@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 1fff8ff1  date 2026-10-11
+# Regression ground truth -- commit 751d4778  date 2026-10-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
+# accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
 # accepted-with-regressions (overnight, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): full tier, only the 9 Karoo decks move, every deck net faster (-2692 turns; Hinata incl. its 2HG rows -412, the 2HG rows alone +6 = 6 budget-churn games); searched 32 faster / 31 slower, all 31 converge (30 at --depth <win turn> --budget-ms 100, hinata d3 s5005 gi68 at --depth 8 --budget-ms 0); d0 to-unwon 99 vs from-unwon 204. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 8396 = 6325 mulligan count + 1996 bottom + 75 bottom-order-only, 0 unexplained; all 12 cases faster
-# accepted-with-regressions (smoke, 2026-10-11): adopt the user's equip prunes (ONE_HOST + EQCOST/PARETO dominance + FOLD_XNAME/COPY_XNAME, default ON 2026-10-11): Gate 1 recoverability 569286/UNRECOVERABLE=0, Gate 2 complete at b768, per-deck aggregates all net <= 0; POWER_FIRST left OFF as budget-independently lossy
-# accepted-with-regressions (regression, 2026-10-11): adopt the user's equip prunes (ONE_HOST + EQCOST/PARETO dominance + FOLD_XNAME/COPY_XNAME, default ON 2026-10-11): Gate 1 recoverability 569286/UNRECOVERABLE=0, Gate 2 complete at b768, per-deck aggregates all net <= 0; POWER_FIRST left OFF as budget-independently lossy
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -53,17 +53,17 @@ fivecolour_smoke_d0_s1001=5.5580/aef6ec89264130ca
 fivecolour_smoke_d3_s1001=4.8267/3157d5fefbf820f5
 fivecolour_smoke_d5_s1001=4.8933/5b9f2a26e1995fad
 stompy_smoke_d0_s1001=4.9460/01d217da6d01506b
-stompy_smoke_d3_s1001=4.0400/340b8e1cd6ca8b72
+stompy_smoke_d3_s1001=4.0400/f0f4d240ef1bd485
 stompy_smoke_d5_s1001=4.0133/edb0732435be2f61
 minotaur_smoke_d0_s1001=5.3090/5566a48888c836ed
 minotaur_smoke_d3_s1001=4.9080/bdf8656383260c31
 minotaur_smoke_d5_s1001=4.9067/214a41b9370bbd27
-kitty_smoke_d0_s1001=4.8820/f54345d18b10c106
-kitty_smoke_d3_s1001=4.3680/fffbfc7f7c2778e1
-kitty_smoke_d5_s1001=4.3800/c15100ceb374db9d
-kittyv2_smoke_d0_s1001=5.6080/96f77dec50e68c82
-kittyv2_smoke_d3_s1001=4.5600/0b12fe79d9717423
-kittyv2_smoke_d5_s1001=4.3600/4e19f8d984be996e
+kitty_smoke_d0_s1001=4.9610/f6ce9183c5f5030d
+kitty_smoke_d3_s1001=4.3760/dc5a656d4108638a
+kitty_smoke_d5_s1001=4.4067/a6d8a9b4c01c988b
+kittyv2_smoke_d0_s1001=5.0150/dd7d7e81c402e6cc
+kittyv2_smoke_d3_s1001=4.1700/69c20b9efff27bdb
+kittyv2_smoke_d5_s1001=4.0600/bdc8799ccb7af6e3
 dragons_smoke_d0_s1001=5.9450/fa01d4bfe99ea1fa
 dragons_smoke_d3_s1001=5.7000/69f380967fdcc40b
 dragons_smoke_d5_s1001=5.5800/457e19eeb69c464c
@@ -96,7 +96,7 @@ auras2hg_smoke_d3_s1001=4.5200/2343755c3023f3ee
 creature_giving2hg_smoke_d3_s1001=5.0000/04503e7d09c41110
 mirrorwing2hg_smoke_d3_s1001=4.6400/e914c344dee148ae
 stompy2hg_smoke_d3_s1001=4.3200/a47e6abc19857614
-kitty2hg_smoke_d3_s1001=4.8000/4b980c3be9ccbcd9
+kitty2hg_smoke_d3_s1001=4.8400/3d6fd15d9263c670
 dragons2hg_smoke_d3_s1001=6.3200/9dadb5163d95346a
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 critter2hg_smoke_d3_s1001=4.7600/9906c908c9d6d9bc
@@ -199,7 +199,7 @@ fivecolour_regression_d3_s3003=4.8250/7e789b361eeee93e
 fivecolour_regression_d5_s2002=4.8200/9d58ba42238ccb32
 fivecolour_regression_d5_s3003=4.8400/0169309c166288b9
 stompy_regression_d0_s2002=4.9750/037f4d0023565a00
-stompy_regression_d3_s2002=4.1700/d7ae9d2930751dde
+stompy_regression_d3_s2002=4.1700/3e05b0eb199afd3e
 stompy_regression_d3_s3003=4.1133/3985a1d426ac900a
 stompy_regression_d5_s2002=4.1640/b989d145d90220ec
 stompy_regression_d5_s3003=4.0880/7c8587f3d9f6d5ce
@@ -208,16 +208,16 @@ minotaur_regression_d3_s2002=4.9033/97f8d53a4e530afc
 minotaur_regression_d3_s3003=4.8767/767aadb738a85071
 minotaur_regression_d5_s2002=4.9080/3ce2e247653fce1d
 minotaur_regression_d5_s3003=4.8600/c54a765e4ff0b0c0
-kitty_regression_d0_s2002=4.8330/8028ce8f6c9911bd
-kitty_regression_d3_s2002=4.2067/bf8542ea51739ed2
-kitty_regression_d3_s3003=4.2867/43dc0b5882aa9b7c
-kitty_regression_d5_s2002=4.2000/c05cb8555a127d5b
-kitty_regression_d5_s3003=4.2400/49c6e5f32361ffe9
-kittyv2_regression_d0_s2002=5.4930/5f2a39f3603ce709
-kittyv2_regression_d3_s2002=4.4700/2cdec5b93c840dd2
-kittyv2_regression_d3_s3003=4.0000/41297113d841b773
-kittyv2_regression_d5_s2002=4.4800/032927ae64b9e37b
-kittyv2_regression_d5_s3003=3.9600/4dc88cc693cc86e3
+kitty_regression_d0_s2002=4.9410/5399b0a386da76a6
+kitty_regression_d3_s2002=4.2133/8fec5d9abcd6d06c
+kitty_regression_d3_s3003=4.2900/86d716a6515ea103
+kitty_regression_d5_s2002=4.2040/0e2f15a4957ce052
+kitty_regression_d5_s3003=4.2320/040feeb3a8af68f6
+kittyv2_regression_d0_s2002=5.0840/c2c9f118bd2962ad
+kittyv2_regression_d3_s2002=4.0600/823e92549ee6db01
+kittyv2_regression_d3_s3003=4.0600/6e22bacc8bb018d0
+kittyv2_regression_d5_s2002=4.1400/2066eb7199449468
+kittyv2_regression_d5_s3003=4.0800/284e5f46eccdf4fa
 dragons_regression_d0_s2002=5.9150/54e3d48aba497173
 dragons_regression_d3_s2002=5.5267/47c3050538741349
 dragons_regression_d3_s3003=5.6167/a4672034b88b1d04
