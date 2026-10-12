@@ -398,6 +398,7 @@ enum Slot : int
     ATTACK_TAP_ABILITY_KINDS, // MTG_ATTACK_TAP_ABILITY_KINDS the attack-tap ability discount also covers the OTHER {T}-source activation kinds -- Garth One-Eye's conjure (GarthActivate), Krenko's tokens (TapForTokens), Deathrite's exile (GraveyardExileAbility), Stoneforge's put (PutFromHandAbility), Kaldring's replay (GraveyardPlayAbility): each taps its creature, which then cannot attack (FiveColour d0 gi123: an uncharged Garth tap made Unite + Black Lotus read lethal). Default ON; =0 -> ActivatePermAbility only
     ATTACK_TAP_PAYER_ORDER,   // MTG_ATTACK_TAP_PAYER_ORDER  the attack-tap discount spends attacking mana creatures in the EXECUTOR's tap order -- the provider's ManaSourceRank / ManaSourceHoldValue under this plan's attack-turn traits (a subtype scaler first, the flat dorks, a domain grower, Deathrite last) -- not lowest power first (Stompy d0 held-out: Craterhoof read as tapping four 2-power Elves where the payment taps Archdruid + one). Default ON; =0 -> lowest power first
     SOLVE_ATTACK_ONLY_WIN,    // MTG_SOLVE_ATTACK_ONLY_WIN   Solve (d0 + playout leaves) scores the ATTACK-ONLY plan when the board is already lethal: its walk skips the empty selection, so on a lethal board where every castable plan taps an attacker (none projects a win) it cast the best-eval spell and lost the lethal (Snow d0 gi1384: the Frost Augur look). Seeded through consider(); any winning cast plan still replaces it (ties included), so only turns where nothing else wins change. Default ON; =0 -> not scored
+    ATTACK_REPROJECT_INTENT,  // MTG_ATTACK_REPROJECT_INTENT  an attack RE-PROJECTION (the board with the plan's taps applied) reads who WANTS to attack from the provider's verdict on the PRE-PLAN board, and re-reads only who CAN (the taps) and what the team hits for: re-asking AttackWith on a board where the plan's direct damage, casts and land payment have not happened flipped FiveColour's Deathrite hold (d0 gi1924: Cannons + Cornucopia + Archangel read 10, the real combat dealt 11). Default ON; =0 -> AttackWith re-asked on the re-projected board
     COUNT
 };
 
@@ -757,6 +758,7 @@ inline const char* Name(int slot)
         "MTG_ATTACK_TAP_ABILITY_KINDS",
         "MTG_ATTACK_TAP_PAYER_ORDER",
         "MTG_SOLVE_ATTACK_ONLY_WIN",
+        "MTG_ATTACK_REPROJECT_INTENT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
