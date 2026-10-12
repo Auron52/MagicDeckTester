@@ -7965,6 +7965,37 @@ static bool PendingFilterInHand(const GameState& state)
 // sources the discount spent; `nc_ok` = its mana can pay a NONCREATURE spell (MTG_ATTACK_TAP_CREATURE_ONLY).
 struct AttackingManaSource { int power; int yield; int number = 0; bool nc_ok = true; };
 
+// MTG_ATTACK_REPROJECT_INTENT (point 10 of the attack-tap levers, below): while a re-projection runs,
+// who WANTS to attack is read from the provider's verdict on the PRE-PLAN board, per battlefield
+// index (the re-projected board is a copy of it with taps added, so indices line up; the card number
+// confirms it). wants: 0 holds, 1 attacks, 2 not recorded -> ask AttackWith as usual.
+struct AttackIntent
+{
+    std::vector<int>           number;
+    std::vector<unsigned char> wants;
+};
+static thread_local const AttackIntent* t_attack_intent = nullptr;
+struct AttackIntentScope
+{
+    const AttackIntent* prev;
+    explicit AttackIntentScope(const AttackIntent* v) : prev(t_attack_intent) { t_attack_intent = v; }
+    ~AttackIntentScope() { t_attack_intent = prev; }
+    AttackIntentScope(const AttackIntentScope&) = delete;
+    AttackIntentScope& operator=(const AttackIntentScope&) = delete;
+};
+// `p` must be an element of state.battlefield. Without a scope this IS AttackWith.
+static bool WantsToAttack(const GameState& state, const Permanent& p)
+{
+    if (t_attack_intent != nullptr)
+    {
+        const std::size_t i = static_cast<std::size_t>(&p - state.battlefield.data());
+        if (i < t_attack_intent->number.size() && t_attack_intent->number[i] == p.card.m_number
+            && t_attack_intent->wants[i] != 2)
+        { return t_attack_intent->wants[i] != 0; }
+    }
+    return ResolveProvider(state).AttackWith(state, p);
+}
+
 // MTG_ATTACK_DOMAIN_DORK_YIELD -- a DOMAIN dork's yield is the pool's, not the card's static amount.
 // PermanentManaYield returns ManaProducedPerTap = 1 for Faeburrow Elder / Bloom Tender, but the pool
 // they feed (AddSourceToPool: `if (def.params.domain_mana) amt = prod.size()`) credits one mana per
@@ -8008,7 +8039,7 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         }
         // Only creatures PendingAttackDamage actually counted can be discounted from it.
         if (!CanAttackFull(p, state.battlefield, active)) { continue; }
-        if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
+        if (!WantsToAttack(state, p)) { continue; }
 
         const bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, p.AnimatedAllTypes(), &p);
@@ -8180,7 +8211,7 @@ static int PendingAttackDamageImpl(const GameState& state)
     {
         if (p.controller_index != active) { continue; }
         if (!CanAttackFull(p, state.battlefield, active, &bs.haste)) { continue; }
-        if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
+        if (!WantsToAttack(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
             p.card, state, active, p.AnimatedAllTypes(), &p, &bs.lords, &bs.anthems);
@@ -8424,6 +8455,24 @@ static bool AttackTapPayerOrderEnabled()
     static const bool env_on = EnvOn("MTG_ATTACK_TAP_PAYER_ORDER", true);   // DEFAULT ON; =0 lowest power first
     return heurarm::Flag(heurarm::ATTACK_TAP_PAYER_ORDER, env_on);
 }
+// 10. MTG_ATTACK_REPROJECT_INTENT -- a re-projection (stage 1's ability taps, stage 2's spent sources
+//    and walk) changes who CAN attack and what the team hits for; it must not re-decide who WANTS to.
+//    PendingAttackDamage asks the provider's AttackWith, and an archetype's hold rule reads context
+//    the re-projected board only half-updates: the spent creatures are tapped there, but the plan's
+//    direct damage has not come off the opponent, its casts are still in hand and the lands that pay
+//    for them are untapped. FiveColour d0 held-out gi1924 (seed 5101925) T5, opponent at 11: {Mana
+//    Cannons, Ancient Cornucopia, Maelstrom Archangel} taps Faeburrow Elder + Birds; on that board
+//    Deathrite's hold (FiveColourProvider::ShouldAttackWith) saw an eligible total of 6 < 11 with
+//    castable cards in hand and held it, so the line read 5 Cannons + 5 attack = 10, not lethal. In
+//    the real combat the opponent is at 6 and nothing is castable: Deathrite swings, 5 + 6 = 11 (the
+//    REPROJECT=0 arm won that game a turn earlier). Who wants to attack is now the provider's verdict
+//    on the PRE-PLAN board -- the board ctx.pending_atk was read from, and exactly what the base-power
+//    subtraction assumed. Default ON; =0 re-asks AttackWith on the re-projected board.
+static bool AttackReprojectIntentEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_REPROJECT_INTENT", true);   // DEFAULT ON; =0 re-ask
+    return heurarm::Flag(heurarm::ATTACK_REPROJECT_INTENT, env_on);
+}
 
 // Per-candidate walk flags (AttackTapCtx::cand_walk).
 enum : unsigned char { kWalkPump = 1, kWalkLife = 2 };
@@ -8455,7 +8504,31 @@ struct AttackTapCtx
     // Stage 2 (see points 4 and 5 above). cand_walk empty = no candidate starts a walk.
     std::vector<unsigned char> cand_walk;
     std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>, int> memo2;   // (mask, spent, walk) -> attack
+    // Point 10: the pre-plan board's attack intent, built on the first re-projection.
+    AttackIntent intent;
+    bool intent_built = false;
 };
+
+// Point 10: the scope a re-projection runs under -- the pre-plan intent, or none (lever off).
+static const AttackIntent* PrePlanAttackIntent(const GameState& state, AttackTapCtx& ctx)
+{
+    if (!AttackReprojectIntentEnabled()) { return nullptr; }
+    if (!ctx.intent_built)
+    {
+        const int active = state.active_player_index;
+        const DecisionProvider& prov = ResolveProvider(state);
+        ctx.intent.number.reserve(state.battlefield.size());
+        ctx.intent.wants.reserve(state.battlefield.size());
+        for (const Permanent& p : state.battlefield)
+        {
+            ctx.intent.number.push_back(p.card.m_number);
+            const bool can = p.controller_index == active && (p.card.IsCreature() || p.is_animated);
+            ctx.intent.wants.push_back(can ? (prov.AttackWith(state, p) ? 1 : 0) : 2);
+        }
+        ctx.intent_built = true;
+    }
+    return &ctx.intent;
+}
 
 static int SumYield(const std::vector<AttackingManaSource>& srcs)
 {
@@ -8891,6 +8964,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
             }
             AttackTapCtx::Entry ne;
             ne.mask    = mask;
+            AttackIntentScope intent_scope(PrePlanAttackIntent(state, ctx));   // point 10
             ne.pending = PendingAttackDamage(t);
             ne.srcs    = CollectAttackingManaSources(t);
             ne.yield   = SumYield(ne.srcs);
@@ -8995,6 +9069,7 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
             }
         }
     }
+    AttackIntentScope intent_scope(PrePlanAttackIntent(state, ctx));   // point 10
     const int pend2 = walk ? ProjectPlanWalk(t, state, cands, sel, walk_pump, walk_life)
                            : PendingAttackDamage(t);
     if (keyable) { ctx.memo2.emplace(key, pend2); }
