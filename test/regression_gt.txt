@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f9e88f2b  date 2026-10-12
+# Regression ground truth -- commit b6f8f0b5  date 2026-10-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
@@ -38,6 +38,8 @@
 # accepted-with-regressions (regression, 2026-10-12): Prevent Damage value leaf adopted (USER 2026-10-11: adopt if it costs about the same, after the mulligan profile). Leaf-only tier (keep table off via MTG_EXHAUSTIVE_PROFILE=none) = baseline for the keep-table attribution. Leaf vs no leaf WITH the keep table live, 8x1000 held-out (930000+): -0.035t t=-10.6 8/8, 0.928x core-ms, 0.862x units. Searched slower 1 (pd_regression_d3_s3003 gi33 5->6): diverges at the LOOKAHEAD bottom of a 4-card keep (trial games at 1 ms), which the keep table replaces.
 # accepted-with-regressions (smoke, 2026-10-12): Prevent Damage keep table (fast, R=30, K=19, gen 40.9 h on 686d47a6 with the leaf) adopted. Validation: keep -0.167t (4/4, t -9.9), confounded bottoming -0.0596t (5/5, t -8.7). keep_adoption_attribution: every changed game explained (different mulligan count / different bottom / bottom-order digest only), 0 unexplained, baselines reproduced both sides (smoke + regression, pd + pd2hg).
 # accepted-with-regressions (regression, 2026-10-12): Prevent Damage keep table (fast, R=30, K=19, gen 40.9 h on 686d47a6 with the leaf) adopted. Validation: keep -0.167t (4/4, t -9.9), confounded bottoming -0.0596t (5/5, t -8.7). keep_adoption_attribution: every changed game explained (different mulligan count / different bottom / bottom-order digest only), 0 unexplained, baselines reproduced both sides (smoke + regression, pd + pd2hg).
+# accepted-with-regressions (overnight, 2026-10-12): pd overnight rows RESIZED at the keep-table adoption (d3 4x100->4x200 b20, d5 4x75->4x125 b40; pd2hg unchanged 4x50 b40), sized to keep a cost saving (USER 2026-10-12). Re-defined keys accepted with the keep table ABSENT (MTG_EXHAUSTIVE_PROFILE=none, leaf in) so the adoption diff is like-for-like; also absorbs the Pyrohemia collapse (d951e809) and the leaf (f9e88f2b), which this tier had not seen.
+# accepted-with-regressions (overnight, 2026-10-12): Prevent Damage keep table adopted (b6f8f0b5) -- overnight tier, on the resized rows: keep_adoption_attribution explains every changed game (different mulligan count / different bottom / bottom-order digest only), 0 unexplained, baselines reproduced both sides (pd + pd2hg). Rows cost 0.27 worker-h with the table vs 0.35 for the OLD rows without it (same box, 2026-10-12).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -651,18 +653,18 @@ soldiers_overnight_d5_s4004=4.2400/8176740359fd349a
 soldiers_overnight_d5_s5005=4.2440/1dec09d137ee5490
 soldiers_overnight_d5_s6006=4.2420/8ca5b88ccf73d32a
 soldiers_overnight_d5_s7007=4.2780/37698003de31ea44
-pd_overnight_d0_s4004=7.5275/d2a9c24329f0f457
-pd_overnight_d0_s6006=7.5210/9741d48ea35ae178
-pd_overnight_d0_s8008=7.5720/1d4ec69c85dd5c2f
-pd_overnight_d0_s10010=7.5575/e24fe3ccc64a1614
-pd_overnight_d3_s4004=5.6600/d7e759edde12cb7b
-pd_overnight_d3_s5005=5.6500/b7a181368a54d2b6
-pd_overnight_d3_s6006=5.6000/038ff4f9df8a083e
-pd_overnight_d3_s7007=5.5500/759a387028fd47ae
-pd_overnight_d5_s4004=5.5867/f9eb209a13f48291
-pd_overnight_d5_s5005=5.6133/ec9f924710091d48
-pd_overnight_d5_s6006=5.6133/3f00841d9ba39231
-pd_overnight_d5_s7007=5.6000/770073bd141e31dc
+pd_overnight_d0_s4004=7.3145/348fc7498ea7abd7
+pd_overnight_d0_s6006=7.2850/3ef5b870afa52804
+pd_overnight_d0_s8008=7.3045/83e53b9328782886
+pd_overnight_d0_s10010=7.3190/0d8f183ff434638b
+pd_overnight_d3_s4004=5.4900/d1f640cf87c59bcc
+pd_overnight_d3_s5005=5.4650/f1cd2821ee74c4a1
+pd_overnight_d3_s6006=5.5050/cc8657d27b63a3da
+pd_overnight_d3_s7007=5.5700/559024dd2728fd4f
+pd_overnight_d5_s4004=5.4720/c49edde488331e1e
+pd_overnight_d5_s5005=5.4080/9b745b007efeee08
+pd_overnight_d5_s6006=5.5840/a88b5f19560beadb
+pd_overnight_d5_s7007=5.5840/c98b1c3070fb767c
 bruna_overnight_d0_s4004=6.2315/2d58d0222b044f42
 bruna_overnight_d0_s6006=6.2315/61d5e18a4618baf9
 bruna_overnight_d0_s8008=6.2515/8957dcc7746c07d2
@@ -727,10 +729,10 @@ pirates2hg_overnight_d5_s4004=5.1067/1f5990fb1fe0a6c7
 pirates2hg_overnight_d5_s5005=4.9800/85d4c768a38b5473
 pirates2hg_overnight_d5_s6006=5.1133/d73e2546ffdd227e
 pirates2hg_overnight_d5_s7007=4.9667/cb89df74217aa351
-pd2hg_overnight_d5_s4004=5.8400/365a3fc9f92557cd
-pd2hg_overnight_d5_s5005=5.7200/aa85fd4f38c6d985
-pd2hg_overnight_d5_s6006=5.6400/6d71d0d01887f57e
-pd2hg_overnight_d5_s7007=5.8000/8c063392a2e966d2
+pd2hg_overnight_d5_s4004=5.6400/595450a5c63f510f
+pd2hg_overnight_d5_s5005=5.4200/7a6b4c3187f55ccc
+pd2hg_overnight_d5_s6006=5.7200/b57937a4550fa828
+pd2hg_overnight_d5_s7007=5.6000/9407c428feac9f3e
 fluctuator_overnight_d0_s4004=5.1455/ae9e09ca79a5b57b
 fluctuator_overnight_d0_s6006=5.2175/5a94065d77b441d4
 fluctuator_overnight_d0_s8008=5.1040/4116c85f96cb1a14

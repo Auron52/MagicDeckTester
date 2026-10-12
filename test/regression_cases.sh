@@ -1119,20 +1119,24 @@ OVERNIGHT_CASES=(
   "soldiers 5 5005  500 40"
   "soldiers 5 6006  500 40"
   "soldiers 5 7007  500 40"
-  # pd: see the SMOKE block. The ledger's P9 counts at the overnight convention's 2x gate budgets
-  # (d3 b20, d5 b40), ~1 core-h on a quiet box.
+  # pd: see the SMOKE block. RESIZED at the keep-table adoption (2026-10-12; regression-testing skill, "Sizing
+  # a deck's overnight rows"; USER: resize to fix NOTABLY undersized rows, but keep a performance benefit from
+  # the artifacts): d3 4x200 b20, d5 4x125 b40 (was the ledger's 4x100 / 4x75 -- 700 searched games, 1/4 of
+  # the entry set). Measured on one box 2026-10-12: the keep table halves PD's per-game cost (d3 1045 -> 506
+  # ms, d5 1493 -> 706 ms), so these rows (1300 searched games) cost ~0.78x of the old rows WITHOUT the table.
+  # The standard full shape (4x1000 / 4x500) would have been 3.24x.
   "pd 0  4004 2000 0"
   "pd 0  6006 2000 0"
   "pd 0  8008 2000 0"
   "pd 0 10010 2000 0"
-  "pd 3 4004  100 20"
-  "pd 3 5005  100 20"
-  "pd 3 6006  100 20"
-  "pd 3 7007  100 20"
-  "pd 5 4004   75 40"
-  "pd 5 5005   75 40"
-  "pd 5 6006   75 40"
-  "pd 5 7007   75 40"
+  "pd 3 4004  200 20"
+  "pd 3 5005  200 20"
+  "pd 3 6006  200 20"
+  "pd 3 7007  200 20"
+  "pd 5 4004  125 40"
+  "pd 5 5005  125 40"
+  "pd 5 6006  125 40"
+  "pd 5 7007  125 40"
   # bruna: RESTORED 2026-10-09, see the SMOKE block. ENTRY SET (regression-testing skill, "Sizing a deck's
   # overnight rows"): Hinata's shape until Bruna's keep table is adopted. The rows restored on 10-09 were
   # the pre-removal standard shape (d3 4x1000 b20, d5 4x500 b40) -- 6,000 searched games against
@@ -1219,7 +1223,8 @@ OVERNIGHT_CASES=(
   "pirates2hg    5 5005 150 40"
   "pirates2hg    5 6006 150 40"
   "pirates2hg    5 7007 150 40"
-  # pd2hg: 2/3 of the deck's own 75-game d5 rows (it reads heads/life -- see the pd SMOKE block), b40.
+  # pd2hg: 50 against the deck's own 125-game d5 rows, b40 (it reads heads/life -- see the pd SMOKE block).
+  # Unchanged at the 2026-10-12 resize: ~1/3-2/3 of the d5 rows, as for the other 2HG decks.
   "pd2hg         5 4004  50 40"
   "pd2hg         5 5005  50 40"
   "pd2hg         5 6006  50 40"
