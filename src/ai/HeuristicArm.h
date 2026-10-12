@@ -438,6 +438,7 @@ enum Slot : int
     SOLVE_AURA_PAYER_CHECK,   // MTG_SOLVE_AURA_PAYER_CHECK  Solve's MTG_SOLVE_PENDING_AURA_EXACT block: a subset that casts a land Aura and PASSES the board-only colour gates must still pass the real payer (SubsetPayableWithFilters: host reserved, Aura attached where the plan declared it), because the gates cannot see which land carries the Aura or that an Aether Hub without {E} makes only {C} -- EDF gi 1475 t7 picked Trace of Abundance onto the Hub that paid for it and dropped Displacer. Default ON; =0 -> gate-only, byte-identical
     EDF_ROUTE_BOARD_DEPLOY,   // MTG_EDF_ROUTE_BOARD_DEPLOY  EDF COMBO OFF route (comboroute::Run): with the outlet + payload already on the battlefield, a loop that does not kill as it stands is retried after DeployPieces (land drop, land Auras, a refund-covered untapper, Training Grounds) paid off the lands, kept only when that trial kills -- a Displacer/Cloud loop stalled at net 0 with Training Grounds in hand (gi 1408 t5, gi 547 t5). The trial memo key folds the lever. Default ON; =0 -> straight to the loop, byte-identical
     EDF_GOFF_VERIFY_UNPROJECTED,// MTG_EDF_GOFF_VERIFY_UNPROJECTED Solve's EDF blink go-off cut: the maximal blink candidate is verified by ONE apply on a copy even when ExtraLethalDamage / ProjectsAlternateWin do not project its kill (the apply's dig-and-deploy finisher -- Living Wish -> Essence Depleter -- is outside the projection); an execution-verified kill (opponent lost, we alive) is returned as this turn's win (EDF gi 1676 t4). Default ON; =0 -> projected-only verify, byte-identical
+    ATTACK_REPROJECT_INTENT,  // MTG_ATTACK_REPROJECT_INTENT  an attack RE-PROJECTION (the board with the plan's taps applied) reads who WANTS to attack from the provider's verdict on the PRE-PLAN board, and re-reads only who CAN (the taps) and what the team hits for: re-asking AttackWith on a board where the plan's direct damage, casts and land payment have not happened flipped FiveColour's Deathrite hold (d0 gi1924: Cannons + Cornucopia + Archangel read 10, the real combat dealt 11). Default ON; =0 -> AttackWith re-asked on the re-projected board
     COUNT
 };
 
@@ -837,6 +838,7 @@ inline const char* Name(int slot)
         "MTG_SOLVE_AURA_PAYER_CHECK",
         "MTG_EDF_ROUTE_BOARD_DEPLOY",
         "MTG_EDF_GOFF_VERIFY_UNPROJECTED",
+        "MTG_ATTACK_REPROJECT_INTENT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

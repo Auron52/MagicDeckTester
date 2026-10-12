@@ -624,3 +624,70 @@ TEST_CASE("Point 9 payer order: MTG_ATTACK_TAP_PAYER_ORDER=0 spends lowest power
     CHECK(Threshold([](int l) { return ElfHoofBoard(l, 1); },
                     [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Craterhoof Behemoth" }); }) == 10);
 }
+
+// ---- Point 10: a re-projection keeps the pre-plan attack intent (MTG_ATTACK_REPROJECT_INTENT) -----
+// FiveColour d0 gi1924's T5 board (seed 5101925), after the Misty Rainforest -> Steam Vents drop:
+// four lands, Deathrite Shaman (fuelled by the Misty in the graveyard), Faeburrow Elder (5/5, taps
+// for five), Birds of Paradise and a hasty Two-Headed Hellkite. Pre-plan attack 11: Hellkite 5 +
+// Faeburrow 5 + Deathrite 1 -- Deathrite swings only because the eligible total is lethal
+// (FiveColourProvider::ShouldAttackWith's lethal exemption). {Mana Cannons, Ancient Cornucopia,
+// Maelstrom Archangel} costs 11, so Faeburrow and Birds pay and stay home; Archangel is five colours
+// under the Cannons: 5 + Hellkite 5 + Deathrite 1 = 11. The re-projection tapped Faeburrow + Birds
+// and re-asked the hold on that board -- eligible total 6 against an opponent still at 11, castable
+// cards still in hand -- so it held Deathrite and read 10.
+namespace
+{
+GameState DeathriteBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Ancient Cornucopia", "Mana Cannons", "Maelstrom Archangel",
+                                     "Nicol Bolas, Planeswalker", "Godless Shrine" });
+    static const FiveColourProvider fc;
+    s.m_provider = &fc;
+    s.players[0].life = 9 + salt;
+    Put(s, "Overgrown Tomb", 150);
+    Put(s, "Deathrite Shaman", 151);
+    Put(s, "Blood Crypt", 152);
+    Put(s, "Faeburrow Elder", 153);
+    Put(s, "Breeding Pool", 154);
+    Put(s, "Two-Headed Hellkite", 155);
+    Put(s, "Birds of Paradise", 156);
+    Put(s, "Steam Vents", 157);
+    s.players[0].graveyard.push_back(HandCard("Misty Rainforest", 158));
+    return s;
+}
+bool CannonsCornucopiaArchangel(const TurnSolver::Plan& p)
+{
+    return CastsOnly(p, { "Mana Cannons", "Ancient Cornucopia", "Maelstrom Archangel" });
+}
+bool ArchangelAlone(const TurnSolver::Plan& p) { return CastsOnly(p, { "Maelstrom Archangel" }); }
+}
+
+TEST_CASE("Point 10 re-projection intent: Deathrite still swings once the plan taps Faeburrow")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    {   // The hold itself: the pre-plan board swings Deathrite; the half-updated one holds it.
+        static const FiveColourProvider fc;
+        GameState s = DeathriteBoard(11, 0);
+        auto drs = [&]() -> const Permanent*
+        {
+            for (const Permanent& p : s.battlefield) { if (p.card.m_number == 151) { return &p; } }
+            return nullptr;
+        };
+        REQUIRE(drs() != nullptr);
+        CHECK(fc.AttackWith(s, *drs()));
+        for (Permanent& p : s.battlefield)
+        { if (p.card.m_number == 153 || p.card.m_number == 156) { p.tapped = true; } }
+        CHECK_FALSE(fc.AttackWith(s, *drs()));
+    }
+    CHECK(Threshold([](int l) { return DeathriteBoard(l, 0); }, CannonsCornucopiaArchangel) == 11);
+    CHECK(Threshold([](int l) { return DeathriteBoard(l, 0); }, ArchangelAlone) == 11);
+}
+
+TEST_CASE("Point 10 re-projection intent: MTG_ATTACK_REPROJECT_INTENT=0 re-asks the hold on the tapped board")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_REPROJECT_INTENT, 0 } });
+    CHECK(Threshold([](int l) { return DeathriteBoard(l, 1); }, CannonsCornucopiaArchangel) == 10);
+    CHECK(Threshold([](int l) { return DeathriteBoard(l, 1); }, ArchangelAlone) == 11);
+}
