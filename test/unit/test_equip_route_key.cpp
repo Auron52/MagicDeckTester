@@ -112,7 +112,7 @@ TEST_CASE("every dedicated counter int on a permanent splits the route key")
     CHECK(with([](Permanent& p) { p.loyalty          = 1; }) != k0);
     CHECK(with([](Permanent& p) { p.charge_counters  = 1; }) != k0);
     // The generic vector was already keyed; it still is.
-    CHECK(with([](Permanent& p) { p.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, 1}); }) != k0);
+    CHECK(with([](Permanent& p) { p.counters.Add(Counter::Type::PlusOnePlusOne, 1); }) != k0);
 }
 
 TEST_CASE("the route key separates the same board before and after combat")
