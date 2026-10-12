@@ -1,0 +1,314 @@
+{
+  "seed": 18, "game_index": 17, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [21] }, "combat_swap_timing": 1, "karoo_float": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 3, "name": "Aether Hub" }, { "num": 25, "name": "Fertile Ground" }, { "num": 38, "name": "Overgrowth" }, { "num": 1, "name": "Adarkar Wastes" }, { "num": 4, "name": "Aether Hub" }, { "num": 53, "name": "Wild Growth" }, { "num": 31, "name": "Living Wish" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 31, "name": "Living Wish" }, { "num": 27, "name": "Fertile Ground" }, { "num": 22, "name": "Emiel the Blessed" }, { "num": 56, "name": "Wild Growth" }, { "num": 4, "name": "Aether Hub" }, { "num": 21, "name": "Emiel the Blessed" }, { "num": 38, "name": "Overgrowth" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 31, "name": "Living Wish", "win_optimal": true }, { "num": 27, "name": "Fertile Ground", "win_optimal": true }, { "num": 22, "name": "Emiel the Blessed", "win_optimal": true }, { "num": 56, "name": "Wild Growth", "win_optimal": true }, { "num": 4, "name": "Aether Hub", "win_optimal": true }, { "num": 21, "name": "Emiel the Blessed", "win_optimal": true }, { "num": 38, "name": "Overgrowth", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 22, "name": "Emiel the Blessed" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Hub", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Fertile Ground", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 56, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Aether Hub; cast: Wild Growth → Aether Hub", "land": "Aether Hub", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 4, "enchant_target_name": "Aether Hub" }] },
+    { "index": 1, "summary": "land=Aether Hub; cast: (nothing)", "land": "Aether Hub", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "tapped": true, "is_land": true, "tap_energy": 1 }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Fertile Ground", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "tapped": true, "is_land": true, "tap_energy": 1 }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Fertile Ground", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Cloud of Faeries" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "is_land": true, "taps": "C", "tap_energy": 1 }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Cloud of Faeries", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Fertile Ground", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Living Wish → Dimensional Infiltrator", "land": null, "casts": ["Living Wish"], "actions": [{ "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 8, "summary": "land=none; cast: Fertile Ground → Aether Hub", "land": null, "casts": ["Fertile Ground"], "actions": [{ "card": "Fertile Ground", "enchant_target": 4, "enchant_target_name": "Aether Hub" }] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "cycle Cloud of Faeries to draw", "land": null, "casts": [], "actions": [{ "card": "Cloud of Faeries", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 73,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "tapped": true, "is_land": true, "tap_energy": 1 }, { "name": "Fertile Ground", "idx": 2, "num": 27, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Cloud of Faeries", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "tapped": true, "is_land": true, "tap_energy": 1 }, { "name": "Fertile Ground", "idx": 2, "num": 27, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Cloud of Faeries", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 30, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Eldrazi Displacer" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "is_land": true, "taps": "C", "tap_auras": [{ "name": "Fertile Ground", "num": 27, "faces": "WUBRG" }], "tap_energy": 1 }, { "name": "Fertile Ground", "idx": 2, "num": 27, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Cloud of Faeries", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Eldrazi Displacer", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Cloud of Faeries, Eldrazi Displacer", "land": null, "casts": ["Cloud of Faeries", "Eldrazi Displacer"], "cast_order_canonical": ["Cloud of Faeries", "Eldrazi Displacer"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Eldrazi Displacer" }] },
+    { "index": 1, "summary": "land=none; cast: Eldrazi Displacer, Cloud of Faeries", "land": null, "drops": ["Cloud of Faeries"], "casts": ["Eldrazi Displacer", "Cloud of Faeries"], "cast_order_canonical": ["Eldrazi Displacer", "Cloud of Faeries"], "actions": [{ "card": "Eldrazi Displacer" }, { "card": "Cloud of Faeries" }] },
+    { "index": 2, "summary": "land=none; cast: Cloud of Faeries, Living Wish → Dimensional Infiltrator", "land": null, "casts": ["Cloud of Faeries", "Living Wish"], "cast_order_canonical": ["Cloud of Faeries", "Living Wish"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 3, "summary": "land=none; cast: Living Wish → Dimensional Infiltrator, Cloud of Faeries", "land": null, "drops": ["Cloud of Faeries"], "casts": ["Living Wish", "Cloud of Faeries"], "cast_order_canonical": ["Living Wish", "Cloud of Faeries"], "actions": [{ "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }, { "card": "Cloud of Faeries" }] },
+    { "index": 18, "summary": "land=none; cast: Cloud of Faeries, Overgrowth → Aether Hub", "land": null, "casts": ["Cloud of Faeries", "Overgrowth"], "cast_order_canonical": ["Cloud of Faeries", "Overgrowth"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Aether Hub" }] },
+    { "index": 19, "summary": "land=none; cast: Overgrowth → Aether Hub, Cloud of Faeries", "land": null, "drops": ["Cloud of Faeries"], "casts": ["Overgrowth", "Cloud of Faeries"], "cast_order_canonical": ["Overgrowth", "Cloud of Faeries"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Aether Hub" }, { "card": "Cloud of Faeries" }] },
+    { "index": 20, "summary": "land=none; cast: Eldrazi Displacer", "land": null, "casts": ["Eldrazi Displacer"], "actions": [{ "card": "Eldrazi Displacer" }] },
+    { "index": 21, "summary": "land=none; cast: Cloud of Faeries", "land": null, "casts": ["Cloud of Faeries"], "actions": [{ "card": "Cloud of Faeries" }] },
+    { "index": 22, "summary": "land=none; cast: Living Wish → Dimensional Infiltrator", "land": null, "casts": ["Living Wish"], "actions": [{ "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 30, "summary": "land=none; cast: Overgrowth → Aether Hub", "land": null, "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Aether Hub" }] },
+    { "index": 31, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 32, "summary": "cycle Cloud of Faeries to draw", "land": null, "casts": [], "actions": [{ "card": "Cloud of Faeries", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 117,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "tapped": true, "is_land": true, "tap_energy": 1 }, { "name": "Fertile Ground", "idx": 2, "num": 27, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Overgrowth", "idx": 4, "num": 38, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Cloud of Faeries", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Eldrazi Displacer", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "tapped": true, "is_land": true, "tap_energy": 1 }, { "name": "Fertile Ground", "idx": 2, "num": 27, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Overgrowth", "idx": 4, "num": 38, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Cloud of Faeries", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Eldrazi Displacer", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 270, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Mariposa Military Base" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Hub", "idx": 0, "num": 4, "is_land": true, "taps": "C", "tap_auras": [{ "name": "Fertile Ground", "num": 27, "faces": "WUBRG" }], "tap_energy": 1 }, { "name": "Fertile Ground", "idx": 2, "num": 27, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Overgrowth", "idx": 4, "num": 38, "is_aura": true, "attached_to": 4, "is_land": false }, { "name": "Wild Growth", "idx": 1, "num": 56, "is_aura": true, "attached_to": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Cloud of Faeries", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Eldrazi Displacer", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Emiel the Blessed", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 37, "name": "Mariposa Military Base", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1, "energy": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mariposa Military Base; cast: Cloud of Faeries, Eldrazi Displacer, Living Wish → Dimensional Infiltrator", "land": "Mariposa Military Base", "casts": ["Cloud of Faeries", "Eldrazi Displacer", "Living Wish"], "cast_order_canonical": ["Cloud of Faeries", "Eldrazi Displacer", "Living Wish"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Eldrazi Displacer" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 1, "summary": "land=Mariposa Military Base; cast: Cloud of Faeries, Living Wish → Dimensional Infiltrator, Eldrazi Displacer", "land": "Mariposa Military Base", "casts": ["Cloud of Faeries", "Living Wish", "Eldrazi Displacer"], "cast_order_canonical": ["Cloud of Faeries", "Living Wish", "Eldrazi Displacer"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }, { "card": "Eldrazi Displacer" }] },
+    { "index": 2, "summary": "land=Mariposa Military Base; cast: Eldrazi Displacer, Cloud of Faeries, Living Wish → Dimensional Infiltrator", "land": "Mariposa Military Base", "drops": ["Cloud of Faeries"], "casts": ["Eldrazi Displacer", "Cloud of Faeries", "Living Wish"], "cast_order_canonical": ["Eldrazi Displacer", "Cloud of Faeries", "Living Wish"], "actions": [{ "card": "Eldrazi Displacer" }, { "card": "Cloud of Faeries" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 24, "summary": "land=none; cast: Cloud of Faeries, Eldrazi Displacer, Living Wish → Dimensional Infiltrator", "land": null, "casts": ["Cloud of Faeries", "Eldrazi Displacer", "Living Wish"], "cast_order_canonical": ["Cloud of Faeries", "Eldrazi Displacer", "Living Wish"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Eldrazi Displacer" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 25, "summary": "land=none; cast: Cloud of Faeries, Living Wish → Dimensional Infiltrator, Eldrazi Displacer", "land": null, "casts": ["Cloud of Faeries", "Living Wish", "Eldrazi Displacer"], "cast_order_canonical": ["Cloud of Faeries", "Living Wish", "Eldrazi Displacer"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }, { "card": "Eldrazi Displacer" }] },
+    { "index": 26, "summary": "land=none; cast: Eldrazi Displacer, Cloud of Faeries, Living Wish → Dimensional Infiltrator", "land": null, "drops": ["Cloud of Faeries"], "casts": ["Eldrazi Displacer", "Cloud of Faeries", "Living Wish"], "cast_order_canonical": ["Eldrazi Displacer", "Cloud of Faeries", "Living Wish"], "actions": [{ "card": "Eldrazi Displacer" }, { "card": "Cloud of Faeries" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 48, "summary": "land=Mariposa Military Base; cast: Cloud of Faeries, Eldrazi Displacer", "land": "Mariposa Military Base", "casts": ["Cloud of Faeries", "Eldrazi Displacer"], "cast_order_canonical": ["Cloud of Faeries", "Eldrazi Displacer"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Eldrazi Displacer" }] },
+    { "index": 49, "summary": "land=Mariposa Military Base; cast: Eldrazi Displacer, Cloud of Faeries", "land": "Mariposa Military Base", "drops": ["Cloud of Faeries"], "casts": ["Eldrazi Displacer", "Cloud of Faeries"], "cast_order_canonical": ["Eldrazi Displacer", "Cloud of Faeries"], "actions": [{ "card": "Eldrazi Displacer" }, { "card": "Cloud of Faeries" }] },
+    { "index": 50, "summary": "land=none; cast: Cloud of Faeries, Eldrazi Displacer", "land": null, "casts": ["Cloud of Faeries", "Eldrazi Displacer"], "cast_order_canonical": ["Cloud of Faeries", "Eldrazi Displacer"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Eldrazi Displacer" }] },
+    { "index": 51, "summary": "land=none; cast: Eldrazi Displacer, Cloud of Faeries", "land": null, "drops": ["Cloud of Faeries"], "casts": ["Eldrazi Displacer", "Cloud of Faeries"], "cast_order_canonical": ["Eldrazi Displacer", "Cloud of Faeries"], "actions": [{ "card": "Eldrazi Displacer" }, { "card": "Cloud of Faeries" }] },
+    { "index": 52, "summary": "land=Mariposa Military Base; cast: Eldrazi Displacer, Living Wish → Dimensional Infiltrator", "land": "Mariposa Military Base", "casts": ["Eldrazi Displacer", "Living Wish"], "cast_order_canonical": ["Eldrazi Displacer", "Living Wish"], "actions": [{ "card": "Eldrazi Displacer" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 60, "summary": "land=none; cast: Eldrazi Displacer, Living Wish → Dimensional Infiltrator", "land": null, "casts": ["Eldrazi Displacer", "Living Wish"], "cast_order_canonical": ["Eldrazi Displacer", "Living Wish"], "actions": [{ "card": "Eldrazi Displacer" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 68, "summary": "land=Mariposa Military Base; cast: Cloud of Faeries, Living Wish → Dimensional Infiltrator", "land": "Mariposa Military Base", "casts": ["Cloud of Faeries", "Living Wish"], "cast_order_canonical": ["Cloud of Faeries", "Living Wish"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 69, "summary": "land=Mariposa Military Base; cast: Living Wish → Dimensional Infiltrator, Cloud of Faeries", "land": "Mariposa Military Base", "casts": ["Living Wish", "Cloud of Faeries"], "cast_order_canonical": ["Living Wish", "Cloud of Faeries"], "actions": [{ "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }, { "card": "Cloud of Faeries" }] },
+    { "index": 84, "summary": "land=Mariposa Military Base; cast: Eldrazi Displacer", "land": "Mariposa Military Base", "casts": ["Eldrazi Displacer"], "actions": [{ "card": "Eldrazi Displacer" }] },
+    { "index": 85, "summary": "land=none; cast: Cloud of Faeries, Living Wish → Dimensional Infiltrator", "land": null, "casts": ["Cloud of Faeries", "Living Wish"], "cast_order_canonical": ["Cloud of Faeries", "Living Wish"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 86, "summary": "land=none; cast: Living Wish → Dimensional Infiltrator, Cloud of Faeries", "land": null, "casts": ["Living Wish", "Cloud of Faeries"], "cast_order_canonical": ["Living Wish", "Cloud of Faeries"], "actions": [{ "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }, { "card": "Cloud of Faeries" }] },
+    { "index": 101, "summary": "land=none; cast: Eldrazi Displacer", "land": null, "casts": ["Eldrazi Displacer"], "actions": [{ "card": "Eldrazi Displacer" }] },
+    { "index": 102, "summary": "land=Mariposa Military Base; cast: Cloud of Faeries", "land": "Mariposa Military Base", "casts": ["Cloud of Faeries"], "actions": [{ "card": "Cloud of Faeries" }] },
+    { "index": 103, "summary": "land=none; cast: Cloud of Faeries", "land": null, "casts": ["Cloud of Faeries"], "actions": [{ "card": "Cloud of Faeries" }] },
+    { "index": 104, "summary": "land=Mariposa Military Base; cast: Living Wish → Dimensional Infiltrator", "land": "Mariposa Military Base", "casts": ["Living Wish"], "actions": [{ "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 112, "summary": "land=none; cast: Living Wish → Dimensional Infiltrator", "land": null, "casts": ["Living Wish"], "actions": [{ "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 120, "summary": "land=Mariposa Military Base; cast: Mariposa Military Base: draw a card", "land": "Mariposa Military Base", "casts": ["Mariposa Military Base"], "actions": [{ "card": "Mariposa Military Base", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 121, "summary": "land=Mariposa Military Base; cast: (nothing)", "land": "Mariposa Military Base", "casts": [], "actions": [] },
+    { "index": 122, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 123, "summary": "cycle Cloud of Faeries to draw", "land": null, "casts": [], "actions": [{ "card": "Cloud of Faeries", "dig": true, "dig_sacrifice": false }] },
+    { "index": 208, "summary": "land=Mariposa Military Base (enters tapped, +rad); cast: Cloud of Faeries, Eldrazi Displacer, Living Wish → Dimensional Infiltrator", "land": "Mariposa Military Base", "rad_mode": 1, "casts": ["Cloud of Faeries", "Eldrazi Displacer", "Living Wish"], "cast_order_canonical": ["Cloud of Faeries", "Eldrazi Displacer", "Living Wish"], "actions": [{ "card": "Cloud of Faeries" }, { "card": "Eldrazi Displacer" }, { "card": "Living Wish", "tutor_target": "Dimensional Infiltrator" }] },
+    { "index": 268, "summary": "land=Mariposa Military Base (enters tapped, +rad); cast: Mariposa Military Base: draw a card", "land": "Mariposa Military Base", "rad_mode": 1, "casts": ["Mariposa Military Base"], "actions": [{ "card": "Mariposa Military Base", "src_num": 37, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 270, "summary": "land=none; cast: Combo Off route -- COMBO OFF: wins this turn", "land": null, "combo_off": true, "combo_off_verified": true, "combo_off_rule": "TRIAL", "casts": ["Combo Off"], "actions": [{ "card": "Combo Off", "x": 999 }] }
+  ],
+  "plans_total": 271,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "land", "text": "⚡ land Mariposa Military Base" },
+    { "turn": 4, "kind": "cast", "text": "⚡ cast Cloud of Faeries" },
+    { "turn": 4, "kind": "cast", "text": "⚡ cast Eldrazi Displacer" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "cast", "text": "⚡ combo finish: Living Wish → Essence Depleter" },
+    { "turn": 4, "kind": "cast", "text": "⚡ cast Essence Depleter" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" },
+    { "turn": 4, "kind": "ability", "text": "✨ Eldrazi Displacer: blinked Cloud of Faeries (returns tapped)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Essence Depleter: opponent loses 1 life" }
+  ]
+}
