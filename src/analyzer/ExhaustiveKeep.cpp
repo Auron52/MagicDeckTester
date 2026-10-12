@@ -2393,8 +2393,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     //     ENGINE needs optimising, and quietly dropping them would convert that signal into a slightly
     //     thinner table nobody inspects. Same reasoning as the phase-A fail-out in valueleaf.sh.
     //
-    // WALL ONLY, NO PREDICTIVE STAGE, matching the user's phase-A ruling (*"Yeah, I guess just a
-    // wall-cap is okay. However, we need to let it be relatively soft."*). `Begin(0)` leaves the unit
+    // WALL ONLY, NO PREDICTIVE STAGE. *** THE PHASE-A RULING ONCE CITED HERE AS AUTHORITY ("Yeah, I
+    // guess just a wall-cap is okay. However, we need to let it be relatively soft.") WAS A
+    // VALUE-LEAF RULING AND DOES NOT AUTHORISE ANYTHING IN THIS FILE -- see the default below, which
+    // is now 0 because the user ruled this generator out of scope entirely. *** `Begin(0)` leaves the unit
     // ceiling disarmed, and with no unit ceiling stage 1 is inert by construction anyway
     // (GameWorkMeter.h: "NO CEILING => NO STAGE 1") -- so the generation-side work ceiling
     // MTG_DECISION_WORK_X stays the only unit-denominated bound, exactly as it was.
@@ -2409,7 +2411,47 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // 1,200 s cap reclaims 3.2 of 220 CPU-h. The cost is the broad 30-300 s band (1,799 rollouts,
     // 91 CPU-h), which no cap can remove without condemning thousands. Do not reach for a lower cap
     // as a performance lever -- that is the fail-out's job to refuse.
-    const double rollout_wall_sec = static_cast<double>(EnvInt("MTG_KEEP_ROLLOUT_WALL_SEC", 1200));
+    // *** DEFAULT 0 = NO WALL. USER, 2026-10-12: "There should be no abandon wall for mulligan
+    // profiles!" / "It was definitely never intended to apply to the mulligan profile." / "It was
+    // narrowly applying only to value-leaf phase A and C." / "Which are the most expensive games we
+    // run." THE PHASE-A RULING QUOTED ABOVE WAS NEVER ABOUT THIS GENERATOR, and citing it here was
+    // the defect -- three unauthorised generalisations in one step:
+    //   SCOPE      value-leaf phase A (matching C)        -> the mulligan keep generator
+    //   MAGNITUDE  "Maybe 3-4 hours?", adopted 4 h        -> 1200 s, TWELVE TIMES tighter
+    //   SITING     above the tail: 4 h cut NOTHING that   -> BELOW the tail: keep rollouts measure
+    //              completed (worst finisher 3.996 h)        max 3,405 s with 81 rollouts >= 1200 s
+    //   CONSEQUENCE phase A: "fewer training rows, and    -> FAIL-OUT: no profile at all
+    //              rows are ADDITIVE"
+    // WHAT IT COST: the v3 run reached sub-refine 64,422/64,422 (100%), subwave 5 converged, 0 frozen
+    // cells, 367,208 rollouts over 12.8 h -- and wrote NOTHING, to reclaim the 3.2 of 220 CPU-h this
+    // comment itself prices the cap at (1.5%).
+    // AND IT IS WALL-CLOCK (gamework::ArmDeadline -> steady_clock), so which rollouts get abandoned
+    // depends on MACHINE LOAD. Phase A states that caveat and justifies accepting it there (its
+    // pathology sustains 186 units/s against a healthy ~4,800, so no unit ceiling can reach it, and a
+    // cut game only loses late training rows). NEITHER half of that argument transfers: a keep
+    // rollout is a far cheaper unit of work, and the keep table is a SHIPPED, POOLABLE artifact whose
+    // cross-machine merge rests on parity fingerprints -- a load-dependent labeller breaks it by
+    // construction, and the repo's rule is to size off UNITS, never ms.
+    // *** THE GOVERNING RULE, and the one to apply before ever adding abandonment anywhere else.
+    // USER, 2026-10-12: "It's also important that whatever process uses that abandonment has the
+    // ability to work around some of the games being lost. Mulligan profiles do not." So the test is
+    // NOT "is this phase expensive" -- it is "CAN THE CONSUMER ABSORB A MISSING GAME?":
+    //   value-leaf phase A  CAN: training rows are ADDITIVE. A cut game keeps every row it banked,
+    //                       only late turns are lost, `finish` already accepts fewer rows, and a
+    //                       later run at a higher cap adds them back.
+    //   value-leaf phase C  CAN: a wall-cut game is excluded from every cell alike AND phase C.5
+    //                       must PROVE the cut changed no verdict -- an explicit discharge of the loss.
+    //   mulligan keep table CANNOT. Each cell IS a decision, consumed directly as policy. A lost
+    //                       rollout biases that cell's mean; a lost cell-side silently falls back to
+    //                       its prior. Nothing is additive and no stage verifies the loss was
+    //                       harmless, so the damage is unbounded in quality and invisible in shape.
+    // Note what the fail-out below really was: an admission that this consumer CANNOT absorb the loss
+    // -- answered by destroying the whole artifact rather than by not losing games. The correct answer
+    // is the one here: on this path, do not abandon.
+    // The knob is kept so a future unit-denominated backstop has a home, and so a diagnostic run can
+    // opt in; it must stay 0 for any generation whose output ships. The leave-it-out / fail-out
+    // machinery below is inert while this is 0.
+    const double rollout_wall_sec = static_cast<double>(EnvInt("MTG_KEEP_ROLLOUT_WALL_SEC", 0));
     // Clamped to the user's stated ceiling: *"We don't want more than 50 for sure."* The default sits
     // at the aggressive end of the range they named, per *"it might make sense to be even more
     // aggressive, not allowing 10."* A larger request is honoured up to 50 and then capped, loudly.
