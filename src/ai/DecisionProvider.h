@@ -1960,7 +1960,9 @@ public:
     //   Both  -- the boundary of that dominance argument (draws/rituals/floating mana can feed a
     //            Main1 cast): offered in BOTH phases.
     // The post-combat enumeration is NEVER filtered, so a Main2 class moves a line to the phase
-    // where it is >= as good -- it cannot delete one. When in doubt classify Main1: that is
+    // where it is >= as good -- it cannot delete one, PROVIDED main 1's apply leaves the moved cast
+    // its mana (the heuristic end-of-main-1 dig did not: TurnSolver::Main1DigDefersToMain2,
+    // MTG_DIG_DEFER_MAIN2). When in doubt classify Main1: that is
     // current behaviour, only wider; Main2 is the assertive claim, and a per-game win-turn
     // regression under the filter is a MISCLASSIFICATION signal, not an acceptable trade.
 

@@ -192,3 +192,18 @@ A screen of such a card measures it **as if the ability did not exist** — whic
 N2 on WhiteKnights came to record "cycling's option value and the legend rule cancel to within noise"
 for a measurement in which cycling never fired once. Round T corrected that record; this document
 removes the cause.
+
+## Follow-up 2026-10-13: the main-1 dig deleted a main-2 cast (MTG_DIG_DEFER_MAIN2)
+
+On a deck whose casts are split across the mains (the main-phase filter, FiveColour), main 1 is
+"stuck" by construction -- the filter withheld its casts -- so this gate fired at the end of main 1
+and spent the mana a withheld Main2 cast needed. FiveColour gi1106 (seed 6211107): T2 cycled Zagoth
+Triome off Stomping Ground + Blood Crypt + Birds, main 2 could no longer emit Faeburrow Elder, and
+the game won T5 instead of T4. The heuristic dig now WAITS for main 2 (same loop, both mains since
+D7) while a withheld cast is payable; see `main-phase-classification.md`, "The apply-side half",
+and `TurnSolver::Main1DigDefersToMain2`. The gate itself is unchanged.
+
+Observation for the owner of this heuristic (not changed): the "nothing castable" probe compares
+MV against the count of LANDS (`MV <= lands`), so mana creatures and rocks are invisible to it --
+Faeburrow (MV 3) read as uncastable off two lands + Birds. That errs toward digging, the opposite
+of the "erring toward NOT digging is the safe direction" note at the probe.

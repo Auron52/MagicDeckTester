@@ -314,3 +314,42 @@ Per second-main deck: the standard battery (train seeds, d3+d5, per-game win-tur
 MAIN2 misclassification shows up as a specific game losing a turn, not as an average drift),
 wall-time, fd oracle, full smoke. Adoption per archetype provider on user approval, like
 every prune.
+
+## The apply-side half: main 1's heuristic dig (2026-10-13, MTG_DIG_DEFER_MAIN2)
+
+USER: *"if we plan to allow its cast in the second main and then we never consider that it should be
+fixed."* The claim "the post-combat pass is never filtered, so a Main2 class moves a line, it cannot
+delete one" held for the ENUMERATION only. Main 1's apply does not end at its plan: `ApplyPlanDirect`
+then runs the provider's heuristic "dig when stuck" (`ShouldConsiderDig`, cycling / sac-to-draw --
+a plain heuristic for every deck outside the searched dig axis), and `AIEngine::UseSurplusLandAbilities`
+does the same in real play. With the filter on, main 1 is "stuck" by construction, so the dig fired
+and spent the mana the deferred cast was waiting for; the unfiltered post-combat enumeration then
+had nothing to pay for it with.
+
+**Repro.** FiveColour gi1106 (seed 6211107), `--depth 8 --budget-ms 0`: T2 holds Faeburrow Elder
+(Main2 under the USER rule: no Greaves) with Stomping Ground + Blood Crypt + Birds untapped. Every
+main-1 plan that made an untapped drop cycled Zagoth Triome for {3} (`GenericProvider::ShouldConsiderDig`
+counts lands -- 2 -- against Faeburrow's MV 3), so `MTG_M2T_TRACE=3` shows the T2 main-2 DECISION
+with every source tapped and one plan, "(pass)". Won T5; `MTG_5C_PHASE=0` (Faeburrow cast in main 1
+before the dig can fire) and `MTG_GENERIC_DIG=0` both win T4. `MTG_5C_CONDEMN=0` stays T5.
+
+**Fix (`TurnSolver::Main1DigDefersToMain2`, one reader for the rollout's pre-combat dig loop and the
+executor's reactive m1 dig).** While a cast the filter WITHHELD from main 1 (Main2 at this state, the
+filter's prowess stand-down respected) is still payable (`PaymentManaCovers`), the heuristic dig
+(`Plan::dig_choice == -1`) waits; the same loop runs at the end of main 2, after that main's casts.
+So main 2 is offered {Faeburrow, pass} and "pass" still digs: the dig is moved, not cancelled.
+Searched dig variants (0/1) are untouched. Gated on `MainPhaseFilterActive` and reached only behind
+`HasAnyDigSource`, so d0, human play, single-main decks and every deck without a dig source are
+byte-identical. `MTG_DIG_DEFER_MAIN2=0` (heurarm `DIG_DEFER_MAIN2`) restores the main-1 dig.
+
+**Which decks.** Of the phase-filter decks (Anti-Lifegain, FiveColour and Fungus by default;
+Hinata2 / Prevent Damage behind their levers) only FiveColour holds a dig source (Zagoth Triome,
+Jetmir's Garden). The other end-of-main-1 spends already keep their lands for main 2
+(`DripManaWantedLaterThisTurn`, `TapPainSourcesIfUseful`, plus the searched `sweep_choice`).
+
+**Measured (one pooled batch, both arms).** gi1106: T5 -> T4 at d8/b0, at the shipped d6/b20 and at
+d3/b10. FiveColour smoke (d3/d5/2HG, s1001): avgs unchanged, =0 arm byte-identical to GT, 5 same-turn
+play changes. Train seeds (d3/d5 x s2002/s3003, 2HG d3 s2002): 9 games faster (gi39/43/72 at d3 and
+d5 s2002, gi189 d3 s2002, gi58 d3 and d5 s3003), **0 slower**; per-key -0.020 / -0.005 / -0.030 /
+-0.010 / 0. Sentinels with the lever on: FiveColour d0 smoke and Anti-Lifegain d3 smoke byte-identical
+to GT.
