@@ -41,6 +41,8 @@
 #include "core/HeuristicDefaults.h"
 #include "ai/Combat.h"
 #include "ai/ManaPayment.h"
+#include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 
 #include <string>
 #include <vector>
@@ -1843,5 +1845,132 @@ TEST_CASE("Brightcap Badger: the viewer offers the granted tap the payer would t
         GameState s = Fresh();
         const int idx = PutSaprolingToken(s, 60, /*sick=*/false);
         CHECK(HumanPreTapFaces(s, s.battlefield[static_cast<std::size_t>(idx)]).empty());
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE MYCOLOTH MAIN-PHASE PIN STANDS DOWN TO `Both` ON A HASTE TURN (USER 2026-10-13).
+//
+// The pin's own argument -- "post-combat eats the same bodies after they have swung, strictly
+// more" -- is sound only while the fresh Mycoloth cannot attack. With haste the pre-combat line
+// swings the 4/4 PLUS every devour counter the same turn (devour 2 on three Saprolings is a
+// 16/16, 32/32 under one Doubling Season), so the ledger stops being one-sided and the phase
+// becomes arithmetic the search must do. An unconditional pin is a predicate in the GATE,
+// consulted at every budget including unlimited, so the haste-lethal line was unfindable at ANY
+// budget -- the shape the USER rejected as MTG_EQUIP_ROUTE_TOPMAIN.
+//
+// SILENT IF BROKEN, which is why these are unit tests: every arrangement below still finishes a
+// game and prints an ordinary win turn. A regression fingerprint cannot distinguish "the pin
+// stood down correctly" from "the predicate never fired", and the 40-game smoke A/B differs by
+// six enumeration-memo misses -- real, but far too small to be a test.
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE("Mycoloth's Main2 pin: no haste route on the battlefield -> still pinned Main2")
+{
+    EnsureCardsLoaded();
+    const FungusProvider prov;
+    GameState s = Fresh();
+    // Fodder and a devour target, but nothing that can grant haste.
+    Put(s, "Sporecrown Thallid", 0, 1);
+    PutSaprolingToken(s, 10);
+    PutSaprolingToken(s, 11);
+    const auto ov = prov.MainPhaseOverride(s, Def("Mycoloth"));
+    REQUIRE(ov.has_value());
+    CHECK(*ov == DecisionProvider::MainPhase::Main2);
+}
+
+TEST_CASE("Mycoloth's Main2 pin: Concordant Crossroads stands it down to Both")
+{
+    EnsureCardsLoaded();
+    const FungusProvider prov;
+    GameState s = Fresh();
+    Put(s, "Concordant Crossroads", 0, 1);
+    const auto ov = prov.MainPhaseOverride(s, Def("Mycoloth"));
+    REQUIRE(ov.has_value());
+    CHECK(*ov == DecisionProvider::MainPhase::Both);
+    // A BLANKET grant, so it needs no fodder and nothing has to be left up -- that is what makes
+    // it the unconditional half of the predicate.
+    CHECK(Def("Concordant Crossroads").params.grants_haste);
+    CHECK(Def("Concordant Crossroads").params.affects_all_creatures);
+}
+
+TEST_CASE("Mycoloth's Main2 pin: Vitaspore's sac-outlet haste counts, but only with fodder")
+{
+    EnsureCardsLoaded();
+    const FungusProvider prov;
+
+    SUBCASE("Vitaspore alone cannot pay its own cost -- still Main2")
+    {
+        GameState s = Fresh();
+        Put(s, "Vitaspore Thallid", 0, 1);
+        // Vitaspore is a FUNGUS, not a Saproling, so it cannot eat itself (the subtype filter
+        // alone forbids it) and there is no other body on the board.
+        const auto ov = prov.MainPhaseOverride(s, Def("Mycoloth"));
+        REQUIRE(ov.has_value());
+        CHECK(*ov == DecisionProvider::MainPhase::Main2);
+    }
+
+    SUBCASE("Vitaspore + one Saproling -> Both")
+    {
+        GameState s = Fresh();
+        Put(s, "Vitaspore Thallid", 0, 1);
+        PutSaprolingToken(s, 10);
+        const auto ov = prov.MainPhaseOverride(s, Def("Mycoloth"));
+        REQUIRE(ov.has_value());
+        CHECK(*ov == DecisionProvider::MainPhase::Both);
+    }
+
+    SUBCASE("the fodder may be the DEVOUR fodder -- the k axis resolves the conflict, not this")
+    {
+        // USER: *"(and leave up enough to give it haste)"*. The predicate deliberately does NOT
+        // reserve a body: devour k is an existing SEARCHED axis (one cast variant per k = 0..own),
+        // so with two Saprolings the search already enumerates k=1 (eat one, sac the other for
+        // haste) alongside k=2 (eat both, no haste) and prices them against each other. Reserving
+        // here would instead DELETE one of those two lines -- a greedy pick at a searched node.
+        GameState s = Fresh();
+        Put(s, "Vitaspore Thallid", 0, 1);
+        PutSaprolingToken(s, 10);
+        PutSaprolingToken(s, 11);
+        const auto ov = prov.MainPhaseOverride(s, Def("Mycoloth"));
+        REQUIRE(ov.has_value());
+        CHECK(*ov == DecisionProvider::MainPhase::Both);
+    }
+
+    SUBCASE("an OPPONENT's Vitaspore and fodder grant us nothing")
+    {
+        GameState s = Fresh();
+        Put(s, "Vitaspore Thallid", 1, 1);
+        const int idx = PutSaprolingToken(s, 10);
+        s.battlefield[static_cast<std::size_t>(idx)].controller_index = 1;
+        s.battlefield[static_cast<std::size_t>(idx)].owner_index      = 1;
+        const auto ov = prov.MainPhaseOverride(s, Def("Mycoloth"));
+        REQUIRE(ov.has_value());
+        CHECK(*ov == DecisionProvider::MainPhase::Main2);
+    }
+}
+
+TEST_CASE("Mycoloth's Main2 pin: MTG_FUNGUS_M2_HASTE=0 restores the unconditional pin")
+{
+    EnsureCardsLoaded();
+    // The env read is a function-local `static`, so it is latched on first use and cannot be
+    // flipped from inside the process. Assert the SHAPE instead: the lever exists in the arm
+    // registry under the name the A/B drives, so `arm_flags` can price the pin without a rebuild.
+    CHECK(std::string(heurarm::Name(heurarm::FUNGUS_M2_HASTE)) == "MTG_FUNGUS_M2_HASTE");
+    CHECK(heurarm::SlotOf("MTG_FUNGUS_M2_HASTE") == heurarm::FUNGUS_M2_HASTE);
+}
+
+TEST_CASE("Everything that is NOT a devour card stays pinned Main1")
+{
+    EnsureCardsLoaded();
+    const FungusProvider prov;
+    GameState s = Fresh();
+    Put(s, "Concordant Crossroads", 0, 1);   // the haste route is live and must not leak
+    PutSaprolingToken(s, 10);
+    for (const char* name : { "Saproling Burst", "Doubling Season", "Utopia Mycon",
+                              "Sporecrown Thallid", "Slimefoot, the Stowaway" })
+    {
+        const auto ov = prov.MainPhaseOverride(s, Def(name));
+        REQUIRE_MESSAGE(ov.has_value(), name);
+        CHECK_MESSAGE(*ov == DecisionProvider::MainPhase::Main1, name);
     }
 }

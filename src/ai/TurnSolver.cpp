@@ -5277,8 +5277,16 @@ static bool SecondMainUnproductive(const GameState& state)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d == nullptr) { return false; }        // unknown -> assume the phase is needed
-            if (m2prov.MainPhaseOverride(state, *d) != DecisionProvider::MainPhase::Main2)
-            { continue; }
+            // `Both` COUNTS AS NEEDING THE PHASE, and it has to. MTG_FUNGUS_M2_HASTE stands the
+            // devour pin down to Both on a haste turn so the pre-combat line is searched too --
+            // but Both does not withdraw the post-combat line, it ADDS the other one (the USER's
+            // *"you would want to try it in both spots"*). Testing `!= Main2` would have skipped
+            // this phase entirely on exactly those turns, deleting the attack-then-eat-the-spent-
+            // attackers line that the pin was built for -- the pin's fix silently un-fixing the
+            // pin's purpose. Only a Main1 answer is a genuine "this card does not want main 2".
+            const std::optional<DecisionProvider::MainPhase> m2ov =
+                m2prov.MainPhaseOverride(state, *d);
+            if (!m2ov.has_value() || *m2ov == DecisionProvider::MainPhase::Main1) { continue; }
             // ...AND THE DEFERRED CAST MUST BE PAYABLE. Holding the card is not the condition the
             // phase exists for -- CASTING it is. Measured (MTG_M2_YIELD_STATS, 60 Fungus games):
             // 181,528 interior m2 solves, 80,738 of them (44.5%) returning an EMPTY plan, almost

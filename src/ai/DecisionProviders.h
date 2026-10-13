@@ -2266,6 +2266,15 @@ public:
     // Requires DeckUsesSecondMain to fire (devour is on that whitelist behind the same lever): the
     // filter only MOVES a cast, so without a post-combat main it would DELETE Mycoloth outright.
     // Both halves are gated on MTG_FUNGUS_M2_DEVOUR so the arm is one switch.
+    //
+    // ...BUT THE PIN IS NOT UNCONDITIONAL, and it was a defect that it ever was (USER 2026-10-13:
+    // *"it should be playable before combat iff we have a haste provider"*, *"The problem is that
+    // you would want to try it in both spots when haste is available"*). The argument above --
+    // "post-combat eats the same bodies after they have swung: strictly more" -- holds only while
+    // the fresh Mycoloth cannot attack. Give it haste and the pre-combat line gets the 4/4 plus
+    // every devour counter swinging THIS turn, which a 16/16 makes decisive, and the ledger stops
+    // being one-sided. So on a haste turn the answer is `Both` and the search decides; see
+    // MTG_FUNGUS_M2_HASTE and FungusHasteRouteForEntrant.
     bool ClassifiesMainPhases() const override;
     std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
     bool SecondMainNeedsDeferredCast() const override;

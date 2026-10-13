@@ -5,6 +5,8 @@
 # accepted-with-regressions (regression, 2026-10-13): Single-path half of the up-front escalation skip WITHDRAWN (MTG_ESC_SKIP_SINGLE default OFF): creature_giving d5 s2002, dragonstorm d5 s2002 + s3003 return EXACTLY to their pre-skip GT -- their moves in 2a3ea87f were that half skipping escalations its climb would have TAKEN (verified on the game logs), NOT thread-history as that note said. The ladder-path skip (R=0, default ON) moves no regression game. CARRIED from the 10c406f8 accept (still in GT): kitty d3+d5 s2002 gi149 T4->T5 is budget-independent and attributed to MTG_EQUIP_ONE_HOST (its 'no double strike' precondition is false on the v1 list, which maindecks 4 Kor Duelist); the lever is a USER ruling, left at its default, finding reported. Reference gate scoped to the 550 non-Kitty refs = 185 ok / 365 repaired / 0 play-drift / 0 enum-gap / 0 board-diverged / 0 contract-fail; the 30 Kitty refs are UN-RUN on the documented 13 min-per-decision viewer cap (docs/design/equip-route-viewer-dfs-cap-is-mis-sized.md).
 # accepted-with-regressions (regression, 2026-10-13): selesnya only: opted in to the up-front escalation skip's rollout allowance (escalation_skip_r=74, USER 2026-10-13 'start with Selesnya'). selesnya_regression_d5_s3003 gi12 changes play at the SAME win turn (T8): replayed alone, the allowance skips a T1 escalation the take rule would have TAKEN (hcom 4 = T) and the game still wins T8; 0 slower / 0 faster in smoke and regression. Held out (3,960 games, three samples): 0 real slowdowns, units -13.2..-14.0%.
 # accepted-with-regressions (regression, 2026-10-13): selesnya (per-depth escalation_skip_r vector replaces the constant 74): selesnya_regression_d5_s3003 gi12 returns to its R=0 play (digest 73290ad9, T8; the R=74 line e904f5c9 was also T8) -- verified by replaying the game alone at R=0 / 74 / vector; same score, avg unchanged
+# accepted-with-regressions (smoke, 2026-10-13): fungusb only: MTG_FUNGUS_M2_HASTE stands the devour Main2 pin down to Both on a haste turn (USER-found lossy gate); searched audit 2 faster / 0 slower / 3 same-score line changes, all the pre-combat haste-Mycoloth line; incumbent fungus holds no haste source so it is provably inert there and byte-identical
+# accepted-with-regressions (regression, 2026-10-13): fungusb only: MTG_FUNGUS_M2_HASTE stands the devour Main2 pin down to Both on a haste turn (USER-found lossy gate); all four fungusb cases better or unchanged (d3 -0.0100/-0.0200, d5 0/-0.0400) and every other deck byte-identical; incumbent fungus holds no haste source so the fix is provably inert there
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -13,8 +15,8 @@ fungus_smoke_d0_s1001=5.6270/a4524c045cb136b3
 fungus_smoke_d3_s1001=5.3667/87288c62f4ff7fbc
 fungus_smoke_d5_s1001=5.3600/fadf8974c3ed5410
 fungusb_smoke_d0_s1001=6.1900/9e0223867c7a1604
-fungusb_smoke_d3_s1001=5.2400/6e1c2c467a9b64f5
-fungusb_smoke_d5_s1001=5.1750/e0f9b163996d6ef4
+fungusb_smoke_d3_s1001=5.2133/49338ba88563c31c
+fungusb_smoke_d5_s1001=5.1750/ae44d424bc271ff8
 slivers_smoke_d0_s1001=4.6530/21c7e15e35fc9f7e
 slivers_smoke_d3_s1001=4.2440/f9002dae3eb80c85
 slivers_smoke_d5_s1001=4.1867/c66ad87e1f20a388
@@ -142,10 +144,10 @@ fungus_regression_d3_s3003=5.4500/947d77b35011873b
 fungus_regression_d5_s2002=5.4400/78c9f0687f0c3f9f
 fungus_regression_d5_s3003=5.4400/461889da47697bcd
 fungusb_regression_d0_s2002=6.1860/358c88e8e1470e10
-fungusb_regression_d3_s2002=5.0900/e451ed3e58c95a7e
-fungusb_regression_d3_s3003=5.2200/bc339b814a76d849
-fungusb_regression_d5_s2002=5.0000/6c7386893ea6a6f6
-fungusb_regression_d5_s3003=5.2200/c54b22b7a4ebaaa2
+fungusb_regression_d3_s2002=5.0800/e36870af0d79410c
+fungusb_regression_d3_s3003=5.2000/436d441a8b0ba06c
+fungusb_regression_d5_s2002=5.0000/168d652887283049
+fungusb_regression_d5_s3003=5.1800/3e80308746e940a1
 slivers_regression_d0_s2002=4.6880/65f8801645c6d170
 slivers_regression_d3_s2002=4.2250/00280527cf7951c9
 slivers_regression_d3_s3003=4.2575/e49009ccaaec4230

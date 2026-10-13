@@ -235,6 +235,7 @@ enum Slot : int
     FUNGUS_M2_DEVOUR,         // MTG_FUNGUS_M2_DEVOUR     Mycoloth (and ONLY Mycoloth) is cast in the SECOND MAIN: attack first, then devour the bodies (ADOPTED default ON)
     FUNGUS_M2_GATE,           // MTG_FUNGUS_M2_GATE       ...and only SOLVE the second main on turns the hand actually holds a PAYABLE Main2 cast (ADOPTED default ON)
     FUNGUS_M2_ROOT,           // MTG_FUNGUS_M2_ROOT       ...and defer only at REAL decision turns: a projected future turn keeps Mycoloth in main 1 (measured NEUTRAL, default OFF)
+    FUNGUS_M2_HASTE,          // MTG_FUNGUS_M2_HASTE      ...and the Main2 pin STANDS DOWN TO `Both` when a haste route is on the battlefield (Concordant Crossroads' blanket grant, or Vitaspore Thallid's `sac_outlet_grants_haste` with fodder to pay it), so the pre-combat devour-and-attack line is searched alongside the post-combat one. USER 2026-10-13: *"it should be playable before combat iff we have a haste provider"* ... *"In cases where this can give more damage + lethal this would be incorrect"* ... *"The problem is that you would want to try it in both spots when haste is available"* ... *"(and leave up enough to give it haste)"*. FIXES A LOSSY GATE, which is why it is default ON rather than earning its way in: the unconditional pin was a predicate consulted at EVERY budget including unlimited, so a haste-devour kill (devour 2 on 3 Saprolings is a 16/16, 32/32 under one Doubling Season) was unfindable at any budget -- the shape the USER rejected as MTG_EQUIP_ROUTE_TOPMAIN ([[budget-may-reprice-not-remove]]). `Both` and not Main1: which phase wins is ARITHMETIC (haste damage now vs eating the spent attackers later) and the search sums both sides exactly, so a doctrine pin either way would be the forbidden one-sided assertion. The "leave enough up" constraint needs no code -- devour k is already a searched axis, so the k that spares a Saproling for Vitaspore's cost is already enumerated and priced. Flip to 0 to measure the pin's cost (default ON)
     FUNGUS_DEVOUR_BIG_EXEMPT, // MTG_FUNGUS_DEVOUR_BIG_EXEMPT  ...and the ladder STOPS at the first big body (Sporesower/Sporecrown never eaten) instead of giving each a rung (default OFF; sub-mode of the above)
     FUNGUS_DEVOUR_LANDMARKS,  // MTG_FUNGUS_DEVOUR_LANDMARKS  devour k is a COMPUTED landmark menu (decline / free-fodder prefix / last-outlet / quest / eat-all), size independent of board width, instead of one rung per contested body (default OFF)
     FUNGUS_DEVOUR_LETHAL,     // MTG_FUNGUS_DEVOUR_LETHAL  ...and a PROVEN kill collapses the menu to the single entry `own`: in the SECOND main the count cannot change this turn's combat, and eating everything maximises both the counters and the sac drain, so it DOMINATES every smaller k (default ON; the conservative projection is Mycoloth's own body alone next turn)
@@ -565,6 +566,7 @@ inline const char* Name(int slot)
         "MTG_FUNGUS_M2_DEVOUR",
         "MTG_FUNGUS_M2_GATE",
         "MTG_FUNGUS_M2_ROOT",
+        "MTG_FUNGUS_M2_HASTE",
         "MTG_FUNGUS_DEVOUR_BIG_EXEMPT",
         "MTG_FUNGUS_DEVOUR_LANDMARKS",
         "MTG_FUNGUS_DEVOUR_LETHAL",

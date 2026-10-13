@@ -28025,13 +28025,99 @@ bool FungusProvider::ClassifiesMainPhases() const
     return heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, on);
 }
 
+// A route to haste for the devour creature THIS turn, for THIS deck. Provider-local on purpose:
+// TurnSolver's HasteAccessThisTurn MISSES `sac_outlet_grants_haste` (Vitaspore Thallid), and it has
+// two other callers driving the generic main-phase classifier -- widening it would move play on
+// every deck to fix one. Deck knowledge belongs in the provider (USER hard rule 2026-09-30).
+//
+// OVER-DETECTION IS THE SAFE DIRECTION, exactly as HasteAccessThisTurn argues for itself: a false
+// positive answers Both, which only WIDENS the enumeration (the pre-combat filter drops Main2 and
+// the post-combat filter drops Main1, so Both survives in both phases). A false negative restores
+// the unconditional pin, which is the loss this exists to remove. So this is affordability-blind.
+//
+// BATTLEFIELD ONLY, and that is sufficient rather than a concession: the override is consulted per
+// NODE during CollectActions, so the "cast the granter first, then Mycoloth" line is covered by the
+// search's own sequencing -- at the node after Concordant Crossroads ({G}) or Vitaspore ({1}{G})
+// resolves, the granter IS on the battlefield and this returns Both there. Reading hand cards too
+// would only duplicate that, at the price of a hand walk at every node.
+//
+// TOKENS ARE SKIPPED. This board is 20-40 wide and almost all of it is Saproling tokens; the walk
+// runs only when a devour card is in hand, but it still runs per node, and this deck's token set
+// (Saprolings, Burst's */* tokens, Brightcap's end-step bodies) carries neither param. Deck-scoped
+// claim, which is what a provider is for -- see the board-width quadratics this deck has already
+// paid for four times.
+static bool FungusHasteRouteForEntrant(const GameState& s)
+{
+    const int active = s.active_player_index;
+    const CardDatabase& db = CardDatabase::Instance();
+    bool sac_haste_outlet = false;
+    std::string outlet_subtype;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        if (p.is_token) { continue; }
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        // Concordant Crossroads: a blanket grant, so the fresh Mycoloth has haste the moment it
+        // enters -- no cost, no fodder, nothing to leave up.
+        if (d->params.grants_haste) { return true; }
+        if (d->params.sac_outlet_grants_haste)
+        { sac_haste_outlet = true; outlet_subtype = d->params.sac_creature_requires_subtype; }
+    }
+    if (!sac_haste_outlet) { return false; }
+    // Vitaspore Thallid: "Sacrifice a Saproling: target creature gains haste." The grant COSTS a
+    // body, so the haste line needs fodder that the devour did not already eat -- the USER's *"(and
+    // leave up enough to give it haste)"*. That constraint is NOT re-derived here: the devour count
+    // k is an existing SEARCHED axis (one cast variant per k = 0..own), so the search already
+    // enumerates the k that leaves one Saproling behind and prices it against eating it. All this
+    // has to answer is whether the route exists at all, which needs one legal body.
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        // Subtype-gated outlets are the only ones this deck has, and a Saproling is a creature by
+        // construction -- so the subtype test IS the legality test, and it covers tokens (which is
+        // the whole point: the fodder is almost always a token). An outlet that eats anything falls
+        // back to the plain creature test.
+        if (!outlet_subtype.empty())
+        { if (!CardHasSubtype(p.card, outlet_subtype)) { continue; } }
+        else if (!p.card.IsCreature()) { continue; }
+        return true;
+    }
+    return false;
+}
+
 std::optional<DecisionProvider::MainPhase>
-FungusProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) const
+FungusProvider::MainPhaseOverride(const GameState& s, const CardDefinition& def) const
 {
     static const bool env_on = EnvOn("MTG_FUNGUS_M2_DEVOUR", true);
     if (!heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, env_on)) { return std::nullopt; }
-    // The one card that wants the later phase.
-    if (def.params.devour > 0) { return MainPhase::Main2; }
+    // The one card that wants the later phase -- UNLESS it can attack the turn it lands.
+    //
+    // USER 2026-10-13: *"it should be playable before combat iff we have a haste provider"* ...
+    // *"In cases where this can give more damage + lethal this would be incorrect."* ... *"The
+    // problem is that you would want to try it in both spots when haste is available."*
+    //
+    // The unconditional Main2 pin was the LOSSY shape ([[budget-may-reprice-not-remove]]): it is a
+    // predicate in the GATE, consulted at every budget including unlimited, so a haste-devour kill
+    // was unfindable at ANY budget. Devour 2 eating 3 Saprolings is a 16/16 (32/32 under one
+    // Doubling Season); with haste that is the whole body of damage THIS turn against 0 from the
+    // deferred line, so it is a LETHAL-TURN loss, not a rounding one.
+    //
+    // BOTH, never Main1. Pinning the other way would be equally lossy: the post-combat line (attack
+    // first, then eat the spent attackers) is the USER's original ruling for this card and is still
+    // right whenever the haste damage is worth less than the bodies. Which of the two wins is
+    // ARITHMETIC, and the search sums both sides exactly -- the same test the Faeburrow/Mana Cannons
+    // doctrine applies above: a doctrine rule may only ASSERT a phase where the ledger is one-sided
+    // by construction. With haste on the table it is not.
+    if (def.params.devour > 0)
+    {
+        static const bool haste_env = EnvOn("MTG_FUNGUS_M2_HASTE", true);
+        if (heurarm::Flag(heurarm::FUNGUS_M2_HASTE, haste_env)
+            && FungusHasteRouteForEntrant(s))
+        { return MainPhase::Both; }
+        return MainPhase::Main2;
+    }
     // USER: *"Everything else can be skipped."* Pinning Main1 overrides the base template rule
     // that would send a summoning-sick vanilla body to Main2 -- this deck's 1/1s are spore engines
     // and Mycoloth fodder, and holding them past combat buys nothing while paying for the phase.

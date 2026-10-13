@@ -1,6 +1,8 @@
 # Fungus candidate-b screen, 2026-10-13: results and list recommendation
 
-**Status: rounds 1a-5 COMPLETE.** No list has been adopted and no new apparatus has been generated.
+**Status: rounds 1a-6 COMPLETE; round 7 (Slimefoot x Mycoloth + the pin's price) specified.** No list
+has been adopted and no new apparatus has been generated. One ENGINE change has landed since round 6:
+the Mycoloth Main-2 pin fix (`MTG_FUNGUS_M2_HASTE`), so round 7 is NOT on rounds 1a-6's engine.
 
 USER framing: *"we will be testing everything out of candidate B and only switch to mono green if
 black seems not that helpful."* And on scope: *"We should not be generating any new tables during
@@ -223,3 +225,143 @@ V1's table. `c_z1_court0` shows the win does not depend on it.
   black argument is narrowed (it argues for a black SOURCE, not the black PACKAGE).
 * **Sporesower Thallid** -- round 1b's `c3` was a 2HG null (t=-1.69) and by far the most expensive
   arm (slow games at 1.1-7.5M units, one at 143 s). The one V1 count the screen does NOT vindicate.
+
+---
+
+## Round 6 (Slimefoot fills) and the CONFOUND the USER found in it
+
+USER design for round 6: *"Just fill in other spots with Slimefoot."* / *"Don't try to move anything
+else around."* So every arm changed only the card being cut and Slimefoot.
+
+Seed 990000, 4000 games/cell, `max_fallback` 0.07 declared (Slimefoot is a 1-of in its own bucket, so
+raising it to 3 costs ~3.4% fall-through -- the documented count-coverage cliff). Negative = faster.
+
+| arm | std | 2hg | ms/game (2hg) |
+|---|---|---|---|
+| `y4` Myco 0 + Beast 4 + **Vitaspore** 4 (fill CONTROL) | **-0.0800** | -0.1747 | **1635** |
+| `y2` Myco 0 + Beast 4 + **Slimefoot** 3 | -0.0685 | **-0.1822** | **837** |
+| `y3` Myco 0 + Slime 4 + Beast **3** | -0.0238 | -0.1062 | 1026 |
+| `y1` Myco 2 + Slime 3 (no Beastmaster change) | +0.0075 (t=+1.4, NULL) | -0.0192 | 1051 |
+
+* Vitaspore-vs-Slimefoot as the fill is a **format split and essentially a tie**: `y4` wins std by
+  -0.0115 +-0.0048 (t=-2.40), `y2` wins 2hg by -0.0075 +-0.0060 (t=-1.25, null). Consistent with
+  `dies_trigger_damage_each_opponent` multiplying Slimefoot's drain by `OpponentHeads()`.
+* `y2` is **half the cost** of `y4` (837 vs 1635 ms/game in 2hg) for the same result. Relevant to the
+  3x suite-cost rule if this list is ever adopted.
+* **Beastmaster -> 4 outranks a 4th Slimefoot** (`y3` drops Beastmaster to 3 and is much worse).
+
+### ...but the Slimefoot reading is confounded, and the USER named why
+
+USER 2026-10-13: *"Slimefoot is probably also pretty dependent on cards like Mycoloth that produce a
+lot of Saprolings."*
+
+**Correct, and the engine models the dependency more strongly than the phrasing suggests.** Three
+channels, all verified in the card data and `SpellEffects.h`:
+
+1. **Devour sacrifices ARE deaths.** `ApplyDevourAsEnters` removes the victims and DEFERS their death
+   triggers; `FireDeferredDevourDeaths` routes each through `OnCreatureDies`, which is exactly where
+   Slimefoot's `dies_trigger_damage` fires. Eating k Saprolings with a Slimefoot out is k face damage
+   and k life on the spot -- **2k in 2HG**.
+2. **The upkeep flood is the fuel.** `upkeep_tokens_per_plus_one_counter` reads Mycoloth's LIVE
+   counters, so devour 3 -> 6 counters -> 6 Saprolings every upkeep (12 counters / 24 tokens under
+   one Doubling Season, and the deck runs four).
+3. **The deck cashes them for free.** Vitaspore, Deathspore, Utopia Mycon and Psychotrope all cost
+   exactly "Sacrifice a Saproling" -- no mana, no `{T}` -- so with Slimefoot out the token pile IS a
+   clock that ignores summoning sickness and ignores blockers.
+
+**And every arm that added Slimefoot also cut Mycoloth.** Base is Mycoloth 4 / Slimefoot 1; `y1` is
+Mycoloth 2, and `y2`/`y3`/`y4` are Mycoloth 0. There is no arm in rounds 1a-6 that adds Slimefoot
+while keeping Mycoloth at 4 -- so the headline `y2`-vs-`y4` comparison was made in the one
+configuration where Slimefoot's best enabler is absent. The only clean reading in the other
+direction is round 4's `k1` (Slimefoot 1 -> 0 against the Mycoloth-4 base: **+0.0095 / +0.0270**,
+Slimefoot earns its slot), which is the sign the hypothesis predicts.
+
+**There is no non-interacting donor in this list, and that is the substantive finding.** Every slot
+is a Saproling-engine slot: Sporecrown pumps the tokens, Wild Growth ramps to the five-drop,
+Utopia/Psychotrope/Deathspore are the outlets that cash Slimefoot in, Tukatongue has a measured
+devour anti-synergy (`c5`), Doubling Season doubles both halves of Mycoloth. So an "add Slimefoot"
+arm **always** pays with a Slimefoot enabler -- which is itself part of why `y2`-vs-`y4` read as a
+tie, and why a plain difference-in-differences with a held-fixed donor cannot be built here.
+
+### Round 7's design: hold the CONTRAST fixed instead of the donor
+
+`logs/fungus_screen/build_spec_r7.py`, seed 1000000 (held out from 941000-990000). Within each
+Mycoloth bracket the two arms differ by **exactly** `{Slimefoot 3, Vitaspore 2}` vs
+`{Slimefoot 1, Vitaspore 4}`, and Beastmaster is constant within each bracket (2 at Mycoloth 2,
+where only two slots are freed; 4 at Mycoloth 0, where four are). The builder ASSERTS that contrast,
+so a later edit cannot silently change the question.
+
+| arm | Myco | Slime | Vita | Beast | role |
+|---|---|---|---|---|---|
+| `w1_m2_slime3` | 2 | **3** | 2 | 2 | Slimefoot fill at Mycoloth 2 |
+| `w2_m2_vita4` | 2 | 1 | **4** | 2 | Vitaspore fill at Mycoloth 2 |
+| `w3_m0_slime3_beast4` | 0 | **3** | 2 | 4 | Slimefoot fill at Mycoloth 0 (= `y2`) |
+| `w4_m0_vita4_beast4` | 0 | 1 | **4** | 4 | Vitaspore fill at Mycoloth 0 (= `y4`/`z1`) |
+
+Interaction = `(w1 - w2) - (w3 - w4)`. Under the hypothesis the Slimefoot fill does *relatively*
+better at Mycoloth 2. Round 6 already measured the Mycoloth-0 half (+0.0115 std / -0.0075 2hg), so
+the Mycoloth-2 half is the new information.
+
+**The apparatus bias cancels in that contrast**, which is what makes the design worth its arms: the
+~3.4% Slimefoot fall-through penalty is one-way and falls on the arm playing the extra copies, and
+BOTH Slimefoot-3 arms carry it, so it subtracts out of the difference-of-differences.
+
+## The Mycoloth Main-2 pin was a LOSSY GATE (USER-found), and it is now FIXED
+
+USER 2026-10-13: *"For Mycoloth I have some concern that we might actually be understating it a
+bit. One reason is that it should be playable before combat iff we have a haste provider."* ... *"In
+cases where this can give more damage + lethal this would be incorrect."* ... *"The problem is that
+you would want to try it in both spots when haste is available."* ... *"(and leave up enough to give
+it haste)"*
+
+`FungusProvider::MainPhaseOverride` took a `const GameState&` whose parameter was **unnamed** and
+returned `MainPhase::Main2` for any `devour > 0` card unconditionally. That is a predicate in the
+GATE, consulted at every budget including unlimited, so the pre-combat devour-and-attack line was
+unfindable at **any** budget -- the shape ruled out for `MTG_EQUIP_ROUTE_TOPMAIN` (see
+`budget-may-reprice-not-remove`). Devour 2 eating three Saprolings is a 16/16 (32/32 under one
+Doubling Season), so with haste this is a lethal-turn loss, not a rounding one.
+
+**Fix (`MTG_FUNGUS_M2_HASTE`, default ON):** answer `MainPhase::Both` when
+`FungusHasteRouteForEntrant` finds a battlefield haste route -- `grants_haste` (Concordant
+Crossroads' blanket grant) or `sac_outlet_grants_haste` (Vitaspore Thallid) **with legal fodder**.
+Four design points worth recording:
+
+* **`Both`, never `Main1`.** Which phase wins is arithmetic -- haste damage now against eating the
+  spent attackers later -- and the search sums both sides exactly. A doctrine pin either way would
+  be the one-sided assertion the Faeburrow/Mana-Cannons rule already forbids.
+* **The USER's "leave enough up to give it haste" needs no code.** Devour `k` is an existing searched
+  axis (one cast variant per `k = 0..own`), so with two Saprolings the search already enumerates
+  `k=1` (eat one, sacrifice the other for haste) alongside `k=2` (eat both, no haste) and prices
+  them. Reserving a body in the predicate would instead DELETE one of those two lines.
+* **Battlefield-only is sufficient, not a concession.** The override is consulted per NODE in
+  `CollectActions`, so "cast the granter first, then Mycoloth" is covered by the search's own
+  sequencing: at the node after Crossroads (`{G}`) or Vitaspore (`{1}{G}`) resolves, the granter IS
+  on the battlefield and the override answers `Both` there.
+* **`SecondMainUnproductive`'s gate had to learn about `Both` as well.** It tested
+  `MainPhaseOverride(...) != Main2 -> continue`, so a `Both` answer would have stopped justifying the
+  post-combat phase -- **the fix would silently have deleted the post-combat devour line the pin
+  exists for.** Only a `Main1` answer (or none) now disqualifies. `HasteAccessThisTurn` was
+  deliberately NOT widened: it misses `sac_outlet_grants_haste` and has two other callers.
+
+**Validation.** 587/587 unit tests, including five new cases in `test/unit/test_fungus_revision.cpp`
+(no route; Crossroads; Vitaspore without fodder; Vitaspore with fodder; the opponent's board; and
+every non-devour card staying `Main1` while a route is live). Smoke: **2 games faster, 0 slower**,
+3 same-score line changes, and every other deck byte-identical. `fungusb_smoke_d3` improved -0.0267t.
+The incumbent `fungus` list holds **no haste source at all** (Mycoloth 2, no Crossroads, no
+Vitaspore), so the fix is provably inert there -- the containment is by mechanism, not luck.
+
+The real games show the intended line directly. `fungusb_smoke_d3 gi18`, identical kept hand and
+draws, Crossroads already down on T3:
+
+```
+T4  old: Saproling Burst; ATTACK   [opp 16]
+T4  new: Mycoloth; ATTACK          [opp 11]
+```
+
+**What this means for the earlier rounds.** The pin penalised every arm holding Mycoloth, so it
+biased the five-drop axis in the direction that FLATTERED cutting Mycoloth -- and it biases round 7's
+Slimefoot contrast in the direction that would fake the USER's hypothesis being false, which is why
+it was fixed before round 7 ran. Round 7's `w5`/`w6` pair prices what is left of it: identical
+60-card lists (Mycoloth 4, Vitaspore 4, Doubling Season 2 -- the most Mycoloth and the most haste
+routes the list can hold) with the lever flipped via `arm_flags`, so the only difference between the
+two arms is the lever and even the Season/Mycoloth interaction is common to both.
