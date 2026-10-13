@@ -1,42 +1,31 @@
-# Regression ground truth -- commit b6f8f0b5  date 2026-10-12
+# Regression ground truth -- commit 0e9abad4  date 2026-10-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-334 turns over the tier); searched 4 faster / 1 slower (minotaur d5 gi0, converges at --depth 5 --budget-ms 100); d0 to-unwon 17 vs from-unwon 30. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 781 = 597 mulligan count + 177 bottom + 7 bottom-order-only, 0 unexplained; all 3 cases faster
 # accepted-with-regressions (regression, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): only the 9 Karoo decks move, every one net faster (-348 turns over the tier); searched 5 faster / 11 slower, all 11 converge at --depth <win turn> --budget-ms 100; d0 to-unwon 13 vs from-unwon 30; viewer protocol --strict 556 refs 0 drift. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 851 = 636 mulligan count + 206 bottom + 9 bottom-order-only, 0 unexplained; all 5 cases faster
 # accepted-with-regressions (overnight, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): full tier, only the 9 Karoo decks move, every deck net faster (-2692 turns; Hinata incl. its 2HG rows -412, the 2HG rows alone +6 = 6 budget-churn games); searched 32 faster / 31 slower, all 31 converge (30 at --depth <win turn> --budget-ms 100, hinata d3 s5005 gi68 at --depth 8 --budget-ms 0); d0 to-unwon 99 vs from-unwon 204. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 8396 = 6325 mulligan count + 1996 bottom + 75 bottom-order-only, 0 unexplained; all 12 cases faster
-# accepted-with-regressions (smoke, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
 # accepted-with-regressions (regression, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
 # accepted-with-regressions (overnight, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
 # accepted-with-regressions (overnight, 2026-10-08): Karoo: the USER's Hinata bounce rule ADOPTED (MTG_HINATA_BOUNCE_RULE default ON; docs/design/karoo-tap-in-response.md): only hinata/hinata2hg rows move, byte-identical to the pooled A/B's Hinata-A arm; held-out Hinata -30 (42 faster/18 slower), 2HG -7 (4/0); every slower game (5 searched, 13 d0) recovers at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
-# accepted-with-regressions (smoke, 2026-10-08): Karoo: the USER's Hinata bounce rule ADOPTED (MTG_HINATA_BOUNCE_RULE default ON; docs/design/karoo-tap-in-response.md): only hinata/hinata2hg rows move, byte-identical to the pooled A/B's Hinata-A arm; held-out Hinata -30 (42 faster/18 slower), 2HG -7 (4/0); every slower game (searched + d0) recovers at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
 # accepted-with-regressions (regression, 2026-10-08): Karoo: the USER's Hinata bounce rule ADOPTED (MTG_HINATA_BOUNCE_RULE default ON; docs/design/karoo-tap-in-response.md): only hinata/hinata2hg rows move, byte-identical to the pooled A/B's Hinata-A arm; held-out Hinata -30 (42 faster/18 slower), 2HG -7 (4/0); every slower game (searched + d0) recovers at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
-# accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the five 2026-10-08 claude-play sweep fixes (GSZ copy id, Pyrohemia post-entry ping, exact line_ok, batch-prepay timing, defer-{C}) + the USER's Beseech doctrine ADOPTED 2026-10-09 (MTG_PD_BESEECH_USEFUL default ON: engine creatures only, skip duplicates; 0.61x units): only pd/pd2hg rows move; d0 faster; the searched slower games are Beseech->Rolling Earthquake finisher lines the rule removes (amendment MTG_PD_BESEECH_FINISHER, default OFF, measured for the USER) and lookahead line changes -- recovery check in docs/design/analysis-Prevent Damage.md
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the five 2026-10-08 claude-play sweep fixes (GSZ copy id, Pyrohemia post-entry ping, exact line_ok, batch-prepay timing, defer-{C}) + the USER's Beseech doctrine ADOPTED 2026-10-09 (MTG_PD_BESEECH_USEFUL default ON: engine creatures only, skip duplicates; 0.61x units): only pd/pd2hg rows move; d0 faster; the searched slower games are Beseech->Rolling Earthquake finisher lines the rule removes (amendment MTG_PD_BESEECH_FINISHER, default OFF, measured for the USER) and lookahead line changes -- recovery check in docs/design/analysis-Prevent Damage.md
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the five 2026-10-08 claude-play sweep fixes (GSZ copy id, Pyrohemia post-entry ping, exact line_ok, batch-prepay timing, defer-{C}) + the USER's Beseech doctrine ADOPTED 2026-10-09 (MTG_PD_BESEECH_USEFUL default ON: engine creatures only, skip duplicates; 0.61x units): only pd/pd2hg rows move; d0 faster; the searched slower games are Beseech->Rolling Earthquake finisher lines the rule removes (amendment MTG_PD_BESEECH_FINISHER, default OFF, measured for the USER) and lookahead line changes -- recovery check in docs/design/analysis-Prevent Damage.md
-# accepted-with-regressions (smoke, 2026-10-09): Karoo: the USER's general bounce rule ADOPTED, root-caused and amended (MTG_BOUNCE_USER_RULE + MTG_BOUNCE_RULE_AMEND + MTG_BOUNCE_REPLAY_PRECISE default ON; docs/design/karoo-tap-in-response.md): only creature_giving/melira/mirrorwing(+2hg) rows move, byte-identical to the pooled A/B ship arm; held-out melira -23, mirrorwing -26, every other Karoo deck 0; 0 searched games slower; all 46 slower d0 games recover at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
 # accepted-with-regressions (regression, 2026-10-09): Karoo: the USER's general bounce rule ADOPTED, root-caused and amended (MTG_BOUNCE_USER_RULE + MTG_BOUNCE_RULE_AMEND + MTG_BOUNCE_REPLAY_PRECISE default ON; docs/design/karoo-tap-in-response.md): only creature_giving/melira/mirrorwing(+2hg) rows move, byte-identical to the pooled A/B ship arm; held-out melira -23, mirrorwing -26, every other Karoo deck 0; 0 searched games slower; all 46 slower d0 games recover at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
 # accepted-with-regressions (overnight, 2026-10-09): Karoo: the USER's general bounce rule ADOPTED, root-caused and amended (MTG_BOUNCE_USER_RULE + MTG_BOUNCE_RULE_AMEND + MTG_BOUNCE_REPLAY_PRECISE default ON; docs/design/karoo-tap-in-response.md): only creature_giving/melira/mirrorwing(+2hg) rows move, byte-identical to the pooled A/B ship arm; held-out melira -23, mirrorwing -26, every other Karoo deck 0; 0 searched games slower; all 46 slower d0 games recover at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
-# accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
-# accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
-# accepted-with-regressions (smoke, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
 # accepted-with-regressions (regression, 2026-10-09): Prevent Damage: RE-MEASURED for the USER's discard ladder + the USER's cast order (2026-10-09). c6bc7c02's regression/overnight PD keys were STALE (re-promoted pre-ladder runs; only smoke had been re-run). Searched: regression 2 faster / 2 slower, overnight 12 faster / 4 slower; every slower game recovers at stage 1 (depth W, b100) = budget churn (seed 3009 gi6: both levers; s4004 gi8 x3: cast order; s5005 gi20: discard ladder). d0: regression 10/8, overnight 65/44
 # accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: RE-MEASURED for the USER's discard ladder + the USER's cast order (2026-10-09). c6bc7c02's regression/overnight PD keys were STALE (re-promoted pre-ladder runs; only smoke had been re-run). Searched: regression 2 faster / 2 slower, overnight 12 faster / 4 slower; every slower game recovers at stage 1 (depth W, b100) = budget churn (seed 3009 gi6: both levers; s4004 gi8 x3: cast order; s5005 gi20: discard ladder). d0: regression 10/8, overnight 65/44
-# accepted-with-regressions (smoke, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
 # accepted-with-regressions (regression, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
 # accepted-with-regressions (overnight, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
 # accepted-with-regressions (overnight, 2026-10-10): bruna (width collapses fbd63d2f, every row better: d3 net -35, d5 -14, d0 -247): 6 slower d3 games -- s4004 gi208, s6006 gi452/gi631 recover at d<old> b100; s4004 gi585 + s7007 gi755 do not recover at d8 b0 but neither does the old binary (old faster win was budget luck); s5005 gi759 T6->T7 is a pre-existing executor/search payment gap the inert-equip fold exposed (docs/design/bruna-wings-recast-payment-divergence.md)
 # accepted-with-regressions (overnight, 2026-10-10): bruna (Wings-recast payment fix 5b4f963f; FULL overnight tier run on src 5c5cd74c, 413 cases, every non-Bruna case and the Bruna d0 rows byte-identical): searched 0 slower / 5 faster (net -5) / 58 play-changed at the same score; d0 unchanged. SUPERSEDES the 2026-10-10 width-collapse note's non-recovering items s5005 gi759 (now T7->T6) and s4004 gi585 (now T5->T4); s7007 gi755 stands as noted there. All 63 changed games replayed under both binaries (old reproduces GT, new reproduces this run): 54 first diverge at a Greaves equip the executor now carries out, 4 at an Aura (Arcanum Wings / Almost Perfect) landing on its planned host after the shroud release, 1 at a bottom chosen by rollouts that run the changed executor paths, the rest are the 5 faster games. Known cosmetic quirk: the release equip is still LOGGED at its plan position, after the Aura it enabled.
 # accepted-with-regressions (overnight, 2026-10-10): bruna RESIZED to the ENTRY set (USER 2026-10-10; regression-testing skill, 'Sizing a deck's overnight rows'): d3 4x1000 b20 -> 4x400 b10, d5 4x500 b40 -> 4x300 b20 (Hinata's shape), d0 unchanged, until Bruna's keep table is adopted. Same binary (src 5c5cd74c) as the previous Bruna overnight accept: the 32 slower / 1 faster / 129 play-changed searched games are the first 400/300 games of each seed re-played at HALF the budget, so each slower game's faster line is the previous accept's own measurement at the old budget -- a key re-definition, not a play change. 1.45 worker-h for Bruna's 12 overnight cases alone (makespan 3m46s), vs 6.56 worker-h (28.6% of the tier) at the old shape inside the full tier.
-# accepted-with-regressions (smoke, 2026-10-10): snow: Jorn -> Kaldring keep-table alias (USER 2026-10-10, mulligan.keep_table_alias; the 09-25 table predates the 10-03 Jorn listing, so every Jorn hand missed the table and paid clairvoyant trial-game bottoming = 60-64% of Snow's searched overnight units). Lossy by the USER's choice (regeneration too expensive now): the Jorn slice loses its clairvoyant bottom and gets a bucket learned for Kaldring. Full smoke/regression tiers: every non-Snow case byte-identical, 556 refs clean. Snow overnight (held-out): searched +41 turns / 1000 games (51 slower / 29 faster), d0 -57 / 1000 (75 faster / 45 slower), searched units 198M -> 57M
 # accepted-with-regressions (regression, 2026-10-10): snow: Jorn -> Kaldring keep-table alias (USER 2026-10-10, mulligan.keep_table_alias; the 09-25 table predates the 10-03 Jorn listing, so every Jorn hand missed the table and paid clairvoyant trial-game bottoming = 60-64% of Snow's searched overnight units). Lossy by the USER's choice (regeneration too expensive now): the Jorn slice loses its clairvoyant bottom and gets a bucket learned for Kaldring. Full smoke/regression tiers: every non-Snow case byte-identical, 556 refs clean. Snow overnight (held-out): searched +41 turns / 1000 games (51 slower / 29 faster), d0 -57 / 1000 (75 faster / 45 slower), searched units 198M -> 57M
 # accepted-with-regressions (overnight, 2026-10-10): snow: Jorn -> Kaldring keep-table alias (USER 2026-10-10, mulligan.keep_table_alias; the 09-25 table predates the 10-03 Jorn listing, so every Jorn hand missed the table and paid clairvoyant trial-game bottoming = 60-64% of Snow's searched overnight units). Lossy by the USER's choice (regeneration too expensive now): the Jorn slice loses its clairvoyant bottom and gets a bucket learned for Kaldring. Full smoke/regression tiers: every non-Snow case byte-identical, 556 refs clean. Snow overnight (held-out): searched +41 turns / 1000 games (51 slower / 29 faster), d0 -57 / 1000 (75 faster / 45 slower), searched units 198M -> 57M
 # accepted-with-regressions (regression, 2026-10-12): Prevent Damage value leaf adopted (USER 2026-10-11: adopt if it costs about the same, after the mulligan profile). Leaf-only tier (keep table off via MTG_EXHAUSTIVE_PROFILE=none) = baseline for the keep-table attribution. Leaf vs no leaf WITH the keep table live, 8x1000 held-out (930000+): -0.035t t=-10.6 8/8, 0.928x core-ms, 0.862x units. Searched slower 1 (pd_regression_d3_s3003 gi33 5->6): diverges at the LOOKAHEAD bottom of a 4-card keep (trial games at 1 ms), which the keep table replaces.
-# accepted-with-regressions (smoke, 2026-10-12): Prevent Damage keep table (fast, R=30, K=19, gen 40.9 h on 686d47a6 with the leaf) adopted. Validation: keep -0.167t (4/4, t -9.9), confounded bottoming -0.0596t (5/5, t -8.7). keep_adoption_attribution: every changed game explained (different mulligan count / different bottom / bottom-order digest only), 0 unexplained, baselines reproduced both sides (smoke + regression, pd + pd2hg).
 # accepted-with-regressions (regression, 2026-10-12): Prevent Damage keep table (fast, R=30, K=19, gen 40.9 h on 686d47a6 with the leaf) adopted. Validation: keep -0.167t (4/4, t -9.9), confounded bottoming -0.0596t (5/5, t -8.7). keep_adoption_attribution: every changed game explained (different mulligan count / different bottom / bottom-order digest only), 0 unexplained, baselines reproduced both sides (smoke + regression, pd + pd2hg).
 # accepted-with-regressions (overnight, 2026-10-12): pd overnight rows RESIZED at the keep-table adoption (d3 4x100->4x200 b20, d5 4x75->4x125 b40; pd2hg unchanged 4x50 b40), sized to keep a cost saving (USER 2026-10-12). Re-defined keys accepted with the keep table ABSENT (MTG_EXHAUSTIVE_PROFILE=none, leaf in) so the adoption diff is like-for-like; also absorbs the Pyrohemia collapse (d951e809) and the leaf (f9e88f2b), which this tier had not seen.
 # accepted-with-regressions (overnight, 2026-10-12): Prevent Damage keep table adopted (b6f8f0b5) -- overnight tier, on the resized rows: keep_adoption_attribution explains every changed game (different mulligan count / different bottom / bottom-order digest only), 0 unexplained, baselines reproduced both sides (pd + pd2hg). Rows cost 0.27 worker-h with the table vs 0.35 for the OLD rows without it (same box, 2026-10-12).
@@ -44,13 +33,13 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-fungus_smoke_d0_s1001=5.6270/a4524c045cb136b3
-fungus_smoke_d3_s1001=5.3667/87288c62f4ff7fbc
-fungus_smoke_d5_s1001=5.3600/fadf8974c3ed5410
-fungusb_smoke_d0_s1001=6.1900/9e0223867c7a1604
+fungus_smoke_d0_s1001=5.6260/fdde68f65c349153
+fungus_smoke_d3_s1001=5.3667/7817f3272b1aea95
+fungus_smoke_d5_s1001=5.3600/6add371310d1c305
+fungusb_smoke_d0_s1001=6.1840/a79d872494bb5962
 fungusb_smoke_d3_s1001=5.2400/6e1c2c467a9b64f5
 fungusb_smoke_d5_s1001=5.1750/e0f9b163996d6ef4
-slivers_smoke_d0_s1001=4.6530/21c7e15e35fc9f7e
+slivers_smoke_d0_s1001=4.6530/07752d5ce84c2d8b
 slivers_smoke_d3_s1001=4.2440/f9002dae3eb80c85
 slivers_smoke_d5_s1001=4.1867/c66ad87e1f20a388
 burn_smoke_d0_s1001=4.4620/e667d678badfdd47
@@ -59,113 +48,116 @@ burn_smoke_d5_s1001=4.3360/78ce0fa9a3320357
 th_smoke_d0_s1001=5.5480/2c26a469bba22630
 th_smoke_d3_s1001=4.0733/9ea5c4f825721eee
 th_smoke_d5_s1001=3.9867/abf1658f6d7a4630
-knights_smoke_d0_s1001=4.5400/a0dfeba57087a812
-knights_smoke_d3_s1001=4.3920/e3b8a2156d9a79ee
-knights_smoke_d5_s1001=4.3867/1473865289a1644b
+knights_smoke_d0_s1001=4.5400/f2e519a246d1a703
+knights_smoke_d3_s1001=4.3920/00a1c43440f5a58f
+knights_smoke_d5_s1001=4.3867/062a6d7ac7a5a59a
 whiteknights_smoke_d0_s1001=4.5830/b2da09a25c3e6ce7
 whiteknights_smoke_d3_s1001=4.1240/3dfc6e7a2d92ac26
 whiteknights_smoke_d5_s1001=4.1467/be2f0e7be56975f6
-antilife_smoke_d0_s1001=4.8930/ea45a9ecc08bd11a
+antilife_smoke_d0_s1001=4.8920/d513bd3f7e3ea671
 antilife_smoke_d3_s1001=4.1880/83bca8fcf408e681
 antilife_smoke_d5_s1001=4.1800/98f08878a259d50a
-hinata_smoke_d0_s1001=6.9070/0b9a84c854d504a4
-hinata_smoke_d3_s1001=5.6600/e7665e5c12cf89e0
-hinata_smoke_d5_s1001=5.8133/23503120ce3361bf
-dragonstorm_smoke_d0_s1001=5.4320/f5da38d6684d4ce0
-dragonstorm_smoke_d3_s1001=4.5533/20845bbf0f586889
-dragonstorm_smoke_d5_s1001=4.5200/db5874513c4b01f3
-auras_smoke_d0_s1001=4.3660/047b4bef065a6857
+hinata_smoke_d0_s1001=6.7190/9f81671cc769bfaa
+hinata_smoke_d3_s1001=5.6533/e50bf322b21f24a7
+hinata_smoke_d5_s1001=5.8267/9379b342bf40818c
+dragonstorm_smoke_d0_s1001=4.9960/0d987bae22b1bfa4
+dragonstorm_smoke_d3_s1001=4.4867/9c915868c6357df1
+dragonstorm_smoke_d5_s1001=4.4667/f82af0054875bfdd
+auras_smoke_d0_s1001=4.3650/f3f0cf380c7ccdf8
 auras_smoke_d3_s1001=4.1267/755056ec15b03a0f
 auras_smoke_d5_s1001=4.1200/300180addad6555e
-goblins_smoke_d0_s1001=4.0650/bdc143c319529e8e
+goblins_smoke_d0_s1001=4.0630/8ac149d7fa506d7a
 goblins_smoke_d3_s1001=3.6467/8c79dd727fcfeda2
 goblins_smoke_d5_s1001=3.5867/5126de1ede62c39d
-creature_giving_smoke_d0_s1001=5.5090/acf49d89d5d9551b
+creature_giving_smoke_d0_s1001=5.5090/9521f918916d9475
 creature_giving_smoke_d3_s1001=4.6867/b083e92fff777d97
-creature_giving_smoke_d5_s1001=4.6667/ace14ee0a911c9c0
-mirrorwing_smoke_d0_s1001=5.7350/b212f64264f8bd02
+creature_giving_smoke_d5_s1001=4.6667/d587ab7ab6d59253
+mirrorwing_smoke_d0_s1001=5.7350/163ebe86943e43fc
 mirrorwing_smoke_d3_s1001=4.2133/efc8017b06a7320b
 mirrorwing_smoke_d5_s1001=4.2933/1ee0b9edf410b41b
-fivecolour_smoke_d0_s1001=5.5580/aef6ec89264130ca
-fivecolour_smoke_d3_s1001=4.8267/3157d5fefbf820f5
-fivecolour_smoke_d5_s1001=4.8933/5b9f2a26e1995fad
-stompy_smoke_d0_s1001=4.9460/01d217da6d01506b
-stompy_smoke_d3_s1001=4.0400/f0f4d240ef1bd485
-stompy_smoke_d5_s1001=4.0133/edb0732435be2f61
+fivecolour_smoke_d0_s1001=5.4740/37a86bc9572994a0
+fivecolour_smoke_d3_s1001=4.8267/b4cb21c4251d0451
+fivecolour_smoke_d5_s1001=4.8933/70b2c4bc0a777109
+stompy_smoke_d0_s1001=4.9000/f4267685b45f6f99
+stompy_smoke_d3_s1001=4.0333/c2ed3b5261a829ef
+stompy_smoke_d5_s1001=4.0133/030118a216716e81
 minotaur_smoke_d0_s1001=5.3090/5566a48888c836ed
 minotaur_smoke_d3_s1001=4.9080/bdf8656383260c31
 minotaur_smoke_d5_s1001=4.9067/214a41b9370bbd27
-kitty_smoke_d0_s1001=4.9610/f6ce9183c5f5030d
-kitty_smoke_d3_s1001=4.3760/dc5a656d4108638a
-kitty_smoke_d5_s1001=4.4067/a6d8a9b4c01c988b
-kittyv2_smoke_d0_s1001=5.0150/dd7d7e81c402e6cc
-kittyv2_smoke_d3_s1001=4.1700/69c20b9efff27bdb
-kittyv2_smoke_d5_s1001=4.0600/bdc8799ccb7af6e3
+kitty_smoke_d0_s1001=4.8820/6123f0fe45a3ba15
+kitty_smoke_d3_s1001=4.3680/fffbfc7f7c2778e1
+kitty_smoke_d5_s1001=4.3800/c15100ceb374db9d
+kittyv2_smoke_d0_s1001=4.8220/d169df62aa2945bc
+kittyv2_smoke_d3_s1001=3.9500/dcf11a214f80d79a
+kittyv2_smoke_d5_s1001=3.8800/a1e8693a06964473
+kittyv3_smoke_d0_s1001=5.6080/c3eb21dbe0d7ff61
+kittyv3_smoke_d3_s1001=4.5600/0b12fe79d9717423
+kittyv3_smoke_d5_s1001=4.3600/4e19f8d984be996e
 dragons_smoke_d0_s1001=5.9350/6dae5c3fc0194a31
 dragons_smoke_d3_s1001=5.6960/34097620549e5015
 dragons_smoke_d5_s1001=5.5733/052989f42c90ba12
-breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
+breaching_smoke_d0_s1001=4.8460/dc20e1df0e892cdc
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
-critter_smoke_d0_s1001=4.6310/a8c2afabd3039c7b
-critter_smoke_d3_s1001=4.3933/64e23d18921b4672
+critter_smoke_d0_s1001=4.6180/2cdec70031069f77
+critter_smoke_d3_s1001=4.3867/94ab4c8cbe8a0018
 critter_smoke_d5_s1001=4.4000/cbe307a2ed38a8fc
-melira_smoke_d0_s1001=6.3460/70122839d44dcafa
+melira_smoke_d0_s1001=6.3440/f091ca5cc49a5b3c
 melira_smoke_d3_s1001=4.6600/bb310b646344e0fc
 melira_smoke_d5_s1001=4.7200/0ae9eef65f5bc091
-angels_smoke_d0_s1001=5.2460/d6c99fee478865cc
-angels_smoke_d3_s1001=4.6720/0408f2acbc589626
-angels_smoke_d5_s1001=4.6267/4939c25a07901df7
-hinata2hg_smoke_d3_s1001=5.6133/8a056c86cd40e3f9
+angels_smoke_d0_s1001=5.2320/efeccdfeda16fcbe
+angels_smoke_d3_s1001=4.6680/5f63d4ca82976ff7
+angels_smoke_d5_s1001=4.6267/de78d92b6cfdcfd0
+hinata2hg_smoke_d3_s1001=5.6000/e75899a6e4410ea4
 antilife2hg_smoke_d3_s1001=3.9700/8a6d41d530e7abd3
 minotaur2hg_smoke_d3_s1001=5.3500/6864ca4d91aab3f6
-goblins2hg_smoke_d3_s1001=4.0400/3c28068e1afacb63
+goblins2hg_smoke_d3_s1001=4.0400/097f3b408bda91fc
 knights2hg_smoke_d3_s1001=5.0933/5add5c5aa084b3e2
 whiteknights2hg_smoke_d3_s1001=4.6533/9e856e28ddd04029
-fivecolour2hg_smoke_d3_s1001=5.4250/d7b071834b8e7c23
+fivecolour2hg_smoke_d3_s1001=5.4250/5eb45097992ca9f4
 fluctuator2hg_smoke_d3_s1001=3.5200/adc1b2642848fe91
-angels2hg_smoke_d3_s1001=5.1900/e420a20addcbf2a2
+angels2hg_smoke_d3_s1001=5.1900/f8f04271075373c6
 slivers2hg_smoke_d3_s1001=4.8400/eb9d35927fc68228
-burn2hg_smoke_d3_s1001=5.8200/4a946825f080a85c
+burn2hg_smoke_d3_s1001=5.8200/1df1e60c4545cd80
 th2hg_smoke_d3_s1001=4.4600/5d7370fcdbce1701
-dragonstorm2hg_smoke_d3_s1001=4.7800/c22bc71141e5b7b2
+dragonstorm2hg_smoke_d3_s1001=4.7000/6e46bcd2bc917d2c
 auras2hg_smoke_d3_s1001=4.5200/2343755c3023f3ee
 creature_giving2hg_smoke_d3_s1001=5.0000/04503e7d09c41110
 mirrorwing2hg_smoke_d3_s1001=4.6400/6e3a78611653eb0b
-stompy2hg_smoke_d3_s1001=4.3200/a47e6abc19857614
-kitty2hg_smoke_d3_s1001=4.8400/3d6fd15d9263c670
+stompy2hg_smoke_d3_s1001=4.3200/b650c0a932c4af19
+kitty2hg_smoke_d3_s1001=4.8000/4b980c3be9ccbcd9
 dragons2hg_smoke_d3_s1001=6.3000/48df7093651a7501
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
-critter2hg_smoke_d3_s1001=4.7600/9906c908c9d6d9bc
-melira2hg_smoke_d3_s1001=4.8400/15182cf23a0ec013
+critter2hg_smoke_d3_s1001=4.7600/63a3c80b717132c4
+melira2hg_smoke_d3_s1001=4.8400/c6183dd6cdc37989
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=5.0200/17792659b430d2f9
 pd2hg_smoke_d3_s1001=5.6000/41cd68762043bb43
-fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
+fluctuator_smoke_d0_s1001=5.0850/7aa0e7ead8e06254
 fluctuator_smoke_d3_s1001=3.5400/fe8f95f9362334e7
 fluctuator_smoke_d5_s1001=3.5067/7b3eeadf188dfa29
-giants_smoke_d0_s1001=6.0750/f4dde2f03037c668
-giants_smoke_d3_s1001=5.7733/d2c722b9f01d9660
-giants_smoke_d5_s1001=5.6933/5712e4c4259ec792
+giants_smoke_d0_s1001=6.0750/e198110ade947117
+giants_smoke_d3_s1001=5.7733/5d578b94d6ce73f7
+giants_smoke_d5_s1001=5.6933/95fb0e42aba08889
 pirates_smoke_d0_s1001=4.7390/1c7cce78ee5347b7
 pirates_smoke_d3_s1001=4.3533/dd56b9e90294338c
 pirates_smoke_d5_s1001=4.3467/abc848d90f53225a
-selesnya_smoke_d0_s1001=5.9280/197b9d7d95146555
-selesnya_smoke_d3_s1001=5.2267/10218e0402108fbd
-selesnya_smoke_d5_s1001=5.2667/4c4b2d241ba4ab57
+selesnya_smoke_d0_s1001=5.7290/f27b030fc7be4d24
+selesnya_smoke_d3_s1001=5.2133/c1ef12dfb9605813
+selesnya_smoke_d5_s1001=5.2667/a27db30e8c04043f
 soldiers_smoke_d0_s1001=4.4320/0c7926df614c90b5
 soldiers_smoke_d3_s1001=4.2800/50e56ed79872f3b3
 soldiers_smoke_d5_s1001=4.2933/abf388e9f9e0a413
 pd_smoke_d0_s1001=7.3020/78dee9f01e7fbe96
 pd_smoke_d3_s1001=5.3600/12a8d118275be0da
 pd_smoke_d5_s1001=5.3333/acad116598e096ec
-bruna2hg_smoke_d3_s1001=5.4400/6da23fed9a801f75
-bruna_smoke_d0_s1001=6.2260/6016b1f0c37640e6
-bruna_smoke_d3_s1001=4.8400/0d14d9861947a98b
-bruna_smoke_d5_s1001=4.9200/0e59f6d09695f402
-snow_smoke_d0_s1001=6.1870/eb782e126ed3bbd5
-snow_smoke_d3_s1001=5.8500/5fbd8bf4f8a35ce0
-snow_smoke_d5_s1001=5.8200/ba86825e581f63c7
+bruna2hg_smoke_d3_s1001=5.4000/5dea2c132b2ff16c
+bruna_smoke_d0_s1001=6.1460/f7161c687f2957fd
+bruna_smoke_d3_s1001=4.8400/15a111f9961f526b
+bruna_smoke_d5_s1001=4.9200/b46b1507da4cf508
+snow_smoke_d0_s1001=6.1710/3831603bcc216a2c
+snow_smoke_d3_s1001=5.8500/d406506fe138ac69
+snow_smoke_d5_s1001=5.8200/2108bf6ec9bd92a0
 
 # --- regression ---
 fungus_regression_d0_s2002=5.6900/7f90c5ec3fa0dd16
