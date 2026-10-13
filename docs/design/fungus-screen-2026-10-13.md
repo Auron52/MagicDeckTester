@@ -1,7 +1,6 @@
 # Fungus candidate-b screen, 2026-10-13: results and list recommendation
 
-**Status: rounds 1a-4 COMPLETE. Round 5 (composite verification) IN FLIGHT.** No list has been
-adopted and no new apparatus has been generated.
+**Status: rounds 1a-5 COMPLETE.** No list has been adopted and no new apparatus has been generated.
 
 USER framing: *"we will be testing everything out of candidate B and only switch to mono green if
 black seems not that helpful."* And on scope: *"We should not be generating any new tables during
@@ -128,32 +127,78 @@ Four conclusions:
   grounds the engine cannot represent: *"Deathspore Thallid has upside that is not effectively
   represented by the engine. If we play black it will be a 1-2 of for sure."*
 
-## RECOMMENDED LIST (pending round 5's additivity check)
+## Round 5: the composite verifies, and it breaks the plateau
 
-Changes to candidate-b, 4 cards:
+Seed 980000, shipped table, engine `f816bc46`. The composite had to be measured as a composite
+because `r2e` proved stacking is not safe to assume.
+
+| arm | std | 2hg | d* (std) | ident (std) |
+|---|---|---|---|---|
+| `c_z1_court0` Myco->0, Beast->4, Vita->4, Court->0 | **-0.1343** | **-0.2387** | 0.240t | 71.4% |
+| `c_a2_court0` Myco->2, Beast->4, Court->0 | -0.1045 | -0.2105 | 0.204t | 82.2% |
+| `c_a2_bog2` Myco->2, Beast->4, Peat Bog->2 | -0.0948 | -0.1830 | 0.195t | 80.3% |
+| `c_a2_only` Myco->2, Beast->4 (additivity baseline) | -0.0730 | -0.1730 | 0.165t | 89.2% |
+
+**1. ADDITIVITY HOLDS, slightly super-additive.** Predicted `c_a2_only + r2c` = -0.0730 + -0.0257 =
+-0.0987 std; **observed -0.1045**. In 2hg: -0.1730 + -0.0323 = -0.2053; **observed -0.2105**. The
+spell edit and the Courtyard cut stack cleanly -- unlike the two *land* cuts, which did not.
+
+**2. The core edit replicates across three seed blocks AND three engines.** `Mycoloth 4->2 +
+Beastmaster 2->4` measured **-0.0838** (1a, seed 941000, `0b33d259`), **-0.0785** (2+3, seed 960000,
+`e1180df7`), **-0.0730** (5, seed 980000, `f816bc46`). That is the most robust number in the screen.
+
+**3. Courtyard beats Peat Bog as the land tweak**, confirmed inside one batch:
+`c_a2_court0` vs `c_a2_bog2` = **-0.0097 std / -0.0275 2hg**, both favouring Courtyard. The Bog cut
+also stacks *sub*-additively in 2hg (predicted -0.1895, observed -0.1830) while Courtyard is
+super-additive in both.
+
+**4. THE PLATEAU IS BROKEN, weakly but consistently.**
+`c_z1_court0` vs `c_a2_court0` = **-0.0297 +-0.0113 (t = -2.62)** in std and
+**-0.0283 +-0.0145 (t = -1.95)** in 2hg. Neither is decisive alone, but the direction replicates:
+the same comparison in round 2+3 was -0.0137, on a different seed block and a different engine. So
+the Mycoloth->0 core is **probably** better by ~0.02-0.03, not provably. `c_z1_court0` also has the
+highest `d*` of any arm measured (0.240t std / 0.360t 2hg -- 4.4x and 6.7x the 0.054t benchmark) and
+is the cheapest arm per game (366 vs base 385 std; 691 vs 836 2hg), since cutting Mycoloth removes
+the devour `k` axis.
+
+## RECOMMENDED LIST
+
+**Primary -- 5 changes to candidate-b** (`c_z1_court0`, measured **-0.1343 std / -0.2387 2hg**):
 
 ```
   Beastmaster Ascension   2 -> 4      (+2)   the robust win; must accompany any 5-drop trim
-  Mycoloth                4 -> 2      (-2)   pays for it; also V1's own count
-  Secluded Courtyard      4 -> 0      (-4)   the one supported land tweak
+  Mycoloth                4 -> 0      (-4)   the 2x2 says its slots are what pay for Beastmaster
+  Vitaspore Thallid       2 -> 4      (+2)   the fill; already bucketed, a spore outlet
+  Secluded Courtyard      4 -> 0      (-4)   the only land tweak supported in both formats
   Forest                  4 -> 8      (+4)
 ```
 
-Held deliberately: **Saproling Burst 4** (trimming it is a null), **Doubling Season 4** (no reason to
-cut the higher-ceiling card instead), **Slimefoot 1** (cutting it is worse), **Deathspore 2** (USER
-ruling; 1-vs-2 unmeasurable), **Peat Bog 4** (a cut pairs badly with the Courtyard cut -- the
-non-additive case), **20 lands**.
+Resulting list (60 cards, 20 lands, 8 five-drops):
 
-**Why a2 and not z1, given they tie:** nothing in the data separates them, so the tiebreak is
-non-measurement. Mycoloth 4->2 is the smaller structural change, is replicated across two rounds and
-two engines (1a -0.0838, 2+3 -0.0785/-0.1735), and matches V1's count on an axis where V1's counts
-keep being vindicated. Mycoloth->0 buys nothing measurable over it while removing the deck's devour
-line entirely. **This is a judgement call on a plateau and should be overridden freely.**
+```
+  8 Forest              4 Beastmaster Ascension   2 Deathspore Thallid    1 Brightcap Badger
+  4 Blooming Marsh      4 Doubling Season         2 Tukatongue Thallid    1 Concordant Crossroads
+  4 Hickory Woodlot     4 Saproling Burst         2 Wild Growth           1 Psychotrope Thallid
+  4 Peat Bog            4 Sporecrown Thallid                             1 Shroofus Sproutsire
+                        4 Undercellar Myconid                            1 Slimefoot, the Stowaway
+                        4 Utopia Mycon                                   1 Sol Ring
+                        4 Vitaspore Thallid
+```
 
-**Round 5 (seed 980000, IN FLIGHT)** measures the composite as a composite, because additivity is
-untested and `r2e` proved stacking is not safe to assume: `c_a2_only` (additivity baseline),
-`c_a2_court0` (the recommendation), `c_a2_bog2` (the alternative land pairing), `c_z1_court0` (the
-plateau's other end through the same land change).
+**Conservative alternative** (`c_a2_court0`, **-0.1045 / -0.2105**): identical except `Mycoloth 2`,
+`Vitaspore 2`. Choose this if the ~0.03 edge at t=2.0-2.6 is not worth cutting a marquee card, or if
+Mycoloth's devour line has value the goldfish cannot express -- the Deathspore situation exactly.
+**That is a USER call; the measurement prefers the primary but not decisively.**
+
+Held deliberately in both: **Saproling Burst 4** (trimming it is a null, and round 1b ranked it
+worst to cut), **Doubling Season 4** (b2 ties a2, so no reason to cut the higher-ceiling card
+instead), **Slimefoot 1** (cutting it is worse, and worse still in 2HG), **Deathspore 2** (USER
+ruling; 1-vs-2 is a perfect null), **Peat Bog 4** (its cut is dominated by the Courtyard cut and
+pairs badly with it), **20 lands**.
+
+**Untested upside, not a blocker:** round 1b's best arm used **Thallid** rather than Vitaspore as the
+fill. Thallid is unbucketed by candidate-b's table, so testing it needs either a bucket ruling or
+V1's table. `c_z1_court0` shows the win does not depend on it.
 
 ## Out of scope, and why -- not nulls
 
