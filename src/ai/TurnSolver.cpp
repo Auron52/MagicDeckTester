@@ -35778,6 +35778,30 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
 
         if (enumstats::Enabled()) { enumstats::g_c_surv.fetch_add(1, std::memory_order_relaxed); }   // fully scored
+        // DIAG (MTG_SOLVE_PROJ_TRACE=<turn>, default 0 = off, print-only): every fully-scored subset
+        // of Solve (the d0 runner / playout policy) on that turn with its this-turn projection terms --
+        // the read that showed gi1106's T4 had no plan projected lethal (MTG_ATTACK_FREECAST_DAMAGE).
+        {
+            static const int s_pt = EnvInt("MTG_SOLVE_PROJ_TRACE", 0);
+            if (s_pt > 0 && state.turn_number == s_pt)
+            {
+                std::cerr << "[proj] T" << state.turn_number << (is_pre_combat ? " m1" : " m2") << " {";
+                for (int j : sel)
+                {
+                    const Action& a = cands[static_cast<std::size_t>(j)];
+                    std::cerr << a.card_name << (a.free_cast ? "(free)" : "") << ";";
+                }
+                std::cerr << "} mv=" << combined.ManaValue()
+                          << " supply=" << (credited ? eff : pool).Total()
+                          << " atk_src_yield=" << SumYield(atk_mana_srcs)
+                          << " pending=" << pending_atk << " tap_lost=" << atk_tap_lost
+                          << " proj_atk=" << projected_atk << " direct=" << direct_dmg
+                          << " extra=" << extra_lethal << " cannons=" << cannons_dmg
+                          << " freecast=" << freecast_dmg
+                          << " opp=" << state.Opponent().life << " wins=" << wins
+                          << " eval=" << total_eval << " rank=" << rank_value << "\n";
+            }
+        }
         bool better;
         if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
         else if (wins && route_win_j >= 0
