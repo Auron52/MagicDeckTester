@@ -8,7 +8,12 @@
 #include <set>
 #include <cstdio>
 #include <cstdint>
+// dladdr() is POSIX; MSVC has no equivalent. MTG_HAVE_DLADDR gates the one diagnostic that
+// uses it (NoteWholeLibraryReadSite below) -- see the note there for why this is guarded.
+#if !defined(_MSC_VER) && (defined(__unix__) || defined(__APPLE__))
+#define MTG_HAVE_DLADDR 1
 #include <dlfcn.h>
+#endif
 
 // Execution-trace instrumentation sink (off by default -> byte-identical). See RolloutTouch.h.
 namespace rollout_touch { thread_local Sink* g_sink = nullptr; }
@@ -36,6 +41,13 @@ thread_local Sink* t_sink = nullptr;
 //
 // dladdr's `dli_fbase` is the mapped base of the object the address lives in, so this is also
 // correct for a site that ends up in a shared library rather than the executable.
+//
+// PLATFORM-GUARDED, and it is guarded because the UNGUARDED version of this exact diagnostic broke
+// the Windows CI build once already: 9a22313b shipped a bare __builtin_return_address(0) and MSVC
+// failed with C3861 (fixed in 73764342 by MTG_RETURN_ADDRESS). dladdr/<dlfcn.h> are POSIX and have
+// no MSVC equivalent that is worth having here, so MSVC keeps the raw-pointer print. This whole
+// function is diagnostic-only -- it returns before doing anything unless MTG_INDEX_CARRY_SITES is
+// set -- so the platform split cannot affect play on either OS.
 void NoteWholeLibraryReadSite(const void* ret)
 {
     static const bool on = EnvOn("MTG_INDEX_CARRY_SITES");
@@ -44,8 +56,9 @@ void NoteWholeLibraryReadSite(const void* ret)
     static std::set<const void*>   seen;
     std::lock_guard<std::mutex>    lk(mu);
     if (!seen.insert(ret).second) { return; }
+#if defined(MTG_HAVE_DLADDR)
     Dl_info info{};
-    if (dladdr(ret, &info) != 0 && info.dli_fbase != nullptr)
+    if (ret != nullptr && dladdr(ret, &info) != 0 && info.dli_fbase != nullptr)
     {
         const std::uintptr_t off = reinterpret_cast<std::uintptr_t>(ret)
                                  - reinterpret_cast<std::uintptr_t>(info.dli_fbase);
@@ -59,7 +72,9 @@ void NoteWholeLibraryReadSite(const void* ret)
                      info.dli_sname ? info.dli_sname : "");
         return;
     }
-    std::fprintf(stderr, "=== ICARRY whole-library read site: %p (dladdr failed) ===\n", ret);
+#endif
+    std::fprintf(stderr, "=== ICARRY whole-library read site: %p (no dladdr -- resolve the load "
+                         "base yourself, or run this probe on Linux) ===\n", ret);
 }
 }   // namespace indexcarry
 
