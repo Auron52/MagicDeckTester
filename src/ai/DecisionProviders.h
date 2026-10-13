@@ -1216,6 +1216,10 @@ public:
     bool CastOrderingCandidates(const GameState&, const std::vector<Action>& plan_actions,
                                 const std::vector<Action>& reorder,
                                 std::vector<std::vector<int>>& out) const override;
+    // ...and every distinct order of the set's hard-cast Dragons on each of those bases (the USER's order
+    // does not rank one Dragon against another; MTG_DRAGONSTORM_DRAGON_ORDER, default ON).
+    void AddDragonOrders(const GameState&, const std::vector<Action>& reorder,
+                         std::vector<std::vector<int>>& out) const;
     // After Irencrag resolves, only the CLOSER takes the one remaining slot -- Dragonstorm, or a Dragon
     // (USER: Irencrag second-to-last, only before Dragonstorm; Irencrag -> Dragon a kept low-value
     // line; never Irencrag -> Apex; the Medallion never after Irencrag). With the cap spent, nothing.

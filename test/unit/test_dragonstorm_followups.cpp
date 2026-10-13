@@ -659,3 +659,81 @@ TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle +
         CHECK(in_hand_rite == (on ? 0 : 1));
     }
 }
+
+TEST_CASE("Dragon order: the searched orderings try every order of the hard-cast Dragons (MTG_DRAGONSTORM_DRAGON_ORDER)")
+{
+    // s3050 gi47 T5 after Apex: Desperate x2, Utvara Hellkite, Lathliss, Irencrag Feat in exile (plan) order. The
+    // canonical order keeps Utvara before Lathliss and puts Irencrag before the LAST Dragon: "Utvara, Irencrag,
+    // Lathliss" -- Lathliss enters last, Utvara's entry makes no 5/5. "Lathliss, Irencrag, Utvara" is the
+    // other order the USER's rules allow (they never rank one Dragon against another).
+    ArmFu user(heurarm::DRAGONSTORM_USER_ORDER, true);
+    const GameState s = BoardFu(std::vector<std::string>(10, "Mountain"),
+                                { "Desperate Ritual", "Desperate Ritual", "Utvara Hellkite", "Lathliss, Dragon Queen",
+                                  "Irencrag Feat" }, 5);
+    const std::vector<Action> acts = { CastFu(s, "Desperate Ritual"), CastFu(s, "Desperate Ritual"),
+                                       CastFu(s, "Utvara Hellkite"), CastFu(s, "Lathliss, Dragon Queen"),
+                                       CastFu(s, "Irencrag Feat") };
+    const std::vector<std::string> canon = { "Desperate Ritual", "Desperate Ritual", "Utvara Hellkite", "Irencrag Feat",
+                                             "Lathliss, Dragon Queen" };
+    const std::vector<std::string> lath_first = { "Desperate Ritual", "Desperate Ritual", "Lathliss, Dragon Queen",
+                                                  "Irencrag Feat", "Utvara Hellkite" };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::DRAGONSTORM_DRAGON_ORDER, on);
+        std::vector<std::vector<int>> out;
+        REQUIRE(DsProvFu().CastOrderingCandidates(s, acts, acts, out));
+        REQUIRE_FALSE(out.empty());
+        CHECK(OrderNamesFu(acts, out[0]) == canon);   // the canonical order stays first (wins every tie)
+        bool has = false;
+        for (const std::vector<int>& o : out) { if (OrderNamesFu(acts, o) == lath_first) { has = true; } }
+        CHECK(has == on);
+        CHECK(out.size() == (on ? 2u : 1u));
+        // Every candidate pays (the exact walk): 10 + 2 = 12 -> a Dragon (6 or 8) -> Irencrag (+7) -> the other.
+        for (const std::vector<int>& o : out) { CHECK(ExactOrderFirstUnpayable(s, acts, o) == -1); }
+    }
+    {
+        // Without Irencrag, two Dragons: both orders offered; one Dragon: nothing added.
+        ArmFu arm(heurarm::DRAGONSTORM_DRAGON_ORDER, true);
+        const GameState s2 = BoardFu(std::vector<std::string>(14, "Mountain"),
+                                     { "Utvara Hellkite", "Lathliss, Dragon Queen" }, 5);
+        const std::vector<Action> two = { CastFu(s2, "Utvara Hellkite"), CastFu(s2, "Lathliss, Dragon Queen") };
+        std::vector<std::vector<int>> out;
+        REQUIRE(DsProvFu().CastOrderingCandidates(s2, two, two, out));
+        CHECK(out.size() == 2u);
+        const std::vector<Action> one = { CastFu(s2, "Utvara Hellkite") };
+        std::vector<std::vector<int>> out1;
+        REQUIRE(DsProvFu().CastOrderingCandidates(s2, one, one, out1));
+        CHECK(out1.size() == 1u);
+    }
+}
+
+TEST_CASE("Dragon order, apply level: Lathliss before the other Dragon makes the 5/5 (MTG_DRAGONSTORM_DRAGON_ORDER)")
+{
+    // The searched order is realised as given (Plan::searched_order): "Lathliss, Irencrag, Utvara" on 12 red --
+    // Utvara enters after Lathliss and her trigger makes a 5/5 Dragon token; the canonical order makes none.
+    ArmFu user(heurarm::DRAGONSTORM_USER_ORDER, true);
+    for (const bool lath_first : { true, false })
+    {
+        CAPTURE(lath_first);
+        GameState s = BoardFu(std::vector<std::string>(12, "Mountain"),
+                              { "Utvara Hellkite", "Lathliss, Dragon Queen", "Irencrag Feat" }, 5);
+        TurnSolver::Plan plan;
+        if (lath_first)
+        { plan.actions = { CastFu(s, "Lathliss, Dragon Queen"), CastFu(s, "Irencrag Feat"), CastFu(s, "Utvara Hellkite") }; }
+        else
+        { plan.actions = { CastFu(s, "Utvara Hellkite"), CastFu(s, "Irencrag Feat"), CastFu(s, "Lathliss, Dragon Queen") }; }
+        plan.searched_order = true;
+        plan.land_decided = true;
+        TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+        int creatures = 0, tokens = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (!p.card.IsCreature()) { continue; }
+            ++creatures;
+            if (p.card.m_name.str() != "Utvara Hellkite" && p.card.m_name.str() != "Lathliss, Dragon Queen") { ++tokens; }
+        }
+        CHECK(creatures == (lath_first ? 3 : 2));
+        CHECK(tokens == (lath_first ? 1 : 0));
+    }
+}
