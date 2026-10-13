@@ -556,3 +556,106 @@ TEST_CASE("Line float: a spare source pays the generic before floating colour th
         }
     }
 }
+
+namespace
+{
+// dragonstorm s3104 gi101 T2: Sandstone Needle (two depletion counters; {T}: {R}{R}) + Unclaimed Territory
+// ({C} for a noncreature spell), hand Ruby Medallion, Rite of Flame, Seething Song x2, Dragonstorm.
+GameState NeedleTerritoryFu()
+{
+    GameState s = BoardFu({ "Sandstone Needle", "Unclaimed Territory" },
+                          { "Seething Song", "Seething Song", "Rite of Flame", "Dragonstorm", "Ruby Medallion" }, 2);
+    for (Permanent& p : s.battlefield)
+    { if (p.card.m_name.str() == "Sandstone Needle") { PutDepletionCounters(s, p, 2); } }
+    return s;
+}
+
+// The USER order's line on that board, as the plan stamps it (Medallion not yet on the battlefield).
+std::vector<Action> NeedleLineFu(const GameState& s)
+{
+    return { CastFu(s, "Ruby Medallion"), CastFu(s, "Rite of Flame"), CastFu(s, "Seething Song"),
+             CastFu(s, "Seething Song"), CastFu(s, "Dragonstorm") };
+}
+}   // namespace
+
+TEST_CASE("Line-spare generic: a colour-short line pays a generic pip with the spare {C} first (MTG_LINE_SPARE_GENERIC_FIRST)")
+{
+    const GameState s0 = NeedleTerritoryFu();
+    const std::vector<Action> line = NeedleLineFu(s0);
+    ManaCost total;
+    for (const Action& a : line) { AddManaCost(total, a.cost); }
+    ManaCost med;
+    med.generic = 2;
+    ManaCost rite;
+    rite.red = 1;
+    // The exact walk (lever-independent) reads the USER order as payable: the {C} and one {R} on the
+    // Medallion, the other {R} floating for Rite. The payer must realise the same payment.
+    CHECK(ExactOrderFirstUnpayable(s0, line, { 0, 1, 2, 3, 4 }) == -1);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::LINE_SPARE_GENERIC_FIRST, on);
+        {
+            GameState s = s0;
+            LineCostFu lc(total);
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK(PermFu(s, "Sandstone Needle").tapped);
+            CHECK(PermFu(s, "Unclaimed Territory").tapped == on);
+            CHECK(s.floating_mana.red == (on ? 1 : 0));
+            // ...so Rite of Flame's {R} is payable next (off: only the Territory's {C} is left).
+            CHECK(TapForCostDirect(s, rite, /*for_creature=*/false) == on);
+        }
+        {
+            // No live line: the historical tap on both arms (the Needle pays both pips, the Territory stays up).
+            GameState s = s0;
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK_FALSE(PermFu(s, "Unclaimed Territory").tapped);
+            CHECK(s.floating_mana.red == 0);
+        }
+    }
+    {
+        // NOT SHORT: with two Mountains as well the board alone makes every {R} the rest of a Medallion ->
+        // Rite line owes, so the rule stands down and both arms tap exactly alike.
+        GameState sa = NeedleTerritoryFu();
+        PutFu(sa, "Mountain", 350);
+        PutFu(sa, "Mountain", 351);
+        ManaCost owes = med;
+        owes.red = 1;
+        std::vector<bool> tapped_on, tapped_off;
+        for (const bool on : { true, false })
+        {
+            ArmFu arm(heurarm::LINE_SPARE_GENERIC_FIRST, on);
+            GameState s = sa;
+            LineCostFu lc(owes);
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            for (const Permanent& p : s.battlefield) { (on ? tapped_on : tapped_off).push_back(p.tapped); }
+        }
+        CHECK(tapped_on == tapped_off);
+    }
+}
+
+TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle + Territory casts Dragonstorm (MTG_LINE_SPARE_GENERIC_FIRST)")
+{
+    // The rollout apply (ApplyPlanDirect) pays through the same shared payer as the executor: the whole
+    // ordered line "Medallion, Rite, Seething, Seething, Dragonstorm" resolves (s3104 gi101's T2 kill).
+    // Lever off: the Medallion's {2} takes both of the Needle's {R}, Rite is unpayable and the line dies.
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::LINE_SPARE_GENERIC_FIRST, on);
+        ArmFu user(heurarm::DRAGONSTORM_USER_ORDER, true);
+        GameState s = NeedleTerritoryFu();
+        TurnSolver::Plan plan;
+        plan.actions = NeedleLineFu(s);
+        plan.land_decided = true;
+        TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+        int in_hand_storm = 0, in_hand_rite = 0;
+        for (const Card& c : s.players[0].hand)
+        {
+            if (c.m_name.str() == "Dragonstorm")   { ++in_hand_storm; }
+            if (c.m_name.str() == "Rite of Flame") { ++in_hand_rite; }
+        }
+        CHECK(in_hand_storm == (on ? 0 : 1));
+        CHECK(in_hand_rite == (on ? 0 : 1));
+    }
+}
