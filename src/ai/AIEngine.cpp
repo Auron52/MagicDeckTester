@@ -6984,6 +6984,10 @@ void AIEngine::UseSurplusLandAbilities(GameState& state,
     Player& ap = state.ActivePlayer();
     if (!state.stack.empty()) { return; }   // let pending spells resolve first
     if (!ResolveProvider(state).HasAnyDigSource(state)) { return; }
+    // MAIN 1 IS NOT THE END OF A SPLIT TURN (MTG_DIG_DEFER_MAIN2) -- lockstep with ApplyPlanDirect's
+    // pre-combat dig loop, through the one shared predicate: a payable cast the main-phase filter
+    // withheld from main 1 keeps this main-1-only reactive dig from spending its mana.
+    if (TurnSolver::Main1DigDefersToMain2(state)) { return; }
 
     // Reactive "dig when stuck" used on the depth-0 / develop-when-stuck paths (full-depth
     // committed turns replay the search's recorded digs instead). Dig THROUGH lands toward

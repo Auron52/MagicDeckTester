@@ -20191,6 +20191,11 @@ bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState
 // remove them. The post-combat pass (is_pre_combat == false) is NEVER filtered, so a Main2 class
 // moves a line, it cannot delete one -- which is also why the filter is only valid on a deck that
 // actually PLAYS a second main (GoldFishRunner::DeckUsesSecondMain; see ClassifiesMainPhases).
+// ...PROVIDED main 1's APPLY leaves the deferred cast its mana: an unfiltered enumeration emits
+// nothing it cannot pay for. The one implicit end-of-main-1 spend that did not know about the
+// deferral was the heuristic dig, and it deleted FiveColour's Faeburrow (see
+// TurnSolver::Main1DigDefersToMain2, MTG_DIG_DEFER_MAIN2). The drip / pain sweeps already keep
+// their lands for main 2 (DripManaWantedLaterThisTurn, TapPainSourcesIfUseful).
 // This generalises DeferSacOutletPreCombat above from sac outlets to the whole cast enumeration:
 // partitioning the two mains is what shrinks the joint plan space multiplicatively, and it is
 // what makes the SEARCHED second main affordable (the greedy one is slated for removal -- the
@@ -20320,6 +20325,92 @@ static bool MainPhaseFilterActive(const GameState& state)
 bool TurnSolver::CollapsedMainActive(const GameState& state)
 {
     return MainPhaseFilterActive(state);
+}
+
+// The pre-combat filter's PROWESS stand-down (CollectActions), shared with the dig deferral below so
+// the two cannot disagree about whether anything was withheld: a prowess attacker available THIS turn
+// -- on the board, or a prowess card in hand with its own haste or haste access -- makes every cast a
+// combat feeder, and the filter keeps the whole hand pre-combat. `haste_access()` is asked only when a
+// prowess card is in hand (it is a board + hand walk).
+template <class HasteFn>
+static bool PhaseFilterProwessAccess(const GameState& state, HasteFn&& haste_access)
+{
+    if (CountProwessAttackers(state) > 0) { return true; }
+    for (const Card& hc : state.ActivePlayer().hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (!hd || !hd->card.HasKeyword(Keyword::Prowess)) { continue; }
+        if (hd->card.HasKeyword(Keyword::Haste) || haste_access()) { return true; }
+    }
+    return false;
+}
+
+// MAIN 1 IS NOT THE END OF A SPLIT TURN (MTG_DIG_DEFER_MAIN2, DEFAULT ON).
+//
+// The filter's whole licence is "the post-combat pass is never filtered, so a Main2 class MOVES a line,
+// it cannot delete one". That holds for the ENUMERATION, but main 1's apply does not end at its plan:
+// ApplyPlanDirect then runs the provider's heuristic "dig when stuck" (cycling / sac-to-draw; a plain
+// heuristic for every deck that does not opt into the searched dig axis -- the USER's 2026-09-29
+// ruling), and AIEngine's reactive m1 dig does the same in real play. On a split turn main 1 is
+// "stuck" BY CONSTRUCTION -- the filter took its casts away -- so the dig fires, taps the mana the
+// deferred cast was waiting for, and the post-combat enumeration (which really is unfiltered) has
+// nothing left to emit it with. The class deleted the line.
+//
+// MEASURED: FiveColour gi1106 (seed 6211107) at d8/b0. T2 holds Faeburrow Elder (USER phase rule:
+// Main2 without Greaves) with Stomping Ground + Blood Crypt + Birds untapped. Every main-1 plan that
+// made an untapped drop cycled Zagoth Triome for {3} (GenericProvider::ShouldConsiderDig counts LANDS, 2,
+// against Faeburrow's MV 3; Birds is not a land), main 2 enumerated only "(pass)", Faeburrow slipped
+// to T3 and the game to T5; PHASE=0 casts it in main 1 before the dig can fire and wins T4.
+// MTG_GENERIC_DIG=0 also wins T4, which is what isolated the dig. (Read off MTG_M2T_TRACE=3: the m2
+// DECISION after "land=Wooded Foothills" / "land=Island" showed every source tapped, the Triome gone
+// from hand and plans=1.) With the lever: T4 at d8/b0, at the shipped d6/b20 and at d3/b10.
+// Train seeds (FiveColour d3/d5 s2002/s3003): 9 games faster, 0 slower; smoke avgs unchanged.
+//
+// THE FIX MOVES THE DIG, IT DOES NOT CANCEL IT: while a WITHHELD cast (Main2 at this state, prowess
+// stand-down respected -- the filter's own test) is still payable here, main 1's heuristic dig waits,
+// and ApplyPlanDirect's dig loop runs again at the end of main 2 (both mains since D7), after the
+// post-combat plan's casts. So main 2 is offered {cast it, pass}, and "pass" still digs. The searched
+// dig variants (Plan::dig_choice 0 / 1, DigDecisionSearched decks) are explicit choices and are left
+// alone; only the heuristic default (-1) waits. PaymentManaCovers false is a proof of unpayability, so
+// the dig waits for nothing that could not be cast. Gated on MainPhaseFilterActive, so d0, human play,
+// single-main decks and every deck without the filter are byte-identical. =0 restores the main-1 dig.
+bool TurnSolver::Main1DigDefersToMain2(const GameState& state)
+{
+    static const bool s_env = EnvOn("MTG_DIG_DEFER_MAIN2", true);   // DEFAULT ON; =0 -> the m1 dig
+    if (!heurarm::Flag(heurarm::DIG_DEFER_MAIN2, s_env)) { return false; }
+    if (!MainPhaseFilterActive(state)) { return false; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    bool inputs_ready = false, haste_access = false, scaling_attacker = false;
+    auto inputs = [&]()
+    {
+        if (inputs_ready) { return; }
+        haste_access     = HasteAccessThisTurn(state);
+        scaling_attacker = BoardHasScalingAttacker(state);
+        inputs_ready     = true;
+    };
+    if (PhaseFilterProwessAccess(state, [&]() { inputs(); return haste_access; })) { return false; }
+    const int floating = static_cast<int>(state.floating_mana.Total());
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        DecisionProvider::MainPhase mp;
+        if (auto o = prov.MainPhaseOverride(state, *d)) { mp = *o; }
+        else
+        {
+            Action a;
+            a.kind      = Action::Kind::CastFromHand;
+            a.def       = d;
+            a.card_name = d->card.m_name;
+            a.cost      = d->card.m_mana_cost;
+            inputs();
+            mp = ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker);
+        }
+        if (mp != DecisionProvider::MainPhase::Main2) { continue; }
+        const int need = EffectiveCost(*d, state).ManaValue() - floating;
+        if (PaymentManaCovers(state, d->card.IsCreature(), need)) { return true; }
+    }
+    return false;
 }
 
 static int OptimisticTurnMana(const GameState& state);   // defined below (mana-ceiling section)
@@ -29721,18 +29812,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // prowess creature in hand that could attack same-turn (own haste or haste access).
         // Suite-caught: without this, burn's plain bolts classified Main2 and starved Monastery
         // Swiftspear (+0.39 avg at every depth).
-        bool prowess_access = CountProwessAttackers(state) > 0;
-        if (!prowess_access)
-        {
-            for (const Card& hc : state.ActivePlayer().hand)
-            {
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (!hd || !hd->card.HasKeyword(Keyword::Prowess)) { continue; }
-                classifier_inputs();   // only a prowess card in hand can need haste_access here
-                if (hd->card.HasKeyword(Keyword::Haste) || haste_access)
-                { prowess_access = true; break; }
-            }
-        }
+        // (Shared with TurnSolver::Main1DigDefersToMain2, which must agree on what was withheld.)
+        const bool prowess_access = PhaseFilterProwessAccess(
+            state, [&]() { classifier_inputs(); return haste_access; });
         if (!prowess_access)
         {
             actions.erase(std::remove_if(actions.begin(), actions.end(),
@@ -44251,8 +44333,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // gated only on affordability, -1 (default, and every non-opted deck) keeps the heuristic.
     // BOTH mains (D7, purge step 14): main 2 used to be excluded, so a line that cycles or sacs a
     // land in the second main was inexpressible -- lockstep with the executor's reactive dig.
+    // MAIN 1 IS NOT THE END OF A SPLIT TURN (MTG_DIG_DEFER_MAIN2): while a cast the main-phase
+    // filter withheld from this main is still payable, the HEURISTIC dig (dig_choice -1) waits for
+    // main 2's pass of this same loop instead of spending that cast's mana -- see
+    // TurnSolver::Main1DigDefersToMain2. Lockstep with AIEngine::UseSurplusLandAbilities.
     if (!s_human_play && plan.dig_choice != 0
-        && ResolveProvider(state).HasAnyDigSource(state))
+        && ResolveProvider(state).HasAnyDigSource(state)
+        && !(is_pre_combat && plan.dig_choice < 0 && TurnSolver::Main1DigDefersToMain2(state)))
     {
         // DigChain: both stopping conditions are provider-owned (see MaxDigsPerTurn /
         // DigContinueAfterResolve). Defaults reproduce the legacy 16-and-break exactly.
@@ -59100,6 +59187,28 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             return s.empty() ? std::string("(pass)") : s;
         };
+        // Level 3: the DECISION itself -- the state the post-combat main enumerates from (hand,
+        // battlefield with tapped flags, land drops, the plain pool) and EVERY enumerated plan, so a
+        // plan that never reaches the per-plan `sub=` line (dedup / EOT closure / dominance) is still
+        // visible, and a cast that was never enumerated at all reads as its absence here.
+        if (m2t_here && EnvInt("MTG_M2T_TRACE", 0) >= 3)
+        {
+            const Player& ap = state.ActivePlayer();
+            std::string hs, bs;
+            for (const Card& hc : ap.hand) { hs += hc.m_name.str(); hs += ","; }
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                bs += p.card.m_name.str(); bs += p.tapped ? "(T)," : ",";
+            }
+            std::fprintf(stderr, "[m2t] %s T%d d%d DECISION lands=%d/%d pool=%d float=%d hand=[%s] bf=[%s] plans=%zu\n",
+                         g_fsw_path.c_str(), state.turn_number, depth, ap.lands_played_this_turn,
+                         ap.LandDropsAvailable(), AvailableManaPool(state).Total(),
+                         static_cast<int>(state.floating_mana.Total()), hs.c_str(), bs.c_str(),
+                         post.size());
+            for (const TurnSolver::Plan& pq : post)
+            { std::fprintf(stderr, "[m2t]     plan %s\n", m2t_sum(pq).c_str()); }
+        }
         // BREAKPOINT NODE hosting (MTG_BP_NODE; see BpNodeEnabled): can any plan of this second
         // main pend at a plain-cantrip partition point? Decides whether the apply gets a capture
         // pointer at all -- off (the default), every apply below is byte-identical to before.
@@ -59463,6 +59572,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (!fresh)
                 {
                     g_m2_variant_dup_skips.fetch_add(1, std::memory_order_relaxed);
+                    if (m2t_here && EnvInt("MTG_M2T_TRACE", 0) >= 3)
+                    { std::fprintf(stderr, "[m2t]     skip q=%s: post-apply state dup\n", m2t_sum(q).c_str()); }
                     if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
                     continue;
                 }
@@ -59561,14 +59672,22 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     }
                 }
             }
-            if (!SimulateEndAndStartNextTurn(s2)) { continue; }
+            const bool m2t_skip3 = m2t_here && EnvInt("MTG_M2T_TRACE", 0) >= 3;
+            if (!SimulateEndAndStartNextTurn(s2))
+            {
+                if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT sim failed\n", m2t_sum(q).c_str()); }
+                continue;
+            }
             ExpireStagedCards(s2);
             // STATE CLOSURE (WinlessDevelopActive / fswdedup): a sibling already searched this
             // exact end-of-turn state, so this line's future IS that line's future.
             if (eot_seen != nullptr
                 && !eot_seen->Visit(BuildDedupKey(s2), s2, std::min(cutoff, best.win_turn),
                                     depth, max_turns))
-            { continue; }
+            {
+                if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT closure\n", m2t_sum(q).c_str()); }
+                continue;
+            }
             // EOT dominance on the caller's frontier. Every (pre-combat x second-main) combination
             // reaching here came from the SAME node with the SAME draws consumed, so they are all
             // siblings in the sense the comparability argument needs.
@@ -59576,7 +59695,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             if (DomActive() && dom_arch)
             {
                 dprobe = domin::Check(*dom_arch, s2);
-                if (dprobe.prune) { continue; }
+                if (dprobe.prune)
+                {
+                    if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT dominance\n", m2t_sum(q).c_str()); }
+                    continue;
+                }
             }
             TurnSolver::SearchLine sub =
                 FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);

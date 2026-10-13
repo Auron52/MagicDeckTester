@@ -1589,6 +1589,14 @@ public:
     // in human play, and under MTG_UNPRUNE=mainphase -- same carve-outs as the filter itself.
     static bool CollapsedMainActive(const GameState& state);
 
+    // Does MAIN 1's heuristic dig (the provider's ShouldConsiderDig "dig when stuck") wait for MAIN 2
+    // on this state? True when the filter above is active and a cast it WITHHELD from main 1 (a
+    // Main2-classified hand card) is still payable -- the turn is not stuck, its casts were moved past
+    // combat. ONE reader for both worlds: ApplyPlanDirect's pre-combat dig loop (rollout) and
+    // AIEngine::UseSurplusLandAbilities (the executor's reactive m1 dig). MTG_DIG_DEFER_MAIN2 (default
+    // ON; heurarm slot DIG_DEFER_MAIN2).
+    static bool Main1DigDefersToMain2(const GameState& state);
+
     // Baseline main-phase classification for a hand cast, for the per-deck review report
     // (--cast-order-report). Uses the SAME ClassifyMainPhase the filter uses, so the reviewed
     // table cannot drift from play. Evaluated against the given (report) state, i.e. an empty
