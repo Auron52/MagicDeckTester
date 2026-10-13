@@ -33396,6 +33396,25 @@ static bool RestrictorOrderExactOn()
     return heurarm::Flag(heurarm::RESTRICTOR_ORDER_EXACT, on);
 }
 
+// MTG_RESTRICTOR_TRACE -- diagnostic (default off, print-only): one line per subset the restrictor test below
+// rejects, at either walk ("solve" = Solve::consider, "enum" = EnumeratePlans), so a reject can be compared
+// game by game against the lever's =0 arm.
+static void RestrictorRejectTrace(const char* site, const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel, int after)
+{
+    static const bool on = EnvOn("MTG_RESTRICTOR_TRACE");
+    if (!on) { return; }
+    std::string names;
+    for (int k : sel)
+    {
+        if (!names.empty()) { names += " + "; }
+        names += cands[k].card_name.str();
+        if (cands[k].chosen_x > 0) { names += "(x" + std::to_string(cands[k].chosen_x) + ")"; }
+    }
+    std::fprintf(stderr, "[restrictor] %s t%d after=%d hand=%zu: %s\n", site, state.turn_number, after,
+                 state.ActivePlayer().hand.size(), names.c_str());
+}
+
 // THE CAST RESTRICTOR'S PRE-SET (MTG_RESTRICTOR_ORDER_EXACT). Both subset walks count the casts AFTER a
 // cast restrictor (Irencrag Feat: "you can cast only one more spell this turn") by CastOrderRank and
 // judge payability ORDER-FREE, with the restrictor's float credited to the whole subset. The two
@@ -35370,7 +35389,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                      && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand))
                     || !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
                                              /*self_only=*/true)))
-            { return; }
+            { RestrictorRejectTrace("solve", state, cands, sel, after); return; }
             // ...and the OTHER end of the same rule (MTG_IRENCRAG_WASTE). A cast RESTRICTOR
             // exists to fund THE FINISHER, and the USER's order reserves its one allowed follower
             // for exactly that: "Irencrag Feat must be second last as it can only be cast before
@@ -47880,7 +47899,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                      && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand))
                     || !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
                                              /*self_only=*/true)))
-            { _ct.label = "irencrag-order"; return; }
+            { _ct.label = "irencrag-order"; RestrictorRejectTrace("enum", state, cands, sel, after); return; }
             // The other end of the same rule -- see the twin in Solve::consider for the full note.
             // Lockstep: both sites must agree or the enumerator offers a plan the leaf will not score.
             const int  rule    = IrencragRule();
