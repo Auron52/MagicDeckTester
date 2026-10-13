@@ -1967,6 +1967,9 @@ public:
     // first. See the definition. MTG_AURA_BUCKET_DISCARD=0 -> the generic max-MV ranking.
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // True (the default) unless the proposed MTG_AURA_RATE_MARGINAL amendment is on: its marginal
+    // credit reads the hand's kept Auras, so a multi-card cleanup is re-ranked per shed.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Fluctuator cycling combo. This provider exists for a reason none of the others do: it does not

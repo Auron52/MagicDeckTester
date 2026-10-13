@@ -431,6 +431,163 @@ TEST_CASE("Auras discard 23 (distance): the creature slot weighs power x castabi
                   { 1, 5, 6, 7, 3, 2, 4, 0 });
 }
 
+// ---- PROPOSED AMENDMENT MTG_AURA_RATE_MARGINAL (default OFF; the USER decides) ---------------------------
+// A useful Aura's rate numerator becomes its MARGINAL power in the kept set K (the useful Auras still in
+// hand + the board), symmetric between scalers and the Auras they count:
+//   M(a) = marg(a) + pw(a) x #(K \ a) [a scaler] + sum pw(s) over the scalers s in K \ a
+// (Ethereal Armor pw 1, Ancestral Mask pw 2; marg = the USER's live power + board scaler credit), each term
+// weighted by the discard_dist factor of the Auras in it under the model; the order is iterated removal of
+// the worst rate. The lever unset (every board above) is the USER design; =0 must be identical.
+
+namespace
+{
+// marg: MTG_AURA_RATE_MARGINAL (-1 = unset = OFF); dist: MTG_DISCARD_DIST_MODEL.
+std::vector<int> AuMarg(const GameState& s, int marg, int dist)
+{
+    heurarm::t_arm[heurarm::AURA_RATE_MARGINAL] = static_cast<std::int8_t>(marg);
+    std::vector<int> v = Au(s, dist);
+    heurarm::t_arm[heurarm::AURA_RATE_MARGINAL] = -1;
+    return v;
+}
+
+// Both model arms: the lever's =0 equals unset (the USER design, `user_old` / `user_new`), and =1 gives
+// `marg_old` / `marg_new`. Each lever-on order is a permutation, and the iterated removal really is the
+// per-shed sequence on these boards (shed its own first pick, re-rank: the rest come back in order).
+void CheckMarginal(const GameState& s, const std::vector<int>& user_old, const std::vector<int>& user_new,
+                   const std::vector<int>& marg_old, const std::vector<int>& marg_new)
+{
+    CHECK(AuOld(s) == user_old);
+    CHECK(AuNew(s) == user_new);
+    CHECK(AuMarg(s, 0, 0) == user_old);
+    CHECK(AuMarg(s, 0, 1) == user_new);
+    CHECK(AuMarg(s, 1, 0) == marg_old);
+    CHECK(AuMarg(s, 1, 1) == marg_new);
+    CHECK(AuMarg(s, 1, -1) == marg_new);   // the model is the default under the lever too
+    CheckPermutation(s, marg_old);
+    CheckPermutation(s, marg_new);
+    heurarm::t_arm[heurarm::AURA_RATE_MARGINAL] = 1;
+    CheckPrefixStable(s, 0);
+    CheckPrefixStable(s, 1);
+    heurarm::t_arm[heurarm::AURA_RATE_MARGINAL] = -1;
+}
+}   // namespace
+
+TEST_CASE("Auras discard: proposed MTG_AURA_RATE_MARGINAL -- the gi1634 board: Armor and Mask rate above Alpha Authority")
+{
+    // The T4 cleanup of the held-out A/B game Auras d0 s6051635 gi 1634: Branchloft Pathway (G face) +
+    // Forest, no creature, no enchantment. Light-Paws (0) is the creature slot; a scaler is in hand, so no
+    // Aura is blank, and the Mask has Auras around, so it is not dead: all seven Auras are useful.
+    //
+    // USER design (both model arms): rates Rancor 2/1, Alpha 0/2, Armor 1/1, Mask 0/3, Link 0/1, Cloak 2/3,
+    // Boon 1/1 -> zeros Alpha, Link (non-scalers, pricier first), Mask; Cloak; Boon = Armor (non-scaler
+    // first); Rancor; Light-Paws. -> 2 5 4 6 7 3 1 0. (Model: Cloak 0.25, Boon = Armor 0.46: same order.)
+    //
+    // Marginal, MTG_DISCARD_DIST_MODEL=0 (every factor 1). K = all 7; the scalers' sum pw = 3.
+    //   P(K) = Rancor 2 + Cloak 2 + Boon 1 + Armor 7 (it counts all seven) + Mask 12 (6 others x 2) = 24.
+    //   M: Rancor 2+3 = 5, Alpha 0+3 = 3, Armor 1+6+2 = 9, Mask 0+12+1 = 13, Link 3, Cloak 2+3 = 5, Boon 4.
+    //   (Check: P(K \ Alpha) = 5 + 6 + 10 = 21 -> 3; P(K \ Armor) = 5 + 10 = 15 -> 9; P(K \ Mask) = 5 + 6
+    //   = 11 -> 13.)  Rates: Rancor 5, Alpha 1.5, Armor 9, Mask 4.33, Link 3, Cloak 1.67, Boon 4.
+    //   1. Alpha (1.5).  K = 6: Rancor 5, Armor 8, Mask 11/3, Link 3, Cloak 5/3, Boon 4.
+    //   2. Cloak (1.67). K = 5: Rancor 5, Armor 7, Mask 9/3 = 3, Link 3, Boon 4.
+    //   3. Link (3 = Mask's 3: the non-scaler first).  K = 4: Rancor 5, Armor 6, Mask 7/3, Boon 4.
+    //   4. Mask (2.33).  K = {Rancor, Armor, Boon}: Rancor 2+1 = 3, Armor 1+2 = 3, Boon 1+1 = 2.
+    //   5. Boon (2).     K = {Rancor, Armor}: Rancor 3, Armor 1+1 = 2.   6. Armor.   7. Rancor.
+    //   -> 2 6 5 4 7 3 1 0. Alpha still goes first -- 3 power for 2 mana is the worst return here -- but
+    //   now on its own merits: the Armor is worth 9 and the Mask 13, not 1 and 0.
+    //
+    // Marginal, with the model (the default). Library kLib6 (6 cards: one Plains, one Forest); no hand land.
+    //   Factors: Rancor {G} 1, Alpha {1}{G} 1; Armor / Link / Boon {W}: P_t = t/6 -> 0.4578; Mask {2}{G}
+    //   (one more land: P_t = 1/3, 3/5, 4/5, 14/15) -> 0.7025; Cloak {1}{G}{W} (P_t = 1/18, 1/5, 2/5, 28/45)
+    //   -> 0.3725. E[M(a)] = fac(a) x (marg(a) + pw(a) x sum fac(K \ a) + sum fac(s) pw(s) over K \ a).
+    //   K = 7: sum fac 4.4486, sum fac x pw 1.8628 (Armor 0.4578 + Mask 1.4050). EV = E[M] / mv:
+    //     Rancor 3.86, Alpha 1.86/2 = 0.93, Armor 0.4578 x (1 + 3.9907 + 1.4050) = 2.93,
+    //     Mask 0.7025 x (2 x 3.7460 + 0.4578)/3 = 1.86, Link 0.4578 x 1.8628 = 0.85,
+    //     Cloak 0.3725 x 3.8628/3 = 0.48, Boon 0.4578 x 2.8628 = 1.31.        1. Cloak (0.48).
+    //   K = 6 (sum fac 4.0760): Alpha 0.93, Link 0.85, Boon 1.31, Mask 1.69, Armor 2.76.  2. Link (0.85).
+    //   K = 5 (3.6182): Alpha 0.93, Boon 1.31, Mask 1.47, Armor 2.55.                      3. Alpha (0.93).
+    //   K = 4 (2.6182): Boon 1.31, Mask 0.7025 x (2 x 1.9157 + 0.4578)/3 = 1.00, Armor 2.09. 4. Mask.
+    //   K = {Rancor, Armor, Boon}: Rancor 2.46, Armor 0.4578 x 2.4578 = 1.13, Boon 0.4578 x 1.4578 = 0.67.
+    //   5. Boon.  6. Armor (0.92 < Rancor 2.46).  7. Rancor.  -> 6 5 2 4 7 3 1 0.
+    GameState s = MakeAu(
+        { kPaws, "Rancor", "Alpha Authority", "Ethereal Armor", "Ancestral Mask", "Spirit Link", "Armadillo Cloak",
+          "Gryff's Boon" },
+        { { "Branchloft Pathway" }, { "Forest" } });
+    s.turn_number = 4;
+    CheckMarginal(s, { 2, 5, 4, 6, 7, 3, 1, 0 }, { 2, 5, 4, 6, 7, 3, 1, 0 },
+                     { 2, 6, 5, 4, 7, 3, 1, 0 }, { 6, 5, 2, 4, 7, 3, 1, 0 });
+    // Armor and Mask are rated above Alpha Authority on both arms (they shed after it).
+    for (int dist : { 0, 1 })
+    {
+        const std::vector<int> o = AuMarg(s, 1, dist);
+        auto pos = [&](int i) { return std::find(o.begin(), o.end(), i) - o.begin(); };
+        CHECK(pos(3) > pos(2));
+        CHECK(pos(4) > pos(2));
+    }
+
+    // Shed stability is declared false only while the lever is on (and the buckets are).
+    heurarm::t_arm[heurarm::AURA_RATE_MARGINAL] = 1;
+    CHECK_FALSE(AurasProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::AURA_BUCKET_DISCARD] = 0;
+    CHECK(AurasProvider().CleanupDiscardShedStable());   // the generic arm: the default
+    heurarm::t_arm[heurarm::AURA_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::AURA_RATE_MARGINAL] = 0;
+    CHECK(AurasProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::AURA_RATE_MARGINAL] = -1;
+    CHECK(AurasProvider().CleanupDiscardShedStable());   // unset = OFF
+}
+
+TEST_CASE("Auras discard: proposed MTG_AURA_RATE_MARGINAL -- an uncastable Daybreak Coronet does not out-rate castable Auras")
+{
+    // Board: Forest, Forest, a bare Bogle (so the Coronet is not stranded). Library kLib10 (2 Plains, the
+    // only W sources). Factors (board 21's): Coronet {W}{W} 0.0753, Mask {2}{G} (one more land, 2 in 10)
+    // 0.4792, Alpha / Rancor / Spider Umbra 1. No enchantment out: the Mask's live power is 0, but a
+    // scaler is in hand, so nothing is blank and the Mask (Auras around) is not dead.
+    //
+    // USER design. Model: EV Coronet 3/2 x 0.0753 = 0.113, Mask 0, Alpha 0, Rancor 2, Spider 1 -> Alpha,
+    // Mask (the zeros, the non-scaler first), Coronet, Spider, Rancor -> 2 1 0 4 3. =0 proxies: Coronet
+    // 1.5 > Spider 1 -> 2 1 4 0 3.
+    //
+    // Marginal, with the model (the default): K = 5, sum fac 3.5545, the Mask's weighted credit 2 x 0.4792
+    // = 0.9584 to every other Aura.
+    //   Coronet 0.0753 x (3 + 0.9584)/2 = 0.149 -- the Mask's +2 reaches it at its own 0.0753;
+    //   Mask 0.4792 x 2 x (3.5545 - 0.4792)/3 = 0.98 -- the Coronet adds 0.0753 of a unit to its count,
+    //   not 1; Alpha 0.9584/2 = 0.48; Spider 1.96; Rancor 2.96.                   1. Coronet (0.149).
+    //   K = {Mask, Alpha, Rancor, Spider}: Mask 0.4792 x 2 x 3/3 = 0.96, Alpha 0.48.  2. Alpha.
+    //   K = {Mask, Rancor, Spider}: Mask 0.4792 x 4/3 = 0.64.                        3. Mask.
+    //   4. Spider (1 < Rancor 2).  5. Rancor.  -> 0 2 1 4 3.
+    // Marginal, =0 proxies (no castability on that arm, exactly as the USER rate there has none): every
+    //   factor is 1, so the Coronet is credited in full: Coronet (3+2)/2 = 2.5, Mask 2 x 4/3 = 2.67,
+    //   Alpha 2/2 = 1, Spider 3, Rancor 4 -> Alpha; then Mask 6/3 = 2 < Coronet 2.5 -> Mask; no scaler
+    //   left: Spider 1 < Coronet 1.5 < Rancor 2 -> 2 1 4 0 3 (the USER =0 order).
+    const GameState s = MakeAu(
+        { "Daybreak Coronet", "Ancestral Mask", "Alpha Authority", "Rancor", "Spider Umbra" },
+        { { "Forest" }, { "Forest" }, { "Slippery Bogle" } }, kLib10);
+    CheckMarginal(s, { 2, 1, 4, 0, 3 }, { 2, 1, 0, 4, 3 },
+                     { 2, 1, 4, 0, 3 }, { 0, 2, 1, 4, 3 });
+    CHECK(AuMarg(s, 1, -1).front() == 0);   // the default model: the Coronet goes first
+}
+
+TEST_CASE("Auras discard: proposed MTG_AURA_RATE_MARGINAL -- two Ethereal Armors: the second is not shed before Gryff's Boon")
+{
+    // Board: Plains, Forest, a bare Bogle; every Aura castable next turn (all factors 1, so both model
+    // arms agree). Hand: Armor, Armor, Gryff's Boon, Rancor.
+    //   USER design: Armor 1/1 = Armor 1/1 = Boon 1/1 (the non-scaler first), Rancor 2 -> 2 0 1 3.
+    //   Marginal: K = 4, the scalers' sum pw 2. P(K) = Armor 4 + Armor 4 + Boon 1 + Rancor 2 = 11.
+    //     Armor 1 + 3 (the three others) + 1 (the other Armor counts it) = 5 (P(K \ Armor) = 3 + 1 + 2 = 6);
+    //     Boon 1 + 2 = 3; Rancor 2 + 2 = 4.                                     1. Boon (3).
+    //     K = {Armor, Armor, Rancor}: Armor 1 + 2 + 1 = 4 = Rancor 2 + 2 = 4 (the non-scaler first).
+    //                                                                           2. Rancor.
+    //     K = {Armor, Armor}: 1 + 1 + 1 = 3 each (hand order).                  3. Armor 0.  4. Armor 1.
+    //   -> 2 3 0 1. The rejected one-sided credit (c013e52d: every Aura + the hand scalers' 2, a scaler
+    //   minus its own 1) read Armor 2, Boon 3, Rancor 4 and shed BOTH Armors before the Boon: the
+    //   self-credit asymmetry this lever removes.
+    const GameState s = MakeAu(
+        { "Ethereal Armor", "Ethereal Armor", "Gryff's Boon", "Rancor" },
+        { { "Plains" }, { "Forest" }, { "Slippery Bogle" } });
+    CheckMarginal(s, { 2, 0, 1, 3 }, { 2, 0, 1, 3 },
+                     { 2, 3, 0, 1 }, { 2, 3, 0, 1 });
+}
+
 // ---- the contract ------------------------------------------------------------------------------------
 
 TEST_CASE("Auras discard: a staged card is never in the preference; it falls to the back")
