@@ -321,3 +321,96 @@ s7000035 T5 with the closer lever: the continuation is empty and Irencrag stays 
 4. **d0 second pass after a closer** ("Dragonstorm not last [later decision]", 3 phases / 300 d0 games:
    s7000043 T4, s7000204 T4, s7000289 T7): after the turn's Dragonstorm the d0 runner's next pass casts an
    expiring exiled card (s7000043: a third Medallion after a T4 win). Harmless where traced; a d0 subset choice.
+
+## Round 3 (2026-10-13): the regression-tier games the lever slowed
+
+The single-lever bisect named `MTG_DRAGONSTORM_USER_ORDER` for five regression-tier games (`=0` and the origin
+binary had the old turn). None of them is the USER's order: two are a payer defect, one a search gap, two
+were illegal kills. Two levers, each `EnvOn(.., true)` + an appended heurarm slot, unit cover in
+`test/unit/test_dragonstorm_followups.cpp`; with both `=0` the binary is byte-identical to dd4859c3 (208 jobs /
+6,240 games, 8 decks, ship / d3 b10 / d0).
+
+| game | tip | fixed | d3 b10 / d5 b20 / d8 b0 / shipped (tip -> fixed) | class |
+|---|---|---|---|---|
+| s3104 gi101 | T3 | T2 | 3/3/3/3 -> 2/2/2/2 | A: payer stranded the {C} (`MTG_LINE_SPARE_GENERIC_FIRST`) |
+| s3222 gi219 | T3 | T2 | 3/3/3/3 -> 2/2/2/2 | A, same board shape |
+| s3050 gi47 | T7 | T6 | 7/7/7/7 -> 6/6/6/6 | B: Dragon order unsearched (`MTG_DRAGONSTORM_DRAGON_ORDER`) |
+| s2759 gi757 (d0) | T5 | T5 | d8 b0 T3 both | C: old T2 was an illegal splice |
+| s2857 gi855 (d0) | T5 | T5 | d8 b0 T3 both | C: old T2 was an illegal splice |
+
+### A. `MTG_LINE_SPARE_GENERIC_FIRST`: the payer now pays generic the way the exact walk does
+
+gi101 T2: Sandstone Needle ({T}: {R}{R}) + Unclaimed Territory ({C} for a noncreature spell); USER order
+Medallion, Rite, Seething, Seething, Dragonstorm. The exact walk (`PayFromPoolLineAware`) pays the Medallion's
+{2} with the {C} and one {R} and floats the other {R} for Rite -- the order pays (`[uo-order] pays=-1`), so
+`ArrangeCastOrder` rightly puts the Medallion at slot 0. The shared payer (`TapForCostSharedOnce`) took the
+Needle for the first generic pip (scarcity rank) and the second {R} of that tap for the second
+(`MTG_TAPDBG`: `cost={2} taps: Sandstone Needle`), stranding the {C}; Rite, both Seethings and Dragonstorm were
+unpayable. Executor and rollout share that payer, so no budget found the T2 kill. By hand the line is legal,
+and so is the old "Rite, Medallion, ..." order -- the order was never the problem. gi219 is the same board shape
+with Desperate Ritual in Rite's place.
+
+Fix (`produce_impl`, ManaPayment.cpp; helper `LineSpareSourceMask`): inside a plan apply, a GENERIC pip of a
+colour-SHORT line (the rest of the line owes more of some colour than the float plus every untapped non-spare
+source can make), while the payment floats nothing the line can spare, is paid first from a SPARE source -- a
+land or rock whose payment-legal mana no later pip owes (never a dork, depletion, storage, pay-sac, filter or
+restricted-spend source; a creature-only-colour land only if every colour it could make for a later Dragon is on
+offer elsewhere). One nested attempt with every non-spare source held, falling through to the unchanged
+selection. Sound for the line: a spare unit can pay none of its coloured pips, and any source pays a later
+generic. Autonomous play only (human play has `MTG_PAY_LINE_FLOAT_HOLD`); one payer, so executor, rollout and
+the payability probes stay in lockstep.
+
+### B. `MTG_DRAGONSTORM_DRAGON_ORDER`: the order between two hard-cast Dragons is searched
+
+gi47 T5 after Apex (Desperate x2, Utvara, Lathliss in exile order; 10 mana): the canonical order keeps PLAN order
+between the Dragons (one rank, stable sort) and rule (2) puts Irencrag before whichever is last -- "Utvara,
+Irencrag, Lathliss": Lathliss enters last, Utvara's entry makes no 5/5, T6 leaves the opponent at 6. "Lathliss,
+Irencrag, Utvara" pays too and kills T6. `CastOrderingCandidates` offered only the canonical order and the splice
+fallback, so that order was unfindable at any budget (d8 b0 T7). The USER's order places a hard-cast Dragon
+against the rituals, Apex, Irencrag and Dragonstorm, never against another Dragon, and reading 6's "plan order"
+was the agent's -- the pre-USER-order generator offered the closers cheapest-first AND in plan order. Fix:
+`AddDragonOrders` adds every distinct order (by name, at most 4! = 24) of a set's hard-cast Dragons on each base
+candidate, each re-arranged; the canonical order stays first, so it still wins every tie. Nothing in the USER's
+order changes.
+
+(Why the tip's game also differs from T2 on: the `USER_ORDER=0` arm suspends Lotus Bloom on T2 and the tip never
+does. That is a tie, not a second defect: on the tip both lines reach only T7 (the Dragon order is fixed either
+way), so the search keeps its first candidate; on the `=0` arm the Bloom's three mana is what let its old
+generator's cheapest-first "Lathliss, Utvara" pay without Irencrag. With B fixed both lines kill T6.)
+
+### C. gi757 / gi855 (d0): the old T2 kills were illegal
+
+* gi757 T2 (two Mountains; Pyretic, Desperate x2, Irencrag, Dragonstorm): the `=0` line casts a PLAIN Desperate,
+  then the other copy SPLICED -- revealing a Desperate that has just left the hand (two copies). Legal maximum on
+  that board is 8 red after Irencrag; Dragonstorm needs 9.
+* gi855 T2 (Mountain + Territory; Desperate x3, Seething, Dragonstorm): plain Desperate, Seething, Desperate+splice,
+  Desperate+splice -- the second splice reveals the copy cast plain first (three copies, three cast). With two
+  mana the only legal opener is a plain Desperate, after which at most one splice is legal: 8 mana, short of 9.
+
+The final A/B's Dragonstorm d0 gi 580 / 700 / 1308 (ab5 seeds 6190581 / 6190701 / 6191309) re-checked on the
+`off` arm with `MTG_USER_ORDER_TRACE`: each kill casts a plain Desperate and then splices the other of TWO copies --
+illegal, as `final-ab-2026-10-13.md` says. None is the class-A payment defect (their orders read unpayable,
+`pays` >= 0; class A reads `pays=-1` with an unpaid cast).
+
+**Found, not fixed -- d0 commits spliced subsets no legal order can pay.** On the tip all five d0 games (gi757,
+gi855; final-ab 580 / 700 / 1308) spend a turn on a subset like {Seething, Desperate+splice, Desperate+splice,
+Desperate, Dragonstorm}: the enumerator admits it (order-free credit; `SubsetHasIllegalSplice` counts copies, not
+order), the legal arrangement fails at its FIRST cast (Seething on two lands, `pays=0`), and
+`OrderedSubsetRealisable` refuses a spliced subset only when the walk fails AT the spliced cast -- so the d0
+runner commits it and the executor casts only the plain Desperate (gi855 T2 and T3, gi700 T3). Proposal: refuse
+a spliced subset whenever no legal order pays it in full (the walk fails anywhere after the arrangement and the
+payable fallback), behind its own lever, measured at d0 on both arms. Not done here: it changes which subsets the
+d0 runner and the rollouts choose, outside this round's scope.
+
+### Movers (one pooled batch per question; NOT a tier, NOT a verdict)
+
+* 8 decks x (ship 60, d3 b10 120, d0 600) games, seeds 9700001+, arms default / both `=0` / each `=0`: every deck
+  but Dragonstorm byte-identical on every chunk (Breaching, Hinata2, Mirrorwing, Pirates, Soldiers, WhiteKnights,
+  Goblins). Dragonstorm: one game moved, d0 gi314 (s9710315) 5 -> 6: the d0 plan "Medallion, Seething, Scourge" on
+  Mountain x2 + Territory now PAYS on T3 (the old payer stranded it), and the d0 runner's T4 then pumps instead of
+  casting Utvara; the old arm won T5 off the failed plan. Recovers at stage 1 (d5 b100: 5 both arms).
+* Dragonstorm held-out, seeds 9800001+: d0 4000 games -4 (3 faster / 0 slower, all `SPARE`); d3 b10 600 -4 (5 / 1;
+  the 5 faster are `DRAGON_ORDER`, the slower is `SPARE`, s9810425 gi424 4 -> 5: a T1 land choice under the 10 ms
+  budget, recovers at d4 b100 and d8 b0); shipped 300: 0 / 0. Search units +0.3% (d3 and shipped).
+* Not run: any regression tier. The smoke / regression Dragonstorm GT will move (the three named games get faster)
+  and is for whoever runs the tiers to accept.

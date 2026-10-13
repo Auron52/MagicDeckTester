@@ -11169,11 +11169,11 @@ bool DragonstormProvider::CastOrderingCandidates(const GameState& s0, const std:
         if (d != nullptr && IsManaRitual(*d) && d->params.max_casts_after < 0 && !d->params.splice_onto_arcane
             && d->card.m_mana_cost.ManaValue() >= 3) { seeth = k; }
     }
-    if (seeth < 0) { return true; }
+    if (seeth < 0) { AddDragonOrders(s, reorder, out); return true; }
     int first_spliced = -1;
     for (int k = seeth + 1; k < n && first_spliced < 0; ++k)
     { if (reorder[canon[k]].splice_count > 0) { first_spliced = k; } }
-    if (first_spliced < 0) { return true; }
+    if (first_spliced < 0) { AddDragonOrders(s, reorder, out); return true; }
     const InternedName& nm = reorder[canon[first_spliced]].card_name;
     std::vector<int> moved, kept;
     for (int k = 0; k < n; ++k)
@@ -11183,7 +11183,67 @@ bool DragonstormProvider::CastOrderingCandidates(const GameState& s0, const std:
     alt.insert(alt.end(), kept.begin() + seeth, kept.end());
     ArrangeCastOrder(s, reorder, alt);   // the Medallion's earliest payable slot for THIS sequence
     if (alt != canon) { out.push_back(std::move(alt)); }
+    AddDragonOrders(s, reorder, out);
     return true;
+}
+
+// MTG_DRAGONSTORM_DRAGON_ORDER (DragonstormDragonOrderOn, EngineFlags.h; DEFAULT ON, =0 -> none added). The
+// USER's order places a hard-cast Dragon AFTER the rituals and Apex and relative to Irencrag / Dragonstorm
+// (rules 5-7) -- never against another Dragon. The canonical order keeps PLAN order between two of them
+// (the comparator is stable at one rank, and ArrangeCastOrder puts Irencrag before whichever comes LAST),
+// so the Dragon that follows Irencrag, and the ETB order (Lathliss makes a 5/5 for each other Dragon that
+// enters AFTER her; Scourge deals damage per Dragon entering after it), were an unsearched pick: dragonstorm
+// s3050 gi47 T5 (after Apex: Desperate x2, Utvara, Lathliss in exile order) could only realise "Utvara,
+// Irencrag, Lathliss" (no token, T7) where "Lathliss, Irencrag, Utvara" -- or, with Lotus Bloom's three,
+// "Lathliss, Utvara" -- kills T6. The pre-USER-order generator offered the closers cheapest-first AND in
+// plan order; this offers every distinct order of the set's hard-cast Dragons (by name; at most 4! = 24),
+// each re-arranged (Irencrag before the last Dragon, the Medallion at its earliest payable slot), for every
+// base already in `out`. The search scores each and keeps the first of any tie, so the canonical order
+// still wins unless another order is strictly better.
+void DragonstormProvider::AddDragonOrders(const GameState& s, const std::vector<Action>& reorder,
+                                          std::vector<std::vector<int>>& out) const
+{
+    if (!DragonstormDragonOrderOn() || out.empty()) { return; }
+    auto is_dragon = [&](int i)
+    {
+        const Action& a = reorder[i];
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        return d != nullptr && d->card.IsCreature();
+    };
+    const std::size_t nbase = out.size();
+    for (std::size_t b = 0; b < nbase; ++b)
+    {
+        const std::vector<int> base = out[b];   // copy: `out` grows below
+        std::vector<int> slots, drag;
+        for (int k = 0; k < static_cast<int>(base.size()); ++k)
+        { if (is_dragon(base[k])) { slots.push_back(k); drag.push_back(base[k]); } }
+        if (drag.size() < 2 || drag.size() > 4) { continue; }
+        // Distinct orders by NAME (two copies of one Dragon are one order), lexicographic -- never by
+        // pointer, so the candidate list is deterministic.
+        auto by_name = [&](int x, int y) { return reorder[x].card_name.str() < reorder[y].card_name.str(); };
+        std::vector<int> perm = drag;
+        std::sort(perm.begin(), perm.end(), by_name);
+        do
+        {
+            std::vector<int> cand = base;
+            for (std::size_t k = 0; k < slots.size(); ++k) { cand[static_cast<std::size_t>(slots[k])] = perm[k]; }
+            // Irencrag keeps the slot rule (2) gave it on the base (before the last Dragon, whichever that now
+            // is); re-arranging only re-places the Medallion at ITS earliest payable slot for this order.
+            ArrangeCastOrder(s, reorder, cand);
+            bool dup = false;
+            for (const std::vector<int>& o : out)
+            {
+                if (o.size() != cand.size()) { continue; }
+                bool same = true;
+                for (std::size_t k = 0; k < o.size() && same; ++k)
+                { same = reorder[o[k]].card_name == reorder[cand[k]].card_name
+                         && reorder[o[k]].splice_count == reorder[cand[k]].splice_count; }
+                if (same) { dup = true; break; }
+            }
+            if (!dup) { out.push_back(std::move(cand)); }
+        } while (std::next_permutation(perm.begin(), perm.end(), by_name));
+    }
 }
 
 // OrderOpaqueCastsByRank (MTG_DRAGONSTORM_ORDER_OPAQUE, DEFAULT ON; =0 -> raw plan order). The tiers
