@@ -61,10 +61,10 @@ A game may skip only if every edited index is unreachable by ALL of:
 1. **Draws / opening hand**, across every mulligan taken (each mulligan reads its own permutation,
    so the mask is the UNION over mulligans, not the kept hand alone).
 2. **Every search branch.** Because the search shares the game's shuffle (`state.shuffle_salt`),
-   all branches read the SAME library order, so the union over branches is a **PREFIX**. Record the
-   deepest prefix any branch read. (A search that re-shuffled per branch would make every game
-   sensitive to every card -- `shuffle_salt_search` is the opt-in decouple instrument and must
-   disable the carry.)
+   all branches read the SAME library order, so the union over branches is a **PREFIX** -- set the
+   bit of every card in that prefix (no separate depth field is needed; see Build notes). (A search
+   that re-shuffled per branch would make every game sensitive to every card --
+   `shuffle_salt_search` is the opt-in decouple instrument and must disable the carry.)
 3. **Anything that left the library** -- hand, battlefield, graveyard, exile, and bottomed cards
    from mulligan bottoming.
 4. **Tutors (USER 2026-10-13).** A tutor searches the whole library, so it breaks the prefix
