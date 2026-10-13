@@ -292,8 +292,8 @@ struct MulliganProfile
     // and measured lossless). A deck that opts in prices the rollouts too, which skips more of the escalations
     // its take rule would discard -- but can skip a takeable one. 0 / absent => the fleet default. Set from the
     // deck's own measured heuristic cost per probe leaf (a low quantile of it), never fleet-wide: Melira's
-    // rollouts cost ~1/30 of other decks' per leaf. A value-leaf REGENERATION keeps it (valueleaf.sh replaces only
-    // eval_model in the live sidecar), but the number was measured against the old leaf's probe -- re-check it.
+    // rollouts cost ~1/30 of other decks' per leaf. It is a measurement of the leaf's probe, so valueleaf.sh phase
+    // E.6 (scripts/esc_skip_stage.py) re-decides it after every leaf it installs; `valueleaf.sh skipcal` alone.
     // PER DEPTH: the sidecar value may also be an ARRAY, one R per heuristic-pass depth (d = 1, 2, ...; past its
     // end the last entry applies). A rollout from a deeper leaf has fewer turns left to play, so its cost per
     // leaf falls with depth (Selesnya's median: ~200 at d1 to ~23 at d5), and one constant fitted at d1

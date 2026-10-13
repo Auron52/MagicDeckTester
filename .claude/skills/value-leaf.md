@@ -282,6 +282,22 @@ skipped by F without failing; if the user later adopts it, `cp` the staged file 
 (finished phases skip, F fills in). Soldiers 2026-10-08 (`docs/design/analysis-soldiers.md`) is the
 hand-run precedent; Prevent Damage 2026-10-11 is the trade case (-0.036 t at 1.21x core-s).
 
+**Phase E.6 decides the deck's escalation-skip allowance** (`escalation_skip_r`, USER 2026-10-13).
+It runs between E.5 and F: the allowance is a measurement of the leaf now live, and it can change play,
+which F and the mulligan stage are fitted to. `scripts/esc_skip_stage.py` does it in three pooled batches.
+* **Probe:** 1200 games at R = 0. It gives up below **4% headroom** (discarded ladder-escalation work as a
+  share of all work), which is most decks, and costs seconds.
+* **A/B:** a held-out paired A/B of the fitted q10 per-depth vector against R = 0.
+* **Isolation:** every moved game replayed alone, to separate real play changes from batch flicker.
+
+It adopts only with no real slower game, installs into the live sidecar in this tree like E.5, and records
+every outcome in `DECISIONS.txt`. When the deck already has a key, that key is a third A/B arm and the bar
+picks between them. Both pass: whichever saves more. Only one passes: that one. Neither passes: the key is
+removed, back to R = 0. `bash scripts/valueleaf.sh skipcal
+[decks/<Deck> ...]` runs it alone for leaves that are already live (backfill, or a hand-installed leaf). An
+adopted allowance is committed like a leaf, with the deck's smoke and regression GT re-accepted.
+Design and evidence: `docs/design/escalation-skip-calibration-stage.md`.
+
 ## The three traps that cost real time
 
 **1. Sidecar PRESENCE activates the hybrid — `enabled: false` is not off.** The engine resolves

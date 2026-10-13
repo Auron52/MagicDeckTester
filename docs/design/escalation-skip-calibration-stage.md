@@ -1,9 +1,10 @@
 # Escalation-skip allowance: a per-deck calibration stage in the value-leaf pipeline
 
-**Status (2026-10-13): proposed.** The user asked whether a new deck should get a stage that decides
-whether it opts in to the escalation skip's rollout allowance. The answer proposed here is yes: a phase
-**E.6** in `scripts/valueleaf.sh`, between E.5 (adopt the leaf) and F (the mulligan-generation contract).
-Nothing below is built yet except the fitting tool (`scripts/esc_skip_calibrate.py`).
+**Status (2026-10-13): BUILT.** Phase **E.6** of `scripts/valueleaf.sh`, between E.5 (adopt the leaf)
+and F (the mulligan-generation contract), implemented in `scripts/esc_skip_stage.py`;
+`bash scripts/valueleaf.sh skipcal [decks/<Deck> ...]` runs it alone (backfill, or a leaf installed by
+hand). The user asked for it to be *"relatively fast for most decks ... give up if there is not a notable
+amount of headroom. So maybe 4%+"*, so a cheap probe gates the expensive A/B.
 
 ## What is being calibrated
 
@@ -66,42 +67,74 @@ chunk, to separate real play changes from batch thread-history flicker
 0 games slower in 23,200. Adopted: Selesnya (vector replaces 74), PD, FungusB and Giants. Mirrorwing
 (70.5) and KittyV3 (43.3) keep their earlier constants, which also passed and save a little more.
 
-## The proposed stage (phase E.6)
+## The stage (phase E.6)
 
 It runs after E.5 because the allowance is a measurement of the probe, which is the value leaf. A
-regenerated leaf changes `pc` and `pl`, and today a regeneration carries the old key over unchanged
-(`MulliganProfile::escalation_skip_r` warns about this). It runs before F, and before any mulligan
-generation, because the allowance changes play slightly and the keep table is fitted to play. That keeps
-the per-deck pipeline strictly serial: profile, then value leaf, then skip allowance, then mulligan.
+regenerated leaf changes `pc` and `pl`, and before this stage a regeneration carried the old key over
+unchanged. It runs before F, and before any mulligan generation, because the allowance can change play and
+the keep table is fitted to play. That keeps the per-deck pipeline strictly serial: profile, then value
+leaf, then skip allowance, then mulligan.
 
-The phase has five steps:
+There are three pooled batches, each covering every deck in the run. Each step needs the previous one's
+data; nothing else is a barrier.
 
-1. **Skip if not applicable.** Skip single-path decks, and decks whose calibration log shows fewer than
-   ~200 ladder escalations: there is too little to save and too little to fit.
-2. **Calibrate.** Run one pooled batch at play settings with `esc_skip_r = 0` and `MTG_ESC_SKIP_LOG=1`,
-   then fit the vector. Size the batch to the escalation count, not to a game count.
-3. **A/B.** Run one pooled batch on fresh seeds, disjoint from calibration and from the suite, with a
-   paired `R = 0` arm against an `esc_skip_rv` arm. Size it to the deck's cost: ~6000 games for cheap
-   decks, ~2400 for Kitty-class decks (about 20 minutes of the box).
-4. **Isolation check.** Replay every game whose digest changed as one-game batch chunks
-   (`seed + gi`, `game_index = gi`) at both arms, and compare game digests. Identical alone means
-   flicker. Different alone means a real play change; score it by win turn, with no win counted as worse
-   than any win.
-5. **Verdict.** Adopt only if no real play change is slower and the net is <= 0 (*"+1 is not neutral.
-   0 is neutral."*). Adopt means writing `escalation_skip_r` into the live sidecar in this tree,
-   uncommitted, like E.5. A real slower game means **not adopted**, with the game named. Every outcome
-   is appended to `<queue>/DECISIONS.txt` and the run continues.
+1. **Probe.** 1200 games per deck at play settings, `esc_skip_r = 0`, `MTG_ESC_SKIP_LOG=1`, seed
+   7,100,000. It gives up at once when:
+   * the deck has no ladder escalations (single-path, or trust-dominated); or
+   * the **headroom** is under **4%**. Headroom is the work of every ladder escalation that ran and was
+     thrown away, as a share of all the games' work. It is the most any allowance could save.
 
-Cost: two pooled batches per deck, minutes for most decks and well under an hour for the most expensive.
-That is small against the value-leaf generation it follows.
+   Otherwise it fits the q10 vector from these games and **projects** its saving by walking the start
+   gate offline. The projection is reported, and the deck also gives up if it is zero.
+2. **A/B.** Surviving decks only, R = 0 vs the vector, paired, on fresh seeds (7,300,000; the fit never
+   sees them). Each deck gets about 15 minutes of the box: 2400 to 6000 games, from the probe's cost per
+   game.
+3. **Isolation.** Every game whose digest moved is replayed alone at both arms as one-game batch chunks
+   (`seed + gi`, `game_index = gi`). Identical alone means flicker
+   (`batch-run-to-run-nondeterminism.md`). Different alone means a real play change, scored by win turn,
+   with no win counted as `max_turns + 1`, as the suite does. More than 100 moved games is not flicker,
+   and the deck is not adopted.
 
-**Backfill.** Run the same stage once for every deck that already has a value leaf. A standalone entry
-point that runs E.6 alone would cover it.
+**Verdict.** An arm passes with no real slower game, a net change of 0 or better (*"+1 is not neutral.
+0 is neutral."*), and a unit saving. A deck that already carries an allowance gets a **third A/B arm**
+with it. That key may be a user-approved constant that saves more than the fit: KittyV3's 43.3 measured
+-4.2% against its vector's -3.0%. Or it may have been fitted to an earlier leaf. The bar picks between
+them:
+
+| fitted vector | existing key | outcome |
+|---|---|---|
+| passes | none, or fails | **adopt** the vector |
+| passes | passes | whichever saves more units (a tie keeps the existing key) |
+| fails | passes | **keep** the existing key |
+| fails | fails | **remove** the key (measured lossy on the live leaf), back to R = 0 |
+
+How the outcome is applied:
+* **Writing** installs or removes the key in the live sidecar in this tree, uncommitted, like E.5. The
+  deck's smoke and regression GT then have to be re-accepted.
+* **A deck that gives up at the probe** is not A/B'd, so its existing key is kept unmeasured, and the
+  decision line flags it.
+* **Every outcome** is appended to `<queue>/DECISIONS.txt`, and nothing stops to ask.
+
+**Cost.** A deck that gives up costs only its share of the probe: seconds for most decks, about 4 minutes
+for the most expensive (KittyV3 at ~5 s a game). A deck that passes adds about 15 minutes of A/B, or about 22 with an existing key's arm.
+
+**Validation (2026-10-13, dry run, `logs/esk_stage/validate`).** Four decks, one pooled run:
+
+| deck | headroom | outcome |
+|---|---|---|
+| Giants | 1.4% | gave up at the probe (fit would project -0.6%) |
+| Mirrorwing | 2.5% | gave up at the probe (-0.8%) |
+| Selesnya | 12.6% | both pass on 6000 g with 0 moved; fit -7.5%, existing vector -7.7%: **kept existing** |
+| KittyV3 | 5.9% | both pass on 2459 g, 4 moved, all flicker; fit -3.1%, existing 43.3 -4.3%: **kept existing** |
+
+It reproduced every hand-made decision of the same day.
 
 ## Open questions for the user
 
-* **Should E.6 adopt automatically (as E.5 does for the leaf), or only stage the vector for sign-off?**
-  The proposal assumes automatic adoption with the strict bar above, recorded in `DECISIONS.txt`.
-* **q = 0.10 is one point measured.** q05 was also measured: 0 play changes anywhere, with about 60% of
-  q10's savings. The stage could try q10 and fall back to q05 when q10 shows a real slower game, rather
-  than adopting nothing.
+* **Automatic adoption** is what was built, as E.5 does for the leaf, under the strict bar above.
+* **There is no q05 fallback.** q05 changed no game anywhere in the A/B, with about 60% of q10's savings.
+  Retrying a failed deck at q05 would cost a second A/B, which works against the "fast" brief, so it was
+  left out.
+* **The gate is the ceiling, not the projection.** Headroom is read as the most that could be saved. On
+  the six measured decks only Selesnya (12.3%) and KittyV3 (5.8%) clear 4%. KittyV3's achievable saving
+  is about 3.3%. Gating on the projection would admit only Selesnya.
