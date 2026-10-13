@@ -62237,7 +62237,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         const long long esk_lim  = (esc_budget && !esc_budget->Unlimited()) ? esc_budget->Limit() : -1;
         const long long esk_rem0 = (esc_budget && !esc_budget->Unlimited()) ? std::max<long long>(0, esc_budget->Remaining()) : -1;
         const long long esk_bu0  = esc_budget ? esc_budget->Used() : 0;
-        // UP-FRONT ESCALATION SKIP (MTG_ESC_SKIP_PREDICT, DEFAULT OFF pending its A/B). The take
+        // UP-FRONT ESCALATION SKIP (MTG_ESC_SKIP_PREDICT, DEFAULT ON; =0 disables). The take
         // decision below throws the escalation's line away unless it reached T = take_at[committed], and the
         // escalation is a ladder whose start gate asks only "does the NEXT pass fit": so on a starved budget it
         // pays for d1 (and maybe d2), stops short of T, and every unit is discarded. Measured 2026-10-13: 3.5%
@@ -62247,7 +62247,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // heuristic pass costs at least the tree the probe walked); a larger R predicts more rollout cost and
         // skips more. A PRICE, not a gate on what is findable: at an unlimited budget nothing is ever skipped.
         // Arm (per job) > env. Requires the probe's structure to have been recorded (outermost decisions).
-        static const bool   s_esk_env   = EnvOn("MTG_ESC_SKIP_PREDICT");
+        // ADOPTED 2026-10-13 at R = 0 (USER: "let's start with this option"). R = 0 is OPTIMISTIC -- a heuristic
+        // pass walks about the probe's tree and then rolls out every leaf -- so it skips only where even the tree
+        // walk cannot reach T, and the take rule's verdict is foreseen rather than changed. Not provably sound (a
+        // heuristic pass prunes differently and can occasionally cost less than the probe; ~5% of Bruna's d1
+        // passes did), so it was measured: held out, 16 discarding decks x 480 games, ZERO games changed play,
+        // units -0.5% (FiveColour, Fungus) to -5.5% (KittyV3), PD -2.9%, TH -3.6%, Selesnya -2.3%. A fleet-wide
+        // R = 50 is NOT safe: Melira's rollouts cost ~1/30 of other decks' per leaf, and there it skipped takeable
+        // escalations (avg 4.6750 -> 4.6896) while every other deck stayed identical -- R > 0 must be per deck.
+        static const bool   s_esk_env   = EnvOn("MTG_ESC_SKIP_PREDICT", true);
         static const double s_esk_r_env = []{ const char* e = std::getenv("MTG_ESC_SKIP_R");
                                               return (e && *e) ? std::atof(e) : 0.0; }();
         const bool   esk_on = (valuearm::t_arm.esc_skip >= 0) ? (valuearm::t_arm.esc_skip != 0) : s_esk_env;
