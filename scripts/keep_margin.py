@@ -230,42 +230,98 @@ def corresponds(raw_path, prof_path):
     return (not why), "; ".join(why), raw["meta"].get("commit"), ek.get("commit")
 
 
+# ---- the counts-INDEPENDENT core of build(), cached -------------------------------------------
+# WHY THIS EXISTS (measured 2026-10-13, Fungus candidate-b: 171,769 size-7 cells, max_mull 6):
+#
+#     read_json                0.58s
+#     SizeTable build          0.99s   counts-independent
+#     kv/sec/arg enumeration  21.30s   counts-independent   <-- 92% of build()
+#     hand_weights             0.10s   COUNTS-dependent
+#     compute_dopt             0.07s   COUNTS-dependent
+#
+# `bound_for` is called ONCE PER ARM PER FORMAT by a screen -- 40 times for a 20-arm round -- and
+# every one of those calls rebuilt the whole enumeration for a 0.17s change in the inputs. That was
+# 40 x 24s = 16 MINUTES of a 20-arm report, and it is why round 8's reporter ran longer than the
+# 26-minute batch it was reporting on. Splitting the core out makes it 22s once plus ~1.2s per arm,
+# a ~14x speedup of the report phase, with IDENTICAL output -- the cached half is a pure function of
+# (raw file, max_mull) and the counts never entered it.
+#
+# SAFE BECAUSE THE CORE IS READ-ONLY AFTER CONSTRUCTION. The only writes to kv/sec/arg in this file
+# are in the enumeration below; margins(), compute_dopt() and verify() only read them, as do
+# deck_compare's callers. If a future consumer ever writes into st["kv"] (or mutates st["tables"] /
+# st["comps"] / st["raw"]), it will silently corrupt every subsequent arm in the same process -- so
+# keep those read-only, or deep-copy here.
+#
+# ONE SLOT, deliberately. Every caller works one deck at a time (a screen's arms all share the base
+# deck's raw; report() walks decks sequentially), so a single slot hits essentially always and bounds
+# memory at one core -- ~48 MB for Fungus -- instead of one per deck seen.
+#
+# Keyed on the raw's identity AND its mtime+size, so a regenerated sidecar is never served stale.
+# MTG_KEEP_MARGIN_NOCACHE=1 disables it, which is how the identity check in the commit was run.
+_CORE_KEY = None
+_CORE_VAL = None
+
+
+def _core(raw_path, max_mull):
+    """Everything in build() that does not depend on `counts`. Cached -- see the note above."""
+    global _CORE_KEY, _CORE_VAL
+    use_cache = os.environ.get("MTG_KEEP_MARGIN_NOCACHE", "0") != "1"
+    key = None
+    if use_cache:
+        try:
+            stt = os.stat(raw_path)
+            key = (os.path.abspath(raw_path), stt.st_mtime_ns, stt.st_size, max_mull)
+        except OSError:
+            key = None                                   # unstattable -> just do not cache
+        if key is not None and key == _CORE_KEY:
+            return _CORE_VAL
+    raw = read_json(raw_path)
+    buckets = raw["buckets"]
+    mm = raw["meta"]["max_mull"] if max_mull is None else max_mull
+    tables = [None] * (mm + 1)
+    for s in raw["sizes"]:
+        ti = HAND - s["H"]
+        if ti <= mm:
+            tables[ti] = SizeTable(s["entries"])
+    for s in raw["sizes"]:      # SizeTable has copied what it needs; the parsed entries are the bulk
+        s["entries"] = None
+    comps = list(tables[0].index)
+    # One enumeration per (hand, mull level), shared by both pd -- half the work of the C++ ordering.
+    # Held as flat per-(m,pd) arrays rather than a dict keyed on (i,m,pd): at Goblins' 417k size-7
+    # cells the dict form is ~3.8 GB, the arrays ~120 MB.
+    n = len(comps)
+    kv = [[array("d", bytes(8 * n)), array("d", bytes(8 * n))] for _ in range(mm + 1)]
+    sec = [[array("d", bytes(8 * n)), array("d", bytes(8 * n))] for _ in range(mm + 1)]
+    arg = [[array("i", bytes(4 * n)), array("i", bytes(4 * n))] for _ in range(mm + 1)]
+    for i, h in enumerate(comps):
+        for m in range(mm + 1):
+            subs = subcomps(h, HAND - m)
+            for pd in (0, 1):
+                b1, b2, a = keep_val_two(tables, h, m, pd, subs)
+                kv[m][pd][i], sec[m][pd][i], arg[m][pd][i] = b1, b2, a
+    val = dict(raw=raw, buckets=buckets, tables=tables, comps=comps,
+               kv=kv, sec=sec, arg=arg, max_mull=mm)
+    if key is not None:
+        _CORE_KEY, _CORE_VAL = key, val
+    return val
+
+
 def build(raw_path, list_path=None, counts=None, deck_size=None, max_mull=None):
     """Policy state for a deck's raw table.
 
     `counts`/`deck_size` may be given INSTEAD of a decklist, which is how a screen bounds an ARM: the
     shared table's cell values with the arm's hand weights, exactly the combination the arm plays
-    under. That is the same substitution reweighting makes, so the two agree by construction."""
-    raw = read_json(raw_path)
-    buckets = raw["buckets"]
-    max_mull = raw["meta"]["max_mull"] if max_mull is None else max_mull
-    tables = [None] * (max_mull + 1)
-    for s in raw["sizes"]:
-        ti = HAND - s["H"]
-        if ti <= max_mull:
-            tables[ti] = SizeTable(s["entries"])
-    for s in raw["sizes"]:      # SizeTable has copied what it needs; the parsed entries are the bulk
-        s["entries"] = None
+    under. That is the same substitution reweighting makes, so the two agree by construction.
+
+    Only the last three lines depend on `counts`; everything else comes from the cached core."""
+    c = _core(raw_path, max_mull)
     if counts is None:
-        counts, deck_size = deck_counts(list_path, buckets)
-    comps = list(tables[0].index)
-    P = hand_weights(tables, counts, deck_size)
-    # One enumeration per (hand, mull level), shared by both pd -- half the work of the C++ ordering.
-    # Held as flat per-(m,pd) arrays rather than a dict keyed on (i,m,pd): at Goblins' 417k size-7
-    # cells the dict form is ~3.8 GB, the arrays ~120 MB.
-    n = len(comps)
-    kv = [[array("d", bytes(8 * n)), array("d", bytes(8 * n))] for _ in range(max_mull + 1)]
-    sec = [[array("d", bytes(8 * n)), array("d", bytes(8 * n))] for _ in range(max_mull + 1)]
-    arg = [[array("i", bytes(4 * n)), array("i", bytes(4 * n))] for _ in range(max_mull + 1)]
-    for i, h in enumerate(comps):
-        for m in range(max_mull + 1):
-            subs = subcomps(h, HAND - m)
-            for pd in (0, 1):
-                b1, b2, a = keep_val_two(tables, h, m, pd, subs)
-                kv[m][pd][i], sec[m][pd][i], arg[m][pd][i] = b1, b2, a
-    Dopt = {pd: compute_dopt(P, max_mull, pd, kv) for pd in (0, 1)}
-    return dict(raw=raw, buckets=buckets, tables=tables, counts=counts, deck_size=deck_size,
-                comps=comps, P=P, kv=kv, sec=sec, arg=arg, Dopt=Dopt, max_mull=max_mull)
+        counts, deck_size = deck_counts(list_path, c["buckets"])
+    P = hand_weights(c["tables"], counts, deck_size)
+    Dopt = {pd: compute_dopt(P, c["max_mull"], pd, c["kv"]) for pd in (0, 1)}
+    return dict(raw=c["raw"], buckets=c["buckets"], tables=c["tables"], counts=counts,
+                deck_size=deck_size, comps=c["comps"], P=P, kv=c["kv"], sec=c["sec"],
+                arg=c["arg"], Dopt=Dopt, max_mull=c["max_mull"])
 
 
 # ---- verification: this must reproduce the shipped policy exactly --------------------------------

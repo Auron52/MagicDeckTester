@@ -131,3 +131,106 @@ descend half is near-dead in this archetype, so what is being bought is a 3-mana
 often 8/8+, for one black pip, capped at one copy in play by the legend rule. That is a good card
 -- but it is not a reason to keep Deathspore Thallid, Slimefoot or Peat Bog x4, and it should not
 be allowed to retro-justify the black package that round 2 is measuring.
+
+---
+
+# RESOLVED DESIGN (2026-10-13) -- USER said "Then add The Mycotyrant."
+
+The scope above was written before the hook sites were traced end to end. Three decisions were open
+and all three are now settled; the one that changed materially is descend.
+
+## 1. The CDA P/T -- as scoped, one new param, one new helper
+
+`DynamicBasePower` / `DynamicBaseToughness` (`SpellEffects.h:15824` / `:15837`) are a flat param
+dispatch, so this is additive and every other card is byte-identical:
+
+```
+pt_equals_creatures_you_control_subtypes: ["Fungus", "Saproling"]
+```
+
+A new `CreatureSubtypeCount(state, controller, subtypes)` beside `CreatureCount`
+(`SpellEffects.h:15194`), counting each creature ONCE even when it matches several subtypes -- the
+card says "that are Fungi and/or Saprolings", and The Mycotyrant's own Fungus tokens plus the
+deck's Saprolings make double-matching bodies reachable, so this is not a theoretical concern.
+
+Printed P/T is `*/*`, i.e. 0/0 before the CDA, which means the SBA toughness check is load-bearing:
+alone on an empty board it is a 1/1 (it is itself a Fungus), and `DynamicBaseToughness` must be read
+by the SBA or it dies on resolution. The read sites are already wired -- `Combat.cpp:25,159`,
+`main.cpp:2710`, `DecisionProviders.cpp:5010`, plus `SoulbondCandidatePower` and `CombatPowerOf`.
+
+## 2. The end-step tokens -- the block exists; only the COUNT is new
+
+`PerformEndStepLifegainTokens` (`SpellEffects.h:6338`) is called in lockstep from
+`GameEngine.cpp:843` (executor) and `TurnSolver.cpp:42970` (rollout). The Mycotyrant's trigger has
+NO intervening-if -- X is simply 0 on a turn with no descend -- so it sets
+`endstep_tokens_unconditional: true`, which candidate-b ALREADY arms via Brightcap Badger
+(`deck_has_unconditional_endstep_tokens`), so the early-out at `:6359` does not need touching.
+
+One new param, `endstep_tokens_equal_descend: true`, replaces the fixed loop bound with
+`DescendedThisTurn(state, active)`. The trigger-collection gate at `:6368` tests
+`endstep_lifegain_tokens > 0`, so it must learn the new param too or the card never enters the
+`triggers` vector -- the same shape of half-fix as the `SecondMainUnproductive` gate that nearly
+un-fixed the Mycoloth pin. Token spec: power/toughness 1, colour `B`, subtypes `["Fungus"]`.
+
+**The tokens are Fungus, NOT Saproling, and that is not cosmetic:** the deck's three "Sacrifice a
+Saproling" outlets cannot eat them, while they DO raise The Mycotyrant's own P/T. *"This token can't
+block"* is `[PARTIAL: provably inert -- the passive opponent never attacks, so we are never offered
+a block]`, the same disclosure convention Archangel of Thune's flying carries. Trample likewise.
+
+## 3. DESCEND -- the scoped design does not survive contact, and here is the replacement
+
+The scope said: *"increment wherever a permanent card enters the owner's graveyard from any zone."*
+**There are 76 `graveyard.push_back` sites in `src/` and no chokepoint.** Instrumenting all of them
+(or refactoring them behind a new helper) is a wide, regression-prone change to a mature engine for
+one card, and the failure mode is silent under-counting.
+
+**Instead: derive it from a turn-start snapshot.**
+
+```
+PlayerState::gy_permanent_cards_at_turn_start   // refreshed at turn start
+DescendedThisTurn(state, pi) = max(0, PermanentCardsInGraveyard(state, pi) - snapshot)
+```
+
+This is COMPLETE for every zone by construction -- it reads the destination, so battlefield deaths,
+the self-sacrificing depletion lands, Saproling Burst's fade-out, and any future discard or mill all
+count without a single call-site edit. Tokens are excluded automatically: a token ceasing to exist
+never reaches the graveyard vector, which is exactly the rule the card needs
+(*"a permanent **card**"*) and the thing the scope doc flagged as most likely to be modelled wrong.
+
+**The one inexactness, stated plainly:** a card that LEAVES the graveyard and returns in the same
+turn is counted once rather than twice. `[PARTIAL: WHY inert here --` nothing in this pool moves a
+card out of a graveyard (no recursion, no flashback, no escape, no exile-from-graveyard), and the
+param gate means no other deck reads the counter at all.`]` If a recursion card ever lands in a deck
+that also holds a descend reader, this must become real event counting.
+
+## 4. The memo/dominance key -- use the mechanism that already exists
+
+`GameState.h:83` defines `enum GyReader` with the standing rule *"any new graveyard-reading path
+must add one"*, and `Dominance.h:934` folds the graveyard ONLY through those bits. Fungus currently
+sets none, so **two states differing only in graveyard contents share a key today** -- which is
+correct now and wrong the moment a descend reader is on the battlefield (sacrifice a Peat Bog or
+not, and the end step makes a different number of tokens).
+
+So: `GyR_DescendCount = 1u << 7`, set by the `GoldFishRunner.cpp:644` audit when any deck card
+carries `endstep_tokens_equal_descend`, folding the PERMANENT-CARD COUNT of the graveyard plus
+`gy_permanent_cards_at_turn_start`. Those two operands determine the descend count exactly, so the
+fold is exact rather than conservative, and it is gated -- every deck without the card keeps a
+byte-identical key. `deck_has_descend_readers` is NOT a separate stamp: the GyReader bit is the gate.
+
+`static_assert(sizeof(GameState) == 1080)` at `Dominance.h:396` will trip when the snapshot int
+lands. That is the guard working: update the number and the size ledger beside it. Prefer placing
+the int where existing padding absorbs it, as `deck_reads_lifegain_in_play` documents at
+`GameState.h:387`.
+
+## 5. Count, and what it replaces
+
+Legendary, so the legend rule caps the battlefield at one and the sensible range is **1-2 copies**
+(USER 2026-10-13: *"more copies is primarily insurance to make sure you have one and 2 is a number
+that only rarely gets duplicates"* -- and the draw-consistency channel that argument rests on IS
+fully modelled by a goldfish; only redundancy-against-removal is not).
+
+**The slot: cut 1 Deathspore Thallid.** Round 4's `k2_death1_vita3` measured that exact donor FREE
+as a 1-for-1 (-0.0003 +-0.0015 std / -0.0008 +-0.0016 2hg at 99.2% ident), Secluded Courtyard CAN
+cast The Mycotyrant (its `colored_creature_only` restriction does not bite on a creature), and black
+stays at 3 of 40 cards -- so the black package is not expanded to pay for it, which is the trap this
+file's strategic correction warns about.
