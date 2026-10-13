@@ -139,4 +139,7 @@ It reproduced every hand-made decision of the same day.
   the most that could be saved. On the six measured decks only Selesnya (12.3%) and KittyV3 (5.8%) clear 4%.
   KittyV3's achievable saving is about 3.3%, and gating on the projection would admit only Selesnya. The
   user: *"I think that's fine. If we get 2-3% that's not a waste of time."* So a deck that clears the 4%
-  ceiling earns its A/B even when the fit projects only 2-3%.
+  ceiling earns its A/B even when the fit projects only 2-3%. **The 4% threshold stands** (same day: *"So 4%
+  is okay. If we found it to be really worthwhile we could even go a bit lower, but with what you mentioned
+  4% is probably good enough."*). Lowering it is the user's lever, to reach for if the fleet's adoptions
+  show the stage paying well.
