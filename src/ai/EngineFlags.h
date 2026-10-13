@@ -184,6 +184,19 @@ inline bool DragonstormDragonOrderOn()
     return heurarm::Flag(heurarm::DRAGONSTORM_DRAGON_ORDER, env_on);
 }
 
+// MTG_DIG_SEARCHED_CHOICE (DEFAULT ON; =0 restores the automatic dig, byte-identical) -- the cycle /
+// sac-to-draw dig is a SEARCHED dig / no-dig choice wherever the provider's gate lets it fire, never an
+// automatic action inside the search window (USER 2026-10-13: "'Main 1's automatic cycle' ... It
+// shouldn't be automatic"). Read by the enumerator (AppendSubdecisionAxes: the no-dig twin and the
+// pre-gate), the post-apply dedup (PlanIsAxisVariant) and the executor's reactive dig
+// (AIEngine::UseSurplusLandAbilities honours the chosen Plan::dig_choice) -- one reader, so the
+// rollout and the executor cannot disagree about which world they are in.
+inline bool DigSearchedChoiceOn()
+{
+    static const bool env_on = EnvOn("MTG_DIG_SEARCHED_CHOICE", true);
+    return heurarm::Flag(heurarm::DIG_SEARCHED_CHOICE, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.

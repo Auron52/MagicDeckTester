@@ -7126,7 +7126,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // uncommitted and a heuristic dig would realise a cycle the search never modelled (fluctuator
     // d3 s1001 gi87: a T3 main-2 Canyon Slough cycle spent a Drannith Stinger ping the T4 kill
     // needed, T4 -> T5 at every budget).
-    if (is_pre_combat_main && !fd_plan_committed) { UseSurplusLandAbilities(state, resolve_stack); }
+    if (is_pre_combat_main && !fd_plan_committed)
+    { UseSurplusLandAbilities(state, resolve_stack, plan.dig_choice); }
     // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: Mutavault and the token
     // taps are searched plan actions, realised in exec_trailing_activations below.)
 
@@ -7291,15 +7292,26 @@ bool AIEngine::TryPlayLand(GameState& state)
 // ---- Surplus land card-draw abilities (cycling, sacrifice-to-draw) ----
 
 void AIEngine::UseSurplusLandAbilities(GameState& state,
-                                       const std::function<void(GameState&)>& resolve_stack)
+                                       const std::function<void(GameState&)>& resolve_stack,
+                                       int dig_choice)
 {
     Player& ap = state.ActivePlayer();
     if (!state.stack.empty()) { return; }   // let pending spells resolve first
+    // THE SEARCHED CHOICE, REALISED (MTG_DIG_SEARCHED_CHOICE, default ON). This path runs only when the
+    // turn carries no recorded script (d0, or the develop-when-stuck fallback), and there the plan's
+    // dig_choice is all that says which world the search scored: ApplyPlanDirect suppresses the loop at
+    // 0, digs while affordable at 1, and runs the gate WITHOUT the main-2 deferral at 2. Before the lever
+    // this function re-decided by heuristic whatever the plan said -- an opt-in deck whose search chose
+    // "no dig" still dug here. =0 restores the heuristic-only reactive dig (the d0 plan is -1 either way).
+    const bool honour = DigSearchedChoiceOn();
+    if (honour && dig_choice == 0) { return; }
     if (!ResolveProvider(state).HasAnyDigSource(state)) { return; }
     // MAIN 1 IS NOT THE END OF A SPLIT TURN (MTG_DIG_DEFER_MAIN2) -- lockstep with ApplyPlanDirect's
     // pre-combat dig loop, through the one shared predicate: a payable cast the main-phase filter
-    // withheld from main 1 keeps this main-1-only reactive dig from spending its mana.
-    if (TurnSolver::Main1DigDefersToMain2(state)) { return; }
+    // withheld from main 1 keeps this main-1-only reactive dig from spending its mana. Like the apply,
+    // only the HEURISTIC default (-1) waits once the choice is searched.
+    if ((!honour || dig_choice < 0) && TurnSolver::Main1DigDefersToMain2(state)) { return; }
+    const bool dig_while_affordable = honour && dig_choice == 1;
 
     // Reactive "dig when stuck" used on the depth-0 / develop-when-stuck paths (full-depth
     // committed turns replay the search's recorded digs instead). Dig THROUGH lands toward
@@ -7316,7 +7328,9 @@ void AIEngine::UseSurplusLandAbilities(GameState& state,
     const bool dig_continue   = dig_chain_open
                                     || ResolveProvider(state).DigContinueAfterResolve();
     int guard = 0;
-    while (guard++ < dig_cap && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
+    while (guard++ < dig_cap
+           && (dig_while_affordable || ResolveProvider(state).ShouldConsiderDig(state))
+           && !ap.library.empty())
     {
         ManaPool avail = AvailableManaPool(state);
         bool is_sac = false;

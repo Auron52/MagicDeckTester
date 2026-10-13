@@ -1355,7 +1355,15 @@ public:
         // scores the dig and no-dig lines and the SEARCH decides; the heuristic is the branch's
         // default, not a substitute for search. The executor needs no handling -- a committed dig
         // line rides breakpoint_actions verbatim, and a committed no-dig line records none.
-        int dig_choice = -1;
+        // 2 (MTG_DIG_SEARCHED_CHOICE, default ON; USER 2026-10-13 "It shouldn't be automatic") == a
+        // BASE plan whose no-dig sibling (0) is in the same candidate list: the provider's gate decides
+        // exactly as at -1, but MTG_DIG_DEFER_MAIN2 does not apply (the sibling IS the no-dig world).
+        // Every provider holding a dig source gets the sibling under the lever -- the opt-in ones their
+        // 0/1 axis, the rest (the USER's 2026-09-29 ruling: no dig-while-affordable axis for them) a
+        // no-dig twin only -- so -1 remains only where no sibling exists: the greedy horizon / d0 plan,
+        // an axis clone, a source drawn mid-apply. The UNCOMMITTED executor path (no recorded script)
+        // honours 0 / 1 / 2 in AIEngine::UseSurplusLandAbilities.
+        int dig_choice = -1;   // (its fan's sibling identity is Plan::dig_group, at the end)
 
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
@@ -1448,6 +1456,13 @@ public:
         // the permutation witness: after the sort, bp_self says where each plan came FROM, which is
         // exactly what turns a pre-sort bp_base into a post-sort one. Never read by play.
         int bp_self = -1;
+
+        // Which dig FAN a plan belongs to (0 = none): a base marked dig_choice 2 and its 0 / 1 siblings
+        // share it (MTG_DIG_SEARCHED_CHOICE). METADATA for the dig fold (DigFoldMemo in TurnSolver.cpp),
+        // exactly like bounce_group: never read by an apply, in no dedup key -- it lets a candidate loop
+        // recognise the no-dig twin of a base whose apply did NOT dig (then an exact duplicate of it) and
+        // decline it before the apply. Here, at the tail, because it fits the struct's tail padding.
+        int dig_group = 0;
 
         bool empty() const { return actions.empty(); }
         // Memberwise equality (C++20 defaulted: every member, a new field included automatically).
@@ -1758,7 +1773,8 @@ public:
     // Main2-classified hand card) is still payable -- the turn is not stuck, its casts were moved past
     // combat. ONE reader for both worlds: ApplyPlanDirect's pre-combat dig loop (rollout) and
     // AIEngine::UseSurplusLandAbilities (the executor's reactive m1 dig). MTG_DIG_DEFER_MAIN2 (default
-    // ON; heurarm slot DIG_DEFER_MAIN2).
+    // ON; heurarm slot DIG_DEFER_MAIN2). Under MTG_DIG_SEARCHED_CHOICE it applies to the heuristic
+    // default (-1) only: a base plan with a searched no-dig sibling (dig_choice 2) is not deferred.
     static bool Main1DigDefersToMain2(const GameState& state);
 
     // Baseline main-phase classification for a hand cast, for the per-deck review report
@@ -1830,6 +1846,10 @@ public:
     // The post-apply state identity every candidate dedup keys on (BuildDedupKey), folded to 64 bits.
     // Tests only: it is how a unit case checks that two states collide (or do not) in that key.
     static std::uint64_t     DedupKeyOf(const GameState& state);
+    // The PASS a search host appends when a main enumerates nothing (FSLineWin's idle node, FSLineTail's
+    // do-nothing second main, SolveWithLookahead's empty set) followed by the dig siblings the host
+    // appends after it (MTG_DIG_SEARCHED_CHOICE: the pass marked 2 + its no-dig twin). Tests only.
+    static std::vector<Plan> IdlePassWithDigSiblings(const GameState& state);
     // The FINITE budget of the OUTERMOST solve of this thread's current decision, or nullptr when
     // that budget is unlimited (`--budget-ms 0`) or no solve is on the stack (the viewer's menu
     // enumeration, the executor's committed apply). A provider-side sub-search run INSIDE a

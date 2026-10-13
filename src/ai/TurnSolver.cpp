@@ -461,6 +461,44 @@ static std::atomic<long long> g_axis_dup_skips{0};
 static std::atomic<long long> g_m2_variant_dup_skips{0};   // main-2 post-apply variant dedup (see m2_seen_states)
 static std::atomic<long long> g_m2_stillborn_skips{0};    // main-2 pre-apply overrun-rank skip (see m2_known_n)
 static std::atomic<long long> g_axis_le_vars{0};   // Land's Edge fire-count variants emitted
+// MTG_DIG_CENSUS (diagnostic only, default OFF; printed at exit). The cycle / sac-to-draw dig loop in
+// ApplyPlanDirect, counted per apply that DUG, split by who decided it -- the instrument for "the dig is
+// never automatic inside the search window" (MTG_DIG_SEARCHED_CHOICE). `auto` = a -1 plan that is not
+// the horizon leaf: an in-window apply that dug by the provider's heuristic with no searched sibling (an
+// axis clone, or a source the pre-gate could not see). `leaf` = the greedy playout beyond the horizon
+// (permitted). `twin` = a base plan marked 2 (gate-decided, its no-dig twin in the same list).
+// `axis1` = the opt-in axis's dig-while-affordable variant. Reads nothing that play reads.
+static std::atomic<long long> g_dig_twins_emitted{0};
+static std::atomic<long long> g_dig_applied_auto{0}, g_dig_applied_leaf{0};
+static std::atomic<long long> g_dig_applied_twin{0}, g_dig_applied_axis1{0};
+// `auto` split by WHY the plan had no sibling: a breakpoint variant (bp_choice >= 0), another axis
+// clone (scry / tutor / ponder / ... pinned), a cast-nothing plan, or a plain base plan whose source
+// the pre-gate could not see (drawn mid-apply).
+static std::atomic<long long> g_dig_auto_bp{0}, g_dig_auto_axis{0}, g_dig_auto_idle{0}, g_dig_auto_base{0};
+static std::atomic<long long> g_dig_auto_bppre{0};   // bp variant whose breakpoint is still pending: the dig is its premise
+static std::atomic<long long> g_dig_folded{0};       // no-dig twins declined pre-apply by the dig fold (DigFoldMemo)
+static bool DigCensusOn()
+{
+    static const bool on = EnvOn("MTG_DIG_CENSUS");
+    return on;
+}
+namespace {
+struct DigCensusDumper
+{
+    ~DigCensusDumper()
+    {
+        if (!DigCensusOn()) { return; }
+        std::fprintf(stderr, "[dig-census] variants_emitted=%lld folded=%lld applied: auto=%lld leaf=%lld twin=%lld axis1=%lld"
+                             " | auto: bp_premise=%lld bp_after=%lld axis=%lld idle=%lld base=%lld\n",
+                     g_dig_twins_emitted.load(), g_dig_folded.load(),
+                     g_dig_applied_auto.load(), g_dig_applied_leaf.load(),
+                     g_dig_applied_twin.load(), g_dig_applied_axis1.load(), g_dig_auto_bppre.load(),
+                     g_dig_auto_bp.load(), g_dig_auto_axis.load(), g_dig_auto_idle.load(),
+                     g_dig_auto_base.load());
+    }
+};
+static DigCensusDumper s_dig_census_dumper;
+}  // namespace
 // CHAIN-SLOT OUTCOME (see g_bp_chain_ci_last). The three cells want three different answers:
 //   covered = the scan landed INSIDE wave 0's own window (ci < W), so rank ci already scored that
 //             exact continuation -> a pure duplicate, losslessly skippable.
@@ -6146,11 +6184,16 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     const bool time_it = m2yield::Enabled();
     const std::chrono::steady_clock::time_point _t0 =
         time_it ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-    const TurnSolver::Plan p =
+    TurnSolver::Plan p =
         greedy_here
             ? TurnSolver::Solve(state, false,
                                 TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, depth))
             : SearchedSecondMainMemoized(state, eff_depth, max_turns, budget, second_main, tt);
+    // The greedy branch IS the horizon leaf's second main (HorizonLeaf permit), so label it the way
+    // SolveWithLookahead labels the first main's. Read only by plan.horizon_leaf's consumers, none of
+    // which runs on a post-combat plan in play (SimulateToEndImpl's swap pin reads the PRE plan); the
+    // label is what lets MTG_DIG_CENSUS tell this permitted playout dig from an in-window one.
+    if (greedy_here) { p.horizon_leaf = true; }
     if (time_it)
     {
         m2yield::g_solve_ns.fetch_add(
@@ -16975,6 +17018,11 @@ static thread_local int g_apd_depth = 0;
 // prefix; every position above it is the degenerate line. Inert (-1 depth) outside the probe.
 struct SlotPrefixProbe { int apd_depth = -1; int first_drop_watchers = -1; };
 static thread_local SlotPrefixProbe g_slot_prefix_probe;
+// Did the LAST ApplyPlanDirect to return on this thread change the state in its cycle / sac-to-draw dig
+// loop? Written on every exit of every apply (RAII), so a candidate loop reads its OWN apply's answer
+// right after the call: a nested apply writes its value on its own exit, before the outer one's. Read
+// only by the dig fold (DigFoldMemo); never by play.
+static thread_local bool g_apd_last_dug = false;
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr,
                             BpPrefixSnap* bp_capture = nullptr,
@@ -18369,7 +18417,8 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && p.atk_dork_release == -1
-        && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
+        && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0
+        && p.dig_choice == -1;   // apply-read (the dig loop); was missing -- continuations never carry it
 }
 // A SUB-DECISION AXIS VARIANT: a plan that differs from a sibling base plan only by a pinned
 // resolution choice (breakpoint continuation, scry/ponder/tutor/dig pick, discard, Emiel counter,
@@ -18393,7 +18442,13 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // inert-duplicate shape this skip exists for. Safe because the two STATE pins are folded
         // into BuildDedupKey's pending pins (a post-apply state still carrying one is distinct).
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
-        || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0;
+        || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
+        // The cycle / sac-draw dig variants (0 = the no-dig twin / never, 1 = dig-while-affordable) --
+        // NOT the 2 mark, which is a base plan. Missing from the 9d widening: a dig variant whose world
+        // its base already reached (the gate refused, the source was unaffordable) paid a full rollout
+        // to re-score a known state. Exact by the same state-identity argument. MTG_DIG_SEARCHED_CHOICE
+        // (=0 restores the omission).
+        || ((p.dig_choice == 0 || p.dig_choice == 1) && DigSearchedChoiceOn());
 }
 // ...and the land-search POSITION twin (Plan::land_search_act_slot != -1) is a variant too -- but a
 // twin is still a BASE for the land-search pick axes (its own picks are searched), which is why the
@@ -18825,6 +18880,36 @@ struct PutBounceFold
             if (std::find(e.seen.begin(), e.seen.end(), key) == e.seen.end())
             { e.seen.push_back(key); e.trace.push_back(tr); }
         }
+    }
+};
+
+// ---- THE DIG FOLD (MTG_DIG_SEARCHED_CHOICE) ------------------------------------------------------
+// The no-dig twin (dig_choice 0) of a base plan marked 2 differs from it ONLY in the dig loop at the
+// end of the apply. So when the base's (complete) apply did NOT dig, the twin's apply is the base's,
+// exactly -- the post-apply dedup would skip it after paying the unit, the GameState copy and the
+// apply. Measured before the fold: 93-100% of twins were such duplicates (fivecolour 27,231 twins for
+// 1,778 base digs in 40 games; edf 220,551 for none). The loop declines them BEFORE the unit charge,
+// the bounce fold's shape. Plan::dig_group identifies the fan (base and siblings share it), so no
+// content comparison is involved. Base plans precede their twins after the stable value sort (same
+// keys), and a base that was itself declined, hosted as a pending node, or never reached records
+// nothing -- its twin then applies as before. Only the twin (0) folds: an opt-in's 1 bypasses the gate
+// and may dig where the base did not.
+struct DigFoldMemo
+{
+    std::unordered_map<int, std::pair<bool, int>> base;   // dig_group -> (base dug?, base cand index)
+    bool on = false;
+    // The base this twin repeats (its cand index), or -1.
+    int Declines(const TurnSolver::Plan& p) const
+    {
+        if (!on || p.dig_group == 0 || p.dig_choice != 0) { return -1; }
+        const auto it = base.find(p.dig_group);
+        return (it != base.end() && !it->second.first) ? it->second.second : -1;
+    }
+    // After an apply: a base (2) whose apply ran to the end records whether it dug.
+    void Record(const TurnSolver::Plan& p, bool complete, int cand)
+    {
+        if (!on || p.dig_group == 0 || p.dig_choice != 2 || !complete) { return; }
+        base.emplace(p.dig_group, std::make_pair(g_apd_last_dug, cand));
     }
 };
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
@@ -40397,6 +40482,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 {
     g_apply_caller_line = caller_line;
     struct ApdDepth { ApdDepth() { ++g_apd_depth; } ~ApdDepth() { --g_apd_depth; } } _apd_depth;
+    // The dig fold's channel (g_apd_last_dug): set the moment THIS apply's dig loop first changes the
+    // state (a successful cost payment), published on every exit.
+    bool apd_dug = false;
+    struct ApdDugOut { bool& v; ~ApdDugOut() { g_apd_last_dug = v; } } _apd_dug_out{apd_dug};
     // Prevent Damage backstop: no tap-trigger may be pending when a plan starts applying (armed only;
     // MTG_DMG_EVENT_VERIFY aborts if one is -- a missed flush site).
     dmgev::BackstopFlush(state, "ApplyPlanDirect");
@@ -45854,10 +45943,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // filter withheld from this main is still payable, the HEURISTIC dig (dig_choice -1) waits for
     // main 2's pass of this same loop instead of spending that cast's mana -- see
     // TurnSolver::Main1DigDefersToMain2. Lockstep with AIEngine::UseSurplusLandAbilities.
+    // 2 (MTG_DIG_SEARCHED_CHOICE): a base plan whose NO-DIG TWIN is in the same candidate list -- the
+    // same gate as -1, but never deferred: the twin is the searched no-dig world, so deferring would only
+    // delete the dig-now line (see the mark at the end of AppendSubdecisionAxes).
     if (!s_human_play && plan.dig_choice != 0
         && ResolveProvider(state).HasAnyDigSource(state)
         && !(is_pre_combat && plan.dig_choice < 0 && TurnSolver::Main1DigDefersToMain2(state)))
     {
+        bool dig_census_counted = !DigCensusOn();   // MTG_DIG_CENSUS: count this apply once, if it digs
         // DigChain: both stopping conditions are provider-owned (see MaxDigsPerTurn /
         // DigContinueAfterResolve). Defaults reproduce the legacy 16-and-break exactly.
         const bool dig_chain_open = DecisionUnpruned(UnprunedGate::DigChain);
@@ -45877,6 +45970,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (src.empty()) { break; }
             const CardDefinition* sd = CardDatabase::Instance().Lookup(src);
             if (!sd) { break; }
+            // The dig fold's "this apply dug": set BEFORE any mutation, so a payment that fails after
+            // tapping still reads as dug -- conservative (the twin is then applied, not declined).
+            apd_dug = true;
 
             if (is_sac)
             {
@@ -45922,6 +46018,40 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
             EnterHand(state, state.active_player_index, std::move(drawn),
                       HandEntryReason::Draw);
+            if (!dig_census_counted)
+            {
+                dig_census_counted = true;
+                (plan.dig_choice == 1 ? g_dig_applied_axis1
+                 : plan.dig_choice == 2 ? g_dig_applied_twin
+                 : plan.horizon_leaf ? g_dig_applied_leaf
+                 : g_dig_applied_auto).fetch_add(1, std::memory_order_relaxed);
+                if (plan.dig_choice < 0 && !plan.horizon_leaf)
+                {
+                    const bool other_axis = plan.scry_choice >= 0 || plan.tutor_choice >= 0
+                        || plan.etbdig_choice >= 0 || plan.lackey_choice >= 0 || plan.ponder_choice >= 0
+                        || plan.discard_choice >= 0 || plan.vial_charge_choice >= 0
+                        || plan.fling_victim_choice != -1 || plan.tectonic_mode_choice >= 0
+                        || plan.tectonic_keep_choice >= 0 || plan.bruna_gather_choice >= 0
+                        || plan.combat_aura_swap_choice >= 0 || plan.saga_target_choice >= 0
+                        || plan.saga_ch1_choice != -1 || !plan.sac_pins.empty()
+                        || plan.tapmode_choice != 0 || plan.freshmode_choice != 0
+                        || plan.bounce_choice >= 1 || plan.etbcounter_choice >= 0
+                        || plan.sweep_choice >= 0 || plan.le_fire_choice >= 0;
+                    // A breakpoint variant whose pinned breakpoint has NOT fired yet (bp_seen <=
+                    // bp_at) reaches it through this dig -- the dig's own site-4 re-solve or one
+                    // after it -- so the dig is the variant's premise, not a choice it skipped.
+                    const bool bp_pending = plan.bp_choice >= 0 && !plan.bp_all && bp_seen <= plan.bp_at;
+                    (plan.bp_choice >= 0 ? (bp_pending ? g_dig_auto_bppre : g_dig_auto_bp)
+                     : other_axis ? g_dig_auto_axis
+                     : plan.actions.empty() ? g_dig_auto_idle
+                     : g_dig_auto_base).fetch_add(1, std::memory_order_relaxed);
+                    TRACE("digauto", "T%d %s bp=%d at=%d seen=%d all=%d axis=%d acts=%zu land=%s src=%s rollout=%d bpenum=%d",
+                          state.turn_number, is_pre_combat ? "m1" : "m2", plan.bp_choice, plan.bp_at,
+                          bp_seen, plan.bp_all ? 1 : 0,
+                          other_axis ? 1 : 0, plan.actions.size(), plan.land_to_play.c_str(),
+                          src.c_str(), g_rollout_nest, g_bp_enum_depth);
+                }
+            }
 
             std::vector<Action>* my_bp_sink = out_breakpoint;
             if (out_breakpoint)
@@ -54049,6 +54179,101 @@ static bool PlanMayHoldLandAtBounce(const GameState& state, const TurnSolver::Pl
     return put_searches > own_searches;
 }
 
+// ---- THE DIG SIBLINGS: no-dig twin / searched dig axis (Plan::dig_choice) ------------------------
+// One pre-gate shared by the axis fan-out (AppendSubdecisionAxes, every base plan of an enumeration)
+// and the hosts that append an IDLE plan after the enumeration (AppendIdleDigSiblings). See the axis
+// block for the rationale (MTG_DIG_SEARCHED_CHOICE; USER 2026-10-13 "It shouldn't be automatic").
+struct DigSiblingGate
+{
+    bool any     = false;   // some plan of this state may get siblings
+    bool opted   = false;   // provider opts into the full axis: never (0) + dig-while-affordable (1)
+    bool src_now = false;   // a dig source exists on the enumeration state
+    bool choice  = false;   // MTG_DIG_SEARCHED_CHOICE
+};
+static DigSiblingGate DigSiblingGateFor(const GameState& state)
+{
+    DigSiblingGate g;
+    const DecisionProvider& dprov = ResolveProvider(state);
+    g.opted  = dprov.DigDecisionSearched();
+    g.choice = DigSearchedChoiceOn();
+    if (!g.opted && !g.choice) { return g; }
+    g.src_now = dprov.HasAnyDigSource(state);
+    if (!g.choice)
+    {
+        // Legacy pre-gate (=0): opt-in providers only, a source payable from the PRE-CAST pool.
+        if (g.src_now)
+        {
+            ManaPool dig_pool = AvailableManaPool(state);
+            bool dig_is_sac = false;
+            g.any = !dprov.SelectDigSource(state, dig_pool, dig_is_sac).empty();
+        }
+        return g;
+    }
+    if (g.src_now) { g.any = true; return g; }
+    // No source yet: only a sac-draw LAND in hand can become one through a plan's own drop. One hand
+    // scan, so a deck with no dig card pays nothing else (and stays byte-identical).
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->card.IsLand() && d->params.sacrifice_draw_cost.has_value()) { g.any = true; break; }
+    }
+    return g;
+}
+// Does this plan get dig siblings? Under the lever with no source yet, only when the plan's OWN drop
+// is a sac-draw land (state-independent, like BpDigFanoutForPlan's self-source rule).
+static bool DigSiblingsFor(const DigSiblingGate& g, const TurnSolver::Plan& p)
+{
+    if (!g.any) { return false; }
+    if (!g.choice || g.src_now) { return true; }
+    const std::string* lands[2] = { &p.land_to_play, &p.land_face };
+    for (const std::string* ln : lands)
+    {
+        if (ln->empty()) { continue; }
+        const CardDefinition* ld = CardDatabase::Instance().Lookup(*ln);
+        if (ld && ld->params.sacrifice_draw_cost.has_value()) { return true; }
+    }
+    return false;
+}
+// A fresh dig-fan identity (Plan::dig_group) -- process-unique, so two lists can never share one in a
+// candidate loop. 0 is "no fan".
+static int NextDigGroup()
+{
+    static std::atomic<int> s_next{0};
+    int g = s_next.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (g <= 0) { s_next.store(1, std::memory_order_relaxed); g = 1; }
+    return g;
+}
+static void AppendDigSiblings(const DigSiblingGate& g, const TurnSolver::Plan& p,
+                              std::vector<TurnSolver::Plan>& out, int group = 0)
+{
+    for (int k = 0; k <= (g.opted ? 1 : 0); ++k)
+    {
+        TurnSolver::Plan v = p;
+        v.dig_choice = k;
+        v.dig_group  = group;
+        out.push_back(std::move(v));
+    }
+}
+// THE IDLE PLAN A HOST APPENDS gets the same siblings. A main with nothing to cast enumerates ZERO
+// plans, and the host then appends the pass itself -- FSLineWin's idle node, FSLineTail's do-nothing
+// second main, SolveWithLookahead's empty candidate set, the NC instrument's m2 -- AFTER the axes ran.
+// That pass is exactly the "empty of gas" state the generic gate digs in, so without this the commonest
+// dig of all stayed automatic. `list.back()` is the idle plan; it is marked 2 and its siblings appended.
+// Lever-only: at =0 every host is byte-identical.
+static void AppendIdleDigSiblings(const GameState& state, std::vector<TurnSolver::Plan>& list)
+{
+    if (list.empty() || HumanPlayActive() || !DigSearchedChoiceOn()) { return; }
+    const DigSiblingGate g = DigSiblingGateFor(state);
+    if (!DigSiblingsFor(g, list.back())) { return; }
+    list.back().dig_choice = 2;   // BEFORE the append: it may reallocate
+    list.back().dig_group  = NextDigGroup();
+    std::vector<TurnSolver::Plan> extra;
+    AppendDigSiblings(g, list.back(), extra, list.back().dig_group);   // dig_choice 0 (and 1 for an opt-in)
+    if (DigCensusOn())
+    { g_dig_twins_emitted.fetch_add(static_cast<long long>(extra.size()), std::memory_order_relaxed); }
+    list.insert(list.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+}
+
 // ---- Post-dedup sub-decision axis fan-out (factored out of the m1 host, 2026-09-06) --------
 // This whole block used to live inline at the tail of EnumeratePlansWithLandUncached's full body,
 // which made every axis M1-HOST-ONLY: the second-main enumerations (EnumeratePlansM2Memoized, and
@@ -54060,9 +54285,9 @@ static bool PlanMayHoldLandAtBounce(const GameState& state, const TurnSolver::Pl
 // MTG_M2_AXES. Inside a breakpoint continuation derivation only the DURING-CAST axes fan out (the
 // continuation IS a decision, and carries their pins -- ContPins; corrected 2026-10-02: the old rule
 // here, "a continuation list is not a new decision and must not fan out", left every sub-decision
-// cast inside a continuation to the heuristic). Known inert-duplicate cost when called at m2: Plan::dig_choice is consumed on
-// the is_pre_combat apply path only (ApplyPlanDirect), so the cycle/sac-draw dig axis's m2
-// variants score identically to their base plan and tie-break away (Auras is the only opt-in).
+// cast inside a continuation to the heuristic). (A former note here -- "Plan::dig_choice is consumed
+// on the is_pre_combat apply path only, so the dig axis's m2 variants are inert" -- went stale at D7,
+// purge step 14: ApplyPlanDirect's dig loop runs in BOTH mains, so the m2 dig variants are live.)
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all)
 {
@@ -55660,16 +55885,43 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // (DigDecisionSearched: Auras) so Treasure Hunt's measured greedy gate and every digless
     // deck stay byte-identical; gated on a source being payable BEFORE the casts, since a turn
     // that cannot afford any dig makes all three worlds identical.
-    if (!cont_axes_only && !HumanPlayActive() && ResolveProvider(state).DigDecisionSearched()
-        && ResolveProvider(state).HasAnyDigSource(state))
+    //
+    // THE DIG IS NEVER AUTOMATIC INSIDE THE WINDOW (MTG_DIG_SEARCHED_CHOICE, default ON; USER
+    // 2026-10-13, on FiveColour gi1106's T2 Triome cycle: "'Main 1's automatic cycle' This seems to be
+    // a bit of a problem in of itself. It shouldn't be automatic."). Two holes made it automatic:
+    //   * A provider that does not opt in (GenericProvider -- FiveColour, Pirates, EDF, Soldiers,
+    //     WhiteKnights -- and TreasureHunt) emitted no variant at all, so every plan's apply ran the
+    //     provider's gate and DUG whenever it passed: the search was never offered "don't". The
+    //     USER's 2026-09-29 ruling stands -- the axis is NOT opened for these providers (no
+    //     dig-while-affordable variant: that is the clairvoyant over-dig they declined) -- so the
+    //     GATE stays the restriction (no gate, no dig) and only the forced outcome goes: each base
+    //     plan gets a NO-DIG TWIN (dig_choice 0), and the base plan is marked 2 at the end of this
+    //     function (= "the provider's gate decides, and a no-dig sibling exists"; an opt-in provider's
+    //     base gets the same mark, since its 0/1 variants are that sibling). The search scores both;
+    //     the base wins ties, so the provider's heuristic remains the ORDERING (the "searched with
+    //     heuristics" shape, and the Vial-charge / soulbond-decline twin precedent).
+    //   * The pre-gate read the PRE-CAST pool and the PRE-DROP board, so a dig the plan's own land
+    //     drop made affordable (gi1106: the T2 drop is the third source for a {3} cycle) or brought
+    //     in (a sac-draw land played this turn -- Fiery Islet, Horizon Canopy, Silent Clearing) got
+    //     no variant and was left to the heuristic. Under the lever the pre-gate is "a source exists
+    //     now, or the plan's own drop is a sac-draw land": sound for both kinds of arrival a land drop
+    //     can cause, and an unaffordable / gate-refused twin is an exact duplicate that the post-apply
+    //     dedup now skips (PlanIsAxisVariant), costing one apply and no rollout. (A source DRAWN
+    //     mid-apply is still unseen here -- that base plan keeps -1, the heuristic; counted by
+    //     MTG_DIG_CENSUS as "auto".)
+    // =0 restores the old pre-gate and the opt-in-only axis byte-identically.
+    // Base plans given a no-dig sibling (lever on), with their fan identity; marked 2 at the end.
+    std::vector<std::pair<std::size_t, int>> dig_twinned;
+    if (!cont_axes_only && !HumanPlayActive())
     {
-        ManaPool dig_pool = AvailableManaPool(state);
-        bool dig_is_sac = false;
-        if (!ResolveProvider(state).SelectDigSource(state, dig_pool, dig_is_sac).empty())
+        const DigSiblingGate dg = DigSiblingGateFor(state);
+        if (dg.any)
         {
             std::vector<TurnSolver::Plan> extra;
-            for (const TurnSolver::Plan& p : all)
+            const std::size_t n_all = all.size();
+            for (std::size_t i = 0; i < n_all; ++i)
             {
+                const TurnSolver::Plan& p = all[i];
                 // Base plans only -- one axis at a time, so cost stays additive (tutor's rule).
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                     || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
@@ -55680,15 +55932,16 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
-                for (int k = 0; k <= 1; ++k)
-                {
-                    TurnSolver::Plan v = p;
-                    v.dig_choice = k;
-                    extra.push_back(std::move(v));
-                }
+                if (!DigSiblingsFor(dg, p)) { continue; }
+                // Opt-in: never (0) + dig-while-affordable (1). Otherwise only the no-dig twin (0).
+                const int grp = dg.choice ? NextDigGroup() : 0;
+                AppendDigSiblings(dg, p, extra, grp);
+                if (dg.choice) { dig_twinned.emplace_back(i, grp); }
             }
-            TRACE("digaxis", "T%d %zu plan(s) -> %zu dig variant(s)",
-                  state.turn_number, all.size(), extra.size());
+            TRACE("digaxis", "T%d %zu plan(s) -> %zu dig variant(s)%s",
+                  state.turn_number, all.size(), extra.size(), dg.opted ? "" : " (no-dig twins)");
+            if (DigCensusOn()) { g_dig_twins_emitted.fetch_add(static_cast<long long>(extra.size()),
+                                                               std::memory_order_relaxed); }
             all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                   std::make_move_iterator(extra.end()));
         }
@@ -56425,6 +56678,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (std::size_t i = n_before_axes; i < all.size(); ++i)
             { all[i].bp_wave0 = false; }
         }
+    }
+
+    // ---- THE BASE OF A NO-DIG TWIN IS MARKED 2 (MTG_DIG_SEARCHED_CHOICE; the dig axis above) ------
+    // Marked HERE, after every axis has cloned, so no later clone inherits a mark it did not earn: a
+    // clone has no twin, keeps -1, and stays the heuristic default (the residual MTG_DIG_CENSUS counts).
+    // 2 runs exactly the gate the base ran at -1 -- with ONE difference: MTG_DIG_DEFER_MAIN2 does not
+    // apply to it. The deferral exists to keep a withheld Main2 cast's mana when main 1's dig was the
+    // only world; with the twin in the list the no-dig world is SEARCHED, so deferring the base too would
+    // only delete the dig-in-main-1 line (a lossy gate on a searched choice).
+    for (const std::pair<std::size_t, int>& t : dig_twinned)
+    {
+        all[t.first].dig_choice = 2;
+        all[t.first].dig_group  = t.second;   // the dig fold's sibling identity (DigFoldMemo)
     }
 }
 
@@ -59719,9 +59985,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             // per-job `ms` from a pooled --batch, which was later shown to swing 24% run-to-run on a
             // BYTE-IDENTICAL arm, so it never had the resolution to see an effect this size. It is
             // being re-measured single-threaded and interleaved; do not re-cite the old number.
+            // ...NOT empty when it carries a SEARCHED dig (MTG_DIG_SEARCHED_CHOICE: the pass marked 2,
+            // or an opt-in's dig-while-affordable 1): the searched m2 scored that pass WITH its dig, so
+            // skipping the apply would drop the dig the solve chose. -1 / 0 keep the skip (=0 never
+            // produces 1 / 2 on an empty plan, so the lever-off arm is byte-identical).
             const bool m2_apply_empty = post_plan.actions.empty()
                                      && post_plan.land_to_play.empty()
-                                     && !post_plan.land_decided;
+                                     && !post_plan.land_decided
+                                     && post_plan.dig_choice <= 0;
             if (!(M2SkipEmptyApplyOn() && m2_apply_empty))
             { ApplyPlanDirect(state, post_plan, false); }
             // OWN DEATH after the second main (see the main-1 twin above).
@@ -60242,6 +60513,14 @@ std::uint64_t TurnSolver::DedupKeyOf(const GameState& state)
 {
     const TranspositionTable::Key k = BuildDedupKey(state);
     return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+}
+
+std::vector<TurnSolver::Plan> TurnSolver::IdlePassWithDigSiblings(const GameState& state)
+{
+    std::vector<Plan> v(1);
+    v.back().land_decided = true;   // FSLineWin's idle node: no drop to take
+    AppendIdleDigSiblings(state, v);
+    return v;
 }
 
 // The census's `skey` column: the engine's OWN full-state identity, folded to 64 bits. Deliberately
@@ -62488,6 +62767,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // land-execution path never greedy-plays a land the enumeration did not choose.
         post.push_back(TurnSolver::Plan{});
         post.back().land_decided = M2DropLive(state);
+        // The do-nothing second main runs the dig loop too (D7): offer its no-dig twin
+        // (MTG_DIG_SEARCHED_CHOICE; see AppendIdleDigSiblings).
+        AppendIdleDigSiblings(state, post);
         if (s_rollout_stats)
         {
             m2stats::g_decisions.fetch_add(1, std::memory_order_relaxed);
@@ -62631,10 +62913,22 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // WAVE 0's STILLBORN TEST (see ArmNewDupAll and FSLineWin's armnew_dup_all): base plans, by
         // PRE-sort index, whose own apply proved every wave-0 variant of them a duplicate.
         std::unordered_map<int, TranspositionTable::Key> m2_armnew_dup_all;
+        // The dig fold (see DigFoldMemo): this loop's post-apply dedup (m2_seen_states) skips EVERY
+        // repeated state, so a no-dig twin whose base did not dig is always a skip-to-be.
+        DigFoldMemo m2_dig_fold;
+        m2_dig_fold.on = DigSearchedChoiceOn();
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
             if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
+            // THE DIG FOLD -- before the unit charge and the apply; leaves the beam refund, which is
+            // all the post-apply dedup's skip leaves here.
+            if (m2_dig_fold.Declines(q) >= 0)
+            {
+                g_dig_folded.fetch_add(1, std::memory_order_relaxed);
+                if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
+                continue;
+            }
             const bool m2_plain_rank = q.bp_choice >= 0 && q.bp_choice < kBpEmptyChoice && !q.bp_all
                                        && q.bp_base >= 0;
             const std::uint64_t m2_nkey = m2_plain_rank
@@ -62696,6 +62990,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             const std::uint64_t latent9_before = g_bp_latent9_last;
             const std::uint64_t truncasym_before = g_bp_truncasym_last;
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
+            m2_dig_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
             if (m2_plain_rank) { m2_known_n.emplace(m2_nkey, g_bp_cands_last); }
             {
                 const std::size_t pos = static_cast<std::size_t>(&q - post.data());
@@ -63973,6 +64268,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::Plan idle;
             idle.land_decided = true;   // no drop to take -> "(defer)": never a greedy land play
             pre.push_back(std::move(idle));
+            // ...and the pass is where the empty-of-gas dig fires: offer its no-dig twin
+            // (MTG_DIG_SEARCHED_CHOICE; see AppendIdleDigSiblings).
+            AppendIdleDigSiblings(state, pre);
         }
         if (winlesscert::StatsOn())
         {
@@ -64092,6 +64390,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     BounceFoldMemo bounce_fold;
     bounce_fold.on     = bp_variants_here && BounceFoldOn();
     bounce_fold.verify = bounce_fold.on && BounceFoldVerifyOn();
+    // ...and the dig fold (see DigFoldMemo), on the same condition.
+    DigFoldMemo dig_fold;
+    dig_fold.on = bp_variants_here && DigSearchedChoiceOn();
     // MTG_BP_WAVE_PROBE only: which wave SLOT first reached each key, for the dup_self/dup_cross
     // split. Left empty (never inserted into) when the probe is off.
     std::unordered_map<TranspositionTable::Key, uint64_t, TranspositionTable::KeyHash> wave_key_slot;
@@ -64460,6 +64761,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
             }
         }
+        // ---- THE DIG FOLD (MTG_DIG_SEARCHED_CHOICE; see DigFoldMemo) ------------------------------
+        // A no-dig twin whose base's apply did not dig IS that apply; declined before ConsumeAt,
+        // leaving what the post-apply dedup's skip would have left (the base's key is already in
+        // bp_seen_states): the probe's no-win value and the beam refund.
+        if (dig_fold.Declines(p) >= 0)
+        {
+            g_dig_folded.fetch_add(1, std::memory_order_relaxed);
+            if (rec_vals) { node_vals.push_back(max_turns + 1); }
+            if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+            FswDeclinedTrace(state, depth, p, "dig-fold", {}, state, -1, best.win_turn);
+            continue;
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
@@ -64532,6 +64845,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 bi.crack  = s.scripted_combat_land_search_crack;
             }
         }
+        dig_fold.Record(p, !node_snap.pending, static_cast<int>(&p - pre.data()));
         bounce_fold.Record(p, static_cast<int>(&p - pre.data()), !node_snap.pending,
                            [&] { return BuildDedupKey(s); });
         if (bounce_expect != nullptr) { BounceFoldMemo::CountVerify(BuildDedupKey(s) == *bounce_expect); }
@@ -69067,6 +69381,9 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     if (is_pre_combat)
     {
         plans = EnumeratePlansWithLand(state, true);
+        // Nothing to cast: the pass and (MTG_DIG_SEARCHED_CHOICE) its no-dig twin, so the empty-of-gas
+        // dig is ranked by the reshuffle average rather than taken. One plan = byte-identical.
+        if (plans.empty()) { plans.push_back(TurnSolver::Plan{}); AppendIdleDigSiblings(state, plans); }
     }
     else
     {
@@ -69074,6 +69391,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         // post-combat play PLUS the idle option (advance without casting). See FSLineTail.
         plans = EnumeratePlans(state, false);
         plans.push_back(TurnSolver::Plan{});
+        AppendIdleDigSiblings(state, plans);
     }
     if (plans.empty())     { return TurnSolver::Plan{}; }
     if (plans.size() == 1) { return plans[0]; }
@@ -69421,7 +69739,16 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         }
     }
 
-    if (candidates.empty()) { report(max_turns + 1, 0); return Plan{}; }
+    // NOTHING TO CAST: the pass (Plan{}) is returned unscored -- and its apply runs the dig loop, so on a
+    // dig deck the empty-of-gas cycle was AUTOMATIC here (a depth>0 lookahead node: the rollout's
+    // searched turns, the uncommitted fallback). Under MTG_DIG_SEARCHED_CHOICE, when a dig sibling is
+    // wanted, the pass (marked 2) and its no-dig twin are SCORED like any candidate set instead.
+    if (candidates.empty())
+    {
+        candidates.push_back(Plan{});
+        AppendIdleDigSiblings(state, candidates);
+        if (candidates.size() == 1) { report(max_turns + 1, 0); return Plan{}; }
+    }
 
     // Track the committed pass's win turn / sub_depth for non-convergence reporting.
     int committed_win       = max_turns + 1;
@@ -70047,6 +70374,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         etb_fold.BuildInPlan(candidates, is_pre_combat && bp_variants_here && state.deck_has_land_search
                                          && !HumanPlayActive() && PutBounceFoldOn());
         const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
+        // ...and the dig fold (see DigFoldMemo), on the same condition.
+        DigFoldMemo dig_fold;
+        dig_fold.on = bp_variants_here && DigSearchedChoiceOn();
         // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
         // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
         // runs every rollout turn and is where the doc says the searched-breakpoint gain actually
@@ -70256,6 +70586,20 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     }
                 }
             }
+            // THE DIG FOLD (MTG_DIG_SEARCHED_CHOICE; see DigFoldMemo) -- the bounce fold's shape: what
+            // the post-apply dedup's skip would have left is the candidate count and the base's
+            // no-breakpoint memo (the twin's apply IS the base's).
+            {
+                const int db = dig_fold.Declines(plan);
+                if (db >= 0)
+                {
+                    g_dig_folded.fetch_add(1, std::memory_order_relaxed);
+                    if (bp_nobp.count(static_cast<std::size_t>(db)) != 0)
+                    { bp_nobp.insert(static_cast<std::size_t>(&plan - candidates.data())); }
+                    ++candidates_done;
+                    continue;
+                }
+            }
 
             // THE PUT-BOUNCE FOLD (see PutBounceFold): an attack bounce variant whose resolution a sibling
             // already ran from the same shared state is that sibling's combat, which the combat-pin fold
@@ -70402,6 +70746,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         g_cpshare_cached.fetch_add(1, std::memory_order_relaxed);
                     }
                 }
+                dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
                                    [&] { return BuildDedupKey(copy); });
                 if (bounce_expect != nullptr)
@@ -70653,6 +70998,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 bounce_fold.Arm(plan);
                 ApplyPlanDirect(copy, plan, false);
+                dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
                                    [&] { return BuildDedupKey(copy); });
                 if (bounce_expect != nullptr)

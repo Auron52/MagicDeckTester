@@ -275,7 +275,11 @@ public:
     // the enumerator emits never-dig / dig-while-affordable variants per base plan and the
     // rollout scores them, with ShouldConsiderDig as the base plan's default and the horizon
     // behaviour (USER 2026-08-28: "searched with heuristics is the way to go"). False keeps the
-    // heuristic-only gate (Treasure Hunt's measured greedy; every digless deck trivially).
+    // heuristic-only gate (Treasure Hunt's measured greedy; every digless deck trivially) -- but not
+    // as an AUTOMATIC action: under MTG_DIG_SEARCHED_CHOICE (default ON; USER 2026-10-13 "It
+    // shouldn't be automatic") each base plan gets a no-dig twin, so where ShouldConsiderDig passes the
+    // search chooses dig vs no-dig; where it fails nothing digs. False means "no dig-while-affordable
+    // variant" (the USER's 2026-09-29 clairvoyance ruling), not "no choice".
     virtual bool        DigDecisionSearched() const { return false; }
 
     // DigResolveOnlyWhenCastable -- for decks whose cycling is FREE and therefore constant
