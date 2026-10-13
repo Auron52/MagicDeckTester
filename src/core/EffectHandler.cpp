@@ -1,10 +1,38 @@
 #include "EffectHandler.h"
 #include "SpellEffects.h"
 #include "RolloutTouch.h"
+#include "IndexCarry.h"
 #include <algorithm>
+#include "EnvFlags.h"
+#include <mutex>
+#include <set>
+#include <cstdio>
 
 // Execution-trace instrumentation sink (off by default -> byte-identical). See RolloutTouch.h.
 namespace rollout_touch { thread_local Sink* g_sink = nullptr; }
+
+// Index-carry recorder sink (off by default -> byte-identical). See IndexCarry.h. Defined beside
+// its sibling above because both are per-thread instrumentation hooks reached from header-inline
+// code, and CMake lists sources explicitly (no glob), so a new .cpp would be a build-file change
+// for one line of storage.
+namespace indexcarry
+{
+thread_local Sink* t_sink = nullptr;
+
+// See the declaration in IndexCarry.h. Off unless MTG_INDEX_CARRY_SITES; one line per distinct
+// return address, first sighting only, so the output is a short list to feed addr2line rather than
+// hundreds of thousands of duplicates.
+void NoteWholeLibraryReadSite(const void* ret)
+{
+    static const bool on = EnvOn("MTG_INDEX_CARRY_SITES");
+    if (!on) { return; }
+    static std::mutex              mu;
+    static std::set<const void*>   seen;
+    std::lock_guard<std::mutex>    lk(mu);
+    if (!seen.insert(ret).second) { return; }
+    std::fprintf(stderr, "=== ICARRY whole-library read site: %p ===\n", ret);
+}
+}   // namespace indexcarry
 
 // ---- Helpers ----
 

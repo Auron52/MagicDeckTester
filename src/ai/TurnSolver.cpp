@@ -18259,7 +18259,18 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
         demand[3] += mc.red;   demand[4] += mc.green;
     };
     for (const Card& c : ap.hand)      { scan(c); }
-    for (const Card& c : ap.library)   { scan(c); }
+    // INDEX-CARRY EXEMPTION (RawAt, not iteration -- see core/IndexCarry.h). This walk reads ONLY
+    // an AGGREGATE: the summed coloured pips of NONLAND cards. Two consequences that make the
+    // exemption precise rather than hopeful. (1) `scan` returns early for lands, so a
+    // LAND-FOR-LAND swap cannot change `demand` at all. (2) For a nonland swap it generally DOES
+    // change it, so the carry is invalid there -- Mycoloth {3}{G}{G} -> Vitaspore {1}{G} moves the
+    // green pip total even if neither card is ever drawn.
+    // THE PRECONDITION IS ENFORCED BY THE CONSUMER, as with the KeepModel walk: deck_compare must
+    // refuse to carry unless the swapped cards are aggregate-equivalent (same IsLand, and for
+    // nonlands the same coloured-pip vector). Recording it instead would be sound but useless --
+    // it fires once per SacForMana action per PLAN (see the note below), which on this archetype's
+    // Utopia Mycon is hundreds of thousands of times per game, saturating every game's mask.
+    for (std::size_t li = 0, ln = ap.library.size(); li < ln; ++li) { scan(ap.library.RawAt(li)); }
     for (const Card& c : ap.graveyard) { scan(c); }
     for (const Permanent& p : state.battlefield)
     {
@@ -50171,7 +50182,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // The land drop is applied before this plan's casts, so the true top `look` cards are
             // what the ETB will see. A plan that draws first still resolves safely: the scripted
             // index is clamped to the candidate count at resolution.
-            const std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
+            // INDEX-CARRY: built by indexed reads rather than from begin(), so the recorder logs
+            // the `look` cards this scry/surveil actually sees instead of a whole-library read.
+            // That is a genuine PREFIX reveal -- exactly what the mask is meant to represent -- so
+            // here precision is available and an exemption would be wrong. Byte-identical: the same
+            // cards in the same order.
+            std::vector<Card> looked;
+            looked.reserve(static_cast<std::size_t>(look));
+            for (int lk = 0; lk < look; ++lk) { looked.push_back(ap.library[static_cast<std::size_t>(lk)]); }
             const std::size_t k = TopDispositionCandidates(
                 state, looked, surveil ? LookKind::Surveil : LookKind::Scry).size();
             for (std::size_t c = 1; c < std::min(k, ScrySearchWidth()); ++c)
@@ -53860,14 +53878,26 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // live window, a single Fold: order-exact at the same cost a multiset sum would have
         // been (a multiset digest was tried first and left the reorder class colliding). The
         // incremental-key revisit can move this into Library if it ever prices too high.
+        // INDEX-CARRY EXEMPTION (RawAt, not iteration -- see core/IndexCarry.h), on the same
+        // grounds as Dominance.h's fold and measured to be THE dominant saturator: this digest runs
+        // once per sim key, i.e. per node, so recording it marked every game fully-accessible
+        // (MTG_INDEX_CARRY_SITES named it). It is a MEMO/EQUALITY key for the TT and FSLineCache,
+        // never a value fed to a decision, so a card sitting undrawn in both states being compared
+        // perturbs both keys identically and the equality relation -- all a memo consumes -- is
+        // unchanged.
         {
             std::uint64_t ldig = 1469598103934665603ull;
-            for (const Card& c : p.library)
-            { ldig = ldig * 1099511628211ull + c.m_name_hash; }
+            for (std::size_t li = 0, ln = p.library.size(); li < ln; ++li)
+            { ldig = ldig * 1099511628211ull + p.library.RawAt(li).m_name_hash; }
             Fold(k, ldig);
         }
         // Full ordered library when shuffle can reorder it (see above). Skipped when OFF.
-        if (shuffle_keys) { for (const Card& c : p.library) { Fold(k, c.m_name_hash); } }
+        // Same exemption and the same reason; note that search-shuffle ALSO invalidates the carry
+        // outright (it decouples branch libraries, so the prefix property is gone) -- the consumer
+        // must refuse to carry when MTG_SEARCH_SHUFFLE is on, which is why this fold being exempt
+        // does not widen the carry's reach.
+        if (shuffle_keys)
+        { for (std::size_t li = 0, ln = p.library.size(); li < ln; ++li) { Fold(k, p.library.RawAt(li).m_name_hash); } }
 
         Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered; multiset when canon)
         Fold(k, static_cast<uint64_t>(p.hand.size()));

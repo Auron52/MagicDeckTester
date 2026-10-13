@@ -499,8 +499,20 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     // position i) -> non-clairvoyant. Lets the value model amortise the rollout-under-uncertainty its
     // de-clairvoyed label already targets. See learned-d0-policy.md.
     int lib_lands = 0, lib_creatures = 0, lib_damage = 0, lib_draw = 0;
-    for (const Card& c : ap.library)
+    // INDEX-CARRY EXEMPTION (RawAt, not iteration -- see Library.h), and UNLIKE the dominance fold
+    // this one is NOT safe by construction: these features are decision VALUES, so a card that is
+    // never drawn still shifts lib_creatures/lib_lands/... for the whole game and can change play.
+    // It is exempt here only because recording it would fire on every eval and mark every game
+    // fully-accessible, destroying the carry for every deck including the ones where it IS sound.
+    // THE PRECONDITION IS THEREFORE ENFORCED BY THE CONSUMER: scripts/deck_compare.py must refuse
+    // to carry unless the deck's eval model provably never splits on a Lib* feature (the Fungus
+    // candidate-b model splits on 19 features, none of them library composition -- and `library_size`
+    // is swap-invariant at a fixed 60 cards). A regenerated model that split on LibCreatures would
+    // silently invalidate the carry, which is exactly why the check reads the sidecar instead of
+    // trusting this comment.
+    for (std::size_t li = 0, ln = ap.library.size(); li < ln; ++li)
     {
+        const Card& c = ap.library.RawAt(li);
         if (c.IsLand())     { ++lib_lands; }
         if (c.IsCreature()) { ++lib_creatures; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);

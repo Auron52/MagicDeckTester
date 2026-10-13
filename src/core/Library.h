@@ -1,5 +1,6 @@
 #pragma once
 #include "Card.h"
+#include "IndexCarry.h"
 #include <vector>
 #include <random>
 #include <cstdint>
@@ -54,16 +55,33 @@ public:
     bool        empty() const { return m_top >= m_cards.size(); }
     std::size_t size()  const { return m_cards.size() - m_top; }
 
-    Card&       front()       { return m_cards[m_top]; }
-    const Card& front() const { return m_cards[m_top]; }
+    // --- INDEX-CARRY (src/core/IndexCarry.h): every PUBLIC read of a card's identity records that
+    // the game could have seen that index. Null sink => one predicted-not-taken branch, byte-
+    // identical. Shuffle()/ShuffleByKey() deliberately reach m_cards[m_top + k] DIRECTLY and so are
+    // NOT recorded: a shuffle permutes identities it never reveals to the player.
+    Card&       front()       { indexcarry::NoteNumber(m_cards[m_top].m_number); return m_cards[m_top]; }
+    const Card& front() const { indexcarry::NoteNumber(m_cards[m_top].m_number); return m_cards[m_top]; }
 
-    Card&       operator[](std::size_t i)       { return m_cards[m_top + i]; }
-    const Card& operator[](std::size_t i) const { return m_cards[m_top + i]; }
+    Card&       operator[](std::size_t i)
+    { indexcarry::NoteNumber(m_cards[m_top + i].m_number); return m_cards[m_top + i]; }
+    const Card& operator[](std::size_t i) const
+    { indexcarry::NoteNumber(m_cards[m_top + i].m_number); return m_cards[m_top + i]; }
 
-    iterator       begin()       { return m_cards.begin() + static_cast<std::ptrdiff_t>(m_top); }
+    // ITERATION IS A WHOLE-LIBRARY READ and is recorded as such -- it makes every card's identity
+    // relevant even though none was drawn, so the carry must answer conservatively (MarkAll). That
+    // is deliberately blunt: a provider that sums library composition (pips, outlets, counts) makes
+    // an UNDRAWN card outcome-relevant, which is precisely the "inaccessible != irrelevant" trap.
+    // Two call sites are exempt via RawAt() below, each for a stated reason.
+    iterator       begin()       { indexcarry::NoteWholeLibraryRead(); return m_cards.begin() + static_cast<std::ptrdiff_t>(m_top); }
     iterator       end()         { return m_cards.end(); }
-    const_iterator begin() const { return m_cards.begin() + static_cast<std::ptrdiff_t>(m_top); }
+    const_iterator begin() const { indexcarry::NoteWholeLibraryRead(); return m_cards.begin() + static_cast<std::ptrdiff_t>(m_top); }
     const_iterator end()   const { return m_cards.end(); }
+
+    // NON-RECORDING positional read, for the two sites whose use of a card's identity provably
+    // cannot make an undrawn card outcome-relevant. Returns exactly what operator[] returns, so
+    // every game stays byte-identical; the ONLY difference is that the access is not recorded.
+    // Do not add a third caller without the same kind of argument written down.
+    const Card& RawAt(std::size_t i) const { return m_cards[m_top + i]; }
 
     // --- mutation (forwarded; the passed iterators already point into the live window) ---
     void push_back(const Card& c) { m_cards.push_back(c); }
@@ -94,6 +112,7 @@ public:
         }
         // Move the top card out and advance the cursor (O(1), no shift). The vacated slot
         // joins the dead prefix and is never read again (dropped on the next copy).
+        indexcarry::NoteNumber(m_cards[m_top].m_number);
         return std::move(m_cards[m_top++]);
     }
 

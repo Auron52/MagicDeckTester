@@ -6,6 +6,7 @@
 #include "../core/GameLogger.h"
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
+#include "../core/IndexCarry.h"
 #include "../core/HardwareConcurrency.h"
 #include "../core/MemBudget.h"
 #include "../ai/AIEngine.h"
@@ -1318,6 +1319,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
 
     const long long s_slow_game_ms = SlowGameMs();
     const bool      s_dump_wins    = EnvOn("MTG_DUMP_WINS");   // see the emission in the worker
+    const bool      s_index_carry  = EnvOn("MTG_INDEX_CARRY");  // see the [icarry] emission below
 
     int requested = num_threads;
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
@@ -1752,6 +1754,14 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // `--seed (base+off) --game-index off` single run exactly. game_index is 0 for a
                 // whole-run job, which is every pre-existing manifest.
                 const int global_gi = job.game_index + wi.game;
+                // INDEX-CARRY (MTG_INDEX_CARRY, see core/IndexCarry.h): record which card INDICES
+                // this game could ever have seen, so a later screen can SKIP the games that cannot
+                // see a changed card and carry the base result instead. Armed BEFORE SetupGame on
+                // purpose -- setup shuffles and takes the mulligans, and every mulligan draws, so
+                // accessibility starts there and not at RunGame. One Sink per game, cleared below,
+                // so a pooled worker can never carry one game's mask into the next.
+                indexcarry::Sink icarry;
+                if (s_index_carry) { indexcarry::t_sink = &icarry; }
                 GameState state = GoldFishRunner::SetupGame(
                     job.deck, job.seed + static_cast<uint64_t>(wi.game));
                 GoldFishRunner::PopulateOpponentSpawns(state, global_gi);
@@ -2132,6 +2142,30 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     for (int n : uniq(dlog.CastNums())) { ln += sep; ln += std::to_string(n); sep = ","; }
                     ln += "\n";
                     std::fwrite(ln.data(), 1, ln.size(), stderr);
+                }
+                // INDEX-CARRY emit. One line per game, built as a single string and written once
+                // (many workers share stderr; a sub-PIPE_BUF single write is what keeps lines from
+                // interleaving), the same discipline the [cards] line above follows.
+                //   acc  = the 64-bit accessibility mask, one bit per maindeck card NUMBER-1
+                //   wlr  = whole-library reads; NON-ZERO MEANS THE CARRY IS VOID for this game
+                //          (something read the library as a whole, so every card's identity is
+                //          relevant even though none was drawn). Emitted rather than folded into
+                //          acc so a 0% saving is distinguishable from the feature being off.
+                // The win-turn relaxation's inputs (Sink::at_turn_start / touched_this_turn) are
+                // NOT emitted yet: BeginTurn() still needs a turn-boundary hook, and publishing a
+                // field that is silently always zero is worse than publishing nothing -- it reads
+                // as "the relaxation measured no difference".
+                if (s_index_carry)
+                {
+                    indexcarry::t_sink = nullptr;
+                    char buf[160];
+                    const int k = std::snprintf(buf, sizeof(buf),
+                        "[icarry] job=%s gi=%d acc=%016llx wlr=%llu tutor=%d\n",
+                        job.name.c_str(), global_gi,
+                        static_cast<unsigned long long>(icarry.accessible),
+                        static_cast<unsigned long long>(icarry.whole_library_reads),
+                        icarry.tutor_seen ? 1 : 0);
+                    if (k > 0) { std::fwrite(buf, 1, static_cast<std::size_t>(k), stderr); }
                 }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();

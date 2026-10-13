@@ -827,7 +827,17 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         if (pi == 0 || s.opponent_library_dealt)
         {
             fold(static_cast<std::uint64_t>(p.library.size()));
-            for (const Card& c : p.library) { fold(c.m_name_hash); }
+            // INDEX-CARRY EXEMPTION (RawAt, not iteration -- see Library.h). This fold is an
+            // EQUALITY TEST BETWEEN TWO STATES OF ONE RUN, never a value fed to a decision. If a
+            // card sits undrawn in the library of both states being compared, substituting a
+            // different card there perturbs BOTH keys identically, so the equality relation -- the
+            // only thing dominance consumes -- is unchanged. Recording it as a whole-library read
+            // would instead fire on EVERY dominance key, i.e. every node, and mark every game
+            // fully-accessible: the carry would be sound but worthless. (Residual risk: a swap
+            // could create or destroy a hash collision. That is the same collision exposure the
+            // key already carries, not a new one.)
+            for (std::size_t li = 0, ln = p.library.size(); li < ln; ++li)
+            { fold(p.library.RawAt(li).m_name_hash); }
         }
         // Per-turn counters: equal across siblings at the same boundary, folded so they cannot
         // silently differ.
