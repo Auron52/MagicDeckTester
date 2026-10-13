@@ -296,6 +296,79 @@ std::uint64_t FbBankedSourceMask(const GameState& state)
     return m;
 }
 
+// One combat on `probe` (a copy): the pump -- with the banked sources held when `hold` -- then the shared
+// damage resolution. `idx` is repaired in place if a payment erased a battlefield entry. True = lethal.
+static bool FbProbeCombat(GameState& probe, std::vector<int>& idx, FbPayer payer, bool hold)
+{
+    FbBankedHoldScope _hold(hold);
+    const int active = probe.active_player_index;
+    ApplyFirebreathing(probe, active, idx, AvailableManaPool(probe), std::numeric_limits<int>::max(), payer);
+    const int exalted = (static_cast<int>(idx.size()) == 1) ? CountExalted(probe.battlefield, active) : 0;
+    ResolveCombatDamage(probe, idx, exalted, /*collect_descs=*/false);
+    return probe.Opponent().life <= 0 || dmgev::OpponentLostRaw(probe);
+}
+
+// MTG_FB_HOLD_BANKED_NEXT_TURN: `probe` (a copy, after this turn's combat) one turn on -- an idle storage
+// land banks its +1 (the end-of-turn rule in GameEngine), the active player's board untaps, the "until end
+// of turn" pumps expire -- and the SAME attackers swing again with the full pump. A projection, not the
+// game: no draw, no main phase, no new attacker; both worlds are projected alike, so the comparison is
+// what matters.
+static bool FbNextTurnLethal(GameState& probe, std::vector<int>& idx, FbPayer payer)
+{
+    const int active = probe.active_player_index;
+    // A Needle whose LAST counter the pump spent is sacrificed (the SBA the executor runs after every event
+    // and the rollout runs after combat, MTG_FB_SBA) -- without it the emptied land untaps and pays again,
+    // the phantom that made the spend world look lethal on dragonstorm d0 s1191687 T5 (its only land).
+    // The sweep can erase battlefield entries, so the attackers are re-found by per-copy id.
+    std::vector<int> ids;
+    ids.reserve(idx.size());
+    for (int i : idx) { ids.push_back(probe.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    const std::size_t bf_pre = probe.battlefield.size();
+    SacrificeDepletedLands(probe);
+    if (probe.battlefield.size() != bf_pre)
+    {
+        idx.clear();
+        for (int id : ids)
+        {
+            for (int bi = 0; bi < static_cast<int>(probe.battlefield.size()); ++bi)
+            { if (probe.battlefield[static_cast<std::size_t>(bi)].card.m_number == id) { idx.push_back(bi); break; } }
+        }
+        if (idx.empty()) { return false; }
+    }
+    for (Permanent& p : probe.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        if (!p.tapped)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.storage_land) { ++p.storage_counters; }
+        }
+        p.tapped = false;
+        p.temp_power_bonus = 0;
+        p.temp_tough_bonus = 0;
+    }
+    probe.floating_mana = ManaPool{};
+    // Next turn's draw (the search is clairvoyant: the real top card) and land drop -- the first hand land
+    // that enters untapped. Without it the projection is a land short: dragonstorm shipped gi 70 T4, where
+    // the T5 Mountain makes the full pump exactly lethal.
+    Player& ap = probe.players[static_cast<std::size_t>(active)];
+    if (!ap.library.empty()) { ap.hand.push_back(ap.library.DrawTop()); }
+    for (std::size_t h = 0; h < ap.hand.size(); ++h)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[h]);
+        if (d == nullptr || !d->card.IsLand() || LandWouldEnterTapped(probe, *d, /*allow_pay_life=*/false)) { continue; }
+        Permanent land;
+        land.card             = d->card;
+        land.card.m_number    = ap.hand[h].m_number;
+        land.controller_index = active;
+        land.owner_index      = active;
+        ap.hand.erase(ap.hand.begin() + static_cast<std::ptrdiff_t>(h));
+        probe.battlefield.push_back(std::move(land));
+        break;
+    }
+    return FbProbeCombat(probe, idx, payer, /*hold=*/false);
+}
+
 bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer)
 {
     if (payer == nullptr || atk_idx.empty() || !FbHoldBankedOn()) { return false; }
@@ -303,14 +376,18 @@ bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_
     // Lethal with EVERYTHING? The full pump on a copy, the caller's own payer (no hold is live yet),
     // then the shared damage resolution. Speculative: no play-viewer events from the probe.
     TapSpeculationScope _spec;
-    GameState probe = state;
-    std::vector<int> pidx = atk_idx;
-    const int active = probe.active_player_index;
-    ApplyFirebreathing(probe, active, pidx, AvailableManaPool(probe), std::numeric_limits<int>::max(), payer);
-    const int exalted = (static_cast<int>(pidx.size()) == 1) ? CountExalted(probe.battlefield, active) : 0;
-    ResolveCombatDamage(probe, pidx, exalted, /*collect_descs=*/false);
-    const bool lethal = probe.Opponent().life <= 0 || dmgev::OpponentLostRaw(probe);
-    return !lethal;
+    GameState spend = state;
+    std::vector<int> sidx = atk_idx;
+    if (FbProbeCombat(spend, sidx, payer, /*hold=*/false)) { return false; }
+    if (!FbHoldBankedNextTurnOn()) { return true; }
+    // MTG_FB_HOLD_BANKED_NEXT_TURN: the hold costs a turn when spending now makes NEXT turn's attack
+    // lethal and holding does not (the Scourge race: Needle pumped T3 -> kill T4; held -> T5). Only then
+    // is the bank spent; when both worlds kill next turn, or neither does, it is kept for the storm turn.
+    if (!FbNextTurnLethal(spend, sidx, payer)) { return true; }
+    GameState hold = state;
+    std::vector<int> hidx = atk_idx;
+    FbProbeCombat(hold, hidx, payer, /*hold=*/true);
+    return FbNextTurnLethal(hold, hidx, payer);
 }
 
 FbBankedHoldScope::FbBankedHoldScope(bool on) : prev(t_fb_hold_banked) { t_fb_hold_banked = on; }

@@ -437,6 +437,49 @@ TEST_CASE("Combat pump keeps a depletion / storage land's mana unless the pump i
     }
 }
 
+TEST_CASE("Combat pump spends the banked mana when only that buys a next-turn kill (MTG_FB_HOLD_BANKED_NEXT_TURN)")
+{
+    // Full pump now 8 (Scourge 4 + two Mountains + the Needle's {R}{R}), held pump 6. Next turn the
+    // projection draws (the library is Mountains) and makes the land drop: a third Mountain, so 9 with the Needle.
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::FB_HOLD_BANKED_NEXT_TURN, on);
+        {
+            // 16 life: spent now -> 8, and next turn's 9 kills; held -> 10, and next turn's 9 does not
+            // (dragonstorm ab5 d3 gi 60's race). The Needle is spent only with the lever.
+            GameState s = PumpBoardFu("Sandstone Needle", 16);
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == (on ? 8 : 10));
+            CHECK(DepletionFu(PermFu(s, "Sandstone Needle")) == (on ? 1 : 2));
+        }
+        {
+            // 14 life: next turn kills from either world (6 or 8 left, 9 damage) -> the bank is kept on both arms.
+            GameState s = PumpBoardFu("Sandstone Needle", 14);
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == 8);
+            CHECK(DepletionFu(PermFu(s, "Sandstone Needle")) == 2);
+        }
+        {
+            // 20 life: no next-turn kill in either world -> held on both arms (the MTG_FB_HOLD_BANKED case).
+            GameState s = PumpBoardFu("Sandstone Needle", 20);
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == 14);
+        }
+        {
+            // The Needle's LAST counter, 16 life: spending it sacrifices the Needle, so next turn swings for
+            // 7 into 8 -- no kill; held, next turn's 9 does not kill 10 either -> held on both arms. (Without
+            // the depletion sweep in the projection the sacked Needle paid again next turn and read lethal.)
+            GameState s = PumpBoardFu("Sandstone Needle", 16);
+            for (Permanent& p : s.battlefield)
+            { for (Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { c.count = 1; } } }
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == 10);
+            CHECK(DepletionFu(PermFu(s, "Sandstone Needle")) == 1);
+        }
+    }
+}
+
 namespace
 {
 // Bind the applying line's unpaid total for one test payment (the plan-apply paths bind it in play).
