@@ -31,10 +31,17 @@ tests. It should wait until we have a list recommendation."*
   `mulligan.keep_table_alias` does NOT prevent this -- `deck_compare` tests coverage against the
   TABLE's own bucket names and cannot see a profile alias.
 * **Engines differ across rounds** and absolute deltas must not be pooled across them: rounds 1a/1b
-  on `src 0b33d259`, round 2+3 on `e1180df7`, rounds 4/5 on `f816bc46`. Origin's
-  `MTG_ESC_SKIP_SINGLE` adoption landed mid-screen but is **structurally inert for Fungus**:
-  its gate is `eff_single_deck = !s_esc_single_env && escalation_cap > 0` and Fungus sets no
-  `escalation_cap` in either its profile or its value sidecar, so the lever cannot fire here.
+  on `src 0b33d259`, round 2+3 on `e1180df7`, rounds 4/5 on `f816bc46`. Three escalation changes
+  landed from origin mid-screen, and they are NOT all inert -- the distinction matters:
+  - `MTG_ESC_SKIP_SINGLE` (`4456f12e`) **is structurally inert for Fungus**: its gate is
+    `eff_single_deck = !s_esc_single_env && escalation_cap > 0`, and Fungus sets no
+    `escalation_cap` in either its profile or its value sidecar, so the lever cannot fire.
+  - `escalation_skip_r` (`6096acda`) is a per-deck sidecar **OPT-IN** that Fungus has not taken.
+  - **`MTG_ESC_SKIP_PREDICT` (`15ffae16`, default ON) CAN fire for Fungus.** `esk_on` reads the
+    global flag (or a per-job arm), with no `escalation_cap` gate. It was adopted at 01:45, so
+    **rounds 1a/1b predate it and rounds 2+3/4/5 include it.** Each round is still internally valid
+    (base and arms share one engine inside one batch), but this is a second reason -- on top of the
+    table-free apparatus -- why round 1b's absolute deltas sit on a different scale from round 2+3's.
 * **Seeds are disjoint per round** (941000 / 943000 / 960000 / 970000 / 980000), so every replicated
   arm doubles as a held-out confirmation of a selection-biased winner.
 * `d*` is the cell-value scatter that would be NEEDED to fake an effect, benchmarked against a
