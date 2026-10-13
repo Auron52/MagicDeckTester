@@ -114,13 +114,20 @@ newly added card, which is a bug detector for the heuristic.
     the mask already represents the prefix.
   - **The test is one instruction:** `(accessible & changed) == 0`, with `changed` computed once per
     arm. That matters because it runs once per game per arm.
-  - **Width:** one `uint64_t` covers a number space of 64. candidate-b is 60 main + 0 side (60 bits)
-    and the shipped Fungus list is 60 + 4 = exactly 64, so Fungus fits in one word. **Nine decks do
-    not** once the fetchable sideboard is numbered -- Hinata2 60+23=83, Prevent Damage 60+15=75,
-    Soldiers and Bruna 72, Snow 70, Knights and EldraziDisplacerFlicker 68, Minotaur 67, Unpredictable
-    Cyclone 65. `std::array<uint64_t,2>` covers 128 and so covers every deck in the repo, at two ANDs.
-    Note the convergence: the decks that overflow one word are exactly the wish/tutor decks whose
-    sideboard is reachable, i.e. the ones that need the tutor predicate anyway.
+  - **Width: ONE `uint64_t`, always -- the mask covers the 60 MAINDECK cards only.** USER
+    2026-10-13: *"I don't think we need the sideboard. Sideboards only represent cards reached from
+    tutors in the list."* In this engine a sideboard is not a real sideboard (there are no games 2/3);
+    it is purely the pool a wish/tutor fetches from, so a sideboard card is reachable ONLY via a
+    tutor -- and the tutor predicate above already forces us to PLAY any game in which a matching
+    tutor was accessible. So a sideboard card never needs a bit of its own, in either direction:
+    swap a maindeck card and the sideboard is irrelevant; swap a SIDEBOARD card and reachability is
+    decided by the TUTOR's maindeck bits, not the fetched card's.
+    This retires an earlier draft's `uint64[2]`, which was sized for the nine decks whose
+    main+sideboard exceeds 64 (Hinata2 83, Prevent Damage 75, Soldiers/Bruna 72, Snow 70,
+    Knights/Eldrazi 68, Minotaur 67, Unpredictable Cyclone 65). Those numbers are real but
+    irrelevant: none of those cards is reachable except through a tutor.
+    (Aside: the shipped Fungus list has a 4-card sideboard and NO tutors, so that sideboard is
+    unreachable outright -- consistent with Spore Flower not being in cards.json at all.)
   - **Bit position is a COMPACTED index, not the raw number.** `base_numbering`'s docstring warns
     that *"contiguity is not required by the engine (m_number is only ever equality-compared, never
     an index)"*, and `inherit_numbering` hands out fresh numbers above the current high for a genuine
