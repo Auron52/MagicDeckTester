@@ -53,6 +53,33 @@ for _k, _d in _REG.items():
     PROFILES[_k] = _d.profile
     PROFILES[_k + deck_registry.STAGED_SUFFIX] = _d.profile
 
+FDL_DEPTH=""   # set by run_incremental from MTG_MATRIX_FD_LEAF_DEPTH
+FDL_FROM=1
+_FDL_MADE={}
+def fdleaf_profile(dname, outdir):
+    """A deck folder differing from the real one ONLY in its profile's `search_leaf_depth` (siblings
+    symlinked, so the keep table and value sidecar are the shipped ones -- valueleaf.sh's
+    make_variant_deck pattern). Built once per deck per run."""
+    if dname in _FDL_MADE: return _FDL_MADE[dname]
+    prof=PROFILES.get(dname)
+    if not prof or not os.path.exists(prof):
+        raise SystemExit("leaf override needs %s's profile, and it has none on disk (%r)" % (dname, prof))
+    src=os.path.dirname(os.path.abspath(prof))
+    dest=os.path.join(os.path.abspath(outdir), "fdleaf_variant", dname)
+    os.makedirs(dest, exist_ok=True)
+    for f in os.listdir(src):
+        if f == os.path.basename(prof): continue
+        lk=os.path.join(dest, f)
+        if os.path.lexists(lk): os.remove(lk)
+        os.symlink(os.path.join(src, f), lk)
+    pj=json.load(open(prof)); pj["search_leaf_depth"]=int(FDL_DEPTH)
+    out=os.path.join(dest, os.path.basename(prof))
+    json.dump(pj, open(out,"w"), indent=1)
+    print("  leaf override: H cells >= H%d read %s (search_leaf_depth=%s)" % (FDL_FROM, out, FDL_DEPTH),
+          flush=True)
+    _FDL_MADE[dname]=out
+    return out
+
 
 # NOTE: the single-invocation helper `run()` that used to live here is DELETED. It ran ONE `mtg` per
 # (deck, depth, seed) and was the shared engine of two loop-shaped drivers -- the monolithic branch of
@@ -732,6 +759,41 @@ def run_incremental(args):
         c.update(chunks=[], intractable=False, running=False, first_wall=None, ceil=0); _refresh(c)
     state_path=args.out+".cells.json"
     src_now=_src_fingerprint()
+    # THE LEAF-FIDELITY OVERRIDE (MTG_MATRIX_FD_LEAF_DEPTH=<n>, MTG_MATRIX_FD_LEAF_FROM=<k>, default 1).
+    # H cells of depth >= k score their horizon with an n-ply beyond-horizon leaf instead of the engine's
+    # default (1-ply). Carried PER JOB, through a variant profile (`search_leaf_depth`, the per-deck key
+    # Melira Pod ships), never through MTG_FD_LEAF_DEPTH: one pool holds every cell, and an environment
+    # variable cannot differ between them. V cells are never touched (the value leaf replaces the
+    # rollout; Snow V4 measured byte-identical, units included), and neither is anything outside this
+    # pool -- phase A's label games and phase E's A/B run on the shipped profile.
+    #
+    # WHY A THRESHOLD. Snow 2026-10-13, paired ordinary games, greedy leaf vs the 1-ply one: H3 0 better /
+    # 0 worse of 83 at 0.028x the units, but H1 0 / 11 worse of 50 (+0.22 t/game) and H2 0 / 2 of 25. A
+    # shallow search leans on its leaf; a deep one barely reads it. So the override is only sound where
+    # it measures identical, and the threshold is how that is said. See
+    # docs/design/snow-matrix-leaf-fidelity.md.
+    #
+    # THE STAMP. Nothing else in the resume path can see this (the src and smoke-digest play fingerprints
+    # are blind to an env var), so a table banked under one leaf and resumed under another would hold two
+    # H references. The setting is stamped beside the state and a mismatch refuses to resume. "" is the
+    # engine default, so a run that never sets it is unaffected.
+    global FDL_DEPTH, FDL_FROM
+    FDL_DEPTH=os.environ.get("MTG_MATRIX_FD_LEAF_DEPTH","").strip()
+    FDL_FROM=int(os.environ.get("MTG_MATRIX_FD_LEAF_FROM","1") or "1")
+    if os.environ.get("MTG_FD_LEAF_DEPTH","").strip():
+        sys.exit("REFUSING: MTG_FD_LEAF_DEPTH is exported around the matrix. It would override every "
+                 "cell's leaf (H and V alike) and outrank the per-job profile; use "
+                 "MTG_MATRIX_FD_LEAF_DEPTH (+ MTG_MATRIX_FD_LEAF_FROM) instead.")
+    fdl_now=("%s@H%d" % (FDL_DEPTH, FDL_FROM)) if FDL_DEPTH else ""
+    fdl_path=args.out+".fdleaf"
+    fdl_banked=open(fdl_path).read().strip() if os.path.exists(fdl_path) else ""
+    if os.path.exists(state_path) and fdl_banked != fdl_now:
+        sys.exit("REFUSING TO RESUME: %s was banked with leaf override %r but this run has %r. "
+                 "The two leaves are different H references and one table cannot hold both. Move the "
+                 "matrix outputs (%s.*, wins/) aside to start phase C fresh, or rerun with the banked value."
+                 % (state_path, fdl_banked or "(engine default)", fdl_now or "(engine default)", args.out))
+    if fdl_now:
+        with open(fdl_path,"w") as f: f.write(fdl_now+"\n")
     if os.path.exists(state_path):                       # resume: skip already-committed chunks
         try:
             saved={_cell_key(x):x for x in json.load(open(state_path))}
@@ -1082,6 +1144,9 @@ def run_incremental(args):
                      # in build_queue so the queue's order survives into the pool; a bare cost weight
                      # here silently reimposed LPT and made the set-completion ordering inert.
                      "weight":ch["w"]}
+                # Leaf-fidelity override: H cells at or past the threshold read the variant profile.
+                if FDL_DEPTH and arm == "H" and c["depth"] >= FDL_FROM:
+                    job["profile"]=fdleaf_profile(dname, os.path.dirname(args.out) or ".")
                 # THE ARM, per job (see ai/ValueArm.h). This is what lets both arms share one queue.
                 if c["arm"]=="V":
                     job.update({"value_model":True, "value_profile":prof,
