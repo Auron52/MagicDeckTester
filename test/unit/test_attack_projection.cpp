@@ -691,3 +691,67 @@ TEST_CASE("Point 10 re-projection intent: MTG_ATTACK_REPROJECT_INTENT=0 re-asks 
     CHECK(Threshold([](int l) { return DeathriteBoard(l, 1); }, CannonsCornucopiaArchangel) == 10);
     CHECK(Threshold([](int l) { return DeathriteBoard(l, 1); }, ArchangelAlone) == 11);
 }
+
+// ---- F7: the attack's free cast (MTG_ATTACK_FREECAST_DAMAGE) ---------------------------------------
+// FiveColour d0 gi1106's T4 board (seed 6211107): three untapped lands (the Triome drop entered
+// tapped), Birds of Paradise, Faeburrow Elder (5/5, taps for five under the Archangel's WUBRG) and a
+// Maelstrom Archangel cast last turn. Pre-plan attack 10: Archangel 5 + vigilant Faeburrow 5. Unite the
+// Coalition costs 7 of the 9 available, so casting it pre-combat taps Faeburrow: 10 direct + Archangel
+// 5. The Archangel connects and frees the SECOND Unite: 10 more. Without the term {Unite} read 15, no
+// plan read lethal at 20, and d0 cast Archangel + Faeburrow instead (won T5, the T4 kill missed).
+namespace
+{
+GameState FreeCastBoard(int opp, int salt, const std::vector<std::string>& hand)
+{
+    GameState s = Bare(opp, salt, hand);
+    static const FiveColourProvider fc;
+    s.m_provider = &fc;
+    Put(s, "Stomping Ground", 160);
+    Put(s, "Godless Shrine", 161);
+    Put(s, "Island", 162);
+    Put(s, "Zagoth Triome", 163, /*tapped=*/true);
+    Put(s, "Birds of Paradise", 164);
+    Put(s, "Faeburrow Elder", 165);
+    Put(s, "Maelstrom Archangel", 166);
+    return s;
+}
+bool UniteAlone(const TurnSolver::Plan& p) { return CastsOnly(p, { "Unite the Coalition" }); }
+}
+
+TEST_CASE("F7 free cast: a connecting Archangel frees the second Unite's 10")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    {
+        const GameState probe = FreeCastBoard(20, 0, { "Unite the Coalition", "Unite the Coalition" });
+        REQUIRE(DomainColors(probe, 0).size() == 5);
+        REQUIRE(AvailableManaPool(probe, nullptr).Total() == 9);   // 3 lands + Birds 1 + Faeburrow 5
+    }
+    // {Unite}: 10 direct + Archangel 5 (Faeburrow pays) + the free Unite 10.
+    CHECK(Threshold([](int l) { return FreeCastBoard(l, 0, { "Unite the Coalition", "Unite the Coalition" }); },
+                    UniteAlone) == 25);
+    const TurnSolver::Plan g20 = GreedySolve(FreeCastBoard(20, 0, { "Unite the Coalition", "Unite the Coalition" }));
+    CHECK(g20.wins_this_turn);
+    // With ONE Unite the cast leaves nothing to free (15), but the attack-only plan swings 10 and frees
+    // that Unite: 20 -- Faeburrow attacks and the free cast spends no mana at all.
+    CHECK(Threshold([](int l) { return FreeCastBoard(l, 0, { "Unite the Coalition" }); }, UniteAlone) == 15);
+    const TurnSolver::Plan one20 = GreedySolve(FreeCastBoard(20, 0, { "Unite the Coalition" }));
+    CHECK(one20.wins_this_turn);
+    CHECK_FALSE(Casts(one20, "Unite the Coalition"));
+    const TurnSolver::Plan one21 = GreedySolve(FreeCastBoard(21, 0, { "Unite the Coalition" }));
+    CHECK_FALSE(one21.wins_this_turn);
+    // A tapped Archangel cannot attack, so it frees nothing.
+    GameState tapped = FreeCastBoard(20, 0, { "Unite the Coalition", "Unite the Coalition" });
+    for (Permanent& p : tapped.battlefield) { if (p.card.m_number == 166) { p.tapped = true; } }
+    CHECK_FALSE(GreedySolve(tapped).wins_this_turn);
+}
+
+TEST_CASE("F7 free cast: MTG_ATTACK_FREECAST_DAMAGE=0 projects no free cast")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_FREECAST_DAMAGE, 0 } });
+    CHECK(Threshold([](int l) { return FreeCastBoard(l, 1, { "Unite the Coalition", "Unite the Coalition" }); },
+                    UniteAlone) == 15);
+    CHECK_FALSE(GreedySolve(FreeCastBoard(20, 1, { "Unite the Coalition", "Unite the Coalition" })).wins_this_turn);
+    CHECK_FALSE(GreedySolve(FreeCastBoard(20, 1, { "Unite the Coalition" })).wins_this_turn);
+}

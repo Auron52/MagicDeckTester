@@ -9745,6 +9745,116 @@ static int CannonsTriggerDamage(const GameState& state, const CannonsCtx& c,
     return dmg;
 }
 
+// MTG_FREECAST_PRUNE (DEFAULT ON, =0 hatch; adopted 2026-08-20): the post-combat main emits free-cast
+// variants only for the top (charges + 2) hand casts by mana value -- see CollectActions. One reader,
+// because the free-cast projection below has to honour the same floor.
+static bool FreeCastPruneEnabled()
+{
+    static const bool s_fc_prune = EnvOn("MTG_FREECAST_PRUNE", true);
+    return s_fc_prune;
+}
+
+// ---- MTG_ATTACK_FREECAST_DAMAGE: Maelstrom Archangel's free cast in the this-turn projection -------
+// "Whenever this creature deals combat damage to a player, you may cast a spell from your hand without
+// paying its mana cost." Combat banks one charge per connecting free-caster (Combat.cpp,
+// free_casts_available, power > 0) and the post-combat main casts a hand spell free. The PRE-combat
+// projection (both consider() sites) priced the attack and the plan's own casts, never the spell the
+// attack frees, so a turn whose kill RELIES on the free Unite the Coalition never read as lethal.
+// FiveColour d0 gi1106 (seed 6211107) T4, opponent at 20, Archangel + vigilant Faeburrow (5/5, taps for
+// 5) + Birds, 3 untapped lands, two Unites in hand: {Unite} is 10 direct + Archangel 5 + the free
+// Unite's 10 = 25; attack-only is 10 + 10 = 20. Once MTG_ATTACK_DOMAIN_DORK_YIELD +
+// MTG_ATTACK_TAP_NEED_EXACT made the Faeburrow tap honest, {Unite} read 15 and nothing read lethal, so
+// d0 cast Archangel + Faeburrow and won T5. The committed tree won T4 only because its phantom
+// Faeburrow swing (5) stood in for the missing free cast (10).
+// Counted exactly or not at all (a false lethal is returned unverified by the search):
+//   * a free-caster counts only when the projection counts it as attacking -- untapped, CanAttackFull,
+//     WantsToAttack, combat power > 0 -- and nothing in the plan can tap it: a creature mana source or
+//     one a candidate's {T} / tap-on-entry Aura takes out of the attack is never counted;
+//   * each charge frees ONE spell still in hand after the plan (every hand index the plan uses is
+//     out), worth its CastFromHand candidate's direct_damage (Unite: its all-in split); {X} spells are
+//     skipped (free means X = 0), alt-cost casts are not free-cast (CollectActions' own rule);
+//   * MTG_FREECAST_PRUNE's floor: a spell outranked by >= charges + 2 remaining casts on mana value
+//     gets no free variant in the post-combat main, so it is not counted.
+// The attack-only seed in Solve (MTG_SOLVE_ATTACK_ONLY_WIN) admits the empty plan on the same sum, so
+// "Archangel + vigilant Faeburrow swing 10, the free Unite deals 10" is scored when every cast taps
+// Faeburrow. NOTE the term is exact only with the honest tap: under MTG_ATTACK_DOMAIN_DORK_YIELD=0 the
+// phantom Faeburrow swing makes {Archangel, Faeburrow} read 10 + 10 = 20 and gi1106 goes back to T5.
+// Pre-combat only (post-combat the banked charge is a real free variant in the plan). Inert for every
+// deck without combat_damage_free_cast. Paired A/B (FiveColour, lever on vs =0, seeds 92x0001+):
+// d0 1000 games 10 faster / 0 slower (5.5730 -> 5.5630); d3 b10 150 and shipped b20 100 identical.
+// Default ON; =0 -> not projected, byte-identical.
+static bool AttackFreeCastDamageEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_FREECAST_DAMAGE", true);   // DEFAULT ON; =0 not projected
+    return heurarm::Flag(heurarm::ATTACK_FREECAST_DAMAGE, env_on);
+}
+struct FreeCastCtx
+{
+    int casters = 0;                    // connecting free-casters no plan can tap
+    struct Cast { int hand_index; int mv; int dmg; };
+    std::vector<Cast> casts;            // every CastFromHand candidate eligible for a free variant
+};
+static FreeCastCtx BuildFreeCastCtx(const GameState& state, bool is_pre_combat,
+                                    const std::vector<Action>& cands,
+                                    const std::vector<AttackingManaSource>& atk_mana_srcs,
+                                    const AttackTapCtx& tap)
+{
+    FreeCastCtx c;
+    if (!is_pre_combat || !AttackFreeCastDamageEnabled()) { return c; }
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.combat_damage_free_cast) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active) || !WantsToAttack(state, p)) { continue; }
+        if (CombatPowerOf(p, state) <= 0) { continue; }
+        bool tappable = false;
+        for (const AttackingManaSource& s : atk_mana_srcs) { if (s.number == p.card.m_number) { tappable = true; } }
+        for (int num : tap.bit_number) { if (num == p.card.m_number) { tappable = true; } }
+        if (!tappable) { ++c.casters; }
+    }
+    if (c.casters == 0) { return c; }
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.free_cast || a.alt_cost || a.hand_index < 0) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const bool has_x = d != nullptr && d->card.m_mana_cost.has_x;
+        c.casts.push_back({ a.hand_index, a.card_mv, has_x ? 0 : std::max(0, a.direct_damage) });
+    }
+    return c;
+}
+static int FreeCastDamage(const FreeCastCtx& c, const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (c.casters <= 0) { return 0; }
+    auto used = [&](int hi)
+    {
+        for (int j : sel) { if (cands[static_cast<std::size_t>(j)].hand_index == hi) { return true; } }
+        return false;
+    };
+    const int  keep  = c.casters + 2;
+    const bool prune = FreeCastPruneEnabled() && !HumanPlayActive();
+    std::vector<std::pair<int, int>> best;   // (damage, hand_index): the best variant per hand card
+    for (const FreeCastCtx::Cast& x : c.casts)
+    {
+        if (x.dmg <= 0 || used(x.hand_index)) { continue; }
+        if (prune)
+        {
+            int above = 0;
+            for (const FreeCastCtx::Cast& y : c.casts)
+            { if (y.mv > x.mv && !used(y.hand_index)) { ++above; } }
+            if (above >= keep) { continue; }
+        }
+        bool seen = false;
+        for (auto& b : best) { if (b.second == x.hand_index) { b.first = std::max(b.first, x.dmg); seen = true; } }
+        if (!seen) { best.emplace_back(x.dmg, x.hand_index); }
+    }
+    std::sort(best.begin(), best.end(), std::greater<>());
+    int dmg = 0;
+    for (int k = 0; k < c.casters && k < static_cast<int>(best.size()); ++k) { dmg += best[static_cast<std::size_t>(k)].first; }
+    return dmg;
+}
+
 // Pre-computed per-permanent on-cast trigger: damage dealt to the caster when they
 // cast a spell with MV <= max_mv (e.g. Eidolon of the Great Revel).
 struct TriggerSource
@@ -30690,9 +30800,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // suggests). Never narrows human play (the viewer shows every legal option).
         // Measured (fivecolour, train + held-out overnight): ~-7% searched wall, zero score
         // changes across 4400 searched games (4 equal-score line swaps), d0 net one game faster.
-        static const bool s_fc_prune = EnvOn("MTG_FREECAST_PRUNE", true);
+        // (One reader, FreeCastPruneEnabled: the free-cast projection honours the same floor.)
         int mv_floor = -1;
-        if (s_fc_prune && !HumanPlayActive())
+        if (FreeCastPruneEnabled() && !HumanPlayActive())
         {
             std::vector<int> mvs;
             mvs.reserve(base_n);
@@ -35484,6 +35594,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
+    // The spell a connecting Maelstrom Archangel frees (MTG_ATTACK_FREECAST_DAMAGE). Lockstep twin.
+    const FreeCastCtx freecast_ctx = BuildFreeCastCtx(state, is_pre_combat, cands, atk_mana_srcs, atk_tap_ctx);
 
     // Hinata combo: does any candidate float ritual mana (Reality Spasm / Irencrag)? Each Action's
     // gross float was stamped at enumeration (a.ritual_float), so this is a cheap scan -- no
@@ -36751,7 +36863,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
         // Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER; 0 unless a Cannons is live).
         const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
-        bool wins = (projected_atk + direct_dmg + extra_lethal + cannons_dmg) >= state.Opponent().life;
+        // The spell a connecting free-caster frees (MTG_ATTACK_FREECAST_DAMAGE; 0 unless one attacks).
+        const int freecast_dmg = FreeCastDamage(freecast_ctx, cands, sel);
+        bool wins = (projected_atk + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg)
+                    >= state.Opponent().life;
         // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
         // has_extra_lethal gate, so a deck with no such model never calls it and stays
         // byte-identical. This is a separate channel on purpose: a deck-out is a different loss
@@ -37335,7 +37450,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // one more plan with the projection every plan gets.
     {
         static const bool s_aow_env = EnvOn("MTG_SOLVE_ATTACK_ONLY_WIN", true);   // DEFAULT ON; =0 off
-        if (is_pre_combat && !best.wins_this_turn && pending_atk >= state.Opponent().life
+        // The attack's free cast counts here too (MTG_ATTACK_FREECAST_DAMAGE; 0 when the lever is off or
+        // no free-caster attacks): Archangel + Faeburrow swing 10 and the free Unite deals 10 more.
+        const int aow_free = FreeCastDamage(freecast_ctx, cands, std::vector<int>{});
+        if (is_pre_combat && !best.wins_this_turn && pending_atk + aow_free >= state.Opponent().life
             && heurarm::Flag(heurarm::SOLVE_ATTACK_ONLY_WIN, s_aow_env))
         {
             std::vector<int> empty_sel;
@@ -47730,6 +47848,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
+    // The spell a connecting Maelstrom Archangel frees (MTG_ATTACK_FREECAST_DAMAGE). Lockstep twin.
+    const FreeCastCtx freecast_ctx = BuildFreeCastCtx(state, is_pre_combat, cands, atk_mana_srcs, atk_tap_ctx);
 
     // Lands in hand: the shared budget for additional discard costs (retrace, LE).
     int lands_in_hand = 0;
@@ -49606,7 +49726,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER) -- twin of Solve's.
         const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
-        bool wins = (projected_atk + direct_dmg + cannons_dmg) >= state.Opponent().life;
+        // The spell a connecting free-caster frees (MTG_ATTACK_FREECAST_DAMAGE) -- twin of Solve's.
+        const int freecast_dmg = FreeCastDamage(freecast_ctx, cands, sel);
+        bool wins = (projected_atk + direct_dmg + cannons_dmg + freecast_dmg) >= state.Opponent().life;
         // A NON-DAMAGE win this turn (a deck-out). Board-level, so it needs no `casting` list and
         // costs one virtual call behind the has_extra_lethal gate; false for every deck without an
         // alternate-win model -> byte-identical. NOTE this site deliberately does NOT add
