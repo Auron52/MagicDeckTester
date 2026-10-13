@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 15ffae16  date 2026-10-13
+# Regression ground truth -- commit 98581d7c  date 2026-10-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
-# accepted-with-regressions (smoke, 2026-10-13): Up-front escalation skip ADOPTED at R=0 (MTG_ESC_SKIP_PREDICT, USER 2026-10-13): hinata d5 s1001 moves 2 games (gi61 8->loss, gi5 loss->loss play-changed) -- both play IDENTICALLY with the skip on vs off when replayed alone (gi61 T8 both, gi5 T7 both), the skip-OFF smoke reproduces GT exactly, and two skip-ON runs agree: batch thread-history perturbation (docs/design/batch-run-to-run-nondeterminism.md), not the skip; gi61 classified churn (8 at 4x and 16x). kittyv2 d3 gi74 and kittyv3 d3 gi67 (6->5) are NOT this change: identical with the skip OFF, and kittyv2 d3 matches GT in 1 of 3 runs -- run-to-run flicker; kittyv3 gi67 alone is T5.
-# accepted-with-regressions (regression, 2026-10-13): Up-front escalation skip ADOPTED at R=0 (MTG_ESC_SKIP_PREDICT, USER 2026-10-13): 3 cells move ONE game each at the SAME win turn (creature_giving d5 s2002 gi189 T6, dragonstorm d5 s3003 gi237 T8, dragonstorm d5 s2002 gi243 T6), 0 slower/0 faster; each replays byte-identically with the skip on vs off when played alone (the skip fires in all three), so the move is batch thread-history perturbation (docs/design/batch-run-to-run-nondeterminism.md), as verified in detail on the smoke tier. CARRIED from the 10c406f8 accept (still in GT): kitty d3+d5 s2002 gi149 T4->T5 is budget-independent and attributed to MTG_EQUIP_ONE_HOST (its 'no double strike' precondition is false on the v1 list, which maindecks 4 Kor Duelist); the lever is a USER ruling, left at its default, finding reported. Reference gate scoped to the 550 non-Kitty refs = 185 ok / 365 repaired / 0 play-drift / 0 enum-gap / 0 board-diverged / 0 contract-fail; the 30 Kitty refs are UN-RUN on the documented 13 min-per-decision viewer cap (docs/design/equip-route-viewer-dfs-cap-is-mis-sized.md).
+# accepted-with-regressions (smoke, 2026-10-13): Single-path half of the up-front escalation skip WITHDRAWN (MTG_ESC_SKIP_SINGLE default OFF; it skipped escalations its climb would have reached and TAKEN): hinata d5 s1001 returns EXACTLY to its pre-skip GT (23503120ce3361bf). The ladder-path skip (R=0, default ON) moves no smoke game. kittyv2 d3 / kittyv3 d3 keep the values accepted in 2a3ea87f -- run-to-run flicker independent of the skip (identical with it OFF; kittyv2 d3 matched the older GT in 1 of 3 runs).
+# accepted-with-regressions (regression, 2026-10-13): Single-path half of the up-front escalation skip WITHDRAWN (MTG_ESC_SKIP_SINGLE default OFF): creature_giving d5 s2002, dragonstorm d5 s2002 + s3003 return EXACTLY to their pre-skip GT -- their moves in 2a3ea87f were that half skipping escalations its climb would have TAKEN (verified on the game logs), NOT thread-history as that note said. The ladder-path skip (R=0, default ON) moves no regression game. CARRIED from the 10c406f8 accept (still in GT): kitty d3+d5 s2002 gi149 T4->T5 is budget-independent and attributed to MTG_EQUIP_ONE_HOST (its 'no double strike' precondition is false on the v1 list, which maindecks 4 Kor Duelist); the lever is a USER ruling, left at its default, finding reported. Reference gate scoped to the 550 non-Kitty refs = 185 ok / 365 repaired / 0 play-drift / 0 enum-gap / 0 board-diverged / 0 contract-fail; the 30 Kitty refs are UN-RUN on the documented 13 min-per-decision viewer cap (docs/design/equip-route-viewer-dfs-cap-is-mis-sized.md).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -33,7 +33,7 @@ antilife_smoke_d3_s1001=4.1880/83bca8fcf408e681
 antilife_smoke_d5_s1001=4.1800/98f08878a259d50a
 hinata_smoke_d0_s1001=6.9070/0b9a84c854d504a4
 hinata_smoke_d3_s1001=5.6600/e7665e5c12cf89e0
-hinata_smoke_d5_s1001=5.8267/f8991f54769b346a
+hinata_smoke_d5_s1001=5.8133/23503120ce3361bf
 dragonstorm_smoke_d0_s1001=5.4320/f5da38d6684d4ce0
 dragonstorm_smoke_d3_s1001=4.5533/20845bbf0f586889
 dragonstorm_smoke_d5_s1001=4.5200/db5874513c4b01f3
@@ -182,8 +182,8 @@ hinata_regression_d5_s3003=5.6300/ff12a1d1dd43be2a
 dragonstorm_regression_d0_s2002=5.4690/7201ed24da535e71
 dragonstorm_regression_d3_s2002=4.3533/959e97bdac31da3d
 dragonstorm_regression_d3_s3003=4.5233/77115c9bf80f74cd
-dragonstorm_regression_d5_s2002=4.3160/53a4f6fea2f2bfec
-dragonstorm_regression_d5_s3003=4.5240/f1cc1242ba7df921
+dragonstorm_regression_d5_s2002=4.3160/5dab7536d41a8932
+dragonstorm_regression_d5_s3003=4.5240/4dec2ffa1157e109
 auras_regression_d0_s2002=4.3480/e1ea584c45229efc
 auras_regression_d3_s2002=4.0760/95c299c25d183e72
 auras_regression_d3_s3003=4.1520/043137708b723482
@@ -197,7 +197,7 @@ goblins_regression_d5_s3003=3.8160/83f69f510cd48214
 creature_giving_regression_d0_s2002=5.5670/1c860c962c6fc5a5
 creature_giving_regression_d3_s2002=4.6400/efa7defebeca307c
 creature_giving_regression_d3_s3003=4.6600/57242ae7c233dcb1
-creature_giving_regression_d5_s2002=4.6120/c8f869613f8827b7
+creature_giving_regression_d5_s2002=4.6120/dedff605d5020c40
 creature_giving_regression_d5_s3003=4.6480/6fd098eecf6f02da
 mirrorwing_regression_d0_s2002=5.8840/7ffc4f9a0c55a704
 mirrorwing_regression_d3_s2002=4.2600/529e47c17f66e9c1
