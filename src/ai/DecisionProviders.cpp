@@ -5652,6 +5652,23 @@ static bool AuraBucketDiscardEnabled()
     return heurarm::Flag(heurarm::AURA_BUCKET_DISCARD, on);
 }
 
+// PROPOSED AMENDMENT (agent, 2026-10-13), NOT the USER's design -- the USER decides; default OFF:
+// MTG_AURA_RATE_HAND_SCALERS. The USER's Aura value counts the scaler credit of the scalers ON THE
+// BOARD; the blank test already counts a scaler kept in hand. On, the value counts the hand scalers
+// too (section 4b), so a 0-power Aura held beside Ethereal Armor is worth +1, not 0. Found by the
+// integration's held-out A/B (Auras d0 s6051635 gi 1634): T4, no creature, Armor in hand -- Alpha
+// Authority shed as the worst rate; the =0 arm cast it T6 beside Armor / All That Glitters and swung
+// 24 for lethal, the bucket arm 19 (T7). The hand credit moves when a hand scaler sheds, so the order
+// is not prefix-stable while this is on: CleanupDiscardShedStable() is false then (re-ranked per shed).
+static bool AuraRateHandScalers()
+{
+    static const bool on = EnvOn("MTG_AURA_RATE_HAND_SCALERS");   // DEFAULT OFF; =1 -> the amendment
+    return heurarm::Flag(heurarm::AURA_RATE_HAND_SCALERS, on);
+}
+
+bool AurasProvider::CleanupDiscardShedStable() const
+{ return !(AuraBucketDiscardEnabled() && AuraRateHandScalers()); }   // lever OFF -> true, the default
+
 // The per-card classes and record, at namespace scope rather than inside the function: MSVC 14.51 cannot
 // value-construct a FUNCTION-LOCAL struct whose default member initializers name function-local enumerators
 // (std::vector<Info>(n) -> C2672 'std::construct_at': no matching overloaded function; GCC accepts it). CI
@@ -5840,6 +5857,24 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
                     || !f.d->params.aura_enchant_requires.empty() || i == keep_enabler) { continue; }
                 f.sub = A_BLANK;
             }
+        }
+    }
+
+    // ---- 4b. MTG_AURA_RATE_HAND_SCALERS (proposed amendment, default OFF; see the reader) -------------
+    // The value's scaler credit also counts the scalers KEPT IN HAND -- the set the blank test reads
+    // (scaler_in_hand) -- each worth its per-unit power once both are cast; a scaler never credits
+    // itself (its own unit is already in live_power). Added AFTER the dead / blank classes above, so
+    // only the useful Auras' rate order (section 7) reads it.
+    if (scaler_in_hand && AuraRateHandScalers())
+    {
+        int hand_credit = 0;
+        for (int i = 0; i < n; ++i)
+        { if (info[i].cls == K_AURA && is_scaler(info[i].d)) { hand_credit += info[i].d->params.aura_scale_power; } }
+        for (int i = 0; i < n; ++i)
+        {
+            Info& f = info[i];
+            if (f.cls != K_AURA) { continue; }
+            f.marg += hand_credit - (is_scaler(f.d) ? f.d->params.aura_scale_power : 0);
         }
     }
 
@@ -9164,6 +9199,20 @@ bool BurnProvider::CleanupDiscardProtectionWaived(const GameState& s, const Card
 
 bool BurnProvider::CleanupDiscardShedStable() const { return !BurnBucketDiscardEnabled(); }
 
+// PROPOSED AMENDMENT (agent, 2026-10-13), NOT the USER's design -- the USER decides; default OFF:
+// MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE. While S4 holds a Shard Volley with no land of its own, a LIVE
+// Searing Blaze that would deal only 1 (no kept hand land for landfall: the last entry of the USER's
+// burn order) is shed AHEAD of it, in S4's slot. Reading: a Volley one land short is worth 3 the turn
+// a land arrives, the dry Blaze 1. Nothing else moves: the classes, the lethal walk and every other
+// slot are computed exactly as the USER's design; with no land-less Volley the order is unchanged.
+// Found by the integration's held-out A/B (burn d3 s6105084 gi 83): one land for five turns, T5 shed
+// the 2nd Volley and kept the 1-damage Blaze; T6 drew a Mountain and was a Volley short (T7; =0 T6).
+static bool BurnVolleyKeepOverDryBlaze()
+{
+    static const bool on = EnvOn("MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE");   // DEFAULT OFF; =1 -> the amendment
+    return heurarm::Flag(heurarm::BURN_VOLLEY_KEEP_OVER_DRY_BLAZE, on);
+}
+
 std::vector<int> BurnProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -9329,6 +9378,22 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
         while (di < dn)               { take('D'); }
     }
 
+    // ---- MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE (proposed amendment, default OFF; see the reader) -------
+    // The dry live Blazes (b_rank 4: landfall, no kept hand land) leave their slot (S5 or the keep
+    // ladder) and shed in S4, ahead of the land-less Volleys -- only while there is such a Volley.
+    std::vector<int> dry_blaze_up;
+    if (!volley_no_land.empty() && BurnVolleyKeepOverDryBlaze())
+    {
+        for (int i : live_burn) { if (at(b_rank, i) == 4) { dry_blaze_up.push_back(i); } }
+        if (!dry_blaze_up.empty())
+        {
+            auto moved = [&](int i)
+            { return std::find(dry_blaze_up.begin(), dry_blaze_up.end(), i) != dry_blaze_up.end(); };
+            burn_beyond.erase(std::remove_if(burn_beyond.begin(), burn_beyond.end(), moved), burn_beyond.end());
+            ladder.erase(std::remove_if(ladder.begin(), ladder.end(), moved), ladder.end());
+        }
+    }
+
     // ---- emit the shed order ----------------------------------------------------------------------
     std::vector<int> shed;
     shed.reserve(static_cast<std::size_t>(n));
@@ -9336,6 +9401,7 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
     for (int i : dead_blaze)    { shed.push_back(i); }                                       // S2
     for (int i : dead_other)    { shed.push_back(i); }
     for (std::size_t k = lands.size(); k-- > static_cast<std::size_t>(kept_lands_n);) { shed.push_back(lands[k]); }  // S3
+    for (int i : dry_blaze_up)   { shed.push_back(i); }                                      // S4 (amendment, OFF)
     for (int i : volley_no_land) { shed.push_back(i); }                                      // S4
     for (std::size_t k = burn_beyond.size(); k-- > 0;) { shed.push_back(burn_beyond[k]); }   // S5
     for (std::size_t k = digs.size(); k-- > static_cast<std::size_t>(dig_keep);) { shed.push_back(digs[k]); }       // S6

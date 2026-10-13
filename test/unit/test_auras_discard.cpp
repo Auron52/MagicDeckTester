@@ -431,6 +431,60 @@ TEST_CASE("Auras discard 23 (distance): the creature slot weighs power x castabi
                   { 1, 5, 6, 7, 3, 2, 4, 0 });
 }
 
+// ---- PROPOSED AMENDMENT MTG_AURA_RATE_HAND_SCALERS (default OFF; the USER decides) ----------------------
+// The board is the T4 cleanup of the integration's held-out A/B game (Auras d0 s6051635 gi 1634): Branchloft
+// Pathway + Forest, no creature, no enchantment; the hand holds two scalers (Ethereal Armor +1/unit, Ancestral
+// Mask +2/other enchantment). Light-Paws (index 0) is the creature slot; every Aura is useful (a scaler is in
+// hand, so nothing is blank; the Mask has Auras around, so it is not dead).
+// USER design, rate order by hand (MTG_DISCARD_DIST_MODEL=0): Alpha 0/2, Mask 0/3, Link 0/1 (equal: the
+// non-scalers first, the pricier first -> Alpha 2, Link 5, then Mask 4), Cloak 2/3 (6), Boon 1 = Armor 1
+// (non-scaler first: 7, 3), Rancor 2 (1); Light-Paws 0 last. -> 2 5 4 6 7 3 1 0.
+// Amended: the hand credit is Armor 1 + Mask 2 = 3, a scaler not crediting itself: Rancor 5/1, Alpha 3/2,
+// Armor 3/1, Mask 1/3, Link 3/1, Cloak 5/3, Boon 4/1 -> Mask 4, Alpha 2, Cloak 6, Link 5 (= Armor 3, the
+// non-scaler first), Boon 7, Rancor 1, Light-Paws 0.
+// With the model (the default) the zero-rate tie keeps the USER head (Alpha Authority); amended the Mask's
+// 1/3 is below Alpha's castable 3/2 at any factor, so it goes first.
+TEST_CASE("Auras discard: proposed MTG_AURA_RATE_HAND_SCALERS -- a 0-power Aura beside a hand scaler is not the worst rate")
+{
+    GameState s = MakeAu(
+        { kPaws, "Rancor", "Alpha Authority", "Ethereal Armor", "Ancestral Mask", "Spirit Link", "Armadillo Cloak",
+          "Gryff's Boon" },
+        { { "Branchloft Pathway" }, { "Forest" } });
+    s.turn_number = 4;
+    auto amend = [](const GameState& g, int on, int dist)
+    {
+        heurarm::t_arm[heurarm::AURA_RATE_HAND_SCALERS] = static_cast<std::int8_t>(on);
+        std::vector<int> v = Au(g, dist);
+        heurarm::t_arm[heurarm::AURA_RATE_HAND_SCALERS] = -1;
+        return v;
+    };
+    CHECK(AuOld(s) == std::vector<int>{ 2, 5, 4, 6, 7, 3, 1, 0 });           // unset = OFF = the USER design
+    CHECK(amend(s, 0, 0) == std::vector<int>{ 2, 5, 4, 6, 7, 3, 1, 0 });
+    CHECK(amend(s, 1, 0) == std::vector<int>{ 4, 2, 6, 5, 3, 7, 1, 0 });
+    CHECK(Au(s).front() == 2);                                                  // the default model: Alpha
+    CHECK(amend(s, 1, -1).front() == 4);                                        // amended: the Mask
+    CheckPermutation(s, amend(s, 1, -1));
+
+    // The hand credit moves when a hand scaler sheds, so the order is declared NOT prefix-stable while the
+    // lever is on (re-ranked per shed); off it keeps the default.
+    heurarm::t_arm[heurarm::AURA_RATE_HAND_SCALERS] = 1;
+    CHECK_FALSE(AurasProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::AURA_BUCKET_DISCARD] = 0;
+    CHECK(AurasProvider().CleanupDiscardShedStable());                          // the generic arm: default
+    heurarm::t_arm[heurarm::AURA_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::AURA_RATE_HAND_SCALERS] = 0;
+    CHECK(AurasProvider().CleanupDiscardShedStable());
+    heurarm::t_arm[heurarm::AURA_RATE_HAND_SCALERS] = -1;
+
+    // No scaler in hand -> no hand credit: board 4's order is unchanged on both model arms.
+    const GameState b4 = MakeAu(
+        { "Alpha Authority", "Spirit Link", "Rancor", "Hyena Umbra", "Daybreak Coronet", "Branchloft Pathway",
+          "Plains", "Slippery Bogle" },
+        { { "Forest" }, { "Plains" }, { "Gladecover Scout" } });
+    CHECK(amend(b4, 1, 0) == AuOld(b4));
+    CHECK(amend(b4, 1, 1) == AuNew(b4));
+}
+
 // ---- the contract ------------------------------------------------------------------------------------
 
 TEST_CASE("Auras discard: a staged card is never in the preference; it falls to the back")
