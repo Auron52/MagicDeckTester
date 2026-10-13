@@ -1,4 +1,5 @@
 {
+  "escalation_skip_r": [97.2, 73.7, 68.6, 0.0, 0.0],
   "eval_model": {
     "coefs": {},
     "intercept": 6258,
