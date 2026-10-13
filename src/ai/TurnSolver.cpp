@@ -46231,6 +46231,41 @@ struct KarooDropEnumScope
     ~KarooDropEnumScope() { g_enum_karoo_drop = prev; g_enum_karoo_num = prev_num; }
 };
 
+static bool LabelSearchScopeActive();   // defined with g_unbounded_label_search, further down
+
+// MTG_HELD_CAST_UNBUDGETED (heurarm HELD_CAST_UNBUDGETED). DEFAULT ON; =0 -> the hold drops at every
+// budget, byte-identical.
+//
+// DecisionProvider::HoldCastUnlessLethal (Hinata's hold-a-lone-Crackle rule) is a provider PRUNE, and
+// both subset walks applied it as a GATE at every budget: a subset casting the held card is dropped
+// unless it projects lethal THIS turn. So a line whose chip cast is not itself lethal was unfindable at
+// --budget-ms 0 too -- the shape CLAUDE.md rules out ("a budget may re-price work, it may not make a
+// line unfindable; completeness at large budget is the invariant"). Hinata2 s3030 gi 27: T3 chip
+// Crackle X=1, Soulfire T6 and its staged Soulfire T7 = 5 + 9 + 9, every cast paid; held, the game is
+// T8 at d5 b20 AND at d8 b0 (MTG_NO_HINATA_HOLD_CRACKLE=1 -> T7 at both). The committed tree reached
+// T7 only because it misread an in-hand Reality Spasm as a second Crackle (MTG_CRACKLE_COUNT_EXACT=0),
+// which switched the hold off; the fix restored the hold's scope and exposed the gate.
+//
+// THE ADMISSION. At an UNBUDGETED SEARCH -- play budget 0 and lookahead depth > 0, the latch
+// AIEngine::TakeTurn raises (EngineFlags.h UnbudgetedSearchScope) -- the search branch list stops
+// flagging held casts: the held line is OFFERED and the search scores it like any other plan, so it
+// wins only where the search's own lookahead says it does. Nothing is picked; options are only added.
+// UNTOUCHED, deliberately:
+//   * Solve's consider (the d0 runner, rollouts past the horizon): the hold is a horizon prior, and
+//     past the horizon is exactly where it belongs -- the permitted greedy keeps it.
+//   * every BUDGETED run: the latch is 0, so this is dead code there by construction (every
+//     regression / shipped cell and both generators' budgeted cells are byte-identical).
+//   * the offline label ladder (LabelSearchScopeActive): its answers may not move underneath it.
+// What a FINITE budget should do with held lines (a budget-staged later wave rather than a gate, so
+// more budget reaches more of them) changes shipped play and is the USER's call -- see
+// docs/design/held-cast-unbudgeted-admission.md.
+static bool HeldCastAdmittedThisSearch()
+{
+    if (g_unbudgeted_search <= 0 || LabelSearchScopeActive()) { return false; }
+    static const bool on = EnvOn("MTG_HELD_CAST_UNBUDGETED", true);
+    return heurarm::Flag(heurarm::HELD_CAST_UNBUDGETED, on);
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -46824,8 +46859,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // HoldCastUnlessLethal (provider; Hinata's lone Crackle under MTG_HINATA_HOLD_LETHAL_BURN): a cast
     // the deck holds unless the subset WINS this turn. Flagged once per candidate here; the drop sits at
     // the subset's `wins` projection below (lockstep twin in SolveUncached). false for every other deck.
+    // MTG_HELD_CAST_UNBUDGETED: an UNBUDGETED SEARCH flags nothing -- the held line is offered and
+    // scored (see HeldCastAdmittedThisSearch). Solve's twin keeps the hold: it is the greedy policy.
     std::vector<unsigned char> cand_held(cands.size(), 0);
     bool any_held = false;
+    const bool held_admitted = HeldCastAdmittedThisSearch();
     const DecisionProvider& held_provider = ResolveProvider(state);
     std::vector<unsigned char> fill_face_ok(cands.size(), 0), fill_x_ok(cands.size(), 0),
                                cand_draws(cands.size(), 0);
@@ -46843,7 +46881,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
         { cand_draws[j] = 1; }
-        if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
+        if (!held_admitted && dd && fa.kind == Action::Kind::CastFromHand
+            && held_provider.HoldCastUnlessLethal(state, *dd))
         { cand_held[j] = 1; any_held = true; }
     }
 

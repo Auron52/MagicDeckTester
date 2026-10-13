@@ -1502,6 +1502,24 @@ struct UnbudgetedPlayScope
     ~UnbudgetedPlayScope() { g_unbudgeted_play = saved; }
 };
 
+// ---- UNBUDGETED-SEARCH SCOPE: the play search has NO budget AND depth remaining ----------------
+// g_unbudgeted_play above is also raised by the depth-0 runner at `--budget-ms 0` (every d0
+// regression case), which is greedy play with no search window at all. This latch is the narrower
+// question a search-window admission needs: is THIS turn's decision a SEARCH (lookahead depth > 0)
+// with no budget reading the work? Raised in the same frame (AIEngine::TakeTurn), save/restored the
+// same way. Every budgeted run (every regression / shipped / generation cell with a budget) leaves
+// it at 0, so whatever it arms is dead code there BY CONSTRUCTION.
+// Reader: TurnSolver's EnumeratePlans (MTG_HELD_CAST_UNBUDGETED).
+inline thread_local int g_unbudgeted_search = 0;
+
+struct UnbudgetedSearchScope
+{
+    int saved;
+    explicit UnbudgetedSearchScope(bool unbudgeted_search)
+        : saved(g_unbudgeted_search) { g_unbudgeted_search = unbudgeted_search ? 1 : 0; }
+    ~UnbudgetedSearchScope() { g_unbudgeted_search = saved; }
+};
+
 inline bool UnbudgetedLeafMemoOn()
 {
     static const bool v = EnvOn("MTG_UNBUDGETED_LEAF_MEMO", true);

@@ -11,6 +11,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/EngineFlags.h"
 #include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -433,4 +434,44 @@ TEST_CASE("HINATA_CASTABLE_MANA: the board's real mana, not its source count, de
     Pin on(heurarm::HINATA_CASTABLE_MANA, true);
     CHECK(hp.ShouldEmitUntapRitual(rich));
     CHECK_FALSE(hp.ShouldEmitUntapRitual(blue));
+}
+
+// ---- MTG_HELD_CAST_UNBUDGETED: an UNBUDGETED search is offered the held line; budgeted + greedy hold it ----
+// The hold was a gate at every budget, so a chip-Crackle line was unfindable even at --budget-ms 0
+// (Hinata2 s3030 gi 27: T3 chip + two Soulfires = T7, held = T8 at d8 b0). Opp at 26: Crackle X=4 + Magma
+// Opus + Hinata's swing = 25, so the lone Crackle is NOT lethal and the hold applies.
+TEST_CASE("HELD_CAST_UNBUDGETED: an unbudgeted search offers a lone non-lethal Crackle; budgeted and greedy hold it")
+{
+    const HinataProvider hp;
+    Pin lb(heurarm::HINATA_HOLD_LETHAL_BURN, true);
+    // Budgeted (the latch is down -- every regression / shipped cell): held, exactly as before.
+    {
+        Pin on(heurarm::HELD_CAST_UNBUDGETED, true);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 11);
+        s.m_provider = &hp;
+        CHECK_FALSE(AnyPlanCasts(s, kCrackle));
+        CHECK_FALSE(CastsHc(GreedyHc(s), kCrackle));
+    }
+    // Unbudgeted SEARCH, lever on: the search branch list carries the chip line...
+    {
+        UnbudgetedSearchScope unbudgeted(true);
+        Pin on(heurarm::HELD_CAST_UNBUDGETED, true);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 12);
+        s.m_provider = &hp;
+        CHECK(AnyPlanCasts(s, kCrackle));
+        // ...while the greedy policy (Solve: the d0 runner, rollouts past the horizon) still holds it.
+        CHECK_FALSE(CastsHc(GreedyHc(s), kCrackle));
+    }
+    // Unbudgeted search, lever =0: the gate, byte-identical to before the lever.
+    {
+        UnbudgetedSearchScope unbudgeted(true);
+        Pin off(heurarm::HELD_CAST_UNBUDGETED, false);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 13);
+        s.m_provider = &hp;
+        CHECK_FALSE(AnyPlanCasts(s, kCrackle));
+    }
+    // The latch is scoped: it is down again once the scope unwinds.
+    CHECK(g_unbudgeted_search == 0);
+    // Default ON.
+    CHECK(heurarm::Flag(heurarm::HELD_CAST_UNBUDGETED, EnvOn("MTG_HELD_CAST_UNBUDGETED", true)));
 }
