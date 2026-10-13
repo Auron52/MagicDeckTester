@@ -106,10 +106,29 @@ newly added card, which is a bug detector for the heuristic.
 
 ## Build notes
 
-* Recorder: per game, a bitmask over the deck's distinct indices (~60 fit one 64-bit word; a 60-card
-  list by index needs 60 bits) plus the max library prefix depth read. ~9 bytes/game, so storage is
-  irrelevant. Off by default and byte-identical when off (the `RolloutTouch` precedent: a null
-  thread_local sink and one predicted-not-taken branch).
+* Recorder: per game, ONE bit per card index -- nothing else. USER 2026-10-13: *"we can just store a
+  64-bit integer (with 60 bit-flags) to represent which cards are accessible in a game. It doesn't
+  need to be anything complex."*
+  - **No prefix-depth field.** An earlier draft of this file stored the mask *plus* the deepest
+    library prefix read. That is redundant: reading the top K cards sets those K cards' own bits, so
+    the mask already represents the prefix.
+  - **The test is one instruction:** `(accessible & changed) == 0`, with `changed` computed once per
+    arm. That matters because it runs once per game per arm.
+  - **Width:** one `uint64_t` covers a number space of 64. candidate-b is 60 main + 0 side (60 bits)
+    and the shipped Fungus list is 60 + 4 = exactly 64, so Fungus fits in one word. **Nine decks do
+    not** once the fetchable sideboard is numbered -- Hinata2 60+23=83, Prevent Damage 60+15=75,
+    Soldiers and Bruna 72, Snow 70, Knights and EldraziDisplacerFlicker 68, Minotaur 67, Unpredictable
+    Cyclone 65. `std::array<uint64_t,2>` covers 128 and so covers every deck in the repo, at two ANDs.
+    Note the convergence: the decks that overflow one word are exactly the wish/tutor decks whose
+    sideboard is reachable, i.e. the ones that need the tutor predicate anyway.
+  - **Bit position is a COMPACTED index, not the raw number.** `base_numbering`'s docstring warns
+    that *"contiguity is not required by the engine (m_number is only ever equality-compared, never
+    an index)"*, and `inherit_numbering` hands out fresh numbers above the current high for a genuine
+    size increase. So map number -> compact bit, exactly as `RolloutTouch::Sink` already maps name ->
+    compact index. (In a 60-card screen every arm frees as many numbers as it adds, so the space
+    stays 1..60 -- but the recorder must not assume it.)
+  - Storage is ~8-16 bytes/game, i.e. irrelevant. Off by default and byte-identical when off (the
+    `RolloutTouch` precedent: a null thread_local sink and one predicted-not-taken branch).
 * Consumer: `scripts/deck_compare.py` already collects per-game results keyed by game index
   (`got[job][g]`) and already pairs arms against base on that index, so the carry slots into the
   existing pairing rather than needing new bookkeeping.
