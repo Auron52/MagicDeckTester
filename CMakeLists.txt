@@ -367,6 +367,7 @@ add_executable(mtg-test
     test/unit/test_edf_route_board_deploy.cpp
     test/unit/test_edf_goff_verify.cpp
     test/unit/test_edf_tapahead_pending_pip.cpp
+    test/unit/test_edf_aura_payer_as_executed.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working
