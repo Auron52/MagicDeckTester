@@ -2,6 +2,16 @@
 #include <cstdint>
 #include <cstddef>
 
+// The caller's return address, for MTG_INDEX_CARRY_SITES (MSVC has no __builtin_return_address).
+#if defined(_MSC_VER)
+#include <intrin.h>
+#define MTG_RETURN_ADDRESS() _ReturnAddress()
+#elif defined(__GNUC__) || defined(__clang__)
+#define MTG_RETURN_ADDRESS() __builtin_return_address(0)
+#else
+#define MTG_RETURN_ADDRESS() nullptr
+#endif
+
 // INDEX-CARRY RECORDER -- which card INDICES a game could ever have seen.
 //
 // USER's idea (2026-10-13): *"keep track of the cards that are relevant (drawn, available) in each
@@ -115,7 +125,7 @@ inline void NoteWholeLibraryRead()
     Sink* s = t_sink;
     if (s == nullptr) { return; }
     s->MarkAll();
-    NoteWholeLibraryReadSite(__builtin_return_address(0));
+    NoteWholeLibraryReadSite(MTG_RETURN_ADDRESS());
 }
 
 }   // namespace indexcarry
