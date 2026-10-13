@@ -437,6 +437,27 @@ TEST_CASE("Combat pump keeps a depletion / storage land's mana unless the pump i
     }
 }
 
+TEST_CASE("Payoff prune: a ritual that funds Ruby Medallion is not burnt for nothing (MTG_PAYOFF_PRUNE_REDUCER_SINK)")
+{
+    // dragonstorm ab5 d3 gi 289's T1: one Mountain, Dragonstorm in hand. Rite of Flame -> Ruby Medallion (and
+    // the storm on T3) was deleted by the payoff prune -- a ritual with no Dragon / Dragonstorm / Apex.
+    const GameState s = BoardFu({ "Mountain" },
+                                { "Rite of Flame", "Ruby Medallion", "Dragonstorm", "Pyretic Ritual", "Seething Song" }, 1);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::PAYOFF_PRUNE_REDUCER_SINK, on);
+        bool rite_medallion = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        {
+            int casts = 0;
+            for (const Action& x : p.actions) { if (x.kind == Action::Kind::CastFromHand) { ++casts; } }
+            if (casts == 2 && CastsBoth(p, "Rite of Flame", "Ruby Medallion")) { rite_medallion = true; }
+        }
+        CHECK(rite_medallion == on);
+    }
+}
+
 TEST_CASE("Combat pump spends the banked mana when only that buys a next-turn kill (MTG_FB_HOLD_BANKED_NEXT_TURN)")
 {
     // Full pump now 8 (Scourge 4 + two Mountains + the Needle's {R}{R}), held pump 6. Next turn the
