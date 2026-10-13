@@ -1,23 +1,8 @@
-# Regression ground truth -- commit 27c5976d  date 2026-10-13
+# Regression ground truth -- commit 10c406f8  date 2026-10-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-10-08): Karoo tap-in-response + SEARCHED bounce ADOPTED (MTG_BOUNCE_UNTAPPED_FIRST + MTG_BOUNCE_SEARCH default ON, docs/design/karoo-tap-in-response.md): full tier, only the 9 Karoo decks move, every deck net faster (-2692 turns; Hinata incl. its 2HG rows -412, the 2HG rows alone +6 = 6 budget-churn games); searched 32 faster / 31 slower, all 31 converge (30 at --depth <win turn> --budget-ms 100, hinata d3 s5005 gi68 at --depth 8 --budget-ms 0); d0 to-unwon 99 vs from-unwon 204. CARRIED (earlier accept today): SelesnyaLifegain keep-table adoption (fast, R=30; validation keep -0.2345t 16/16, confounded bottoming -0.0641t 16/16). Every changed game attributed by test/keep_adoption_attribution.py: 8396 = 6325 mulligan count + 1996 bottom + 75 bottom-order-only, 0 unexplained; all 12 cases faster
-# accepted-with-regressions (overnight, 2026-10-08): Soldiers keep table (fast R=30, K=19) adopted 2026-10-08: every case faster (smoke -0.079, regression -0.131, overnight -0.135 t mean); every changed game, incl. every slower one, attributed by keep_adoption_attribution.py to a different kept hand/bottom (0 unexplained, both baselines reproduced); re-measured byte-identical on 98b9247f after the Karoo rebase
-# accepted-with-regressions (overnight, 2026-10-08): Karoo: the USER's Hinata bounce rule ADOPTED (MTG_HINATA_BOUNCE_RULE default ON; docs/design/karoo-tap-in-response.md): only hinata/hinata2hg rows move, byte-identical to the pooled A/B's Hinata-A arm; held-out Hinata -30 (42 faster/18 slower), 2HG -7 (4/0); every slower game (5 searched, 13 d0) recovers at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
-# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the five 2026-10-08 claude-play sweep fixes (GSZ copy id, Pyrohemia post-entry ping, exact line_ok, batch-prepay timing, defer-{C}) + the USER's Beseech doctrine ADOPTED 2026-10-09 (MTG_PD_BESEECH_USEFUL default ON: engine creatures only, skip duplicates; 0.61x units): only pd/pd2hg rows move; d0 faster; the searched slower games are Beseech->Rolling Earthquake finisher lines the rule removes (amendment MTG_PD_BESEECH_FINISHER, default OFF, measured for the USER) and lookahead line changes -- recovery check in docs/design/analysis-Prevent Damage.md
-# accepted-with-regressions (overnight, 2026-10-09): Karoo: the USER's general bounce rule ADOPTED, root-caused and amended (MTG_BOUNCE_USER_RULE + MTG_BOUNCE_RULE_AMEND + MTG_BOUNCE_REPLAY_PRECISE default ON; docs/design/karoo-tap-in-response.md): only creature_giving/melira/mirrorwing(+2hg) rows move, byte-identical to the pooled A/B ship arm; held-out melira -23, mirrorwing -26, every other Karoo deck 0; 0 searched games slower; all 46 slower d0 games recover at --depth <win turn> --budget-ms 100 AND --depth 8 --budget-ms 0
-# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER-approved Beseech rule (2026-10-09) -- engine creatures, then the damage sources and Ancient Tomb, skipping duplicates (MTG_PD_BESEECH_USEFUL): only pd/pd2hg rows move; 556 refs clean; vs the engine-only rule overnight searched 31 faster / 11 slower (-20 turns), regression 3 faster / 1 slower; d0 within noise
-# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's discard ladder (2026-10-09, MTG_PD_DISCARD_USER) -- lands to 4 (1 Tomb + 3 coloured, painful first) > 2 gain > 1 drain > 1 damage spell > extra lands > 2nd drain, tutors as backups; vs the 09-28 ladder on 4,900 fresh paired games -0.0010 t/game, 3 faster / 0 slower; refs 0/11 short; only pd/pd2hg rows move
-# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: the USER's cast order (2026-10-09, MTG_PD_CAST_ORDER) -- Tamanoa + Zenith 10, other creatures 12, Rhox 13, Spellshock 15, spells 20, Earthquake 25, Pyrohemia 26; vs generic on 4,900 fresh paired games -0.0049 t/game, 45 faster / 23 slower, all 9 slower searched games recover (two-stage); refs 0/11 short; only pd/pd2hg rows move
-# accepted-with-regressions (overnight, 2026-10-09): Prevent Damage: RE-MEASURED for the USER's discard ladder + the USER's cast order (2026-10-09). c6bc7c02's regression/overnight PD keys were STALE (re-promoted pre-ladder runs; only smoke had been re-run). Searched: regression 2 faster / 2 slower, overnight 12 faster / 4 slower; every slower game recovers at stage 1 (depth W, b100) = budget churn (seed 3009 gi6: both levers; s4004 gi8 x3: cast order; s5005 gi20: discard ladder). d0: regression 10/8, overnight 65/44
-# accepted-with-regressions (overnight, 2026-10-10): Snow keep table (fast, R=30, K=17) adopted 2026-10-09, gen on frozen src df5b7c7e across a cross-machine handoff + a hard-crash resume (7,086,012 rollouts = 46% of uniform-R). Validation: keep -0.2818t 16/16 mean/se -43.07; confounded bottoming (MTG_CONFOUND_BOTTOM=3) -0.0771t 16/16 mean/se -22.84. GT re-measured here on a500d466 with the profile live -- smoke -0.200t mean (3/3 faster), regression -0.182t (4 faster/1 tie/0 slower), overnight -0.215t (9/9 faster). Every changed game attributed by test/keep_adoption_attribution.py: smoke 671 (619 mulligan count + 50 bottom + 2 bottom-order-only), regression 688 (620 + 65 + 3), overnight 1113 (1011 + 102); 0 unexplained and both replays reproduced their baselines in all three tiers, so the searched-SLOWER games (smoke/regression 17, overnight 88) are mulligan-caused churn, not play regressions.
-# accepted-with-regressions (overnight, 2026-10-10): bruna (width collapses fbd63d2f, every row better: d3 net -35, d5 -14, d0 -247): 6 slower d3 games -- s4004 gi208, s6006 gi452/gi631 recover at d<old> b100; s4004 gi585 + s7007 gi755 do not recover at d8 b0 but neither does the old binary (old faster win was budget luck); s5005 gi759 T6->T7 is a pre-existing executor/search payment gap the inert-equip fold exposed (docs/design/bruna-wings-recast-payment-divergence.md)
-# accepted-with-regressions (overnight, 2026-10-10): bruna (Wings-recast payment fix 5b4f963f; FULL overnight tier run on src 5c5cd74c, 413 cases, every non-Bruna case and the Bruna d0 rows byte-identical): searched 0 slower / 5 faster (net -5) / 58 play-changed at the same score; d0 unchanged. SUPERSEDES the 2026-10-10 width-collapse note's non-recovering items s5005 gi759 (now T7->T6) and s4004 gi585 (now T5->T4); s7007 gi755 stands as noted there. All 63 changed games replayed under both binaries (old reproduces GT, new reproduces this run): 54 first diverge at a Greaves equip the executor now carries out, 4 at an Aura (Arcanum Wings / Almost Perfect) landing on its planned host after the shroud release, 1 at a bottom chosen by rollouts that run the changed executor paths, the rest are the 5 faster games. Known cosmetic quirk: the release equip is still LOGGED at its plan position, after the Aura it enabled.
-# accepted-with-regressions (overnight, 2026-10-10): bruna RESIZED to the ENTRY set (USER 2026-10-10; regression-testing skill, 'Sizing a deck's overnight rows'): d3 4x1000 b20 -> 4x400 b10, d5 4x500 b40 -> 4x300 b20 (Hinata's shape), d0 unchanged, until Bruna's keep table is adopted. Same binary (src 5c5cd74c) as the previous Bruna overnight accept: the 32 slower / 1 faster / 129 play-changed searched games are the first 400/300 games of each seed re-played at HALF the budget, so each slower game's faster line is the previous accept's own measurement at the old budget -- a key re-definition, not a play change. 1.45 worker-h for Bruna's 12 overnight cases alone (makespan 3m46s), vs 6.56 worker-h (28.6% of the tier) at the old shape inside the full tier.
-# accepted-with-regressions (overnight, 2026-10-10): snow: Jorn -> Kaldring keep-table alias (USER 2026-10-10, mulligan.keep_table_alias; the 09-25 table predates the 10-03 Jorn listing, so every Jorn hand missed the table and paid clairvoyant trial-game bottoming = 60-64% of Snow's searched overnight units). Lossy by the USER's choice (regeneration too expensive now): the Jorn slice loses its clairvoyant bottom and gets a bucket learned for Kaldring. Full smoke/regression tiers: every non-Snow case byte-identical, 556 refs clean. Snow overnight (held-out): searched +41 turns / 1000 games (51 slower / 29 faster), d0 -57 / 1000 (75 faster / 45 slower), searched units 198M -> 57M
-# accepted-with-regressions (overnight, 2026-10-12): pd overnight rows RESIZED at the keep-table adoption (d3 4x100->4x200 b20, d5 4x75->4x125 b40; pd2hg unchanged 4x50 b40), sized to keep a cost saving (USER 2026-10-12). Re-defined keys accepted with the keep table ABSENT (MTG_EXHAUSTIVE_PROFILE=none, leaf in) so the adoption diff is like-for-like; also absorbs the Pyrohemia collapse (d951e809) and the leaf (f9e88f2b), which this tier had not seen.
-# accepted-with-regressions (overnight, 2026-10-12): Prevent Damage keep table adopted (b6f8f0b5) -- overnight tier, on the resized rows: keep_adoption_attribution explains every changed game (different mulligan count / different bottom / bottom-order digest only), 0 unexplained, baselines reproduced both sides (pd + pd2hg). Rows cost 0.27 worker-h with the table vs 0.35 for the OLD rows without it (same box, 2026-10-12).
 # accepted-with-regressions (smoke, 2026-10-13): Rebase of 91 local commits onto origin's 60 (canonical CounterList storage, Karoo base+Hinata bounce rules, PD cast order/discard ladder/Beseech, restricted mana rank) + this branch's adopted equip prunes and the Omnitool restricted second main: searched 41 faster / 2 slower (BOTH churn -- kitty d3 gi238 recovers to 5 at 4x/16x, kittyv2 d5 gi49 comes back BETTER than baseline), d0 254 faster / 2 slower; 3 NEW kittyv3 keys (own decklist per f09afcfd); CI green on ubuntu-latest + windows-latest + determinism parity; prior smoke notes dropped deliberately -- every cell is re-measured here and none carried a standing USER cell ruling.
 # accepted-with-regressions (regression, 2026-10-13): Same rebase as the smoke note: searched 74 faster / 8 slower -- 6 churn, and the 2 PERSISTS are ONE game (kitty d3+d5 s2002 gi149) attributed by single-lever bisection to MTG_EQUIP_ONE_HOST and BUDGET-INDEPENDENT (T4 with the lever off, T5 with it on, at both 4x and 16x): the lever's dominance precondition 'NO DOUBLE STRIKE' is FALSE on the v1 list, which maindecks 4 Kor Duelist, and its gate FrameHasDoubleStrikeSource is frame-local while the concentration it causes is persistent board state -- the lever is LEFT at its adopted default (a USER ruling) and the finding is reported, not silently patched; d0 270 faster / 5 slower; reference gate scoped to the 550 non-Kitty refs = 0 play-drift / 0 enum-gap / 0 board-diverged / 0 contract-fail, and the 30 Kitty refs are UN-RUN on the documented 13 min-per-decision viewer cap (docs/design/equip-route-viewer-dfs-cap-is-mis-sized.md).
+# accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -490,7 +475,7 @@ fivecolour_overnight_d0_s10010=5.6140/2b115e2fef5d0e7e
 fivecolour_overnight_d3_s4004=4.8575/314aef9ac81efa6c
 fivecolour_overnight_d3_s5005=4.8275/a38b978044b62a8b
 fivecolour_overnight_d3_s6006=4.8500/bb5d617dd464fe2c
-fivecolour_overnight_d3_s7007=4.8675/d05a3a77f06173be
+fivecolour_overnight_d3_s7007=4.8675/d02df199a95194c3
 fivecolour_overnight_d5_s4004=4.8167/4f4a9fc833fc40fd
 fivecolour_overnight_d5_s5005=4.8067/bdd6178493c4da7e
 fivecolour_overnight_d5_s6006=4.8333/23f67208f0872307
@@ -499,14 +484,14 @@ stompy_overnight_d0_s4004=4.9790/4281cd9cde19e70a
 stompy_overnight_d0_s6006=4.9565/0a4e867d6511c3ce
 stompy_overnight_d0_s8008=4.9500/a7c834f589209195
 stompy_overnight_d0_s10010=4.9960/c0122873344dacb2
-stompy_overnight_d3_s4004=4.1170/9a150f0361b19726
-stompy_overnight_d3_s5005=4.1100/849699b8fccaca4a
-stompy_overnight_d3_s6006=4.1130/380d3ee605c6f319
-stompy_overnight_d3_s7007=4.1030/d04d6fadde0d99a8
-stompy_overnight_d5_s4004=4.1360/6d2b9ecbb866a760
+stompy_overnight_d3_s4004=4.1160/36ace92cd791fcc6
+stompy_overnight_d3_s5005=4.1100/0e0820f3e1041ad6
+stompy_overnight_d3_s6006=4.1120/99c4447342eaa825
+stompy_overnight_d3_s7007=4.1030/18dd291ab6f827a7
+stompy_overnight_d5_s4004=4.1340/de4b4d41a0730513
 stompy_overnight_d5_s5005=4.0960/9c1a4c3600caf614
 stompy_overnight_d5_s6006=4.1100/af6c706b35341264
-stompy_overnight_d5_s7007=4.0920/bb76cabd6102596f
+stompy_overnight_d5_s7007=4.0920/5e3c83f33752cd53
 minotaur_overnight_d0_s4004=5.3245/e7ab2823e261bf9d
 minotaur_overnight_d0_s6006=5.3120/b8f1be3eebe2579e
 minotaur_overnight_d0_s8008=5.3070/068ede8a45507e98
@@ -519,30 +504,42 @@ minotaur_overnight_d5_s4004=4.8600/929b1eab34de6bd1
 minotaur_overnight_d5_s5005=4.8380/b1e1ecb06c80ee54
 minotaur_overnight_d5_s6006=4.8860/a760bbf776f7bb38
 minotaur_overnight_d5_s7007=4.8300/a54806e036f77252
-kitty_overnight_d0_s4004=4.9420/5b1ce2b6ca11fa03
-kitty_overnight_d0_s6006=4.9620/bfddc361d5595b67
-kitty_overnight_d0_s8008=4.9410/fe4d0dfc4bf9067d
-kitty_overnight_d0_s10010=4.9695/83e0d23b2d26e9d6
-kitty_overnight_d3_s4004=4.2700/e6d74b5ad5d3d8d9
-kitty_overnight_d3_s5005=4.2900/cd6160472d696f37
-kitty_overnight_d3_s6006=4.2730/1e4008766af39e79
-kitty_overnight_d3_s7007=4.2700/beb2b0bd3d77d41c
-kitty_overnight_d5_s4004=4.2780/cd319f1a41e090ca
-kitty_overnight_d5_s5005=4.2880/47493aecc6846600
-kitty_overnight_d5_s6006=4.2200/e26ee53fa4ca78ec
-kitty_overnight_d5_s7007=4.2460/1b73faf47ce47a50
-kittyv2_overnight_d0_s4004=4.9685/7b4fa8ccf4f78d80
-kittyv2_overnight_d0_s6006=4.9980/c76b05b4891bcec6
-kittyv2_overnight_d0_s8008=5.0395/1b460bfd6d00c979
-kittyv2_overnight_d0_s10010=5.0805/9a0b8c67fa85f6a1
-kittyv2_overnight_d3_s4004=4.1040/5060a4977f7eaa0b
-kittyv2_overnight_d3_s5005=4.0640/e4a10283bb104ba0
-kittyv2_overnight_d3_s6006=3.9960/8669d8994909b6fc
-kittyv2_overnight_d3_s7007=4.1160/077bd5a28ced274b
-kittyv2_overnight_d5_s4004=4.0400/900ba87ff0a9fac1
-kittyv2_overnight_d5_s5005=4.0160/9255b81ee8cbe128
-kittyv2_overnight_d5_s6006=3.8880/b96f1add724a282b
-kittyv2_overnight_d5_s7007=4.1280/027ac38e6f542e61
+kitty_overnight_d0_s4004=4.8555/0a60be0e2d3dcdcc
+kitty_overnight_d0_s6006=4.8745/18a03d489050757e
+kitty_overnight_d0_s8008=4.8455/b41be7cba8622ac9
+kitty_overnight_d0_s10010=4.8785/b8e18c85bf2eb43f
+kitty_overnight_d3_s4004=4.2550/7a0c6ec3321bd781
+kitty_overnight_d3_s5005=4.2810/9bccb8c4efcfd060
+kitty_overnight_d3_s6006=4.2650/3ecf30b2d3242640
+kitty_overnight_d3_s7007=4.2570/9a6e53e99a566dd9
+kitty_overnight_d5_s4004=4.2640/bf83789bae44c453
+kitty_overnight_d5_s5005=4.2820/b1c9351319c1b0e2
+kitty_overnight_d5_s6006=4.2220/62b31af157534fbf
+kitty_overnight_d5_s7007=4.2260/23582b44684cff1c
+kittyv2_overnight_d0_s4004=4.7960/3aba8fc7c9cb7b1b
+kittyv2_overnight_d0_s6006=4.8255/0b6111e88d745924
+kittyv2_overnight_d0_s8008=4.8595/050fe8311aa66315
+kittyv2_overnight_d0_s10010=4.9060/7c05e0b3b1524003
+kittyv2_overnight_d3_s4004=3.9400/80145228db378ad9
+kittyv2_overnight_d3_s5005=3.8360/8648322bf7ca1305
+kittyv2_overnight_d3_s6006=3.7480/304849474d89c68d
+kittyv2_overnight_d3_s7007=3.8440/e01c1236a64fb970
+kittyv2_overnight_d5_s4004=3.8560/fac1d51172731c16
+kittyv2_overnight_d5_s5005=3.8400/39aa72b7e8e35d8d
+kittyv2_overnight_d5_s6006=3.6800/42bc7db93766ebde
+kittyv2_overnight_d5_s7007=3.9120/0fe8dd3c019060a0
+kittyv3_overnight_d0_s4004=5.4415/ef8f478cc29ac13c
+kittyv3_overnight_d0_s6006=5.4420/1db1f56ee6c7afe0
+kittyv3_overnight_d0_s8008=5.4925/4d438e63a8b0f947
+kittyv3_overnight_d0_s10010=5.4800/31546a170b9143a4
+kittyv3_overnight_d3_s4004=4.4040/589046171b4ff1e7
+kittyv3_overnight_d3_s5005=4.4120/aab2998103112f8a
+kittyv3_overnight_d3_s6006=4.4280/065a506b0157b967
+kittyv3_overnight_d3_s7007=4.4800/8ceff16f3976e911
+kittyv3_overnight_d5_s4004=4.4480/7aab790e6273f173
+kittyv3_overnight_d5_s5005=4.4240/3a486cacd40b1360
+kittyv3_overnight_d5_s6006=4.3200/3c56ee10fac66b92
+kittyv3_overnight_d5_s7007=4.6480/1783eee09533f8c9
 dragons_overnight_d0_s4004=5.8785/5845f4e1972221b4
 dragons_overnight_d0_s6006=5.8880/ed491bb1ed1cc6f8
 dragons_overnight_d0_s8008=5.9040/57704cde1626ac92
@@ -734,7 +731,7 @@ fluctuator_overnight_d5_s7007=3.6360/2f27e1e2d5c14fb6
 snow_overnight_d0_s4004=6.1480/53bd05e611ff68c4
 snow_overnight_d3_s4004=5.7200/e66e5beb6d65f152
 snow_overnight_d3_s5005=5.6533/e5108841cf5c7e46
-snow_overnight_d3_s6006=5.6733/521812e601a81415
+snow_overnight_d3_s6006=5.6733/a3a600d0ccd8c3c7
 snow_overnight_d3_s7007=5.7133/ce520ceca98e1ff0
 snow_overnight_d5_s4004=5.7400/4831b1fa1398e40a
 snow_overnight_d5_s5005=5.6200/82879c7551d30292
