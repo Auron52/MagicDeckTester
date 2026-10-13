@@ -2,6 +2,7 @@
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../ai/GameWorkMeter.h"
+#include "../ai/EscStats.h"
 #include "../core/GameLogger.h"
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
@@ -16,6 +17,7 @@
 #include "../ai/ValueArm.h"
 #include "../ai/DecisionProviders.h"   // SelectDecisionProvider + Name(): report which archetype a job runs under
 #include <algorithm>
+#include <array>
 #include <climits>
 #include <condition_variable>
 #include <deque>
@@ -708,6 +710,8 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("constant_exhaust_mult")) { j.arm.constant_exhaust_mult = jspec["constant_exhaust_mult"].get<double>(); }
     if (jspec.contains("esc_single_reserve")) { const json& v = jspec["esc_single_reserve"]; j.arm.esc_single_reserve = v.is_number() ? v.get<int>() : (v.get<bool>() ? 1 : 0); }
     if (jspec.contains("esc_deck_r"))   { j.arm.esc_deck_r   = jspec["esc_deck_r"].get<double>(); }
+    if (jspec.contains("esc_skip"))     { j.arm.esc_skip     = jspec["esc_skip"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("esc_skip_r"))   { j.arm.esc_skip_r   = jspec["esc_skip_r"].get<double>(); }
     if (jspec.contains("esc_fit_depth_cap")) { j.arm.esc_fit_depth_cap = jspec["esc_fit_depth_cap"].get<int>(); }
     if (jspec.contains("esc_depth_cap"))     { j.arm.esc_depth_cap     = jspec["esc_depth_cap"].get<int>(); }
     if (jspec.contains("esc_fit_lazy_r"))    { j.arm.esc_fit_lazy_r    = jspec["esc_fit_lazy_r"].get<bool>() ? 1 : 0; }
@@ -996,6 +1000,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // written to disk. One long long per game -- 166 KB for a 20,800-game matrix.
     static const bool s_dump_units = EnvOn("MTG_DUMP_UNITS");
     std::vector<std::vector<long long>> units(jobs.size());
+    // Per-job escalation tallies (MTG_ESC_JOB_STATS=1; diagnostic, see ai/EscStats.h).
+    static const bool s_esc_job_stats = EnvOn("MTG_ESC_JOB_STATS");
+    std::vector<std::array<std::atomic<long long>, 9>> esc_job(jobs.size());
+    for (auto& a : esc_job) { for (auto& x : a) { x.store(0, std::memory_order_relaxed); } }
     // Per-job core-milliseconds (see BatchJobResult::elapsed_ms). Relaxed adds: the value is read
     // only after the job's last game lands, and that read is already ordered by the acq_rel
     // remaining-counter decrement below.
@@ -1810,8 +1818,16 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     }
                     gamework::PublishTo(&slot_units[slot], &cc.late);
                 }
+                const long long e0[9] = { escstats::t_take_n, escstats::t_take_u, escstats::t_disc_n, escstats::t_disc_u, escstats::t_disc_ver_n, escstats::t_disc_ver_earlier, escstats::t_disc_ver_equal, escstats::t_disc_rescued_n, escstats::t_disc_rescued_main_n };
+                escstats::t_job = job.name.c_str(); escstats::t_gi = wi.game;
                 int wt = engine->RunGame(state, job.max_turns);
+                escstats::t_job = nullptr; escstats::t_gi = -1;
                 const long long g_units = gamework::Used();
+                if (s_esc_job_stats)
+                {
+                    const long long e1[9] = { escstats::t_take_n, escstats::t_take_u, escstats::t_disc_n, escstats::t_disc_u, escstats::t_disc_ver_n, escstats::t_disc_ver_earlier, escstats::t_disc_ver_equal, escstats::t_disc_rescued_n, escstats::t_disc_rescued_main_n };
+                    for (int q = 0; q < 9; ++q) { esc_job[wi.job][q].fetch_add(e1[q] - e0[q], std::memory_order_relaxed); }
+                }
                 // Read BEFORE End(), which resets both (same rule as Used() above).
                 const gamework::Cause g_cause   = gamework::AbandonCause();
                 const double          g_elapsed = gamework::Elapsed();
@@ -2118,6 +2134,15 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
+                // Per-game play digest + work (escalation-skip prototype; see ai/EscStats.h), so a paired
+                // A/B can count the games whose play actually moved, not just the aggregate.
+                static const bool s_esk_game = EnvOn("MTG_ESC_SKIP_LOG");
+                if (s_esk_game)
+                {
+                    std::fprintf(stderr, "[gdg] job=%s gi=%d wt=%d dg=%016llx u=%lld\n", job.name.c_str(), global_gi,
+                                 win_turns[wi.job][wi.game],
+                                 static_cast<unsigned long long>(digests[wi.job][wi.game]), units[wi.job][wi.game]);
+                }
                 if (trace)
                 {
                     dlog.EndGame(win_turns[wi.job][wi.game]);
@@ -2141,6 +2166,15 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 {
                     BatchJobResult r = reduce_job(wi.job);
                     std::lock_guard<std::mutex> lk(cb_mtx);
+                    if (s_esc_job_stats)
+                    {
+                        const auto& e = esc_job[wi.job];
+                        std::cerr << "[esc-job] " << r.name << ": taken=" << e[0].load() << "/" << e[1].load()
+                                  << " discarded=" << e[2].load() << "/" << e[3].load()
+                                  << " disc_verified_win=" << e[4].load() << " (earlier " << e[5].load()
+                                  << ", equal " << e[6].load() << ", partial-pass climb " << e[7].load() << ", partial-pass ladder " << e[8].load() << ")"
+                                  << " units_total=" << r.units_total << "\n" << std::flush;
+                    }
                     on_job_done(r);
                 }
             }

@@ -3,6 +3,7 @@
 #include "../core/EnvFlags.h"
 #include "../core/MemBudget.h"
 #include "TurnSolver.h"
+#include "EscStats.h"               // per-thread escalation taken/discarded tallies (diagnostic)
 #include "ContPinScope.h"
 #include "ManaPayment.h"
 #include "PayLedger.h"   // MTG_PAY_ROLLBACK_AUDIT: the dig-gate half of the count-only instrument
@@ -60708,6 +60709,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // The hybrid's K-predictor / path-to-trust read the PROBE's per-depth structure; this ladder
             // IS the probe under a per-deck shape, so record it as FullSearchLine's ladder would.
             if (g_probe_recording && k >= 0 && k < 16) { g_probe_leaves[k] = leaves; g_probe_cost[k] = cost; }
+            if (escstats::t_rec == 1 && g_fsline_nest == 0 && g_rollout_nest == 0 && k >= 0 && k < 16)
+            { escstats::t_pl[k] = leaves; escstats::t_pc[k] = cost; }
             TRACE("search", "T%d emul pass=%d %s done win=%d cost=%lld leaves=%lld ch=%.0f",
                   state.turn_number, k, heuristic ? "H" : "V", att.win_turn, cost, leaves, ch[k]);
         };
@@ -60991,7 +60994,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                   state.turn_number, pass_depth,
                   budget ? budget->Used() : 0, budget ? budget->Limit() : 0,
                   rescued ? pass_depth : prev_committed, rescued ? " (anytime rescue)" : "");
-            if (rescued) { line = attempt;    committed_depth = pass_depth; }
+            if (rescued) { line = attempt;    committed_depth = pass_depth; escstats::t_esc_rescued_main = true; }
             else         { line = prev_line;  committed_depth = prev_committed; }
             break;
         }
@@ -61027,6 +61030,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         {
             g_hlad_leaves[pass_depth] = g_fs_leaf_evals - leaves_before;
             g_hlad_cost[pass_depth]   = cost;
+        }
+        if (escstats::t_rec != 0 && g_fsline_nest == 0 && g_rollout_nest == 0 && pass_depth >= 0 && pass_depth < 16)
+        {
+            long long* pl = (escstats::t_rec == 1) ? escstats::t_pl : escstats::t_hl;
+            long long* pc = (escstats::t_rec == 1) ? escstats::t_pc : escstats::t_hc;
+            pl[pass_depth] = g_fs_leaf_evals - leaves_before;
+            pc[pass_depth] = cost;
         }
         TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld",
               state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0);
@@ -61204,6 +61214,13 @@ namespace
         std::array<std::atomic<long long>, 16> redo_depth{};    // committed depth AT the decisions that redid
         std::array<std::atomic<long long>, 16> redo_hdepth{};   // heuristic-escalation ACHIEVED depth (hcommitted)
         std::atomic<long long> redo_short{0};                   // escalations whose heuristic pass fell short of user depth
+        // DISCARDED escalations (diagnostic): escalations whose heuristic line the take rule then REJECTED (the
+        // value-leaf line was kept), and the work units each side spent -- the dead work a tighter up-front gate
+        // could remove. Indexed by the probe's committed depth c and the escalation's achieved depth.
+        std::atomic<long long> esc_n_taken{0}, esc_n_discarded{0}, esc_u_taken{0}, esc_u_discarded{0};
+        std::array<std::atomic<long long>, 16> esc_disc_c{};      // discarded, by committed depth c
+        std::array<std::atomic<long long>, 16> esc_disc_u_c{};    // their units, by c
+        std::array<std::atomic<long long>, 16> esc_disc_h{};      // discarded, by achieved heuristic depth
         std::atomic<long long> esc_verified{0};                 // escalations that COMMITTED a verified win (win <= turn+hcommitted-1)
         std::atomic<long long> esc_verified_short{0};           // ... AND at hcommitted < probe committed (verified win the probe pruned)
         std::array<std::atomic<long long>, 16> esc_ver_hdepth{}; // achieved-depth histogram of the VERIFIED-win escalations
@@ -61231,6 +61248,19 @@ namespace
                       << " verified=" << verified.load()
                       << " redo_short=" << redo_short.load()
                       << " (escalations that did NOT reach user depth)\n";
+            {
+                const long long nt = esc_n_taken.load(), nd = esc_n_discarded.load();
+                const long long ut = esc_u_taken.load(), ud = esc_u_discarded.load();
+                std::cerr << "[hybrid-stats] escalations TAKEN=" << nt << " (units " << ut << ")  DISCARDED="
+                          << nd << " (units " << ud << ", mean " << (nd > 0 ? ud / nd : 0) << "/esc)\n";
+                std::cerr << "[hybrid-stats] discarded by committed c (n/units):";
+                for (int d = 0; d < 16; ++d)
+                { if (esc_disc_c[d].load() > 0) { std::cerr << " c" << d << ":" << esc_disc_c[d].load() << "/" << esc_disc_u_c[d].load(); } }
+                std::cerr << "\n[hybrid-stats] discarded by achieved heuristic depth:";
+                for (int d = 0; d < 16; ++d)
+                { if (esc_disc_h[d].load() > 0) { std::cerr << " h" << d << ":" << esc_disc_h[d].load(); } }
+                std::cerr << "\n";
+            }
             std::cerr << "[hybrid-stats] esc_verified=" << esc_verified.load()
                       << " (escalations committing a VERIFIED win) of which at depth < probe: "
                       << esc_verified_short.load()
@@ -61594,6 +61624,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // `avoided` credit of 0), which is what it already read whenever its worker was clean -- i.e.
     // the ISOLATED answer, not the contaminated one.
     for (int d = 0; d < 16; ++d) { g_probe_leaves[d] = 0; g_probe_cost[d] = 0; }
+    // Skip-prototype recording (EscStats.h): outermost decisions only, so a nested hybrid cannot clobber it.
+    const bool esk_outer = (g_fsline_nest == 0 && g_rollout_nest == 0);
+    if (esk_outer)
+    {
+        for (int d = 0; d < 16; ++d) { escstats::t_pl[d] = 0; escstats::t_pc[d] = 0; escstats::t_hl[d] = 0; escstats::t_hc[d] = 0; }
+    }
     if (s_esc_predict || eff_single_predict)
     {
         g_probe_recording = true;
@@ -61777,6 +61813,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // held-out condemnation residuals flow through the probe's filtered projections.
         static const bool s_condemn_honest_probe = EnvOn("MTG_CONDEMN_HONEST_PROBE");
         CondemnSuppressGuard _hp(s_condemn_honest_probe);
+        escstats::RecGuard _esk_rec(esk_outer ? 1 : 0);
         line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
     }
     g_probe_recording = false;
@@ -62087,6 +62124,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     }
     if (escalate)
     {
+        const long long esc_u0 = gamework::Used();   // diagnostic: units this escalation spends
+        escstats::t_esc_rescued = false; escstats::t_esc_rescued_main = false;
         // Diagnostics: how much of the probe's budget is left when we decide to escalate. Under the
         // legacy shared budget this IS the escalation's whole allowance; under fresh/split arms it
         // still measures what the probe consumed. Probe units/leaf uses the recorded probe structure
@@ -62192,6 +62231,51 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             esc_budget = &esc_alloc_budget;
         }
         SearchLine hline;
+        // Skip-prototype bookkeeping (EscStats.h): which escalation path ran, its budget at entry, and the
+        // single path's predicted target. Read only by the MTG_ESC_SKIP_LOG line and the skip lever.
+        int esk_path = 0, esk_target = -1, esk_daff = -1, esk_cap = -1;
+        const long long esk_lim  = (esc_budget && !esc_budget->Unlimited()) ? esc_budget->Limit() : -1;
+        const long long esk_rem0 = (esc_budget && !esc_budget->Unlimited()) ? std::max<long long>(0, esc_budget->Remaining()) : -1;
+        const long long esk_bu0  = esc_budget ? esc_budget->Used() : 0;
+        // UP-FRONT ESCALATION SKIP (MTG_ESC_SKIP_PREDICT, DEFAULT OFF pending its A/B). The take
+        // decision below throws the escalation's line away unless it reached T = take_at[committed], and the
+        // escalation is a ladder whose start gate asks only "does the NEXT pass fit": so on a starved budget it
+        // pays for d1 (and maybe d2), stops short of T, and every unit is discarded. Measured 2026-10-13: 3.5%
+        // of all play units fleet-wide, 0 of 4,756 discarded escalations holding any win. This asks the SAME
+        // start gate ONCE, up front, about the whole path to T, with each heuristic pass's cost predicted from
+        // the probe's own record at that depth: probe units + R x probe leaves. R = 0 is the floor (the
+        // heuristic pass costs at least the tree the probe walked); a larger R predicts more rollout cost and
+        // skips more. A PRICE, not a gate on what is findable: at an unlimited budget nothing is ever skipped.
+        // Arm (per job) > env. Requires the probe's structure to have been recorded (outermost decisions).
+        static const bool   s_esk_env   = EnvOn("MTG_ESC_SKIP_PREDICT");
+        static const double s_esk_r_env = []{ const char* e = std::getenv("MTG_ESC_SKIP_R");
+                                              return (e && *e) ? std::atof(e) : 0.0; }();
+        const bool   esk_on = (valuearm::t_arm.esc_skip >= 0) ? (valuearm::t_arm.esc_skip != 0) : s_esk_env;
+        const double esk_R  = (valuearm::t_arm.esc_skip_r >= 0.0) ? valuearm::t_arm.esc_skip_r : s_esk_r_env;
+        const int    esk_T  = (!line_constant && !value_fallback_take_at.empty() && s_vto_override < 0)
+                            ? TakeAtForCommitted(value_fallback_take_at, committed) : -1;
+        // Deepest heuristic pass the ladder's start gate is predicted to admit on `rem0` units, walking the
+        // gate exactly as FullSearchLine does (pass 1 always; pass 2 on the kDefaultGrowth bootstrap; then the
+        // measured-ratio extrapolation), with predicted per-pass costs in place of measured ones. Returns a
+        // large value when the probe never recorded the depths it would need (cannot predict => never skip).
+        auto esk_reach = [&](long long rem0, int T) -> int
+        {
+            const int top = std::min(std::min(T, committed), 15);
+            if (top < 1 || escstats::t_pc[1] <= 0) { return 99; }
+            double h[16] = {0};
+            for (int d = 1; d <= top; ++d)
+            { h[d] = static_cast<double>(escstats::t_pc[d]) + esk_R * static_cast<double>(escstats::t_pl[d]); }
+            double rem = static_cast<double>(rem0) - h[1];
+            int reached = 1;
+            for (int d = 2; d <= top; ++d)
+            {
+                const double est = (d == 2) ? h[1] * kDefaultGrowth : h[d - 1] * (h[d - 1] / std::max(1.0, h[d - 2]));
+                if (est > kStartGateAlpha * std::max(0.0, rem)) { break; }
+                reached = d; rem -= h[d];
+            }
+            return (top < T && reached == top) ? 99 : reached;
+        };
+        bool esk_skipped = false;
         static const bool s_esc_predict_warm = EnvOn("MTG_ESC_PREDICT_WARM");
         if (s_esc_predict && (tt == nullptr || s_esc_predict_warm))
         {
@@ -62379,6 +62463,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             const int cap = eff_single_deck
                           ? std::clamp(escalation_cap, 1, depth)
                           : std::clamp(committed - s_esc_single_off, 1, depth);
+            esk_path = 1; esk_cap = cap;
             // DETERMINISM: the adopted per-deck path (eff_single_deck) must use a FIXED cost-per-leaf R and NEVER
             // mutate the thread_local g_esc_R. g_esc_R's EMA trajectory depends on the game->thread schedule (each
             // worker converges R over the games it happens to run), so an adaptive R makes PLAY non-reproducible
@@ -62438,6 +62523,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     daff = d; rem -= chat[d];
                 }
                 target = std::min(cap, std::max(1, daff));
+                esk_daff = daff;
                 // DIAGNOSTIC ONLY (MTG_ESC_SINGLE_DIAG=1): why the predicted target landed where it did.
                 // Answers "is R even live here?" -- R can only move `target` when the affordability walk
                 // stops strictly below `cap`; if pmax collapses (committed==1) or chat[1] already blows the
@@ -62533,7 +62619,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // be roughly right: R is a hint, the live estimate makes the final depth reliable.
             static const bool s_esc_single_climb = EnvOn("MTG_ESC_SINGLE_CLIMB");
             const bool eff_climb = eff_single_deck || s_esc_single_climb;
-            int  td = target;
+            esk_target = target;
+            // Up-front skip, single path: the predicted affordable depth is already known here, before any
+            // heuristic pass runs, and only the climb could lift the result above it.
+            esk_skipped = esk_on && esk_outer && esk_T > 0 && esc_budget && !esc_budget->Unlimited()
+                       && target < esk_T;
+            if (esk_skipped) { hline = line; }
+            int  td = esk_skipped ? 0 : target;
             bool aborted = true;
             bool first = true;
             long long c_last = 0;   // measured budget-work of the last COMPLETED pass (for the climb estimate)
@@ -62693,7 +62785,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                             if (up.win_turn < hline.win_turn)
                             { g_idwaste_rescuable.fetch_add(1, std::memory_order_relaxed); }
                         }
-                        if (s_id_anytime && up.win_turn < hline.win_turn) { hline = up; }
+                        if (s_id_anytime && up.win_turn < hline.win_turn) { hline = up; escstats::t_esc_rescued = true; }
                         break;
                     }
                     c_prev_climb = static_cast<double>(c_last);
@@ -62720,7 +62812,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                       ? valuearm::t_arm.esc_depth_cap : s_esc_depth_cap_env;
             const int esc_depth = (s_esc_depth_cap > 0) ? std::min(depth, s_esc_depth_cap) : depth;
             const long long used_before = (s_esc_measure && esc_budget) ? esc_budget->Used() : 0;
-            hline = FullSearchLine(state, esc_depth, max_turns, second_main, tt, esc_budget, &hcommitted);
+            esk_path = 2;
+            escstats::RecGuard _esk_rec(esk_outer ? 2 : 0);
+            esk_skipped = esk_on && esk_outer && esk_T > 1 && esc_budget && !esc_budget->Unlimited()
+                       && esk_reach(std::max<long long>(0, esc_budget->Remaining()), esk_T) < esk_T;
+            if (esk_skipped) { hline = line; hcommitted = 0; }
+            else { hline = FullSearchLine(state, esc_depth, max_turns, second_main, tt, esc_budget, &hcommitted); }
             if (s_esc_measure && esc_budget && hcommitted >= 1)
             {
                 // Ladder work for this escalation (interior + rollout units).
@@ -62783,6 +62880,62 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                 : (hcommitted > committed - kValueTrustOffset);
         }
         const bool wt_changed = taken && (hline.win_turn != old_wt);
+        {
+            const long long eu0 = gamework::Used() - esc_u0;
+            if (taken) { ++escstats::t_take_n; escstats::t_take_u += eu0; }
+            else
+            {
+                ++escstats::t_disc_n; escstats::t_disc_u += eu0;
+                if (escstats::t_esc_rescued) { ++escstats::t_disc_rescued_n; }
+                if (escstats::t_esc_rescued_main) { ++escstats::t_disc_rescued_main_n; }
+                if ((hcommitted > 0 && hline.win_turn <= state.turn_number + hcommitted - 1) || escstats::t_esc_rescued)
+                {
+                    ++escstats::t_disc_ver_n;
+                    if (hline.win_turn < old_wt)       { ++escstats::t_disc_ver_earlier; }
+                    else if (hline.win_turn == old_wt) { ++escstats::t_disc_ver_equal; }
+                }
+            }
+        }
+        static const bool s_esk_log = EnvOn("MTG_ESC_SKIP_LOG");
+        if (s_esk_log && esk_outer)
+        {
+            // ONE line per escalation, built then written with a single call (pooled workers share stderr).
+            char buf[4096];
+            int n = std::snprintf(buf, sizeof buf,
+                "[esk] job=%s gi=%d turn=%d path=%d c=%d depth=%d T=%d lc=%d lim=%lld rem0=%lld bu=%lld eu=%lld "
+                "target=%d daff=%d cap=%d hcom=%d taken=%d owt=%d hwt=%d resc=%d skip=%d",
+                escstats::t_job ? escstats::t_job : "-", escstats::t_gi, state.turn_number, esk_path, committed, depth,
+                (!value_fallback_take_at.empty() && s_vto_override < 0) ? TakeAtForCommitted(value_fallback_take_at, committed) : -1,
+                line_constant ? 1 : 0, esk_lim, esk_rem0, (esc_budget ? esc_budget->Used() : 0) - esk_bu0,
+                gamework::Used() - esc_u0, esk_target, esk_daff, esk_cap, hcommitted, taken ? 1 : 0,
+                old_wt, hline.win_turn, escstats::t_esc_rescued ? 1 : 0, esk_skipped ? 1 : 0);
+            auto arr = [&](const char* tag, const long long* a)
+            {
+                if (n < 0 || n >= static_cast<int>(sizeof buf) - 40) { return; }
+                n += std::snprintf(buf + n, sizeof buf - n, " %s=", tag);
+                for (int d = 1; d <= std::min(depth, 15); ++d)
+                {
+                    if (n >= static_cast<int>(sizeof buf) - 24) { break; }
+                    n += std::snprintf(buf + n, sizeof buf - n, "%lld%s", a[d], d < std::min(depth, 15) ? "/" : "");
+                }
+            };
+            arr("pl", escstats::t_pl); arr("pc", escstats::t_pc); arr("hl", escstats::t_hl); arr("hc", escstats::t_hc);
+            if (n > 0 && n < static_cast<int>(sizeof buf) - 1) { buf[n++] = '\n'; buf[n] = 0; }
+            std::fputs(buf, stderr);
+        }
+        if (g_hybrid_stats.enabled)
+        {
+            const long long eu = gamework::Used() - esc_u0;
+            const int ci = (committed >= 0 && committed < 16) ? committed : 15;
+            const int hi2 = (hcommitted >= 0 && hcommitted < 16) ? hcommitted : 15;
+            if (taken) { g_hybrid_stats.esc_n_taken.fetch_add(1); g_hybrid_stats.esc_u_taken.fetch_add(eu); }
+            else
+            {
+                g_hybrid_stats.esc_n_discarded.fetch_add(1); g_hybrid_stats.esc_u_discarded.fetch_add(eu);
+                g_hybrid_stats.esc_disc_c[ci].fetch_add(1); g_hybrid_stats.esc_disc_u_c[ci].fetch_add(eu);
+                g_hybrid_stats.esc_disc_h[hi2].fetch_add(1);
+            }
+        }
         // Opt-in escalation-outcome dump (byte-identical when MTG_ESCALATION_DUMP unset). All features are
         // observed BEFORE the escalation ran, so they can gate a future confidence-skip. See the doc.
         if (g_escalation_dump.enabled)
