@@ -18,9 +18,11 @@ THREE POOLED BATCHES, every deck in each (the steps depend on each other's data,
              GIVE UP (fast) when the deck has no ladder escalations (single-path, or trust-dominated), or when
              the HEADROOM -- every ladder escalation that ran and was thrown away, as a share of all the
              games' work -- is under 4% (USER 2026-10-13: "relatively fast for most decks ... give up if there
-             is not a notable amount of headroom. So maybe 4%+"). Otherwise fit the q10 per-depth vector and
-             project what it would save (the projection matched the measured A/B within 0.2 points on six
-             decks).
+             is not a notable amount of headroom. So maybe 4%+"). The gate is that CEILING, not the fit's
+             projected saving, on purpose: a deck that clears 4% may project only 2-3% (KittyV3: 5.9% ceiling,
+             -3% projected), and the USER (same day) ruled that worth the A/B: "If we get 2-3% that's not a
+             waste of time." Otherwise fit the q10 per-depth vector and project what it would save (the
+             projection matched the measured A/B within 0.2 points on six decks); a deck projecting 0 gives up.
   2. A/B     the surviving decks, R = 0 vs the vector, paired, on FRESH seeds (the fit never sees them),
              sized to ~15 min of the box per deck (2400..6000 games).
   3. ISOLATE every game whose digest moved, replayed ALONE at both arms as one-game batch chunks. A game that
@@ -47,7 +49,7 @@ import deck_registry                                   # noqa: E402
 import esc_skip_calibrate as cal                       # noqa: E402
 from engine_bin import engine_bin, kind                # noqa: E402
 
-HEADROOM_MIN = 0.04            # USER 2026-10-13
+HEADROOM_MIN = 0.04            # USER 2026-10-13; gates the CEILING, not the projection (USER: 2-3% is worth it)
 PROBE_GAMES, PROBE_SEED = 1200, 7_100_000
 AB_SEED = 7_300_000            # disjoint from the probe's seeds: the A/B is held out from the fit
 AB_WALL_S, AB_MIN, AB_MAX = 900, 2400, 6000

@@ -135,6 +135,8 @@ It reproduced every hand-made decision of the same day.
 * **There is no q05 fallback.** q05 changed no game anywhere in the A/B, with about 60% of q10's savings.
   Retrying a failed deck at q05 would cost a second A/B, which works against the "fast" brief, so it was
   left out.
-* **The gate is the ceiling, not the projection.** Headroom is read as the most that could be saved. On
-  the six measured decks only Selesnya (12.3%) and KittyV3 (5.8%) clear 4%. KittyV3's achievable saving
-  is about 3.3%. Gating on the projection would admit only Selesnya.
+* **The gate is the ceiling, not the projection. DECIDED (USER 2026-10-13): keep it.** Headroom is read as
+  the most that could be saved. On the six measured decks only Selesnya (12.3%) and KittyV3 (5.8%) clear 4%.
+  KittyV3's achievable saving is about 3.3%, and gating on the projection would admit only Selesnya. The
+  user: *"I think that's fine. If we get 2-3% that's not a waste of time."* So a deck that clears the 4%
+  ceiling earns its A/B even when the fit projects only 2-3%.
