@@ -62631,15 +62631,40 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             static const bool s_esc_single_climb = EnvOn("MTG_ESC_SINGLE_CLIMB");
             const bool eff_climb = eff_single_deck || s_esc_single_climb;
             esk_target = target;
-            // Up-front skip, single path (MTG_ESC_SKIP_SINGLE, DEFAULT OFF -- WITHDRAWN 2026-10-13): skip when
-            // the predicted target is below T. LOSSY as written, because the climb below can lift the result
-            // past the target: on Creature Giving, Dragonstorm and Hinata (none of which discard at play
-            // settings, so the calibration never saw them) the climb reached T and the escalation was TAKEN in
-            // every play change the tiers found -- 5 of 5, one of them a T6 win the leaf rated T9. A safe form
-            // must predict the climb too; until one is measured this half stays off.
-            static const bool s_esk_single = EnvOn("MTG_ESC_SKIP_SINGLE");
-            esk_skipped = s_esk_single && esk_on && esk_outer && esk_T > 0 && esc_budget && !esc_budget->Unlimited()
-                       && target < esk_T;
+            // Up-front skip, single path (MTG_ESC_SKIP_SINGLE, DEFAULT ON; =0 disables). The first form --
+            // skip whenever the predicted target is below T -- was WITHDRAWN 2026-10-13 as LOSSY: the climb below
+            // can lift the result past the target, and on Creature Giving, Dragonstorm and Hinata (none of which
+            // discard at play settings, so the calibration never saw them) it reached T and the escalation was
+            // TAKEN in all 5 play changes the tiers found, one of them a T6 win the leaf rated T9. This form
+            // predicts the CLIMB too, optimistically: the target pass costs only the probe's tree at that depth
+            // (plus R x leaves, R = 0 by default), and each climb step is extrapolated by the probe's leaf ratio
+            // exactly as the climb does it; skip only if even that cannot reach T. No probe record for a needed
+            // depth => cannot predict => never skip. Offline on the 48 regression cells of the 12 single-path
+            // decks (1,138 escalations): the withdrawn form skipped 20 TAKEN escalations, this one 0, while still
+            // removing 73% of TH's and 65% of Stompy's discarded units. ADOPTED 2026-10-13 on a held-out paired
+            // A/B (12 single-path decks x 480 games, play settings): 0 / 5760 games changed play; units TH -3.1%,
+            // Stompy -1.7%, every other deck untouched (the skip never fires where the climb can reach T).
+            static const bool s_esk_single = EnvOn("MTG_ESC_SKIP_SINGLE", true);
+            auto esk_climb_reach = [&](long long rem0, int t, int T) -> int
+            {
+                if (t >= T) { return t; }
+                if (t < 1 || t >= 15 || escstats::t_pc[t] <= 0) { return 99; }
+                double h   = static_cast<double>(escstats::t_pc[t]) + esk_R * static_cast<double>(escstats::t_pl[t]);
+                double rem = static_cast<double>(rem0) - h;
+                while (t < T)
+                {
+                    if (t + 1 >= 16 || escstats::t_pl[t + 1] <= 0) { return 99; }
+                    const double est = h * static_cast<double>(escstats::t_pl[t + 1])
+                                     / static_cast<double>(std::max<long long>(1, escstats::t_pl[t]));
+                    if (est > kStartGateAlpha * std::max(0.0, rem)) { return t; }
+                    rem -= est; h = est; ++t;
+                }
+                return t;
+            };
+            const bool esk_single_on = (valuearm::t_arm.esc_skip_single >= 0) ? (valuearm::t_arm.esc_skip_single != 0) : s_esk_single;
+            esk_skipped = esk_single_on && esk_on && esk_outer && esk_T > 0 && esc_budget && !esc_budget->Unlimited()
+                       && target < esk_T
+                       && esk_climb_reach(std::max<long long>(0, esc_budget->Remaining()), target, esk_T) < esk_T;
             if (esk_skipped) { hline = line; }
             int  td = esk_skipped ? 0 : target;
             bool aborted = true;

@@ -712,6 +712,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("esc_deck_r"))   { j.arm.esc_deck_r   = jspec["esc_deck_r"].get<double>(); }
     if (jspec.contains("esc_skip"))     { j.arm.esc_skip     = jspec["esc_skip"].get<bool>() ? 1 : 0; }
     if (jspec.contains("esc_skip_r"))   { j.arm.esc_skip_r   = jspec["esc_skip_r"].get<double>(); }
+    if (jspec.contains("esc_skip_single")) { j.arm.esc_skip_single = jspec["esc_skip_single"].get<bool>() ? 1 : 0; }
     if (jspec.contains("esc_fit_depth_cap")) { j.arm.esc_fit_depth_cap = jspec["esc_fit_depth_cap"].get<int>(); }
     if (jspec.contains("esc_depth_cap"))     { j.arm.esc_depth_cap     = jspec["esc_depth_cap"].get<int>(); }
     if (jspec.contains("esc_fit_lazy_r"))    { j.arm.esc_fit_lazy_r    = jspec["esc_fit_lazy_r"].get<bool>() ? 1 : 0; }

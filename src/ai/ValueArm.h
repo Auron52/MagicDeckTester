@@ -128,6 +128,7 @@ struct Arm
     // Per-job so the on/off arms and an R sweep share one pooled batch (see TurnSolver.cpp).
     int         esc_skip          = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SKIP_PREDICT)
     double      esc_skip_r        = -1.0;   // <0 unset => env => 0        (MTG_ESC_SKIP_R)
+    int         esc_skip_single   = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SKIP_SINGLE)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // GREEDY-WALK CHARGE WEIGHT (MTG_SOLVE_CHARGE_W): visits per charged unit, >=1. NOT a value-leaf
     // setting -- it lives here because this struct is the per-job NUMERIC arm (heurarm::Arm is
