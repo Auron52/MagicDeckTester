@@ -62,6 +62,25 @@ struct Job
     // exactly as the single-run `--seed (base+off) --game-index off` form does). Default 0 keeps
     // every existing manifest byte-identical.
     int             game_index          = 0;
+    // INDEX-CARRY SKIP LIST ("skip_games": [<global gi>, ...]), the consumer half of
+    // src/core/IndexCarry.h. GLOBAL indices (i.e. game_index + i), matching every other gi the
+    // manifest and the `[win]` lines speak in. A listed game is NEVER ENQUEUED: no work item, no
+    // state, no output line -- the driver already knows that game's answer because it proved the
+    // game cannot reach any card this arm changed, and it fills the result in from the base arm.
+    //
+    // THE ENGINE FABRICATES NOTHING. It does not write a win turn it did not compute and it does not
+    // claim the game ran; `games_played` and the aggregate simply count fewer games, and the driver
+    // is what reconstitutes the full per-game series. That split is deliberate: the soundness
+    // argument belongs to the driver (it owns the decklists, the numbering and the preconditions),
+    // so the engine must not be able to launder a skipped game into a result.
+    //
+    // BYTE-IDENTICAL for the games that DO run, which is what makes this safe to leave in the hot
+    // path. Game i keeps its own shuffle seed (`seed + i`) and its own opponent-spawn index
+    // (`game_index + i`) regardless of which other games are present, and the relative per-game
+    // ceiling counts its calibration window by GLOBAL INDEX rather than by position in the work list
+    // -- so dropping games does not slide the window. An absent key enqueues everything, so every
+    // pre-existing manifest is untouched.
+    std::vector<int> skip_games;
     // FORCED-MULLIGAN replay ("force_mulligan": "<count>:<n1,n2,...>"), the reference-bench shape:
     // keep at exactly <count> mulligans bottoming exactly those card numbers, reconstructing a
     // hand-played game's recorded opening hand so the replay measures PLAY, not mulligan policy.
@@ -672,6 +691,32 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.games               = jspec["games"].get<int>();
     j.seed                = jspec["seed"].get<uint64_t>();
     j.game_index          = jspec.value("game_index", 0);   // chunk offset; see Job::game_index
+    // Index-carry skip list (see Job::skip_games). VALIDATED HERE, loudly, because a silently
+    // ignored or out-of-range entry would read as "the carry skipped that game" while the game
+    // actually ran -- or worse, as a game the driver then fills in from base having never checked
+    // the engine agreed. Same posture ParseJob already takes toward an unknown heurarm flag name.
+    if (jspec.contains("skip_games"))
+    {
+        const json& sg = jspec["skip_games"];
+        if (!sg.is_array())
+        { throw std::runtime_error("manifest job \"skip_games\" must be an array of global game indices"); }
+        for (const json& e : sg)
+        {
+            const int gi = e.get<int>();
+            const int local = gi - j.game_index;
+            if (local < 0 || local >= j.games)
+            {
+                throw std::runtime_error("manifest job \"" + j.name + "\": skip_games "
+                                         + std::to_string(gi) + " is outside this job's games ["
+                                         + std::to_string(j.game_index) + ", "
+                                         + std::to_string(j.game_index + j.games) + ")");
+            }
+            j.skip_games.push_back(local);
+        }
+        std::sort(j.skip_games.begin(), j.skip_games.end());
+        if (std::adjacent_find(j.skip_games.begin(), j.skip_games.end()) != j.skip_games.end())
+        { throw std::runtime_error("manifest job \"" + j.name + "\": duplicate entry in skip_games"); }
+    }
     // Same spec string the CLI's --force-mulligan takes, through the SAME parser (see Job::fm_count).
     {
         const std::string fm = jspec.value("force_mulligan", std::string());
@@ -1028,15 +1073,41 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         units[j].assign(jobs[j].games, 0);
     }
 
-    // Flatten every game of every job into one work list.
+    // Flatten every game of every job into one work list, minus each job's index-carry skip list
+    // (see Job::skip_games). A skipped slot is stamped kSkipped here, which reuses the EXISTING
+    // condemned-cell path in reduce_job verbatim: `win_turns == kSkipped` with `abandoned_at == 0`
+    // drops the game from games_played and from the aggregate without recording an outcome. That is
+    // the right sentinel rather than a new one -- "the pool did not run this game" is precisely what
+    // it already means, and -1 ("played, did not win") is the value that must never be used here.
     std::vector<WorkItem> items;
     {
         std::size_t total = 0;
-        for (const Job& j : jobs) { total += static_cast<std::size_t>(std::max(0, j.games)); }
+        for (const Job& j : jobs)
+        { total += static_cast<std::size_t>(std::max(0, j.games)) - j.skip_games.size(); }
         items.reserve(total);
         for (int j = 0; j < static_cast<int>(jobs.size()); ++j)
         {
-            for (int gi = 0; gi < jobs[j].games; ++gi) { items.push_back({j, gi}); }
+            const std::vector<int>& sk = jobs[j].skip_games;
+            std::size_t s = 0;
+            for (int gi = 0; gi < jobs[j].games; ++gi)
+            {
+                // sk is sorted and deduped (ParseJob), so one forward cursor matches it in O(games).
+                if (s < sk.size() && sk[s] == gi) { ++s; win_turns[j][gi] = kSkipped; continue; }
+                items.push_back({j, gi});
+            }
+        }
+    }
+    {
+        // Say so on stderr, once per job that skips anything. A performance feature that silently
+        // runs fewer games than the manifest asked for is indistinguishable from a truncated run,
+        // which is the one thing CLAUDE.md's no-timeout rule exists to keep legible -- so the count
+        // is printed where every other per-job line goes, and the driver cross-checks it.
+        for (const Job& j : jobs)
+        {
+            if (j.skip_games.empty()) { continue; }
+            std::fprintf(stderr, "[icarry-skip] job=%s skipped=%zu of %d (index-carry: no access to "
+                                 "any changed card)\n",
+                         j.name.c_str(), j.skip_games.size(), j.games);
         }
     }
 
@@ -1434,7 +1505,13 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     std::vector<std::atomic<int>> remaining(jobs.size());
     for (std::size_t j = 0; j < jobs.size(); ++j)
     {
-        remaining[j].store(jobs[j].games, std::memory_order_relaxed);
+        // MINUS THE INDEX-CARRY SKIPS, or the job never completes. A skipped game produces no work
+        // item, so no worker ever decrements for it: counting it here left the counter stuck above
+        // zero, on_job_done never fired, and the job's `played=/ms=/units=` summary line was simply
+        // ABSENT from the streamed output. That is how the first carried run presented -- correct
+        // per-game results, correct deltas, and a `nan` in the ms/game column with no error anywhere.
+        remaining[j].store(jobs[j].games - static_cast<int>(jobs[j].skip_games.size()),
+                           std::memory_order_relaxed);
     }
     std::mutex cb_mtx;
 

@@ -212,3 +212,99 @@ newly added card, which is a bug detector for the heuristic.
   ~56,000-64,000 games each, so order 2x, and better the narrower the edit.
 * Fungus is the easy first case: **no tutors, no mill, no shuffle effects** in either list; the only
   library-reader is Psychotrope Thallid's `sac_outlet_draw`, which merely extends the prefix.
+
+---
+
+## BUILT AND MEASURED, 2026-10-13 -- `"index_carry": true`
+
+Both halves are in. `scripts/deck_compare.py` skips the games an arm provably cannot play
+differently from base, and the saving is real:
+
+**4 land-swap arms x 2,000 games, Fungus candidate-b (d5/b20, seed 1300000): 241 s carried vs 279 s
+uncarried = 1.16x**, with 3,175 of 8,000 arm games skipped (39.7%). The delta / se / t / ident%
+tables are IDENTICAL to the uncarried run on every arm, and a smaller paired test was checked PER
+GAME across all 1,200 games.
+
+### Skip rate falls fast in the number of CHANGED SLOTS -- so screen in increments of ONE
+
+| changed slots | skip rate (measured) |
+|---|---|
+| 1 | **68%** (from the mask distribution) |
+| 2 | **45-47%** |
+| 3 | 32% |
+| 4 | **21.6%** |
+| 6 | 11% |
+| 8 | 6% |
+
+USER 2026-10-13: *"In the majority of cases we should probably move by increments of 1. That way we
+get more numbers and high reusage."* The table is why: **halving the increment roughly doubles the
+reuse**, so a 1-step ladder is cheaper PER ARM as well as more informative. Use the spec's `replace`
+map on every arm -- it is what makes a 1-for-1 swap k=1 rather than k=2, by pairing the vacated slot
+with the added copy so only ONE number's card differs.
+
+### The engine half
+
+Per-job `"skip_games": [<global gi>, ...]` (GLOBAL indices, matching the `[win]` lines). A listed
+game is never enqueued and is stamped `kSkipped`, reusing the existing condemned-cell reduce path.
+**The engine fabricates nothing** -- it does not write a win turn it did not compute; the driver
+reconstitutes the series, because the soundness argument belongs to whoever owns the decklists.
+Byte-identical for the games that do run (verified: the same 8 games, same win turns, with 4 skipped
+alongside). `ParseJob` validates the list loudly -- an out-of-range entry is a hard error, because a
+silently ignored one would read as "the carry skipped that game" while the game actually ran.
+
+### Two preconditions, refused PER ARM
+
+An ineligible arm simply runs in full, so turning the carry on can only make a run cheaper or
+identical.
+
+1. **The value model must not split on library COMPOSITION** (`lib_lands`, `lib_creatures`,
+   `lib_damage_sources`, `lib_draw_engines`, `lib_land_density_pct`, `plan_dig_yield`). Read out of
+   the model's own trees, not trusted to a doc.
+2. **The deck-wide NONLAND coloured-pip vector must be unchanged.** `ChosenFloatColorCandidates`
+   sums it over the library -- and `stable_sort`s the float-colour fan by DESCENDING magnitude, so
+   presence is not sufficient and the full vector must match. Land-for-land arms pass automatically
+   (its `scan` returns early for lands); most spell swaps do not, and are correctly refused with the
+   moved colours named (`Mycoloth 2 -> Slimefoot 3`: `B 3->5, G 41->39`).
+
+Deck-wide equality is SUFFICIENT, not merely necessary: a skipped game never draws the changed slots,
+so those cards sit in the library all game and are counted in every zone that walk sums -- the totals
+cannot drift apart mid-game.
+
+### What keeps it sound as the engine changes
+
+`carry_sites_unchanged()` greps the tree for `Library::RawAt` callers and REFUSES to carry if the set
+has moved from `CARRY_RAWAT_SITES`. Every argument here is about a KNOWN set of unrecorded library
+reads; a sixth one added later would make the skip unsound while every visible check still passed.
+The count is deliberately crude -- it cannot tell a safe new site from an unsafe one, so it refuses
+either way and makes someone write the argument down.
+
+### Verification is unconditional
+
+Every 50th otherwise-skippable game is HELD BACK and played anyway; a win-turn mismatch is a hard
+failure naming the games, never a warning. Also forced to play: any game with `tutor=1` (a tutor can
+name a SIDEBOARD card, which the 60-bit maindeck mask does not cover at all) and any with `wlr > 0`.
+
+`<stem>.<label>.carryfill.json` persists the filled-in games and `--confirm` merges it. Without that,
+a later confirm re-reading the deliberately-short `.err` log would pair on the PLAYED games only --
+silently dropping exactly the games the carry proved were ties, which is the subset most favourable
+to finding an effect. A performance feature turning into a measurement bias, invisibly.
+
+### Two bugs worth recording, because both PASSED every soundness check while delivering nothing
+
+* The verification stride counted with `len(skip)`, which never advances while the branch keeps
+  choosing `sample` -- so `0 % N == 0` stayed true and ALL 88 skippable games went to verification.
+  The run reported "0.0% skipped" and was perfectly sound. Verifying everything is not wrong, just
+  worthless.
+* The engine's per-job `remaining` counter was not reduced by the skips, so the job never completed,
+  `on_job_done` never fired, and its `played=/ms=/units=` summary line was simply ABSENT. It surfaced
+  only as `nan` in the ms/game column, with correct per-game results and correct deltas everywhere.
+
+A performance feature that silently performs nothing is the failure mode to design against here.
+
+### Still owed
+
+* `Sink::BeginTurn()` has no turn-boundary hook, so the **win-turn relaxation** above is still
+  unmeasured. It would raise the skip rate further.
+* The wave barrier could be removed by moving the skip decision INTO the batch (base and arm jobs
+  share a `gi`, so arm game `gi` becomes droppable the moment base game `gi` lands) -- one pool, no
+  wave. At the measured scale the barrier costs little, so this is only worth it if that changes.

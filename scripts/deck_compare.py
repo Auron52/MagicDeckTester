@@ -388,11 +388,17 @@ def score(path, arms, max_turns, expect=None):
             if m.group(1) in got:
                 wt = int(m.group(3))
                 got[m.group(1)][int(m.group(2))] = max_turns + 1 if wt < 0 else wt
-    short = {a: len(g) for a, g in got.items() if expect is not None and len(g) != expect}
+    # `expect` may be an int (every job runs the same count, the normal case) or a {job: count} map,
+    # which is what the index-carry phase needs: a carrying arm deliberately runs FEWER games, so a
+    # flat expectation would make the completeness gate fire on exactly the feature that works. The
+    # per-job form keeps the gate at full strength -- it still demands an EXACT count, just the
+    # count the driver asked the engine for.
+    want = (lambda a: expect.get(a)) if isinstance(expect, dict) else (lambda a: expect)
+    short = {a: len(g) for a, g in got.items() if want(a) is not None and len(g) != want(a)}
     if short:
         raise SystemExit(
             "the batch did not finish every game -- refusing to report a number.\n"
-            + "".join(f"  {a:24s} {n:,} of {expect:,}\n" for a, n in sorted(short.items()))
+            + "".join(f"  {a:24s} {n:,} of {want(a):,}\n" for a, n in sorted(short.items()))
             + f"  The log is intact: {os.path.relpath(path, ROOT)}")
     return got
 
@@ -508,6 +514,442 @@ def job_costs(err_path):
     return costs
 
 
+# ============================================================================================
+# INDEX CARRY -- skip the games an arm cannot possibly play differently.
+#
+# USER's idea (2026-10-13): *"keep track of the cards that are relevant (drawn, available) in each
+# game ... skip games where we have no access to changed cards."*
+#
+# THE ARGUMENT, because everything below is only as good as it. The engine records, per game, which
+# maindeck card INDICES the game could have seen (src/core/IndexCarry.h; `MTG_INDEX_CARRY=1` emits
+# `[icarry] job= gi= acc= wlr= tutor=`). Two arms share a numbering, and ShuffleByKey sorts by
+# key(seed, m_number), so position p holds the same NUMBER in both arms -- only the CARD at a number
+# can differ. If the base game never accessed any number whose card this arm changed, then by
+# induction on decisions the arm's game is in an identical state at every decision it makes: same
+# inputs, same choice, same next state. The first divergence would have to be an access to a changed
+# number, and there is none. So the arm's result EQUALS base's, and its mask equals base's too --
+# which is why base's mask may be used to decide the arm's skips.
+#
+# ...PROVIDED NOTHING READS THE LIBRARY WITHOUT RECORDING IT. Library iteration IS recorded (as a
+# conservative whole-library read), but five call sites deliberately read it through the
+# non-recording Library::RawAt, and the induction above is false for any of them whose value can
+# differ between the arms. They are NOT interchangeable:
+#
+#   * Dominance.h's fold and TurnSolver's BuildSimKey digests are SAFE BY CONSTRUCTION. They are
+#     equality/memo keys: an undrawn swap perturbs every key on both sides identically, so the
+#     equality RELATION -- all a memo consumes -- is preserved.
+#   * GoldFishRunner's two setup walks are SETUP-ONLY (pre-shuffle, decklist order; they assign the
+#     very numbers the mask is keyed on).
+#   * KeepModel's Lib* loop and TurnSolver's sac-for-mana pip walk read decision VALUES. Those are
+#     the two preconditions this module checks, and they are checked HERE because the driver is what
+#     owns the decklists and the model.
+#
+# So the precondition list below must stay in 1:1 correspondence with the RawAt call sites. That is
+# not left to memory: carry_sites_unchanged() greps the tree and REFUSES to carry if the set moved.
+# ============================================================================================
+
+# Every non-recording library read, as (file, how many). Keep in sync with Library::RawAt's callers.
+CARRY_RAWAT_SITES = {
+    "src/ai/Dominance.h":            1,   # memo fold                      -- safe by construction
+    "src/ai/TurnSolver.cpp":         3,   # pip walk + 2 BuildSimKey digests -- 1 needs a precondition
+    "src/ai/KeepModel.cpp":          1,   # Lib* features                  -- needs a precondition
+    "src/runner/GoldFishRunner.cpp": 2,   # numbering stamp + validation   -- setup-only
+}
+
+# MidGameFeature names that read library COMPOSITION (KeepModel.h v6 + the v9 interaction). A model
+# that splits on any of these turns an UNDRAWN card into a decision input, which is exactly the
+# "inaccessible != irrelevant" trap -- the carry is then invalid for any swap that moves the
+# corresponding count. `library_size` is deliberately NOT here: it is swap-invariant at a fixed deck
+# size, and a spec that changes the deck size is already flagged as a probable typo.
+CARRY_LIB_FEATURES = {"lib_lands", "lib_creatures", "lib_damage_sources", "lib_draw_engines",
+                      "lib_land_density_pct", "plan_dig_yield"}
+
+
+def carry_sites_unchanged():
+    """-> (ok, message). Refuses the carry if a new non-recording library read has appeared.
+
+    This is the guard that matters most over time: every argument above is about a KNOWN set of
+    unrecorded reads, and a sixth one added later would silently make the skip unsound while every
+    visible check still passed. Counting is crude on purpose -- it cannot tell a safe new site from
+    an unsafe one, so it refuses either way and makes someone write the argument down."""
+    found, missing = {}, []
+    for rel in sorted(CARRY_RAWAT_SITES):
+        p = os.path.join(ROOT, rel)
+        if not os.path.exists(p):
+            missing.append(rel)
+            continue
+        found[rel] = len(re.findall(r"\.RawAt\(", open(p).read()))
+    if missing:
+        return False, "index-carry: these files no longer exist: " + ", ".join(missing)
+    drift = {k: (CARRY_RAWAT_SITES[k], v) for k, v in found.items() if v != CARRY_RAWAT_SITES[k]}
+    # A site in a file the registry does not list at all is the same hazard, so sweep the tree too.
+    extra = []
+    for dirpath, _dirs, files in os.walk(os.path.join(ROOT, "src")):
+        for f in files:
+            if not f.endswith((".cpp", ".h")):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, f), ROOT)
+            if rel == "src/core/Library.h" or rel in CARRY_RAWAT_SITES:
+                continue
+            if re.search(r"\.RawAt\(", open(os.path.join(dirpath, f)).read()):
+                extra.append(rel)
+    if drift or extra:
+        parts = ["index-carry REFUSED: the set of non-recording library reads (Library::RawAt) moved,"
+                 " so the skip's soundness argument no longer covers the tree."]
+        for k, (want, got) in sorted(drift.items()):
+            parts.append(f"    {k}: registry says {want} site(s), found {got}")
+        for k in sorted(extra):
+            parts.append(f"    {k}: NEW file with a RawAt call, not in the registry")
+        parts.append("  Write the argument for each new site (safe by construction? or a consumer-side"
+                     " precondition?),")
+        parts.append("  then update CARRY_RAWAT_SITES. Do NOT just bump the count.")
+        return False, "\n".join(parts)
+    return True, ""
+
+
+def model_split_features(value_profile):
+    """-> set of feature names the value model's trees split on, or None if there is no model.
+
+    The serialized tree is a flat node list; an INTERNAL node is [feature, threshold, lo, hi] and a
+    LEAF is [value]. Reading the model rather than trusting a doc is the point: the precondition is
+    about what this deck's model actually consults."""
+    if not value_profile or not os.path.exists(value_profile):
+        return None
+    em = (json.load(open(value_profile)) or {}).get("eval_model")
+    if not em:
+        return None
+    feats = set()
+    for tree in em.get("trees") or []:
+        for node in tree:
+            if isinstance(node, list) and len(node) == 4 and isinstance(node[0], str):
+                feats.add(node[0])
+    for k in (em.get("coefs") or {}):
+        feats.add(k)
+    return feats
+
+
+def nonland_pip_vector(counts, db):
+    """Per-colour coloured pips summed over NONLAND cards, deck-wide. -> (W,U,B,R,G).
+
+    This is exactly what TurnSolver's ChosenFloatColorCandidates accumulates (its `scan` returns
+    early for lands and sums hand + LIBRARY + graveyard + battlefield). Deck-wide equality is what
+    the carry needs, and it is SUFFICIENT rather than merely necessary: a skipped game never draws
+    the changed slots, so those cards sit in the library for the whole game and are counted in every
+    one of that walk's zones throughout -- the totals therefore cannot drift apart mid-game.
+    MAGNITUDE, not just presence: the walk `stable_sort`s the colours by DESCENDING demand, so two
+    decks with the same nonzero colours but different totals can order the float-colour fan
+    differently, and enumeration order is not something to be casual about under a budget."""
+    pips = [0, 0, 0, 0, 0]
+    for name, n in counts.items():
+        c = db.get(name)
+        if not c or "Land" in (c.get("types") or []):
+            continue
+        cost = c.get("mana_cost") or ""
+        for i, sym in enumerate("WUBRG"):
+            # {B/G} hybrids and {2/W} count toward each listed colour, the same way ManaCost parses
+            # them -- over-counting a hybrid is the conservative direction for an EQUALITY test.
+            pips[i] += n * len(re.findall(r"\{[^}]*" + sym + r"[^}]*\}", cost))
+    return tuple(pips)
+
+
+def changed_numbers(base_nums, arm_nums):
+    """Card NUMBERS whose card differs between base and this arm. -> set of ints.
+
+    Both arms draw the same NUMBER at the same shuffle position (inherit_numbering's load-bearing
+    invariant: the number SET stays {1..60}, and ShuffleByKey sorts by key(seed, number)), so a
+    number is the unit the mask speaks in and the only thing that can differ is the card AT it."""
+    owner = {}
+    for name, nums in base_nums.items():
+        for n in nums:
+            owner[n] = name
+    out = set()
+    for name, nums in arm_nums.items():
+        for n in nums:
+            if owner.get(n) != name:
+                out.add(n)
+    # A number base used and this arm does not (a genuine size decrease) also counts as changed.
+    for n, name in owner.items():
+        if all(n not in nums for nums in arm_nums.values()):
+            out.add(n)
+    return out
+
+
+def carry_mask_bits(numbers):
+    """Card numbers -> the uint64 the engine builds (BitForNumber: bit = number - 1).
+
+    A number outside 1..64 cannot be represented, and the engine degrades such a read to MarkAll
+    rather than aliasing it onto another card's bit -- so a maindeck over 64 cards simply never
+    skips. Mirror that here by refusing instead of silently dropping the out-of-range bits."""
+    bad = sorted(n for n in numbers if not 1 <= n <= 64)
+    if bad:
+        return None, (f"index-carry: card number(s) {bad} are outside the 64-bit mask; the recorder "
+                      f"marks every card accessible in that case, so nothing would skip anyway")
+    m = 0
+    for n in numbers:
+        m |= 1 << (n - 1)
+    return m, ""
+
+
+def carry_eligibility(spec, tag, base_nums, arm_nums, db, model_feats):
+    """Can this arm's games be skipped on the mask? -> (changed_mask, [reasons it cannot]).
+
+    Every reason is reported even when the first already disqualifies the arm: the useful output of
+    a refusal is WHY, and "it would also have failed the pip test" changes what you try next."""
+    reasons = []
+    changed = changed_numbers(base_nums, arm_nums)
+    if not changed:
+        reasons.append("no card differs from base (nothing to skip ON -- this arm IS base)")
+    mask, err = carry_mask_bits(changed)
+    if err:
+        reasons.append(err)
+        mask = None
+    # (1) the value model must not read library COMPOSITION.
+    if model_feats:
+        bad = sorted(model_feats & CARRY_LIB_FEATURES)
+        if bad:
+            reasons.append(f"the value model splits on library-composition feature(s) {', '.join(bad)}"
+                           f" -- an UNDRAWN card is a decision input, so the mask does not bound it")
+    # (2) the sac-for-mana float-colour walk reads a deck-wide nonland pip AGGREGATE.
+    vb = nonland_pip_vector(spec.counts, db)
+    va = nonland_pip_vector(spec.arms[tag], db)
+    if vb != va:
+        moved = ", ".join(f"{c} {b}->{a}" for c, b, a in zip("WUBRG", vb, va) if b != a)
+        reasons.append(f"the nonland coloured-pip total moves ({moved}) -- ChosenFloatColorCandidates"
+                       f" sums it over the LIBRARY, so an undrawn swap changes the float-colour fan")
+    return mask, reasons
+
+
+def carry_masks(err_path, want_jobs):
+    """Parse `[icarry] job= gi= acc= wlr= tutor=` -> {job: {gi: (acc, wlr, tutor)}}."""
+    out = {j: {} for j in want_jobs}
+    try:
+        for line in open(err_path):
+            for m in re.finditer(r"\[icarry\] job=(\S+) gi=(\d+) acc=([0-9a-f]+) wlr=(\d+) tutor=(\d)",
+                                 line):
+                if m.group(1) in out:
+                    out[m.group(1)][int(m.group(2))] = (int(m.group(3), 16), int(m.group(4)),
+                                                        int(m.group(5)))
+    except OSError:
+        pass
+    return out
+
+
+def carry_skip_set(masks, changed_mask, verify_every):
+    """Which game indices this arm may skip. -> (skip set, sample set, stats).
+
+    THREE things force a game to play, and each is a different hazard:
+      * `(acc & changed) != 0`      -- it could reach a changed card. The whole test.
+      * `tutor`                     -- a tutor can name a SIDEBOARD card, which the 60-bit maindeck
+                                       mask does not cover at all, so accessibility says nothing.
+      * `wlr > 0`                   -- something did a whole-library read; `acc` is then all-ones and
+                                       the first test already refuses, but it is asserted separately
+                                       so a future recorder bug cannot turn into a silent skip.
+    `verify_every`: hold back every Nth otherwise-skippable game and PLAY it anyway, so the claim
+    "this game is identical to base" is checked against the engine on real games rather than argued.
+    Not optional and not sampled randomly -- a deterministic stride keeps the verification set
+    reproducible from the spec alone."""
+    skip, sample = set(), set()
+    forced = {"access": 0, "tutor": 0, "wlr": 0}
+    # Count the SKIPPABLE games seen, not len(skip). Using len(skip) was a real bug and an
+    # instructive one: it never advances while the branch keeps choosing `sample`, so `0 % N == 0`
+    # stayed true and EVERY skippable game went into the verification set -- 88 of 88, a run that
+    # reported "0.0% skipped" and still passed every check, because verifying everything is sound,
+    # just worthless. A performance feature that silently performs nothing is the failure mode to
+    # design against here.
+    seen = 0
+    for gi, (acc, wlr, tutor) in sorted(masks.items()):
+        if tutor:
+            forced["tutor"] += 1
+            continue
+        if wlr:
+            forced["wlr"] += 1
+            continue
+        if acc & changed_mask:
+            forced["access"] += 1
+            continue
+        seen += 1
+        if verify_every > 0 and seen % verify_every == 1:
+            sample.add(gi)
+        else:
+            skip.add(gi)
+    return skip, sample, forced
+
+
+def run_with_carry(spec, jobs, env, label, decks, profile):
+    """Run the pooled batch, skipping the games the index carry proves cannot differ from base.
+
+    -> (got, carry_report) with `got` in exactly the shape score() returns, so every caller
+    downstream is unchanged: a skipped game is FILLED IN from base, which is not a fabrication but
+    the literal content of the proof ("this game plays identically").
+
+    TWO WAVES, AND THAT NEEDS SAYING OUT LOUD because CLAUDE.md forbids waves in a pooled run. The
+    rule's own carve-out is "a barrier is only allowed where a genuine data dependency requires it",
+    and this is that case: which games an arm may skip is a FUNCTION of base's masks, so base must
+    finish first. The damage is bounded and known -- wave 1 is base alone (1 cell per format, ~14% of
+    a 7-arm spec), wave 2 is everything else and keeps the single tail the rule is really about. It
+    is NOT the forbidden shape (one batch per arm, or per deck, or per phase of equal size).
+
+    WHY BASE'S MASK MAY DECIDE AN ARM'S SKIPS -- the induction, once more, because it is the whole
+    feature: two arms share a numbering and ShuffleByKey sorts by key(seed, number), so position p
+    holds the same number in both. If base never accessed a changed number, then at every decision
+    the arm sees identical inputs, so it chooses identically and reaches an identical state; the
+    first divergence would require accessing a changed number, and there is none. Hence the arm's
+    result AND its mask equal base's."""
+    # Driver-only bookkeeping rides on the job dicts under a DOUBLE underscore and is stripped before
+    # the manifest is written. Single-underscore keys are left alone on purpose: `_no_profile_
+    # deliberate` is an inert key that is MEANT to reach the manifest, as a record that the
+    # no-profile hatch was taken deliberately rather than by accident.
+    strip = lambda j: {k: v for k, v in j.items() if not k.startswith("__")}
+    carry_report = {"eligible": {}, "refused": {}, "skipped": {}, "forced": {}, "verified": {}}
+    base_jobs = [j for j in jobs if j.get("__tag") == "base"]
+    other_names = {j["name"] for j in base_jobs}
+    other_jobs = [j for j in jobs if j["name"] not in other_names]
+    if not base_jobs:
+        raise SystemExit("index_carry: this run has no `base` cell, so there is no mask to carry "
+                         "from (a --confirm of a single arm cannot carry)")
+
+    # ---- WAVE 1: base only, with the recorder armed. -------------------------------------------
+    print(f"\nindex-carry wave 1/2: base only ({len(base_jobs)} cell(s)), recording accessibility")
+    err1 = run_batch([strip(j) for j in base_jobs], spec.out,
+                     f"{spec.stem}.{label}.carrybase", spec.threads,
+                     dict(env, MTG_INDEX_CARRY="1"), pin_deck=spec.base_path)
+    got = score(err1, [j["name"] for j in base_jobs], spec.maxturn, expect=spec.games)
+    masks = carry_masks(err1, [j["name"] for j in base_jobs])
+
+    # ---- the per-arm decision. -----------------------------------------------------------------
+    db = {c.get("name"): c for c in json.load(open(CARDS_JSON))["cards"]}
+    model_feats = model_split_features(spec.value_profile)
+    base_nums = json.load(open(decks["base"][1]))
+    verify_every = spec.carry_verify_every
+    skip_of = {}
+    for j in other_jobs:
+        tag = j.get("__tag")
+        if tag is None or tag not in spec.arms:
+            continue                                  # a --with-floor bracket cell: never carried
+        if tag not in carry_report["eligible"] and tag not in carry_report["refused"]:
+            mask, reasons = carry_eligibility(spec, tag, base_nums, json.load(open(decks[tag][1])),
+                                              db, model_feats)
+            if reasons:
+                carry_report["refused"][tag] = reasons
+            else:
+                carry_report["eligible"][tag] = mask
+        mask = carry_report["eligible"].get(tag)
+        if mask is None:
+            continue
+        bj = spec.jname(j.get("__fmt", ""), "base")
+        if bj not in masks or len(masks[bj]) != spec.games:
+            raise SystemExit(f"index-carry: base cell {bj} emitted {len(masks.get(bj, {})):,} of "
+                             f"{spec.games:,} masks -- refusing to skip anything on a partial record")
+        skip, sample, forced = carry_skip_set(masks[bj], mask, verify_every)
+        skip_of[j["name"]] = (skip, sample, bj)
+        carry_report["skipped"][j["name"]] = len(skip)
+        carry_report["forced"][j["name"]] = forced
+
+    # ---- WAVE 2: every other cell, with its skip list. -----------------------------------------
+    total_skipped = sum(len(s) for s, _, _ in skip_of.values())
+    total_games = len(other_jobs) * spec.games
+    print(f"index-carry wave 2/2: {len(other_jobs)} cell(s), "
+          f"{total_games - total_skipped:,} of {total_games:,} games "
+          f"({100.0 * total_skipped / total_games:.1f}% skipped)")
+    expect = {}
+    w2 = []
+    for j in other_jobs:
+        jj = strip(j)
+        if j["name"] in skip_of:
+            skip = sorted(skip_of[j["name"]][0])
+            if skip:
+                jj["skip_games"] = skip
+        expect[j["name"]] = spec.games - len(jj.get("skip_games", []))
+        w2.append(jj)
+    out2 = run_batch(w2, spec.out, f"{spec.stem}.{label}", spec.threads, env,
+                     pin_deck=spec.base_path)
+    got.update(score(out2, [j["name"] for j in w2], spec.maxturn, expect=expect))
+
+    # ---- THE VERIFICATION, and it is not optional. ---------------------------------------------
+    # The held-back sample games were skippable but were PLAYED. If the proof is right their win
+    # turns equal base's exactly. A mismatch means a precondition is wrong -- not that the sample is
+    # noisy -- so it is a hard failure with the games named, never a warning.
+    bad = []
+    for name, (skip, sample, bj) in skip_of.items():
+        for gi in sorted(sample):
+            if gi in got.get(name, {}) and got[name][gi] != got[bj][gi]:
+                bad.append(f"    {name} gi={gi}: arm wt={got[name][gi]} but base wt={got[bj][gi]}")
+        carry_report["verified"][name] = len(sample)
+    if bad:
+        raise SystemExit(
+            "INDEX-CARRY VERIFICATION FAILED -- a game the carry would have skipped did NOT match "
+            "base.\n  The skip is UNSOUND for this spec; every number from this run is suspect.\n"
+            + "\n".join(bad[:20])
+            + f"\n  ({len(bad)} mismatch(es) over {sum(len(s) for _, s, _ in skip_of.values())} "
+              f"verification games.)\n"
+              "  Most likely: a library read this driver does not know about, or an arm that passed "
+              "the\n  pip/model preconditions but changes something else the search reads over the "
+              "library.")
+
+    # ---- fill the skipped games in from base. --------------------------------------------------
+    fill = {}
+    for name, (skip, _sample, bj) in skip_of.items():
+        fill[name] = {}
+        for gi in skip:
+            got[name][gi] = got[bj][gi]
+            fill[name][str(gi)] = got[bj][gi]
+    # ...AND PERSIST THE FILL, because a later `--confirm` re-reads this run's `.err` LOG rather than
+    # this function's return value. A carried arm's log is deliberately short one `[win]` line per
+    # skipped game, so without this file the confirm would pair on the PLAYED games only -- i.e. it
+    # would silently drop exactly the games the carry proved were ties, which is the subset most
+    # favourable to finding an effect. That would turn a performance feature into a measurement bias,
+    # and it would not look like one.
+    json.dump({"fill": fill, "report": {k: v for k, v in carry_report.items() if k != "eligible"},
+               "eligible": {k: f"{bin(v).count('1')} changed slots" for k, v in
+                            carry_report["eligible"].items()},
+               "games": spec.games, "verify_every": verify_every},
+              open(os.path.join(spec.out, f"{spec.stem}.{label}.carryfill.json"), "w"), indent=1)
+    return got, carry_report
+
+
+def merge_carryfill(got, out, stem, label):
+    """Re-attach a carried run's skipped games when re-reading its log. -> number of games added.
+
+    See the note in run_with_carry: the log is short by design, so every reader of a PAST run's
+    `.err` has to come through here or it is comparing a biased subset."""
+    p = os.path.join(out, f"{stem}.{label}.carryfill.json")
+    if not os.path.exists(p):
+        return 0
+    n = 0
+    for job, games in (json.load(open(p)).get("fill") or {}).items():
+        if job not in got:
+            continue
+        for gi, wt in games.items():
+            if int(gi) not in got[job]:
+                got[job][int(gi)] = wt
+                n += 1
+    return n
+
+
+def report_carry(rep, games):
+    """Print what the carry did, including what it REFUSED and why."""
+    if not rep["eligible"] and not rep["refused"]:
+        return
+    print("\nindex-carry:")
+    for tag, mask in sorted(rep["eligible"].items()):
+        print(f"  {tag:22s} CARRIED   {bin(mask).count('1')} changed slot(s)")
+    for tag, reasons in sorted(rep["refused"].items()):
+        print(f"  {tag:22s} not carried:")
+        for r in reasons:
+            print(f"      {r}")
+    if rep["skipped"]:
+        tot = sum(rep["skipped"].values())
+        run = len(rep["skipped"]) * games - tot
+        print(f"  skipped {tot:,} of {len(rep['skipped']) * games:,} games on the carried cells "
+              f"({100.0 * tot / (len(rep['skipped']) * games):.1f}%); {run:,} played")
+        for name in sorted(rep["forced"]):
+            f = rep["forced"][name]
+            print(f"      {name:26s} forced to play: access {f['access']:,}  tutor {f['tutor']:,}"
+                  f"  whole-library-read {f['wlr']:,}   verified {rep['verified'].get(name, 0):,}")
+        print("  VERIFIED: every verification game's win turn matched base exactly (a mismatch is a "
+              "hard failure, not a warning).")
+
+
 def paired(got, a, b):
     """(mean delta b-a, se, n, %identical) over the game indices both arms finished."""
     common = sorted(set(got[a]) & set(got[b]))
@@ -569,6 +1011,19 @@ class Spec:
         for t, f in self.arm_flags.items():
             if not isinstance(f, dict) or any(not isinstance(v, bool) for v in f.values()):
                 raise SystemExit(f"arm_flags[{t!r}]: must be an object of ENV_NAME -> bool")
+        # INDEX CARRY ("index_carry": true, default OFF). Skips the games that provably cannot play
+        # differently from base -- see the block above paired(). Default off because it is a
+        # SOUNDNESS-gated optimisation, not a free one: it refuses per arm, and an arm that fails a
+        # precondition runs in full, so turning it on can only make a run cheaper or identical. It is
+        # still opt-in, because a screen's whole output is a number and a new mechanism between the
+        # engine and that number should be asked for rather than assumed.
+        self.index_carry = bool(s.get("index_carry", False))
+        # How often to HOLD BACK a skippable game and play it anyway, as the identity check. Every
+        # 50th by default (~2% of the saving) -- cheap enough to be unconditional, which is the
+        # point: the proof is checked against the engine on real games of every carried arm, in
+        # every run, not once at review time. 0 disables and is deliberately NOT offered as a
+        # tuning knob; use it only to reproduce a failure.
+        self.carry_verify_every = int(s.get("carry_verify_every", 50))
         self.formats = s.get("formats")
         if self.formats:
             if self.starting_life is not None or self.opponent_heads is not None:
@@ -1318,8 +1773,13 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         dp, np_ = spec.write_arm(tag, os.path.join(spec.out, tag))
         decks[tag] = (dp, np_)
         for fmt in spec.formats:
-            jobs.append(spec.job(spec.jname(fmt, tag), dp, np_, profile, seed=seed,
-                                 fmt=fmt, tag=tag))
+            j = spec.job(spec.jname(fmt, tag), dp, np_, profile, seed=seed, fmt=fmt, tag=tag)
+            # Driver-only, stripped before the manifest (see run_with_carry): the index carry has to
+            # map a job name back to its ARM (which cards changed) and its FORMAT (whose base cell's
+            # masks apply). Re-deriving either by parsing the job NAME would break the moment a tag
+            # contained the format separator.
+            j["__tag"], j["__fmt"] = tag, fmt
+            jobs.append(j)
     # --with-floor: the bracket's SHARED cells are the screen's own arms, so run the bracket's own
     # cells in the SAME batch instead of re-running base and the variant in a second invocation. That
     # is not an approximation -- a separate --floor produced per-job digests identical to the screen's
@@ -1361,6 +1821,9 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     json.dump({"arms": spec.arms, "arm_flags": spec.arm_flags,
                "games": spec.games, "depth": spec.depth,
                "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
+               # Recorded but INFORMATIONAL (see confirm's `informational` set): it changes which
+               # games ran, never what any of them played.
+               "index_carry": spec.index_carry,
                # What actually decides play is the BINARY; the commit beside it is
                # metadata (two commits touching only this driver produce identical games,
                # and --confirm refused a comparison across exactly that pair).
@@ -1387,12 +1850,38 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     # to DefaultProfile() in silence. MTG_EXHAUSTIVE_PROFILE=none suppresses exactly the sidecar
     # (AttachExhaustiveSidecar), process-globally, which is what "symmetric" means here.
     env = {} if use_table else {"MTG_EXHAUSTIVE_PROFILE": "none"}
-    got = score(run_batch(jobs, spec.out, f"{spec.stem}.{label}", spec.threads, env, pin_deck=spec.base_path),
-                [j["name"] for j in jobs],
-                spec.maxturn, expect=spec.games)
+    carry_rep = None
+    if spec.index_carry:
+        ok, why = carry_sites_unchanged()
+        if not ok:
+            raise SystemExit(why)
+        if ftags:
+            # A bracket cell's whole point is that it plays under a DIFFERENT table, so base's masks
+            # (recorded under the screen's table) do not describe it -- and the bracket also builds
+            # per-deck tables, which is the thing the carry is meant to make unnecessary. Refuse
+            # rather than carry the arms and quietly not the bracket.
+            raise SystemExit("index_carry and --with-floor do not combine: a bracket cell plays "
+                             "under its own table, so the base cell's masks do not describe it.\n"
+                             "  Run the bracket as its own invocation with index_carry off.")
+        got, carry_rep = run_with_carry(spec, jobs, env, label, decks, profile)
+    else:
+        got = score(run_batch([{k: v for k, v in j.items() if not k.startswith("__")} for j in jobs],
+                              spec.out, f"{spec.stem}.{label}", spec.threads, env,
+                              pin_deck=spec.base_path),
+                    [j["name"] for j in jobs],
+                    spec.maxturn, expect=spec.games)
+    if carry_rep:
+        report_carry(carry_rep, spec.games)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)")
     cost = job_costs(os.path.join(spec.out, f"{spec.stem}.{label}.err"))
+    if spec.index_carry:
+        # The base cell ran in WAVE 1 and so logged its per-job cost to a different file. Without
+        # this the ms/game column reads `nan` for base -- and for every carried arm, because the
+        # table normalises against base -- which is the one column that would make a reader think
+        # the carry had broken the run. (It also makes the carried arms' ms/game a genuine
+        # like-for-like: the number is per PLAYED game in both waves.)
+        cost.update(job_costs(os.path.join(spec.out, f"{spec.stem}.{label}.carrybase.err")))
     cost = {k: v for k, v in cost.items() if k in {j["name"] for j in jobs}}
     others = [t for t in run_arms if t != "base"]
     results = {}
@@ -2090,7 +2579,14 @@ def confirm(spec, tag, dry_run):
         # driver or the docs produce identical play, and refusing across them makes
         # --confirm unusable during development (it fired on exactly that). What decides
         # play is the BINARY, which the fingerprint stamps separately.
-        informational = {"seed", "engine_commit"}
+        # `index_carry` is informational for the same reason the commit is: it does not change what
+        # any game plays. The carry only ever REPLACES a game's result with the base result it has
+        # PROVEN equal -- and proven on real games, every run, by the held-back verification sample.
+        # So a carried screen and an uncarried confirm are the same measurement, and refusing across
+        # them would assert the opposite of what the feature's own check establishes. The thing that
+        # genuinely must not differ silently is the LOG SHAPE, and that is handled by
+        # merge_carryfill below rather than by refusing the comparison.
+        informational = {"seed", "engine_commit", "index_carry"}
         diff = sorted(k for k in set(fa) | set(fb)
                       if k not in informational and fa.get(k) != fb.get(k))
         def show(k):
@@ -2116,6 +2612,14 @@ def confirm(spec, tag, dry_run):
               "\n   this run stands on its own)")
         return 0
     a = score(prev, [spec.jname(f, t) for f in spec.formats for t in spec.arms], spec.maxturn)
+    # If that screen CARRIED (index_carry), its log is short one `[win]` per skipped game and those
+    # games must be re-attached before pairing -- they are ties, so pairing without them compares the
+    # held-out block against a biased subset of the screen. Says so when it fires, because a silent
+    # reconstruction is the kind of thing that should be visible in the output it changes.
+    added = merge_carryfill(a, spec.out, spec.stem, "screen")
+    if added:
+        print(f"\n  (the earlier screen ran with index_carry: re-attached {added:,} skipped game(s)"
+              f"\n   from its carryfill record, so the screen block below is the FULL series)")
     b = score(os.path.join(spec.out, f"{spec.stem}.confirm.err"),
               [spec.jname(f, t) for f in spec.formats for t in ("base", tag)], spec.maxturn)
     # Each format is its own held-out test: the combination can reproduce in one and shrink in the
