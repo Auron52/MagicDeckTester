@@ -525,6 +525,9 @@ if [ ${#DECK_DIRS[@]} -gt 0 ]; then
     # Queue dir keyed by the SORTED key set, so `run A B` and `run B A` resume the same queue rather
     # than silently starting a second one that repeats every game.
     VLQ=logs/vlq_$(printf '%s\n' "${_keys[@]}" | sort | paste -sd+ -)
+    # A long key set overflows NAME_MAX (255, + "logs/"): mkdir fails and the run cannot start. Past it, name the queue by
+    # a hash of the same sorted set -- still order-independent and resumable; every shorter name is unchanged.
+    [ ${#VLQ} -le 260 ] || VLQ=logs/vlq_${#_keys[@]}decks_$(printf '%s\n' "${_keys[@]}" | sort | sha1sum | cut -c1-12)
     DONE=$VLQ/done; ROWDIR=$VLQ/rows
     mkdir -p "$DONE" "$ROWDIR" logs/eval
 fi
@@ -1472,13 +1475,19 @@ ab)
 skipcal)
     # PHASE E.6 ALONE, for decks whose leaf is ALREADY live: the one-time backfill of the fleet, or a leaf
     # installed by hand. No marker -- it always re-decides -- and no freeze check: it measures the tree as it
-    # stands and fits nothing that a later src change could strand. Named decks, else every deck with a live
-    # value sidecar. Pooled like every other phase: three batches in total, not three per deck.
+    # stands and fits nothing that a later src change could strand. Named decks, else every REGRESSION-SUITE
+    # deck with a live value sidecar: an archived predecessor list (decks/<Stem>/v<N>-<slug>/) keeps its sidecar
+    # but is no longer played, and has no GT to re-accept an adoption against. Pooled like every other phase:
+    # three batches in total, not three per deck.
     harness_pgo_ensure
     _dirs=()
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
-        [ -e "$dir/$stem.value.json" ] && _dirs+=("$dir")
+        [ -e "$dir/$stem.value.json" ] || continue
+        if [ ${#DECK_DIRS[@]} -eq 0 ] && ! python3 scripts/suite_gate.py --require "$dir" > /dev/null 2>&1; then
+            log "  skipcal: $dir is not a regression-suite deck (an archived list?) -- skipped"; continue
+        fi
+        _dirs+=("$dir")
     done
     [ ${#_dirs[@]} -gt 0 ] || { echo "no deck with a live value sidecar to calibrate"; exit 2; }
     log "=== PHASE E.6 ALONE (skipcal): ${#_dirs[@]} deck(s) ==="
