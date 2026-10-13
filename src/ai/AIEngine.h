@@ -478,9 +478,13 @@ private:
     // (e.g. Fiery Islet) to draw toward Treasure Hunt. Gated by ShouldConsiderDig (no draw
     // engine in hand, no retrace in yard, >=2 lands, Land's Edge not already lethal). Used
     // on the depth-0 / develop-when-stuck paths; full-depth committed turns instead replay
-    // the search's recorded dig (PerformDig). Pre-combat only.
+    // the search's recorded dig (PerformDig). Pre-combat only. `dig_choice` is the executing plan's
+    // Plan::dig_choice: under MTG_DIG_SEARCHED_CHOICE the reactive dig realises the SEARCHED choice the
+    // plan was scored with (0 = none, 1 = dig while affordable, 2 = the gate without the main-2
+    // deferral) instead of re-deciding by heuristic; -1 (the d0 runner's greedy plan) keeps the gate.
     void UseSurplusLandAbilities(GameState& state,
-                                 const std::function<void(GameState&)>& resolve_stack = {});
+                                 const std::function<void(GameState&)>& resolve_stack = {},
+                                 int dig_choice = -1);
 
     // Mechanically perform one dig: cycle the named land from hand (is_sacrifice=false) or
     // {cost},{T},Sacrifice it from the battlefield (is_sacrifice=true), pay the cost, and

@@ -254,6 +254,13 @@ public:
     // the searched fan-out is left to providers that have shown it pays. It also happens to cost
     // nothing: no dig axis means no per-plan fan-out and no budget churn (USER, same day: "If there
     // are losses due to budget churn you can feel free to restrict the usage").
+    //
+    // 2026-10-13 -- WHAT `false` NO LONGER MEANS. With no axis, every plan's apply DUG whenever the
+    // gate passed: the search was never offered "don't" (FiveColour gi1106's T2 Triome cycle starved
+    // the main-2 Faeburrow). USER: "'Main 1's automatic cycle' ... It shouldn't be automatic." Under
+    // MTG_DIG_SEARCHED_CHOICE (default ON) each base plan gets a NO-DIG TWIN, so the gate below still
+    // RESTRICTS (no gate, no dig) but where it passes the search chooses. Still no dig-while-affordable
+    // variant -- that half of the 2026-09-29 ruling stands. docs/design/generic-dig-gate.md.
     int         LandsEdgeFireCount(const GameState&, int) const override;
     bool        WantVialCharge(const GameState&, const Permanent&) const override;
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;

@@ -353,3 +353,10 @@ play changes. Train seeds (d3/d5 x s2002/s3003, 2HG d3 s2002): 9 games faster (g
 d5 s2002, gi189 d3 s2002, gi58 d3 and d5 s3003), **0 slower**; per-key -0.020 / -0.005 / -0.030 /
 -0.010 / 0. Sentinels with the lever on: FiveColour d0 smoke and Anti-Lifegain d3 smoke byte-identical
 to GT.
+
+**Superseded in part, same day (MTG_DIG_SEARCHED_CHOICE; see generic-dig-gate.md, "the dig is a SEARCHED
+choice").** USER: *"It shouldn't be automatic."* Every base plan and every appended pass now carries a
+no-dig twin, so main 1 offers {cycle now, keep the mana} as a searched choice and the deferral applies
+only to the heuristic default (-1) that has no sibling: the horizon playout's greedy plan and axis clones
+(d0 never filters, so it never deferred).
+gi1106 wins T4 at d8/b0, d6/b20 and d3/b10 with `MTG_DIG_DEFER_MAIN2=0` under the new lever.

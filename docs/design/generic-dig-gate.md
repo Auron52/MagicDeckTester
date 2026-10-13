@@ -207,3 +207,168 @@ Observation for the owner of this heuristic (not changed): the "nothing castable
 MV against the count of LANDS (`MV <= lands`), so mana creatures and rocks are invisible to it --
 Faeburrow (MV 3) read as uncastable off two lands + Birds. That errs toward digging, the opposite
 of the "erring toward NOT digging is the safe direction" note at the probe.
+
+## 2026-10-13: the dig is a SEARCHED choice, never automatic (MTG_DIG_SEARCHED_CHOICE)
+
+**USER, on gi1106's T2 Triome cycle:** *"'Main 1's automatic cycle' This seems to be a bit of a problem
+in of itself. It shouldn't be automatic."* The 2026-09-29 build left the generic provider's gate as the
+whole decision: with no dig axis, every plan's apply ran `ShouldConsiderDig` at the end and DUG whenever
+it passed, so the search was never offered "don't". MTG_DIG_DEFER_MAIN2 (the morning's narrow fix) moved
+that automatic dig to main 2 on one class of state; this removes the automatic outcome itself.
+
+**How the ruling of 2026-09-29 and this one fit together.** That ruling declined the *dig-while-affordable*
+axis for the generic provider (the clairvoyant search would cycle exactly when it can see a better top
+card). That half stands: no `dig_choice 1` variant is emitted for a non-opted provider. What goes is only
+the FORCED outcome. The gate stays the provider's restriction (no gate, no dig); where it passes, the search
+now sees both worlds and the gate's answer is the tie-break (the base plan comes first, so equal scores keep
+the provider's heuristic).
+
+### The map: every place a cycle / sac-to-draw is performed
+
+| site | who decides | class |
+|---|---|---|
+| `ApplyPlanDirect` dig loop, base plan of an opt-in deck (Auras, Fluctuator, Dragons) with its 0/1 variants | searched (dig_choice 0 / 1 / base) | (a) |
+| same loop, EVERY plan of a non-opted deck (GenericProvider: FiveColour, Pirates, EDF, Soldiers, WhiteKnights; TreasureHunt) | the gate, no sibling | **(b) -- fixed: no-dig twin** |
+| same loop, the PASS a host appends after the enumeration (FSLineWin's idle node, FSLineTail's do-nothing main 2, SolveWithLookahead's empty set, the NC instrument) -- the empty-of-gas state itself, every provider | the gate, no sibling | **(b) -- fixed: twin on the pass** |
+| same loop, an opt-in base whose source the PRE-CAST pool could not pay (made affordable / brought in by this plan's own land drop: a Canopy / Islet / Clearing played this turn) | the gate, no sibling | **(b) -- fixed: pre-gate = "a source exists or the plan's drop is a sac-draw land"** |
+| same loop, an axis clone (scry / tutor / Ponder / bounce / ... variant) | the gate, no sibling | (b) residual -- the one-axis-at-a-time gap (no-greedy audit A4/C6) |
+| same loop, a wave-0 breakpoint variant whose breakpoint fired BEFORE the dig | the gate, no sibling | (b) residual, same gap. A variant whose breakpoint is still pending reaches it THROUGH the dig (site 4): the dig is the variant's premise, not a skipped choice. Deferred-wave variants are cloned from the base AND its twin, so those come in dig / no-dig pairs |
+| same loop, a source DRAWN mid-apply (the pre-gate cannot see it) | the gate | (b) residual, measured 0 at d3 b10 |
+| same loop, the go-off SEED plans (null seed) | the gate | (b) residual, unbounded search only (label / b0) |
+| same loop, the horizon leaf's greedy plan (`Solve`, HorizonLeaf permit; m1 and now-labelled m2) | the gate | (c) permitted |
+| `AIEngine::UseSurplusLandAbilities` at d0 (the d0 runner's `Solve` plan) | the gate | (c) permitted |
+| `AIEngine::UseSurplusLandAbilities` on the uncommitted depth>0 path (no recorded script) | re-decided by heuristic, IGNORING the searched plan's dig_choice | **(b) / lockstep gap -- fixed: honours 0 / 1 / 2** |
+| executor replay of `Action::Kind::DigDraw` on a committed line | whatever the scored line did | inherits its plan's class |
+| SimulateToEndImpl's empty-main-2 apply skip (`MTG_M2_SKIP_EMPTY_APPLY`) | skipped the apply of a searched pass that DUG | **fixed: a 2 / 1 pass is not "empty"** |
+| enumerated draw activations (tap-draw Frost Augur / Scrying Sheets / Mariposa / Troyan, Clue sac-draw, Recruitment Officer, Psychotrope Thallid), ETB dig, Ponder / scry | plan actions or axes | (a) |
+| human play P3 / P6 cycling plans | the person | n/a |
+
+### The change
+
+* **Twin.** `AppendSubdecisionAxes` emits, for every base plan of a deck holding a dig source, a no-dig twin
+  (`dig_choice 0`; an opt-in deck keeps its 0 + 1), and marks the base `dig_choice 2` ("the gate decides, a
+  sibling exists"). The four hosts that append a pass after the enumeration do the same for the pass
+  (`AppendIdleDigSiblings`). Clones made by later axes keep -1.
+* **Pre-gate** under the lever: a source exists now, or the plan's own drop is a sac-draw land (sound for
+  both arrivals a land drop can cause), instead of "payable from the pre-cast pool".
+* **Exact dedup / fold.** A twin whose base did not dig is the base's apply exactly. `PlanIsAxisVariant`
+  now covers dig variants (the 9d widening had missed them), and the **dig fold** (`DigFoldMemo`,
+  `Plan::dig_group`, the bounce fold's shape) declines such a twin BEFORE the unit charge in FSLineWin,
+  FSLineTail and SolveWithLookahead. Exactness gate: d3 `--budget-ms 0` digests identical with and without
+  the fold on all 8 dig decks run (EDF's b0 games take ~5 min each and were left out).
+* **2 is not deferred.** MTG_DIG_DEFER_MAIN2 applies to -1 only, in the apply and in the executor.
+* **Executor.** `UseSurplusLandAbilities(state, resolve_stack, plan.dig_choice)`: 0 skips, 1 digs while
+  affordable, 2 runs the gate without the deferral, -1 unchanged.
+* `MTG_DIG_SEARCHED_CHOICE` (heurarm slot `DIG_SEARCHED_CHOICE`, appended last; reader
+  `DigSearchedChoiceOn()` in EngineFlags.h). `=0` is byte-identical to the tree before (verified: 24/24
+  jobs, 12 decks x 2 cells, against the pre-change binary; again 22/22 after the fold).
+* `MTG_DIG_CENSUS=1` prints, at exit, how many variants were emitted / folded and which plans dug
+  (`twin` = a base with a sibling, `axis1`, `leaf` = permitted, `auto` = in-window with no sibling, split by
+  cause). `MTG_TRACE=digauto` names each residual.
+
+### gi1106 and MTG_DIG_DEFER_MAIN2
+
+gi1106 (seed 6211107) under the lever: **T4 at d8/b0, at the shipped d6/b20 and at d3/b10, with
+`MTG_DIG_DEFER_MAIN2` on AND with it `=0`** (lever `=0`: T4 with the deferral, T5 without -- the pre-change
+behaviour, reproduced). Main 1's pass now carries its no-dig twin, so "keep the mana for the main-2
+Faeburrow" is a searched world and the search takes it.
+
+**Is the deferral redundant?** For the decision it was built for, yes: in the pooled A/B the FiveColour
+`defer0` arm (lever on, deferral `=0`) is **digest-identical to `new` on all 50 chunks (2,500 games, every
+cell)**. It is not PROVABLY inert -- it still shapes the -1 plans that have no sibling (the horizon playout's
+greedy plan, axis clones, unbounded-search seeds) -- but no measured game moves. Proposed for deletion as a
+USER call (it is a heuristic on the playout policy now, not a correctness fix); not deleted here.
+
+### Measured
+
+One pooled batch (`logs/dig_agent/make_dig_ab.py`, 47,500 games), fresh seeds 8800001+, every dig deck,
+arms `new` (lever on) vs `dig0` (`MTG_DIG_SEARCHED_CHOICE=0`) paired by seed / game index, plus a FiveColour
+`defer0` arm (lever on, `MTG_DIG_DEFER_MAIN2=0`). Unwon = 9. Cells: shipped (value_play depth, b20) 200 /
+d3 b10 300 / d0 2000 games per arm.
+
+| deck | ship new-dig0 | d3 new-dig0 | d0 | per-deck net | units x (ship / d3) | play changed (chunks of 50) |
+|---|---|---|---|---|---|---|
+| FiveColour | 0 | +0.0033 (0 faster / 1 slower) | identical | **+1** | 1.021 / 1.003 | ship 1/4, d3 4/6 |
+| Pirates | 0 | 0 | identical | 0 | 1.034 / 1.012 | none (digest-identical) |
+| EDF | 0 | 0 | identical | 0 | 1.002 / 1.001 | none |
+| Soldiers | 0 | 0 | identical | 0 | 1.015 / 0.999 | none |
+| WhiteKnights | 0 | 0 | identical | 0 | 1.000 / 1.000 | none |
+| treasure_hunt | 0 | +0.0100 (0 / 3) | identical | **+3** | 1.236 / 1.154 | ship 1/4, d3 2/6 |
+| Auras | 0 | 0 | identical | 0 | 1.027 / 0.936 | ship 1/4, d3 1/6 |
+| Fluctuator | -0.0050 (3 / 1) | -0.0067 (2 / 0) | identical | **-3** | 1.069 / 0.983 | ship 3/4, d3 6/6 |
+| Dragons | 0 | 0 | identical | 0 | 0.983 / 0.977 | none |
+
+**Every slower game recovers at stage 1** (`--depth W --budget-ms 100`, W = the dig0 arm's win turn), so
+none needed stage 2: fivecolour d3 gi23 (seed 8805024, 5 vs 4), th d3 gi1 / gi3 / gi16 (seeds 8905002 /
+8905004 / 8905017, 6 vs 5, 5 vs 4, 5 vs 4), fluctuator ship gi28 (seed 8940029, unwon vs 7). They are
+BUDGET CHURN: th gi1's T3 decision reached searched depth 1 with the lever (T5 unverified, played
+"(defer) + Land's Edge") where the lever-off search reached depth 3 and verified T5 off Thundering Falls.
+Treasure Hunt is the expensive case because its gate passes on most turns, so its twins are REAL
+alternatives, not duplicates the fold can drop (units x1.15-1.24). **The per-deck bar (net <= 0) is not met
+on this sample for treasure_hunt (+3) and FiveColour (+1)** -- both entirely budget churn at d3 b10; the
+remedy that fits the completeness rule would be a budget-staged admission of the twins (a later wave), not
+a gate. Reported for the USER's decision; the lever ships default ON as instructed, `=0` is the hatch.
+
+**The fold matters.** Before it (same arms, the ship cells and EDF d3 of the run it replaced) units ran
+x1.13-1.33 on six decks and EDF d3 x1.41 -- 93-100% of the twins were exact duplicates paying a unit, a
+GameState copy and an apply each (EDF: 220,551 twins for 0 digs in 40 games); and EDF lost a ship game
+(gi38) to that churn alone. With the fold EDF is x1.00 and digest-identical to `=0`.
+
+### Clairvoyance
+
+**Which instrument can strip it.** `MTG_SHUFFLE_SALT_SEARCH` cannot: it salts mid-game SHUFFLE events
+(fetch, tutor, Ponder -- `SearchShuffleSeed`), and a cycle's draw is the plain top card, not a shuffle.
+`MTG_HONEST_PLAY` cannot either: it reshuffles only the FUTURE turns inside a rollout, while the root
+candidate's own apply -- where the dig draws -- still reads the true library. **`MTG_NC_SEARCH` can**: every
+real decision ranks its candidates by the win turn averaged over K reshuffles of the unseen library (each
+candidate's apply draws from the reshuffled library, so the dig's card is unknown), then executes the best
+against the true library. The executor honours the chosen twin on that path (`UseSurplusLandAbilities`).
+
+**Clairvoyant result** (the table above): the searched choice changed realised play in few chunks and made
+no deck faster except Fluctuator (an opt-in deck, where the lever's effect is the wider pre-gate, the pass's
+siblings and the executor honouring the choice). So the clairvoyant search did NOT manufacture known-draw
+speed here; its costs are budget churn.
+
+**Non-clairvoyant result** (one pooled batch, `MTG_NC_SEARCH=1 MTG_NC_K=16 MTG_NC_DEPTH=1`, d3, 300 games per
+arm, fresh seeds 8900001+, `scripts/dig_choice_ab/make_nc.py`): FiveColour **+3** (0 faster / 2 slower:
+gi83 seed 8905084 6 vs 4, gi185 seed 8905186 6 vs 5), treasure_hunt **+1** (0 / 1: gi233 seed 9005234 5 vs
+4), Pirates and Soldiers 0 (identical outcomes). NC has no budget, so these are DECISION effects: offered the
+no-dig twin, the reshuffle-averaged ranker sometimes declined a dig the gate would have taken, and lost
+time by it; it never gained. That is the USER's prior from the other side -- *"a non-clairvoyant engine
+would not want to [cycle] (or only very rarely)"* was about adding digs; here the gate's digs, when it
+passes, look right in expectation, and second-guessing them did not pay. Not root-caused (parked): K=16 is
+a noisy ranker, so these three may be sampling error rather than a real preference.
+
+### Resume (the work was parked 2026-10-13 for a value-leaf generation; nothing below has been run)
+
+The tooling is committed in `scripts/dig_choice_ab/` (written in the worktree's gitignored
+`logs/dig_agent/`; the scripts hard-code that worktree's path in `WT=` / `sys.path` -- edit those two lines to
+run from elsewhere): `make_dig_ab.py` (pooled A/B + `--analyse`), `make_recovery.py` (two-stage recovery),
+`make_nc.py` (non-clairvoyant A/B), `make_exact.py` / `make_ident.py` (b0 exactness, byte-identity),
+`census.sh` / `census2.sh` (`MTG_DIG_CENSUS`), `g1106.sh` / `g1106_all.sh`, `fdoracle.sh`, `game2.sh`
+(one game, both arms, traced), `run_batch.sh` (one pooled `--batch`, 6 threads, cores 0-5). Binaries ran from
+the build volume (`build/scratch/dig_agent/`), deck files from the primary checkout (the keep-table cache
+keys on the sidecar's canonical path, so a worktree path rebuilds a 1-3 GB table per deck).
+
+1. **gi1106 on the final binary.** The T4-at-three-cells result above was measured on the pre-fold build
+   (v2). The fold is exact at b0 (so d8/b0 stands), but it re-prices finite budgets: re-run
+   `bash logs/dig_agent/g1106_all.sh <mtg> final` (four lever combinations x d8b0 / ship / d3b10).
+2. **Full unit suite on the final binary** (`mtg-test`, 1032 cases). Green on the pre-fold build; the 9
+   dig cases (`-tc="Dig searched choice*,Main-1 dig waits*"`) are green on the final one.
+3. **Residual census on the final binary**: `bash logs/dig_agent/census2.sh <mtg> <out> 40` (lever on,
+   `MTG_TRACE=digauto`). The numbers in the map are from the pre-fold build; the fold does not change which
+   plans dig, only which twins are applied, so they should hold.
+4. **Executor lockstep**: `bash logs/dig_agent/fdoracle.sh <mtg>` counts `[fd-diverge]` (committed line
+   not realised) lever on vs off, d3 b10, six dig decks x 100 games.
+5. **The per-deck bar** for treasure_hunt (+3) and FiveColour (+1): a larger held-out sample at d3 b10 for
+   those two decks (`make_dig_ab.py --decks th,fivecolour --cells d3 --seed0 <fresh> --scale 4`), and, if
+   the USER wants the churn removed rather than accepted, a budget-staged admission of the twins (a later
+   wave: the completeness-preserving shape, per CLAUDE.md) instead of any gate.
+6. **Root-cause the three non-clairvoyant slower games** (decision effects, not budget): each arm as one game,
+   e.g. `MTG_NC_SEARCH=1 MTG_NC_K=16 MTG_NC_DEPTH=1 mtg decks/FiveColour/FiveColour.cod --profile
+   decks/FiveColour/FiveColour.profile.json --seed 8905084 --game-index 83 --games 1 --depth 3 --budget-ms 10
+   --ignore-play-profile` with `MTG_DIG_SEARCHED_CHOICE=1` / `=0` and `MTG_TRACE=dig` (also gi185 seed 8905186;
+   treasure_hunt gi233 seed 9005234). Raising K (32-64) tells sampling noise from a real preference.
+7. **USER decisions owed**: adopt the lever default ON (clairvoyant bar unmet on two decks by budget churn
+   alone; non-clairvoyant also +3 FiveColour / +1 treasure_hunt); delete MTG_DIG_DEFER_MAIN2 (inert in 2,500
+   FiveColour games under the lever).
