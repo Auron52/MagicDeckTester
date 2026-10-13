@@ -166,6 +166,24 @@ inline bool LineFloatTapFirstOn()
     return heurarm::Flag(heurarm::LINE_FLOAT_TAP_FIRST, env_on);
 }
 
+// MTG_LINE_SPARE_GENERIC_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware generic tap
+// (produce_impl in TapForCostSharedOnce, ManaPayment.cpp): a colour-short line's generic pip taps a SPARE
+// source first. One payer for executor, rollout and the payability walks -> lockstep by construction.
+inline bool LineSpareGenericFirstOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_SPARE_GENERIC_FIRST", true);
+    return heurarm::Flag(heurarm::LINE_SPARE_GENERIC_FIRST, env_on);
+}
+
+// MTG_DRAGONSTORM_DRAGON_ORDER (DEFAULT ON; =0 disables) -- DragonstormProvider::CastOrderingCandidates
+// also offers every distinct order of the set's hard-cast Dragons (USER order on). Read only there; the
+// searched order rides Plan::searched_order into both apply worlds.
+inline bool DragonstormDragonOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_DRAGONSTORM_DRAGON_ORDER", true);
+    return heurarm::Flag(heurarm::DRAGONSTORM_DRAGON_ORDER, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.
