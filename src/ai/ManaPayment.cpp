@@ -621,6 +621,120 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                      std::uint64_t reserved_mask, ManaPool* available,
                                      bool honor_legacy_cco);
 
+// ---- MTG_LINE_SPARE_GENERIC_FIRST: the SPARE sources of a generic pip, and whether the line is SHORT --------
+//
+// The exact order walk (ExactOrderWalkImpl -> PayFromPoolLineAware) pays a generic pip out of each colour's
+// SURPLUS over the pips the rest of the line still owes. The greedy payer did not: it took the scarcity-
+// ranked source, then the second mana of a two-mana tap. dragonstorm s3104 gi101 T2, Sandstone Needle
+// ({T}: {R}{R}) + Unclaimed Territory ({C} for a noncreature spell), USER order "Ruby Medallion, Rite of
+// Flame, Seething Song x2, Dragonstorm": the walk pays the Medallion's {2} with the {C} and one {R} (the
+// other {R} floats for Rite); the payer tapped the Needle for both pips and stranded the {C}, Rite's {R}
+// was unpayable, and every later cast with it -- in the executor AND in the rollout, so no budget found
+// the T2 kill (it fell to T3).
+//
+// A source is SPARE for this payment when every colour it can legally make here is one no later pip of
+// the line owes (so its only use in the line is generic), and it is a plain land or rock: no dork (attack),
+// no depletion / storage / pay-sac source (banked or one-shot mana), no filter (a conversion) and no
+// restricted-spend source. A colored_creature_only land under a noncreature payment makes {C} here but
+// a colour for a later CREATURE of the line; it is spare only if every such colour the line owes is
+// also on offer from the float or another unrestricted untapped source (the LINE_FLOAT_TAP_FIRST rule:
+// dragonstorm s7100151 T5, the Territory was Kolaghan's only {B}).
+// The line is SHORT when, for some colour, the rest of the line owes more than the float (this payment's
+// and the turn's reserve) plus every untapped NON-spare source could make of it -- an over-count of supply
+// (each source counted toward every colour it makes, its full yield), so SHORT is only ever read when
+// colour is genuinely tight. Only a short line takes the spare first; elsewhere the tap order is the
+// historical one. Spending a spare unit on a generic pip never costs the line a coloured pip (it could pay
+// none) nor a mana (any source pays a later generic), which is why the walk can model it unconditionally.
+// Returns the spare mask over battlefield indices (< 64); `short_line` reports the shortage.
+static std::uint64_t LineSpareSourceMask(const GameState& state, int active, bool for_creature,
+                                         const int later[5], const ManaPool& local_float,
+                                         std::uint64_t reserved_mask, bool& short_line)
+{
+    short_line = false;
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }
+    auto colour_idx = [](Color c) -> int
+    {
+        switch (c)
+        {
+            case Color::White: return 0; case Color::Blue: return 1; case Color::Black: return 2;
+            case Color::Red:   return 3; case Color::Green: return 4; default: return -1;
+        }
+    };
+    const ManaPool& tf = state.floating_mana;
+    int supply[5] = { local_float.white + tf.white, local_float.blue + tf.blue, local_float.black + tf.black,
+                      local_float.red + tf.red, local_float.green + tf.green };
+    const int wild = local_float.wild + tf.wild;
+    for (int c = 0; c < 5; ++c) { supply[c] += wild; }
+    auto plain_src = [&](const Permanent& p, const CardDefinition& d) -> bool
+    {
+        if (d.tmpl != CardTemplate::BasicLand && !d.params.mana_rock) { return false; }
+        if (d.tmpl == CardTemplate::ManaDork || d.params.storage_land || d.params.enters_tapped_with_depletion != 0
+            || d.params.creature_mana_only || BigSpellOnlySource(d.params) || d.params.is_filter
+            || d.params.ramp_filter || d.params.any_color_filter || PaySacSpendableNow(state, p, d))
+        { return false; }
+        for (const Counter& k : p.counters) { if (k.type == Counter::Type::Depletion) { return false; } }
+        return true;
+    };
+    // An unrestricted untapped source other than `self` (or the float) that makes colour `ci` for a creature.
+    auto other_makes = [&](int self, int ci) -> bool
+    {
+        if (local_float.wild + tf.wild > 0) { return true; }
+        const int fl[5] = { local_float.white + tf.white, local_float.blue + tf.blue, local_float.black + tf.black,
+                            local_float.red + tf.red, local_float.green + tf.green };
+        if (fl[ci] > 0) { return true; }
+        for (int q = 0; q < n; ++q)
+        {
+            if (q == self) { continue; }
+            const Permanent& o = state.battlefield[static_cast<std::size_t>(q)];
+            if (o.controller_index != active || o.tapped || o.def_absent) { continue; }
+            const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
+            if (od == nullptr || od->params.colored_creature_only) { continue; }
+            if (!o.card.IsLand() && od->tmpl != CardTemplate::ManaDork && !od->params.mana_rock) { continue; }
+            for (Color c : ProducesForPayment(state, active, *od, /*for_creature=*/true, &o))
+            { if (colour_idx(c) == ci) { return true; } }
+        }
+        return false;
+    };
+    std::uint64_t spare = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        // def_absent == no definition (a token): skipped before the lookup (a Saproling board).
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const bool sourcey = p.card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock;
+        if (!sourcey) { continue; }
+        bool ok = !(reserved_mask & (1ull << i)) && plain_src(p, *d);
+        if (ok)
+        {
+            const std::vector<Color>& pay = ProducesForPayment(state, active, *d, for_creature, &p);
+            if (pay.empty()) { ok = false; }
+            for (Color c : pay)
+            { const int ci = colour_idx(c); if (ci >= 0 && later[ci] > 0) { ok = false; break; } }
+        }
+        if (ok && d->params.colored_creature_only && !for_creature)
+        {
+            for (Color c : EffectiveProducesFor(state, active, *d, &p))
+            { const int ci = colour_idx(c); if (ci >= 0 && later[ci] > 0 && !other_makes(i, ci)) { ok = false; break; } }
+        }
+        if (ok) { spare |= (1ull << i); continue; }
+        // Not spare: credit its whole yield to every colour it can make (the over-count).
+        const int y = std::max(1, SourceMaxNetLive(state, p, *d));
+        int seen = 0;
+        for (Color c : EffectiveProducesFor(state, active, *d, &p))
+        {
+            const int ci = colour_idx(c);
+            if (ci < 0 || (seen & (1 << ci))) { continue; }
+            seen |= (1 << ci);
+            supply[ci] += y;
+        }
+    }
+    for (int c = 0; c < 5; ++c) { if (later[c] > supply[c]) { short_line = true; break; } }
+    return spare;
+}
+
 // PREVENT DAMAGE: the pain-aware payment policy (dmgev::PainAwarePay) wraps each payment ATTEMPT --
 // the reservation ladder's held attempts and the unrestricted one alike -- so the damage floor and
 // the cap are computed over the sources THIS attempt may tap. Wrapping the whole ladder instead
@@ -1028,8 +1142,58 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // See the line-float hold at the top of produce_impl. Set only for the duration of the one
     // nested attempt it makes, so the attempt cannot re-enter the hold.
     bool line_float_bypass = false;
+    // MTG_LINE_SPARE_GENERIC_FIRST: the colour (static_cast<int>(Color)) the spare tap below added, which
+    // `pay` consumes for this generic pip instead of ConsumeFloatingAny's fixed order (that order would
+    // take a floating {R} the line owes ahead of a spare {G}). -1 = none.
+    int spare_take = -1;
     auto produce_impl = [&](auto& self, Color needed, bool any, bool allow_ramp) -> bool
     {
+        // LINE-SPARE GENERIC FIRST (autonomous; MTG_LINE_SPARE_GENERIC_FIRST, default ON; =0 -> the
+        // historical order). See LineSpareSourceMask for the rule, the case and why it is sound. A generic
+        // pip of a COLOUR-SHORT line, while this payment floats nothing the line can spare, taps a SPARE
+        // source first -- one nested attempt with every non-spare source held -- and falls through to the
+        // unchanged selection below when none can be tapped. Human play keeps its own float hold (below).
+        if (any && !paying_snow && !line_float_bypass && !feeding && LineSpareGenericFirstOn()
+            && !HumanPlayActive())
+        {
+            const ManaCost& lu = g_line_unpaid_cost;
+            const int n = static_cast<int>(state.battlefield.size());
+            if (lu.colorless == 0 && (lu.white + lu.blue + lu.black + lu.red + lu.green) > 0 && n <= 64
+                && floating.colorless == 0 && floating.wild == 0)
+            {
+                int later[5];
+                LineOwedAfterOwnPips(later);
+                const int fl[5] = { floating.white, floating.blue, floating.black, floating.red, floating.green };
+                bool no_surplus = (later[0] + later[1] + later[2] + later[3] + later[4]) > 0;
+                for (int c = 0; c < 5 && no_surplus; ++c) { if (fl[c] > later[c]) { no_surplus = false; } }
+                bool short_line = false;
+                const std::uint64_t spare = no_surplus
+                    ? LineSpareSourceMask(state, active, for_creature, later, floating, reserved_mask, short_line)
+                    : 0;
+                if (spare != 0 && short_line)
+                {
+                    const std::uint64_t all = n == 64 ? ~0ull : ((1ull << n) - 1);
+                    const std::uint64_t prev_mask = reserved_mask;
+                    const ManaPool before = floating;
+                    reserved_mask |= (all & ~spare);
+                    line_float_bypass = true;
+                    const bool tapped = self(self, needed, any, allow_ramp);
+                    line_float_bypass = false;
+                    reserved_mask = prev_mask;
+                    if (tapped)
+                    {
+                        // The unit the spare added: {C} first, else the first colour that grew.
+                        if (floating.colorless > before.colorless) { spare_take = static_cast<int>(Color::Colorless); }
+                        else if (floating.white > before.white)    { spare_take = static_cast<int>(Color::White); }
+                        else if (floating.blue  > before.blue)     { spare_take = static_cast<int>(Color::Blue); }
+                        else if (floating.black > before.black)    { spare_take = static_cast<int>(Color::Black); }
+                        else if (floating.red   > before.red)      { spare_take = static_cast<int>(Color::Red); }
+                        else if (floating.green > before.green)    { spare_take = static_cast<int>(Color::Green); }
+                        return true;
+                    }
+                }
+            }
+        }
         // Snow pips skip the floating shortcut: mid-payment floating carries no snow provenance
         // (conservatively non-snow), so an {S} pip must tap a fresh snow source. Fungibility keeps
         // this sound when floating is non-empty -- the snow-produced unit enters the float and any
@@ -1942,10 +2106,16 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     auto pay = [&](Color needed, bool any) -> bool
     {
         payledger::t_cur_pip_any = any;     // rollback audit: what kind of pip this tap pays
+        spare_take = -1;
         const bool produced = produce(needed, any, true);
         payledger::t_cur_pip_any = false;
-        if (!produced) { return false; }
-        const bool ok = any ? [&]{ Color took; return ConsumeFloatingAny(floating, took); }()
+        if (!produced) { spare_take = -1; return false; }
+        const bool ok = any ? [&]{
+                                  // MTG_LINE_SPARE_GENERIC_FIRST: the spare unit pays this pip.
+                                  const int st = spare_take;
+                                  spare_take = -1;
+                                  if (st >= 0 && ConsumeFloating(floating, static_cast<Color>(st))) { return true; }
+                                  Color took; return ConsumeFloatingAny(floating, took); }()
                             : ConsumeFloating(floating, needed);
         // One pip landed: the turn-scope reserves (g_pay_remaining_mv's consumers) now see one
         // fewer pip still owed by this payment.
