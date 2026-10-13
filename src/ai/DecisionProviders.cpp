@@ -5641,6 +5641,7 @@ std::string AurasProvider::SelectDigSource(const GameState& s, const ManaPool& p
 // PREFIX-STABLE (CleanupDiscardShedStable's default): no card's class depends on a card that sheds
 // before it -- which is why a stranded Aura counts neither as an enabler nor as the dead Mask's
 // "enchantment around" (it sheds ahead of both). test_auras_discard.cpp walks boards shed by shed.
+// (The proposed MTG_AURA_RATE_MARGINAL, default OFF, declares it false: see its reader below.)
 // Classification is by PARAMS (aura_cast_tutor_attach, draw_on_aura_cast, is_aura,
 // aura_enchant_requires, aura_scale_*, sacrifice_draw_cost, mdfc_back_name, fastland via
 // LandWouldEnterTapped); the only name test is the legend rule's (CR 704.5j keys on the name). Every
@@ -5651,6 +5652,31 @@ static bool AuraBucketDiscardEnabled()
     static const bool on = EnvOn("MTG_AURA_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
     return heurarm::Flag(heurarm::AURA_BUCKET_DISCARD, on);
 }
+
+// PROPOSED AMENDMENT (agent, 2026-10-13), NOT the USER's design -- the USER decides; default OFF:
+// MTG_AURA_RATE_MARGINAL. The USER's useful-Aura rate counts only the scalers ON THE BOARD, so with no
+// enchantment out a 0-power Aura rates 0 even beside an Ethereal Armor kept in hand (held-out A/B game
+// Auras d0 s6051635 gi 1634: T4 shed Alpha Authority; the =0 arm cast it T6 beside Armor and swung 24
+// for lethal, the bucket arm 19). On, a useful Aura is rated by its MARGINAL power in the KEPT set
+// (section 7b) -- symmetric, unlike the rejected one-sided MTG_AURA_RATE_HAND_SCALERS (c013e52d, which
+// credited Alpha Authority for a hand Armor but not the Armor for the Alpha; USER: "Why would Alpha
+// Authority provide more damage than Ethereal Armor?"). Off, every order is the USER design exactly.
+static bool AuraRateMarginal()
+{
+    static const bool on = EnvOn("MTG_AURA_RATE_MARGINAL");   // DEFAULT OFF; =1 -> the amendment
+    return heurarm::Flag(heurarm::AURA_RATE_MARGINAL, on);
+}
+
+// Lever OFF -> true, the default (the USER design is prefix-stable, see above). ON -> false: the order is
+// computed by iterated removal (section 7b), so the useful Auras' tail already IS the per-shed sequence of
+// the marginal rule; but the USER's BLANK class reads the hand (no scaler in play OR KEPT IN HAND), and the
+// marginal rate can shed the last hand scaler ahead of a 0-power Aura (K = {Mask, Alpha Authority}: the
+// Mask adds 2 for 3 mana, Alpha 2 for 2), which a re-rank then classes BLANK. The iterated tail sheds that
+// Aura next anyway, and the two agree on every board the unit tests walk, but the class is the USER's and
+// must see the hand as it is, so the engine re-asks after every shed rather than trusting the claim. The
+// cost is one extra consultation per extra card shed, on the lever's arm only.
+bool AurasProvider::CleanupDiscardShedStable() const
+{ return !(AuraBucketDiscardEnabled() && AuraRateMarginal()); }
 
 // The per-card classes and record, at namespace scope rather than inside the function: MSVC 14.51 cannot
 // value-construct a FUNCTION-LOCAL struct whose default member initializers name function-local enumerators
@@ -5993,27 +6019,95 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     emit([&](int i) { return (info[i].cls == K_DRAWER || info[i].cls == K_TUTOR) && i != slot && i != paws; },
          by_index);                                                                       // spare Kor
     emit([&](int i) { return info[i].cls == K_LAND && info[i].land_slot == L_SOFT; }, by_index);   // 4th land
-    emit([&](int i) { return aura_sub(i, A_USEFUL); },                                    // useful, worst first
-         [&](int a, int b)
-         {
-             if (dist_on)   // EV = rate x CastFactor (an exact rate tie stays exact in double)
-             {
-                 const double ea = static_cast<double>(info[a].marg) / std::max(1, info[a].mv) * info[a].fac;
-                 const double eb = static_cast<double>(info[b].marg) / std::max(1, info[b].mv) * info[b].fac;
-                 if (ea != eb) { return ea < eb; }
-             }
-             else
-             {
-                 const long ra = static_cast<long>(info[a].marg) * std::max(1, info[b].mv);
-                 const long rb = static_cast<long>(info[b].marg) * std::max(1, info[a].mv);
-                 if (ra != rb) { return ra < rb; }
-             }
-             const bool sa = is_scaler(info[a].d), sb = is_scaler(info[b].d);
-             if (sa != sb) { return !sa; }                                                // reading (d)
-             if (info[a].mv != info[b].mv)
-             { return tutor_in_play ? info[a].mv < info[b].mv : info[a].mv > info[b].mv; }
-             return a < b;
-         });
+    // The useful Auras, worst first. The rate's numerator is `val` -- the USER's live power (marg) unless
+    // MTG_AURA_RATE_MARGINAL is on (7b) -- held as a double for the model's EV and as an integer for the
+    // =0 proxies' exact cross-multiplied rate; off, both are info[].marg itself, so the comparator is the
+    // USER design's expression for expression.
+    std::vector<double> val_d(static_cast<std::size_t>(n), 0.0);
+    std::vector<long>   val_i(static_cast<std::size_t>(n), 0);
+    auto useful_sheds_before = [&](int a, int b)
+    {
+        if (dist_on)   // EV = rate x CastFactor (an exact rate tie stays exact in double)
+        {
+            const double ea = val_d[a] / std::max(1, info[a].mv) * info[a].fac;
+            const double eb = val_d[b] / std::max(1, info[b].mv) * info[b].fac;
+            if (ea != eb) { return ea < eb; }
+        }
+        else
+        {
+            const long ra = val_i[a] * std::max(1, info[b].mv);
+            const long rb = val_i[b] * std::max(1, info[a].mv);
+            if (ra != rb) { return ra < rb; }
+        }
+        const bool sa = is_scaler(info[a].d), sb = is_scaler(info[b].d);
+        if (sa != sb) { return !sa; }                                                     // reading (d)
+        if (info[a].mv != info[b].mv)
+        { return tutor_in_play ? info[a].mv < info[b].mv : info[a].mv > info[b].mv; }
+        return a < b;
+    };
+    if (!AuraRateMarginal())
+    {
+        for (int i = 0; i < n; ++i) { val_d[i] = static_cast<double>(info[i].marg); val_i[i] = info[i].marg; }
+        emit([&](int i) { return aura_sub(i, A_USEFUL); }, useful_sheds_before);         // useful, worst first
+    }
+    else
+    {
+        // ---- 7b. MTG_AURA_RATE_MARGINAL (proposed amendment, default OFF; see the reader) ---------------
+        // An Aura's value is its MARGINAL power in the KEPT set K -- the useful Auras still in hand, plus
+        // the board: P(K) - P(K \ a), where P sums every kept Aura's fixed bonus and every scaler's
+        // per-unit power times what it counts. Each kept Aura is one more enchantment (and one more
+        // artifact-or-enchantment), so every scaler kind counts every other kept Aura once, and so
+        //   M(a) = marg(a)                                 the USER's live power + the board scalers' credit
+        //        + pw(a) x #(K \ a)    if a is a scaler    the kept Auras it would count
+        //        + sum pw(s), s in K \ a, s a scaler       the kept scalers that would count it
+        // SYMMETRIC: a 0-power Aura beside one hand Ethereal Armor gains +1, and the Armor gains +1 for it.
+        // Ancestral Mask's pw is 2, so it gains 2 per other kept Aura (it never counts itself: marg's
+        // ench_all is the board's). Only the useful Auras' order reads M -- the dup / blank / dead / stranded
+        // classes above are the USER's, computed on marg, and those cards are not in K (they shed first).
+        //
+        // CASTABILITY (reused, not invented): the shared discard_dist factor, the same `fac` the USER rate
+        // multiplies by. Read as an independent weight per Aura, the EXPECTED power E[P(K)] puts fac(a) on
+        // a's own terms and fac(s) x fac(a) on every scaler-counts-Aura pair, so
+        //   E[M(a)] = fac(a) x ( marg(a) + pw(a) x sum fac(b), b in K \ a + sum fac(s) x pw(s), s in K \ a )
+        // -- the USER's EV shape (rate x fac) with marg replaced by the bracket. A {W}{W} Daybreak Coronet
+        // with no white source neither earns full credit from the scalers nor gives a scaler a full unit.
+        // With MTG_DISCARD_DIST_MODEL=0 every fac is 1 (that arm has no castability, exactly as the USER's
+        // =0 rate has none) and M is the exact integer above.
+        //
+        // SHED STABILITY: K shrinks as Auras shed, and M moves with it (shedding a scaler takes its credit
+        // off every other Aura), so ranking K once is not the greedy shed. The order is built by ITERATED
+        // REMOVAL -- shed the worst M in the current K, recompute M over the rest, repeat -- which is
+        // exactly what re-ranking after each shed would pick: the tail of this list IS the per-shed
+        // sequence, so the searched discard axis (which indexes this list) and a multi-card cleanup see the
+        // same order. CleanupDiscardShedStable() is still false while this is on, for the USER classes'
+        // sake (see its definition). Ties use the USER comparator unchanged.
+        std::vector<int> kept;
+        kept.reserve(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i) { if (aura_sub(i, A_USEFUL)) { kept.push_back(i); } }
+        auto pw = [&](int i) { return is_scaler(info[i].d) ? info[i].d->params.aura_scale_power : 0; };
+        while (!kept.empty())
+        {
+            long   cnt = 0, cred = 0;          // #K and sum pw(s) over K's scalers
+            double wcnt = 0.0, wcred = 0.0;    // the same, castability-weighted
+            for (int i : kept)
+            {
+                ++cnt;
+                cred  += pw(i);
+                wcnt  += info[i].fac;
+                wcred += info[i].fac * pw(i);
+            }
+            for (int i : kept)
+            {
+                const int p = pw(i);
+                val_i[i] = info[i].marg + static_cast<long>(p) * (cnt - 1) + (cred - p);
+                val_d[i] = info[i].marg + p * (wcnt - info[i].fac) + (wcred - info[i].fac * p);
+            }
+            int worst = kept.front();
+            for (int i : kept) { if (useful_sheds_before(i, worst)) { worst = i; } }
+            shed.push_back(worst);
+            kept.erase(std::find(kept.begin(), kept.end(), worst));
+        }
+    }
     if (paws >= 0) { shed.push_back(paws); }                                              // protected
     if (slot >= 0) { shed.push_back(slot); }
     for (int k = hard_n - 1; k >= 0; --k) { shed.push_back(land_keep[k]); }
