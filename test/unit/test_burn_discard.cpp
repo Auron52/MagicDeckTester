@@ -286,6 +286,48 @@ TEST_CASE("burn discard B6: Shard Volley above the land-less Blaze; a Blood that
     CHECK(Gen(s).front() == 5);
 }
 
+// MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE (USER-adopted 2026-10-13, default ON). The board is the T5 cleanup of
+// the integration's held-out A/B game (burn d3 s6105084 gi 83): one Mountain, Swiftspear + Goblin Guide in
+// play (next swing 3), three opponent 2/2s, opponent at 9, no land in hand.
+// Without the amendment, by hand: live burn walk Skull 3 > Skull 5 (r0) > Blood 7 (kills a 2/2: r2) >
+// Volley 0 > Volley 1 (r3) > Blaze 2 > Blaze 6 (no kept land: r4, 1 dmg). Need 9 - 3 = 6: both Skullcracks
+// kept, the rest beyond lethal -- except Volley 1, the 2nd Volley with one land in reach (S4). Eidolon is not
+// needed (T5 > 3): S7, waived. -> S4 1, S5 6 2 0 7, S7 4, ladder tail 5 3.
+// With it: the two 1-damage Blazes leave S5 and shed in S4 ahead of the land-less Volley -> 2 6 1 0 7 4 5 3.
+// With no land-less Volley (B6's board: 3 lands, 1 Volley) the lever changes nothing.
+TEST_CASE("burn discard: MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE sheds the 1-damage Blaze before a land-less Volley")
+{
+    const GameState s = MakeBurn({ kVolley, kVolley, kBlaze, kSkull, kEid, kSkull, kBlaze, kBlood },
+                                 { kMtn, kSS, kGG }, { kGG, kGG, kGG }, 5, 9);
+    auto amend = [](const GameState& g, int on)
+    {
+        heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP_OVER_DRY_BLAZE] = static_cast<std::int8_t>(on);
+        std::vector<int> v = Burn(g);
+        heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP_OVER_DRY_BLAZE] = -1;
+        return v;
+    };
+    CHECK(Burn(s) == std::vector<int>{ 2, 6, 1, 0, 7, 4, 5, 3 });       // unset = ON (the default)
+    CHECK(amend(s, 1) == std::vector<int>{ 2, 6, 1, 0, 7, 4, 5, 3 });
+    CHECK(amend(s, 0) == std::vector<int>{ 1, 6, 2, 0, 7, 4, 5, 3 });   // =0: the design without it
+    CheckPermutation(s, amend(s, 1));
+
+    // A 2-card cleanup (re-ranked per shed: the bucket arm is not prefix-stable) sheds both dry Blazes.
+    heurarm::t_arm[heurarm::BURN_BUCKET_DISCARD] = 1;
+    GameState t = s;
+    const int done = CleanupDiscardShed(t, &kReq, 2, -1, false, true, nullptr);
+    heurarm::t_arm[heurarm::BURN_BUCKET_DISCARD] = -1;
+    REQUIRE(done == 2);
+    REQUIRE(t.players[0].graveyard.size() == 2);
+    CHECK(t.players[0].graveyard[0].m_name == kBlaze);
+    CHECK(t.players[0].graveyard[1].m_name == kBlaze);
+
+    // No land-less Volley -> the order is the design's exactly (B6), on either arm.
+    const GameState b6 = MakeBurn({ kBlood, kBlaze, kVolley, kBolt, kSkull, kLuts, kGG, kSS },
+                                  { kMtn, kMtn, kMtn }, { "Varchild's War-Riders" }, 4);
+    CHECK(amend(b6, 1) == std::vector<int>{ 0, 1, 2, 4, 5, 3, 6, 7 });
+    CHECK(amend(b6, 0) == std::vector<int>{ 0, 1, 2, 4, 5, 3, 6, 7 });
+}
+
 TEST_CASE("burn discard: MTG_BURN_BUCKET_DISCARD=0 is exactly the generic ranking, protection intact")
 {
     const std::vector<GameState> boards = {

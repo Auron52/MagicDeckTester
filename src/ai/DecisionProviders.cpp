@@ -9305,6 +9305,21 @@ bool BurnProvider::CleanupDiscardProtectionWaived(const GameState& s, const Card
 
 bool BurnProvider::CleanupDiscardShedStable() const { return !BurnBucketDiscardEnabled(); }
 
+// MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE -- an amendment to the USER's burn buckets, ADOPTED by the USER
+// (2026-10-13: "The burn one seems okay."). While S4 holds a Shard Volley with no land of its own, a LIVE
+// Searing Blaze that would deal only 1 (no kept hand land for landfall: the last entry of the USER's burn
+// order) is shed AHEAD of it, in S4's slot. Reading: a Volley one land short is worth 3 the turn a land
+// arrives, the dry Blaze 1. Nothing else moves: the classes, the lethal walk and every other slot are
+// computed exactly as the USER's design; with no land-less Volley the order is unchanged. Found by the
+// integration's held-out A/B (burn d3 s6105084 gi 83): one land for five turns, T5 shed the 2nd Volley
+// and kept the 1-damage Blaze; T6 drew a Mountain and was a Volley short (T7; generic T6). Measured on
+// fresh seeds vs the design without it: ship / d3 identical, d0 3 faster / 0 slower over 80,000 games.
+static bool BurnVolleyKeepOverDryBlaze()
+{
+    static const bool on = EnvOn("MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::BURN_VOLLEY_KEEP_OVER_DRY_BLAZE, on);
+}
+
 std::vector<int> BurnProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -9470,6 +9485,22 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
         while (di < dn)               { take('D'); }
     }
 
+    // ---- MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE (USER-adopted amendment, default ON; see the reader) ------
+    // The dry live Blazes (b_rank 4: landfall, no kept hand land) leave their slot (S5 or the keep
+    // ladder) and shed in S4, ahead of the land-less Volleys -- only while there is such a Volley.
+    std::vector<int> dry_blaze_up;
+    if (!volley_no_land.empty() && BurnVolleyKeepOverDryBlaze())
+    {
+        for (int i : live_burn) { if (at(b_rank, i) == 4) { dry_blaze_up.push_back(i); } }
+        if (!dry_blaze_up.empty())
+        {
+            auto moved = [&](int i)
+            { return std::find(dry_blaze_up.begin(), dry_blaze_up.end(), i) != dry_blaze_up.end(); };
+            burn_beyond.erase(std::remove_if(burn_beyond.begin(), burn_beyond.end(), moved), burn_beyond.end());
+            ladder.erase(std::remove_if(ladder.begin(), ladder.end(), moved), ladder.end());
+        }
+    }
+
     // ---- emit the shed order ----------------------------------------------------------------------
     std::vector<int> shed;
     shed.reserve(static_cast<std::size_t>(n));
@@ -9477,6 +9508,7 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
     for (int i : dead_blaze)    { shed.push_back(i); }                                       // S2
     for (int i : dead_other)    { shed.push_back(i); }
     for (std::size_t k = lands.size(); k-- > static_cast<std::size_t>(kept_lands_n);) { shed.push_back(lands[k]); }  // S3
+    for (int i : dry_blaze_up)   { shed.push_back(i); }                                      // S4 (the amendment)
     for (int i : volley_no_land) { shed.push_back(i); }                                      // S4
     for (std::size_t k = burn_beyond.size(); k-- > 0;) { shed.push_back(burn_beyond[k]); }   // S5
     for (std::size_t k = digs.size(); k-- > static_cast<std::size_t>(dig_keep);) { shed.push_back(digs[k]); }       // S6
