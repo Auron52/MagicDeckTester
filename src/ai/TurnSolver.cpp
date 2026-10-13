@@ -10651,12 +10651,28 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
 // call site). See docs/design/dragonstorm-d0-divergence-digest.md.
 static const bool s_storm_hold = !EnvOn("MTG_NO_STORM_HOLD");
 
+// MTG_PAYOFF_PRUNE_REDUCER_SINK (heurarm PAYOFF_PRUNE_REDUCER_SINK). DEFAULT ON; =0 -> the creature / storm /
+// Apex payoffs only. A PERMANENT spell-cost reducer (Ruby Medallion) is a sink for the ritual's mana: the
+// discount outlives the turn, so "Rite of Flame -> Ruby Medallion" is not a one-turn accelerant burnt for
+// nothing -- it is the USER's "cast as early as possible" Medallion (dragonstorm-user-cast-order.md). Without
+// it the prune deletes that line at every budget, even with a Dragonstorm in hand (it advances the storm turn).
+// SEARCH BRANCH LIST ONLY (EnumeratePlans), like the storm-hold rule in the other direction: the search must be
+// able to find the line, while the greedy policy (Solve's consider: the d0 runner and the rollouts) keeps
+// holding the ritual -- admitting it there too measured worse at d0 (fresh seeds 2000 games: +68, 48 / 84),
+// the greedy spending rituals on a Medallion it cannot see the storm turn for.
+static bool PayoffPruneReducerSinkOn()
+{
+    static const bool on = EnvOn("MTG_PAYOFF_PRUNE_REDUCER_SINK", true);
+    return heurarm::Flag(heurarm::PAYOFF_PRUNE_REDUCER_SINK, on);
+}
+
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                   bool storm_in_hand)
+                                   bool storm_in_hand, bool search_branch_list = false)
 {
     // A fair creature justifies a ritual by default; under the storm-hold rule, when a storm payoff is
     // in hand, it does NOT -- only the storm finishers (Dragonstorm/Apex) do, so the ritual is held.
     const bool creature_pays = !(s_storm_hold && storm_in_hand);
+    const bool reducer_pays  = search_branch_list && PayoffPruneReducerSinkOn();
     bool has_ritual = false, has_payoff = false;
     for (int j : sel)
     {
@@ -10664,7 +10680,8 @@ static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::
         const CardDefinition* d = cands[j].def;
         if (!d) { continue; }
         if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0
-            || (creature_pays && d->card.IsCreature()))
+            || (creature_pays && d->card.IsCreature())
+            || (reducer_pays && !d->params.reduces_spell_color.empty() && !d->card.IsLand()))
         {
             has_payoff = true;
         }
@@ -48440,7 +48457,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // branch list intact so it can still arbitrate the cast-a-dragon-now line.
         if (payoff_prune_on
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
-            && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false)) { return; }
+            && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false, /*search_branch_list=*/true)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
