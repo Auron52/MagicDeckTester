@@ -51124,7 +51124,18 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (d ? d->card.IsLand() : c.IsLand()) { ++lands_now; }
             if (d && d->params.discard_land_damage > 0) { le_reachable = true; }
         }
-        if (!le_reachable)
+        // DECKLIST GATE on the library walk (GameState::deck_has_discard_land_damage). Byte-identical
+        // by construction: the stamp is true whenever any card in either zone carries the param, so a
+        // false stamp is a PROOF the loop below cannot reach `le_reachable = true`. The hand loop
+        // above is deliberately NOT gated -- it does double duty, counting `lands_now`.
+        //
+        // Worth doing for two separate reasons. It is a per-node whole-library scan that for every
+        // deck but Treasure Hunt is guaranteed to walk all 50+ cards and find nothing, and wasted
+        // work is removed on sight. And it is the last site that saturates the index-carry mask: a
+        // composition test over the library genuinely does make an UNDRAWN card outcome-relevant
+        // (an undrawn Land's Edge widens this very fan), so it must not be exempted via
+        // Library::RawAt -- the sound fix is to not run it when the decklist proves it cannot match.
+        if (!le_reachable && state.deck_has_discard_land_damage)
         {
             for (const Card& c : state.players[ctrl].library)
             {

@@ -695,6 +695,21 @@ struct GameState
     // Defaults TRUE (an unstamped state keeps the walk -- erring the other way UNDERCHARGES a spell).
     // Lives in the padding after the bools above.
     bool                     deck_has_spell_tax    = true;
+    // Does the deck run a LAND'S EDGE (CardParams::discard_land_damage)? DECK CONSTANT, stamped by
+    // StampDeckTraits. Gates AppendSubdecisionAxes' `le_reachable` LIBRARY walk -- a whole-library
+    // scan, run per node, which for every deck in the suite but Treasure Hunt is guaranteed to
+    // examine all 50+ cards and find nothing. Two reasons it is worth a trait rather than a comment:
+    //   * it is wasted search work, and a prune of provably-empty work is adopted unconditionally
+    //     (USER 2026-10-01: *"Wasted work is wasted work regardless of the situation"*);
+    //   * it is the LAST site that saturates the index-carry accessibility mask
+    //     (src/core/IndexCarry.h). Library ITERATION is recorded as a whole-library read, because a
+    //     test over library composition really does make an UNDRAWN card outcome-relevant -- and
+    //     this one does: an undrawn Land's Edge widens the plan fan. So it must NOT be exempted via
+    //     RawAt; the honest fix is to not run it when the decklist proves it cannot match. A deck
+    //     that DOES play Land's Edge keeps the walk and keeps saturating, which is correct.
+    // Defaults TRUE so an unstamped state keeps the walk (today's behaviour). Lives in the bool
+    // padding after the bools above, so sizeof(GameState) does not move.
+    bool                     deck_has_discard_land_damage = true;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole

@@ -7,6 +7,8 @@
 #include <mutex>
 #include <set>
 #include <cstdio>
+#include <cstdint>
+#include <dlfcn.h>
 
 // Execution-trace instrumentation sink (off by default -> byte-identical). See RolloutTouch.h.
 namespace rollout_touch { thread_local Sink* g_sink = nullptr; }
@@ -22,6 +24,18 @@ thread_local Sink* t_sink = nullptr;
 // See the declaration in IndexCarry.h. Off unless MTG_INDEX_CARRY_SITES; one line per distinct
 // return address, first sighting only, so the output is a short list to feed addr2line rather than
 // hundreds of thousands of duplicates.
+// PRINT THE FILE-RELATIVE OFFSET, not the runtime address, and that distinction is the whole
+// usefulness of this tool. The binary is a PIE, so a raw `%p` is only resolvable if you also know
+// the load base -- which means guessing it, remembering to run under `setarch -R`, and getting `??`
+// from addr2line the moment you resolve against a DIFFERENT build of the same source (Release traced,
+// Profile resolved: the only build with line numbers is the one whose base you no longer know). The
+// offset is base-independent, so the loop is just:
+//
+//     MTG_INDEX_CARRY=1 MTG_INDEX_CARRY_SITES=1 ./build/Profile/mtg --batch <probe> --threads 1
+//     addr2line -f -C -i -e build/Profile/mtg <offset>
+//
+// dladdr's `dli_fbase` is the mapped base of the object the address lives in, so this is also
+// correct for a site that ends up in a shared library rather than the executable.
 void NoteWholeLibraryReadSite(const void* ret)
 {
     static const bool on = EnvOn("MTG_INDEX_CARRY_SITES");
@@ -30,7 +44,22 @@ void NoteWholeLibraryReadSite(const void* ret)
     static std::set<const void*>   seen;
     std::lock_guard<std::mutex>    lk(mu);
     if (!seen.insert(ret).second) { return; }
-    std::fprintf(stderr, "=== ICARRY whole-library read site: %p ===\n", ret);
+    Dl_info info{};
+    if (dladdr(ret, &info) != 0 && info.dli_fbase != nullptr)
+    {
+        const std::uintptr_t off = reinterpret_cast<std::uintptr_t>(ret)
+                                 - reinterpret_cast<std::uintptr_t>(info.dli_fbase);
+        std::fprintf(stderr,
+                     "=== ICARRY whole-library read site: +0x%zx in %s   (addr2line -f -C -i -e "
+                     "<binary> 0x%zx)%s%s ===\n",
+                     static_cast<std::size_t>(off),
+                     info.dli_fname ? info.dli_fname : "?",
+                     static_cast<std::size_t>(off),
+                     info.dli_sname ? "  sym=" : "",
+                     info.dli_sname ? info.dli_sname : "");
+        return;
+    }
+    std::fprintf(stderr, "=== ICARRY whole-library read site: %p (dladdr failed) ===\n", ret);
 }
 }   // namespace indexcarry
 

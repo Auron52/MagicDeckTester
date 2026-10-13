@@ -77,11 +77,20 @@ public:
     const_iterator begin() const { indexcarry::NoteWholeLibraryRead(); return m_cards.begin() + static_cast<std::ptrdiff_t>(m_top); }
     const_iterator end()   const { return m_cards.end(); }
 
-    // NON-RECORDING positional read, for the two sites whose use of a card's identity provably
-    // cannot make an undrawn card outcome-relevant. Returns exactly what operator[] returns, so
-    // every game stays byte-identical; the ONLY difference is that the access is not recorded.
-    // Do not add a third caller without the same kind of argument written down.
+    // NON-RECORDING positional access, for the sites whose use of a card's identity provably cannot
+    // make an undrawn card outcome-relevant. Returns exactly what operator[] returns, so every game
+    // stays byte-identical; the ONLY difference is that the access is not recorded. Each caller owes
+    // its own written argument -- see IndexCarry.h; the exemptions are NOT interchangeable, because
+    // a memo-key digest is safe BY CONSTRUCTION while a loop feeding a decision VALUE is only safe
+    // under a precondition the consumer has to check.
+    //
+    // THE MUTABLE OVERLOAD IS SETUP-ONLY. It exists for GoldFishRunner::AssignCardNumbers, which
+    // STAMPS m_number onto a library that is still in decklist order, before the opening shuffle --
+    // so there is no information to leak: the numbering is what the carry's bit assignment is
+    // DERIVED from, and the walk happens before the game has a state to decide anything in. Do not
+    // reach for it from anywhere a game is in progress.
     const Card& RawAt(std::size_t i) const { return m_cards[m_top + i]; }
+    Card&       RawAt(std::size_t i)       { return m_cards[m_top + i]; }
 
     // --- mutation (forwarded; the passed iterators already point into the live window) ---
     void push_back(const Card& c) { m_cards.push_back(c); }

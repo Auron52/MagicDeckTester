@@ -724,8 +724,14 @@ void GoldFishRunner::AssignCardNumbers(GameState& state,
                                        const std::map<std::string, std::vector<int>>& numbering)
 {
     std::map<std::string, int> copy_index;
-    for (Card& c : state.players[0].library)
+    // RawAt, not iteration: this is the walk that ASSIGNS the numbers the index-carry mask is keyed
+    // on, and it runs on a still-unshuffled library before the game exists. Recording it would
+    // MarkAll every single game and permanently saturate the mask -- the carry would report "every
+    // card accessible" before turn 1. See Library::RawAt's setup-only note.
+    Library& lib = state.players[0].library;
+    for (std::size_t li = 0, ln = lib.size(); li < ln; ++li)
     {
+        Card& c = lib.RawAt(li);
         int idx = copy_index[c.m_name]++;
         auto it = numbering.find(c.m_name);
         if (it != numbering.end() && idx < static_cast<int>(it->second.size()))
@@ -1146,6 +1152,23 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Land's Edge: only a deck that runs one pays AppendSubdecisionAxes' per-node LIBRARY walk.
+    // BOTH ZONES deliberately, the `deck_has_attack_threshold` reasoning rather than the
+    // mainboard-only one: the gate's sole effect is to skip a provably-empty walk, so over-arming
+    // it is merely slower and can never change a result -- and that removes any question about
+    // whether a sideboard card can reach the library. The sideboard is shared across every arm of a
+    // screen, so scanning it is symmetric and introduces no arm asymmetry either.
+    state.deck_has_discard_land_damage = [&deck]{
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.discard_land_damage > 0) { return true; }
+            }
+        }
+        return false;
+    }();
     // Harbin's attack-threshold pump: only a deck that runs one pays its per-combat board scan.
     state.deck_has_attack_threshold = [&deck]{
         for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
@@ -1477,8 +1500,10 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
         // Pre-shuffle the library is in decklist order, so AssignCardNumbers' per-name copy counter
         // hands copy k of a card the map's k-th entry -- independent of where the file lists it.
         AssignCardNumbers(state, *supplied);
-        for (const Card& c : state.players[0].library)
+        const Library& nlib = state.players[0].library;
+        for (std::size_t li = 0, ln = nlib.size(); li < ln; ++li)
         {
+            const Card& c = nlib.RawAt(li);   // same setup-only exemption as AssignCardNumbers
             // m_number 0 == the name is absent from the map, or this deck holds more copies than the
             // map allots. Either way ShuffleByKey would key every such card identically and clump
             // them: refuse rather than silently measure a broken shuffle.

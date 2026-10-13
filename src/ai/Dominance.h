@@ -388,6 +388,11 @@ static_assert(sizeof(Player) == 200,
 // REBASE NOTE (2026-10-08): the 864 -> 872 above is the pre-rebase measurement. Rebased onto
 // upstream's 1072 the same three fields land differently in padding, so the number below is a FRESH
 // measured sizeof under the merged layout, not 1072 + 8 arithmetic.
+// +bool (2026-10-13, Fungus/index-carry; NO size change -- it lands in the existing bool padding,
+// which is why the number below is unmoved): `deck_has_discard_land_damage` (Land's Edge). Same
+// classification as `deck_has_spell_tax` / `deck_has_attack_threshold` above: a DECK CONSTANT stamped
+// once in StampDeckTraits that only skips a provably-empty walk (AppendSubdecisionAxes' per-node
+// library scan), so it is identical across every pair of states Build() compares -- nothing to fold.
 static_assert(sizeof(GameState) == 1080,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
