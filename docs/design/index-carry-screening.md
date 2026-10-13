@@ -88,7 +88,13 @@ reused; it was latent only because nothing shipped carried `traced`). Mirror the
 `ProvenWinlessThisTurn` discipline: *"any card, zone or route the analysis does not cover returns
 false"*.
 
-## The win-turn relaxation (USER proposal 2026-10-13) -- INSTRUMENT IT, DO NOT ASSUME IT
+## The win-turn relaxation (USER proposal 2026-10-13) -- APPROVED AS A MEASUREMENT
+
+**USER ruling 2026-10-13: *"Measuring it sounds good to me."*** So the two-mask recorder is part of
+the FIRST build (retrofitting a per-turn snapshot later is the expensive order), the relaxed
+predicate ships OFF, and the already-mandatory verification pass reports skip rate AND per-game
+identity for every predicate. Adopting the relaxation is then a USER decision on that data -- it is
+not pre-approved by this ruling, which authorises the measurement only.
 
 > *"If we wanted to be even more tricky we could skip adding cards that are accessible only on the
 > win turn, but not played as part of the winning line... it is technically correct in that it could
@@ -129,11 +135,20 @@ estimated" property that the rest of this document rests on. It is also nearly f
 * Recorder: snapshot the mask at the START of each turn, and OR in the cards the executor actually
   touched during the win turn. That is one extra `uint64_t` plus a per-turn copy; the skip test stays
   a single `AND`.
-* Store BOTH masks (strict, and win-turn-relaxed -- optionally relaxed-library-only as a third).
-* The mandatory verification run (below) then reports skip rate under each AND per-game identity under
-  each, in the same pass. If the relaxed predicate holds identity at the shipped budget, take it. If it
-  does not, the finding is that the budget is perturbing line-finding -- worth knowing on its own, and
-  a sharper instrument for it than anything currently in the tree.
+* Store the masks for all THREE predicates, which the verification pass evaluates side by side:
+  - **P0 strict** -- the predicate the rest of this document specifies. Exact. The one that ships on.
+  - **P1 relaxed, library-only** -- P0 minus the win turn's library-prefix extension, for won games
+    only. Root menu byte-identical; near-exact; expected to carry most of the extra saving.
+  - **P2 relaxed, full** -- P1 also minus cards that reached hand/another zone on the win turn and were
+    never touched, for won games only. Sound at large budget, approximate at the shipped one.
+* The mandatory verification run (below) reports, for each predicate: skip rate, AND per-game identity
+  against the full run. Expected reading: P0 identical by construction (a failure there is a RECORDER
+  BUG, which is the main thing the pass is for); P1 identical or near it; P2 is the real question. If
+  P2 breaks identity, the finding is that the 20 ms budget is perturbing which line gets found -- worth
+  knowing on its own, and a sharper instrument for it than anything currently in the tree.
+* **Report the skip rates even if the identity check kills P1/P2.** The gap between P0 and P1 prices
+  how much of the mask the final turn's search prefix is responsible for, which is a fact about search
+  shape that nothing in the tree currently measures.
 
 ## The pruning-heuristic trap (USER 2026-10-13)
 
