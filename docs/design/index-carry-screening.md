@@ -22,6 +22,9 @@ accessible; if the edited indices were not among them, carry the base result.
 known, not estimated. The estimator is byte-identical to the full run and `se` is still computed
 over all N games. Pure compute saving, zero statistical cost.
 
+(The ONE proposed rule that would weaken this to an approximation is the win-turn relaxation; it is
+kept separate, off, and instrumented for exactly that reason -- see its section below.)
+
 ## Why the existing feature does not cover it
 
 `docs/design/execution-trace-carry.md` (Phase A+B BUILT 2026-07-07, `src/core/RolloutTouch.h`,
@@ -84,6 +87,53 @@ changed-card set, so every cell read as provably-untouched and the ENTIRE prior 
 reused; it was latent only because nothing shipped carried `traced`). Mirror the
 `ProvenWinlessThisTurn` discipline: *"any card, zone or route the analysis does not cover returns
 false"*.
+
+## The win-turn relaxation (USER proposal 2026-10-13) -- INSTRUMENT IT, DO NOT ASSUME IT
+
+> *"If we wanted to be even more tricky we could skip adding cards that are accessible only on the
+> win turn, but not played as part of the winning line... it is technically correct in that it could
+> change how we win, but not the winning turn."* ... *"Because the original line that wins on turn X
+> is still there (so winning some other way on turn X is redundant information)."*
+
+**The proof, and it is short.** The winning line never touched the edited index, so it is still legal
+in the arm. A win is **terminal-maximal** -- nothing the substituted card enables can be worth more
+than winning this turn. So the swap can only change WHICH maximal line is picked, and every maximal
+line reports the same turn. Note what the argument does NOT need: no claim about the new card's
+quality, only "the old line survives" + "nothing outranks a win."
+
+**It is WINS-ONLY, and the exception is the dangerous direction.** For a game that hit the turn cap
+without winning, "not played as part of the winning line" is vacuously true of every card -- there
+was no winning line -- while the arm's different card on the final turn is EXACTLY what might have
+won it. The relaxation is licensed by the win EXISTING, not by the turn being last. A build must gate
+it on `won == true`, never on `turn == last_turn`.
+
+**Under a binding budget the line is still there but may not be FOUND.** Screens run at
+`budget_ms: 20`. This is the repo's standing distinction (`docs/design/budget-may-reprice-not-remove`
+/ CLAUDE.md): re-pricing work is legal, making a line unfindable is not -- and a budget perturbation
+is precisely a findability change. That splits the relaxation into two sub-cases whose risk differs
+by a lot, and the split is the reason to build it:
+
+1. **Library-only on the win turn** -- the edited index was read by the final turn's search prefix and
+   never left the library. The root menu is **byte-identical**, so the winning action is enumerated in
+   the same position, and rollout values cannot outrank a terminal win. Residual risk is only rollout
+   unit accounting shifting the exhaustion point. **This is likely where most of the payoff is**: the
+   win turn is where the search reads deepest, so the final turn's prefix extension is the single
+   largest block of bits the strict mask sets.
+2. **In hand (or any other zone) on the win turn, unplayed** -- the root menu itself differs, so
+   enumeration and unit consumption differ. Sound at large budget; an approximation at 20 ms.
+
+**Therefore: record it, report it, and let the data decide -- do not ship it on the argument alone.**
+This would be the design's FIRST inexact rule, and it forfeits the "`D_g` is exactly 0, known not
+estimated" property that the rest of this document rests on. It is also nearly free to measure:
+
+* Recorder: snapshot the mask at the START of each turn, and OR in the cards the executor actually
+  touched during the win turn. That is one extra `uint64_t` plus a per-turn copy; the skip test stays
+  a single `AND`.
+* Store BOTH masks (strict, and win-turn-relaxed -- optionally relaxed-library-only as a third).
+* The mandatory verification run (below) then reports skip rate under each AND per-game identity under
+  each, in the same pass. If the relaxed predicate holds identity at the shipped budget, take it. If it
+  does not, the finding is that the budget is perturbing line-finding -- worth knowing on its own, and
+  a sharper instrument for it than anything currently in the tree.
 
 ## The pruning-heuristic trap (USER 2026-10-13)
 
