@@ -440,6 +440,7 @@ enum Slot : int
     EDF_GOFF_VERIFY_UNPROJECTED,// MTG_EDF_GOFF_VERIFY_UNPROJECTED Solve's EDF blink go-off cut: the maximal blink candidate is verified by ONE apply on a copy even when ExtraLethalDamage / ProjectsAlternateWin do not project its kill (the apply's dig-and-deploy finisher -- Living Wish -> Essence Depleter -- is outside the projection); an execution-verified kill (opponent lost, we alive) is returned as this turn's win (EDF gi 1676 t4). Default ON; =0 -> projected-only verify, byte-identical
     ATTACK_REPROJECT_INTENT,  // MTG_ATTACK_REPROJECT_INTENT  an attack RE-PROJECTION (the board with the plan's taps applied) reads who WANTS to attack from the provider's verdict on the PRE-PLAN board, and re-reads only who CAN (the taps) and what the team hits for: re-asking AttackWith on a board where the plan's direct damage, casts and land payment have not happened flipped FiveColour's Deathrite hold (d0 gi1924: Cannons + Cornucopia + Archangel read 10, the real combat dealt 11). Default ON; =0 -> AttackWith re-asked on the re-projected board
     TAPAHEAD_PENDING_PIP_AUTO,// MTG_TAPAHEAD_PENDING_PIP_AUTO the ETB-untap tap-ahead (EtbUntapTapAheadIntoFloat) commits a dual land's banked unit to the pending cast's own still-uncovered pip in AUTONOMOUS play too (was human-only), when no other untapped source still covers that pip: Kitchen, the only {U}, banked {G} and Cloud of Faeries' {1}{U} was dropped (EDF held-out gi 147 t4); Solve's payer, which runs the same tap-ahead, refused {Wild Growth, Cloud} for the same reason. Executor + rollout + both walks (shared). Default ON; =0 -> human-only, byte-identical
+    SOLVE_AURA_PAYER_AS_EXECUTED,// MTG_SOLVE_AURA_PAYER_AS_EXECUTED MTG_SOLVE_AURA_PAYER_CHECK prices the land-Aura subset the way both apply worlds pay it: the whole-turn prepay (BatchPrepayMainCasts) on a scratch copy first, the per-cast walk only behind a declined prepay. The per-cast walk alone was stricter than execution where the joint prepay pays a line the walk cannot (EDF held-out gi 1011 t2 {Trace, Training Grounds}). Default ON; =0 -> the per-cast walk alone, byte-identical
     COUNT
 };
 
@@ -841,6 +842,7 @@ inline const char* Name(int slot)
         "MTG_EDF_GOFF_VERIFY_UNPROJECTED",
         "MTG_ATTACK_REPROJECT_INTENT",
         "MTG_TAPAHEAD_PENDING_PIP_AUTO",
+        "MTG_SOLVE_AURA_PAYER_AS_EXECUTED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

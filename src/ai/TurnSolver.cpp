@@ -7744,6 +7744,41 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
     return ok;
 }
 
+// THE LINE PAID THE WAY THE EXECUTOR PAYS IT (MTG_SOLVE_AURA_PAYER_CHECK's payer). Both apply worlds
+// (AIEngine::TakeTurn, ApplyPlanDirect) bind the line's unpaid-cost hold and plan traits and run the
+// whole-turn prepay (BatchPrepayMainCasts) BEFORE any cast pays; only a declined prepay leaves the
+// casts to the per-cast payer. SubsetPayableWithFilters is that per-cast fallback alone, so as the
+// gate it was STRICTER than execution wherever the joint prepay pays a line the per-cast walk cannot:
+// the prepay picks every land's face for the whole line at once, the per-cast walk picks it for the
+// first cast and strands the rest. Held-out EDF d0 (seed 5300001): gi 1011 t2 {Trace of Abundance,
+// Training Grounds} off Yavimaya Coast + Wild Growth and a fresh Aether Hub -- the prepay pays it
+// (the Coast's base face goes to {U}), the walk taps the Coast for {C} for Trace and finds no {U}; gi
+// 147 t4 {Wild Growth, Cloud of Faeries} -- the prepay pays it, the walk's Cloud tap-ahead commits
+// Kitchen (the only {U}) to {G}. Run the prepay on a scratch copy first, exactly as the executor
+// would, and walk the casts on what it leaves (a fully prepaid line pays out of the float); a
+// declined prepay is the per-cast walk, as before.
+// MTG_SOLVE_AURA_PAYER_AS_EXECUTED (DEFAULT ON; =0 restores the per-cast walk alone, byte-identical).
+static bool SolveAuraPayerAsExecutedOn()
+{
+    static const bool s_env = EnvOn("MTG_SOLVE_AURA_PAYER_AS_EXECUTED", true);
+    return heurarm::Flag(heurarm::SOLVE_AURA_PAYER_AS_EXECUTED, s_env);
+}
+static bool SubsetPayableAsExecuted(const GameState& state, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel)
+{
+    std::vector<Action> acts;
+    acts.reserve(sel.size());
+    for (int j : sel) { acts.push_back(cands[j]); }
+    PayScratch _scratch(state);
+    GameState& cp = _scratch.Board();
+    LineUnpaidCostScope _luc(LineCastCostTotal(acts));
+    PlanTraits traits;
+    if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, acts); }
+    PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
+    if (!TurnSolver::BatchPrepayMainCasts(cp, acts)) { return SubsetPayableWithFilters(state, cands, sel); }
+    return SubsetPayableWithFilters(cp, cands, sel);
+}
+
 // MTG_COLOR_EXACT_PROBE -- the soundness instrument for the colour-exact gate. The gate may only
 // ever reject a subset the board GENUINELY cannot pay, so every rejection is re-tested against the
 // real payment path (the same tap-for-real simulation the filter fallback uses, which is the
@@ -36463,7 +36498,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             {
                 bool casts_aura = false;
                 for (int j : sel) { if (cand_land_aura[static_cast<std::size_t>(j)]) { casts_aura = true; break; } }
-                if (casts_aura && !SubsetPayableWithFilters(state, cands, sel)) { mc_store_reject(); return; }
+                // ...priced the way the executor pays it: the whole-turn prepay first, the per-cast
+                // walk only behind a declined prepay (SubsetPayableAsExecuted;
+                // MTG_SOLVE_AURA_PAYER_AS_EXECUTED, =0 -> the per-cast walk alone).
+                if (casts_aura
+                    && !(SolveAuraPayerAsExecutedOn() ? SubsetPayableAsExecuted(state, cands, sel)
+                                                      : SubsetPayableWithFilters(state, cands, sel)))
+                { mc_store_reject(); return; }
             }
         }
         if (mana_cache_on && !mc_hit) { mc_last_gmask = gmask; mc_reject = false; mc_mana_ok = mana_ok; }
