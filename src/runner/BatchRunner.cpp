@@ -713,6 +713,15 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("esc_deck_r"))   { j.arm.esc_deck_r   = jspec["esc_deck_r"].get<double>(); }
     if (jspec.contains("esc_skip"))     { j.arm.esc_skip     = jspec["esc_skip"].get<bool>() ? 1 : 0; }
     if (jspec.contains("esc_skip_r"))   { j.arm.esc_skip_r   = jspec["esc_skip_r"].get<double>(); }
+    if (jspec.contains("esc_skip_rv"))
+    {
+        for (const auto& v : jspec["esc_skip_rv"])
+        {
+            if (j.arm.esc_skip_rv_n >= static_cast<int>(j.arm.esc_skip_rv.size()))
+            { throw std::runtime_error("manifest esc_skip_rv: more than 8 depths"); }
+            j.arm.esc_skip_rv[static_cast<std::size_t>(j.arm.esc_skip_rv_n++)] = v.get<double>();
+        }
+    }
     if (jspec.contains("esc_skip_single")) { j.arm.esc_skip_single = jspec["esc_skip_single"].get<bool>() ? 1 : 0; }
     if (jspec.contains("esc_fit_depth_cap")) { j.arm.esc_fit_depth_cap = jspec["esc_fit_depth_cap"].get<int>(); }
     if (jspec.contains("esc_depth_cap"))     { j.arm.esc_depth_cap     = jspec["esc_depth_cap"].get<int>(); }

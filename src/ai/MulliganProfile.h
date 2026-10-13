@@ -294,7 +294,15 @@ struct MulliganProfile
     // deck's own measured heuristic cost per probe leaf (a low quantile of it), never fleet-wide: Melira's
     // rollouts cost ~1/30 of other decks' per leaf. A value-leaf REGENERATION keeps it (valueleaf.sh replaces only
     // eval_model in the live sidecar), but the number was measured against the old leaf's probe -- re-check it.
-    double escalation_skip_r = 0.0;
+    // PER DEPTH: the sidecar value may also be an ARRAY, one R per heuristic-pass depth (d = 1, 2, ...; past its
+    // end the last entry applies). A rollout from a deeper leaf has fewer turns left to play, so its cost per
+    // leaf falls with depth (Selesnya's median: ~200 at d1 to ~23 at d5), and one constant fitted at d1
+    // overprices the deep passes the ladder's start gate extrapolates from. A scalar is a one-entry array.
+    // Empty => the fleet default (R = 0). Fit with scripts/esc_skip_calibrate.py (q = 0.10 of the deck's own
+    // per-leaf rollout cost at each depth). Held-out paired A/B vs R = 0 (2026-10-13, 23,200 games over six
+    // decks): 0 games slower; Selesnya -7.8% units with 0 / 6000 changed, where its constant 74 (-12.9%) had
+    // turned a T8 win into no win.
+    std::vector<double> escalation_skip_r;
 
     // Per-model "never fall back to the value-leaf line" flag (`value_no_fallback` key in <deck>.value.json).
     // The hybrid escalates an unverified line to the heuristic, then TAKES that result only if it clears the

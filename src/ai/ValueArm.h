@@ -1,5 +1,7 @@
 #pragma once
+#include <array>
 #include <string>
+#include <vector>
 
 // PER-THREAD value-leaf ARM settings, so ONE pooled batch can run BOTH arms of the depth matrix.
 //
@@ -128,6 +130,10 @@ struct Arm
     // Per-job so the on/off arms and an R sweep share one pooled batch (see TurnSolver.cpp).
     int         esc_skip          = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SKIP_PREDICT)
     double      esc_skip_r        = -1.0;   // <0 unset => env => 0        (MTG_ESC_SKIP_R)
+    // Per-depth form of esc_skip_r (manifest "esc_skip_rv": [R1, R2, ...]; past the end the last entry
+    // applies). esc_skip_rv_n > 0 overrides esc_skip_r.
+    std::array<double, 8> esc_skip_rv{};
+    int         esc_skip_rv_n     = 0;
     int         esc_skip_single   = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SKIP_SINGLE)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // GREEDY-WALK CHARGE WEIGHT (MTG_SOLVE_CHARGE_W): visits per charged unit, >=1. NOT a value-leaf
@@ -177,7 +183,9 @@ inline thread_local double      t_deck_exhaust_mult = 0.0;
 // wants 4 (-0.0125 +/- 0.0040 vs the full ladder at parity cost) while hinata/fivecolour want 1, where
 // raising it converts a FREE clean win into a paid trade. Tier 1 (acts wherever FIT acts).
 inline thread_local double      t_deck_fit_alpha = 0.0;
-inline thread_local double      t_deck_esc_skip_r = 0.0;   // per-deck opt-in skip allowance (MulliganProfile::escalation_skip_r)
+// Per-deck opt-in skip allowance, per depth (MulliganProfile::escalation_skip_r; the profile outlives the
+// decision that DeckShapeScope points this at). nullptr / empty => the fleet default (R = 0).
+inline thread_local const std::vector<double>* t_deck_esc_skip_r = nullptr;
 // value_play.fit_lazy_r: defer FIT's per-game R calibration to first use. -1 unset => env (default ON).
 // Per-deck because Melira is the one deck it HURTS (+0.0126 +/- 0.0025) while it is a 4-7 sigma gain on
 // hinata/fivecolour/cgiving/kitty and frees cost on ten more.

@@ -62289,13 +62289,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // R = 50 is NOT safe: Melira's rollouts cost ~1/30 of other decks' per leaf, and there it skipped takeable
         // escalations (avg 4.6750 -> 4.6896) while every other deck stayed identical -- R > 0 must be per deck.
         static const bool   s_esk_env   = EnvOn("MTG_ESC_SKIP_PREDICT", true);
-        // R precedence: per-job arm > MTG_ESC_SKIP_R (when set) > the deck's opt-in sidecar escalation_skip_r > 0.
+        // R precedence: per-job arm (per-depth esc_skip_rv, else esc_skip_r) > MTG_ESC_SKIP_R (when set) > the
+        // deck's opt-in sidecar escalation_skip_r (a scalar or one R per depth) > 0. esk_R[d] is the allowance
+        // for the heuristic pass at depth d; past the end of a per-depth list its last entry applies.
         static const double s_esk_r_env = []{ const char* e = std::getenv("MTG_ESC_SKIP_R");
                                               return (e && *e) ? std::atof(e) : -1.0; }();
         const bool   esk_on = (valuearm::t_arm.esc_skip >= 0) ? (valuearm::t_arm.esc_skip != 0) : s_esk_env;
-        const double esk_R  = (valuearm::t_arm.esc_skip_r >= 0.0) ? valuearm::t_arm.esc_skip_r
-                            : (s_esk_r_env >= 0.0)               ? s_esk_r_env
-                            : (valuearm::t_deck_esc_skip_r > 0.0) ? valuearm::t_deck_esc_skip_r : 0.0;
+        double esk_R[16] = {0};
+        {
+            const std::vector<double>* deck_r = valuearm::t_deck_esc_skip_r;
+            const double* rv = nullptr; int rn = 0; double r1 = 0.0;
+            if      (valuearm::t_arm.esc_skip_rv_n > 0)    { rv = valuearm::t_arm.esc_skip_rv.data(); rn = valuearm::t_arm.esc_skip_rv_n; }
+            else if (valuearm::t_arm.esc_skip_r >= 0.0)    { r1 = valuearm::t_arm.esc_skip_r; }
+            else if (s_esk_r_env >= 0.0)                   { r1 = s_esk_r_env; }
+            else if (deck_r != nullptr && !deck_r->empty()) { rv = deck_r->data(); rn = static_cast<int>(deck_r->size()); }
+            for (int d = 1; d < 16; ++d) { esk_R[d] = (rn > 0) ? rv[std::min(d, rn) - 1] : r1; }
+        }
         const int    esk_T  = (!line_constant && !value_fallback_take_at.empty() && s_vto_override < 0)
                             ? TakeAtForCommitted(value_fallback_take_at, committed) : -1;
         // Deepest heuristic pass the ladder's start gate is predicted to admit on `rem0` units, walking the
@@ -62308,7 +62317,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             if (top < 1 || escstats::t_pc[1] <= 0) { return 99; }
             double h[16] = {0};
             for (int d = 1; d <= top; ++d)
-            { h[d] = static_cast<double>(escstats::t_pc[d]) + esk_R * static_cast<double>(escstats::t_pl[d]); }
+            { h[d] = static_cast<double>(escstats::t_pc[d]) + esk_R[d] * static_cast<double>(escstats::t_pl[d]); }
             double rem = static_cast<double>(rem0) - h[1];
             int reached = 1;
             for (int d = 2; d <= top; ++d)
@@ -62682,7 +62691,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             {
                 if (t >= T) { return t; }
                 if (t < 1 || t >= 15 || escstats::t_pc[t] <= 0) { return 99; }
-                double h   = static_cast<double>(escstats::t_pc[t]) + esk_R * static_cast<double>(escstats::t_pl[t]);
+                double h   = static_cast<double>(escstats::t_pc[t]) + esk_R[t] * static_cast<double>(escstats::t_pl[t]);
                 double rem = static_cast<double>(rem0) - h;
                 while (t < T)
                 {
