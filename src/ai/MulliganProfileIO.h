@@ -1266,6 +1266,7 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
             // MulliganProfile::value_trust_depth.
             const nlohmann::json& mm = j.contains("eval_model") ? j["eval_model"] : j;
             profile.value_trust_depth = mm.value("value_trust_depth", j.value("value_trust_depth", 0));
+            profile.escalation_skip_r = mm.value("escalation_skip_r", j.value("escalation_skip_r", 0.0));
             profile.value_no_fallback = mm.value("value_no_fallback", j.value("value_no_fallback", false));
             // Table-driven take-crossover (see MulliganProfile::value_fallback_take_at). Build a by-committed-
             // depth lookup from the (committed_depths, take_heuristic_at_hdepth) pair; presence of this table

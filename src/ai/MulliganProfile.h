@@ -286,6 +286,16 @@ struct MulliganProfile
     // Decks whose value-leaf matches the heuristic at d5 (verified-win-dominated: knights/slivers) set 5.
     int value_trust_depth = 0;
 
+    // Per-deck OPT-IN rollout allowance for the up-front escalation skip (`escalation_skip_r` key in
+    // <deck>.value.json; see MTG_ESC_SKIP_PREDICT in TurnSolver.cpp). The skip predicts each heuristic pass as
+    // the probe's tree at that depth plus R x its leaves; the fleet runs R = 0 (the bare tree walk, optimistic
+    // and measured lossless). A deck that opts in prices the rollouts too, which skips more of the escalations
+    // its take rule would discard -- but can skip a takeable one. 0 / absent => the fleet default. Set from the
+    // deck's own measured heuristic cost per probe leaf (a low quantile of it), never fleet-wide: Melira's
+    // rollouts cost ~1/30 of other decks' per leaf. A value-leaf REGENERATION keeps it (valueleaf.sh replaces only
+    // eval_model in the live sidecar), but the number was measured against the old leaf's probe -- re-check it.
+    double escalation_skip_r = 0.0;
+
     // Per-model "never fall back to the value-leaf line" flag (`value_no_fallback` key in <deck>.value.json).
     // The hybrid escalates an unverified line to the heuristic, then TAKES that result only if it clears the
     // take-crossover (heuristic reached deep enough to beat the value-leaf line, ~ committed - kValueTrustOffset);

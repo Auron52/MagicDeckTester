@@ -62259,10 +62259,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // R = 50 is NOT safe: Melira's rollouts cost ~1/30 of other decks' per leaf, and there it skipped takeable
         // escalations (avg 4.6750 -> 4.6896) while every other deck stayed identical -- R > 0 must be per deck.
         static const bool   s_esk_env   = EnvOn("MTG_ESC_SKIP_PREDICT", true);
+        // R precedence: per-job arm > MTG_ESC_SKIP_R (when set) > the deck's opt-in sidecar escalation_skip_r > 0.
         static const double s_esk_r_env = []{ const char* e = std::getenv("MTG_ESC_SKIP_R");
-                                              return (e && *e) ? std::atof(e) : 0.0; }();
+                                              return (e && *e) ? std::atof(e) : -1.0; }();
         const bool   esk_on = (valuearm::t_arm.esc_skip >= 0) ? (valuearm::t_arm.esc_skip != 0) : s_esk_env;
-        const double esk_R  = (valuearm::t_arm.esc_skip_r >= 0.0) ? valuearm::t_arm.esc_skip_r : s_esk_r_env;
+        const double esk_R  = (valuearm::t_arm.esc_skip_r >= 0.0) ? valuearm::t_arm.esc_skip_r
+                            : (s_esk_r_env >= 0.0)               ? s_esk_r_env
+                            : (valuearm::t_deck_esc_skip_r > 0.0) ? valuearm::t_deck_esc_skip_r : 0.0;
         const int    esk_T  = (!line_constant && !value_fallback_take_at.empty() && s_vto_override < 0)
                             ? TakeAtForCommitted(value_fallback_take_at, committed) : -1;
         // Deepest heuristic pass the ladder's start gate is predicted to admit on `rem0` units, walking the

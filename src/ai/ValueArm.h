@@ -177,6 +177,7 @@ inline thread_local double      t_deck_exhaust_mult = 0.0;
 // wants 4 (-0.0125 +/- 0.0040 vs the full ladder at parity cost) while hinata/fivecolour want 1, where
 // raising it converts a FREE clean win into a paid trade. Tier 1 (acts wherever FIT acts).
 inline thread_local double      t_deck_fit_alpha = 0.0;
+inline thread_local double      t_deck_esc_skip_r = 0.0;   // per-deck opt-in skip allowance (MulliganProfile::escalation_skip_r)
 // value_play.fit_lazy_r: defer FIT's per-game R calibration to first use. -1 unset => env (default ON).
 // Per-deck because Melira is the one deck it HURTS (+0.0126 +/- 0.0025) while it is a 4-7 sigma gain on
 // hinata/fivecolour/cgiving/kitty and frees cost on ten more.
