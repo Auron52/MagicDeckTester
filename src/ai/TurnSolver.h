@@ -1638,6 +1638,12 @@ public:
     // like the search; ApplyPlan runs the canonical execution order (land, casts, Land's
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
+    // TEST SEAMS for the held late wave (MTG_HELD_CRACKLE_LATE_WAVE): the HELD TRANCHE a search host
+    // re-opens after wave 0 -- exactly the subsets DecisionProvider::HoldCastUnlessLethal dropped from
+    // EnumerateMainPlans' list (wave 0's groups) -- and whether a host would run that wave on this
+    // state at all (the lever + a held card in hand). Not used by play.
+    static std::vector<Plan> EnumerateMainPlansHeldTranche(const GameState& state, bool is_pre_combat);
+    static bool              HeldLateWaveWanted(const GameState& state);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
     // The post-apply state identity every candidate dedup keys on (BuildDedupKey), folded to 64 bits.
     // Tests only: it is how a unit case checks that two states collide (or do not) in that key.

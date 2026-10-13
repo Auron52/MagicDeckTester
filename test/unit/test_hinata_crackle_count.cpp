@@ -11,7 +11,6 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
-#include "ai/EngineFlags.h"
 #include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -436,42 +435,93 @@ TEST_CASE("HINATA_CASTABLE_MANA: the board's real mana, not its source count, de
     CHECK_FALSE(hp.ShouldEmitUntapRitual(blue));
 }
 
-// ---- MTG_HELD_CAST_UNBUDGETED: an UNBUDGETED search is offered the held line; budgeted + greedy hold it ----
+// ---- MTG_HELD_CRACKLE_LATE_WAVE: the hold DEFERS a lone non-lethal Crackle to a later wave -------------
 // The hold was a gate at every budget, so a chip-Crackle line was unfindable even at --budget-ms 0
-// (Hinata2 s3030 gi 27: T3 chip + two Soulfires = T7, held = T8 at d8 b0). Opp at 26: Crackle X=4 + Magma
-// Opus + Hinata's swing = 25, so the lone Crackle is NOT lethal and the hold applies.
-TEST_CASE("HELD_CAST_UNBUDGETED: an unbudgeted search offers a lone non-lethal Crackle; budgeted and greedy hold it")
+// (Hinata2 s3030 gi 27: T3 chip + two Soulfires = T7, held = T8 at d8 b0). Now wave 0 (the plan list
+// a search node scores first) still excludes the held subsets, and the HELD TRANCHE a host re-opens
+// afterwards, budget permitting, is exactly those subsets -- the two partition the unheld plan space.
+namespace
+{
+bool AllPlansCast(const std::vector<TurnSolver::Plan>& ps, const std::string& name)
+{
+    for (const TurnSolver::Plan& p : ps) { if (!CastsHc(p, name)) { return false; } }
+    return true;
+}
+bool AnyCasts(const std::vector<TurnSolver::Plan>& ps, const std::string& name)
+{
+    for (const TurnSolver::Plan& p : ps) { if (CastsHc(p, name)) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("HELD_CRACKLE_LATE_WAVE: the held Crackle is absent from wave 0 and present in the held tranche")
 {
     const HinataProvider hp;
     Pin lb(heurarm::HINATA_HOLD_LETHAL_BURN, true);
-    // Budgeted (the latch is down -- every regression / shipped cell): held, exactly as before.
+    Pin on(heurarm::HELD_CRACKLE_LATE_WAVE, true);
+    // Opp at 26: Crackle X=4 + Magma Opus + Hinata's swing = 25, so no Crackle subset is lethal.
+    GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 21);
+    s.m_provider = &hp;
+    const std::vector<TurnSolver::Plan> wave0 = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const std::vector<TurnSolver::Plan> held  = TurnSolver::EnumerateMainPlansHeldTranche(s, true);
+    CHECK_FALSE(wave0.empty());
+    CHECK_FALSE(AnyCasts(wave0, kCrackle));    // wave 0: held out, exactly as the gate did
+    CHECK_FALSE(held.empty());                 // ...and offered after it
+    CHECK(AllPlansCast(held, kCrackle));       // the tranche is ONLY the held subsets (no wave-0 dupes)
+    CHECK(AnyCasts(held, "Magma Opus"));       // including the co-cast combinations
+    for (const TurnSolver::Plan& p : held) { CHECK_FALSE(p.wins_this_turn); }
+    CHECK(TurnSolver::HeldLateWaveWanted(s));
+    // The greedy policy (Solve: the d0 runner, rollouts past the horizon) keeps the hold.
+    CHECK_FALSE(CastsHc(GreedyHc(s), kCrackle));
+}
+
+TEST_CASE("HELD_CRACKLE_LATE_WAVE: a LETHAL Crackle stays in wave 0; the tranche holds only the non-lethal ones")
+{
+    const HinataProvider hp;
+    Pin lb(heurarm::HINATA_HOLD_LETHAL_BURN, true);
+    Pin on(heurarm::HELD_CRACKLE_LATE_WAVE, true);
+    // Opp at 25: Crackle X=4 + Magma Opus (1 face) + the swing is exactly lethal; Crackle alone is not.
+    GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 25, 22);
+    s.m_provider = &hp;
+    const std::vector<TurnSolver::Plan> wave0 = TurnSolver::EnumerateMainPlans(s, true);
+    const std::vector<TurnSolver::Plan> held  = TurnSolver::EnumerateMainPlansHeldTranche(s, true);
+    bool wave0_lethal_crackle = false;
+    for (const TurnSolver::Plan& p : wave0)
+    { if (CastsHc(p, kCrackle) && p.wins_this_turn) { wave0_lethal_crackle = true; } }
+    CHECK(wave0_lethal_crackle);
+    CHECK_FALSE(held.empty());
+    CHECK(AllPlansCast(held, kCrackle));
+    for (const TurnSolver::Plan& p : held) { CHECK_FALSE(p.wins_this_turn); }
+}
+
+TEST_CASE("HELD_CRACKLE_LATE_WAVE: nothing to defer without a held card; the lever =0 asks for no wave")
+{
+    const HinataProvider hp;
+    Pin lb(heurarm::HINATA_HOLD_LETHAL_BURN, true);
     {
-        Pin on(heurarm::HELD_CAST_UNBUDGETED, true);
-        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 11);
+        // A second copy lifts the hold: wave 0 already carries the chip; the tranche is empty.
+        Pin on(heurarm::HELD_CRACKLE_LATE_WAVE, true);
+        GameState s = BurnBoard({ kCrackle, kCrackle }, 26, 23);
         s.m_provider = &hp;
-        CHECK_FALSE(AnyPlanCasts(s, kCrackle));
-        CHECK_FALSE(CastsHc(GreedyHc(s), kCrackle));
+        CHECK(AnyCasts(TurnSolver::EnumerateMainPlans(s, true), kCrackle));
+        CHECK(TurnSolver::EnumerateMainPlansHeldTranche(s, true).empty());
+        CHECK_FALSE(TurnSolver::HeldLateWaveWanted(s));
     }
-    // Unbudgeted SEARCH, lever on: the search branch list carries the chip line...
     {
-        UnbudgetedSearchScope unbudgeted(true);
-        Pin on(heurarm::HELD_CAST_UNBUDGETED, true);
-        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 12);
+        // Lever =0: no host asks for the wave (the gate, byte-identical to dd4859c3); wave 0 unchanged.
+        Pin off(heurarm::HELD_CRACKLE_LATE_WAVE, false);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 24);
         s.m_provider = &hp;
-        CHECK(AnyPlanCasts(s, kCrackle));
-        // ...while the greedy policy (Solve: the d0 runner, rollouts past the horizon) still holds it.
-        CHECK_FALSE(CastsHc(GreedyHc(s), kCrackle));
+        CHECK_FALSE(TurnSolver::HeldLateWaveWanted(s));
+        CHECK_FALSE(AnyCasts(TurnSolver::EnumerateMainPlans(s, true), kCrackle));
     }
-    // Unbudgeted search, lever =0: the gate, byte-identical to before the lever.
     {
-        UnbudgetedSearchScope unbudgeted(true);
-        Pin off(heurarm::HELD_CAST_UNBUDGETED, false);
-        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 13);
-        s.m_provider = &hp;
-        CHECK_FALSE(AnyPlanCasts(s, kCrackle));
+        // Every other deck: the provider holds nothing, so there is never a wave.
+        Pin on(heurarm::HELD_CRACKLE_LATE_WAVE, true);
+        GameState s = BurnBoard({ kCrackle, "Magma Opus" }, 26, 25);
+        s.m_provider = &DefaultProvider();
+        CHECK_FALSE(TurnSolver::HeldLateWaveWanted(s));
     }
-    // The latch is scoped: it is down again once the scope unwinds.
-    CHECK(g_unbudgeted_search == 0);
     // Default ON.
-    CHECK(heurarm::Flag(heurarm::HELD_CAST_UNBUDGETED, EnvOn("MTG_HELD_CAST_UNBUDGETED", true)));
+    CHECK(heurarm::Flag(heurarm::HELD_CRACKLE_LATE_WAVE, EnvOn("MTG_HELD_CRACKLE_LATE_WAVE", true)));
 }

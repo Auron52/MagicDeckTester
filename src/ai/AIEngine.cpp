@@ -2223,8 +2223,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // makes budgeted play structurally -- not merely measurably -- untouched. Scoped, because
     // BottomEvalScope re-enters with a different budget.
     UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
-    // ...and the narrower search-only latch (EngineFlags.h): unbudgeted AND searched (depth > 0).
-    UnbudgetedSearchScope _unbudgeted_search(m_budget_ms <= 0 && m_lookahead_depth > 0);
     // MTG_FD_TRACE: how many times the executor ENTERS a decision for ONE phase. GameEngine's
     // MainPhase calls this at most twice per phase (the `may_draw_spells` second opportunity), so a
     // count above two names a re-entry source -- and every entry is handed its OWN
