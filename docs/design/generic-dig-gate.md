@@ -372,3 +372,39 @@ keys on the sidecar's canonical path, so a worktree path rebuilds a 1-3 GB table
 7. **USER decisions owed**: adopt the lever default ON (clairvoyant bar unmet on two decks by budget churn
    alone; non-clairvoyant also +3 FiveColour / +1 treasure_hunt); delete MTG_DIG_DEFER_MAIN2 (inert in 2,500
    FiveColour games under the lever).
+
+### A later wave for the twins: what each shape can buy (analysis 2026-10-13, while parked; nothing built or run)
+
+**Where the churn comes from.** A finite budget is spent through `FullSearchLine`'s iterative-deepening
+ladder: passes 1..D, each admitted by the start gate (`estimate = c_prev x c_prev / c_prev2 <= alpha x
+remaining`). Where the gate passes on most turns (treasure_hunt), a twin is a REAL second child, so `c_prev`
+and the growth ratio both rise and the gate refuses the deeper pass sooner (th gi1: searched depth 1 with the
+lever, 3 without). The extra cost sits at REFUTED nodes, where every plan must be scored whatever its order.
+The fold already removed the exact duplicates (EDF d3 x1.41 -> x1.00), so what is left is the width of a
+real decision. Note the ship cells were net 0 for both decks; the +3 / +1 are the d3 b10 cell, which is a
+suite cell (`fivecolour 3 1001 150 10`), so the bar applies there too.
+
+1. **Node-local order: twins after every non-twin plan** (a `MoveOrderPlans` key just below
+   `wins_this_turn`). Twins are cloned after `AppendBreakpointVariants` and from base plans only, so a twin has
+   no wave-0 family to split; the other plans' shifted positions are what the post-sort `bp_base` remap
+   already handles (and `w0_order_ok` already requires it). A pure reorder, so it is complete at every budget, and the B&B loops
+   are result-preserving under reordering (`MoveOrderPlans`' own argument). The base always precedes its twin,
+   so the fold keeps working. **It saves only where a base plan finds an in-window win** (the loop exits
+   before any twin) **and on the node where the budget runs out.** At refuted nodes, where the churn is, it
+   pays the same. Predicted effect: small. Cheap to build, and its b0 digests move only by tie-break.
+2. **Pass-staged: the ladder is the wave.** Warm-up passes (`pass_depth < D`) admit twins only at the root
+   turn's nodes; the committing pass admits them everywhere. At an unlimited budget the committing pass always
+   runs, so this is complete. It also matches the turn-boundary preference (the root turn's choice first). But
+   at a finite budget, a warm-up pass that ends up committed (the start gate refuses the next pass) carries
+   the GATE's dig at the deeper in-window turns. That is exactly the automatic dig the USER objected to, back
+   inside the window, at the budgets that cannot reach the full pass. **USER call.** Risk: the start gate's
+   growth estimate is calibrated on twin-free warm-up passes, so the committing pass costs more than
+   predicted (more overrun aborts) unless the estimate accounts for the twins.
+3. **Settings.** If 1 is not enough and 2 is refused, the remaining cost is real width. The depth-economics
+   rule (CLAUDE.md, "COLLAPSE WASTED SEARCH") makes that a settings question for the deck (its budget / depth
+   cells), not a search shape.
+
+**Proposed order once un-parked:** build 1 behind its own lever and A/B it in ONE pooled batch with step 5's
+larger held-out sample (arms: `=0`, lever, lever + order; treasure_hunt + FiveColour d3 b10, plus the ship
+cells and a digest check on the other dig decks). Bring 2 to the USER only if treasure_hunt / FiveColour
+still miss the bar.
