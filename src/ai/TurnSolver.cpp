@@ -62247,12 +62247,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // heuristic pass costs at least the tree the probe walked); a larger R predicts more rollout cost and
         // skips more. A PRICE, not a gate on what is findable: at an unlimited budget nothing is ever skipped.
         // Arm (per job) > env. Requires the probe's structure to have been recorded (outermost decisions).
-        // ADOPTED 2026-10-13 at R = 0 (USER: "let's start with this option"). R = 0 is OPTIMISTIC -- a heuristic
+        // ADOPTED 2026-10-13 at R = 0 (USER: "let's start with this option") -- the LADDER path only; the single
+        // path's half is withdrawn (MTG_ESC_SKIP_SINGLE, see there). R = 0 is OPTIMISTIC -- a heuristic
         // pass walks about the probe's tree and then rolls out every leaf -- so it skips only where even the tree
         // walk cannot reach T, and the take rule's verdict is foreseen rather than changed. Not provably sound (a
         // heuristic pass prunes differently and can occasionally cost less than the probe; ~5% of Bruna's d1
-        // passes did), so it was measured: held out, 16 discarding decks x 480 games, ZERO games changed play,
-        // units -0.5% (FiveColour, Fungus) to -5.5% (KittyV3), PD -2.9%, TH -3.6%, Selesnya -2.3%. A fleet-wide
+        // passes did), so it was measured: held out, 16 discarding decks x 480 games, ZERO games changed play;
+        // ladder-path units -0.5% (Fungus) to -5.5% (KittyV3), PD -2.9%, Selesnya -2.3% (the TH / Stompy /
+        // FiveColour savings in that run were the withdrawn single-path half). The smoke/regression tiers moved
+        // no ladder-path game; every play change they found was the single path's. A fleet-wide
         // R = 50 is NOT safe: Melira's rollouts cost ~1/30 of other decks' per leaf, and there it skipped takeable
         // escalations (avg 4.6750 -> 4.6896) while every other deck stayed identical -- R > 0 must be per deck.
         static const bool   s_esk_env   = EnvOn("MTG_ESC_SKIP_PREDICT", true);
@@ -62628,9 +62631,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             static const bool s_esc_single_climb = EnvOn("MTG_ESC_SINGLE_CLIMB");
             const bool eff_climb = eff_single_deck || s_esc_single_climb;
             esk_target = target;
-            // Up-front skip, single path: the predicted affordable depth is already known here, before any
-            // heuristic pass runs, and only the climb could lift the result above it.
-            esk_skipped = esk_on && esk_outer && esk_T > 0 && esc_budget && !esc_budget->Unlimited()
+            // Up-front skip, single path (MTG_ESC_SKIP_SINGLE, DEFAULT OFF -- WITHDRAWN 2026-10-13): skip when
+            // the predicted target is below T. LOSSY as written, because the climb below can lift the result
+            // past the target: on Creature Giving, Dragonstorm and Hinata (none of which discard at play
+            // settings, so the calibration never saw them) the climb reached T and the escalation was TAKEN in
+            // every play change the tiers found -- 5 of 5, one of them a T6 win the leaf rated T9. A safe form
+            // must predict the climb too; until one is measured this half stays off.
+            static const bool s_esk_single = EnvOn("MTG_ESC_SKIP_SINGLE");
+            esk_skipped = s_esk_single && esk_on && esk_outer && esk_T > 0 && esc_budget && !esc_budget->Unlimited()
                        && target < esk_T;
             if (esk_skipped) { hline = line; }
             int  td = esk_skipped ? 0 : target;
