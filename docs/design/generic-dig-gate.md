@@ -482,3 +482,16 @@ routes are the USER's: accept it (the churn is the cost of a real decision the g
 automatically); option 2 above (pass-staged twins, which puts the gate's dig back inside the window at
 finite budget); option 3 (treasure_hunt's depth / budget settings); or, separately, a better no-win
 tie-break than plan order, which would address gi722 for every lever, not just this one.
+
+**The suite on the integrated tree (2026-10-14, 746d54ea; NOT accepted).** Smoke: 116 / 125 pass, 9 changed --
+treasure_hunt d3 +1, d5 +2, th2hg d3 +2; Fluctuator -1, fluctuator2hg -2, dragons2hg -1; FiveColour d3 / d5 and
+Dragons d3 digest-only. Regression: 158 / 176 pass, 18 changed; per-deck net in game-turns treasure_hunt **+8**
+(d5 s2002 alone +5), Auras -3, Dragons -1, Fluctuator -1, fluctuator2hg -1, FiveColour 0, fivecolour2hg 0. Every
+slower game was classified (`classify_turn_later.sh`): smoke 4 / 4 and regression 11 / 12 recover at 4x their case
+budget; the twelfth, Fluctuator d3 s3003 gi81 (6 -> 7, identical draws), persists at 16x but recovers at stage 1
+(`--depth 6 --budget-ms 100` -> T6; `--depth 8 --budget-ms 0` -> T6) -- a d3-horizon line change like gi722.
+Unit 1032 / 1032; reference check (non-Kitty, --strict) 171 ok / 379 repaired / 0 drift over 550 refs.
+The tree was NOT accepted: the USER's bar treats churn as a cost to minimise, not an exoneration, and
+treasure_hunt's is now measured at its shipped-like d5 cells too, not only d3. The primary checkout was put back
+on 9347f97b; the run's results are kept in `build/scratch/dig_tier_results_746d54ea/` (an accept after a
+fast-forward to the same src can promote them without a re-run).
