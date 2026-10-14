@@ -1,0 +1,11 @@
+{
+  "_comment": "Angels, the narrow Giada second main (USER 2026-10-14, MTG_ANGELS_GIADA_M2; docs/design/angels-cast-order-2026-10-14.md). The draft's probe 4-e: T3, Giada, Font of Hope in play (not sick), 2 Plains + a Plains in hand, hand Righteous Valkyrie + Lightstall Inquisitor. Main 1 casts Righteous off the three Plains and leaves Giada untapped; she attacks (vigilance keeps her untapped) and her post-combat Angel-only {W} pays Lightstall -- the only line that wins T5. With main 1 only, both casts need her mana before combat and she cannot attack: opponent at 2 after T5 (see angels_giada_m2_off_no_t5.json).",
+  "deck": "decks/Angels/Angels.cod",
+  "turn": 3, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "battlefield": [ { "name": "Plains" }, { "name": "Plains" }, { "name": "Giada, Font of Hope" } ],
+  "hand": [ "Righteous Valkyrie", "Lightstall Inquisitor", "Plains" ],
+  "library_filler": "Plains", "library_size": 30,
+  "depth": 5, "budget_ms": 300, "max_turns": 5,
+  "env": { "MTG_ANGELS_GIADA_M2": "1" },
+  "expect_win_turn": 5
+}

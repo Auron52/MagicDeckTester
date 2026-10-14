@@ -30436,6 +30436,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // RESTRICTED PROVIDER SECOND MAIN -- the phase's whole menu is what the deck's provider admits
+    // (DecisionProvider::RestrictedSecondMainAdmits; first user: Angels' vigilant Giada, where the menu
+    // is the Angel casts that need her post-combat {W}, MTG_ANGELS_GIADA_M2). Post-combat only, and only
+    // while the provider's own predicate holds -- ProviderSecondMainLive is false on any deck that
+    // already plays a full second main, so this never narrows one. Human play is exempt: the viewer is
+    // never narrowed. The soundness argument (a refused option was reachable, weakly better, in main 1)
+    // lives with the provider's rule, beside its goldfish-only caveat.
+    if (!is_pre_combat && !actions.empty() && !HumanPlayActive() && ProviderSecondMainLive(state))
+    {
+        const DecisionProvider& rprov = ResolveProvider(state);
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+            [&](const Action& a) { return !rprov.RestrictedSecondMainAdmits(state, a); }), actions.end());
+    }
+
     // PHYREXIAN post-pass ({G/P}: pay the pip with 2 life instead -- CR 107.4f; Birthing Pod,
     // user-directed 2026-09-05). Mana-vs-life is a REAL search branch, not a payment preference:
     // paying 2 life FREES A SOURCE for the rest of the turn (the seed-1 T3 line: {3}+2 life to
@@ -56960,7 +56974,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // the first main, and modelling a second main the real game skips would let
         // the search optimise against plays that never happen. See AIEngine::TakeTurn.
         if (second_main || UntapSecondMainLive(state)       // per-turn: Jorn
-            || DigSecondMainLive(state))                   // per-turn: the Omnitool's attack dig
+            || DigSecondMainLive(state)                    // per-turn: the Omnitool's attack dig
+            || ProviderSecondMainLive(state))              // per-turn: a provider's restricted m2 (Angels' Giada)
         {
             TurnSolver::Plan post_plan;
             if (g_honest_teacher && depth > 0)
@@ -59366,7 +59381,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     if (second_main || UntapSecondMainLive(state)   // per-turn: Jorn
-        || DigSecondMainLive(state))                // per-turn: the Omnitool's attack dig
+        || DigSecondMainLive(state)                 // per-turn: the Omnitool's attack dig
+        || ProviderSecondMainLive(state))           // per-turn: a provider's restricted m2 (Angels' Giada)
     {
         // "STUCK -- PASS THE TURN", the second-main half. At `turn == cutoff` the post-combat main
         // is the last thing in the horizon: every plan here either kills now or hands to FSLineWin
@@ -61237,7 +61253,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // per-turn second-main predicate must be inside the parentheses or the elision would throw away
     // the very turn the restricted main exists to search.
     const bool edge_tail_elide = !(second_main || UntapSecondMainLive(state)
-                                   || DigSecondMainLive(state)) && g_unbounded_label_search > 0
+                                   || DigSecondMainLive(state) || ProviderSecondMainLive(state))
+                                 && g_unbounded_label_search > 0
                                  && state.turn_number >= cutoff
                                  && winlesscert::EdgeTailElideOn();
     // GO-OFF DOMINANCE WIDTH (see winlesscert::GoffDomOn). A residual node scores its first W
@@ -65797,7 +65814,8 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                     // This turn's SECOND main (only when evaluating the pre-combat plan of a
                     // second-main deck): search it honestly (reshuffled) so the pre-combat plan's
                     // value ACCOUNTS for the finisher it enables, instead of skipping it. Not greedy.
-                    if (is_pre_combat && (second_main || UntapSecondMainLive(s)))
+                    if (is_pre_combat && (second_main || UntapSecondMainLive(s)
+                                          || ProviderSecondMainLive(s)))   // + a provider's restricted m2
                     {
                         TurnSolver::Plan post = TurnSolver::SolveWithLookahead(
                             s, false, depth > 0 ? depth : 1, max_turns, nullptr, false,
@@ -67029,7 +67047,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // the decisive site for "cast now vs hold for after combat" -- the candidate being
                 // scored here IS the pre-combat choice, and its second main is what pays for
                 // passing. See SolveSecondMainInSearch.
-                if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
+                if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
+                    || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
                 {
                     if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                 second_main, tt, /*in_rollout=*/false))
@@ -67382,7 +67401,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                         SimulateCombat(copy);
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
-                        if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
+                        if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
+                            || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
                         {
                             // Searched, exactly as in the main candidate loop above -- a deferred
                             // wave's variants must be scored on the same footing as wave 0's.
@@ -67490,7 +67510,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                     SimulateCombat(copy);
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
-                    if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
+                    if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
+                        || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
                     {
                         if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                     second_main, tt, /*in_rollout=*/false))
@@ -67621,7 +67642,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, plan, true);
                     SimulateCombat(copy);
                     if (OpponentHasLost(copy)) { return state.turn_number; }
-                    if (second_main || UntapSecondMainLive(copy))   // per-turn: Jorn
+                    if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
+                        || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
                     {
                         if (ApplySecondMainInSearch(copy, committed_sub_depth, max_turns,
                                                     budget, second_main, &esc_tt,

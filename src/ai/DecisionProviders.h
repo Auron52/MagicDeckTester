@@ -547,6 +547,24 @@ public:
     // False while the buckets AND the distance model are on: the model's LandDrops are the ladder's
     // kept lands, which the tail sheds among the Angels they priced. Re-rank per shed.
     bool CleanupDiscardShedStable() const override;
+    // THE USER'S CAST ORDER (approved 2026-10-14, docs/design/angels-cast-order-2026-10-14.md;
+    // MTG_ANGELS_ORDER, heurarm ANGELS_ORDER). A TOTAL order: every slot is keyed on card PARAMS,
+    // a sub-key orders a slot's members (mana value / the base slot of a duplicate legend), and the
+    // card NAME is the final tie-break -- never plan or hand order (USER cross-deck ruling 2026-10-14:
+    // "Let's fully order the cards in each list inasmuch as possible. I don't like the randomness of
+    // choosing the order."). ArrangeCastOrder carries the two USER caveats a scalar rank cannot see
+    // (they need the cast SET) plus a second same-name legend in the set. All main 1.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    void        ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
+    // THE NARROW GIADA SECOND MAIN (USER 2026-10-14; MTG_ANGELS_GIADA_M2, heurarm ANGELS_GIADA_M2):
+    // "It would be only exactly cases where Giada can attack and we would use her mana where it would
+    // be considered ... always only to be one spell maximum." Opens only when a vigilant Giada that
+    // could attack this turn is still untapped after combat AND an Angel spell in hand is payable with
+    // her Angel-only {W} but not without it; admits only such Angel casts (two are never payable: her
+    // one {W} can fund one of them, and neither is payable without it). Everything else stays main 1.
+    bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
 };
 
 // Bruna, Light of Alabaster (Bant Auras/Equipment voltron, Glittering Wish sideboard; onboarded
@@ -3105,6 +3123,16 @@ private:
 inline const DecisionProvider& ResolveProvider(const GameState& s)
 {
     return s.m_provider ? *s.m_provider : DefaultProvider();
+}
+
+// Is THIS turn's post-combat main live because the deck's provider opened a RESTRICTED one
+// (DecisionProvider::RestrictedSecondMainLive -- Angels' vigilant Giada, MTG_ANGELS_GIADA_M2)? Read
+// beside UntapSecondMainLive / DigSecondMainLive at every post-combat site. Never on a deck that
+// already plays a full second main: its phase is open anyway, and the restricted menu must not
+// narrow it. One virtual call that returns false for every other provider.
+inline bool ProviderSecondMainLive(const GameState& s)
+{
+    return !s.uses_second_main && ResolveProvider(s).RestrictedSecondMainLive(s);
 }
 
 // M2 fixpoint mode for THIS deck (the one reader every host shares -- executor, scored line,
