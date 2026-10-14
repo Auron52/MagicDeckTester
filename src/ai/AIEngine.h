@@ -284,6 +284,10 @@ private:
     // the pre-combat land block holds the drop for a hand-land tutor, consumed (and cleared) by
     // the post-cast play in the same TakeTurn -- never carried across turns.
     bool                     m_tutor_deferred_drop = false;
+    // Its draw-engine twin (LandDropAfterDrawEngine, treasure_hunt's "Treasure Hunt before the land
+    // drop"): set when the pre-combat land block holds the drop for a draw engine, consumed (and
+    // cleared) by the post-cast replay of the same TakeTurn pass -- never carried across turns.
+    bool                     m_draw_deferred_drop  = false;
     // Breakpoint continuations TakeTurn's resolve_draw_breakpoint has run on this engine (counted past
     // its depth / call caps). Read only by the unit seam (MTG_EXEC_FAILED_CAST_NO_RESOLVE's test: an
     // unpaid draw-engine cast must open none); never read by play.

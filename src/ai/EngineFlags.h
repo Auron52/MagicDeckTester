@@ -216,6 +216,16 @@ inline bool TreasureHuntDigPruneOn()
     return heurarm::Flag(heurarm::TH_DIG_PRUNE, env_on);
 }
 
+// MTG_DRAW_HELD_DROP_REPLAY (DEFAULT ON; =0 -> a drop held for a draw engine that the main never cast is
+// lost, byte-identical to the tree before 2026-10-14) -- read by AIEngine::TakeTurn's depth-0 post-cast
+// replay of the drop DecisionProvider::LandDropAfterDrawEngine held. Executor-only (the rule it completes
+// is a depth-0 executor rule); heurarm slot so one pooled batch carries both arms.
+inline bool DrawHeldDropReplayOn()
+{
+    static const bool env_on = EnvOn("MTG_DRAW_HELD_DROP_REPLAY", true);
+    return heurarm::Flag(heurarm::DRAW_HELD_DROP_REPLAY, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.
