@@ -353,6 +353,7 @@ add_executable(mtg-test
     test/unit/test_fluctuator_discard.cpp
     test/unit/test_melira_pod_discard.cpp
     test/unit/test_auras_discard.cpp
+    test/unit/test_auras_cast_order.cpp
     test/unit/test_auras_restricted_new_creature.cpp
     test/unit/test_equip_one_host_ds_gate.cpp
     test/unit/test_eldrazi_flicker_discard.cpp
