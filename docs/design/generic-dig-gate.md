@@ -495,3 +495,96 @@ The tree was NOT accepted: the USER's bar treats churn as a cost to minimise, no
 treasure_hunt's is now measured at its shipped-like d5 cells too, not only d3. The primary checkout was put back
 on 9347f97b; the run's results are kept in `build/scratch/dig_tier_results_746d54ea/` (an accept after a
 fast-forward to the same src can promote them without a re-run).
+
+### CPU time vs quality, per deck (2026-10-14; USER: "I would like to see actual comparisons in terms of CPU time vs quality. Per deck.")
+
+One pooled batch (`scripts/dig_choice_ab/make_cpu_quality.py`, 108,600 games, seeds 9700001+, mtg.v6 = this branch's src) on an IDLE box (12 workers on 12 physical cores; load never above 13.8), arms interleaved chunk by chunk. Every cell of a deck uses the same seeds, so arms and budgets are paired. "off" = MTG_DIG_SEARCHED_CHOICE=0 (the committed tree), "on" = the lever. CPU = core-ms per game (sum of per-game wall times at one game per core). EDF ran a reduced ladder (35 core-s per game at its shipped depth).
+
+**treasure_hunt** (1200 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 4.1025 @ 67 ms | 4.1125 @ 73 ms | +12 | 1.10 | 4.1117 @ 64 ms | 4.1167 @ 69 ms | +6 | 1.08 |
+| b10 | 4.0908 @ 79 ms | 4.0983 @ 92 ms | +9 | 1.16 | 4.1025 @ 92 ms | 4.1058 @ 93 ms | +4 | 1.01 |
+| b20 | 4.0833 @ 103 ms | 4.0900 @ 120 ms | +8 | 1.17 | 4.0925 @ 169 ms | 4.0950 @ 161 ms | +3 | 0.95 |
+| b40 | 4.0775 @ 115 ms | 4.0825 @ 141 ms | +6 | 1.22 | 4.0850 @ 294 ms | 4.0867 @ 284 ms | +2 | 0.97 |
+| b80 | 4.0742 @ 133 ms | 4.0758 @ 165 ms | +2 | 1.24 | 4.0825 @ 473 ms | 4.0842 @ 466 ms | +2 | 0.98 |
+
+**FiveColour** (600 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d6: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 4.8433 @ 237 ms | 4.8433 @ 242 ms | +0 | 1.02 | 4.8533 @ 214 ms | 4.8517 @ 217 ms | -1 | 1.02 |
+| b10 | 4.8483 @ 317 ms | 4.8450 @ 324 ms | -2 | 1.02 | 4.8483 @ 326 ms | 4.8467 @ 327 ms | -1 | 1.00 |
+| b20 | 4.8250 @ 382 ms | 4.8233 @ 391 ms | -1 | 1.02 | 4.8367 @ 600 ms | 4.8367 @ 601 ms | +0 | 1.00 |
+| b40 | 4.8133 @ 418 ms | 4.8117 @ 436 ms | -1 | 1.04 | 4.8317 @ 989 ms | 4.8300 @ 984 ms | -1 | 1.00 |
+| b80 | 4.8100 @ 464 ms | 4.8083 @ 477 ms | -1 | 1.03 | 4.8300 @ 1570 ms | 4.8283 @ 1575 ms | -1 | 1.00 |
+
+**Fluctuator** (600 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 3.4850 @ 23 ms | 3.4833 @ 21 ms | -1 | 0.89 | 3.4867 @ 34 ms | 3.4850 @ 34 ms | -1 | 1.00 |
+| b10 | 3.4817 @ 19 ms | 3.4800 @ 21 ms | -1 | 1.08 | 3.4850 @ 49 ms | 3.4833 @ 50 ms | -1 | 1.03 |
+| b20 | 3.4783 @ 19 ms | 3.4767 @ 20 ms | -1 | 1.07 | 3.4833 @ 85 ms | 3.4817 @ 90 ms | -1 | 1.05 |
+| b40 | 3.4783 @ 20 ms | 3.4767 @ 22 ms | -1 | 1.10 | 3.4867 @ 160 ms | 3.4833 @ 154 ms | -2 | 0.96 |
+| b80 | 3.4783 @ 21 ms | 3.4767 @ 24 ms | -1 | 1.14 | 3.4900 @ 249 ms | 3.4883 @ 249 ms | -1 | 1.00 |
+
+**Auras** (600 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 4.0917 @ 34 ms | 4.0900 @ 32 ms | -1 | 0.95 | 4.0917 @ 50 ms | 4.0900 @ 52 ms | -1 | 1.05 |
+| b10 | 4.0900 @ 31 ms | 4.0900 @ 30 ms | +0 | 0.96 | 4.0900 @ 77 ms | 4.0900 @ 79 ms | +0 | 1.03 |
+| b20 | 4.0900 @ 27 ms | 4.0900 @ 26 ms | +0 | 0.96 | 4.0900 @ 130 ms | 4.0900 @ 135 ms | +0 | 1.04 |
+| b40 | 4.0900 @ 30 ms | 4.0900 @ 28 ms | +0 | 0.95 | 4.0900 @ 190 ms | 4.0900 @ 192 ms | +0 | 1.01 |
+| b80 | 4.0900 @ 31 ms | 4.0900 @ 27 ms | +0 | 0.87 | 4.0900 @ 286 ms | 4.0900 @ 271 ms | +0 | 0.95 |
+
+**Dragons** (600 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 5.5583 @ 32 ms | 5.5583 @ 32 ms | +0 | 1.00 | 5.5650 @ 47 ms | 5.5650 @ 48 ms | +0 | 1.02 |
+| b10 | 5.5583 @ 40 ms | 5.5583 @ 40 ms | +0 | 0.99 | 5.5650 @ 67 ms | 5.5650 @ 69 ms | +0 | 1.03 |
+| b20 | 5.5583 @ 49 ms | 5.5583 @ 49 ms | +0 | 0.99 | 5.5617 @ 91 ms | 5.5617 @ 99 ms | +0 | 1.08 |
+| b40 | 5.5583 @ 63 ms | 5.5583 @ 64 ms | +0 | 1.02 | 5.5600 @ 119 ms | 5.5600 @ 119 ms | +0 | 1.00 |
+| b80 | 5.5583 @ 85 ms | 5.5567 @ 86 ms | -1 | 1.01 | 5.5600 @ 144 ms | 5.5600 @ 145 ms | +0 | 1.01 |
+
+**Pirates** (600 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 4.3750 @ 82 ms | 4.3750 @ 83 ms | +0 | 1.01 | 4.3767 @ 86 ms | 4.3767 @ 90 ms | +0 | 1.04 |
+| b10 | 4.3683 @ 87 ms | 4.3700 @ 88 ms | +1 | 1.01 | 4.3717 @ 133 ms | 4.3733 @ 132 ms | +1 | 0.99 |
+| b20 | 4.3683 @ 92 ms | 4.3683 @ 94 ms | +0 | 1.02 | 4.3700 @ 233 ms | 4.3700 @ 238 ms | +0 | 1.02 |
+| b40 | 4.3667 @ 105 ms | 4.3667 @ 111 ms | +0 | 1.06 | 4.3700 @ 364 ms | 4.3700 @ 366 ms | +0 | 1.00 |
+| b80 | 4.3667 @ 119 ms | 4.3667 @ 122 ms | +0 | 1.03 | 4.3683 @ 591 ms | 4.3683 @ 597 ms | +0 | 1.01 |
+
+**Soldiers** (600 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 4.2567 @ 28 ms | 4.2567 @ 29 ms | +0 | 1.04 | 4.2617 @ 43 ms | 4.2600 @ 44 ms | -1 | 1.03 |
+| b10 | 4.2567 @ 29 ms | 4.2567 @ 31 ms | +0 | 1.05 | 4.2617 @ 77 ms | 4.2600 @ 78 ms | -1 | 1.01 |
+| b20 | 4.2567 @ 33 ms | 4.2567 @ 34 ms | +0 | 1.03 | 4.2617 @ 136 ms | 4.2600 @ 138 ms | -1 | 1.01 |
+| b40 | 4.2567 @ 35 ms | 4.2567 @ 35 ms | +0 | 1.02 | 4.2617 @ 204 ms | 4.2600 @ 205 ms | -1 | 1.00 |
+| b80 | 4.2567 @ 36 ms | 4.2567 @ 37 ms | +0 | 1.03 | 4.2617 @ 302 ms | 4.2600 @ 308 ms | -1 | 1.02 |
+
+**WhiteKnights** (600 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b5 | 4.1400 @ 5 ms | 4.1400 @ 5 ms | +0 | 1.02 | 4.1450 @ 30 ms | 4.1450 @ 31 ms | +0 | 1.00 |
+| b10 | 4.1400 @ 4 ms | 4.1400 @ 4 ms | +0 | 1.00 | 4.1400 @ 48 ms | 4.1400 @ 48 ms | +0 | 1.00 |
+| b20 | 4.1400 @ 5 ms | 4.1400 @ 5 ms | +0 | 1.07 | 4.1400 @ 71 ms | 4.1400 @ 71 ms | +0 | 1.00 |
+| b40 | 4.1400 @ 5 ms | 4.1400 @ 5 ms | +0 | 1.02 | 4.1400 @ 87 ms | 4.1400 @ 87 ms | +0 | 1.00 |
+| b80 | 4.1400 @ 5 ms | 4.1400 @ 5 ms | +0 | 0.98 | 4.1400 @ 101 ms | 4.1400 @ 102 ms | +0 | 1.01 |
+
+**EldraziDisplacerFlicker** (100 games per cell; quality = mean win turn, loss 9, lower is better; CPU = core-ms per game)
+
+| budget | shipped d5: off | on | net | CPU x | d3: off | on | net | CPU x |
+|---|---|---|---|---|---|---|---|---|
+| b10 | - | - | - | - | 4.3500 @ 5252 ms | 4.3500 @ 5201 ms | +0 | 0.99 |
+| b20 | 4.3400 @ 11519 ms | 4.3400 @ 11516 ms | +0 | 1.00 | 4.3400 @ 11438 ms | 4.3400 @ 11420 ms | +0 | 1.00 |
+
+**Reading.** Only treasure_hunt has a real CPU / quality gap: at its shipped depth the lever costs **1.10-1.24x the CPU and is worse at every budget** (+12 / +9 / +8 / +6 / +2 games in 1,200), and to match lever-off's quality it needs **1.29-1.48x** the CPU (b5-b40); lever-off's b80 quality is not reached at all within b80. At d3 the CPU is about equal (0.95-1.08x) and the lever is +2 to +6. On the other eight decks the quality difference is 0-2 games per 600 at every budget (FiveColour, Fluctuator, Soldiers, Auras slightly better; Pirates +1 at b10) and the CPU 0.88-1.06x. Separately: for most decks quality barely moves across a 16x budget range (Dragons, Auras, WhiteKnights, Soldiers flat), a depth-economics observation in its own right.
