@@ -2644,12 +2644,40 @@ public:
     // MTG_WALKER_CAST_ACTIVATE=0 restores the cast-only enumeration for the A/B.
     bool SearchesWalkerCastActivation() const override
     { return EnvOn("MTG_WALKER_CAST_ACTIVATE", true); }
-    // 5g-mined cast order (2026-09-08, 2940 earliest-win decisions, every rule 0-conflict): enter-
-    // WATCHERS (Soul Warden / Soul's Attendant / Auriok Champion / Daxos) before the lifegain
-    // PAYOFFS (Pridemate / Voice), both before everything else -- a watcher cast first catches every
-    // later enter this turn; cast after them it catches none. MTG_CRITTER_WATCHER_ORDER=0 restores
-    // Generic for the A/B.
+    // THE USER-SETTLED TOTAL CAST ORDER (2026-10-14; MTG_CRITTER_ORDER, heurarm CRITTER_ORDER,
+    // DEFAULT ON). Every hook below reads card PARAMS, never names; the full order, the reasoning
+    // and the measurement are in docs/design/critterlifegain-cast-order-2026-10-14.md:
+    //   land > enter-WATCHERS (Soul Warden, Soul's Attendant, Auriok Champion, Daxos) > TEAM payoff
+    //   (Archangel of Thune) > UNIT payoffs, more white pips first (Voice of the Blessed, then Ajani's
+    //   Pridemate) > the walker cast carrying its PRIDEMATE-TOKEN loyalty ability (Ajani -2) > the
+    //   DEVOTION god (Heliod, placed by ArrangeCastOrder) > other BODIES (Ocelot Pride, Serra
+    //   Ascendant, Ranger-Captain of Eos) > the walker cast for its +1 or with no activation > the
+    //   rest (Unexpectedly Absent). Within a slot: cheapest first, then by NAME (CastOrderTiesByName).
+    //   THE FLIP (draft section 3): with 2+ more watchers than payoffs on the board and no team payoff
+    //   there, the payoff block (Thune, Voice, Pridemate, Ajani -2, Heliod) moves ahead of the new
+    //   watchers. MTG_CRITTER_ORDER=0 restores the 2026-09-08 mined order (MTG_CRITTER_WATCHER_ORDER:
+    //   watchers 8, Pridemate/Voice 9, Generic for the rest) byte-for-byte.
     int CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // Heliod's range runs to the end of the creature block (ArrangeCastOrder walks it there), so a
+    // breakpoint inside that range never condemns it as already passed.
+    int CastOrderRankLatest(const GameState&, const CardDefinition&) const override;
+    // The Ajani split: a cast whose loyalty_ability makes the Pridemate token ranks right after the
+    // unit payoffs; +1 and the plain cast keep the walker's late slot.
+    int CastOrderActionRank(const GameState&, const Action&, int rank) const override;
+    // The total order (rank, then name) at every apply site, then Heliod's devotion walk.
+    void ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
+    bool CastOrderTiesByName() const override;
+    const char* CastOrderTierName(int rank) const override;
+    // Single-main deck (uses_second_main=no): every cast is a main-1 cast (play-inert; the report
+    // stops showing m2 for Serra Ascendant and Heliod).
+    std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
+    // Heliod's two-way case is SEARCHED (FIRST vs after the creatures): the cast-ordering expansion
+    // is opened for this deck, and CastOrderingCandidates offers the two orderings ONLY for a plan
+    // in that case (canonical = after the creatures first); every other plan is left untouched.
+    bool WantsCastOrderingSearch() const override;
+    bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                const std::vector<Action>& reorder,
+                                std::vector<std::vector<int>>& out) const override;
 };
 
 // SelesnyaLifegain (GW "whenever you gain life" ramp-into-fatties: Wellwisher / Blighted Steppe /

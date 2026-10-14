@@ -2647,7 +2647,13 @@ bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
 {
     if (ra != rb) { return ra < rb; }
     if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
-    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
+    const DecisionProvider& prov = ResolveProvider(state);
+    // DecisionProvider::CastOrderTiesByName: the deck's TOTAL order -- a tie the ritual rule below
+    // leaves standing falls to the NAME, never to plan order. False for every deck that does not
+    // opt in, which then takes exactly the old "stable: keep plan order" exits below.
+    const bool by_name = prov.CastOrderTiesByName();
+    auto name_less = [&]() { return by_name && a.card_name.str() < b.card_name.str(); };
+    if (!prov.CastCheapestFirstWithinTier()) { return name_less(); }   // stable: keep plan order
     // Reuse the action's memoized def (back-filled once per node, == Lookup(card_name)) instead of
     // re-hashing the name string on every comparison -- this comparator runs O(n log n) per sort.
     // Byte-identical; def==nullptr (an action from a path that didn't back-fill) falls back to Lookup.
@@ -2657,8 +2663,10 @@ bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
     // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
     // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
     // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
-    if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
-    return a.cost.ManaValue() < b.cost.ManaValue();
+    if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return name_less(); }
+    const int ma = a.cost.ManaValue(), mb = b.cost.ManaValue();
+    if (ma != mb) { return ma < mb; }
+    return name_less();
 }
 
 bool OrderM1FirstEnabled()

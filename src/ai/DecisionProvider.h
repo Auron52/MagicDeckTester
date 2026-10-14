@@ -1269,6 +1269,15 @@ public:
     // generic COST REDUCER tier) and the report is the USER's review artifact.
     virtual const char* CastOrderTierName(int rank) const { (void)rank; return nullptr; }
 
+    // CastOrderTiesByName -- the shared comparator (CastOrderLessRanked) breaks a CastOrderRank TIE
+    // between two DIFFERENT cards by NAME (lexicographic) instead of keeping plan order. USER, the
+    // 2026-10-14 cast-order review: "Let's fully order the cards in each list inasmuch as possible. I
+    // don't like the randomness of choosing the order." Plan order is draw- and enumeration-dependent,
+    // so a tie left to it is a choice nobody made; a name fallback makes the realised order a function
+    // of the cast SET alone. Applied after the ritual cheapest-first rule, so it only decides what that
+    // rule leaves equal. Default false -> every deck that does not override it is byte-identical.
+    virtual bool CastOrderTiesByName() const { return false; }
+
     // XCandidates -- candidate X values for an {X} spell (a branching-PRUNE heuristic). The engine
     // asks BEFORE emitting cast variants and emits one cast per returned value (the variants
     // share hand_index, so they are mutually exclusive in the plan), letting the search pick
