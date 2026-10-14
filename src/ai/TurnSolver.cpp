@@ -471,6 +471,7 @@ static std::atomic<long long> g_axis_le_vars{0};   // Land's Edge fire-count var
 static std::atomic<long long> g_dig_twins_emitted{0};
 static std::atomic<long long> g_dig_applied_auto{0}, g_dig_applied_leaf{0};
 static std::atomic<long long> g_dig_applied_twin{0}, g_dig_applied_axis1{0};
+static std::atomic<long long> g_dig_applied_pruned{0};   // a provider whose DigOfferAt PRUNED the dig to its gate (no no-dig world)
 // `auto` split by WHY the plan had no sibling: a breakpoint variant (bp_choice >= 0), another axis
 // clone (scry / tutor / ponder / ... pinned), a cast-nothing plan, or a plain base plan whose source
 // the pre-gate could not see (drawn mid-apply).
@@ -489,10 +490,11 @@ struct DigCensusDumper
     {
         if (!DigCensusOn()) { return; }
         std::fprintf(stderr, "[dig-census] variants_emitted=%lld folded=%lld applied: auto=%lld leaf=%lld twin=%lld axis1=%lld"
-                             " | auto: bp_premise=%lld bp_after=%lld axis=%lld idle=%lld base=%lld\n",
+                             " pruned=%lld | auto: bp_premise=%lld bp_after=%lld axis=%lld idle=%lld base=%lld\n",
                      g_dig_twins_emitted.load(), g_dig_folded.load(),
                      g_dig_applied_auto.load(), g_dig_applied_leaf.load(),
-                     g_dig_applied_twin.load(), g_dig_applied_axis1.load(), g_dig_auto_bppre.load(),
+                     g_dig_applied_twin.load(), g_dig_applied_axis1.load(), g_dig_applied_pruned.load(),
+                     g_dig_auto_bppre.load(),
                      g_dig_auto_bp.load(), g_dig_auto_axis.load(), g_dig_auto_idle.load(),
                      g_dig_auto_base.load());
     }
@@ -46021,11 +46023,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!dig_census_counted)
             {
                 dig_census_counted = true;
+                // A -1 plan of a deck whose provider PRUNED the dig decision to its gate (its offer has no
+                // no-dig world) is that prune, not an automatic dig: counted apart (`pruned`) so the
+                // in-window residual stays legible. Diagnostic only (MTG_DIG_CENSUS).
+                const bool pruned = plan.dig_choice < 0 && !plan.horizon_leaf && DigSearchedChoiceOn()
+                    && !ResolveProvider(state).DigOfferAt(state).no_dig;
                 (plan.dig_choice == 1 ? g_dig_applied_axis1
                  : plan.dig_choice == 2 ? g_dig_applied_twin
                  : plan.horizon_leaf ? g_dig_applied_leaf
+                 : pruned ? g_dig_applied_pruned
                  : g_dig_applied_auto).fetch_add(1, std::memory_order_relaxed);
-                if (plan.dig_choice < 0 && !plan.horizon_leaf)
+                if (plan.dig_choice < 0 && !plan.horizon_leaf && !pruned)
                 {
                     const bool other_axis = plan.scry_choice >= 0 || plan.tutor_choice >= 0
                         || plan.etbdig_choice >= 0 || plan.lackey_choice >= 0 || plan.ponder_choice >= 0
@@ -54183,48 +54191,19 @@ static bool PlanMayHoldLandAtBounce(const GameState& state, const TurnSolver::Pl
 // One pre-gate shared by the axis fan-out (AppendSubdecisionAxes, every base plan of an enumeration)
 // and the hosts that append an IDLE plan after the enumeration (AppendIdleDigSiblings). See the axis
 // block for the rationale (MTG_DIG_SEARCHED_CHOICE; USER 2026-10-13 "It shouldn't be automatic").
-struct DigSiblingGate
+// THE DECK'S OFFER at this state (DecisionProvider::DigOfferAt): built by the provider -- the searched choice
+// or its prune -- and only materialised here. None in human play (the person decides).
+static DigOffer DigOfferFor(const GameState& state)
 {
-    bool any     = false;   // some plan of this state may get siblings
-    bool opted   = false;   // provider opts into the full axis: never (0) + dig-while-affordable (1)
-    bool src_now = false;   // a dig source exists on the enumeration state
-    bool choice  = false;   // MTG_DIG_SEARCHED_CHOICE
-};
-static DigSiblingGate DigSiblingGateFor(const GameState& state)
-{
-    DigSiblingGate g;
-    const DecisionProvider& dprov = ResolveProvider(state);
-    g.opted  = dprov.DigDecisionSearched();
-    g.choice = DigSearchedChoiceOn();
-    if (!g.opted && !g.choice) { return g; }
-    g.src_now = dprov.HasAnyDigSource(state);
-    if (!g.choice)
-    {
-        // Legacy pre-gate (=0): opt-in providers only, a source payable from the PRE-CAST pool.
-        if (g.src_now)
-        {
-            ManaPool dig_pool = AvailableManaPool(state);
-            bool dig_is_sac = false;
-            g.any = !dprov.SelectDigSource(state, dig_pool, dig_is_sac).empty();
-        }
-        return g;
-    }
-    if (g.src_now) { g.any = true; return g; }
-    // No source yet: only a sac-draw LAND in hand can become one through a plan's own drop. One hand
-    // scan, so a deck with no dig card pays nothing else (and stays byte-identical).
-    for (const Card& c : state.ActivePlayer().hand)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d && d->card.IsLand() && d->params.sacrifice_draw_cost.has_value()) { g.any = true; break; }
-    }
-    return g;
+    if (HumanPlayActive()) { return DigOffer{}; }
+    return ResolveProvider(state).DigOfferAt(state);
 }
-// Does this plan get dig siblings? Under the lever with no source yet, only when the plan's OWN drop
-// is a sac-draw land (state-independent, like BpDigFanoutForPlan's self-source rule).
-static bool DigSiblingsFor(const DigSiblingGate& g, const TurnSolver::Plan& p)
+// Does this plan get the offer's siblings? SacDrawDrop: only when the plan's OWN drop is a sac-draw land
+// (state-independent, like BpDigFanoutForPlan's self-source rule).
+static bool DigOfferCovers(const DigOffer& o, const TurnSolver::Plan& p)
 {
-    if (!g.any) { return false; }
-    if (!g.choice || g.src_now) { return true; }
+    if (!o.Any()) { return false; }
+    if (o.plans == DigOffer::Plans::All) { return true; }
     const std::string* lands[2] = { &p.land_to_play, &p.land_face };
     for (const std::string* ln : lands)
     {
@@ -54243,11 +54222,12 @@ static int NextDigGroup()
     if (g <= 0) { s_next.store(1, std::memory_order_relaxed); g = 1; }
     return g;
 }
-static void AppendDigSiblings(const DigSiblingGate& g, const TurnSolver::Plan& p,
+static void AppendDigSiblings(const DigOffer& o, const TurnSolver::Plan& p,
                               std::vector<TurnSolver::Plan>& out, int group = 0)
 {
-    for (int k = 0; k <= (g.opted ? 1 : 0); ++k)
+    for (int k = 0; k <= 1; ++k)
     {
+        if ((k == 0 && !o.no_dig) || (k == 1 && !o.while_affordable)) { continue; }
         TurnSolver::Plan v = p;
         v.dig_choice = k;
         v.dig_group  = group;
@@ -54263,12 +54243,12 @@ static void AppendDigSiblings(const DigSiblingGate& g, const TurnSolver::Plan& p
 static void AppendIdleDigSiblings(const GameState& state, std::vector<TurnSolver::Plan>& list)
 {
     if (list.empty() || HumanPlayActive() || !DigSearchedChoiceOn()) { return; }
-    const DigSiblingGate g = DigSiblingGateFor(state);
-    if (!DigSiblingsFor(g, list.back())) { return; }
+    const DigOffer o = DigOfferFor(state);
+    if (!DigOfferCovers(o, list.back())) { return; }
     list.back().dig_choice = 2;   // BEFORE the append: it may reallocate
     list.back().dig_group  = NextDigGroup();
     std::vector<TurnSolver::Plan> extra;
-    AppendDigSiblings(g, list.back(), extra, list.back().dig_group);   // dig_choice 0 (and 1 for an opt-in)
+    AppendDigSiblings(o, list.back(), extra, list.back().dig_group);   // the deck's offer: 0 (and 1 for an opt-in)
     if (DigCensusOn())
     { g_dig_twins_emitted.fetch_add(static_cast<long long>(extra.size()), std::memory_order_relaxed); }
     list.insert(list.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
@@ -55914,8 +55894,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     std::vector<std::pair<std::size_t, int>> dig_twinned;
     if (!cont_axes_only && !HumanPlayActive())
     {
-        const DigSiblingGate dg = DigSiblingGateFor(state);
-        if (dg.any)
+        const DigOffer dg = DigOfferFor(state);
+        const bool dg_choice = DigSearchedChoiceOn();
+        if (dg.Any())
         {
             std::vector<TurnSolver::Plan> extra;
             const std::size_t n_all = all.size();
@@ -55932,14 +55913,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
-                if (!DigSiblingsFor(dg, p)) { continue; }
-                // Opt-in: never (0) + dig-while-affordable (1). Otherwise only the no-dig twin (0).
-                const int grp = dg.choice ? NextDigGroup() : 0;
+                if (!DigOfferCovers(dg, p)) { continue; }
+                // The deck's offer: the no-dig twin (0), plus dig-while-affordable (1) for an opt-in.
+                const int grp = dg_choice ? NextDigGroup() : 0;
                 AppendDigSiblings(dg, p, extra, grp);
-                if (dg.choice) { dig_twinned.emplace_back(i, grp); }
+                if (dg_choice) { dig_twinned.emplace_back(i, grp); }
             }
             TRACE("digaxis", "T%d %zu plan(s) -> %zu dig variant(s)%s",
-                  state.turn_number, all.size(), extra.size(), dg.opted ? "" : " (no-dig twins)");
+                  state.turn_number, all.size(), extra.size(), dg.while_affordable ? "" : " (no-dig twins)");
             if (DigCensusOn()) { g_dig_twins_emitted.fetch_add(static_cast<long long>(extra.size()),
                                                                std::memory_order_relaxed); }
             all.insert(all.end(), std::make_move_iterator(extra.begin()),

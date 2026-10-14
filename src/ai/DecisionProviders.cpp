@@ -6255,6 +6255,40 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
+// ---- DIG OFFER UTILITIES (see DecisionProviders.h) -------------------------------------------------------
+DigOffer SearchedDigOffer(const DecisionProvider& prov, const GameState& s, bool while_affordable)
+{
+    DigOffer o;
+    if (!DigSearchedChoiceOn())
+    {
+        // Legacy (=0): the opt-in axis only, gated on a source payable from the PRE-CAST pool.
+        if (!while_affordable || !prov.HasAnyDigSource(s)) { return o; }
+        ManaPool dig_pool = AvailableManaPool(s);
+        bool dig_is_sac = false;
+        if (prov.SelectDigSource(s, dig_pool, dig_is_sac).empty()) { return o; }
+        o.no_dig = o.while_affordable = true;
+        o.plans  = DigOffer::Plans::All;
+        return o;
+    }
+    o.no_dig           = true;
+    o.while_affordable = while_affordable;
+    if (prov.HasAnyDigSource(s)) { o.plans = DigOffer::Plans::All; return o; }
+    // No source yet: only a sac-draw LAND in hand can become one, through a plan's own drop. One hand scan,
+    // so a deck with no dig card pays nothing else (and stays byte-identical).
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->card.IsLand() && d->params.sacrifice_draw_cost.has_value())
+        { o.plans = DigOffer::Plans::SacDrawDrop; return o; }
+    }
+    return o;
+}
+DigOffer DigOfferPrunedToGate() { return DigOffer{}; }
+DigOffer DecisionProvider::DigOfferAt(const GameState& s) const
+{
+    return SearchedDigOffer(*this, s, DigDecisionSearched());
+}
+
 // ---- TreasureHuntProvider ---------------------------------------------------
 
 bool TreasureHuntProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }
@@ -6268,6 +6302,18 @@ bool TreasureHuntProvider::ShouldConsiderDig(const GameState& s) const
 std::string TreasureHuntProvider::SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const
 {
     return ::SelectDigSource(s, pool, out_is_sac);
+}
+// THE DIG DECISION IS PRUNED TO THE GATE ABOVE (MTG_TH_DIG_PRUNE, default ON; =0 -> the searched no-dig twin
+// every other deck gets). This deck digs to FIND Treasure Hunt / Land's Edge, its gate passes on most turns (a
+// cycling land or Fiery Islet is nearly always in hand), and the search sees what the dig draws -- so the twin
+// was a real second child almost everywhere and almost never the better one: 4 games faster and 64 slower
+// over ~17,000 paired games, at 1.10-1.24x the CPU at the shipped depth and slower at every budget b5-b80
+// (docs/design/generic-dig-gate.md, "CPU time vs quality, per deck"). The deck wants its dig, so it restricts
+// the decision to it (USER 2026-10-14: a prune is fine in the provider "if the deck desires it").
+DigOffer TreasureHuntProvider::DigOfferAt(const GameState& s) const
+{
+    if (TreasureHuntDigPruneOn()) { return DigOfferPrunedToGate(); }
+    return SearchedDigOffer(*this, s, /*while_affordable=*/false);
 }
 
 int TreasureHuntProvider::LandsEdgeFireCount(const GameState& s, int rate) const

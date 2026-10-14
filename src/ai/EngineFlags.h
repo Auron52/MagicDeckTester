@@ -197,6 +197,14 @@ inline bool DigSearchedChoiceOn()
     return heurarm::Flag(heurarm::DIG_SEARCHED_CHOICE, env_on);
 }
 
+// MTG_TH_DIG_PRUNE (DEFAULT ON; =0 -> treasure_hunt gets the no-dig twin like every other deck) -- read by
+// TreasureHuntProvider::DigOfferAt, the provider's prune of its own dig decision to its gate.
+inline bool TreasureHuntDigPruneOn()
+{
+    static const bool env_on = EnvOn("MTG_TH_DIG_PRUNE", true);
+    return heurarm::Flag(heurarm::TH_DIG_PRUNE, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.

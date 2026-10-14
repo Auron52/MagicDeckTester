@@ -343,3 +343,69 @@ TEST_CASE("Dig searched choice: an opt-in deck's sac-draw land played THIS turn 
         CHECK(CountChoice(plans, 1) == 0);
     }
 }
+
+// ---- THE DECK'S OWN PRUNE (DecisionProvider::DigOfferAt -> DigOfferPrunedToGate; MTG_TH_DIG_PRUNE) -----
+// USER 2026-10-14: "dig-while-affordable is okay as a search prune in a provider heuristic if the deck
+// desires it. It is not okay as greedy logic built into the search." TreasureHuntProvider prunes its dig
+// decision to its gate (the twin measured 4 faster / 64 slower over ~17,000 paired games): where the gate
+// passes, the pass carries NO no-dig twin and is not marked 2; the gate digs in the apply. =0 restores
+// the twin.
+namespace
+{
+// treasure_hunt, turn 3, the drop made, three untapped Islands, nothing castable: a Lonely Sandbar
+// (cycling {U}) and two spare lands in hand.
+GameState ThStuck()
+{
+    static const TreasureHuntProvider th;
+    GameState s;
+    s.m_provider          = &th;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.players[0].lands_played_this_turn = 1;
+    Put(s, "Island", 46);
+    Put(s, "Island", 47);
+    Put(s, "Island", 48);
+    int num = 100;
+    s.players[0].hand.push_back(NumberedCard("Lonely Sandbar", num++));
+    s.players[0].hand.push_back(NumberedCard("Island", num++));
+    s.players[0].hand.push_back(NumberedCard("Island", num++));
+    for (int k = 0; k < 10; ++k) { s.players[0].library.push_back(NumberedCard("Island", 900 + k)); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Dig searched choice: treasure_hunt's provider prunes the dig to its gate (no twin)")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    const GameState pre = ThStuck();
+    REQUIRE(pre.m_provider->HasAnyDigSource(pre));
+    REQUIRE(pre.m_provider->ShouldConsiderDig(pre));
+    REQUIRE_FALSE(pre.m_provider->DigDecisionSearched());
+    REQUIRE_FALSE(pre.m_provider->DigOfferAt(pre).Any());   // the deck's offer: no sibling world
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithDigSiblings(pre);
+    REQUIRE(plans.size() == 1);
+    CHECK(plans[0].dig_choice == -1);   // the deck's gate decides; no sibling to choose
+    GameState s = pre;
+    TurnSolver::ApplyPlan(s, plans[0], /*is_pre_combat=*/true);
+    CHECK_FALSE(InHand(s, "Lonely Sandbar"));   // the gate passed: the pruned decision is "dig"
+    CHECK(InGraveyard(s, "Lonely Sandbar"));
+}
+
+TEST_CASE("Dig searched choice: MTG_TH_DIG_PRUNE=0 gives treasure_hunt the no-dig twin again")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    ArmScope off(heurarm::TH_DIG_PRUNE, 0);
+    const GameState pre = ThStuck();
+    REQUIRE(pre.m_provider->DigOfferAt(pre).no_dig);       // the searched offer: the no-dig twin
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithDigSiblings(pre);
+    REQUIRE(plans.size() == 2);
+    CHECK(plans[0].dig_choice == 2);
+    CHECK(plans[1].dig_choice == 0);
+    GameState s = pre;
+    TurnSolver::ApplyPlan(s, plans[1], /*is_pre_combat=*/true);
+    CHECK(InHand(s, "Lonely Sandbar"));         // the twin keeps the land
+}

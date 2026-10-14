@@ -588,3 +588,27 @@ One pooled batch (`scripts/dig_choice_ab/make_cpu_quality.py`, 108,600 games, se
 | b20 | 4.3400 @ 11519 ms | 4.3400 @ 11516 ms | +0 | 1.00 | 4.3400 @ 11438 ms | 4.3400 @ 11420 ms | +0 | 1.00 |
 
 **Reading.** Only treasure_hunt has a real CPU / quality gap: at its shipped depth the lever costs **1.10-1.24x the CPU and is worse at every budget** (+12 / +9 / +8 / +6 / +2 games in 1,200), and to match lever-off's quality it needs **1.29-1.48x** the CPU (b5-b40); lever-off's b80 quality is not reached at all within b80. At d3 the CPU is about equal (0.95-1.08x) and the lever is +2 to +6. On the other eight decks the quality difference is 0-2 games per 600 at every budget (FiveColour, Fluctuator, Soldiers, Auras slightly better; Pirates +1 at b10) and the CPU 0.88-1.06x. Separately: for most decks quality barely moves across a 16x budget range (Dragons, Auras, WhiteKnights, Soldiers flat), a depth-economics observation in its own right.
+
+### The deck builds its dig options (2026-10-14): DecisionProvider::DigOfferAt, and treasure_hunt's prune
+
+**USER rulings.** *"To be clear here, dig-while-affordable is okay as a search prune in a provider heuristic
+if the deck desires it. It is not okay as greedy logic built into the search."* And on the shape: *"I have a
+preference for actually building the logic and prune into the provider, which a boolean doesn't do. Or a
+utility that the provider can reference."* (A first cut was a `DigPrunedToGate()` boolean read by
+TurnSolver's sibling gate. Replaced before it was measured.)
+
+**The shape.** Which dig worlds a candidate plan is offered besides itself is now the provider's to build:
+`DecisionProvider::DigOfferAt(state)` returns a `DigOffer`: a no-dig twin (`dig_choice 0`), a
+dig-while-affordable variant (`dig_choice 1`), and which plans qualify (all, when a source exists now; or only
+a plan whose own drop is a sac-draw land). Two shared utilities build it (DecisionProviders.h):
+`SearchedDigOffer(prov, s, while_affordable)`, the searched choice and the base-class default (the
+dig-while-affordable variant for a `DigDecisionSearched` deck); and `DigOfferPrunedToGate()`, the deck's
+one-option prune (the plan digs exactly where its `ShouldConsiderDig` passes; no sibling). TurnSolver keeps
+no dig logic of its own: `DigOfferFor` asks the provider, and `DigOfferCovers` / `AppendDigSiblings`
+materialise the answer (the former `DigSiblingGate` / `DigSiblingGateFor` moved into `SearchedDigOffer`,
+unchanged, including the `=0` legacy pre-gate).
+
+**treasure_hunt prunes** (`TreasureHuntProvider::DigOfferAt` -> `DigOfferPrunedToGate()`; `MTG_TH_DIG_PRUNE`,
+heurarm slot, default ON, `=0` gives it the searched twin). The deck wants its dig: 4 faster / 64 slower over
+~17,000 paired games with the twin, at 1.10-1.24x the CPU at its shipped depth (the CPU table above). Every
+other deck keeps the searched offer. `MTG_DIG_CENSUS` counts the prune's digs as `pruned`, not `auto`.
