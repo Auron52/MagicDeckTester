@@ -6714,7 +6714,14 @@ int TurnSolver::StoriedWaivedEquipId(const GameState& state, const std::vector<A
 // class SameTurnMetalcraftEquipCredit already runs in by default, under the same
 // LeafReducerCreditEnabled law: optimism is sound exactly where a rollout validates it.
 //
-// MTG_EQUIP_DS_GATE_CASTS -- DEFAULT ON; `=0` restores the dead cast half. THE DEFECT: the two
+// MTG_EQUIP_DS_GATE_CASTS -- DEFAULT OFF until the USER rules on MTG_EQUIP_DS_SWING_FIRST; `=1`
+// enables. A DEFECT FIX THAT CANNOT SHIP ALONE: on KittyEquipment v1 it fails the adoption bar by
+// itself (held-out, seeds 10500001+: shipped +2, d3 +2, d0 +16 net vs the committed tree; 4 searched
+// games unfindable even at d8 b0), because the dead gate had been masking a hole in the USER's
+// consolidation doctrine -- the doctrine's double-strike host may be a body that cannot attack this
+// turn. With MTG_EQUIP_DS_SWING_FIRST also on, every cell is better (shipped -6, d3 -13, d0 -21; 2HG
+// -2 / -3 / -9; v2 / v3 identical) and every slower game recovers at stage 1. Adopt the two
+// TOGETHER. docs/design/kitty-one-host-rootcause.md, section 8. THE DEFECT: the two
 // frame predicates below (MetalcraftWillFreeEquips, FrameHasDoubleStrikeSource) read each cast
 // candidate's `Action::def`, and CollectActions -- where MTG_EQUIP_ONE_HOST and the zero-power
 // equip rule call them -- fills `def` only in its closing resolve pass ("Resolve each action's card
@@ -6731,7 +6738,7 @@ int TurnSolver::StoriedWaivedEquipId(const GameState& state, const std::vector<A
 // pass) already see a resolved `def`, so for them this is an identity.
 static bool EquipDsGateCastsEnabled()
 {
-    static const bool env_on = EnvOn("MTG_EQUIP_DS_GATE_CASTS", true);   // DEFAULT ON
+    static const bool env_on = EnvOn("MTG_EQUIP_DS_GATE_CASTS");   // DEFAULT OFF (see above)
     return heurarm::Flag(heurarm::EQUIP_DS_GATE_CASTS, env_on);
 }
 
