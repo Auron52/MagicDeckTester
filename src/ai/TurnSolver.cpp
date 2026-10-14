@@ -3358,6 +3358,27 @@ static thread_local SearchBudget* g_greedy_charge_budget = nullptr;
 // replicate count fan) is NOT offered to it: greedy would pick among the variants by the ordering
 // hint, which measured worse than resolution's line-hold max (slivers d0 +36 turns / 1000 games).
 static thread_local int g_greedy_solve_nest = 0;
+// THE REPLICATE COUNT IS SEARCHED (2026-10-14, docs/design/slivers-replicate-searched.md). Two defects
+// kept the count a pick inside the search window, one lever each so a pooled A/B can attribute them:
+//   MTG_REPLICATE_SIG     the autonomous powerset dedup keys a pinned count (#R<k>); without the key
+//                         every count class collapsed to its highest-valued member, so even the
+//                         ON-BOARD fan was decided by the ordering hint, never searched.
+//   MTG_REPLICATE_PENDING the count fan also covers a Sliver cast AFTER a same-plan Hatchery (a granter
+//                         in hand that the plan casts or Vial-puts first). Without it that cast had only
+//                         the unpinned variant, i.e. resolution's greedy max.
+// Both DEFAULT ON (defect fixes); =0 restores the pre-fix behaviour byte for byte. Search window only:
+// the greedy picker (g_greedy_solve_nest > 0 -- the horizon playout and the d0 runner) is never offered
+// a pinned count, and human play keeps its own fan and keys.
+static bool ReplicateSigEnabled()
+{
+    static const bool env_on = EnvOn("MTG_REPLICATE_SIG", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::REPLICATE_SIG, env_on);
+}
+static bool ReplicatePendingFanEnabled()
+{
+    static const bool env_on = EnvOn("MTG_REPLICATE_PENDING", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::REPLICATE_PENDING, env_on);
+}
 // Plan::le_fire_choice for the apply in progress (-1 = the provider's LandsEdgeFireCount). Scoped
 // by ApplyPlanDirect; read at its end-of-main Land's Edge fire.
 static thread_local int g_le_fire_pin = -1;
@@ -14896,6 +14917,11 @@ struct SubsetFilterPre
     // provider opt-in) -> the rule never fires.
     std::vector<int>  equip_release_only;
 
+    // Per candidate: 1 = a hand cast whose replicate count is PINNED (>= 0) on a creature the board does
+    // not grant replicate to at this node -- the pending-grant fan (MTG_REPLICATE_PENDING), legal only
+    // beside a same-plan granter (SubsetHasUngrantedReplicatePin). EMPTY = no such candidate, which is
+    // exact rather than a weaker precondition, so it is built on the instruments-armed path too.
+    std::vector<char> rep_pending;
     std::vector<const CardDefinition*> sac_src_def;   // per candidate; nullptr = none/not a sac action
     bool board_persist     = false;                   // meaningful only when sac_src_def is non-empty
     // `board_death_payoff` is hoisted from SubsetWastesCreatureSacMana's FINAL test for the same
@@ -14951,6 +14977,54 @@ static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>
     }
 }
 
+// The pending-grant replicate pins (SubsetFilterPre::rep_pending). Only CollectActions' pending-grant fan
+// pins a count on a creature the board cannot replicate, so `out` stays EMPTY for every candidate list
+// that holds no such pin (every deck but slivers, the greedy picker, human play): one int compare per
+// candidate. CanReplicate is a board read, and the board is frozen for the whole enumeration.
+static void BuildReplicatePending(const GameState& state, const std::vector<Action>& cands,
+                                  std::vector<char>& out)
+{
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.replicate_count < 0) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || CanReplicate(*d, state.battlefield, state.active_player_index)) { continue; }
+        if (out.empty()) { out.assign(cands.size(), 0); }
+        out[j] = 1;
+    }
+}
+
+// Reject a subset that PINS a pending-grant replicate count (rep_pending) without also casting or
+// Vial-putting a granter for it (Hatchery Sliver, GrantsReplicateTo). With no granter in the plan the
+// creature can never be replicated -- the board has none (that is what made it pending) and nothing in
+// the plan adds one -- so the pinned cast realises exactly the unpinned cast, which is in the same
+// candidate group and survives this filter: an identity fold, nothing a larger budget could find is
+// lost. A granter that IS in the subset but resolves after the cast is the cast order's business, not
+// this filter's: that pin realises no copy, the post-apply dedup skips it, and predicting the realised
+// order here would be the lockstep hazard (the apply's order owns it).
+static bool SubsetHasUngrantedReplicatePin(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                           const std::vector<char>& rep_pending)
+{
+    for (int j : sel)
+    {
+        if (!rep_pending[static_cast<std::size_t>(j)]) { continue; }
+        const Action& a = cands[j];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        bool granted = false;
+        for (int k : sel)
+        {
+            if (k == j) { continue; }
+            const Action& g = cands[k];
+            if (g.kind != Action::Kind::CastFromHand && g.kind != Action::Kind::ActivateVial) { continue; }
+            const CardDefinition* gd = g.def ? g.def : CardDatabase::Instance().Lookup(g.card_name);
+            if (gd != nullptr && d != nullptr && GrantsReplicateTo(*gd, *d)) { granted = true; break; }
+        }
+        if (!granted) { return true; }
+    }
+    return false;
+}
+
 static void BuildEquipReleaseOnly(const GameState& state, const std::vector<Action>& cands,
                                   std::vector<int>& out);   // defined with DropInertHasteShroudEquips
 static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::vector<Action>& cands)
@@ -14961,6 +15035,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     {
         BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
         BuildEquipReleaseOnly(state, cands, p.equip_release_only);
+        BuildReplicatePending(state, cands, p.rep_pending);
         return p;
     }
 
@@ -15140,6 +15215,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
 
     BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
     if (p.equip) { BuildEquipReleaseOnly(state, cands, p.equip_release_only); }
+    BuildReplicatePending(state, cands, p.rep_pending);
 
     // The sac-source table (see the struct). Built only when a filter that reads it can actually
     // run -- otherwise the walk below is itself the waste it exists to remove.
@@ -23424,6 +23500,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (!fade_read_ready) { fade_read_val = ReadFadeBoard(state); fade_read_ready = true; }
         return fade_read_val;
     };
+    // The replicate granters in hand (Hatchery Sliver), for the PENDING-GRANT count fan
+    // (MTG_REPLICATE_PENDING). Lazy for the same reason: only a searched creature cast the board does
+    // not already grant replicate to asks, and one hand walk serves every such creature in the call.
+    // A granter grants only from the battlefield, so it must be ANOTHER card than the one being cast
+    // (a second copy of the same name counts). Staged cards count: a staged granter is castable.
+    bool rep_granters_ready = false;
+    std::vector<std::pair<const CardDefinition*, int>> rep_granters;   // (definition, copies in hand)
+    auto rep_granter_in_hand = [&](const CardDefinition& d) -> bool {
+        if (!rep_granters_ready)
+        {
+            for (const Card& h : ap.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                if (hd == nullptr || !hd->params.grants_replicate_to_subtypes) { continue; }
+                bool seen = false;
+                for (auto& g : rep_granters) { if (g.first == hd) { ++g.second; seen = true; break; } }
+                if (!seen) { rep_granters.emplace_back(hd, 1); }
+            }
+            rep_granters_ready = true;
+        }
+        for (const auto& g : rep_granters)
+        {
+            if ((g.first != &d || g.second >= 2) && GrantsReplicateTo(*g.first, d)) { return true; }
+        }
+        return false;
+    };
 
     if (poolaudit::Enabled()) { poolaudit::Probe(state, is_pre_combat ? "collect-m1" : "collect-m2"); }
 
@@ -25900,9 +26002,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // autonomous plan space used to leave replicate_count == -1 and let resolution take the
         // greedy max, which is the very sink the reports above describe. The provider may PRUNE the
         // fan (DecisionProvider::ReplicateCounts, empty = every k); human play always gets it whole.
-        // An unpinned (-1) cast now reaches the resolution loop only beyond the search horizon: the
-        // greedy picker (g_greedy_solve_nest > 0, GreedyPermit-checked to sit outside every window)
-        // is not offered the fan and keeps resolution's line-hold max.
+        // The greedy picker (g_greedy_solve_nest > 0, GreedyPermit-checked to sit outside every
+        // window) is not offered the fan and keeps resolution's line-hold max. Inside the window the
+        // unpinned (-1) cast is one SEARCHED option beside the pinned counts -- and until 2026-10-14 it
+        // was not: the autonomous dedup collapsed the counts (MTG_REPLICATE_SIG) and a Sliver cast
+        // after a same-plan Hatchery had no fan at all (MTG_REPLICATE_PENDING); see the fan below.
         // ---- DEVOUR (CR 702.81, Mycoloth "Devour 2") ---------------------------------------------
         // One cast variant per number of creatures devoured, k = 0 .. (own creatures on the
         // battlefield). Unlike the replicate fan below, this is enumerated in AUTONOMOUS play too,
@@ -25970,8 +26074,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;
         }
 
-        if (def.card.IsCreature() && (g_greedy_solve_nest == 0 || HumanPlayActive())
-            && CanReplicate(def, state.battlefield, state.active_player_index))
+        // PENDING GRANT (MTG_REPLICATE_PENDING, default ON; 2026-10-14). CanReplicate reads the board at
+        // THIS node, so a Sliver the plan casts after a SAME-PLAN Hatchery Sliver (cast from hand or
+        // Vial-put earlier in the plan) was offered no fan at all -- only the unpinned cast, which
+        // resolution then made at the greedy max, and whichever post-Hatchery Sliver resolved first took
+        // every spare copy. That is a greedy pick inside the search window (the cast-order draft's
+        // finding 6.2; the pending_split probe: "Cloudshredder with no copy, Muscle with one" was
+        // unfindable at any budget). So a creature some hand granter would grant replicate to gets the
+        // same pinned fan, priced into its bill exactly like the on-board fan. Its pins are only
+        // grantable in a subset that also casts or puts the granter: SubsetHasUngrantedReplicatePin
+        // rejects the rest (an exact duplicate of the unpinned cast, which never makes a copy without
+        // the grant). Whether the granter actually resolves FIRST is the plan's cast order (the USER's
+        // to decide) -- a pin it does not precede realises no copy, the same state as the unpinned
+        // cast, and the post-apply dedup skips it. The unpinned cast is emitted FIRST and unchanged, so
+        // every subset without the granter enumerates exactly what it did before, and a pinned count
+        // replaces it only on a strict improvement. Search window only (never the greedy picker, never
+        // human play, whose resolution dialog already asks for this count).
+        bool rep_now     = false;
+        bool rep_pending = false;
+        if (def.card.IsCreature() && (g_greedy_solve_nest == 0 || HumanPlayActive()))
+        {
+            rep_now = CanReplicate(def, state.battlefield, state.active_player_index);
+            if (!rep_now && !HumanPlayActive() && ReplicatePendingFanEnabled())
+            { rep_pending = rep_granter_in_hand(def); }
+        }
+        if (rep_now || rep_pending)
         {
             // Replicate's additional cost is the spell's PRINTED mana cost (CR 702.56a) -- a cost
             // reduction applies to the total cost of the spell once, not per copy, so this is
@@ -26001,10 +26128,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 kmax = std::max(0, (pool - base_mv) / rep_mv);
             }
             kmax = std::min(kmax, 8);   // sanity cap: 8 extra copies is past any pool the fleet reaches
+            // A pending grant with no copy affordable is just the plain cast: emit nothing new (the
+            // generic push below sees exactly the action it always did).
+            const bool fan = rep_now || kmax >= 1;
+            // The unpinned cast first, unchanged (see PENDING GRANT above).
+            if (fan && rep_pending) { actions.push_back(a); }
             std::vector<int> rep_ks;
-            if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Replicate))
+            if (fan && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Replicate))
             { rep_ks = ResolveProvider(state).ReplicateCounts(state, def, kmax); }
-            if (rep_ks.empty()) { for (int k = 0; k <= kmax; ++k) { rep_ks.push_back(k); } }
+            if (fan && rep_ks.empty()) { for (int k = 0; k <= kmax; ++k) { rep_ks.push_back(k); } }
             for (int k : rep_ks)
             {
                 if (k < 0 || k > kmax) { continue; }
@@ -26014,10 +26146,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // Each copy is another body on the board; keep the ordering hint monotone in k so
                 // the plan list reads high-to-low rather than in an arbitrary order.
                 v.eval += k * EvalCard(def, state);
-                if (v.haste_attack_power > 0)
+                if (v.haste_attack_power > 0 && rep_now)
                 {
                     // Token copies of a hasted creature attack this turn too, so the this-turn
                     // attack projection must count them (lockstep with the tokens apply pushes).
+                    // NOT for a pending-grant pin: its copies exist only if the plan's granter
+                    // resolves first, which the projection cannot see, and a projected win is taken
+                    // without a rollout (SolveWithLookahead's wins_this_turn return) -- so it
+                    // under-projects (safe: the line is still searched) rather than over-projects.
                     v.haste_attack_power += k * (a.haste_attack_power);
                 }
                 actions.push_back(std::move(v));
@@ -26032,13 +26168,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // T4 -> T5 at 1x/4x/16x). A variant that realises the same count as a pinned one lands on
             // the same state and the post-apply dedup skips it. Not offered to human play (a person
             // picks a count).
-            if (!HumanPlayActive() && kmax >= 1)
+            if (rep_now && !HumanPlayActive() && kmax >= 1)
             {
                 Action v = a;   // replicate_count stays -1
                 v.eval += kmax * EvalCard(def, state);
                 actions.push_back(std::move(v));
             }
-            continue;
+            if (fan) { continue; }
         }
 
         // Ponder (cast_reorder): keep-vs-shuffle. This was the #1 branching source (MTG_BRANCH_STATS:
@@ -36310,6 +36446,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
+        // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
+        if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
         if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
         if (shape != nullptr) { shapestats::Bump(shape->passed); ++callf.passed; }
         int mask = 0;
@@ -48841,6 +48980,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
+        // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
+        if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
         if (eshape != nullptr) { shapestats::Bump(eshape->e_passed); ++ecallf.passed; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
@@ -50851,7 +50993,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // distinct plan for the un-pruned oracle (MTG_UNPRUNED: the viewer's / claude-play's plan list),
     // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
     const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
-    auto plan_signature = [s_human_play_sig, host_sig, cre_host_sig](const TurnSolver::Plan& p) -> std::string
+    const bool rep_sig = ReplicateSigEnabled();   // the #R key below (MTG_REPLICATE_SIG)
+    auto plan_signature = [s_human_play_sig, host_sig, cre_host_sig, rep_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l, u, msf;
         for (const Action& act : p.actions)
@@ -50937,6 +51080,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // byte-identical (the #S/#V/#K precedent).
                         + (act.devour_count >= 0
                            ? ("#D" + std::to_string(act.devour_count)) : "")
+                        // REPLICATE COUNT (CR 702.56, Hatchery Sliver): the devour defect again, on
+                        // the axis that was fanned for the USER's no-greedy rule (2026-09-30) and
+                        // then never reached the search. CollectActions emits one variant per pinned
+                        // k plus the unpinned "spare mana" cast, and only the human-play branch below
+                        // keyed k -- so the autonomous dedup kept the highest-VALUED member of every
+                        // class, i.e. the ordering hint `eval += k * EvalCard` picked the count.
+                        // That is a greedy pick inside the search window: "Cloudshredder with no
+                        // copy, Muscle with one" was unfindable at any budget whenever the hint
+                        // ranked another split higher (slivers-replicate-searched.md, the
+                        // onboard_split probe). Keyed from >= 0 like the human key: "replicate zero
+                        // times" is a real line. -1 = not pinned, so every deck that never pins a
+                        // count (all but slivers) is byte-identical. Human play already keys it.
+                        + ((rep_sig && !s_human_play_sig && act.replicate_count >= 0)
+                           ? ("#R" + std::to_string(act.replicate_count)) : "")
                         // CAST-TIME trick target (kTrickBestOwnTarget, MTG_MINT_CREDIT_EXACT): "the
                         // best attacker when the trick resolves" and an explicit pre-plan target
                         // are DISTINCT plans -- the explicit one aims at the body the payment then
@@ -51180,7 +51337,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // variants. Keyed from >= 0, not > 0: "replicate ZERO times" is a real, chosen line
                 // here -- it is the one that leaves the mana for Thrumming Hivepool -- and collapsing
                 // it into the un-declared cast would hide exactly the choice this dimension exists
-                // for. Autonomous play never emits a variant at all (replicate_count stays -1).
+                // for. (The autonomous signature keys the same count as #R, MTG_REPLICATE_SIG.)
                 if (act.replicate_count >= 0)    { sub.push_back("r" + act.card_name + "=" + std::to_string(act.replicate_count)); }
                 // Aura enchant TARGET: which creature the Aura attaches to is a human choice (Bogles piles
                 // auras on one creature, but Daybreak Coronet / Lion Umbra restrictions and simple threat

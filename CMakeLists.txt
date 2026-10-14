@@ -370,6 +370,7 @@ add_executable(mtg-test
     test/unit/test_knights_discard.cpp
     test/unit/test_whiteknights_discard.cpp
     test/unit/test_slivers_vial_discard.cpp
+    test/unit/test_slivers_replicate_searched.cpp
     test/unit/test_discard_distance.cpp
     test/unit/test_selesnya_d0_defects.cpp
     test/unit/test_attack_projection.cpp

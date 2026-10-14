@@ -18030,6 +18030,24 @@ inline bool WantVialCharge(const GameState& state, const Permanent& vial)
     return target > 0 && c < target;
 }
 
+// True when `granter` (Hatchery Sliver: "Each Sliver spell you cast has replicate") grants
+// replicate to the spell `def`: it carries `grants_replicate_to_subtypes` and `def` has one of its
+// subtypes_affected. The static ability works from the BATTLEFIELD only, so a granter still in hand
+// grants nothing yet -- CanReplicate asks this of each controlled permanent; the search asks it of a
+// granter the same plan casts or Vial-puts earlier (TurnSolver's pending-grant count fan).
+inline bool GrantsReplicateTo(const CardDefinition& granter, const CardDefinition& def)
+{
+    if (!granter.params.grants_replicate_to_subtypes) { return false; }
+    for (const std::string& sub : granter.params.subtypes_affected)
+    {
+        for (const std::string& cs : def.card.m_subtypes)
+        {
+            if (cs == sub) { return true; }
+        }
+    }
+    return false;
+}
+
 // Returns true if the creature `def` gets replicate when cast this turn.
 // Two sources: the card itself has `has_replicate`, or a permanent on the battlefield
 // has `grants_replicate_to_subtypes` and the creature matches its subtypes_affected.
@@ -18043,14 +18061,7 @@ inline bool CanReplicate(
     {
         if (p.controller_index != controller_index) { continue; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(p.card);
-        if (!ldef || !ldef->params.grants_replicate_to_subtypes) { continue; }
-        for (const std::string& sub : ldef->params.subtypes_affected)
-        {
-            for (const std::string& cs : def.card.m_subtypes)
-            {
-                if (cs == sub) { return true; }
-            }
-        }
+        if (ldef && GrantsReplicateTo(*ldef, def)) { return true; }
     }
     return false;
 }
