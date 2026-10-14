@@ -1069,3 +1069,66 @@ sub-additive**, against round 14's 6.5–9.5% sub and round 18's 5% super. The r
 rather than mysterious: `g_A` and `g_B` both spend into the same "cheap bodies" theme and compete
 for the same marginal turns. Round 20 therefore applies an explicit 25% sub-additive discount to
 every composite prediction, and says so per arm.
+
+---
+
+## Round 20 RESULT (seed 1130000): Utopia Mycon goes to ZERO, and the archetype changes
+
+Read against `h_ref` = f_E in-pool. Predictions written into the builder before the run, with an
+explicit 25% sub-additive discount applied to every composite after round 19's drift.
+
+| arm | edit | std | 2hg | mean | predicted | error |
+|---|---|---|---|---|---|---|
+| **`h_F`** | `h_A` + Sapherd #2 + Thallid #2 off **Utopia Mycon 2→0** | **−0.0447** | **−0.0464** | **−0.0456** | −0.0280 | −0.0176 |
+| `h_B` | `h_A` + Mycon 1 + Shroofus 3 | −0.0204 | −0.0377 | −0.0290 | −0.0270 | −0.0020 |
+| `h_D` | `h_B` + Migration #4 | −0.0207 | −0.0354 | −0.0280 | −0.0330 | +0.0050 |
+| `h_E` | `h_A` + Migration #4 off Undercellar | −0.0227 | −0.0302 | −0.0265 | −0.0250 | −0.0015 |
+| `h_C` | `h_A` + Migration #4 off Wild Growth | −0.0197 | −0.0277 | −0.0237 | −0.0290 | +0.0053 |
+| `h_A` | `g_A` + `g_D` | −0.0142 | −0.0275 | −0.0208 | −0.0220 | +0.0012 |
+
+### The structural prediction held, and it is the one that licenses the method
+
+**|`h_C` − `h_E`| = 0.0028**, against a written "< 0.006". Those two arms buy the *identical*
+Migration #4 rung off different donors (Wild Growth #2 at +0.0134 and Undercellar #4 at +0.0166 in
+the round-17 census). Their agreement is direct evidence that the census's donor prices **transfer
+to this composite** rather than being local to `z_m24` — the thing round 16's land ladder had
+assumed and could not show. Five of six point predictions also landed within 0.005.
+
+**Migration stops at 3.** The #4 rung is worth only −0.003 to −0.006 against #3's −0.032, and in
+the full composite `h_B` (Migration 3) edges `h_D` (Migration 4) by −0.0010. The ladder is flat.
+
+### Utopia Mycon goes to zero — the USER's own named test case
+
+*"For example, I don't expect Utopia Mycon to go, but that should be proven with numbers."* The
+numbers say it goes, in four independent steps across four seed blocks:
+
+| step | reading |
+|---|---|
+| round 11: 4th copy | +0.0005 (t=+0.14) — a dead null |
+| round 17: 3→2 | −0.0065 — FREE |
+| round 19 `g_B`: 2→1 | cheap (the pair with Shroofus #3 nets −0.0078) |
+| round 20 `h_F`: 2→0 | **gains 0.025 over the same arm that kept it** (`h_F` vs `h_B`) |
+
+### This is an archetype change, not a tuning
+
+`h_F` has shed all three of the deck's engine cards — **zero Mycoloth, zero Utopia Mycon, zero
+Doubling Season** — and with them *every sacrifice outlet in the list* (Mycon, Psychotrope,
+Deathspore, Vitaspore and Mycoloth's devour are all at 0). candidate-b was a ramp/doubler deck;
+this is a cheap-bodies-plus-haste aggro deck that happens to share a card pool. The Saprolings
+simply attack.
+
+It is also **7.6x cheaper to simulate**: 50.5 ms/game against the base's 382.4, and 2.2x cheaper
+than `f_E` at 112.5. That is not incidental — the devour k-axis and the sac-outlet powerset were
+this deck's two documented cost centres, and both are gone. If this list is ever adopted it walks
+into the 3x suite-cost rule with enormous headroom, where candidate-b was the expensive case.
+
+### `h_F`, the leading list (60 cards, 24 lands, mono-green)
+
+```
+1 Sol Ring              4 Sporecrown Thallid    1 Tukatongue Thallid
+4 Brightcap Badger      4 Undercellar Myconid   2 Shroofus Sproutsire
+4 Beastmaster Ascension 2 Wild Growth           4 Saproling Burst
+3 Concordant Crossroads 3 Saproling Migration   2 Thallid
+2 Yavimaya Sapherd
+LANDS (24)   20 Forest  4 Hickory Woodlot
+```
