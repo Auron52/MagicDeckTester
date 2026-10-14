@@ -1368,7 +1368,7 @@ Two tooling facts worth recording, each of which cost a 30-second failed run:
 * `deck_compare` takes `logs/deckcmp/<Deck>/.lock`; two runs on one deck would both rewrite the
   arm decklists and `numbering.json` under each other. Chain by captured PID, never run two.
 
-### Round 27 — RUNNING, and it is the last open question
+### Round 27 — the last open question (DESIGN; result below)
 
 Does `h_F` want 1 Utopia Mycon? A **third** fresh held-out block (1210000), **10,000 games**,
 d7/b1000, 16 cells, on the aliased R=30 table (`pool_table: false` — nothing generated).
@@ -1394,11 +1394,106 @@ docstring before any of these numbers existed, which I then let two under-powere
 out of. I have mispredicted swap signs in rounds 19 and 21 by over-rating adds; this would be the
 first time I under-rated one.
 
-### State of the recommendation as of round 26
+### Round 27 RESULT (seed 1210000, 10,000 games, d7/b1000): round 25 REPLICATES — Mycon goes back in
 
-`h_F` is **60 cards, 24 lands, mono-green, fully legal** under the Modern/Legacy/Vintage copy rule
-(Sol Ring at exactly 1, nothing else over cap). It beats `z_m24` by −0.06 to −0.08 at every budget
-from 20 ms to d7/b1000, and that margin is NOT a budget artifact. **It is pending round 27 on one
-card.** `h_F` runs 0 Deathspore Thallid; the user's 1-copy floor was conditional on the list being
-black (*"at least if we have a list with black"*) and this list is mono-green, so it does not bind —
-flagged for the user rather than assumed.
+Finished 2026-10-14 14:10Z, 2 h 00 m, 32/32 workers the whole way. The pre-registered contrasts,
+read off the printed pairwise matrices (negative = **the ADD gains**):
+
+| contrast | std | 2hg |
+|---|---|---|
+| `r_mycon1_S` − `r_h_F`  (+1 Mycon, donor Yavimaya Sapherd 2→1) | **−0.0107** | **−0.0226** |
+| `r_mycon1_T` − `r_h_F`  (+1 Mycon, donor Thallid 2→1) | −0.0050 | −0.0069 |
+| `r_mycon2` − `r_h_F`  (+2 Mycon, both donors) | −0.0056 | −0.0179 |
+| `r_myco1_S` − `r_h_F`  (+1 Mycoloth, donor Sapherd 2→1) | +0.0032 | −0.0080 |
+| `r_ctl1` (the apparatus floor, ESTIMATED not measured) | −0.0103 | −0.0081 |
+
+Printed pairwise se for the closest pair: **0.0052 std / 0.0058 2hg** — larger than the 0.0038 /
+0.0048 I pre-registered, so the t on the headline contrast is ≈ **−2.1 std / −3.9 2hg**, not the
+−3.1 / −5.4 I projected. The *effect* replicated; my *precision* estimate was optimistic.
+
+**The replication, which is the whole point of this round.** `+1 Utopia Mycon` on the Sapherd donor,
+across every block it has been measured on:
+
+| block | games | setting | std | 2hg |
+|---|---|---|---|---|
+| 1180000 | 2,000 | d5/b20 | +0.0035 | +0.0055 |
+| 1180000 | 2,000 | d5/b320 | +0.0015 | −0.0005 |
+| 1180000 | 2,000 | d7/b1000 | +0.0020 | −0.0010 |
+| 1200000 | 6,000 | d7/b1000 | −0.0117 | −0.0258 |
+| 1210000 | 10,000 | d7/b1000 | **−0.0107** | **−0.0226** |
+
+The two well-powered blocks agree to within 0.001 std / 0.003 2hg. Block 1180000 carried pairwise se
+~0.0085 / ~0.0107, so its "+0.0020" sits about 1.5 se from −0.0107 — **not a contradiction, just
+three readings of an underpowered block that I reported as a settled null.** That is the same error
+as the unpaired budget ladder in round 22, in a different dress: an effect smaller than the block's
+own noise was read as zero rather than as unresolved.
+
+**The 2-copy rung behaves correctly.** Two copies (−0.0056 / −0.0179) give back roughly half of one
+copy's gain (−0.0107 / −0.0226) in both formats, so the second copy is negative-valued. That is the
+diminishing shape a card belonging at exactly 1 copy must show; a flat jump would have suggested a
+fixture of the block rather than a card effect. The rung was the corroborating check and it passes.
+
+**Three caveats, all of which belong in the recommendation.**
+
+1. **The donor carries part of the gain.** The Thallid donor buys the identical rung and gains only
+   −0.0050 / −0.0069 — less than half the Sapherd donor's. So some of the Sapherd arm's margin is
+   the **second Yavimaya Sapherd being the worst card in the list**, not Mycon's value. What the
+   two-donor design was built to test is the **sign**, and both donors agree on it in both formats.
+2. **In std the gain does not clear the floor.** −0.0107 against an estimated floor of −0.0103 is
+   1.0×; in 2hg, −0.0226 against −0.0081 is 2.8×. std alone would not carry this call. It is carried
+   because std and 2hg are **co-equal** and 2hg is clear, and because `ctl1` measures *base-vs-arm*
+   bias while this contrast is *arm-vs-arm* between two lists that share one table and differ by two
+   cards — most of that bias is common-mode and cancels. **The floor remains ESTIMATED, never
+   measured** (round 26: `--with-floor` is unavailable here).
+3. **Selection bias is flagged by the driver** (`r_mycon1_S` wins both formats). It does not apply
+   the usual way: this round *was* the held-out confirmation of round 25's winner, on a third
+   disjoint block, with the arm fixed in advance.
+
+**Mycoloth stays at zero.** +0.0032 std / −0.0080 2hg — signs split, both at or under the floor,
+consistent with round 25's −0.0017 / −0.0082. Three blocks have now failed to show the first
+Mycoloth earning its slot.
+
+**The prediction in round 27's docstring held.** I had written that Mycon would come back at 1 copy
+because it is the only card in the list that converts surplus saprolings into mana and the list has
+zero sacrifice outlets — a structural gap named in round 23's docstring, before any of these numbers
+existed, which two underpowered blocks then talked me out of. Recorded because the *mechanism* was
+available three rounds before the measurement caught up, and I down-weighted it for noise.
+
+## FINAL RECOMMENDATION (rounds 1–27, 2026-10-13/14)
+
+**`h_F` + 1 Utopia Mycon − 1 Yavimaya Sapherd** — 60 cards, 24 lands, mono-green:
+
+```
+1 Sol Ring            4 Beastmaster Ascension      20 Forest
+1 Utopia Mycon        2 Wild Growth                 4 Hickory Woodlot
+4 Sporecrown Thallid  4 Saproling Burst             3 Saproling Migration
+1 Tukatongue Thallid  3 Concordant Crossroads       2 Thallid
+4 Brightcap Badger                                  1 Yavimaya Sapherd
+4 Undercellar Myconid
+2 Shroofus Sproutsire
+```
+
+**Margin over the shipped-style anchor `z_m24`** (2 Mycoloth / 3 Utopia Mycon / 1 Doubling Season):
+−0.0761 std / −0.0608 2hg at d7/b1000 on 10,000 held-out games — about 8–12× the estimated apparatus
+floor, and stable from 20 ms to d7/b1000.
+
+**Legality:** Sol Ring at exactly **1** (Restricted in Vintage, illegal in Modern/Legacy), nothing
+else over its cap. Checked against `logs/fungus_screen/legality.json` in every round-27 arm.
+
+**Named model biases that the numbers cannot price, and which a human should weigh:**
+
+* **Saproling Migration's kicker is unmodelled**, so its 3 copies are a **LOWER bound** — the real
+  card is better than the measured one.
+* **Concordant Crossroads grants haste symmetrically.** The goldfish has no opponent board to hand
+  haste to, so its 3 copies carry a real paper cost the measurement cannot see. This is the one
+  number in the list I would expect a human to overrule downward.
+* **The apparatus floor is ESTIMATED from `ctl1`, not measured.** `--with-floor` generates per-arm
+  R=10 keep tables (forbidden by the standing no-new-tables constraint) and dies anyway on
+  `Fungus.buckets.json` naming `Secluded Courtyard`, a card this mono-green list does not contain.
+  Amending a bucket policy is a **user-only** ruling.
+* **0 Deathspore Thallid.** The user's 1-copy floor was explicitly conditional (*"at least if we have
+  a list with black"*) and this list is mono-green, so it does not bind. Flagged, not assumed.
+
+**Deliberately not done** (each is a user-owned next step, not a gap in the screen): a keep table and
+value leaf fitted to this list; Saproling Migration's kicker plus the `EvalCard`
+`cast_creates_tokens` branch; the convoke / `ManaDefOf` phantom-mana defect.
