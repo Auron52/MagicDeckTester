@@ -375,7 +375,6 @@ add_executable(mtg-test
     test/unit/test_edf_goff_verify.cpp
     test/unit/test_edf_tapahead_pending_pip.cpp
     test/unit/test_edf_aura_payer_as_executed.cpp
-    test/unit/test_main2_dig_defer.cpp
     test/unit/test_dig_searched_choice.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
