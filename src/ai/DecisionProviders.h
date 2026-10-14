@@ -64,7 +64,7 @@ enum class UnprunedGate
                   // k=0..N-1 splice fan-out per copy instead of only the bare + max-chain families
                   // (DragonstormProvider::UseSpliceCollapse)
     SacLandHold,  // burn's sac-land burn hold disabled: keep the plans that cast Shard Volley before the
-                  // winning turn (BurnProvider::HoldsSacLandBurnUntilLethal)
+                  // winning turn (BurnProvider::HoldsSacLandBurn)
     TrickTarget,  // Mirrorwing/Zada solo-target trick target set opened to EVERY legal creature
                   // (battlefield + hand) instead of MirrorwingProvider::TrickTargetCandidates'
                   // narrowed set (magnets + best attacker + haste/copy extras)
@@ -972,8 +972,10 @@ public:
     bool PreferHoldLandDrop(const GameState&, int) const override;
     // Shard Volley is the deck's only sacrifice-a-land spell, and every land it could sacrifice is a
     // Mountain (no utility land whose loss is free) -- so holding it until it wins the game or unlocks
-    // Spectacle is a pure gain in available mana. See HoldSacLandBurn in TurnSolver.cpp.
-    bool HoldsSacLandBurnUntilLethal() const override { return true; }
+    // Spectacle is a pure gain in available mana. The rule, its exceptions and the measurement are at
+    // the definition (DecisionProviders.cpp).
+    bool HoldsSacLandBurn(const GameState& s, const std::vector<Action>& cands,
+                          const std::vector<int>& sel, bool* rescued_by_exception) const override;
     // The USER's cleanup-discard buckets (2026-10-09, docs/design/burn-discard-policy-proposal.md
     // "burn: SETTLED"): 2nd Eidolon > dead Blaze/Blood > lands past 3 (+1 with a Blaze) > a Volley
     // with no land > burn beyond lethal > a 2nd Light Up the Stage > spare creatures > the keep
@@ -1000,6 +1002,9 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Hinata"; }
+    // The Irencrag waste gate (MTG_IRENCRAG_WASTE + the MTG_IRENCRAG_* rule arms): see the definition.
+    bool RestrictorSubsetWasted(const GameState& s, const std::vector<Action>& cands,
+                                const std::vector<int>& sel, int j, int pool_total) const override;
     bool OpponentPlaysLands() const override { return true; }
     // M2 FIXPOINT OPT-IN, mode 2 (ADOPTED 2026-09-06; USER approved the per-deck opt-in and
     // the 18-deck sweep found hinata the only converter). Evidence, both tiers + quiet box:

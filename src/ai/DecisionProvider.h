@@ -2426,19 +2426,34 @@ public:
                                                    int /*own*/) const
     { return {}; }
 
-    // HoldsSacLandBurnUntilLethal -- opt IN to the sac-land burn hold (Shard Volley). A spell whose
+    // HoldsSacLandBurn -- the deck's prune on a sacrifice-a-land burn spell (Shard Volley). A spell whose
     // additional cost is "sacrifice a land" spends a permanent mana source for a fixed lump of damage,
-    // which in a goldfish is worth the same on any later turn -- so the enumerators drop plans that cast
-    // one unless it wins this turn or enables Spectacle. See HoldSacLandBurn in TurnSolver.cpp for the
-    // rule, the two exceptions and the measurement. Base false -> every other deck keeps the full
-    // (unpruned) plan set; MTG_UNPRUNED / MTG_UNPRUNE=saclandhold reopens it for burn too.
-    virtual bool HoldsSacLandBurnUntilLethal() const { return false; }
+    // which in a goldfish is worth the same on any later turn. Asked by BOTH subset walks (Solve's
+    // consider and EnumeratePlans', lockstep) for a payable subset holding such a cast whose projection
+    // does NOT win this turn; true DROPS the subset. rescued_by_exception (may be null; MTG_SV_LETHAL_AUDIT)
+    // is set when an exception kept a plan the plain rule would drop. Base false -> every deck keeps the
+    // full plan set; BurnProvider holds Shard Volley (its definition carries the rule, the exceptions
+    // and the measurement). A deck rule, so it lives in the deck's provider (USER 2026-10-14).
+    virtual bool HoldsSacLandBurn(const GameState& /*s*/, const std::vector<Action>& /*cands*/,
+                                  const std::vector<int>& /*sel*/, bool* /*rescued_by_exception*/) const
+    { return false; }
+
+    // RestrictorSubsetWasted -- the deck's prune on a cast RESTRICTOR (a card with max_casts_after:
+    // Irencrag Feat, "you can cast only one more spell this turn"). Asked by BOTH subset walks for each
+    // restrictor cands[j] in a subset that is already legal (no more followers than allowed); true marks
+    // the subset as WASTING the restrictor, and the walk drops it unless its projection wins this turn
+    // (a winning plan is never dropped). pool_total = the mana the walk paid from. Asked only on decks
+    // whose play order IS their CastOrderRank (not the ordering-search decks). Base false; HinataProvider
+    // carries the USER's Irencrag rule (MTG_IRENCRAG_WASTE). Moved out of the engine 2026-10-14 (USER).
+    virtual bool RestrictorSubsetWasted(const GameState& /*s*/, const std::vector<Action>& /*cands*/,
+                                        const std::vector<int>& /*sel*/, int /*j*/, int /*pool_total*/) const
+    { return false; }
 
     // HoldCastUnlessLethal -- a cast the deck HOLDS unless the plan that casts it wins THIS turn. Asked
     // once per candidate by BOTH subset walks (Solve's consider and EnumeratePlans', lockstep); a subset
     // holding a flagged cast whose projection is not lethal -- the walks' own `wins`: every cast's
     // direct damage + this turn's attack, on a subset that already passed payability -- is dropped,
-    // exactly the HoldSacLandBurn shape. This is how a "keep it for the combo" rule asks "does casting
+    // exactly the HoldsSacLandBurn shape. This is how a "keep it for the combo" rule asks "does casting
     // it now win?" with the engine's own damage and payability machinery rather than a private
     // estimate (Hinata's lone Crackle, MTG_HINATA_HOLD_LETHAL_BURN: a Magma Opus or Soulfire co-cast
     // can make the turn lethal). Base false -> every deck is byte-identical.
