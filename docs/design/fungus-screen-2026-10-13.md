@@ -1016,3 +1016,56 @@ No Doubling Season at all — a card the USER likes and expected to keep ("*I li
 and think it is strong*"), though they also said reducing it "*may very well be defensible*" and
 that multiples are not super good. The screen took it to zero on numbers: the last copy was worth
 −0.0069 to CUT in round 17, and nothing in round 18 wanted it back.
+
+---
+
+## Round 19 RESULT (seed 1120000): the model is good now, and the one card I mispriced
+
+**The confirm first.** `f_E` is the selection-biased winner of a six-arm screen, so it re-ran here
+as `g_ref` on a disjoint seed block with its `replace` map carried verbatim (same card numbering,
+so it is a replication of the same list rather than a re-derived cousin):
+
+| | round 18 | round 19 | drift |
+|---|---|---|---|
+| `f_E` vs base | −0.3618 / −0.4605 | −0.3583 / −0.4688 | +0.0035 / −0.0083 |
+
+Clean. Read against `g_ref`, with the predictions written into the builder before the run:
+
+| arm | edit | std | 2hg | mean | predicted | error |
+|---|---|---|---|---|---|---|
+| **`g_D`** | **Tukatongue 2→1 → Migration #3** | **−0.0152** | **−0.0175** | **−0.0164** | **+0.0050** | **−0.0214** |
+| `g_E` | Mycoloth 0 + Mycon 1 → Sapherd #2 + Thallid #2 | −0.0179 | −0.0112 | −0.0145 | −0.0100 | −0.0045 |
+| `g_F` | `g_A` + `g_B` | −0.0042 | −0.0242 | −0.0142 | −0.0180 | +0.0038 |
+| `g_A` | Mycoloth 1→0 → Badger #4 | −0.0075 | −0.0170 | −0.0123 | −0.0120 | −0.0003 |
+| `g_B` | Mycon 2→1 → Shroofus #3 | +0.0020 | −0.0177 | −0.0078 | −0.0080 | +0.0002 |
+| `g_C` | Wild Growth 2→1 → Crossroads #4 | +0.0035 | +0.0131 | +0.0083 | +0.0120 | −0.0037 |
+
+Four of six predictions landed within 0.004, **including both pre-registered losses**. A census
+that only tests its favoured direction cannot find the edge of it; `g_C` and `g_D` were run
+specifically to find that edge, and `g_C` duly confirmed round 13's "Crossroads #4 is dead".
+(`g_C` also carried a 6.74% fall-through against the reference's 3.77%, a handicap running against
+an arm already predicted to lose — so it is not clean evidence against a 4th Crossroads, only
+consistent with the earlier reading.)
+
+### The misprediction, which is the round's actual finding
+
+I predicted `g_D` at **+0.0050** — a loss — on the reasoning that Tukatongue #2 costs +0.0152 in
+the census and a third Saproling Migration would not return it. It returned more than twice it.
+Backing the donor out, **Saproling Migration #3 is worth about −0.032**, the most valuable single
+addition since the Beastmaster fill.
+
+**And Migration's number is a LOWER bound, which makes this more interesting rather than less.**
+Two documented omissions push the same way against the card: the **kicker is not modelled at all**
+(`grep kicker src/` is empty), and the kicked mode is four tokens for `{5}{G}` — a cost this
+24-land deck reaches on exactly the turns its wins cluster on; and `EvalCard` has no
+`cast_creates_tokens` branch, so the card is valued as a cantrip in the arm that plays it. This is
+the one place in the whole screen where building a missing mechanic could **change a ranking**
+rather than merely tidy a disclosure.
+
+### Additivity, third reading — and it is drifting
+
+`g_F` predicted −0.0180 from `g_A` + `g_B` = −0.0201 additive; measured −0.0142, i.e. **29%
+sub-additive**, against round 14's 6.5–9.5% sub and round 18's 5% super. The reason is visible
+rather than mysterious: `g_A` and `g_B` both spend into the same "cheap bodies" theme and compete
+for the same marginal turns. Round 20 therefore applies an explicit 25% sub-additive discount to
+every composite prediction, and says so per arm.
