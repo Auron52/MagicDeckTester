@@ -884,3 +884,72 @@ has managed: fall-through is **1.58% on 19 of 22 arms**, so arm-vs-arm differenc
 bias-free. The exceptions are `y_cut_concordantcr` (0.40%) and `y_cut_beastmastera` (1.30%), whose
 lower rates *flatter cutting those two cards* by roughly 0.003 turns — so a census verdict of "keep"
 on either is conservative, and a verdict of "cut" must be discounted.
+
+---
+
+## Round 17 RESULT (seed 1100000): the donor census on `z_m24`, 22 arms, no algebra
+
+This is the round the USER asked for in the handover -- *"step by step remove cards by testing
+swaps"*, *"considering almost all options to start and only skipping replacement tests of card x
+when it is clear that card is crucial"*. Every arm is `z_m24 − 1x <card> + 1x Vitaspore`, with
+`z_m24` itself in the pool as `y_ref`, so `arm − y_ref` **is** the measured cost of that one edit.
+Nothing is summed; no additivity assumption appears anywhere in the round.
+
+`y_ref` = −0.2868 std / −0.4022 2hg. Negative below = **cutting the card HELPS**.
+
+| edit | std | 2hg | mean |
+|---|---|---|---|
+| Doubling Season 1→0 | −0.0080 | −0.0058 | **−0.0069** |
+| Utopia Mycon 3→2 | −0.0057 | −0.0073 | **−0.0065** |
+| Blooming Marsh 4→0 (land-for-land) | −0.0020 | −0.0030 | **−0.0025** |
+| Mycoloth 2→1 | −0.0050 | +0.0027 | −0.0012 (null) |
+| Blooming Marsh 4→2 | −0.0017 | −0.0005 | −0.0011 |
+| `y_land` one Forest → one Vitaspore | −0.0007 | +0.0040 | +0.0017 |
+| Wild Growth 2→1 | +0.0093 | +0.0175 | +0.0134 |
+| Tukatongue 2→1 | +0.0158 | +0.0147 | +0.0152 |
+| Undercellar Myconid 4→3 | +0.0151 | +0.0182 | +0.0166 |
+| Saproling Burst 4→3 | +0.0136 | +0.0217 | +0.0176 |
+| Thallid 1→0 | +0.0178 | +0.0182 | +0.0180 |
+| Yavimaya Sapherd 1→0 | +0.0188 | +0.0177 | +0.0182 |
+| Shroofus Sproutsire 2→1 | +0.0118 | +0.0267 | +0.0192 |
+| Brightcap Badger 2→1 | +0.0153 | +0.0262 | +0.0207 |
+| Saproling Migration 1→0 | +0.0196 | +0.0282 | +0.0239 |
+| Concordant Crossroads 2→1 | +0.0371 | +0.0240 | +0.0306 |
+| Beastmaster Ascension 4→3 | +0.0116 | +0.0547 | +0.0332 |
+| Sporecrown Thallid 4→3 | +0.0565 | +0.0462 | +0.0514 |
+| Hickory Woodlot 4→2 (land-for-land) | +0.0496 | +0.0572 | +0.0534 |
+| **Sol Ring 1→0** | **+0.0848** | **+0.0907** | **+0.0877** |
+
+### What it settles
+
+* **Sol Ring is the single most valuable card in the deck**, by a factor of 1.7 over the next
+  card -- and the USER's Modern/Legacy/Vintage rule caps it at one copy. That is the cleanest
+  possible vindication of the retraction in the Sol Ring section above: the illegal 1→2 edit
+  looked like the screen's best find *because the card really is that good*. The cap binds on the
+  best card in the list, and it is a format rule, not a measurement.
+* **Three cuts are free or better than free**, which is what round 18 spends.
+* **The land ladder is exhausted.** `y_land` says the 24th Forest is worth the same as a blank
+  Thallid (+0.0017). With round 16's rungs (23→24 gains, 24→25 loses) the count is settled at 24
+  and no further rung deserves an arm.
+* **Round 16's Crossroads correction holds on held-out seeds**: cutting copy #2 costs +0.0306
+  mean here against +0.0254 in round 16 — consistent, and both far above the ~0.016 floor. The
+  round-15 inference that it was nearly free is dead twice over.
+* **Beastmaster's format split is the screen's largest, again**: +0.0116 std vs +0.0547 2hg. Four
+  copies are non-negotiable for a list serving both formats, exactly as round 13 found.
+* The USER's two named asks both hold up at the composite: **Brightcap Badger #2 (+0.0207) and
+  Shroofus #2 (+0.0192)** are each worth more than a third Tukatongue or a second Wild Growth.
+
+### The bias audit, which runs the conservative way
+
+Fall-through was **1.58% on 19 of 22 arms** -- the flattest the screen has managed, so arm-vs-arm
+differences are nearly bias-free. The two exceptions both *flatter cutting* the card:
+`y_cut_concordantcr` at 0.40% and `y_cut_beastmastera` at 1.30%. Both verdicts came back "keep",
+so the bias cannot have manufactured them; the true costs are if anything higher than printed.
+
+### A constraint on how any of this may be quoted
+
+`z_m24` measured −0.3040 / −0.4467 in round 16 and −0.2868 / −0.4022 as round 17's `y_ref`: a
+drift of **0.017 std / 0.044 2hg** between seed blocks, which is larger than most of the effects
+being chased. So **absolute deltas versus base are not comparable across rounds** -- only
+within-pool paired differences are, since those share seeds and the apparatus. Every number in
+this section is within-pool, and the final recommendation quotes one pool rather than splicing.
