@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b88448ec  date 2026-10-14
+# Regression ground truth -- commit 16842c72  date 2026-10-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (smoke, 2026-10-13): Single-path half of the up-front escalation skip WITHDRAWN (MTG_ESC_SKIP_SINGLE default OFF; it skipped escalations its climb would have reached and TAKEN): hinata d5 s1001 returns EXACTLY to its pre-skip GT (23503120ce3361bf). The ladder-path skip (R=0, default ON) moves no smoke game. kittyv2 d3 / kittyv3 d3 keep the values accepted in 2a3ea87f -- run-to-run flicker independent of the skip (identical with it OFF; kittyv2 d3 matched the older GT in 1 of 3 runs).
@@ -9,6 +9,9 @@
 # accepted-with-regressions (regression, 2026-10-13): fungusb only: MTG_FUNGUS_M2_HASTE stands the devour Main2 pin down to Both on a haste turn (USER-found lossy gate); all four fungusb cases better or unchanged (d3 -0.0100/-0.0200, d5 0/-0.0400) and every other deck byte-identical; incumbent fungus holds no haste source so the fix is provably inert there
 # accepted-with-regressions (regression, 2026-10-13): rebase re-validation onto origin's per-depth escalation-skip work (incl. fungusb escalation_skip_r vector): 336 PASS / 0 FAIL, no cell moved from the already-accepted values -- the pin fix and the skip vector compose cleanly
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
+# accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: ADOPT the v3 exhaustive keep table (a9a17e64) -- all 12 overnight keys improve, mean -0.6251t (range -0.4800..-0.7380), measured against the table-ABSENT baseline accepted on these same resized rows in 16842c72 so the only difference is the table; held-out confirmation of generation's keep A/B -0.724933t and confounded-bottoming -0.155600t.
+# accepted-with-regressions (smoke, 2026-10-14): kittyv3 only: ADOPT the v3 exhaustive keep table (a9a17e64) -- all 3 smoke keys improve, mean -0.6413t (d0 -0.8240, d3 -0.6800, d5 -0.4200); prior GT was verified to be a table-ABSENT measurement this engine reproduces exactly (same avg AND play digest), so this diff is the table alone.
+# accepted-with-regressions (regression, 2026-10-14): kittyv3 only: ADOPT the v3 exhaustive keep table (a9a17e64) -- all 5 regression keys improve, mean -0.5904t (d0 -0.6620, d3 -0.7500/-0.4200, d5 -0.7400/-0.3800); prior GT verified table-ABSENT and exactly reproduced, so this diff is the table alone.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -70,9 +73,9 @@ kitty_smoke_d5_s1001=4.3800/c15100ceb374db9d
 kittyv2_smoke_d0_s1001=4.8220/9b44bfd46617745f
 kittyv2_smoke_d3_s1001=3.9500/dcf11a214f80d79a
 kittyv2_smoke_d5_s1001=3.8800/a1e8693a06964473
-kittyv3_smoke_d0_s1001=5.6080/96f77dec50e68c82
-kittyv3_smoke_d3_s1001=4.5600/0b12fe79d9717423
-kittyv3_smoke_d5_s1001=4.3600/4e19f8d984be996e
+kittyv3_smoke_d0_s1001=4.7840/ef6acf8039192e4b
+kittyv3_smoke_d3_s1001=3.8800/bf0f79b982d32d39
+kittyv3_smoke_d5_s1001=3.9400/c595813d4ab3ab51
 dragons_smoke_d0_s1001=5.9350/6dae5c3fc0194a31
 dragons_smoke_d3_s1001=5.6960/34097620549e5015
 dragons_smoke_d5_s1001=5.5733/052989f42c90ba12
@@ -235,11 +238,11 @@ kittyv2_regression_d3_s2002=3.8000/f032d7556654895c
 kittyv2_regression_d3_s3003=3.8600/adf4d6ef2dca81ca
 kittyv2_regression_d5_s2002=3.9200/ccf53277e7e92a6b
 kittyv2_regression_d5_s3003=3.9200/060d16ca5d37a7b0
-kittyv3_regression_d0_s2002=5.4930/5f2a39f3603ce709
-kittyv3_regression_d3_s2002=4.4700/2cdec5b93c840dd2
-kittyv3_regression_d3_s3003=4.0000/41297113d841b773
-kittyv3_regression_d5_s2002=4.4800/032927ae64b9e37b
-kittyv3_regression_d5_s3003=3.9600/4dc88cc693cc86e3
+kittyv3_regression_d0_s2002=4.8310/d23b2b441a27cdcb
+kittyv3_regression_d3_s2002=3.7200/4f89591177b41913
+kittyv3_regression_d3_s3003=3.5800/af195e0745ed8372
+kittyv3_regression_d5_s2002=3.7400/aaf78aecfa0c1426
+kittyv3_regression_d5_s3003=3.5800/077ef401caf8e796
 dragons_regression_d0_s2002=5.9050/81439c4592a0ba43
 dragons_regression_d3_s2002=5.5267/bdff4db7e48da17e
 dragons_regression_d3_s3003=5.6167/daac0b9efb2f4896
@@ -534,18 +537,18 @@ kittyv2_overnight_d5_s4004=3.8560/fac1d51172731c16
 kittyv2_overnight_d5_s5005=3.8400/39aa72b7e8e35d8d
 kittyv2_overnight_d5_s6006=3.6800/42bc7db93766ebde
 kittyv2_overnight_d5_s7007=3.9120/0fe8dd3c019060a0
-kittyv3_overnight_d0_s4004=5.4415/ef8f478cc29ac13c
-kittyv3_overnight_d0_s6006=5.4420/1db1f56ee6c7afe0
-kittyv3_overnight_d0_s8008=5.4925/4d438e63a8b0f947
-kittyv3_overnight_d0_s10010=5.4800/31546a170b9143a4
-kittyv3_overnight_d3_s4004=4.2880/cadc20e114b909b1
-kittyv3_overnight_d3_s5005=4.4240/5e4fd1df225cb57a
-kittyv3_overnight_d3_s6006=4.4080/61eaa08dd093476b
-kittyv3_overnight_d3_s7007=4.3500/6c2e327329a178bc
-kittyv3_overnight_d5_s4004=4.3840/6784bd6f9ee33e00
-kittyv3_overnight_d5_s5005=4.4080/8a7ea6c7c1994931
-kittyv3_overnight_d5_s6006=4.4160/33781a713ffbe2c1
-kittyv3_overnight_d5_s7007=4.4880/84e30f0ab36bd3f3
+kittyv3_overnight_d0_s4004=4.7395/097729e55c1d13ab
+kittyv3_overnight_d0_s6006=4.7625/8c2fe2cbc8a1978c
+kittyv3_overnight_d0_s8008=4.7545/51384e003a7cdb99
+kittyv3_overnight_d0_s10010=4.8180/45322972937e4bdc
+kittyv3_overnight_d3_s4004=3.8080/8242112842c01c09
+kittyv3_overnight_d3_s5005=3.8000/872a6bfc84b072de
+kittyv3_overnight_d3_s6006=3.8120/8b70c922a122dc53
+kittyv3_overnight_d3_s7007=3.7620/8d4e8b9bfeffe909
+kittyv3_overnight_d5_s4004=3.8960/be6bf690b40106f0
+kittyv3_overnight_d5_s5005=3.7280/816ab9553ef3dcea
+kittyv3_overnight_d5_s6006=3.7840/104bea12e84cceb0
+kittyv3_overnight_d5_s7007=3.8560/dac80a62ebf74418
 dragons_overnight_d0_s4004=5.8785/5845f4e1972221b4
 dragons_overnight_d0_s6006=5.8880/ed491bb1ed1cc6f8
 dragons_overnight_d0_s8008=5.9040/57704cde1626ac92
