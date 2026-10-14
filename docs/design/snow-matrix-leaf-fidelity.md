@@ -147,3 +147,32 @@ mix it with the banked 1-ply chunks). From the stopped run's own records the COM
 cheap everywhere (mean 7.5 s/game at H4, 6.9 s at H5); the ~390 core-h it still projected was the
 skip-listed games burning to 40M in cell after cell. Run it with the box to itself: the matrix's
 condemnation rule is wall-clock based.
+
+## 9. A GENERAL rule instead of a matrix override (USER 2026-10-14)
+
+> *"My recommendation is to figure out whether we can come up with a generally adoptable rule like this."*
+
+**The rule: leaf fidelity by PASS depth.** A commit-the-line pass of nominal depth >= K scores its
+horizon with a greedy playout; shallower passes keep the 1-ply leaf. The pass depth is set by the
+root FSLineWin node and read by `EffectiveFdLeafDepth` (below an explicit `MTG_FD_LEAF_DEPTH` and a
+deck's own `search_leaf_depth`). Per-job flags `MTG_LEAF_GREEDY_D2/_D3/_D4` (+ `_D3_UNL`, the
+depth-3 rule only in an UNLIMITED-budget pass). Flags off is byte-identical.
+
+**Shipped (budgeted) play, every suite deck** -- smoke-tier cell shapes at depth >= 3 on held-out
+seeds (+900000), plus Snow's 720 extra d3/b10 + d5/b20 games, one pooled batch, paired
+(`test/leaf_greedy_ab.sh`, run `fleet1`):
+
+| arm | paired games | digests moved | win turns moved | better / worse |
+|---|---|---|---|---|
+| D3 | 10,930 | 91 | 39 | 1 / 29 (at 7,385 read) |
+| **D4** | 10,930 | **0** | **0** | 0 / 0 |
+
+D3 is NOT adoptable under a budget, and the mechanism is specific: at d3/b10 the 1-ply leaf often
+cannot finish the depth-3 pass, so play commits the depth-2 pass; the cheap leaf lets the depth-3 pass
+finish and its greedy-scored commit replaces the depth-2 one scored by the 1-ply leaf -- and the 1-ply
+leaf wins that trade. Unbudgeted there is no substitution (every pass finishes), which is why H3 was
+identical there. D4 never changed a single game's play in shipped cells.
+
+**Unbudgeted H cells, every suite deck** (run `hcells`, 15 games x deck x cell, 10M ceiling; the d3
+arm is greedy at H3-H5, so at H4/H5 it IS the D4 arm): H5 0 moved of 330 (22 decks), H4 0 moved of
+~320 (units 0.12-1.0x per deck). H3: see below.
