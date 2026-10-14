@@ -140,6 +140,17 @@ inline bool DragonstormIrencragCloserOn()
     return heurarm::Flag(heurarm::DRAGONSTORM_IRENCRAG_CLOSER, env_on);
 }
 
+// MTG_DRAGONSTORM_D0_SPLICE_REFUSE (DEFAULT ON; =0 disables) -- the DEPTH-0 RUNNER (TurnSolver::InD0Runner,
+// the permitted greedy site) does not commit a Dragonstorm subset holding a SPLICED cast that no legal order
+// pays in full: DragonstormProvider::OrderedSubsetRealisable refuses it wherever the exact walk fails, not
+// only at the spliced cast. Read at that one site (both subset evaluators call it); the search window --
+// rollouts and searched frames -- is untouched. docs/design/dragonstorm-d0-splice-refusal.md.
+inline bool DragonstormD0SpliceRefuseOn()
+{
+    static const bool env_on = EnvOn("MTG_DRAGONSTORM_D0_SPLICE_REFUSE", true);
+    return heurarm::Flag(heurarm::DRAGONSTORM_D0_SPLICE_REFUSE, env_on);
+}
+
 // MTG_FB_HOLD_BANKED (DEFAULT ON; =0 disables) -- the combat pump holds BANKED sources (depletion and
 // storage lands) back unless the full pump is lethal. Read by both pump sites (AIEngine::Firebreathe and
 // the rollout's SimulateCombat) through FbHoldBankedThisCombat (Combat.cpp) -> lockstep.
