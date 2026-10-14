@@ -9181,6 +9181,96 @@ std::vector<int> SoldiersProvider::CleanupDiscardCandidates(
 
 // ---- BurnProvider -----------------------------------------------------------
 
+// ---- BurnProvider::HoldsSacLandBurn: the sac-land burn hold ("hold Shard Volley until it buys something") -------------------------
+// A sacrifice-a-land damage spell (Shard Volley: {R}, sac a land, 3 to any target) trades a
+// PERMANENT mana source for a fixed lump of face damage. Goldfishing there is no race and the
+// opponent never gains life, so 3 damage now is worth exactly what 3 damage later is worth -- while
+// the sacrificed land costs a mana on EVERY intervening turn. So the cast is only ever right when it
+// buys something THIS turn -- three exceptions, all board-readable (nothing clairvoyant):
+//   (a) the plan wins this turn -- the damage is the killing blow;
+//   (b) it turns Spectacle on for a spell in the same plan (Light Up the Stage {2}{R} -> {R}) -- a
+//       real same-turn discount the deferred cast cannot recover;
+//   (c) it pumps a PROWESS attacker that connects this turn (Monastery Swiftspear) -- likewise
+//       destroyed by deferring.
+// Everything else is a strictly worse ordering of the same total damage. Being FLOODED is NOT a
+// fourth exception: surplus lands make an early cast harmless, never better, so there is no upside
+// to weigh and the rule needs no flood branch (it also makes deferring free in exactly those hands).
+//
+// Motivation: at d5 the search cast its first Shard Volley by T3 in 37/100k games vs 8 at d6, and
+// those games are ~60% of d5's quality deficit (seed 203265: sacs its ONLY land on T2, sits on 0
+// lands through T5 unable to cast four drawn spells, and loses with the opponent on 1 life).
+//
+// This is a PRUNE and nothing else (search-primary): it only ever REMOVES plans, it is provider-owned
+// (moved here from TurnSolver.cpp 2026-10-14; every other deck answers false), and MTG_UNPRUNED / MTG_UNPRUNE=saclandhold
+// reopens the full branch set for the standing pruned-vs-unpruned audit. MTG_SV_HOLD=0 is the legacy
+// hatch (pre-heuristic behaviour) for a byte-identical A/B.
+//
+// MEASURED (burn, shipped d6/budget-20/trust-5, 20 paired seeds x 5000 games per arm, both blocks):
+//   train    -0.00143 turns  t=-12.11  20/20 seeds better
+//   held-out -0.00174 turns  t=-10.72  20/20 seeds better        [negative = better]
+//   cost: +0.14% instructions (callgrind, deterministic); wall clock indistinguishable.
+// Exceptions (b) and (c) are NOT decoration -- they carry the result:
+//   * WITHOUT (c): +0.00292  t=+16.25  0/20 better. The rule alone LOSES. A noncreature cast pumps
+//     every attacking Swiftspear, which the "3 damage is worth the same later" argument misses.
+//   * (b) strict-vs-permissive (must SV be the only face-damage source to count as the enabler?) is
+//     byte-identical over 100k games -- the powerset never affords Light Up at full cost, so the only
+//     SV+Spectacle plans come from the Plan-B builder, where SV is the sole trigger by construction.
+//     Kept in its strict form because that is the rule as reasoned; the permissive branch was deleted.
+static bool SacLandHoldEnabled()
+{
+    static const bool on = EnvOn("MTG_SV_HOLD", true);   // DEFAULT ON; =0 restores the old behaviour
+    return on;
+}
+
+// True => drop this plan. Exception (a) is the caller's `!wins` gate, so this only decides (b)/(c).
+// Callers also gate on `sacrifice_count > 0`, so a deck with no sac-land card never reaches the scan.
+// rescued_by_exception (out, optional): set when exception (c) is what kept the plan -- i.e. the
+// (a)+(b) rule alone would have dropped it. Used only by MTG_SV_LETHAL_AUDIT.
+bool BurnProvider::HoldsSacLandBurn(const GameState& state, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel, bool* rescued_by_exception) const
+{
+    if (!SacLandHoldEnabled())                                       { return false; }
+    if (DecisionUnpruned(UnprunedGate::SacLandHold))                 { return false; }
+
+    const Player& ap = state.ActivePlayer();
+    bool has_sac = false, has_spectacle = false, other_face_damage = false;
+    bool sac_is_staged = false, sac_expires_now = false;
+    for (int j : sel)
+    {
+        const Action& c = cands[j];
+        if (c.kind != Action::Kind::CastFromHand) { continue; }
+        if (c.sacrifice_land && c.direct_damage > 0)
+        {
+            has_sac = true;
+            if (c.hand_index >= 0 && c.hand_index < static_cast<int>(ap.hand.size())
+                && ap.hand[c.hand_index].m_is_staged)
+            {
+                // m_staged_expiry = the LAST turn this card may be played, so it is use-it-or-lose-it
+                // only on that turn. Earlier than that, holding still costs nothing.
+                sac_is_staged  = true;
+                sac_expires_now = (ap.hand[c.hand_index].m_staged_expiry <= state.turn_number);
+            }
+            continue;
+        }
+        if (c.has_spectacle)      { has_spectacle = true; }
+        if (c.direct_damage > 0)  { other_face_damage = true; }
+    }
+    if (!has_sac) { return false; }   // the sac cast is a non-damage one (no such card today)
+    // (b) Spectacle enabler. Already-active Spectacle needs no enabler, so the exception is dead
+    // there -- and another face-damage cast in the plan is the cheaper enabler (it leaves the land).
+    if (has_spectacle && !state.opponent_lost_life_this_turn && !other_face_damage) { return false; }
+    // (c) EXPIRING: the card is not in our hand -- Light Up the Stage exiled it, and it is playable
+    // only until the end of our next turn (CR 406; Card::m_staged_expiry is that last turn). On the
+    // expiry turn "holding" it does not defer the damage, it DESTROYS the card. That is the ONLY real
+    // drawback to holding, and it is a card-mechanics fact, not a strategic judgement. Before the
+    // expiry turn there is still no reason to cast it early, so the exception is deliberately narrow:
+    // fire on the LAST legal turn, not merely because the card is staged.
+    if (sac_expires_now) { if (rescued_by_exception) { *rescued_by_exception = true; } return false; }
+    (void)sac_is_staged;
+    return true;
+}
+
+
 bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
 {
     // Burn's curve tops out at mana value 2, so ~2-3 lands cast the whole deck; a further land in
@@ -9583,6 +9673,98 @@ double AntiLifegainProvider::NcLandDropTempoBonus(const GameState& s, int contro
 }
 
 // ---- HinataProvider ---------------------------------------------------------
+
+// ---- HinataProvider::RestrictorSubsetWasted: the Irencrag waste gate (MTG_IRENCRAG_WASTE) ----------
+// Moved here from TurnSolver.cpp's two subset walks 2026-10-14 (USER: "These should be moved into the
+// provider for sure. That was my intention."), byte-identical. The engine keeps the LEGALITY half (no
+// more than max_casts_after casts ranked after the restrictor; MTG_RESTRICTOR_ORDER_EXACT); this is the
+// deck's PRUNE on what the one follower may be. The original note:
+//
+// ...and the OTHER end of the same rule (MTG_IRENCRAG_WASTE). A cast RESTRICTOR
+// exists to fund THE FINISHER, and the USER's order reserves its one allowed follower
+// for exactly that: "Irencrag Feat must be second last as it can only be cast before
+// Crackle." So the test is not "is anything after it" but "is the FINISHER after it".
+// Nothing after -> the subset pays {1}{R}{R}{R} and a card to float seven red nothing
+// can spend. A NON-finisher after -> it spends the one remaining cast on the wrong
+// spell, which USER 2026-09-01 ruled out on value: "Irencrag -> Soulfire was a pretty
+// bad play in the first place. With Hinata out, Soulfire can pretty easily cost 3 or 4
+// and without Hinata or Crackle (or two main damage sources) Soulfire isn't going to
+// get the opponent in lethal range... casting Irencrag to play Soulfire is pretty bad
+// value overall." Both cases are the same defect: the restriction bought nothing. USER 2026-09-01:
+// "this is exactly why I put Irencrag feat second last before Crackle in my order.
+// Cases where we want to cast it without are very rare and would pretty much just be
+// to do the last few damage for lethal." Under that order Crackle (23) is the ONLY
+// cast ranked after Irencrag (22) -- Soulfire (20) and Opus (21) precede it -- so
+// `after == 0` means the float has no consumer at all. Measured as the top case in the
+// greedy-deletion diff: 20,117 of 55,006 continuation differences are the canonical
+// continuation casting Irencrag where greedy correctly declines.
+//
+// A HEURISTIC prune, not a legality one (USER: "A heuristic prune could make sense"):
+// the turn-scoped float CAN still be spent by a post-breakpoint continuation off a
+// drawn payoff, so this deletes a real if rare line. Hence flag-gated and measured.
+// EXEMPT WHEN LETHAL (USER 2026-09-01: "it would use Irencrag to do 3 for lethal if no
+// Crackle is present") -- deferred to the win projection below, which is the only place
+// lethality is known. A winning plan is never dropped by this lever.
+// SCOPE (measured 2026-09-01): only sound where the plan's PLAY order IS the rank
+// order. Dragonstorm SEARCHES its combo cast order (WantsCastOrderingSearch), so
+// `after`, counted by CastOrderRank, does not describe what actually follows Irencrag
+// there -- and the gate measured WORSE on that deck in all four cells (+0.0115, t 5.66,
+// 2 better : 43 worse, paired 1200x2 at d3/d5 x s2002/s3003). Excluding the
+// ordering-search decks is the principled scope, not a per-deck exception.
+bool HinataProvider::RestrictorSubsetWasted(const GameState& s, const std::vector<Action>& cands,
+                                            const std::vector<int>& sel, int j, int pool_total) const
+{
+    if (!IrencragWasteGateEnabled()) { return false; }
+    const CardDefinition* rd = cands[j].def;
+    const int r_rank = rd ? CastOrderRank(s, *rd) : 20;
+    int  after = 0;
+    bool after_finisher    = false;   // is the follower the FINISHER the slot is reserved for?
+    bool after_payoff      = false;   // ...or at least a PAYOFF rather than a cantrip?
+    bool after_needs_float = false;   // ...and could it not have been cast without him?
+    for (int k : sel)
+    {
+        if (k == j) { continue; }
+        const CardDefinition* kd = cands[k].def;
+        const int k_rank = kd ? CastOrderRank(s, *kd) : 20;
+        if (k_rank > r_rank)
+        {
+            ++after;
+            if (!kd) { continue; }
+            if (kd->params.x_damage_multiplier > 1) { after_finisher = true; }
+            // A PAYOFF is one of the deck's three terminals (Crackle / Soulfire / Opus) --
+            // the same params the provider's rank tiers key on. USER 2026-09-01 scoped the
+            // rule to exactly these three.
+            const bool is_payoff = kd->params.x_damage_multiplier > 1
+                                || kd->params.damage_equals_top_mv
+                                || kd->params.cast_draw > 0;
+            if (!is_payoff) { continue; }
+            after_payoff = true;
+            // ...and DID IT NEED THE FLOAT? That is the real question the restrictor asks,
+            // and the reason the card-identity rules mis-measured (searched-design §6e):
+            //   * an {X} finisher (Crackle) always converts more mana into more damage, so
+            //     the float is never wasted on it;
+            //   * a FIXED-cost payoff needs the float only when the rest of the pool could
+            //     not have cast it anyway. Soulfire is {6}{R}{R}{R} = NINE, so on turn 3 off
+            //     ~5 mana Irencrag is the only way to cast the deck's dig -- a real play.
+            //     With Hinata out it costs 3-4, the pool covers it, and spending Irencrag on
+            //     it is exactly the waste the USER described ("it seems off to play Soulfire
+            //     with no Hinata, but ... it is a viable play in the worst cases").
+            // Approximate by construction (other casts in the subset also draw on the pool),
+            // which is the safe direction here: over-crediting need keeps a line, never
+            // deletes one.
+            if (kd->params.x_damage_multiplier > 1) { after_needs_float = true; continue; }
+            const int left = pool_total - cands[j].cost.ManaValue();
+            if (cands[k].cost.ManaValue() > left) { after_needs_float = true; }
+        }
+    }
+    const int  rule    = IrencragRule();
+    const bool iren_ok = rule >= 3 ? after_needs_float   // payoff that NEEDED the float
+                       : rule == 2 ? after_finisher      // the finisher only (USER doctrine)
+                       : rule == 1 ? after_payoff        // any payoff, cantrips banned
+                                   : (after > 0);        // anything at all (adopted loose)
+    return !iren_ok;
+}
+
 
 // MTG_HINATA_ORDER_FULL -- the USER's FULL (total) cast order for Hinata, reviewed 2026-08-26.
 //
