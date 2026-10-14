@@ -551,3 +551,55 @@ Vigor), is Legacy/Vintage-legal and therefore still a 4-of. "Old card" does not 
 Only ~0.025t worse than the illegal version, because the loss is spread across many small legal
 edits rather than concentrated in one banned card. The bottom four rows are thin enough that round
 12's adds and round 13's ladders are likely to displace them.
+
+## Round 12 RESULT: The Mycotyrant wins the add census; Cryptolith Rite, my own pick, loses
+
+Control `a_vita3` = -0.0158 std / -0.0145 2hg. NET = `value(card #1) - value(Vitaspore #3)`, directly
+comparable with round 11's NET column -- the two rounds ran disjoint seeds on the identical
+apparatus and their controls agree to 0.003.
+
+| add, 1 copy, paid by Psychotrope | std | NET | 2hg | NET |
+|---|---|---|---|---|
+| **The Mycotyrant** | -0.0465 (t=-10.3) | **-0.0307** | -0.0500 (t=-9.9) | **-0.0355** |
+| Yavimaya Sapherd | -0.0375 | -0.0217 | -0.0370 | -0.0225 |
+| Saproling Migration | -0.0355 | -0.0197 | -0.0362 | -0.0217 |
+| Thallid | -0.0318 | -0.0160 | -0.0395 | -0.0250 |
+| Spore Swarm | -0.0283 | -0.0125 | -0.0355 | -0.0210 |
+| Sporesower Thallid | -0.0205 | -0.0047 | -0.0187 | -0.0042 |
+| Deathbloom Thallid | -0.0155 | +0.0003 | -0.0165 | -0.0020 |
+| Parallel Lives | -0.0080 | +0.0078 | -0.0063 | +0.0082 |
+| Primal Vigor | -0.0053 | +0.0105 | -0.0053 | +0.0092 |
+| Cryptolith Rite | -0.0010 | +0.0148 | -0.0047 | +0.0098 |
+| Thallid Shell-Dweller | -0.0015 | +0.0143 | +0.0020 | +0.0165 |
+
+Six adds beat a third Vitaspore; five lose to it.
+
+**CRYPTOLITH RITE WAS THE PRE-REGISTERED FAVOURITE AND IT LOST.** Recorded without rescue, per the
+standing lesson that a mechanism invented after the numbers explains them. The one caveat that was
+declared BEFORE the run stands: that arm reuses Brightcap Badger's grant, so it is scoped to
+[Fungus, Saproling] (25 of 26 creature cards) and to {G} rather than any colour, and therefore cannot
+pay the list's three black pips. Both omissions remove mana the real card provides, so the faithful
+version is better than this number -- but the headroom is one creature card and three pips, which
+does not plausibly cover a 0.015t gap. Not worth the MEDIUM engine work (a `LiveManaGrant` union
+merge plus an any-colour face, and the agent showed an any-colour face BREAKS the dup-collapse fold
+that currently folds a dozen interchangeable Saprolings into one class).
+
+**Two design-pass predictions landed exactly**, which is worth recording because it says the
+pre-measurement reasoning was load-bearing rather than decorative:
+* Thallid Shell-Dweller is the WORST add. Defender is really enforced, and it forfeits not just
+  damage but every Beastmaster Ascension quest counter, since those come one per DECLARED attacker.
+* Deathbloom Thallid is a null. Its death trigger is reachable almost only through Mycoloth's
+  devour, because all three "Sacrifice a Saproling" outlets gate on the subtype and this is a Fungus.
+
+**Both token doublers lose** -- the same signal as Doubling Season 4->2 measuring free. This deck
+does not want more doublers. Note that Primal Vigor's arm is the ONLY one in the census biased FOR
+its card (its symmetric drawback is worth zero against a goldfish), and it still lost.
+
+**Saproling Migration and Spore Swarm are LOWER BOUNDS**: no kicker, and `EvalCard` has no
+`cast_creates_tokens` branch so both are valued as cantrips in the arm that plays them. Fixing that
+is adopt-and-measure (it moves GT for both Fungus configs) and is the thing to do if the composite's
+margin turns out thin -- the two cards sit mid-table, so it cannot change the top of the ranking.
+
+Keep-score marginals inverted against play again: Cryptolith Rite -0.2299 and Thallid Shell-Dweller
+-0.2846 were near the bottom, while the census WINNER scored 0.1725. The table fits the keep
+decision, not the race.
