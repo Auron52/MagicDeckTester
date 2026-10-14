@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """ONE pooled A/B for MTG_DIG_TWIN_LAST (the node-local "twins last" move order; generic-dig-gate.md, "A later
-wave for the twins", option 1). Three arms, paired by (deck, cell, game index) on FRESH seeds:
+wave for the twins", option 1). MEASURED INERT and REVERTED: the lever exists only at commit e20ea7da (build that
+to re-run; on any later tree the 'tl' arm's flag is unknown and the batch refuses the manifest). Three arms, paired
+by (deck, cell, game index) on FRESH seeds:
 
   dig0  MTG_DIG_SEARCHED_CHOICE=0          == the committed tree (byte-identical; the per-deck bar's baseline)
   new   the lever as shipped on the branch  (MTG_DIG_SEARCHED_CHOICE on, twins interleaved)

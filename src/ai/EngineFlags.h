@@ -197,17 +197,6 @@ inline bool DigSearchedChoiceOn()
     return heurarm::Flag(heurarm::DIG_SEARCHED_CHOICE, env_on);
 }
 
-// MTG_DIG_TWIN_LAST (DEFAULT OFF while it is A/B'd; =1 -> on) -- the move order tries a node's dig
-// siblings (the no-dig twin, and an opt-in provider's 0 / 1 axis) after every other plan of the same
-// wins_this_turn class. A reorder only: complete at every budget, inert at =0 and wherever no fan exists
-// (MTG_DIG_SEARCHED_CHOICE=0 stamps no dig_group). Read by MoveOrderPlans, the one sort every B&B host
-// shares, so the rollout and the executor see the same order.
-inline bool DigTwinLastOn()
-{
-    static const bool env_on = EnvOn("MTG_DIG_TWIN_LAST");
-    return heurarm::Flag(heurarm::DIG_TWIN_LAST, env_on);
-}
-
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.
