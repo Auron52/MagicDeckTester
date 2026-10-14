@@ -1132,3 +1132,101 @@ into the 3x suite-cost rule with enormous headroom, where candidate-b was the ex
 2 Yavimaya Sapherd
 LANDS (24)   20 Forest  4 Hickory Woodlot
 ```
+
+---
+
+## Round 21 RESULT (seed 1140000): CONVERGED -- every remaining trade loses
+
+`h_F` re-ran as `i_ref` on a disjoint seed block (replace map carried verbatim). Round 20 read it
+at −0.4020 / −0.5152; round 21 reads **−0.3900 / −0.5272**, a drift of +0.0120 / −0.0120 — a wash,
+so the eight-arm screen's winner is not selection-bias inflation.
+
+Every candidate trade spends the cheapest remaining donor on the best remaining add. **All six
+lose:**
+
+| arm | edit | std | 2hg | mean | predicted |
+|---|---|---|---|---|---|
+| `i_C` | Wild Growth 2→1 → Thallid #3 | +0.0060 | +0.0010 | +0.0035 | +0.0030 |
+| `i_F` | Undercellar 4→3 → Sapherd #3 | +0.0005 | +0.0104 | +0.0055 | +0.0070 |
+| `i_D` | Wild Growth 2→1 → Migration #4 | +0.0083 | +0.0052 | +0.0067 | +0.0090 |
+| `i_A` | Wild Growth 2→1 → Shroofus #3 | +0.0242 | +0.0160 | +0.0201 | +0.0000 |
+| `i_B` | Wild Growth 2→1 → Sapherd #3 | +0.0202 | +0.0299 | +0.0250 | +0.0030 |
+| `i_E` | Wild Growth 2→0 → Sapherd #3 + Thallid #3 | +0.0310 | +0.0429 | +0.0370 | +0.0050 |
+
+A screen is finished when its best available trade is no longer positive, and that is now measured
+rather than asserted. **`h_F` is the recommendation.**
+
+### A NEGATIVE result on the method, recorded because it matters
+
+The donor-transfer check **failed here**, having passed in round 20. `i_B` and `i_F` buy the
+identical Yavimaya Sapherd #3 rung off two donors the round-17 census priced 0.003 apart; the
+predicted gap was ~0.004 and the measured gap is **0.0195**. So Wild Growth #2 is worth far more in
+`h_F` than the census (measured on `z_m24`) said — and the mechanism is visible rather than
+mysterious: `z_m24` still had Utopia Mycon for mana, and `h_F` has none, so Wild Growth is now one
+of only three mana accelerants left (with Sol Ring and Hickory Woodlot). **A donor price is a
+marginal, and it moves when the list around it moves.** Round 20's check passed because `h_A` was
+much closer to `z_m24` than `h_F` is. The practical rule: a census transfers across small composite
+steps and must be re-measured across large ones.
+
+Also note my three predictions for `i_A`/`i_B`/`i_E` were 0.020–0.032 too optimistic, all in the
+same direction — I over-rated the remaining adds, which is the same error as round 19's `g_D`
+misprediction with the sign reversed.
+
+---
+
+# Round 22 (2026-10-14): the USER asks whether the BUDGET made these calls
+
+USER: *"we might need some additional higher budget evidence to ensure that our engine is not
+deleting things because they cost budget."*
+
+**This is the right question and it threatens the headline, so it is recorded as a live alternative
+hypothesis rather than defended against.** All 21 rounds ran at `depth 5, budget_ms 20`. The
+winner is **7.6x cheaper per game** than the base (50.5 ms vs 382.4). And the three cards the
+screen drove to zero are precisely the three this repo documents as the deck's cost centres:
+
+* **Mycoloth** — the devour k-axis ("one cast variant per k = 0..(own creatures)"), which
+  `MTG_FUNGUS_DEVOUR_LETHAL` exists to collapse; cards.json calls it "THE DECK'S ENGINE".
+* **Utopia Mycon** — the sac-outlet count pool, whose adoption was "worth 2.29x on the heaviest
+  cell", over "a powerset over identical bodies".
+* **Doubling Season** — multiplies every token and counter event, inflating downstream enumeration.
+
+Under a binding budget those three lose their best lines first, and a screen would then rank them
+down for being *expensive* rather than for being *weak*. CLAUDE.md is explicit that the test belongs
+at the top of the budget range: *"A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE UNFINDABLE —
+COMPLETENESS AT LARGE BUDGET IS THE INVARIANT."*
+
+The screen's budget was **not** below a shipped deeper policy — Fungus's `value_play` carries only
+`mull_gen_depth 1 / mull_gen_budget_ms 3` with no `target_depth`, so the leaf never drives play and
+d5/b20 was a deliberate screening choice. That is not a defence: it means 20 ms was simply never
+validated as non-binding for this deck.
+
+### The ladder (running)
+
+Three pooled batches, one per budget — `budget_ms` is spec-level in `deck_compare`, so separate
+batches are unavoidable and each is a genuinely different measurement, not a wave of one job. All
+16 cells of each budget pool into one batch; chained by captured PID.
+
+| budget | games | seed |
+|---|---|---|
+| 20 ms (the screen's own setting, as the in-ladder control) | 2000 | 1150000 |
+| 80 ms | 2000 | 1160000 |
+| 320 ms | 1200 | 1170000 |
+
+Seven arms, spanning the whole trajectory by engine count (Mycoloth / Mycon / Season):
+
+| arm | engines |
+|---|---|
+| `k_z_m24` | 2 / 3 / 1 — intact |
+| `k_f_E` | 1 / 2 / 0 — partly cut |
+| `k_h_F` | 0 / 0 / 0 — gone (the recommendation) |
+
+plus `k_cut_myco`, `k_cut_season`, `k_cut_mycon` — the three most suspect single cuts re-priced on
+`z_m24` against a neutral Vitaspore fill, exactly as round 17 built them at 20 ms.
+
+**What would falsify the screen:** the `k_h_F`-over-`k_z_m24` margin SHRINKING as budget rises, or
+any of the three "free" cuts turning into a LOSS. **Prediction on the record: the margin shrinks
+but survives** — the engines genuinely do cost budget, so some of the measured gain must be the
+cheap list spending its 20 ms better, but `h_F` beat `z_m24` by ~0.10 mean, 6x the apparatus floor
+and more than a plausible budget-allocation effect. The three single cuts are the ones I am
+genuinely unsure about, each being within 0.008 of zero; at these sample sizes they are read for
+**sign and trend only** and must not be quoted as settled.
