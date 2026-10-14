@@ -802,3 +802,85 @@ keep the copy. Round 16 re-prices it on the mono list as `z_cross1`.
 The two top lists finished **0.0003 apart** on the co-equal mean and won on different axes:
 `x_F` (black, 25 lands) −0.3500 and `x_monoE` (mono, 23 lands) −0.3497. Their combination --
 **mono-green at 25 lands** -- had never been measured. That is `z_m25`, round 16's predicted winner.
+
+---
+
+## Round 16 RESULT (seed 1090000): 24 lands, mono-green wins both formats, and a CORRECTION
+
+Base 5.1805 std / 5.6238 2hg. Ten cells per format in one pool, 32/32 at the heartbeat.
+
+| arm | std | 2hg | mean |
+|---|---|---|---|
+| `z_m24` mono, 24 lands | **−0.3040** | **−0.4467** | **−0.3754** |
+| `z_marsh2` Blooming Marsh 4→2 | −0.2948 | −0.4447 | −0.3698 |
+| `z_m25` mono, 25 lands | −0.2920 | −0.4405 | −0.3663 |
+| `z_m26` mono, 26 lands | −0.2883 | −0.4425 | −0.3654 |
+| `z_mono23` mono, 23 lands | −0.2888 | −0.4258 | −0.3573 |
+| `z_b25` black, 25 lands | −0.2652 | −0.4193 | −0.3423 |
+| `z_cross1` Crossroads to 1 | −0.2627 | −0.4190 | −0.3409 |
+| `z_hick2` Hickory 4→2 | −0.2360 | −0.3695 | −0.3028 |
+| `z_ctl1` the control, 6th reading | −0.0147 | −0.0175 | — |
+
+### The prediction, scored
+
+Predicted `z_m25` at −0.3037 / −0.4288, mean **−0.3663**. Measured mean **−0.3663** — exact. But the
+format split was mis-apportioned by about 0.012 in each direction (std came in 0.012 worse than
+predicted, 2hg 0.012 better). So the swap algebra now has a track record of predicting the *mean*
+well while being unreliable about *which format* a gain lands in. Worth knowing, since the ranking
+rule weights the two formats equally: a mean prediction is usable, a per-format one is not.
+
+And `z_m24` was not predicted at all — the 24-land rung existed only because of the USER's
+"screen in increments of ONE" rule. The 23→25→27 jump had hidden the peak.
+
+### The land count is really a DONOR ranking, not a land ranking
+
+* 23 → 24 (spending **Doubling Season #2**): −0.0152 / −0.0210 — the land wins
+* 24 → 25 (spending **Tukatongue #2**): +0.0120 / +0.0063 — the *card* wins
+* 25 → 26 (spending the last Tukatongue): +0.0037 / −0.0020 — flat
+
+So "the ladder peaks at 24" is a statement about two particular donors, not about lands. The honest
+form is: a marginal Forest is worth more than a second Doubling Season and less than a second
+Tukatongue. [[isolate-the-axis-dont-difference-decks]] — which is precisely why round 17 runs the
+donor census with a neutral filler instead of extending the ladder again.
+
+Note also that the BLACK list peaked at 25 while the mono list peaks at 24. That is consistent:
+dropping Peat Bog removes a land that taps for two but dies, so the mono mana base is smoother and
+needs one less.
+
+### Hickory Woodlot is load-bearing, and Blooming Marsh is not
+
+`z_hick2` (Hickory 4→2, land-for-land) is the round's worst arm by a wide margin: **+0.0560 /
++0.0710** against `z_m25`. The two-mana-from-one-land accelerant is doing real work and 4 copies
+stay. `z_marsh2` (Marsh 4→2, land-for-land) goes the other way at −0.0027 / −0.0043, which is the
+predicted direction: in a mono-green deck Blooming Marsh produces nothing a Forest does not and
+enters tapped once three other lands are out, so it is strictly dominated. Round 17 measures 4→0.
+
+### Mono-green wins BOTH formats at equal land count
+
+`z_m25` over `z_b25`, same 25 lands, in the same pool: **−0.0267 std / −0.0213 2hg.** Predicted
+−0.028 / −0.004 — std exact, 2hg much stronger than predicted. With round 15's twin at 23 lands
+(−0.0283 / −0.0043) that is two independent readings, std replicating closely (−0.0283, −0.0267)
+and 2hg moving from a null to a clear win. The colour question is settled: **mono-green**, and the
+black list's higher fall-through (2.76% vs 1.58%) accounts for only ~0.003 of the margin.
+
+### CORRECTION: the 2nd Concordant Crossroads DOES earn its slot
+
+Round 15 read `x_G` (Crossroads 2→1) at +0.0105 / +0.0037 and I inferred from that the second copy
+was worth less than the apparatus floor, so cutting it was nearly free. **That inference was wrong,
+and the error was reading a net as a price.** `x_G` filled the freed slot with Yavimaya Sapherd — a
+real card, two bodies for three mana — so +0.0105 was the net of *losing Crossroads and gaining
+Sapherd*, not the price of Crossroads. Round 16's `z_cross1` fills with Vitaspore, the screen's
+standing near-null, and the same cut now costs **+0.0293 std / +0.0215 2hg** — comfortably above
+the ~0.016 floor. [[sink-price-is-not-a-refutation]]: price a cut against the replacement, not
+against zero. Differencing the two arms says Sapherd recovers about 0.019 of the 0.029 lost.
+
+So the second Crossroads stays, and the Concordant Crossroads judgement resolves the other way from
+round 15's reading: the measured 0.025 mean is an **upper** bound (the unmodelled World rule and the
+symmetric haste grant both flatter it), but an upper bound of 0.025 is not zero, and nothing in the
+pool replaces it for less. The disclosure stands; the cut does not.
+
+Round 17's census carries one more bias note worth recording, because it is the cleanest the screen
+has managed: fall-through is **1.58% on 19 of 22 arms**, so arm-vs-arm differences are nearly
+bias-free. The exceptions are `y_cut_concordantcr` (0.40%) and `y_cut_beastmastera` (1.30%), whose
+lower rates *flatter cutting those two cards* by roughly 0.003 turns — so a census verdict of "keep"
+on either is conservative, and a verdict of "cut" must be discounted.
