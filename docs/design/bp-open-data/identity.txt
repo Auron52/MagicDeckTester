@@ -1,0 +1,6 @@
+jobs compared 68, identical (digest + units) 64, differ 4, games 1700
+decks: auras,creature,critter,dragonstorm,fluctuator,goblins,hinata,kitty,melira,mirrorwing,snow,th
+  DIFF kitty_d3_off.c0 base=('29648f4fb886d0c8', 25, '4.4000', 326397) lever=('29648f4fb886d0c8', 25, '4.4000', 326287)
+  DIFF kitty_d3_off.c25 base=('96fd8ee13c2f98b8', 25, '4.5200', 236411) lever=('96fd8ee13c2f98b8', 25, '4.5200', 236399)
+  DIFF kitty_ship_off.c0 base=('d733073dbaa0df67', 25, '3.8800', 314902) lever=('d733073dbaa0df67', 25, '3.8800', 315354)
+  DIFF kitty_ship_off.c25 base=('e44a825fe0fdbf1d', 25, '4.4000', 663378) lever=('e44a825fe0fdbf1d', 25, '4.4000', 663262)
