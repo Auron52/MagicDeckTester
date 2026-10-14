@@ -9302,7 +9302,9 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
 //      look-ahead at the spawn schedule", USER);
 //   S3 lands beyond the quota: 3 counting the board, +1 while holding a Searing Blaze;
 //   S4 a Shard Volley with no land of its own: the k-th Volley needs k lands among board + kept hand
-//      lands ("One land per volley is okay", USER -- the per-Volley land quota is DROPPED);
+//      lands ("One land per volley is okay", USER -- the per-Volley land quota is DROPPED); the
+//      land-light variants (MTG_BURN_VOLLEY_KEEP1 / KEEP2 / KEEP_FLOOR / NOLAND_RANK / NOLAND_LATE,
+//      proposed 2026-10-14, default OFF) are described at their readers below;
 //   S5 burn beyond lethal, worst first;
 //   S6 a 2nd Light Up the Stage (or every copy below 2 lands across board + hand);
 //   S7 spare creatures past the quota of 2 counting the board, a not-needed Eidolon FIRST;
@@ -9409,6 +9411,53 @@ static bool BurnVolleyKeepOverDryBlaze()
     return heurarm::Flag(heurarm::BURN_VOLLEY_KEEP_OVER_DRY_BLAZE, on);
 }
 
+// THE LAND-LIGHT SHARD VOLLEY VARIANTS (PROPOSED 2026-10-14, all default OFF -- the USER picks; measured in
+// docs/design/burn-discard-policy-proposal.md, "2026-10-14"). USER: "Yeah, that rule is probably too
+// aggressive when we are land-light. At least 1 could always be kept and 2 possibly. I think we can give
+// some wiggle room. ... However, there are still many cards Shard Volley does lose to in these cases. It
+// could be second ranking, 'shard volley with no land' that loses to more of the potential options."
+// Found by the 2026-10-13 d0 A/B: five games (seeds 9310001 + gi 1048, 8292, 12620, 17376, 20102) with NO
+// land on board or in hand, where S4 shed every Volley ahead of an unkept Light Up the Stage, a spare
+// Eidolon or a 2nd Skullcrack, and the generic max-MV discard won faster.
+//   KEEP1 / KEEP2: the first one / two land-less Volleys are not S4 sheds; they stay in the burn order as
+//     ordinary Volleys (S4 then holds the Volleys past lands + K). KEEP_FLOOR reads "at least 1 [2] could
+//     always be kept" as a floor instead: max(lands, K) Volleys hold a land -- identical with no land at all,
+//     no change from the design once the lands reach K.
+//   NOLAND_RANK: a land-less Volley is never an S4 shed; it takes the burn-order rank "Shard Volley with no
+//     land" directly below the with-land Volley. Its placement is pinned on both sides: above the 1-damage
+//     Blaze (the USER-adopted amendment above), and therefore above the Searing Blood that cannot kill (0
+//     face), the unkept Light Up the Stage (S6) and a spare Eidolon (S7), which the design already sheds
+//     ahead of the 1-damage Blaze. Nothing on this list sorts between two Shard Volleys, so the rank is
+//     order-identical to never shedding a Volley for want of a land; KEEP1 / KEEP2 / NOLAND_LATE on top of
+//     it change nothing (no Volley reaches S4 or the late slot).
+//   NOLAND_LATE: the land-less Volleys (past KEEP1 / KEEP2) keep their own shed slot but move it from S4 to
+//     just after S6: they now outlast burn beyond lethal and the Light Up the Stage the design does not keep,
+//     and still lose to a spare creature, the 0-face Blood and every kept card -- the "loses to more of the
+//     potential options" reading. The amendment above still holds: a KEPT 1-damage Blaze moves up to just
+//     ahead of them; one already beyond lethal (S5) is ahead of them where it is.
+static int BurnVolleyKeepSlack()
+{
+    static const bool k1 = EnvOn("MTG_BURN_VOLLEY_KEEP1");   // DEFAULT OFF; =1 enables
+    static const bool k2 = EnvOn("MTG_BURN_VOLLEY_KEEP2");   // DEFAULT OFF; =1 enables (overrides KEEP1)
+    if (heurarm::Flag(heurarm::BURN_VOLLEY_KEEP2, k2)) { return 2; }
+    return heurarm::Flag(heurarm::BURN_VOLLEY_KEEP1, k1) ? 1 : 0;
+}
+static bool BurnVolleyKeepFloor()
+{
+    static const bool on = EnvOn("MTG_BURN_VOLLEY_KEEP_FLOOR");   // DEFAULT OFF; =1 -> max(lands, K)
+    return heurarm::Flag(heurarm::BURN_VOLLEY_KEEP_FLOOR, on);
+}
+static bool BurnVolleyNoLandRank()
+{
+    static const bool on = EnvOn("MTG_BURN_VOLLEY_NOLAND_RANK");   // DEFAULT OFF; =1 enables
+    return heurarm::Flag(heurarm::BURN_VOLLEY_NOLAND_RANK, on);
+}
+static bool BurnVolleyNoLandLate()
+{
+    static const bool on = EnvOn("MTG_BURN_VOLLEY_NOLAND_LATE");   // DEFAULT OFF; =1 enables
+    return heurarm::Flag(heurarm::BURN_VOLLEY_NOLAND_LATE, on);
+}
+
 std::vector<int> BurnProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -9505,13 +9554,19 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
     });
     std::vector<int> volley_no_land, burn_kept, burn_beyond;
     {
+        // How many Volleys hold a land: the k-th needs k lands (the USER design), plus the proposed
+        // land-light variants above (all off: exactly total_lands).
+        int volley_lands = total_lands;
+        if (BurnVolleyNoLandRank()) { volley_lands = n; }   // every Volley stays in the burn order
+        else if (const int k = BurnVolleyKeepSlack(); k > 0)
+        { volley_lands = BurnVolleyKeepFloor() ? std::max(total_lands, k) : total_lands + k; }
         int volleys = 0, acc = 0;
         const int need = std::max(0, s.Opponent().life - board_power);
         for (int i : live_burn)
         {
             if (def_of(ap.hand[static_cast<std::size_t>(i)])->params.sacrifice_land)
             {
-                if (volleys + 1 > total_lands) { volley_no_land.push_back(i); continue; }
+                if (volleys + 1 > volley_lands) { volley_no_land.push_back(i); continue; }
                 ++volleys;
             }
             if (acc >= need) { burn_beyond.push_back(i); continue; }
@@ -9577,10 +9632,18 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
     // ---- MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE (USER-adopted amendment, default ON; see the reader) ------
     // The dry live Blazes (b_rank 4: landfall, no kept hand land) leave their slot (S5 or the keep
     // ladder) and shed in S4, ahead of the land-less Volleys -- only while there is such a Volley.
+    // Under MTG_BURN_VOLLEY_NOLAND_LATE (proposed, default OFF) those Volleys shed after S6, so a dry Blaze
+    // already in S5 (beyond lethal) sheds ahead of them where it is; only a KEPT one (the ladder) moves up.
+    const bool volley_late = BurnVolleyNoLandLate();
     std::vector<int> dry_blaze_up;
     if (!volley_no_land.empty() && BurnVolleyKeepOverDryBlaze())
     {
-        for (int i : live_burn) { if (at(b_rank, i) == 4) { dry_blaze_up.push_back(i); } }
+        for (int i : live_burn)
+        {
+            if (at(b_rank, i) != 4) { continue; }
+            if (volley_late && std::find(burn_beyond.begin(), burn_beyond.end(), i) != burn_beyond.end()) { continue; }
+            dry_blaze_up.push_back(i);
+        }
         if (!dry_blaze_up.empty())
         {
             auto moved = [&](int i)
@@ -9591,16 +9654,23 @@ std::vector<int> BurnProvider::CleanupDiscardCandidates(
     }
 
     // ---- emit the shed order ----------------------------------------------------------------------
+    // MTG_BURN_VOLLEY_NOLAND_LATE (proposed, default OFF) moves the land-less Volleys -- and the kept dry
+    // Blazes the amendment sheds ahead of them -- from S4 to just after S6.
     std::vector<int> shed;
     shed.reserve(static_cast<std::size_t>(n));
+    auto emit_volley_no_land = [&]
+    {
+        for (int i : dry_blaze_up)   { shed.push_back(i); }                                  // (the amendment)
+        for (int i : volley_no_land) { shed.push_back(i); }
+    };
     for (int i : eidolon_dupes) { shed.push_back(i); }                                       // S1
     for (int i : dead_blaze)    { shed.push_back(i); }                                       // S2
     for (int i : dead_other)    { shed.push_back(i); }
     for (std::size_t k = lands.size(); k-- > static_cast<std::size_t>(kept_lands_n);) { shed.push_back(lands[k]); }  // S3
-    for (int i : dry_blaze_up)   { shed.push_back(i); }                                      // S4 (the amendment)
-    for (int i : volley_no_land) { shed.push_back(i); }                                      // S4
+    if (!volley_late) { emit_volley_no_land(); }                                             // S4
     for (std::size_t k = burn_beyond.size(); k-- > 0;) { shed.push_back(burn_beyond[k]); }   // S5
     for (std::size_t k = digs.size(); k-- > static_cast<std::size_t>(dig_keep);) { shed.push_back(digs[k]); }       // S6
+    if (volley_late) { emit_volley_no_land(); }                                              // S4, late
     for (int i : eidolon_spare) { shed.push_back(i); }                                       // S7
     for (std::size_t k = creature_spare.size(); k-- > 0;) { shed.push_back(creature_spare[k]); }
     for (int i : others)        { shed.push_back(i); }                                       // S8
