@@ -719,3 +719,86 @@ Mycotyrant list, since in paper the replaced copy reaches the graveyard and coun
 The symmetric grant is the one that matters in paper, and it is the mirror image of the USER's
 warning -- a card that measures well partly because its downside is invisible. Hence the call to run
 2 rather than 3, which `w_D` then supported independently; round 15's `x_G` prices going to 1.
+
+---
+
+## Round 15 RESULT (seed 1080000): both winners replicate, and TWO readings turn over
+
+Base 5.1787 std / 5.6065 2hg. Nine cells per format in one pool, 32/32 workers at the heartbeat.
+
+| arm | std | 2hg | mean | what it was for |
+|---|---|---|---|---|
+| `x_mono` | **−0.2993** | −0.3860 | −0.3427 | CONFIRM round 14's std winner, held-out |
+| `x_monoE` | −0.2885 | −0.4108 | **−0.3497** | the mono-green TWIN of `x_E` |
+| `x_F` | −0.2755 | **−0.4245** | **−0.3500** | 25 lands |
+| `x_E` | −0.2602 | −0.4065 | −0.3334 | `x_D` + The Mycotyrant, uncontested |
+| `x_H` | −0.2587 | −0.4015 | −0.3301 | 27 lands |
+| `x_G` | −0.2497 | −0.4027 | −0.3262 | Crossroads to 1 |
+| `x_D` | −0.2410 | −0.4015 | −0.3213 | CONFIRM round 14's 2hg winner, held-out |
+| `x_ctl1` | −0.0168 | −0.0208 | — | the control's SIXTH reading |
+
+### The confirm, which was owed and is not optional
+
+|  | round 14 (seed 1070000) | round 15 (seed 1080000) | drift |
+|---|---|---|---|
+| `w_D` / `x_D` | −0.2480 / −0.3972 | −0.2410 / −0.4015 | +0.0070 / −0.0043 |
+| `w_mono` / `x_mono` | −0.2752 / −0.3595 | −0.2993 / −0.3860 | −0.0241 / −0.0265 |
+
+Neither winner was selection-bias inflation; `w_mono` read **better** held-out by ~0.025. The control
+has now been read six times (−0.0152, −0.0158, −0.0150, −0.0190, −0.0168, −0.0208), so the apparatus
+floor is a stable ~0.017 and every composite here is 14–25x it.
+
+### 1. The colour "disagreement" was an artifact of comparing unequal lists
+
+Round 14 had mono winning std and `w_D` winning 2hg, from lists assembled differently. The twin pair
+-- same spend, same 23 lands, black removed and nothing else changed -- reads:
+
+* std: `x_monoE` over `x_E` by **−0.0283** (t ≈ −2.7)
+* 2hg: by **−0.0043** (t ≈ −0.36, a null)
+
+Mono-green wins std and ties 2hg. Nothing disagrees. The earlier split was a confound, not a fact
+about the formats, and it is the same shape of error as round 14's `w_D`-vs-`w_B` two-changes-at-once.
+
+**The apparatus bias here runs in TWO directions and the honest statement needs both.** Converting an
+arm to mono-green empties bucket `[11] Peat Bog, Hickory Woodlot` from 8 members to 4, so the table's
+advice for those compositions is applied to a base it was never fitted to -- a mis-calibration
+`fallback_rate` provably cannot see, because bucket `[13] Forest, Blooming Marsh` goes 18→22 and is
+already past the `min(count, 7)` cap, so it reports ~0. That channel runs AGAINST mono. But the
+fall-through channel runs the other way: at round 16's preflight the black 25-land arm shows **2.76%**
+of hands falling through against the mono arms' **1.58%**, and that penalty is one-way against the arm
+that has it -- worth roughly 0.003 turns at this scale. So ~10% of the 0.028 std margin is bias
+favouring mono, and the unquantified calibration channel pushes back the other way. The effect is an
+order of magnitude larger than the part we can price; it is not an artifact of either channel.
+
+### 2. THE LAND LADDER TURNED OVER
+
+Five rounds of 21 −0.0230, 22 −0.0455, 23 −0.0645, 25 −0.1042 looked dead linear at ~0.020/land.
+It is not:
+
+* 25 beats 23 by **−0.0152 / −0.0180**
+* 27 is **worse than 25** by +0.0168 / +0.0230, and worse than 23 outright
+
+So the optimum is at ~25 and the ladder is done climbing. Caveat on the turn-over point: `x_H` paid
+for 27 by cutting the last Tukatongue *and* a Wild Growth, so the 25→27 loss is the land gain net of
+those two cuts rather than a pure land price. The direction is unambiguous; the exact peak needed
+round 16's one-copy rungs (24, 26), which the 23→25→27 jump had skipped.
+
+### 3. The Mycotyrant belongs once it competes with nothing
+
+`x_E` over `x_D` by −0.0192 std / −0.0050 2hg. So round 14's `w_D`-beats-`w_B` was **not** the
+Mycotyrant being the weak half of that pair -- it was the third Crossroads and the missing
+Shroofus #2 / Badger #2. Priced on its own donor (Mycoloth 3→2) it pays, mildly.
+
+### 4. The second Crossroads is worth less than the floor
+
+`x_G` (Crossroads to 1) loses by only **+0.0105 / +0.0037** -- *below* the ~0.017 control floor, in
+the one place the model is documented to flatter the card (the World rule is unmodelled and goes live
+at exactly two copies; the symmetric haste grant is a paper drawback priced at zero). A cost
+indistinguishable from zero, in a spot where the engine is known to be generous, is not a reason to
+keep the copy. Round 16 re-prices it on the mono list as `z_cross1`.
+
+### What round 15 leaves for round 16
+
+The two top lists finished **0.0003 apart** on the co-equal mean and won on different axes:
+`x_F` (black, 25 lands) −0.3500 and `x_monoE` (mono, 23 lands) −0.3497. Their combination --
+**mono-green at 25 lands** -- had never been measured. That is `z_m25`, round 16's predicted winner.
