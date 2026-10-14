@@ -1,4 +1,4 @@
-# Regression ground truth -- commit ea2579d3  date 2026-10-13
+# Regression ground truth -- commit b88448ec  date 2026-10-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (smoke, 2026-10-13): Single-path half of the up-front escalation skip WITHDRAWN (MTG_ESC_SKIP_SINGLE default OFF; it skipped escalations its climb would have reached and TAKEN): hinata d5 s1001 returns EXACTLY to its pre-skip GT (23503120ce3361bf). The ladder-path skip (R=0, default ON) moves no smoke game. kittyv2 d3 / kittyv3 d3 keep the values accepted in 2a3ea87f -- run-to-run flicker independent of the skip (identical with it OFF; kittyv2 d3 matched the older GT in 1 of 3 runs).
@@ -8,6 +8,7 @@
 # accepted-with-regressions (smoke, 2026-10-13): fungusb only: MTG_FUNGUS_M2_HASTE stands the devour Main2 pin down to Both on a haste turn (USER-found lossy gate); searched audit 2 faster / 0 slower / 3 same-score line changes, all the pre-combat haste-Mycoloth line; incumbent fungus holds no haste source so it is provably inert there and byte-identical
 # accepted-with-regressions (regression, 2026-10-13): fungusb only: MTG_FUNGUS_M2_HASTE stands the devour Main2 pin down to Both on a haste turn (USER-found lossy gate); all four fungusb cases better or unchanged (d3 -0.0100/-0.0200, d5 0/-0.0400) and every other deck byte-identical; incumbent fungus holds no haste source so the fix is provably inert there
 # accepted-with-regressions (regression, 2026-10-13): rebase re-validation onto origin's per-depth escalation-skip work (incl. fungusb escalation_skip_r vector): 336 PASS / 0 FAIL, no cell moved from the already-accepted values -- the pin fix and the skip vector compose cleanly
+# accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -537,14 +538,14 @@ kittyv3_overnight_d0_s4004=5.4415/ef8f478cc29ac13c
 kittyv3_overnight_d0_s6006=5.4420/1db1f56ee6c7afe0
 kittyv3_overnight_d0_s8008=5.4925/4d438e63a8b0f947
 kittyv3_overnight_d0_s10010=5.4800/31546a170b9143a4
-kittyv3_overnight_d3_s4004=4.4040/589046171b4ff1e7
-kittyv3_overnight_d3_s5005=4.4120/aab2998103112f8a
-kittyv3_overnight_d3_s6006=4.4280/065a506b0157b967
-kittyv3_overnight_d3_s7007=4.4800/8ceff16f3976e911
-kittyv3_overnight_d5_s4004=4.4480/7aab790e6273f173
-kittyv3_overnight_d5_s5005=4.4240/3a486cacd40b1360
-kittyv3_overnight_d5_s6006=4.3200/3c56ee10fac66b92
-kittyv3_overnight_d5_s7007=4.6480/1783eee09533f8c9
+kittyv3_overnight_d3_s4004=4.2880/cadc20e114b909b1
+kittyv3_overnight_d3_s5005=4.4240/5e4fd1df225cb57a
+kittyv3_overnight_d3_s6006=4.4080/61eaa08dd093476b
+kittyv3_overnight_d3_s7007=4.3500/6c2e327329a178bc
+kittyv3_overnight_d5_s4004=4.3840/6784bd6f9ee33e00
+kittyv3_overnight_d5_s5005=4.4080/8a7ea6c7c1994931
+kittyv3_overnight_d5_s6006=4.4160/33781a713ffbe2c1
+kittyv3_overnight_d5_s7007=4.4880/84e30f0ab36bd3f3
 dragons_overnight_d0_s4004=5.8785/5845f4e1972221b4
 dragons_overnight_d0_s6006=5.8880/ed491bb1ed1cc6f8
 dragons_overnight_d0_s8008=5.9040/57704cde1626ac92
