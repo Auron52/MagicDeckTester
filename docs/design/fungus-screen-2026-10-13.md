@@ -603,3 +603,64 @@ margin turns out thin -- the two cards sit mid-table, so it cannot change the to
 Keep-score marginals inverted against play again: Cryptolith Rite -0.2299 and Thallid Shell-Dweller
 -0.2846 were near the bottom, while the census WINNER scored 0.1725. The table fits the keep
 decision, not the race.
+
+## Round 13 RESULT: Beastmaster does not need the Mycoloth cut, and the land ladder has not turned
+
+Controls by donor COUNT: `r_ctl1` -0.0150/-0.0190, `r_ctl2` -0.0203/-0.0138, `r_ctl3` -0.0372/-0.0215.
+Each ladder rung is read against its matched control.
+
+| edit | slots | NET std | NET 2hg |
+|---|---|---|---|
+| **Beastmaster Ascension 2->4, on FREE donors** | 2 | **-0.0682** | **-0.1740** |
+| Concordant Crossroads 1->4 | 3 | -0.0488 | -0.0495 |
+| Concordant Crossroads 1->3 | 2 | -0.0472 | -0.0492 |
+| Concordant Crossroads 1->2 | 1 | -0.0295 | -0.0325 |
+| Wild Growth 2->4 | 2 | -0.0172 | -0.0319 |
+| Wild Growth 2->3 | 1 | -0.0130 | -0.0225 |
+
+| vs base directly | std | 2hg |
+|---|---|---|
+| **23 lands** | **-0.0645** | **-0.0800** |
+| 22 lands | -0.0455 | -0.0573 |
+| 21 lands | -0.0230 | -0.0310 |
+| Doubling Season 4->1 | -0.0248 | -0.0008 |
+
+**THE HEADLINE IS A CONFOUND CAUGHT ONE LEVEL UP.** Round 9's `c_m2` (-0.0877/-0.2112) bundles
+Beastmaster 2->4 with Mycoloth 4->2 and Courtyard->Forest, and the screen had been reading that as
+evidence for trimming a five-drop. Priced on its own free donors, **Beastmaster 2->4 alone is
+-0.0885/-0.1878 vs base** -- so the Mycoloth cut plus the land swap contribute only ~-0.020/-0.037 on
+top, and the expensive half of the structural edit is optional. This is exactly the shape round 2+3's
+z5/z6 2x2 was built to catch (a fill present in every arm that measures well), re-emerging at the
+composite level. It is why round 14's `w_A` is deliberately **Mycoloth-NEUTRAL**.
+
+**Crossroads wants three.** The third copy adds -0.018; the fourth adds -0.002, i.e. nothing.
+
+**The land ladder is still climbing at 23** (~0.022/slot, near-constant across 21/22/23), so the
+optimum is not yet sited and an open ladder cannot be assembled from. Round 14's `w_land25` extends
+it to 25 as a diagnostic.
+
+**Doubling Season 4->1 is a FORMAT SPLIT, not a free third copy:** -0.0248 std but -0.0008 2hg, with
+a +0.0240 (t=+3.94) split. Since the formats are co-equal the assembly cuts Season to 2 and treats
+the third as marginal.
+
+**Cross-round replication is good.** Round 11 vs round 13 on disjoint seeds: Crossroads #2 NET
+-0.0323/-0.0354 vs -0.0295/-0.0325; Wild Growth #3 -0.0075/-0.0167 vs -0.0130/-0.0225. The control
+has now read -0.0152, -0.0158 and -0.0150 in std across three seed blocks, which is what licenses
+pooling every NET in the screen.
+
+**Beastmaster's format split is the largest in the screen:** -0.0993 (t=-15.60) more in 2hg. Any
+list built for both formats should treat Beastmaster 4 as non-negotiable.
+
+## Round 14: the composite, rebuilt (the first draft was killed 26 seconds in)
+
+The first draft assembled five greedy swaps on top of `c_m2` and was stopped as soon as round 13
+landed, because `c_m2`'s Beastmaster fill turned out to be most of its value. The rebuilt round has
+eight arms: `w_ctl1` (the control's FOURTH reading), `w_beast4` (held-out replication of the screen's
+biggest edit, which now carries the assembly), `w_land25` (extend the open ladder), `w_A` (the
+Mycoloth-neutral candidate on free donors only), `w_B` (`w_A` + lands to 23), `w_C` (`w_B` +
+Mycoloth 4->2, with the freed copy going to a SPELL so the Mycoloth axis is isolated), `w_D` (the
+alternative spend for the Mycotyrant and Crossroads-#3 slots) and `w_mono` (mono-green, reopened).
+
+**Predictions on the record before the run: `w_A` -0.195 std / -0.305 2hg; `w_B` -0.253 / -0.375;
+`w_C - w_B` -0.0133 / -0.0530.** Worst-arm fall-through is 4.90%, one-way against the candidate
+arms, so the measured gains are LOWER bounds by roughly 0.003t.
