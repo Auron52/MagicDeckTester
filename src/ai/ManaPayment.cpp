@@ -2647,7 +2647,13 @@ bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
 {
     if (ra != rb) { return ra < rb; }
     if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
-    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
+    const DecisionProvider& prov = ResolveProvider(state);
+    // A TOTAL deck order (CastOrderTotalByName): two DIFFERENT cards on one rank fall back to the
+    // name, a fixed key -- never to plan / hand order (USER 2026-10-14: "I don't like the randomness
+    // of choosing the order"). Two copies of one card keep the rule below.
+    if (prov.CastOrderTotalByName() && a.card_name != b.card_name)
+    { return a.card_name.str() < b.card_name.str(); }
+    if (!prov.CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
     // Reuse the action's memoized def (back-filled once per node, == Lookup(card_name)) instead of
     // re-hashing the name string on every comparison -- this comparator runs O(n log n) per sort.
     // Byte-identical; def==nullptr (an action from a path that didn't back-fill) falls back to Lookup.

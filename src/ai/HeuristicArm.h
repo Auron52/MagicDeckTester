@@ -73,9 +73,8 @@ enum Slot : int
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
     KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
-    HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata FULL cast order (Ponder/Preordain PEERS)
-    HINATA_PP_STRICT,         // MTG_HINATA_PP_STRICT      ...and split the peers: Ponder before Preordain
-    HINATA_IREN_EARLY,        // MTG_HINATA_IREN_EARLY     LOO: Irencrag back to 18 (any payoff may follow)
+    HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata: the USER's settled TOTAL cast order (2026-10-14)
+    HINATA_PP_STRICT,         // MTG_HINATA_PP_STRICT      ...the REVERSE tie-break: Ponder before Preordain
     HINATA_FIND_LATE,         // MTG_HINATA_FIND_LATE      LOO: tutor/cantrips/dig back to 20 (after her)
     HINATA_PAY_TIE,           // MTG_HINATA_PAY_TIE        LOO: the three payoffs tied at 20 again
     HINATA_GAMBLE_LATE,       // MTG_HINATA_GAMBLE_LATE    tutor AFTER the cantrips (cantrip, then fetch)
@@ -464,6 +463,7 @@ enum Slot : int
     REPLICATE_PENDING,        // MTG_REPLICATE_PENDING the replicate count fan also covers a Sliver cast AFTER a SAME-PLAN Hatchery Sliver (a granter in hand, cast or Vial-put earlier in the plan): pinned k = 0..kmax beside the unpinned cast, and a subset that pins a count with no granter in it is rejected (its pin could never be granted: an exact duplicate of the unpinned cast). Without it that cast had only the unpinned variant, i.e. resolution's greedy max -- a greedy pick inside the search window that also decided WHICH post-Hatchery Sliver got the copies (resolution order). Search window only; human play and the greedy picker unchanged. Default ON; =0 -> byte-identical
     DRAW_HELD_DROP_REPLAY,    // MTG_DRAW_HELD_DROP_REPLAY the depth-0 executor PLAYS a land drop its provider held for a draw engine (DecisionProvider::LandDropAfterDrawEngine: treasure_hunt's "Treasure Hunt before the land drop") after this main's casts when the main cast no draw engine -- the only route that replayed it was the draw engine's second TakeTurn pass, so a main that cast Land's Edge alone lost the drop (cast-order probe A2: no land on T4, won T5; d3/d5/d8 win T4). A held drop the provider still holds as marginal Land's Edge ammo (HoldDeferredDropForLethal) stays held; a played one requests the second pass, which re-solves with its mana. Default ON; =0 -> the drop is lost, byte-identical to before (docs/design/treasure-hunt-land-rule-provider.md)
     FREECAST_X_ZERO,          // MTG_FREECAST_X_ZERO  DEFECT FIX (CR 107.3b: an {X} spell cast without paying its mana cost has X = 0) to the post-combat free-cast bank (Maelstrom Archangel): its X = 0 check read the copied candidate's Action::def, which CollectActions fills only in its closing resolve pass BELOW the bank, so it never fired and every X > 0 variant got a free twin that paid nothing and resolved at its X. The fix resolves the def the way the closing pass does (CollectedActionDef) and gives an {X} spell free variants only from its X = 0 candidates. Only FiveColour banks a charge and its list holds no {X} spell, so it is inert on every shipped deck. docs/design/precollect-def-dead-reads.md. Default ON; =0 -> the dead read, byte-identical to 77e094a2
+    HINATA_IREN_SECOND_LAST,  // MTG_HINATA_IREN_SECOND_LAST (under MTG_HINATA_ORDER_FULL) the USER's Irencrag rule as a SET-LEVEL placement (HinataProvider::ArrangeCastOrder): Irencrag Feat is the plan's SECOND-LAST cast, immediately before whichever payoff (Soulfire Eruption / Magma Opus / Crackle with Power) is its last -- "Irencrag can go in any of three spots depending on what other spells are cast, but it is always second last" (USER 2026-10-14), so Irencrag -> Soulfire, Soulfire -> Irencrag -> Crackle and Soulfire -> Opus -> Irencrag -> Crackle are all lines. Both subset walks count its one follower, RestrictorPrePayable's pre-set and the waste gate in that SAME arranged order (RestrictorFollowsArrangement), and the waste gate prunes a plan in which it precedes no payoff. docs/design/hinata-cast-order.md. Default ON; =0 -> the scalar rank 18 alone (ahead of every payoff)
     COUNT
 };
 
@@ -516,7 +516,6 @@ inline const char* Name(int slot)
         "MTG_KE_ORDER_FULL",
         "MTG_HINATA_ORDER_FULL",
         "MTG_HINATA_PP_STRICT",
-        "MTG_HINATA_IREN_EARLY",
         "MTG_HINATA_FIND_LATE",
         "MTG_HINATA_PAY_TIE",
         "MTG_HINATA_GAMBLE_LATE",
@@ -883,6 +882,7 @@ inline const char* Name(int slot)
         "MTG_REPLICATE_PENDING",
         "MTG_DRAW_HELD_DROP_REPLAY",
         "MTG_FREECAST_X_ZERO",
+        "MTG_HINATA_IREN_SECOND_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
