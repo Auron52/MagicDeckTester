@@ -87,10 +87,35 @@ static thread_local int t_search_leaf_depth = -1;
 // greedy. Only the outermost rollout (g_rollout_nest == 0 on entry): the nested candidate
 // rollouts inside that first ply are exactly the greedy ones the depth-1 pass already implies.
 static thread_local int t_search_leaf_first_turn_depth = -1;
+// The nominal depth of the commit-the-line PASS this thread is inside (the depth its outermost
+// FSLineWin node was entered with; -1 = not inside one). Set by FSLineWin's root node, RAII-restored.
+static thread_local int t_fs_pass_depth = -1;
+// LEAF FIDELITY BY PASS DEPTH (MTG_LEAF_GREEDY_D2 / _D3 / _D4, per-job heurarm, default OFF): the
+// threshold K at or above which a pass's beyond-horizon leaf is a greedy playout; INT_MAX = rule off.
+// WHY A PASS-DEPTH RULE (Snow, 2026-10-13, paired per game, greedy leaf vs the 1-ply one, unbounded):
+// H1 0 better / 11 worse of 50 (+0.22 t/game), H2 0 / 2 of 25, but H3 0 / 0 of 83, H4 0 / 0 of 62,
+// H5 0 / 0 of 41 (H5 digest-identical on all 41) at 0.03-0.07x the units, and 50-460x on the heavy
+// games that abandoned the value-leaf matrix. A shallow pass is scored BY its leaf; a deep pass reaches
+// most of an 8-turn goldfish inside the window and the leaf rarely decides anything. A blanket greedy
+// leaf (search_leaf_depth 0) was WORSE in budgeted play (+0.021 t/game at d3/b10 and d5/b20) because it
+// also cheapened the shallow passes a binding budget commits; keyed on the pass, those keep the 1-ply
+// leaf. Beyond the horizon, so this is the playout policy, not the search window (no-greedy rule).
+static int LeafGreedyFromDepth()
+{
+    static const bool e2 = EnvOn("MTG_LEAF_GREEDY_D2");
+    static const bool e3 = EnvOn("MTG_LEAF_GREEDY_D3");
+    static const bool e4 = EnvOn("MTG_LEAF_GREEDY_D4");
+    if (heurarm::Flag(heurarm::LEAF_GREEDY_D2, e2)) { return 2; }
+    if (heurarm::Flag(heurarm::LEAF_GREEDY_D3, e3)) { return 3; }
+    if (heurarm::Flag(heurarm::LEAF_GREEDY_D4, e4)) { return 4; }
+    return std::numeric_limits<int>::max();
+}
 static inline int EffectiveFdLeafDepth()
 {
     if (s_fd_leaf_depth_env != nullptr && *s_fd_leaf_depth_env) { return s_fd_leaf_depth; }
-    return t_search_leaf_depth >= 0 ? t_search_leaf_depth : s_fd_leaf_depth;
+    if (t_search_leaf_depth >= 0) { return t_search_leaf_depth; }   // the deck's own setting wins
+    if (t_fs_pass_depth >= LeafGreedyFromDepth()) { return 0; }
+    return s_fd_leaf_depth;
 }
 TurnSolver::SearchLeafDepthScope::SearchLeafDepthScope(int depth, int first_turn_depth)
     : m_saved(t_search_leaf_depth), m_saved_first(t_search_leaf_first_turn_depth)
@@ -58566,6 +58591,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const bool bp_root = (g_fsline_nest == 0);
     if (bp_root) { ++g_decision_epoch; }
     FsLineNestGuard _fs_nest;
+    // The pass's nominal depth, for the leaf-fidelity rule (LeafGreedyFromDepth). Only the root node
+    // sets it: every node below is the same pass, and its leaves read the pass, not their own depth.
+    struct FsPassDepthScope
+    {
+        int saved;
+        FsPassDepthScope(bool root, int d) : saved(t_fs_pass_depth) { if (root) { t_fs_pass_depth = d; } }
+        ~FsPassDepthScope() { t_fs_pass_depth = saved; }
+    } _fs_pass(bp_root, depth);
     g_bp_root_enum = bp_root;
     groupwave::g_state.max_dropped = 0;   // reset; capture right after (nested scoring-time
                                           // enumerations would otherwise leak into it)
