@@ -279,6 +279,14 @@ cell)**. It is not PROVABLY inert -- it still shapes the -1 plans that have no s
 greedy plan, axis clones, unbounded-search seeds) -- but no measured game moves. Proposed for deletion as a
 USER call (it is a heuristic on the playout policy now, not a correctness fix); not deleted here.
 
+**DELETED 2026-10-14 (USER: "Sure, let's delete it.")** Deleting it is the `=0` arm, so that arm was measured
+once more on the integrated tree (src 77e094a2, provider-built dig offer) before the code went: FiveColour,
+fresh seeds 10500001+, paired, shipped b20 2,000 / d3 b10 2,000 / d0 10,000 games per arm -- **0 faster /
+0 slower in every cell, play digest identical in 100 / 100 chunks** (build/scratch/defer0/, `make.py`).
+Removed: `TurnSolver::Main1DigDefersToMain2`, its two call sites (ApplyPlanDirect's dig loop, AIEngine's
+reactive dig), heurarm slot `DIG_DEFER_MAIN2`, test_main2_dig_defer.cpp (the gi1106 state stays covered by
+test_dig_searched_choice.cpp).
+
 ### Measured
 
 One pooled batch (`logs/dig_agent/make_dig_ab.py`, 47,500 games), fresh seeds 8800001+, every dig deck,
