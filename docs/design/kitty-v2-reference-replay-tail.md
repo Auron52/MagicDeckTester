@@ -1,7 +1,8 @@
 # KittyEquipment v2: one reference replay serialises the regression's reference stage
 
-**Status:** diagnosed 2026-10-14; an exact (output-identical) fix is on branch `kitty-replay`, not
-merged. See "Diagnosis" and "Fix" below.
+**Status:** FIXED 2026-10-14 by 35c40abb (pushed; CI green on ubuntu, windows and determinism parity).
+The reference stage now takes minutes. The follow-ups under "What is left" are deferred: the user wants
+any that are pure upside, after the Snow value leaf. See "Diagnosis" and "Fix" below.
 
 ## Symptom
 
@@ -110,7 +111,19 @@ unchanged.
   creature_giving. VERIFY on kittyv2 d3: 95,695 refused, 0 violations; 109,081 cut-block positions, 0
   cut violations.
 
-## What is left (not done; each is a decision, not a free collapse)
+## What is left (deferred 2026-10-14; the user wants the pure-upside ones, after the Snow value leaf)
+
+Classified by whether each one is pure upside, i.e. exact with nothing given up:
+
+* **Pure upside, not yet applied:** the PLAIN cut (`MTG_MANA_WALK_CUT`, change 2 above) applies
+  soundly to `Solve`'s twin of the scalar walk. The investigating agent placed it near
+  TurnSolver.cpp:35088 in its working tree; re-locate it before applying. It would change only which
+  odometer positions are visited, and it needs the same VERIFY and play-identity checks as the fix
+  above. The agent also did not establish which bail sets the bound to unlimited on the human-menu
+  frames; the cut does not fire there, but those frames are small.
+* **Not pure upside** (each is a decision for the user): the two items below. The search-menu route
+  trial can change verdicts, and references could move. The persistent checker gives up coverage of
+  the stateless spawn path.
 
 * The reference is still the stage's longest: the turn-4 steps cost 61-77 s user each. The cost is
   now general per-link engine work (ApplyPlan, state copies, payment, sim keys; perf is flat) in the
