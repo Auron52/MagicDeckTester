@@ -6713,6 +6713,39 @@ int TurnSolver::StoriedWaivedEquipId(const GameState& state, const std::vector<A
 // un-equipped plan. The error is confined to that plan's SCORE, which is the disclosed optimism
 // class SameTurnMetalcraftEquipCredit already runs in by default, under the same
 // LeafReducerCreditEnabled law: optimism is sound exactly where a rollout validates it.
+//
+// MTG_EQUIP_DS_GATE_CASTS -- DEFAULT ON; `=0` restores the dead cast half. THE DEFECT: the two
+// frame predicates below (MetalcraftWillFreeEquips, FrameHasDoubleStrikeSource) read each cast
+// candidate's `Action::def`, and CollectActions -- where MTG_EQUIP_ONE_HOST and the zero-power
+// equip rule call them -- fills `def` only in its closing resolve pass ("Resolve each action's card
+// definition ONCE"), thousands of lines AFTER the equip block. So inside CollectActions every
+// CastFromHand candidate still has `def == nullptr`, the cast half of both predicates is DEAD, and
+// FrameHasDoubleStrikeSource sees only the battlefield. A Kor Duelist or Balan the frame can CAST
+// never disarmed the one-host rule. The USER's ruling is conditional on exactly that -- *"There is
+// no double strike so we should always choose exactly one creature"* -- and the gate's own comment
+// names the case ("a Balan cast in the same subset is exactly the case..."), so a double striker in
+// hand was a counterexample the rule was never meant to cover: the Hammer and Jitte were offered
+// only onto the old non-sick Paladin and never onto the Kor Duelist that doubles them.
+// KittyEquipment gi149 (seed 2151) T4, docs/design/kitty-one-host-rootcause.md: T5 at every budget
+// with the rule on, T4 with it off. The other callers (MetalcraftHoistArmed, after the resolve
+// pass) already see a resolved `def`, so for them this is an identity.
+static bool EquipDsGateCastsEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EQUIP_DS_GATE_CASTS", true);   // DEFAULT ON
+    return heurarm::Flag(heurarm::EQUIP_DS_GATE_CASTS, env_on);
+}
+
+// A cast candidate's definition, resolved the way CollectActions' closing pass resolves it when the
+// candidate has not been through that pass yet. nullptr only for an unknown card.
+static const CardDefinition* CastCandidateDef(const GameState& state, const Action& a)
+{
+    if (a.def != nullptr || !EquipDsGateCastsEnabled()) { return a.def; }
+    const Player& ap = state.players[state.active_player_index];
+    return (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+               ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
+               : CardDatabase::Instance().Lookup(a.card_name);
+}
+
 static bool MetalcraftWillFreeEquips(const GameState& state, const std::vector<Action>& cands)
 {
     const int controller = state.active_player_index;
@@ -6727,8 +6760,10 @@ static bool MetalcraftWillFreeEquips(const GameState& state, const std::vector<A
     }
     for (const Action& a : cands)
     {
-        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
-        note_threshold(a.def->params.metalcraft_equip_zero_artifacts);
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = CastCandidateDef(state, a);
+        if (d == nullptr) { continue; }
+        note_threshold(d->params.metalcraft_equip_zero_artifacts);
     }
     if (threshold <= 0) { return false; }
     // Equipment ARE artifacts, so a cast Bonesplitter counts itself toward the threshold that makes
@@ -6736,8 +6771,10 @@ static bool MetalcraftWillFreeEquips(const GameState& state, const std::vector<A
     int artifacts = CountControlledArtifacts(state, controller);
     for (const Action& a : cands)
     {
-        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
-        if (a.def->card.HasType(CardType::Artifact)) { ++artifacts; }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = CastCandidateDef(state, a);
+        if (d == nullptr) { continue; }
+        if (d->card.HasType(CardType::Artifact)) { ++artifacts; }
     }
     return artifacts >= threshold;
 }
@@ -6772,8 +6809,8 @@ static bool FrameHasDoubleStrikeSource(const GameState& state, const std::vector
     }
     for (const Action& a : cands)
     {
-        if (a.kind != Action::Kind::CastFromHand) { continue; }
-        if (ds_def(a.def))                        { return true; }
+        if (a.kind != Action::Kind::CastFromHand)  { continue; }
+        if (ds_def(CastCandidateDef(state, a)))    { return true; }   // see MTG_EQUIP_DS_GATE_CASTS
     }
     return false;
 }
@@ -25962,7 +25999,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                 }
             }
-            // ---- ONE HOST FOR EVERY RIDER (MTG_EQUIP_ONE_HOST, DEFAULT OFF) -------------------
+            // ---- ONE HOST FOR EVERY RIDER (MTG_EQUIP_ONE_HOST, DEFAULT ON since 2026-10-11) ----
             //
             // USER RULING 2026-10-11: *"There is no double strike so we should always choose exactly
             // one creature to equip (not summoning-sick preferred) and put everything on that
@@ -25984,7 +26021,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //     FrameHasDoubleStrikeSource -- the SAME predicate the metalcraft hoist already uses
             //     for the same precondition -- so a frame holding Kor Duelist or Balan is untouched.
             //     On KittyEquipment v3 the only double_strike_while_equipped card near the list, Kor
-            //     Duelist, is SIDEBOARD ONLY.
+            //     Duelist, is SIDEBOARD ONLY. "HOLDING" INCLUDES A CAST CANDIDATE, and until
+            //     MTG_EQUIP_DS_GATE_CASTS it did not: this block runs before CollectActions' closing
+            //     def-resolve pass, so every candidate's Action::def is still null here and the
+            //     gate's cast half read nothing. On v1 (4 Kor Duelist, 2 Balan) that let the rule
+            //     pick the old Paladin while the Duelist / Balan the frame could cast was the host the
+            //     riders belonged on (gi149 / gi738: T5 instead of T4 at every budget).
+            //     docs/design/kitty-one-host-rootcause.md.
             //   * GOLEM-SKIN GAUNTLETS MAKES CONCENTRATION STRICTLY BETTER, not merely equal. It
             //     grants +1/+0 per Equipment attached TO ITS OWN HOST and v3 runs four, so every
             //     piece moved off the pile costs each Gauntlets a point. With G Gauntlets and E
