@@ -159,6 +159,27 @@ Guardian of Thraben > Coppercoat Vanguard > Cathar Commando > Jirina > Harbin > 
 General Kudro > King Darien XLVIII > Rick (6-17 order-free; the measured 10-04 sequence keeps it total). Fix the two
 "user-proposed" labels (vial-put-interleaving.md:42, the soldiers_vial_after_tutor_continuation scenario comment).
 
+### burn -- SETTLED (USER 2026-10-14)
+USER: "The burn order seems reasonable, though I wouldn't cast any spell but Light Up the Stage, Searing Blaze (if
+missing a land drop) or Eidolon in main 2 without playing them off main 2 Light up the Stage."
+Order: land > Goblin Guide > Monastery Swiftspear > Lightning Bolt > Shard Volley > Searing Blaze > Searing Blood >
+Skullcrack > Light Up the Stage > Eidolon of the Great Revel.
+- LAND first, two exceptions: before Searing Blaze whenever Blaze is cast and a land is in hand (landfall, 3 not 1);
+  after Light Up the Stage when the turn pays for Light Up without it (a land Light Up exiles can be played and the
+  hand land kept).
+- Haste creatures first (Swiftspear's prowess sees every spell), by name. Burn by cost, then name. Shard Volley JOINS
+  the burn (it no longer trails every cast in the sacrifice-land pass); the USER's Volley hold rule is unchanged.
+- Light Up the Stage after the burn and the creatures: main 1 when a burn spell earlier in that main enables
+  spectacle (USER 08-17), otherwise main 2 for {R} after combat damage. Eidolon is the turn's last cast.
+- MAIN 2 (USER): the only spells cast in main 2 are Light Up the Stage, Eidolon, and Searing Blaze while the land
+  drop is missing (no land has entered this turn, so a land a main-2 Light Up exiles can still turn landfall on).
+  Every other spell is main 1 unless it is played off a main-2 Light Up the Stage. Agent reading, surfaced: "played
+  off" admits the cards that Light Up exiled AND hand spells cast after it in that main (e.g. paid by a land it
+  exiled); the narrower reading (exiled cards only) is the alternative.
+- Engine change (agent default yes, the question was not answered explicitly): the search credits spectacle when a
+  face-damage spell precedes Light Up in the same plan, so Swiftspear -> burn -> Light Up for {R} becomes findable
+  (seed 9295 gi 294, a turn-3 kill the engine misses at every budget).
+
 ## Start here: eight answers that unblock most of the rest
 
 There are 141 questions below. Each has a default, but a default is not an adoption: until you answer, the
