@@ -287,15 +287,95 @@ TO UNBLOCK:
 ================================================================================"""
 
 
+BLOCK_VERSION_MSG = """
+================================================================================
+BLOCKED: this VERSION of {stem} is NOT in the regression suite.
+================================================================================
+  generating for : {deck}
+  the deck DOES have suite keys, but none of them points at this version:
+{siblings}
+Suite membership is per DECKLIST, not per deck folder (user directive, 2026-10-14:
+*"we probably should actually enforce that the version needs to be in the
+regression tests prior to both value-leaf and mulligan profile"*). A value leaf and
+a keep table are fitted to the play of ONE decklist, so a sibling version's ground
+truth does not cover this one -- nothing would detect an engine change breaking the
+list the artifact was fitted to.
+
+TO UNBLOCK:
+  1. Measure this VERSION's cost and apply the 3x rule:
+         python3 scripts/suite_gate.py --cost {deck}
+     It may be added only if its cost is <= {mult:g}x the most expensive deck that
+     already has both a value leaf and a mulligan profile.
+  2. If it PASSES: add a *** NEW *** key [{guess}] to DECK_FILE and DECK_PROF in
+     test/regression_cases.sh pointing at this version, add its cases to
+     SMOKE_CASES / REGRESSION_CASES / OVERNIGHT_CASES (size from a timing probe;
+     mirror the sibling version), then run each tier and `--accept` to create its
+     ground truth.
+  3. *** NEVER REPOINT AN EXISTING KEY AT A DIFFERENT DECKLIST. *** ONE KEY PER
+     DECKLIST. A repointed key silently changes which deck it measures, so the
+     committed ground truth describes a list that case no longer plays: repointing
+     `kittyv2` at v3 made a stale baseline read as a +2.2620 regression
+     (test/regression_cases.sh, the kittyv2 block). Add a key; never move one.
+  4. A version's rows may be RETIRED later, once that version's value leaf and
+     mulligan profile are finished (user, 2026-10-14) -- and for a superseded list,
+     once the new version is shown to outperform it. That is a cleanup AFTER the
+     fact; it is never a reason to skip the gate now.
+================================================================================"""
+
+
+def sibling_keys(deck_path):
+    """-> [(key, relpath)] for suite keys whose decklist lives under the same top-level deck folder.
+
+    `decks/<Deck>/...` is the family. Used to tell "this deck is not in the suite at all" apart from
+    "this VERSION is not in the suite" -- two situations that need opposite advice, because the
+    second one's naive key guess COLLIDES with the sibling's existing key.
+    """
+    rel = os.path.relpath(os.path.abspath(deck_path), ROOT)
+    parts = rel.split(os.sep)
+    if len(parts) < 2:
+        return []
+    family = os.sep.join(parts[:2]) + os.sep          # e.g. "decks/WhiteKnights/"
+    return sorted((k, v) for k, v in _read_map("DECK_FILE").items() if v.startswith(family))
+
+
+def _version_key_guess(deck_path, stem, taken):
+    """A key name for a versioned decklist that does NOT collide with an existing one.
+
+    Follows the convention already in the suite (`kittyv2` / `kittyv3`): deck stem + the version
+    number off the `v<N>-<slug>` folder.
+    """
+    base = re.sub(r"[^a-z0-9_]", "", stem.lower()) or "deckkey"
+    parent = os.path.basename(os.path.dirname(os.path.abspath(deck_path)))
+    m = re.match(r"v(\d+)-", parent)
+    cand = f"{base}v{m.group(1)}" if m else base
+    if cand not in taken:
+        return cand
+    n = 2
+    while f"{cand}_{n}" in taken:
+        n += 1
+    return f"{cand}_{n}"
+
+
 def mode_require(deck_path):
     key = deck_key(deck_path)
     stem = os.path.splitext(os.path.basename(deck_path))[0]
     if key:
         print(f"suite gate: {stem} is regression key `{key}` -- ok")
         return 0
+    deck_rel = os.path.relpath(os.path.dirname(os.path.abspath(deck_path)), ROOT)
+    sibs = sibling_keys(deck_path)
+    if sibs:
+        # The deck family IS in the suite but this decklist is not -- so the plain message's
+        # "add [<stem>]" advice would name a key that already exists and points somewhere else.
+        taken = set(_read_map("DECK_FILE"))
+        listing = "\n".join(f"      {k:<16} -> {v}" for k, v in sibs)
+        sys.stderr.write(BLOCK_VERSION_MSG.format(
+            stem=stem, deck=deck_rel, siblings=listing,
+            guess=_version_key_guess(deck_path, stem, taken), mult=MULTIPLE) + "\n")
+        return 3
     guess = re.sub(r"[^a-z0-9_]", "", stem.lower()) or "deckkey"
-    sys.stderr.write(BLOCK_MSG.format(stem=stem, deck=os.path.relpath(os.path.dirname(
-        os.path.abspath(deck_path)), ROOT), guess=guess, mult=MULTIPLE) + "\n")
+    sys.stderr.write(BLOCK_MSG.format(stem=stem, deck=deck_rel,
+                                      guess=guess, mult=MULTIPLE) + "\n")
     return 3
 
 
