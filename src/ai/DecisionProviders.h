@@ -2003,6 +2003,24 @@ public:
     // True (the default) unless the proposed MTG_AURA_RATE_MARGINAL amendment is on: its marginal
     // credit reads the hand's kept Auras, so a multi-card cleanup is re-ranked per shed.
     bool CleanupDiscardShedStable() const override;
+    // Cast order: the USER-approved order (2026-10-14, "Otherwise the auras order seems okay"),
+    // TOTAL and UNCONDITIONAL -- the same on every turn, whether or not a Light-Paws is in play:
+    // Light-Paws > Kor > the other creatures (by name) > plain Auras (highest mana value first,
+    // weakest power first within one mana value, then by name) > scalers (highest mana value first)
+    // > restricted Auras ("enchant modified creature" before "another Aura attached"). Keyed on
+    // params; the name is only the final tie-break, so no two different cards ever compare equal.
+    // MTG_AURAS_ORDER (default ON; =0 -> GenericProvider's rank, byte-identical to ff3e205b).
+    // docs/design/auras-cast-order-2026-10-14.md.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // MTG_AURAS_ORDER_SEARCH (default OFF -- the USER's open question Q19): search the Aura order on a
+    // Light-Paws turn. Opens the engine's cast-ordering search for this deck, and CastOrderingCandidates
+    // hands it every distinct Aura order (approved order first) of a plan holding 2+ Auras on a turn
+    // with a Light-Paws in play or in the plan -- every other plan is left exactly as it was.
+    bool WantsCastOrderingSearch() const override;
+    bool CastOrderingCandidates(const GameState&, const std::vector<Action>& plan_actions,
+                                const std::vector<Action>& reorder,
+                                std::vector<std::vector<int>>& out) const override;
 };
 
 // Fluctuator cycling combo. This provider exists for a reason none of the others do: it does not

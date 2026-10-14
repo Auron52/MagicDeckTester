@@ -1758,9 +1758,63 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
         return false;
     };
     const bool more_fetches_coming = another_aura_soon();
+    // MTG_LP_FETCH_USER_RULE (heurarm LP_FETCH_USER_RULE, DEFAULT OFF -- the USER's open question Q20,
+    // docs/design/auras-cast-order-2026-10-14.md). The rule above reads "last fetch" as "no Aura of ANY mana
+    // value castable this turn OR NEXT", which is not what the USER said: the wording is the last fetch IN
+    // THE PLAN, and a later fetch only matters if it could still TAKE this scaler. Under the arm a scaler
+    // leads iff no later fetch of this turn's line can reach it:
+    //   * the line's remaining Aura casts are the hand's Auras in the deck's own cast order, each kept while
+    //     the mana left still pays it on top of the ones before it (AvailableManaPool = the untapped
+    //     sources plus the prepaid float the plan's later casts drain -- the plan itself is not visible at a
+    //     resolution, so "castable from what is left" stands in for "cast by the plan");
+    //   * walking them in order: a SAME-NAME copy first means ours is cast before another fetch can take it
+    //     (once it is controlled no fetch may name it) -> take it NOW, the USER's second clause; a cast of
+    //     mana value >= the scaler's first means that cast's fetch can still take it -> take the flat Aura;
+    //   * neither -> this is the last fetch that can reach it -> take it.
+    // A scaler that leads competes with the other leaders on realized power, so a Mask (+2 per other
+    // enchantment) beats a duplicate Armor (+1 each) whenever the Mask is also last-chance -- the draft's
+    // finding (b): the pre-arm rule let the Armor copy in hand outrank a Mask unconditionally.
+    static const bool s_lp_user_rule_env = EnvOn("MTG_LP_FETCH_USER_RULE");   // DEFAULT OFF (measurement arm)
+    const bool lp_user_rule = s_rank_mode == 4
+                           && heurarm::Flag(heurarm::LP_FETCH_USER_RULE, s_lp_user_rule_env);
+    std::vector<const Card*> line_auras;   // the rest of this turn's Aura casts, in cast order
+    if (lp_user_rule)
+    {
+        std::vector<std::pair<int, const Card*>> hand_auras;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.is_aura && !d->params.is_land_aura) { hand_auras.emplace_back(CastOrderRank(s, *d), &c); }
+        }
+        std::stable_sort(hand_auras.begin(), hand_auras.end(),
+                         [](const auto& x, const auto& y) { return x.first < y.first; });
+        const ManaPool left = AvailableManaPool(s);
+        ManaCost committed;
+        for (const auto& [rank, c] : hand_auras)
+        {
+            (void)rank;
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(*c);
+            const ManaCost need = AddManaCosts(committed, d->card.m_mana_cost);
+            if (!left.CanPay(need)) { continue; }
+            committed = need;
+            line_auras.push_back(c);
+        }
+    }
+    auto last_chance = [&](int i) -> bool {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+        const int m = d ? d->card.m_mana_cost.ManaValue() : 0;
+        for (const Card* c : line_auras)
+        {
+            if (c->m_name == ap.library[i].m_name) { return true; }   // our copy goes first: last chance
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(*c);
+            if (hd && hd->card.m_mana_cost.ManaValue() >= m) { return false; }   // its fetch can still take it
+        }
+        return true;
+    };
     // Under mode 4 a scaling candidate keeps its head start only when this is the last fetch, or when
     // that very Aura would otherwise arrive from hand first.
     auto mode4_scale_first = [&](int i) -> bool {
+        if (lp_user_rule) { return scales(i) && last_chance(i); }
         return scales(i) && (!more_fetches_coming || in_hand_by_name(i));
     };
     const bool scale_first_now = (s_rank_mode == 1)
@@ -6112,6 +6166,237 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
     if (slot >= 0) { shed.push_back(slot); }
     for (int k = hard_n - 1; k >= 0; --k) { shed.push_back(land_keep[k]); }
     return CleanupDiscardRankingCounted(s, required_pieces, shed);
+}
+
+// ---- AurasProvider::CastOrderRank: the USER-approved Auras cast order (2026-10-14) ---------------------
+//
+// USER, reviewing docs/design/cast-order-drafts-2026-10-14/Auras.md: "Otherwise the auras order seems okay.
+// (pending tests)", with one amendment -- "Maybe Lion Umbra before Daybreak just in case." / "So that you
+// could play 2 Daybreak." / "(if light paws is out)" -- and the same day's cross-deck ruling: "Let's fully
+// order the cards in each list inasmuch as possible. I don't like the randomness of choosing the order."
+// There was no earlier USER order for this deck: what played before was the generic creature-10 /
+// noncreature-20 tiers plus an agent sub-order (GenericProvider's Light-Paws block, MTG_AURA_CAST_ORDER),
+// which read the section's START board and so tied every Aura on the turn a Light-Paws was cast.
+//
+// The order, on the current list (land first, then every nonland card, one per position):
+//
+//   land > Light-Paws > Kor Spiritdancer > Gladecover Scout > Slippery Bogle > Armadillo Cloak >
+//   Alpha Authority > Spirit Mantle > Spirit Link > Gryff's Boon > Hyena Umbra > Spider Umbra >
+//   Audacity > Rancor > Ancestral Mask > All That Glitters > Ethereal Armor > Lion Umbra > Daybreak Coronet
+//
+// The rules that produce it (PARAMS, not names; the name is only the last key):
+//   * CREATURES FIRST. The Aura engines must be on the battlefield before any Aura is cast -- Light-Paws
+//     ("whenever an Aura you control enters, if you cast it": aura_cast_tutor_attach) ahead of Kor
+//     Spiritdancer ("whenever you cast an Aura spell, draw": draw_on_aura_cast / aura_self_buff_*) -- and
+//     every host must exist before an Aura targets it. The other creatures follow by name.
+//   * PLAIN AURAS (no aura_scale_*, no aura_enchant_requires): HIGHEST mana value first, so the big fetch
+//     brackets fire first and the 1-drop fetch comes last; within one mana value the WEAKEST first by
+//     aura_power_bonus (toughness, flying, first strike, reach, trample and lifelink are all worth 0 here
+//     -- the USER's valuation for this deck), so the stronger name is still fetchable when the weaker
+//     one's trigger resolves; equal power -> by name.
+//   * SCALERS (aura_scale_kind with aura_scale_power > 0) after every plain Aura, highest mana value first:
+//     Ancestral Mask > All That Glitters > Ethereal Armor. Armor last, so an earlier Light-Paws fetch can
+//     take a SECOND Armor while ours is still in hand (each scaler reads the enchantment count, so a
+//     duplicate compounds).
+//   * RESTRICTED AURAS LAST -- a legality rule (their host must already be enchanted / modified), so any
+//     other Aura of the plan is cast first. Among them "enchant modified creature" (Lion Umbra) goes BEFORE
+//     "enchant creature with another Aura attached" (Daybreak Coronet): with a Light-Paws out, the Lion
+//     Umbra's fetch (mana value <= 2, a name not yet controlled) can take a Coronet while ours is still in
+//     hand -- "so that you could play 2 Daybreak". The reverse spends the fetch on the one-of Lion Umbra.
+//
+// UNCONDITIONAL: the same on every turn, with or without a Light-Paws in play, so the turn a Light-Paws is
+// cast orders its Auras exactly like every later turn (the generic block cannot: its rank reads the start
+// board). TOTAL: every class is a distinct band and the name is the final key, so two different cards
+// never compare equal and plan / hand order never decides; only copies of one card tie, and those are
+// interchangeable. None of these cards is ORDER-OPAQUE (no draw / staging / cascade / trick params --
+// OrderingOpaque), so this rank IS the realised order in both the executor and the rollout apply.
+//
+// MTG_AURAS_ORDER (default ON; =0 -> GenericProvider's rank, byte-identical to ff3e205b).
+static bool AurasOrderOn()
+{
+    static const bool env = EnvOn("MTG_AURAS_ORDER", true);   // DEFAULT ON; =0 restores the generic rank
+    return heurarm::Flag(heurarm::AURAS_ORDER, env);
+}
+
+namespace auras_order
+{
+// The rank is (class << kNameBits) + name key. The NAME KEY is monotone in alphabetical order over the first
+// four characters (case-insensitive letter = 2..27, any other character = 1, past the end = 0; base 28, and
+// 28^4 = 614,656 < 2^20), so it needs no card-database state and a newly added card cannot move an existing
+// one. Four characters separate every pair this list can tie; the unit test asserts all 18 nonland names
+// rank apart, so a list change that collides is caught there rather than silently tied.
+constexpr int kNameBits = 20;
+
+int NameKey(const std::string& n)
+{
+    int k = 0;
+    for (std::size_t i = 0; i < 4; ++i)
+    {
+        int c = 0;
+        if (i < n.size())
+        {
+            const unsigned char ch = static_cast<unsigned char>(n[i]);
+            c = std::isalpha(ch) ? 2 + (std::tolower(ch) - 'a') : 1;
+        }
+        k = k * 28 + c;
+    }
+    return k;
+}
+
+// The class bands, earliest first.
+constexpr int kEarly              = 0;    // an unrecognised card the generic order puts before creatures
+constexpr int kLightPaws          = 1;    // aura_cast_tutor_attach
+constexpr int kKor                = 2;    // draw_on_aura_cast / aura_self_buff_*
+constexpr int kCreature           = 3;    // every other creature, by name
+constexpr int kMvCap              = 7;    // mana values above this share the top band
+constexpr int kPowSlots           = 8;    // power bonuses 0..7
+constexpr int kPlainBase          = 4;    // + (kMvCap - mv) * kPowSlots + power: 4..67
+constexpr int kScalerBase         = kPlainBase + (kMvCap + 1) * kPowSlots;   // + (kMvCap - mv): 68..75
+constexpr int kRestrictedModified = kScalerBase + kMvCap + 1;               // 76: enchant modified creature
+constexpr int kRestrictedAnother  = kRestrictedModified + 1;                // 77: another Aura attached
+constexpr int kRestrictedOther    = kRestrictedAnother + 1;                 // 78: any other requirement
+constexpr int kLate               = kRestrictedOther + 1;                   // 79: an unrecognised card
+
+bool IsCreatureAura(const CardDefinition& d) { return d.params.is_aura && !d.params.is_land_aura; }
+}   // namespace auras_order
+
+int AurasProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!AurasOrderOn()) { return GenericProvider::CastOrderRank(s, def); }
+    using namespace auras_order;
+    const CardParams& p = def.params;
+    const int mv = std::clamp(static_cast<int>(def.card.m_mana_cost.ManaValue()), 0, kMvCap);
+    int cls = kLate;
+    if (def.card.IsCreature())
+    {
+        if (p.aura_cast_tutor_attach)                          { cls = kLightPaws; }
+        else if (p.draw_on_aura_cast || p.aura_self_buff_power > 0) { cls = kKor; }
+        else                                                   { cls = kCreature; }
+    }
+    else if (IsCreatureAura(def))
+    {
+        if (p.aura_enchant_requires == "modified")          { cls = kRestrictedModified; }
+        else if (p.aura_enchant_requires == "another_aura") { cls = kRestrictedAnother; }
+        else if (!p.aura_enchant_requires.empty())          { cls = kRestrictedOther; }
+        else if (!p.aura_scale_kind.empty() && p.aura_scale_power > 0) { cls = kScalerBase + (kMvCap - mv); }
+        else
+        {
+            cls = kPlainBase + (kMvCap - mv) * kPowSlots + std::clamp(p.aura_power_bonus, 0, kPowSlots - 1);
+        }
+    }
+    else
+    {
+        // Not on the current list. Keep the generic order's one structural promise -- an accelerant
+        // (a rock, a ramp land Aura, a reducer) goes before the creatures -- and put anything else last.
+        cls = GenericProvider::CastOrderRank(s, def) < 10 ? kEarly : kLate;
+    }
+    return (cls << kNameBits) + NameKey(def.card.m_name.str());
+}
+
+const char* AurasProvider::CastOrderTierName(int rank) const
+{
+    if (!AurasOrderOn()) { return GenericProvider::CastOrderTierName(rank); }
+    using namespace auras_order;
+    const int cls = rank >> kNameBits;
+    if (cls == kEarly)     { return "EARLY: a card off the list the generic order puts before creatures (accelerant)"; }
+    if (cls == kLightPaws) { return "ENGINE: Light-Paws -- on the battlefield before any Aura, so every Aura cast fetches"; }
+    if (cls == kKor)       { return "ENGINE: Kor Spiritdancer -- before any Aura, so every Aura cast draws"; }
+    if (cls == kCreature)  { return "CREATURE: a host before the Auras that target it (by name)"; }
+    if (cls >= kPlainBase && cls < kScalerBase)
+    { return "PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name"; }
+    if (cls >= kScalerBase && cls < kRestrictedModified)
+    { return "SCALER: after every plain Aura, highest mana value first (an earlier fetch can take a second copy)"; }
+    if (cls == kRestrictedModified)
+    { return "RESTRICTED (enchant modified creature): last for legality, before Coronet so a fetch can take a 2nd Coronet"; }
+    if (cls == kRestrictedAnother) { return "RESTRICTED (another Aura attached): last for legality"; }
+    if (cls == kRestrictedOther)   { return "RESTRICTED (other enchant requirement): last for legality"; }
+    if (cls == kLate)              { return "LATE: a card off the list"; }
+    return nullptr;
+}
+
+// ---- MTG_AURAS_ORDER_SEARCH: the Aura order SEARCHED on Light-Paws turns (USER open question Q19) ------
+//
+// The rank above is a prune over what Light-Paws can fetch: the fetch target is the provider's pick
+// (LightPawsAuraCandidates().front()), so the cast order and the fetch ranking jointly decide which Auras
+// the line ends with. This arm lets the search try the other orders on the turns where that matters -- a
+// Light-Paws in play or cast by the plan, and 2+ Auras in the plan -- through the engine's existing
+// cast-ordering search (EnumeratePlans' OrderingSearchEnabled expansion: each ordering is APPLIED on a
+// copy and deduplicated by end-of-phase state, and the restricted-Aura-before-enabler / Aura-before-its-
+// creature orderings are dropped there). The approved order is the FIRST candidate, so it survives every
+// dedup; creatures keep their slots ahead of the Auras. Every other plan returns no candidates, which the
+// caller treats as "keep the plan exactly as it was" (no searched_order flag, no extra apply). Orders are
+// distinct NAME sequences (copies of one card do not multiply); a plan with more than 120 of them keeps
+// the approved order only, the engine's own cap. DEFAULT OFF: measured for the USER, not shipped.
+static bool AurasOrderSearchOn()
+{
+    static const bool env = EnvOn("MTG_AURAS_ORDER_SEARCH");   // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AURAS_ORDER_SEARCH, env);
+}
+
+bool AurasProvider::WantsCastOrderingSearch() const { return AurasOrderSearchOn(); }
+
+bool AurasProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                           const std::vector<Action>& reorder,
+                                           std::vector<std::vector<int>>& out) const
+{
+    (void)plan_actions;
+    out.clear();
+    if (!AurasOrderSearchOn()) { return true; }
+    auto def_of = [](const Action& a) -> const CardDefinition*
+    { return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name); };
+    bool light_paws = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.aura_cast_tutor_attach) { light_paws = true; break; }
+    }
+    for (const Action& a : reorder)
+    {
+        const CardDefinition* d = def_of(a);
+        if (d && d->params.aura_cast_tutor_attach) { light_paws = true; }
+    }
+    if (!light_paws) { return true; }
+    std::vector<int> canon(reorder.size());
+    for (std::size_t i = 0; i < canon.size(); ++i) { canon[i] = static_cast<int>(i); }
+    std::stable_sort(canon.begin(), canon.end(), [&](int x, int y) { return CastOrderLess(s, reorder[x], reorder[y]); });
+    std::vector<std::size_t> slots;   // positions of canon holding an Aura
+    std::vector<int>         auras;   // the Auras there (indices into reorder)
+    for (std::size_t k = 0; k < canon.size(); ++k)
+    {
+        const CardDefinition* d = def_of(reorder[canon[k]]);
+        if (d && auras_order::IsCreatureAura(*d)) { slots.push_back(k); auras.push_back(canon[k]); }
+    }
+    if (auras.size() < 2) { return true; }
+    auto by_name = [&](int x, int y) { return reorder[x].card_name.str() < reorder[y].card_name.str(); };
+    std::vector<int> perm = auras;
+    std::sort(perm.begin(), perm.end(), by_name);
+    // Distinct name sequences = n! / prod(copies!); over the cap -> the approved order alone.
+    {
+        long long n_orders = 1;
+        for (std::size_t k = 2; k <= perm.size(); ++k) { n_orders *= static_cast<long long>(k); }
+        std::size_t run = 1;
+        for (std::size_t k = 1; k <= perm.size(); ++k)
+        {
+            if (k < perm.size() && reorder[perm[k]].card_name == reorder[perm[k - 1]].card_name) { ++run; continue; }
+            for (std::size_t f = 2; f <= run; ++f) { n_orders /= static_cast<long long>(f); }
+            run = 1;
+        }
+        if (n_orders > 120) { return true; }
+    }
+    out.push_back(canon);
+    do
+    {
+        std::vector<int> o = canon;
+        bool same = true;
+        for (std::size_t k = 0; k < slots.size(); ++k)
+        {
+            o[slots[k]] = perm[k];
+            if (reorder[perm[k]].card_name != reorder[canon[slots[k]]].card_name) { same = false; }
+        }
+        if (!same) { out.push_back(std::move(o)); }
+    } while (std::next_permutation(perm.begin(), perm.end(), by_name));
+    return true;
 }
 
 // ---- DIG OFFER UTILITIES (see DecisionProviders.h) -------------------------------------------------------
