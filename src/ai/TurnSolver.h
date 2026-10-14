@@ -2077,6 +2077,22 @@ public:
     // below), which no later Treasure can meet -- the mint-line hold decline does not apply to it.
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false);
+    // A CAST ORDER'S PAYABILITY, AS THE APPLY WORLDS REALISE IT -- the projection a provider's
+    // ArrangeCastOrder uses when an order may only move "when the line is otherwise unpayable" (the
+    // EDF land-Aura range, MTG_EDF_AURA_RANGE). Both work on a scratch copy; `state` is untouched.
+    //   OrderPrepaysWholeTurn  -- the whole-turn prepay (BatchPrepayMainCasts) pays the casts in `order`
+    //                             jointly, which is what both apply worlds try first; then the order
+    //                             cannot decide payability.
+    //   OrderPaysSequentially  -- each cast in `order`, as given, paid one at a time on the board the
+    //                             casts before it leave: the enumeration's own sequential walk
+    //                             (SubsetPayableSequential's body -- live costs, the ETB-untap tap-ahead
+    //                             and untap, a land Aura's bonus on its declared host), so the arranged
+    //                             order and the walk that admits a subset agree. False for any action
+    //                             kind the walk does not model.
+    static bool OrderPrepaysWholeTurn(const GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& order);
+    static bool OrderPaysSequentially(const GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& order);
     // MTG_MINT_CREDIT_EXACT -- the base pool's share of a HOISTED-MINTER line, paid jointly. The
     // whole-turn prepay above cannot pay a line the mint funds (its bill exceeds the board by
     // construction), so every such line fell to the per-cast greedy, whose "leave out if you can"
