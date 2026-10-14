@@ -251,11 +251,11 @@ TEST_CASE("Dig searched choice: MTG_DIG_SEARCHED_CHOICE=0 restores the automatic
 
 TEST_CASE("Dig searched choice: gi1106 T2 -- main 1 offers the cycle AND the mana-keeping pass")
 {
-    // The state of test_main2_dig_defer.cpp: Stomping Ground + Blood Crypt + Birds untapped, the drop
+    // FiveColour gi1106 (seed 6211107): Stomping Ground + Blood Crypt + Birds untapped, the drop
     // made, Faeburrow withheld to main 2 by the USER phase rule, a Zagoth Triome in hand -- main 1
     // enumerates nothing, so the search's pass is the whole decision. With its no-dig twin in the list
-    // the deferral (MTG_DIG_DEFER_MAIN2) no longer touches the pass marked 2: cycle-now and
-    // keep-the-mana are both SEARCHED, instead of one being deleted by a rule.
+    // cycle-now and keep-the-mana are both SEARCHED, instead of one being deleted by a rule (the
+    // 2026-10-13 deferral patch, MTG_DIG_DEFER_MAIN2, was deleted 2026-10-14).
     EnsureCardsLoaded();
     heurarm::Clear();
     SearchedPlayScope searched;
@@ -276,7 +276,6 @@ TEST_CASE("Dig searched choice: gi1106 T2 -- main 1 offers the cycle AND the man
                            "Maelstrom Archangel", "Island", "Zagoth Triome" })
     { pre.players[0].hand.push_back(NumberedCard(n, num++)); }
     for (int k = 0; k < 10; ++k) { pre.players[0].library.push_back(NumberedCard("Forest", 900 + k)); }
-    REQUIRE(TurnSolver::Main1DigDefersToMain2(pre));
     const std::vector<TurnSolver::Plan> m1 = TurnSolver::IdlePassWithDigSiblings(pre);
     REQUIRE(m1.size() == 2);
     {   // dig now: not deferred (the twin is the no-dig world)

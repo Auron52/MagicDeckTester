@@ -20280,8 +20280,10 @@ bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState
 // actually PLAYS a second main (GoldFishRunner::DeckUsesSecondMain; see ClassifiesMainPhases).
 // ...PROVIDED main 1's APPLY leaves the deferred cast its mana: an unfiltered enumeration emits
 // nothing it cannot pay for. The one implicit end-of-main-1 spend that did not know about the
-// deferral was the heuristic dig, and it deleted FiveColour's Faeburrow (see
-// TurnSolver::Main1DigDefersToMain2, MTG_DIG_DEFER_MAIN2). The drip / pain sweeps already keep
+// deferral was the heuristic dig, and it deleted FiveColour's Faeburrow (gi1106). That dig is a
+// SEARCHED choice now (MTG_DIG_SEARCHED_CHOICE: every base plan carries a no-dig twin, so "keep the
+// mana for main 2" is a scored world); the 2026-10-13 patch that made it wait for main 2
+// (MTG_DIG_DEFER_MAIN2) was deleted 2026-10-14 (USER). The drip / pain sweeps already keep
 // their lands for main 2 (DripManaWantedLaterThisTurn, TapPainSourcesIfUseful).
 // This generalises DeferSacOutletPreCombat above from sac outlets to the whole cast enumeration:
 // partitioning the two mains is what shrinks the joint plan space multiplicatively, and it is
@@ -20428,74 +20430,6 @@ static bool PhaseFilterProwessAccess(const GameState& state, HasteFn&& haste_acc
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
         if (!hd || !hd->card.HasKeyword(Keyword::Prowess)) { continue; }
         if (hd->card.HasKeyword(Keyword::Haste) || haste_access()) { return true; }
-    }
-    return false;
-}
-
-// MAIN 1 IS NOT THE END OF A SPLIT TURN (MTG_DIG_DEFER_MAIN2, DEFAULT ON).
-//
-// The filter's whole licence is "the post-combat pass is never filtered, so a Main2 class MOVES a line,
-// it cannot delete one". That holds for the ENUMERATION, but main 1's apply does not end at its plan:
-// ApplyPlanDirect then runs the provider's heuristic "dig when stuck" (cycling / sac-to-draw; a plain
-// heuristic for every deck that does not opt into the searched dig axis -- the USER's 2026-09-29
-// ruling), and AIEngine's reactive m1 dig does the same in real play. On a split turn main 1 is
-// "stuck" BY CONSTRUCTION -- the filter took its casts away -- so the dig fires, taps the mana the
-// deferred cast was waiting for, and the post-combat enumeration (which really is unfiltered) has
-// nothing left to emit it with. The class deleted the line.
-//
-// MEASURED: FiveColour gi1106 (seed 6211107) at d8/b0. T2 holds Faeburrow Elder (USER phase rule:
-// Main2 without Greaves) with Stomping Ground + Blood Crypt + Birds untapped. Every main-1 plan that
-// made an untapped drop cycled Zagoth Triome for {3} (GenericProvider::ShouldConsiderDig counts LANDS, 2,
-// against Faeburrow's MV 3; Birds is not a land), main 2 enumerated only "(pass)", Faeburrow slipped
-// to T3 and the game to T5; PHASE=0 casts it in main 1 before the dig can fire and wins T4.
-// MTG_GENERIC_DIG=0 also wins T4, which is what isolated the dig. (Read off MTG_M2T_TRACE=3: the m2
-// DECISION after "land=Wooded Foothills" / "land=Island" showed every source tapped, the Triome gone
-// from hand and plans=1.) With the lever: T4 at d8/b0, at the shipped d6/b20 and at d3/b10.
-// Train seeds (FiveColour d3/d5 s2002/s3003): 9 games faster, 0 slower; smoke avgs unchanged.
-//
-// THE FIX MOVES THE DIG, IT DOES NOT CANCEL IT: while a WITHHELD cast (Main2 at this state, prowess
-// stand-down respected -- the filter's own test) is still payable here, main 1's heuristic dig waits,
-// and ApplyPlanDirect's dig loop runs again at the end of main 2 (both mains since D7), after the
-// post-combat plan's casts. So main 2 is offered {cast it, pass}, and "pass" still digs. The searched
-// dig variants (Plan::dig_choice 0 / 1, DigDecisionSearched decks) are explicit choices and are left
-// alone; only the heuristic default (-1) waits. PaymentManaCovers false is a proof of unpayability, so
-// the dig waits for nothing that could not be cast. Gated on MainPhaseFilterActive, so d0, human play,
-// single-main decks and every deck without the filter are byte-identical. =0 restores the main-1 dig.
-bool TurnSolver::Main1DigDefersToMain2(const GameState& state)
-{
-    static const bool s_env = EnvOn("MTG_DIG_DEFER_MAIN2", true);   // DEFAULT ON; =0 -> the m1 dig
-    if (!heurarm::Flag(heurarm::DIG_DEFER_MAIN2, s_env)) { return false; }
-    if (!MainPhaseFilterActive(state)) { return false; }
-    const DecisionProvider& prov = ResolveProvider(state);
-    bool inputs_ready = false, haste_access = false, scaling_attacker = false;
-    auto inputs = [&]()
-    {
-        if (inputs_ready) { return; }
-        haste_access     = HasteAccessThisTurn(state);
-        scaling_attacker = BoardHasScalingAttacker(state);
-        inputs_ready     = true;
-    };
-    if (PhaseFilterProwessAccess(state, [&]() { inputs(); return haste_access; })) { return false; }
-    const int floating = static_cast<int>(state.floating_mana.Total());
-    for (const Card& c : state.ActivePlayer().hand)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d == nullptr || d->card.IsLand()) { continue; }
-        DecisionProvider::MainPhase mp;
-        if (auto o = prov.MainPhaseOverride(state, *d)) { mp = *o; }
-        else
-        {
-            Action a;
-            a.kind      = Action::Kind::CastFromHand;
-            a.def       = d;
-            a.card_name = d->card.m_name;
-            a.cost      = d->card.m_mana_cost;
-            inputs();
-            mp = ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker);
-        }
-        if (mp != DecisionProvider::MainPhase::Main2) { continue; }
-        const int need = EffectiveCost(*d, state).ManaValue() - floating;
-        if (PaymentManaCovers(state, d->card.IsCreature(), need)) { return true; }
     }
     return false;
 }
@@ -29899,7 +29833,6 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // prowess creature in hand that could attack same-turn (own haste or haste access).
         // Suite-caught: without this, burn's plain bolts classified Main2 and starved Monastery
         // Swiftspear (+0.39 avg at every depth).
-        // (Shared with TurnSolver::Main1DigDefersToMain2, which must agree on what was withheld.)
         const bool prowess_access = PhaseFilterProwessAccess(
             state, [&]() { classifier_inputs(); return haste_access; });
         if (!prowess_access)
@@ -44424,16 +44357,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // gated only on affordability, -1 (default, and every non-opted deck) keeps the heuristic.
     // BOTH mains (D7, purge step 14): main 2 used to be excluded, so a line that cycles or sacs a
     // land in the second main was inexpressible -- lockstep with the executor's reactive dig.
-    // MAIN 1 IS NOT THE END OF A SPLIT TURN (MTG_DIG_DEFER_MAIN2): while a cast the main-phase
-    // filter withheld from this main is still payable, the HEURISTIC dig (dig_choice -1) waits for
-    // main 2's pass of this same loop instead of spending that cast's mana -- see
-    // TurnSolver::Main1DigDefersToMain2. Lockstep with AIEngine::UseSurplusLandAbilities.
     // 2 (MTG_DIG_SEARCHED_CHOICE): a base plan whose NO-DIG TWIN is in the same candidate list -- the
-    // same gate as -1, but never deferred: the twin is the searched no-dig world, so deferring would only
-    // delete the dig-now line (see the mark at the end of AppendSubdecisionAxes).
+    // same gate as -1; the twin is the searched no-dig world (see the mark at the end of
+    // AppendSubdecisionAxes).
     if (!s_human_play && plan.dig_choice != 0
-        && ResolveProvider(state).HasAnyDigSource(state)
-        && !(is_pre_combat && plan.dig_choice < 0 && TurnSolver::Main1DigDefersToMain2(state)))
+        && ResolveProvider(state).HasAnyDigSource(state))
     {
         bool dig_census_counted = !DigCensusOn();   // MTG_DIG_CENSUS: count this apply once, if it digs
         // DigChain: both stopping conditions are provider-owned (see MaxDigsPerTurn /
@@ -54103,10 +54031,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // ---- THE BASE OF A NO-DIG TWIN IS MARKED 2 (MTG_DIG_SEARCHED_CHOICE; the dig axis above) ------
     // Marked HERE, after every axis has cloned, so no later clone inherits a mark it did not earn: a
     // clone has no twin, keeps -1, and stays the heuristic default (the residual MTG_DIG_CENSUS counts).
-    // 2 runs exactly the gate the base ran at -1 -- with ONE difference: MTG_DIG_DEFER_MAIN2 does not
-    // apply to it. The deferral exists to keep a withheld Main2 cast's mana when main 1's dig was the
-    // only world; with the twin in the list the no-dig world is SEARCHED, so deferring the base too would
-    // only delete the dig-in-main-1 line (a lossy gate on a searched choice).
+    // 2 runs exactly the gate the base ran at -1; with the twin in the list the no-dig world is SEARCHED.
     for (const std::pair<std::size_t, int>& t : dig_twinned)
     {
         all[t.first].dig_choice = 2;
