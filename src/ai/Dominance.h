@@ -221,6 +221,17 @@ static_assert(std::is_trivially_copyable_v<Permanent>,
 // is held for the rest of the game, never reset at untap, and CR 114 gives neither player any way to
 // remove it), which again does not make it droppable, because this is an equality key and not an
 // ordering.
+// 200 -> 200 (2026-10-14, The Mycotyrant): Player gained `gy_size_at_turn_start` (int, DESCEND's
+// per-turn baseline) and THE SIZE DID NOT MOVE -- it was DELIBERATELY declared immediately after
+// `life`, in the four bytes of padding that preceded `hand`'s 8-byte alignment, so this tripwire did
+// NOT fire. That is the emblem_team_pump entry's blind spot again, so it is logged here: both
+// layouts were compiled and printed (beside the graveyard it is 208/1096; at offset 4 it is
+// 200/1080), because GameState is deep-copied per search node on the heaviest deck in the suite.
+// Classification: GAME STATE, and it IS folded in Build() below -- gated on GyR_DescendCount, as
+// the two operands (graveyard size, this baseline) rather than the derived descend count. It is
+// future-determining for a deck holding a descend reader: two states differing only in whether a
+// Peat Bog has sacrificed itself make a different number of end-step tokens. The gate is what keeps
+// every other deck byte-identical, and a clear bit PROVES no card in the game reads descend.
 static_assert(sizeof(Player) == 200,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -393,6 +404,10 @@ static_assert(sizeof(Player) == 200,
 // classification as `deck_has_spell_tax` / `deck_has_attack_threshold` above: a DECK CONSTANT stamped
 // once in StampDeckTraits that only skips a provably-empty walk (AppendSubdecisionAxes' per-node
 // library scan), so it is identical across every pair of states Build() compares -- nothing to fold.
+// +0 (2026-10-14, The Mycotyrant/DESCEND; NO size change): GameState itself gained no field -- the
+// new state is Player::gy_size_at_turn_start, placed in Player's offset-4 padding so neither this
+// number nor Player's moved (see the 200 -> 200 entry above for the measurement and the fold).
+// `GyR_DescendCount` is a new bit in the existing deck_gy_readers mask, not a new field.
 static_assert(sizeof(GameState) == 1080,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -981,6 +996,26 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
             { fold(0x7C05ull); fold(n_land); fold(n_inst_sorc); fold(n_creature); }
             if (gy_bits & GyR_ColorDemand)
             { fold(0xC01Dull); for (std::uint64_t v : pips) { fold(v); } }
+        }
+        // DESCEND (The Mycotyrant): the graveyard's SHAPE, folded as its two operands rather than
+        // the derived count, exactly as BuildSimKey does -- O(1) and strictly finer, see the note
+        // there. Kept OUTSIDE the `gy_bits != GyR_None` block above on purpose: that block's loop
+        // is about card IDENTITY and TYPES, and this reader observes neither, so bundling them
+        // would make a shape fold pay for a per-card LookupCached walk it has no use for.
+        //
+        // Build() is called at a turn BOUNDARY, where descend has already been read by the end step
+        // and the next turn's rebase has not happened yet, so this is a DEFENSIVE fold in the same
+        // sense as the per-turn counters above ("equal across siblings at the same boundary, folded
+        // so they cannot silently differ") -- not a known hole. Gated, so every non-descend deck
+        // keeps a byte-identical key -- in every STAMPED path. An unstamped state (the scenario
+        // harness; `deck_gy_readers` defaults to 0xFFFFFFFF and only SetupGame stamps it) folds it
+        // for every deck, which is the safe direction for a new fold and is argued where its twin
+        // lives, in TurnSolver's BuildSimKey.
+        if (gy_bits & GyR_DescendCount)
+        {
+            fold(0xDE5Cull);
+            fold(static_cast<std::uint64_t>(p.graveyard.size()));
+            fold(static_cast<std::uint64_t>(p.gy_size_at_turn_start));
         }
         // The OPPONENT's hand/life are folded here only for the non-active player's hand; our own
         // hand is the directional axis below.

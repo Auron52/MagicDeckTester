@@ -90,6 +90,13 @@ enum GyReader : std::uint32_t
     GyR_LandsEdgeNames  = 1u << 4,  // Land's Edge definition lookup falls through to the graveyard
     GyR_TypeCounts      = 1u << 5,  // Deathrite: COUNTS of land / instant-or-sorcery / creature cards
     GyR_ColorDemand     = 1u << 6,  // ChosenFloatColorCandidates: coloured pips over NONLAND gy cards
+    // DESCEND (The Mycotyrant). The first reader here that observes the graveyard's SHAPE rather
+    // than its contents: DescendedThisTurn() = the permanent cards in graveyard[gy_size_at_turn_start
+    // .. end), i.e. how many permanent cards arrived THIS TURN. Without this bit two states that
+    // differ only in whether a Peat Bog was sacrificed share a key -- and their end steps make a
+    // different number of tokens, so they reach different boards. Correct for Fungus TODAY, because
+    // it sets no bit at all and has no descend reader; wrong the moment one is on the battlefield.
+    GyR_DescendCount    = 1u << 7,
 };
 
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
@@ -227,7 +234,14 @@ struct GameState
     // plan -- the old shared id 0 collapsed them to one), and an addressable viewer choice. The
     // counter lives on the state so search branches fork it: the same line assigns the same ids in
     // the rollout and the executor (lockstep by construction).
-    int                      next_token_number     = 1000;
+    // The base, NAMED, because it is also a PREDICATE: `m_number >= kFirstTokenNumber` is how a
+    // bare Card (one that has left the battlefield and lost Permanent::is_token) is known to be a
+    // token. Several sites already open-code `>= 1000` for exactly that; DescendedThisTurn needs it
+    // because tokens DO reach the graveyard vector at the unguarded sacrifice sites -- see the note
+    // on that function. Exact in both directions by construction: every creation helper draws from
+    // this counter, and deck cards are numbered 1..N (N ~= 75 with a sideboard).
+    static constexpr int     kFirstTokenNumber     = 1000;
+    int                      next_token_number     = kFirstTokenNumber;
     // Per-copy id for the passive opponent's SCHEDULED SPAWNS (the "1/1 Creature" bodies made at
     // GameEngine's turn start and by the rollout's twin), from this base up (2026-09-16). They used
     // to share id 0 -- "never targeted" -- but a blink outlet targets ANY creature: with a shared id

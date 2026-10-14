@@ -1,0 +1,36 @@
+{
+  "deck": "decks/Fungus/candidate-b-2026-09/Fungus.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 40,
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "_comment": "Fungus candidate-B / The Mycotyrant (2026-10-14). THE CDA REACHING COMBAT DAMAGE, which is the one path the unit tests cannot pin: they assert DynamicBasePower/DynamicBaseToughness and LethalToughness directly, and this asserts that the number those return is what the opponent's life actually loses. Printed P/T is */* = 0/0, so a regression that drops the CDA from the combat sum does not produce a small error -- the creature deals ZERO. BOARD: The Mycotyrant (Fungus), Utopia Mycon (0/2 Fungus), Mycoloth (4/4 Fungus) and Shroofus Sproutsire (1/1 Saproling, trample), i.e. FOUR creatures matching 'Fungi and/or Saprolings', so the Mycotyrant is a 4/4 -- counting ITSELF, which is the clause that keeps it off 0/0. Shroofus is in the board deliberately: it is the only Saproling CARD in the pool (every other matching creature is a Fungus), so without it this fixture would exercise only half the subtype filter. DAMAGE LEDGER for the one attack: Mycotyrant 4 + Mycoloth 4 + Shroofus 1 + Utopia Mycon 0 = 9, so 40 -> 31. No blocking is modelled, so every point reaches the face and trample is inert. Three things that could have perturbed the arithmetic and provably do not: Mycoloth's upkeep makes one Saproling PER +1/+1 COUNTER and it has none (devour applies only as it enters, and it is already on the battlefield); the spore Thallids gain their first spore counter at this upkeep and need THREE to make anything; and Shroofus's own 'whenever a Saproling you control deals combat damage' trigger does fire (it is itself a Saproling dealing 1) but resolves AFTER combat damage, so it adds a body, not damage. A regression that reads a static P/T for the Mycotyrant lands on 35; one that counts only Fungi and not Saprolings lands on 32 (a 3/3); one that double-counts a creature matching two filter entries lands lower still.",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Utopia Mycon"
+    },
+    {
+      "name": "Mycoloth"
+    },
+    {
+      "name": "Shroofus Sproutsire"
+    },
+    {
+      "name": "The Mycotyrant"
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "expect_opponent_life": 31
+}

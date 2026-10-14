@@ -24,6 +24,45 @@ struct SuspendedCard
 struct Player
 {
     int life                       = 20;
+    // DESCEND, The Mycotyrant: "X is the number of times you descended this turn", where you
+    // descend "each time a permanent CARD is put into your graveyard from anywhere". This is the
+    // graveyard's SIZE at the start of this player's turn, refreshed at BOTH untap sites in
+    // lockstep with cards_drawn_this_turn below; DescendedThisTurn() (SpellEffects.h) counts the
+    // permanent cards in graveyard[this .. end).
+    //
+    // IT SITS BESIDE AN UNRELATED FIELD FOR A LAYOUT REASON, and the reason is measured. The four
+    // bytes at offset 4 were padding before `hand`'s 8-byte alignment, so here the int is free:
+    // sizeof(Player) stays 200 and sizeof(GameState) stays 1080. Declared beside the graveyard or
+    // the per-turn counters -- its natural homes -- it instead lands after a full 8-byte slot and
+    // costs 8 on Player, hence 16 on GameState, which the search deep-copies at EVERY NODE on the
+    // heaviest deck in the suite. Both layouts were compiled and printed (208/1096 there,
+    // 200/1080 here), not reasoned about. Same trick, same justification, as
+    // GameState::deck_reads_lifegain_in_play.
+    //
+    // WHY A SNAPSHOT AND NOT AN EVENT COUNTER. The faithful model is a counter incremented wherever
+    // a permanent card reaches the graveyard -- and there are 76 `graveyard.push_back` sites in
+    // src/ with no chokepoint (EffectHandler::MoveToGraveyard covers only the stack->graveyard trip
+    // of a resolved spell, not deaths, sacrifices, depletion lands or a faded Saproling Burst).
+    // Instrumenting all 76 is a wide change to a mature engine for one card, and its failure mode
+    // is SILENT UNDER-COUNTING. Deriving the count from the DESTINATION zone is complete for every
+    // source zone by construction instead, and it excludes TOKENS for free -- a token ceasing to
+    // exist never reaches this vector -- which is exactly the rule the card needs and the thing
+    // most likely to be modelled wrong (this deck makes ~40 Saprolings a game and sacrifices most
+    // of them; not one is a descend).
+    //
+    // THE SIZE, NOT A PERMANENT-CARD COUNT, and that is a cost decision with a correctness
+    // argument behind it. A count snapshot needs the current count too, i.e. a full graveyard walk
+    // with a LookupCached per card at every read -- and BuildSimKey, one of the readers, is ~15% of
+    // runtime on the one deck whose sacrifice engine makes the graveyard the fastest-growing zone
+    // on the board. A size snapshot makes a read O(cards that arrived this turn), usually zero.
+    // The two forms are EXACT under the same condition -- the graveyard is append-only within the
+    // turn -- and degrade the same way when it is not: a card that leaves and returns in one turn
+    // counts once instead of twice, and one that merely leaves lowers the count. Nothing in a
+    // descend deck's pool moves a card out of a graveyard (no recursion, flashback, escape or
+    // exile-from-graveyard), and the GyR_DescendCount gate means no other deck computes this at
+    // all. If a recursion card ever shares a list with a descend reader, this must become real
+    // event counting.
+    int gy_size_at_turn_start      = 0;
     std::vector<Card> hand;
     Library           library;      // index 0 = top of library
     std::vector<Card> graveyard;

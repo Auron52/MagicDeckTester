@@ -897,6 +897,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.power_equals_creature_count  = params.value("power_equals_creature_count", false);
     p.toughness_equals_creature_count = params.value("toughness_equals_creature_count", false);
     p.toughness_equals_devotion_color = params.value("toughness_equals_devotion_color", std::string{});
+    // The Mycotyrant's subtype-filtered CDA (see CardParams). Empty = off.
+    for (const std::string& s : params.value("pt_equals_creatures_you_control_subtypes", json::array()))
+        p.pt_equals_creatures_you_control_subtypes.push_back(s);
 
     // --- Snow (see the CardParams snow block) ---
     p.pt_equals_snow_permanents_you_control   = params.value("pt_equals_snow_permanents_you_control", false);
@@ -1224,6 +1227,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("endstep_token_keywords", json::array()))
         p.endstep_token_keywords.push_back(s);
     p.endstep_token_ascend_copy           = params.value("endstep_token_ascend_copy", false);
+    p.endstep_tokens_equal_descend        = params.value("endstep_tokens_equal_descend", false);
     p.ascend                              = params.value("ascend", false);
     p.etb_opp_creatures_debuff      = params.value("etb_opp_creatures_debuff", 0);
     p.opp_dies_life_loss            = params.value("opp_dies_life_loss", 0);

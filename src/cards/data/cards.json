@@ -8921,6 +8921,41 @@
    }
   },
   {
+   "name": "The Mycotyrant",
+   "mana_cost": "{1}{B}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Elder",
+    "Fungus"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "Trample\nThe Mycotyrant's power and toughness are each equal to the number of creatures you control that are Fungi and/or Saprolings.\nAt the beginning of your end step, create X 1/1 black Fungus creature tokens with \"This token can't block,\" where X is the number of times you descended this turn. (You descend each time a permanent card is put into your graveyard from anywhere.) [THE CDA IS THE CARD. Printed */* is modelled as power/toughness 0 plus pt_equals_creatures_you_control_subtypes [Fungus, Saproling], read live on BOTH axes through DynamicBasePower/DynamicBaseToughness -- the Adeline / Abominable Treefolk pattern. ONE POOL: a creature that is both a Fungus and a Saproling counts ONCE (\"Fungi and/or Saprolings\"), which CreatureSubtypeCount's break enforces. It is itself a Fungus and its own tokens are Fungi, so it counts itself and them; alone on an empty board it is a 1/1 and never dies to the toughness SBA, which is load-bearing because 0/0 is what the SBA would otherwise see. The subtype test runs against the PERMANENT'S OWN Card, not a definition lookup, because every Saproling here is a TOKEN and a token has no CardDefinition -- the same token-safe route Sporecrown Thallid's lord and Brightcap Badger's mana grant already take. In this deck that makes a three-mana creature that is routinely an 8/8 or larger, and it stacks with Sporecrown's Fungus lord.\nDESCEND COUNTS CARDS, NOT TOKENS, and getting that backwards would make the end-step clause look like the best card in the deck instead of a near-dead rider. A token is not a card, so the ~40 Saprolings this deck creates and sacrifices every game contribute EXACTLY ZERO: Utopia Mycon, Psychotrope Thallid and a Mycoloth devouring tokens are all descend-silent. Nor is X cumulative -- \"this turn\" resets it -- so the real sources are a trickle of one-offs: a Peat Bog or Hickory Woodlot sacrificing itself on depletion, a Saproling Burst fading out, a creature CARD dying. X is realistically 0 or 1, occasionally 2. Modelled as endstep_tokens_equal_descend on the shared PerformEndStepLifegainTokens trigger (called in lockstep from GameEngine::EndStep and TurnSolver::SimulateEndAndStartNextTurn, or the rollout projects a board the real game keeps growing), with the count read from DescendedThisTurn() -- the turn-start graveyard snapshot, complete for every source zone because it reads the destination. NO INTERVENING-IF: the trigger fires on a turn with no descend and simply makes nothing, hence endstep_tokens_unconditional.\nTHE TOKENS ARE FUNGUS, NOT SAPROLING, and that is not cosmetic: the deck's three \"Sacrifice a Saproling\" outlets cannot eat them, while they DO raise this creature's own P/T by one each.\nLEGENDARY (CR 704.5j), so the battlefield holds one and extra copies are draws that do nothing -- which caps any sensible count at 1-2.\nPARTIAL: trample is parsed but PROVABLY INERT -- no blocking is modelled, so all combat damage already reaches the face. PARTIAL: the tokens' \"This token can't block\" is INERT for the twin reason -- the passive opponent never attacks, so we are never offered a block. Both are the same disclosure convention Archangel of Thune's flying and Abominable Treefolk's trample carry. PARTIAL: a permanent card that LEAVES this player's graveyard and returns in the same turn is counted once rather than twice, because the descend count is derived from a turn-start snapshot rather than from 76 instrumented graveyard-push sites. Provably inert in this pool -- nothing here moves a card out of a graveyard (no recursion, flashback, escape or exile-from-graveyard) -- and the GyR_DescendCount gate means no other deck computes the count at all. If a recursion card ever shares a list with a descend reader this must become real event counting.]",
+   "template": "custom",
+   "parameters": {
+    "pt_equals_creatures_you_control_subtypes": [
+     "Fungus",
+     "Saproling"
+    ],
+    "endstep_tokens_equal_descend": true,
+    "endstep_tokens_unconditional": true,
+    "endstep_token_power": 1,
+    "endstep_token_toughness": 1,
+    "endstep_token_color": "B",
+    "endstep_token_subtypes": [
+     "Fungus"
+    ]
+   }
+  },
+  {
    "name": "Simic Growth Chamber",
    "mana_cost": "",
    "types": [

@@ -685,6 +685,25 @@ struct CardParams
     // letter ("W"); empty = off. Toughness-only: deliberately NOT in DynamicBasePower and NOT in
     // the combat-feeder lists (a toughness CDA feeds no damage).
     std::string toughness_equals_devotion_color;
+    // The Mycotyrant (printed */*): "power and toughness are each equal to the number of creatures
+    // you control that are Fungi and/or Saprolings." The subtype-FILTERED twin of
+    // power_equals_creature_count above, setting BOTH axes through
+    // DynamicBasePower/DynamicBaseToughness (JSON power/toughness are 0). An OR-filter over the
+    // list, and each creature is counted ONCE however many entries it matches -- "Fungi and/or
+    // Saprolings" is one pool, the same reading as RefreshStoriedLatch's "artifacts, legendaries,
+    // and/or Sagas". That is not theoretical here: this card's own end-step tokens are Fungi, the
+    // deck's Saprolings are Saprolings, and nothing stops a permanent being both.
+    //
+    // Matched with CardHasSubtype against the PERMANENT'S OWN Card, never a definition lookup --
+    // the token-safe route Sporecrown Thallid's lord and Brightcap Badger's mana grant already
+    // take, and mandatory here for the same reason: every Saproling in this deck is a TOKEN and a
+    // token has no CardDefinition, so a definition-keyed predicate would be dead on the entire
+    // population the card exists to count.
+    //
+    // It counts ITSELF (it is a Fungus), so alone on an empty board it is a 1/1 and never dies to
+    // the toughness SBA -- which is load-bearing, because printed */* is 0/0 and the SBA reads
+    // DynamicBaseToughness.
+    std::vector<std::string> pt_equals_creatures_you_control_subtypes;
 
     // --- Snow (the Snow deck, 2026-09-06: first engine readers of Supertype::Snow) ------------
     // Snow-ness is decided by the shared IsSnowPermanent/SnowPermanentCount helpers in
@@ -2098,6 +2117,26 @@ struct CardParams
     //                                 miss that anthem.
     std::vector<std::string> endstep_token_keywords;
     bool endstep_token_ascend_copy   = false;
+    //   endstep_tokens_equal_descend -- the COUNT is dynamic (The Mycotyrant: "create X 1/1 black
+    //                                 Fungus creature tokens ... where X is the number of times you
+    //                                 descended this turn"). Every other card in this family has a
+    //                                 FIXED N in endstep_lifegain_tokens; this one reads
+    //                                 DescendedThisTurn(state, controller) at resolution instead, so
+    //                                 the card leaves endstep_lifegain_tokens at 0 and X may legally
+    //                                 be 0 (the trigger still goes on the stack -- there is no
+    //                                 intervening-if, so this param pairs with
+    //                                 endstep_tokens_unconditional).
+    //
+    //   X = 0 IS WHY THERE IS A SHARED PREDICATE. Three sites used to test
+    //   `endstep_lifegain_tokens > 0` as "does this card have an end-step token trigger at all":
+    //   the trigger-collection gate in PerformEndStepLifegainTokens, that function's creation loop
+    //   bound, and GoldFishRunner's deck_has_unconditional_endstep_tokens stamp. A card whose count
+    //   is dynamic answers 0 to all three and would never fire, never be collected, and never arm
+    //   the stamp that keeps the hoisted lifegain early-out from swallowing it. All three now go
+    //   through HasEndStepTokenTrigger / EndStepTokenCount (SpellEffects.h) so they cannot disagree
+    //   -- the same half-fix shape as the SecondMainUnproductive gate that nearly un-fixed the
+    //   Mycoloth main-2 pin.
+    bool endstep_tokens_equal_descend = false;
     // ASCEND (CR 702.131): "If you control ten or more permanents, you get the city's blessing for
     // the rest of the game." A per-PLAYER designation (Player::has_city_blessing), not a permanent
     // state -- once gained it NEVER goes away, so losing the ascend permanent or dropping below ten

@@ -1,8 +1,14 @@
 # The Mycotyrant: implementation scope, and what it actually argues for
 
-**Status: SCOPED, NOT IMPLEMENTED.** Not in `src/cards/data/cards.json` (532 cards as of
-2026-10-13). It gates the Fungus mono-green decision, so this file exists to stop that decision
-being made on a guess about the card.
+**Status: IMPLEMENTED 2026-10-14.** In `src/cards/data/cards.json` (533 cards), unit-tested
+(`test/unit/test_mycotyrant.cpp`), smoke-clean and byte-identical for every existing deck. Read the
+**BUILT** section at the end of this file FIRST: four things in the resolved design did not survive
+contact, and one of them -- the claim that tokens cannot reach the graveyard -- was simply false and
+would have made the card's weakest clause look like its strongest.
+
+Everything below the first divider is the SCOPE as written before any code existed, kept because the
+strategic argument in it is still the reason the card is here at all. It gates the Fungus mono-green
+decision, so this file exists to stop that decision being made on a guess about the card.
 
 ## The card (Scryfall, fetched 2026-10-13 -- not recalled)
 
@@ -124,7 +130,7 @@ decision -- not an assumption that it is a bomb.
    `scripts/deck_compare.py` refuses a card that is not in `cards.json` or whose implementation has
    gaps -- so this must land before any screen arm can hold it.
 
-## Open question for the USER
+## Open question for the USER -- ANSWERED 2026-10-13 ("Then add The Mycotyrant.")
 
 Whether to implement it at all is worth deciding on the above rather than on enthusiasm: the
 descend half is near-dead in this archetype, so what is being bought is a 3-mana creature that is
@@ -229,8 +235,118 @@ Legendary, so the legend rule caps the battlefield at one and the sensible range
 that only rarely gets duplicates"* -- and the draw-consistency channel that argument rests on IS
 fully modelled by a goldfish; only redundancy-against-removal is not).
 
-**The slot: cut 1 Deathspore Thallid.** Round 4's `k2_death1_vita3` measured that exact donor FREE
-as a 1-for-1 (-0.0003 +-0.0015 std / -0.0008 +-0.0016 2hg at 99.2% ident), Secluded Courtyard CAN
-cast The Mycotyrant (its `colored_creature_only` restriction does not bite on a creature), and black
-stays at 3 of 40 cards -- so the black package is not expanded to pay for it, which is the trap this
-file's strategic correction warns about.
+**The slot: PSYCHOTROPE THALLID, not Deathspore** (superseded 2026-10-13 by round 8, after this
+section was first written). Round 8 priced every slot in the list at ONE copy and found Psychotrope
+Thallid 1->0 measuring **-0.0123 std / -0.0180 2hg** -- cutting it GAINS in both formats, so it is a
+whole free slot and strictly better than the Deathspore slot round 4 had identified as merely free
+(-0.0003/-0.0008). It is also the only choice that does not create a conflict: the user has since
+ruled a hard FLOOR of one Deathspore, leaving exactly one spendable Deathspore copy, and that copy
+is wanted for a second Slimefoot. Secluded Courtyard CAN cast The Mycotyrant (its
+`colored_creature_only` restriction does not bite on a creature), and black stays at 3 of 40 cards
+-- so the black package is not expanded to pay for it, which is the trap this file's strategic
+correction warns about.
+
+---
+
+# BUILT (2026-10-14) -- four places the resolved design did not survive contact
+
+Implemented, unit-tested, smoke-clean (125/125 PASS, 0 configs changed -- byte-identical for every
+existing deck) and verified in 40 logged games. Four things differ from the section above, and the
+second one is a correctness finding rather than a refinement.
+
+## 1. Descend snapshots the graveyard's SIZE, not its permanent-card COUNT
+
+The resolved design said `gy_permanent_cards_at_turn_start` plus
+`max(0, permanent_cards_in_gy_now - snapshot)`. Shipped instead:
+`Player::gy_size_at_turn_start`, with `DescendedThisTurn()` counting the permanent cards in
+`graveyard[snapshot .. end)`.
+
+Both forms are EXACT under the same condition -- the graveyard is append-only within the turn -- and
+degrade identically when it is not. The size form is **O(cards that arrived this turn)**, usually
+zero, where the count form needs a full graveyard walk with a `LookupCached` per card at every read.
+That matters because one of the readers is `BuildSimKey`, ~15% of runtime on the one deck whose
+sacrifice engine makes the graveyard the fastest-growing zone on the board.
+
+It also turned out to be the form that could absorb finding 2 at all: a per-card suffix scan can
+filter tokens, where a count difference cannot.
+
+## 2. TOKENS ARE NOT EXCLUDED FOR FREE -- the central claim above is FALSE
+
+The resolved design's argument for deriving descend from the destination zone was: *"tokens are
+excluded automatically: a token ceasing to exist never reaches the graveyard vector."* **It does.**
+Of the ~45 `graveyard.push_back` sites in `SpellEffects.h` only a handful test `is_token` first; the
+rest push unconditionally.
+
+Found in play, in the first 24 logged games, not by re-reading the code: `Vitaspore Thallid`
+sacrificed Saproling token **#1000**, the token's `Card` landed in the graveyard, and under a
+Doubling Season the end step made **two** tokens on a turn whose true descend was **zero**. Across
+40 games, **9 token cards** appeared in graveyards -- so this is routine, not a corner. In a deck
+that sacrifices ~40 tokens a game an unfiltered count would not be slightly wrong, it would be the
+entire card.
+
+Fixed by filtering at the READ: a graveyard card is not a CARD when
+`m_number >= GameState::kFirstTokenNumber` (1000). Exact in both directions by construction -- every
+token-creation helper draws its id from `next_token_number`, and deck cards are numbered 1..N -- and
+it is the test several other sites in `SpellEffects.h` already open-code.
+
+**LEFT OPEN, AND IT IS A REAL BUG INDEPENDENT OF THIS CARD.** A token that leaves the battlefield
+ceases to exist (CR 111.7) and should never persist in a graveyard. It does, at every unguarded
+site. That is not fixed here because `graveyard.size()` is a feature of the learned mid-game
+evaluator (`MidGameFeature::GraveyardSize`), so emptying tokens out of the zone would move play on
+every deck carrying such a model -- a GT-moving change that needs its own A/B and is the user's call,
+not a side effect of adding a card. Filtering at the read is local, gated, and provably right for
+this card. If it is ever fixed at the sites, the id filter here becomes redundant but stays correct.
+
+## 3. One shared predicate, not three widened tests
+
+`endstep_lifegain_tokens > 0` was doing double duty as "how many tokens" AND "does this card have an
+end-step token trigger at all", in THREE places: the trigger-collection gate, that loop's bound, and
+`GoldFishRunner`'s `deck_has_unconditional_endstep_tokens` stamp (which is conjunctive --
+`endstep_tokens_unconditional && endstep_lifegain_tokens > 0`). A card whose count is dynamic answers
+0 to all three, so it would never be collected, never fire, and never arm the stamp that keeps the
+hoisted lifegain early-out from swallowing it -- which is the Brightcap Badger bug exactly.
+
+All three now route through `HasEndStepTokenTrigger(params)` / `EndStepTokenCount(params, state,
+controller)`, so they cannot disagree. The resolved design named only the first of the three sites.
+
+## 4. The key folds cost nothing, and no size assert moved
+
+`GyR_DescendCount = 1u << 7` as designed, set in `DeckGraveyardReaders` for any card carrying
+`endstep_tokens_equal_descend`, and it IS the gate -- there is no separate `deck_has_descend_readers`
+stamp. Two refinements:
+
+* **Both key folds take the two OPERANDS** (graveyard size, turn-start baseline) rather than the
+  derived descend count: O(1) instead of a walk, and strictly FINER than the count (it also
+  separates a turn that put an instant in the graveyard from one that put a permanent there, which
+  descend does not care about). Finer costs memo hits, never soundness.
+* **Gated on the bit for BOTH players**, unlike `BuildSimKey`'s two neighbouring graveyard folds,
+  which are restricted to `pi == 0` because the opponent's fixed 60 can genuinely contain the cards
+  they test for. This fold's only consumer reads `DescendedThisTurn(state, active_player_index)` off
+  a permanent WE control, so a clear bit proves nothing in the game reads either player's descend.
+  Always folding for `pi == 1` would add a fold to every deck in the repo and move all their keys.
+
+`static_assert(sizeof(GameState) == 1080)` did NOT trip, and that was deliberate rather than lucky:
+the new int was declared immediately after `Player::life`, in the four bytes of padding that preceded
+`hand`'s 8-byte alignment. Both layouts were compiled and printed -- beside the graveyard or the
+per-turn counters it is 208/1096, at offset 4 it is 200/1080 -- because `GameState` is deep-copied at
+every search node on the heaviest deck in the suite. The size ledger in `Dominance.h` records the
+zero-delta entry anyway, per its own rule that the log is the record and the assert only its alarm.
+
+## What is asserted, and where
+
+`test/unit/test_mycotyrant.cpp` (8 cases): the printed characteristics the CDA depends on; the CDA on
+both axes, counting itself, tokens, and a second Fungus card, and NOT a Badger or the opponent's
+board; the one-pool rule for a creature that is both Fungus and Saproling, order-independently; the
+toughness SBA reading the CDA (a lone Mycotyrant is a 1/1, and `LethalToughness` says 1 where
+`EffectiveToughness` says 0); descend's baseline, its nonpermanent filter, its per-player scope, its
+underflow clamp, the token filter with the trap asserted (a token's leftover Card passes the
+permanent-type test -- only the id separates it), and the `ZoneCard` requirement with both halves
+spelled out; the presence-vs-count predicate for all three cards in the family; the end-to-end end
+step (X tokens, 1/1 black Fungus, none on a descend-free turn, each token raising the CDA, and the
+hoisted early-out documented); and `GyR_DescendCount` being stamped for a list holding the card and
+not for the rest of candidate-b.
+
+In play, over 40 logged games on a 4-copy verification list (`logs/`, never committed): 30 end steps
+with a Mycotyrant on the battlefield, 11 with X > 0, **0 mismatches** against an independent
+recomputation of descend from the graveyard ids -- including the Doubling Season doubling -- and 11
+snapshots where it was the only Fungus/Saproling on the board, surviving all 11.

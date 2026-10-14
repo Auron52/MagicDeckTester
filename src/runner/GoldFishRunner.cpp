@@ -676,6 +676,12 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         if (p.sac_for_mana_amount > 0 || p.creates_treasures > 0 || p.etb_creates_treasures > 0
             || p.impulse_exile > 0)
         { m |= GyR_ColorDemand; }
+        // DESCEND (The Mycotyrant). The first reader of the graveyard's SHAPE rather than its
+        // contents -- "how many permanent cards arrived this turn" -- so it needs its own bit even
+        // though no name, type count or pip is ever observed. This bit IS the gate for the whole
+        // feature: it is what folds the shape into both state keys, and no separate
+        // deck_has_descend_readers stamp exists.
+        if (p.endstep_tokens_equal_descend)  { m |= GyR_DescendCount; }
     }
     // Timeless Witness (Prevent Damage, 2026-09-27): its ETB returns ANY card from the graveyard and
     // Eternalize reads its own copy there. It is a SIDEBOARD card (reached by Living Wish), and the
@@ -1298,7 +1304,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (d->params.storied_permanents > 0)      { storied = true; }
-                if (d->params.endstep_tokens_unconditional && d->params.endstep_lifegain_tokens > 0)
+                // HasEndStepTokenTrigger, not `endstep_lifegain_tokens > 0`: The Mycotyrant's count
+                // is dynamic (endstep_tokens_equal_descend) so it leaves that field at 0, and this
+                // stamp is what stops the hoisted lifegain early-out from swallowing an
+                // unconditional trigger on a deck that gains no life -- the exact bug Brightcap
+                // Badger shipped with. See CardParams::endstep_tokens_equal_descend.
+                if (d->params.endstep_tokens_unconditional && HasEndStepTokenTrigger(d->params))
                 { uncond_endstep = true; }
             }
         };

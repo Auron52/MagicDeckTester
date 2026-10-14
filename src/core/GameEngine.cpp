@@ -263,6 +263,12 @@ void GameEngine::UntapStep(GameState& state)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
     ap.equip_activated_this_turn = false;         // Kili's waiver is per TURN (same lockstep)
+    // DESCEND's baseline (The Mycotyrant). A REBASE, not a reset to 0 -- descend is "this turn", so
+    // the snapshot has to follow the graveyard rather than clear (same lockstep w/
+    // SimulateEndAndStartNextTurn). It must be refreshed AFTER the previous turn's end step has
+    // read it, which both sites satisfy: the executor's EndStep is a whole turn earlier, and the
+    // rollout's twin runs PerformEndStepLifegainTokens before reaching this line.
+    ap.gy_size_at_turn_start = static_cast<int>(ap.graveyard.size());
     RefreshDevotionCreatures(state);    // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ rollout)
     RefreshCityBlessing(state);         // ascend backstop for any non-cascade board change (lockstep w/ rollout)
     RefreshStoriedLatch(state);         // storied backstop, same contract (lockstep w/ rollout)

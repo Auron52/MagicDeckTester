@@ -6334,6 +6334,73 @@ inline void RefreshStoriedLatch(GameState& state)
 // the stack AND again on resolution. With one active player and nothing here able to undo a gain
 // between the two, a single check is equivalent.
 //
+// ---- DESCEND (The Mycotyrant) ------------------------------------------------------------------
+// "You descend each time a permanent CARD is put into your graveyard from anywhere" -- so X is the
+// number of permanent cards that arrived in this player's graveyard THIS TURN. Derived from the
+// turn-start snapshot (Player::gy_size_at_turn_start, which carries the full rationale for the
+// shape) rather than counted at the 76 graveyard-push sites.
+//
+// A TOKEN IS NOT A CARD, and in this deck that is the single most load-bearing fact about the
+// clause: the ~40 Saprolings it creates and eats every game must contribute exactly ZERO, so every
+// outlet that eats one -- Utopia Mycon, Psychotrope Thallid, Vitaspore Thallid's haste grant, a
+// Mycoloth devouring tokens -- is descend-silent. The real sources are a trickle of one-offs: a
+// Peat Bog or Hickory Woodlot sacrificing itself on depletion, a Saproling Burst fading out, a
+// creature CARD dying. X is realistically 0 or 1, occasionally 2.
+//
+// TOKENS REALLY DO REACH THE GRAVEYARD VECTOR, so this has to be filtered EXPLICITLY. The scope
+// doc assumed the opposite -- "a token ceasing to exist never reaches the graveyard, so tokens are
+// excluded for free" -- and the first 24 logged games falsified it: `Vitaspore Thallid` sacrificed
+// Saproling token #1000 and the token's Card was pushed onto the graveyard, which (under a Doubling
+// Season) produced 2 end-step tokens for a turn whose true descend was 0. Of the ~45
+// `graveyard.push_back` sites in this file only a handful test `is_token` first; the rest push
+// unconditionally, which was harmless until something counted what was in there. That is a genuine
+// CR 111.7 modelling bug in its own right (a token that leaves the battlefield ceases to exist and
+// should never persist in a graveyard) and it is NOT fixed here: `graveyard.size()` is a feature of
+// the learned mid-game model, so emptying tokens out of it would move play on every deck that has
+// one. Filtering at the READ is local, gated, and provably right for this card.
+//
+// `m_number >= kFirstTokenNumber` is the test, and it is exact in both directions by construction:
+// every token-creation helper draws its id from GameState::next_token_number (base 1000) and deck
+// cards are numbered 1..N. It is also the test several other sites in this file already open-code.
+//
+// ZoneCard, not the raw card, for the permanent-type half: a graveyard Card is a NAME-ONLY
+// placeholder with an empty type mask (DeckLoader::MakePlaceholder), so `gy_card.IsPermanentCard()`
+// is false for every card in there -- a land and a creature alike. Reading it raw would make X
+// permanently 0, silently, which is the other half of this helper's job.
+inline int DescendedThisTurn(const GameState& state, int player_index)
+{
+    const Player& p    = state.players[player_index];
+    const int     snap = p.gy_size_at_turn_start;
+    const int     n    = static_cast<int>(p.graveyard.size());
+    if (n <= snap) { return 0; }   // nothing arrived (or something left -- see Player's note)
+    int count = 0;
+    for (int i = snap; i < n; ++i)
+    {
+        const Card& gc = p.graveyard[static_cast<std::size_t>(i)];
+        if (gc.m_number >= GameState::kFirstTokenNumber) { continue; }   // not a CARD
+        if (ZoneCard(gc).IsPermanentCard())              { ++count; }
+    }
+    return count;
+}
+
+// Does this card have an end-step token trigger AT ALL? ONE predicate, because the count is no
+// longer the arming condition: The Mycotyrant's X is dynamic, so it leaves
+// endstep_lifegain_tokens at 0 and every site that used `> 0` as a presence test would have
+// skipped it. See CardParams::endstep_tokens_equal_descend for the three sites and why a shared
+// predicate rather than three widened tests.
+inline bool HasEndStepTokenTrigger(const CardParams& pp)
+{
+    return pp.endstep_lifegain_tokens > 0 || pp.endstep_tokens_equal_descend;
+}
+
+// How many tokens THIS resolution makes. Fixed N for every card in the family except the one whose
+// oracle text makes it dynamic.
+inline int EndStepTokenCount(const CardParams& pp, const GameState& state, int controller_index)
+{
+    if (pp.endstep_tokens_equal_descend) { return DescendedThisTurn(state, controller_index); }
+    return pp.endstep_lifegain_tokens;
+}
+
 // Param-gated early-out -> byte-identical for every deck without such a card.
 inline void PerformEndStepLifegainTokens(GameState& state)
 {
@@ -6365,7 +6432,7 @@ inline void PerformEndStepLifegainTokens(GameState& state)
     {
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.endstep_lifegain_tokens > 0) { triggers.push_back(d); }
+        if (d && HasEndStepTokenTrigger(d->params)) { triggers.push_back(d); }
     }
     if (triggers.empty()) { return; }
     // The intervening-if (CR 603.4), SNAPSHOT before anything is created. At Ocelot Pride's
@@ -6390,7 +6457,12 @@ inline void PerformEndStepLifegainTokens(GameState& state)
         // below clamps that to 1 -- so it is a separate flag, false for every pre-existing card.
         if (!pp.endstep_tokens_unconditional
             && gained_this_turn < std::max(1, pp.endstep_lifegain_threshold)) { continue; }
-        for (int i = 0; i < pp.endstep_lifegain_tokens; ++i)
+        // SNAPSHOT the count before anything is created, for the same CR 603.4 reason the
+        // intervening-if is snapshotted: the tokens this trigger makes are not cards, so they
+        // cannot raise a descend count -- but reading it once keeps that a property of the code
+        // rather than of the token's type, and it is one call instead of N.
+        const int n_tokens = EndStepTokenCount(pp, state, active);
+        for (int i = 0; i < n_tokens; ++i)
         {
             // Enters through the universal cascade: in a lifegain deck each Cat is a creature
             // ENTERING, i.e. a Soul Warden / Soul's Attendant / Auriok Champion / Daxos trigger
@@ -15202,6 +15274,33 @@ inline int CreatureCount(const GameState& state, int controller_index)
     return count;
 }
 
+// The subtype-FILTERED twin of CreatureCount (The Mycotyrant: "creatures you control that are Fungi
+// and/or Saprolings"). ONE POOL, NOT ONE PER SUBTYPE: the `break` counts a creature that is both a
+// Fungus and a Saproling exactly once, the same reading RefreshStoriedLatch gives "artifacts,
+// legendaries, and/or Sagas". That case is reachable here, not theoretical -- nothing stops a
+// permanent carrying both of this deck's two subtypes.
+//
+// Matches CardHasSubtype against the PERMANENT'S OWN Card, never a definition lookup: every
+// Saproling in this deck is a TOKEN, tokens have no CardDefinition, and a definition-keyed
+// predicate would therefore be dead on the whole population being counted. Animated lands are
+// included on the same terms as CreatureCount -- they are creatures -- but only if their own card
+// carries one of the subtypes, which no land in this pool does.
+inline int CreatureSubtypeCount(const GameState& state, int controller_index,
+                                const std::vector<std::string>& subtypes)
+{
+    int count = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index)   { continue; }
+        if (!p.card.IsCreature() && !p.is_animated)   { continue; }
+        for (const std::string& sub : subtypes)
+        {
+            if (CardHasSubtype(p.card, sub)) { ++count; break; }   // ONE pool: count once
+        }
+    }
+    return count;
+}
+
 // ---- Snow (the Snow deck: the first engine readers of Supertype::Snow) ------------------------
 // A permanent is snow if its card carries the supertype OR it has an ice counter while an
 // ice_counters_are_snow source (Rimefeather Owl) is on the battlefield -- the Owl's layer-4
@@ -15828,6 +15927,9 @@ inline int DynamicBasePower(const CardDefinition& def, const GameState& state, i
     { return SnowPermanentCount(state, controller_index); }
     if (def.params.pt_equals_snow_permanents_on_battlefield)
     { return SnowPermanentCount(state, -1); }
+    if (!def.params.pt_equals_creatures_you_control_subtypes.empty())   // The Mycotyrant
+    { return CreatureSubtypeCount(state, controller_index,
+                                  def.params.pt_equals_creatures_you_control_subtypes); }
     return 0;
 }
 
@@ -15844,6 +15946,9 @@ inline int DynamicBaseToughness(const CardDefinition& def, const GameState& stat
     { return SnowPermanentCount(state, controller_index); }
     if (def.params.pt_equals_snow_permanents_on_battlefield)
     { return SnowPermanentCount(state, -1); }
+    if (!def.params.pt_equals_creatures_you_control_subtypes.empty())   // The Mycotyrant
+    { return CreatureSubtypeCount(state, controller_index,
+                                  def.params.pt_equals_creatures_you_control_subtypes); }
     return 0;
 }
 

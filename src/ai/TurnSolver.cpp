@@ -43143,6 +43143,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
     ap.equip_activated_this_turn = false;          // Kili's waiver is per TURN (same lockstep)
+    // DESCEND's baseline -- a REBASE, not a reset (lockstep w/ UntapStep; see the note there).
+    // PerformEndStepLifegainTokens, which reads it, runs EARLIER IN THIS FUNCTION, so the order is
+    // read-then-rebase exactly as in the executor's two separate steps.
+    ap.gy_size_at_turn_start = static_cast<int>(ap.graveyard.size());
     RefreshDevotionCreatures(state);               // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ UntapStep)
     RefreshCityBlessing(state);                    // ascend backstop for any non-cascade board change (lockstep w/ UntapStep)
     RefreshStoriedLatch(state);                    // storied backstop, same contract (lockstep w/ UntapStep)
@@ -54066,6 +54070,46 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
                     Fold(k, static_cast<uint64_t>(gy_lands));
                 }
             }
+        }
+        // DESCEND (The Mycotyrant). The graveyard's SHAPE, not its contents: two mid-turn states
+        // identical everywhere else but differing in whether a Peat Bog has sacrificed itself make
+        // a DIFFERENT NUMBER OF TOKENS at the end step, so they must not share a key. This is a
+        // genuine hole on a descend deck today -- Fungus sets no GyReader bit at all, so its
+        // graveyard is folded nowhere above.
+        //
+        // FOLDS THE TWO OPERANDS, not DescendedThisTurn(). O(1) instead of a walk over the cards
+        // that arrived this turn, and strictly FINER than the derived count (it also separates a
+        // turn that put an instant in the graveyard from one that put a permanent there, which
+        // descend does not care about). Finer costs memo hits, never soundness -- and BuildSimKey
+        // is ~15% of runtime on the deck this is for, so the cheap direction is the right one.
+        // Both operands are needed: the DIFFERENCE is what the trigger reads, and the LEVEL is what
+        // the next turn's rebase will make the new baseline.
+        //
+        // GATED ON THE BIT FOR BOTH PLAYERS, unlike the two folds above -- which is sound for a
+        // different reason than theirs, not the same one. Theirs needed the pi == 0 restriction
+        // because the OPPONENT's fixed 60 can genuinely contain the cards they are about to test
+        // for. This one's only consumer is PerformEndStepLifegainTokens reading
+        // DescendedThisTurn(state, active_player_index) off a permanent WE control, so a clear bit
+        // proves nothing in the game reads EITHER player's descend. Erring the other way (always
+        // folding for pi == 1) would add a fold to every deck in the repo and move all their keys.
+        //
+        // AN UNSTAMPED STATE DOES FOLD THIS, for every deck, and that is the deliberate direction.
+        // `deck_gy_readers` defaults to 0xFFFFFFFF and only GoldFishRunner::SetupGame stamps it, so
+        // the scenario harness (which calls StampDeckTraits but NOT SetupGame) and any hand-built
+        // GameState take this branch. Unlike its sibling gates there is no "pre-existing behaviour"
+        // to preserve here -- the fold itself is new -- so the only question is which way to err,
+        // and FOLDING is the safe one: a finer key is always sound and merely costs memo hits, where
+        // a missing fold would merge two states whose end steps make a different number of tokens.
+        // That case is REACHABLE rather than hypothetical --
+        // test/scenarios/fungusb_mycotyrant_cda_combat.json puts the card on an unstamped board.
+        // Every STAMPED path (the runner, the batch, the analyzer, the keep generators) has the bit
+        // clear for every deck with no descend reader, which is what keeps them byte-identical:
+        // smoke 125/125 and regression 176/176 with 0 configs changed.
+        if ((state.deck_gy_readers & GyR_DescendCount) != 0)
+        {
+            Fold(k, 0xDE5C + static_cast<uint64_t>(pi)); // sub-section: descend shape
+            Fold(k, static_cast<uint64_t>(p.graveyard.size()));
+            Fold(k, static_cast<uint64_t>(p.gy_size_at_turn_start));
         }
     }
 
