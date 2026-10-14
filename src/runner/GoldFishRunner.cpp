@@ -1378,6 +1378,17 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             return false;
         };
         state.dmg_events_armed = arms(deck.mainboard) || arms(deck.sideboard);
+        // inf_life_possible (see GameState): the one card class that can stamp inf_life_turn.
+        auto inf_arms = [](const std::vector<Card>& zone)
+        {
+            for (const Card& c : zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.persist && d->params.etb_self_lifegain > 0) { return true; }
+            }
+            return false;
+        };
+        state.inf_life_possible = inf_arms(deck.mainboard) || inf_arms(deck.sideboard);
         static const bool s_own_death_all = EnvOn("MTG_OWN_DEATH_ALL");   // DEFAULT OFF; measurement only
         state.own_death_live = state.dmg_events_armed || s_own_death_all;
     }

@@ -286,6 +286,12 @@ struct GameState
     // Stays -1 for every deck without the loop -> byte-identical elsewhere (every reader gates
     // on >= 0).
     int                      inf_life_turn                = -1;
+    // Can anything in this game ever stamp inf_life_turn? Its one setter (ApplySacCreatureOutlet)
+    // needs a persist creature with an ETB lifegain, so a decklist (main + sideboard) without one
+    // cannot. Stamped by GoldFishRunner's setup beside dmg_events_armed; the default is the
+    // CONSERVATIVE answer (true), so an entry point that never stamps it loses nothing but the
+    // MTG_LA_TIE_PRUNE shortcut that reads it.
+    bool                     inf_life_possible            = true;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack

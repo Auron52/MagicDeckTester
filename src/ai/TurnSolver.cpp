@@ -4880,6 +4880,11 @@ static bool BpLandDropSlotPassed(const GameState& state)
 static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int depth, int max_turns,
                                                    SearchBudget* budget, bool second_main,
                                                    TranspositionTable* tt);
+// The rollout's per-turn PRE-COMBAT lookahead, memoized in unbudgeted play (MTG_ROLLOUT_M1_MEMO).
+// Defined beside SearchedSecondMainMemoized, whose discipline it copies.
+static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth, int max_turns,
+                                              SearchBudget* budget, bool second_main,
+                                              TranspositionTable* tt);
 
 // ---- KittyEquipment: the end-of-main-2 KEMBA PARK (USER doctrine, 2026-08-19) -------------------
 //
@@ -53971,10 +53976,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
 // Per-GAME reset of the thread_local plan memos (see TurnSolver.h for why this exists). Defined
 // here because it must follow both memo namespaces. Cheap: an unordered_map::clear on maps whose
 // live content is one decision's worth of entries.
+static void M1MemoClear();   // the rollout pre-combat memo (defined with it, below)
 void TurnSolver::ClearPerGameCaches()
 {
     solvememo::t_cache.clear();
     solvememo::t_m2cache.clear();
+    M1MemoClear();
     enummemo::t_cache.clear();
     plancache::Release(plancache::t_enum_bytes);
     // The all-paths accumulator (MTG_BP_CONDEMN_ALLPATHS) belongs here and NOT in the bp-enum cache,
@@ -54734,6 +54741,93 @@ inline bool TTNoWinCacheOn()
     return v;
 }
 
+// MTG_NOWIN_STORE_UNGRADED -- DEFAULT ON; =0 restores the old refusal (byte-identical to before).
+//
+// THE HOLE. The leaf table's no-win half (armed in unbudgeted play) refused every FULL-RUN no-win
+// (cutoff >= max_turns) of a deck that opts out of the graded no-win leaf (GradesNoWinLeaf ==
+// false -- Snow is the one such deck). The refusal's reason is the frame rule's one hole: the
+// natural horizon exit published NOTHING for an ungraded deck, so leafeval::t_tb at return was
+// "whatever a sibling frame left", not a function of the call's inputs, and a memo cannot replay
+// that. So on Snow a rollout that never won inside the horizon was re-rolled from scratch at
+// every transposition, while the same rollout under a cutoff (a bounded refutation) WAS stored.
+//
+// THE FIX closes the hole instead of working around it: the natural exit publishes kInvalid when
+// it does not grade, so EVERY return point of a full run publishes a value that is a function of
+// the inputs, and the full-run no-win is then as storable as a graded deck's. The publish is a
+// no-op on every shipped configuration: a grading deck still publishes its quantity, and on an
+// ungraded deck nothing ever publishes a value other than kInvalid (the only other publishers are
+// the own-death exits -- own_death_live, false on Snow -- and the default-off MTG_LEAF_VALUE_RES),
+// so t_tb is already kInvalid there; the explicit publish only makes that a guarantee rather than
+// an accident of which sibling ran last. A hit replays kInvalid (leaf_tb == kInvalid), exactly
+// what the fresh run leaves.
+//
+// It changes UNITS, never play: a hit skips the rollout's ConsumeAt() calls, which is why it is
+// gated behind the same unbudgeted-play latch as the rest of the no-win half (NoWinLeafMemoArmed)
+// and cannot touch budgeted play. Measured: docs/design/snow-exact-unit-reductions.md.
+inline bool NoWinStoreUngradedOn()
+{
+    static const bool v = EnvOn("MTG_NOWIN_STORE_UNGRADED", true);
+    return v;
+}
+
+// MTG_LA_TIE_PRUNE -- DEFAULT ON; =0 restores the unpruned candidate loop (byte-identical to before).
+//
+// SolveWithLookahead scores each candidate with a rollout under cutoff = the pass's running best
+// (pass_best_win), and replaces the best only on a STRICTLY earlier win, or on an EQUAL win by the
+// tie-break chain (inf-life proof, graded leaf, then plan.value). A rollout started from the
+// candidate's next-turn state cannot return a win EARLIER than that state's turn. So once the best
+// already wins on that very turn, a further candidate's rollout can change the pick only through the
+// tie-break -- and the chain is decidable WITHOUT the rollout:
+//   * graded leaf: only for a NO-WIN (a win publishes kInvalid), and the best here is a WIN;
+//   * inf-life: only if the candidate could prove the loop while the best did not -- impossible when
+//     the best already carries the proof, or when the game holds no card that can stamp it
+//     (GameState::inf_life_possible, stamped at setup from the decklist);
+//   * plan.value: the candidate must be STRICTLY higher-valued.
+// When all three fail, the rollout's result is provably irrelevant to the returned plan, and it is
+// not run. Same identity for the two deferred-wave loops, which accept only a STRICTLY earlier win:
+// there the rollout is irrelevant as soon as the best wins on the candidate's next turn, whatever
+// its value. This is branch-and-bound, not a heuristic: the pick is the same plan at every budget.
+//
+// What it removes: the 1-ply leaf's tail of candidates scored after an earlier candidate already
+// proved the earliest possible win -- each still applied (that is how a this-turn win is found),
+// but no longer rolled out.
+//
+// GATED like the leaf table's no-win half: unbudgeted play only, an unlimited (or absent) budget,
+// and never at the enforcing root (whose escalation reads every candidate's score). Under a budget
+// the freed units would be re-spent and play would move, which is an A/B, not an identity.
+inline bool LaTiePruneOn()
+{
+    static const bool v = EnvOn("MTG_LA_TIE_PRUNE", true);
+    return v;
+}
+// MTG_LA_TIE_TIGHTEN -- DEFAULT ON (only under MTG_LA_TIE_PRUNE's gate); =0 keeps just the skip.
+// The general form of the skip: the same candidate (or wave variant) that cannot win a tie is asked
+// only whether it wins STRICTLY earlier, i.e. under cutoff pass_best_win - 1. A win exactly at
+// pass_best_win would be discarded by the comparison anyway, so the answer the loop acts on is the
+// same; the rollout just stops one turn sooner. The refutation it leaves in the leaf table is bounded
+// by the cutoff it really ran under, so it is a true fact for every later query that reads it.
+inline bool LaTieTightenOn()
+{
+    static const bool v = EnvOn("MTG_LA_TIE_TIGHTEN", true);
+    return v;
+}
+// Counted only under MTG_ROLLOUT_STATS (a shared atomic per pruned candidate would contend in a pool).
+static std::atomic<long long> g_la_tie_pruned{0}, g_la_wave_pruned{0}, g_la_tie_tightened{0};
+struct LaTiePruneDumper
+{
+    ~LaTiePruneDumper()
+    {
+        const long long a = g_la_tie_pruned.load(), b = g_la_wave_pruned.load();
+        const long long c = g_la_tie_tightened.load();
+        if (a + b + c > 0)
+        {
+            std::fprintf(stderr, "[la-tie-prune] candidate_rollouts_skipped=%lld wave_rollouts_skipped=%lld"
+                                 " candidate_cutoffs_tightened=%lld\n", a, b, c);
+        }
+    }
+};
+static LaTiePruneDumper g_la_tie_prune_dumper;
+
 // MTG_ROLLOUT_HORIZON's truncated tail publishes a leaf grade from a NON-cutoff-dependent branch,
 // which breaks the "a run at cutoff < max_turns always publishes kInvalid" argument the no-win
 // memo's replay rests on (see NoWinLeafMemoArmed). It needs a value model to fire at all, so this
@@ -55034,8 +55128,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         }
         else
         {
-            pre_plan = TurnSolver::SolveWithLookahead(
-                state, true, turn_depth, max_turns, budget, false, second_main, tt);
+            pre_plan = RolloutPreCombatSolve(state, turn_depth, max_turns, budget, second_main, tt);
         }
         // ROLLOUT COMBAT SWAP (MTG_ROLLOUT_AURA_SWAP, Bruna sweep E): a FUTURE turn's pre-combat
         // plan that came from the horizon leaf gets the damage-max Arcanum Wings combat-swap pin.
@@ -55165,7 +55258,63 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         leafeval::Publish(leafeval::Quantity(state));
         leafeval::PublishLife(state.players[1 - state.active_player_index].life);
     }
+    // ...and an ungraded exit publishes kInvalid, so this return point too leaves a value that is
+    // a function of the call's inputs (see NoWinStoreUngradedOn: it is what makes an ungraded
+    // full-run no-win storable).
+    else if (NoWinStoreUngradedOn()) { leafeval::Publish(leafeval::kInvalid); }
     return max_turns + 1;
+}
+
+// LEAF-TABLE PROBE (MTG_TT_PROBE=1; diagnostic, counts only -- no behaviour). Attributes every
+// SimulateToEnd call by the rollout depth it ran at (0 = greedy playout, 1 = the 1-ply leaf, 2+ =
+// other) and by what happened: a WIN hit, a NO-WIN hit (split: a full-run entry, which only
+// MTG_NOWIN_STORE_UNGRADED stores on an ungraded deck), or a computed body -- with the body's own
+// work units (the per-game meter's delta, so a depth-1 body INCLUDES its nested depth-0 bodies) and
+// what became of its result: a stored win, a stored no-win, or a no-win left unstored (and why).
+namespace ttprobe
+{
+    inline bool On() { static const bool v = EnvOn("MTG_TT_PROBE"); return v; }
+    enum { kWinHit, kNoWinHit, kNoWinHitFull, kCompWin, kCompNoWinStored, kCompNoWinFullUngraded,
+           kCompNoWinTrunc, kCompNoWinUnarmed, kN };
+    static const char* kNames[kN] = { "win_hit", "nowin_hit", "nowin_hit_fullentry", "comp_win",
+                                      "comp_nowin_stored", "comp_nowin_unstored_full_ungraded",
+                                      "comp_nowin_unstored_trunc", "comp_nowin_unstored_other" };
+    inline std::atomic<long long> g_n[3][kN];
+    inline std::atomic<long long> g_u[3][kN];
+    // Depth-1 computed bodies by SLACK = cutoff - start turn (0 = only the start turn can count;
+    // 4 = 4+ or a full run), with how many returned a win EXACTLY at the cutoff.
+    inline std::atomic<long long> g_slack_n[5], g_slack_u[5], g_slack_wat[5];
+    inline void Add(int depth, int what, long long units)
+    {
+        const int d = depth <= 0 ? 0 : (depth == 1 ? 1 : 2);
+        g_n[d][what].fetch_add(1, std::memory_order_relaxed);
+        g_u[d][what].fetch_add(units, std::memory_order_relaxed);
+    }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!On()) { return; }
+            for (int d = 0; d < 3; ++d)
+            {
+                for (int w = 0; w < kN; ++w)
+                {
+                    const long long n = g_n[d][w].load();
+                    if (n == 0) { continue; }
+                    std::fprintf(stderr, "[tt-probe] depth=%s %-36s n=%12lld units=%14lld\n",
+                                 d == 0 ? "0" : (d == 1 ? "1" : "2+"), kNames[w], n, g_u[d][w].load());
+                }
+            }
+            for (int k = 0; k < 5; ++k)
+            {
+                if (g_slack_n[k].load() == 0) { continue; }
+                std::fprintf(stderr, "[tt-probe] depth=1 slack=%d%s n=%lld units=%lld win_at_cutoff=%lld\n",
+                             k, k == 4 ? "+" : "", g_slack_n[k].load(), g_slack_u[k].load(),
+                             g_slack_wat[k].load());
+            }
+        }
+    };
+    inline Dumper g_dumper;
 }
 
 // Memoizing wrapper around SimulateToEndImpl. On a cache hit the rollout is
@@ -55201,6 +55350,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         if (cached != nullptr)
         {
             PROF_INC(tt_hits); ++g_tt_hit_n;
+            if (ttprobe::On()) { ttprobe::Add(depth, ttprobe::kWinHit, 0); }
             if (g_fs_sim_trace > 0)
             {
                 std::fprintf(stderr, "[fs-sim] tt-hit from t%d d%d -> win=%d  %s\n", state.turn_number,
@@ -55309,6 +55459,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                     }
                 }
                 PROF_INC(tt_nowin_hit); ++g_tt_hit_n;
+                if (ttprobe::On())
+                { ttprobe::Add(depth, e->bound >= max_turns ? ttprobe::kNoWinHitFull
+                                                            : ttprobe::kNoWinHit, 0); }
                 if (cutoff_turn >= max_turns && e->leaf_tb != leafeval::kInvalid)
                 { leafeval::Publish(e->leaf_tb); leafeval::PublishLife(e->leaf_life); }
                 else
@@ -55330,8 +55483,34 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         std::fprintf(stderr, "[fs-sim] >> rollout from t%d d%d cutoff=%d  %s\n", state.turn_number,
                      depth, cutoff_turn, FsSimBoardText(state).c_str());
     }
+    const long long probe_u0 = ttprobe::On() ? gamework::t_used : 0;
+    const int state_turn_at_entry = state.turn_number;
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
     if (g_fs_sim_trace > 0) { std::fprintf(stderr, "[fs-sim] << win=%d\n", result); }
+    if (ttprobe::On() && tt != nullptr)
+    {
+        const long long du = gamework::t_used - probe_u0;
+        int what = ttprobe::kCompWin;
+        if (result > max_turns)
+        {
+            const bool full = (cutoff_turn >= max_turns);
+            const bool graded = leafeval::GradeNoWinEnabled()
+                             && (leafeval::ForceNoWin() || ResolveProvider(state).GradesNoWinLeaf());
+            if (g_fs_trunc_events != trunc_at_entry)          { what = ttprobe::kCompNoWinTrunc; }
+            else if (!nowin_armed)                             { what = ttprobe::kCompNoWinUnarmed; }
+            else if (full && !graded && !NoWinStoreUngradedOn()) { what = ttprobe::kCompNoWinFullUngraded; }
+            else                                               { what = ttprobe::kCompNoWinStored; }
+        }
+        ttprobe::Add(depth, what, du);
+        if (depth == 1)
+        {
+            int k = cutoff_turn - state_turn_at_entry;
+            k = k < 0 ? 0 : (k > 4 ? 4 : k);
+            ttprobe::g_slack_n[k].fetch_add(1, std::memory_order_relaxed);
+            ttprobe::g_slack_u[k].fetch_add(du, std::memory_order_relaxed);
+            if (result == cutoff_turn) { ttprobe::g_slack_wat[k].fetch_add(1, std::memory_order_relaxed); }
+        }
+    }
 
     if (tt != nullptr && result <= max_turns) { PROF_INC(tt_stores); tt->Store(key, result); }
     else if (tt != nullptr)
@@ -55348,11 +55527,14 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         // decline the store instead. A narrower run cannot reach that exit at all, so it is exempt.
         // `nowin_armed` leads so that a BUDGETED search short-circuits before the provider lookup:
         // with the mechanism disarmed this whole block is the single boolean test it always was.
+        // MTG_NOWIN_STORE_UNGRADED (default ON) admits the ungraded full run too: its natural exit
+        // now publishes kInvalid, so every exit of a full run publishes deterministically.
         const bool full_run = (cutoff_turn >= max_turns);
         if (nowin_armed && g_fs_trunc_events == trunc_at_entry
-            && (!full_run || (leafeval::GradeNoWinEnabled()
-                              && (leafeval::ForceNoWin()
-                                  || ResolveProvider(state).GradesNoWinLeaf()))))
+            && (!full_run || NoWinStoreUngradedOn()
+                || (leafeval::GradeNoWinEnabled()
+                    && (leafeval::ForceNoWin()
+                        || ResolveProvider(state).GradesNoWinLeaf()))))
         {
             PROF_INC(tt_nowin_stored);
             TranspositionTable::NoWinEntry e;
@@ -57433,6 +57615,42 @@ inline Dumper g_dumper;
 // `eot_seen` (STUCK-TURN STATE CLOSURE, see WinlessDevelopActive): the caller's set of end-of-turn
 // states already searched at this decision. nullptr -- every caller but the stuck-node plan loop --
 // disables the collapse entirely.
+// ---- STRICT CHILD CUTOFFS (MTG_FS_STRICT_CUT -- DEFAULT ON; =0 restores the inclusive cut) ---------
+//
+// Every plan loop in the full-line search keeps a child's line only on a STRICTLY earlier win
+// (`x.win_turn < best.win_turn`), yet it hands the child cutoff = min(cutoff, best.win_turn) --
+// INCLUSIVE of the best's own turn. A child win AT best.win_turn is therefore searched for and then
+// thrown away, and so is everything a deeper node does to find a win at exactly ITS cutoff: a
+// cutoff c is always either some ancestor's best (a tie there, discarded) or the root's
+// max_turns + 1 (no game reaches it), so a win at exactly c can never change the root's line. The
+// 1-ply horizon leaf pays for that turn in full -- the rollout plays the whole of turn c, its
+// ~116-candidate lookahead included, to report a win the caller discards. Asking min(cutoff,
+// best.win_turn - 1) instead removes exactly that work and nothing else. Every node still searches
+// "wins at turn <= its cutoff" exactly, so every bound the caches record stays a true statement;
+// a node's WIN line is cutoff-independent (first strict improvement in plan order), so a later
+// query at a looser cutoff that re-searches instead of hitting finds the same line.
+//
+// Only while best is a real win (best.win_turn <= max_turns): before any win the cut is the
+// caller's, as before. The one INCLUSIVE comparison in these loops -- the attacking-dork release,
+// "release wins ties" -- keeps its inclusive cut at the default branch's own win turn (its call
+// site takes min(this, tail.win_turn)). Off while the value-guided beam records children's scores
+// (they rank later passes) or the dominance census/prune reads them.
+//
+// UNBUDGETED PLAY ONLY, for the reason every unit-moving collapse here is: under a budget the
+// freed units are re-spent and play moves. Measured: docs/design/snow-exact-unit-reductions.md.
+inline bool FsStrictCutOn()
+{
+    static const bool v = EnvOn("MTG_FS_STRICT_CUT", true);
+    return v;
+}
+static inline int FsChildCut(int cutoff, int best_win, int max_turns, const SearchBudget* budget)
+{
+    if (best_win <= max_turns && FsStrictCutOn() && g_unbudgeted_play > 0
+        && (budget == nullptr || budget->Unlimited()) && !g_probe_val_recording && !DomActive())
+    { return std::min(cutoff, best_win - 1); }
+    return std::min(cutoff, best_win);
+}
+
 struct EotStateSet
 {
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen;
@@ -57978,7 +58196,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (!SimulateEndAndStartNextTurn(s3)) { continue; }
                     ExpireStagedCards(s3);
                     TurnSolver::SearchLine sub =
-                        FSLineWin(s3, depth, max_turns, std::min(cutoff, best.win_turn),
+                        FSLineWin(s3, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
                                   second_main, tt, lc, budget);
                     if (m2t_here)
                     {
@@ -57986,7 +58204,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         for (const Action& ca : bp3) { cont += ca.card_name.str(); cont += ","; }
                         std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d cont=[%s] sub=%d cutoff=%d\n",
                                      state.turn_number, depth, m2t_sum(q).c_str(), k, cont.c_str(),
-                                     sub.win_turn, std::min(cutoff, best.win_turn));
+                                     sub.win_turn, FsChildCut(cutoff, best.win_turn, max_turns, budget));
                         // Level 2: the child's NEXT-TURN start state (s3 is post-EOT here), so a
                         // sub that "should" have won can be diffed against the fixture/control state
                         // -- hand, library top (the next turn's dig window), and untapped sources.
@@ -58114,7 +58332,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     {
                         ++g_m2fix_nest;
                         TurnSolver::SearchLine cont =
-                            FSLineTail(s2, depth, max_turns, std::min(cutoff, best.win_turn),
+                            FSLineTail(s2, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
                                        second_main, tt, lc, budget);
                         --g_m2fix_nest;
                         if (m2t_here)
@@ -58142,7 +58360,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // STATE CLOSURE (WinlessDevelopActive / fswdedup): a sibling already searched this
             // exact end-of-turn state, so this line's future IS that line's future.
             if (eot_seen != nullptr
-                && !eot_seen->Visit(BuildDedupKey(s2), s2, std::min(cutoff, best.win_turn),
+                && !eot_seen->Visit(BuildDedupKey(s2), s2, FsChildCut(cutoff, best.win_turn, max_turns, budget),
                                     depth, max_turns))
             { continue; }
             // EOT dominance on the caller's frontier. Every (pre-combat x second-main) combination
@@ -58155,7 +58373,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (dprobe.prune) { continue; }
             }
             TurnSolver::SearchLine sub =
-                FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
+                FSLineWin(s2, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
             if (m2t_here)
             {
                 std::fprintf(stderr, "[m2t] %s T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
@@ -58238,7 +58456,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (!SimulateEndAndStartNextTurn(s)) { continue; }
                     ExpireStagedCards(s);
                     TurnSolver::SearchLine sub =
-                        FSLineWin(s, depth, max_turns, std::min(cutoff, best.win_turn),
+                        FSLineWin(s, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
                                   second_main, tt, lc, budget);
                     if (sub.win_turn < best.win_turn)
                     {
@@ -58386,7 +58604,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         if (dprobe.prune) { continue; }
                     }
                     TurnSolver::SearchLine sub =
-                        FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn),
+                        FSLineWin(s2, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
                                   second_main, tt, lc, budget);
                     if (m2t_here)
                     {
@@ -59699,7 +59917,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         return win;
                     }
                     TurnSolver::SearchLine tail =
-                        FSLineTail(s3, depth - 1, max_turns, std::min(cutoff, best.win_turn),
+                        FSLineTail(s3, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
                                    second_main, tt, lc, budget, nullptr, eot_ptr);
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
@@ -59909,7 +60127,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 for (const Action& a : p.actions) { g_fsw_path += a.card_name; g_fsw_path += ","; }
                 g_fsw_path += "|";
             }
-            tail = FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+            tail = FSLineTail(s, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main,
                               tt, lc, budget, &dom_arch, eot_ptr);
             if (s_fsw_path) { g_fsw_path.resize(path_len); }
         }
@@ -59930,7 +60148,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             TurnSolver::SearchLine tail_rel =
                 FSLineTail(s_rel, depth - 1, max_turns,
-                           std::min(cutoff, std::min(best.win_turn, tail.win_turn)),
+                           std::min(FsChildCut(cutoff, best.win_turn, max_turns, budget), tail.win_turn),
                            second_main, tt, lc, budget, &dom_arch, eot_ptr);
             // RELEASE WINS TIES (<=, not <): the hold's only possible payoff is within THIS
             // turn -- every source untaps next turn (the hold rule's own premise) -- so a tail
@@ -60220,7 +60438,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     return win;
                 }
                 TurnSolver::SearchLine tail =
-                    FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+                    FSLineTail(s, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main,
                                tt, lc, budget, nullptr, eot_ptr);
                 // ...and the tail half of the [fsw-wave] line above (same gate).
                 {
@@ -60361,7 +60579,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     return true;
                 }
                 TurnSolver::SearchLine tail =
-                    FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+                    FSLineTail(s, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main,
                                tt, lc, budget, nullptr, eot_ptr);
                 // FRESH-SPEND admissibility (mirror of wave 0's check): a freshmode variant is
                 // admitted only when its line realizes a WIN within the horizon; a this-turn kill
@@ -64450,6 +64668,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         const bool trace_tn = (s_trace_solve || s_trace_env) && s_trace_turn > 0
                               && state.turn_number == s_trace_turn;
         const bool trace_this = trace_t1 || trace_t2 || trace_tn;
+        // MTG_LA_TIE_PRUNE's gate (see LaTiePruneOn). Not under a trace (every candidate is printed
+        // there) and not with the dominance census/prune armed (it records every rollout's score).
+        const bool tie_prune_here = LaTiePruneOn() && !enforce_budget && g_unbudgeted_play > 0
+                                 && (budget == nullptr || budget->Unlimited())
+                                 && !trace_this && !DomActive();
         if (trace_this)
         {
             // depth and the phase are printed too: under an UNBOUNDED budget enforce_budget is
@@ -65444,6 +65667,28 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (dom_probe.prune) { ++candidates_done; continue; }
             }
 
+            // EXACT TIE PRUNE (MTG_LA_TIE_PRUNE; see LaTiePruneOn). A candidate that cannot win a
+            // tie with the best needs a STRICTLY earlier win to matter, so its rollout is asked only
+            // about turns < pass_best_win (cutoff one tighter) -- and when no such turn is left (the
+            // best already wins on the earliest turn this rollout could return), not run at all.
+            int cand_cutoff = pass_best_win;
+            if (tie_prune_here && pass_has_best && pass_best_win <= max_turns
+                && !(plan.value > pass_best.value)
+                && (pass_best_inf >= 0 || !state.inf_life_possible || !leafeval::InfWinTie()))
+            {
+                if (pass_best_win <= copy.turn_number)
+                {
+                    if (s_rollout_stats) { g_la_tie_pruned.fetch_add(1, std::memory_order_relaxed); }
+                    ++candidates_done;
+                    continue;
+                }
+                if (LaTieTightenOn())
+                {
+                    cand_cutoff = pass_best_win - 1;
+                    if (s_rollout_stats) { g_la_tie_tightened.fetch_add(1, std::memory_order_relaxed); }
+                }
+            }
+
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
@@ -65451,7 +65696,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             leafeval::t_life = leafeval::kInvalid;
             leafeval::t_inf = -1;                  // ...and its winning rollout's inf-life stamp
             int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
-                                         pass_best_win, second_main, tt);
+                                         cand_cutoff, second_main, tt);
             const long long leaf_tb   = leafeval::t_tb;
             const long long leaf_life = leafeval::t_life;
             const int       leaf_inf  = leafeval::t_inf;
@@ -65624,8 +65869,17 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                     }
                     if (!SimulateEndAndStartNextTurn(copy)) { continue; }
+                    // EXACT TIE PRUNE, wave form: only a STRICTLY earlier win is taken below, and
+                    // this rollout cannot return earlier than copy.turn_number.
+                    if (tie_prune_here && pass_has_best && pass_best_win <= copy.turn_number)
+                    { if (s_rollout_stats) { g_la_wave_pruned.fetch_add(1, std::memory_order_relaxed); } continue; }
+                    // ...and, for the same reason, a win AT pass_best_win is never taken here, so
+                    // the rollout is asked one turn less.
+                    const int wave_cutoff = (tie_prune_here && pass_has_best && LaTieTightenOn()
+                                             && pass_best_win <= max_turns)
+                                          ? pass_best_win - 1 : pass_best_win;
                     const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
-                                                       pass_best_win, second_main, tt);
+                                                       wave_cutoff, second_main, tt);
                     // STRICTLY better only. Wave 0's variants share their base plan's `value`, so the
                     // equal-turn value tiebreak the main loop uses would let a deferred rank displace
                     // an equally-good searched line for no measured reason; requiring a strict
@@ -65724,8 +65978,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                 }
                 if (!SimulateEndAndStartNextTurn(copy)) { return true; }
+                if (tie_prune_here && pass_has_best && pass_best_win <= copy.turn_number)
+                { if (s_rollout_stats) { g_la_wave_pruned.fetch_add(1, std::memory_order_relaxed); } return true; }
+                const int gw_cutoff = (tie_prune_here && pass_has_best && LaTieTightenOn()
+                                       && pass_best_win <= max_turns)
+                                    ? pass_best_win - 1 : pass_best_win;
                 const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
-                                                   pass_best_win, second_main, tt);
+                                                   gw_cutoff, second_main, tt);
                 // STRICTLY better only -- same reasoning as the bp wave phase above.
                 if (pass_has_best && win_turn >= pass_best_win) { return true; }
                 if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
@@ -66678,6 +66937,156 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     cache[k] = solvememo::Entry{ g_decision_epoch, p,
                                  static_cast<uint32_t>(g_condemn_drops - drops_before),
                                  static_cast<uint32_t>(g_fs_trunc_events - trunc_before) };
+    return p;
+}
+
+// ---- ROLLOUT PRE-COMBAT MEMO (MTG_ROLLOUT_M1_MEMO -- DEFAULT ON; =0 restores the unmemoized solve) --
+//
+// The 1-ply horizon leaf (SimulateToEnd at EffectiveFdLeafDepth() == 1) re-decides EVERY simulated
+// turn with SolveWithLookahead(depth 1): the whole candidate list (~116 on Snow), each candidate
+// applied and rolled out. Its post-combat twin has been memoized since 2026-08-15
+// (SearchedSecondMainMemoized: 80% exact repeats); the pre-combat solve never was. So when two
+// horizon leaves of one pass reach the same turn-start position -- a transposition into the MIDDLE
+// of an earlier leaf's rollout, or the same leaf re-rolled because the table only held a bounded
+// refutation narrower than the new query -- the whole turn's candidate fan-out was paid again.
+//
+// EXACT, NOT A HEURISTIC. In an unbudgeted search the returned plan is a pure function of the key:
+// no start gate, no overrun guard, every candidate scored to completion, and every memo underneath
+// (leaf table, solve memo, enum memo) returns what a recompute would. The key is the one the m2 memo
+// and the greedy memo use for mid-turn positions (BuildBreakpointKey, which folds floating mana,
+// storm count, casts-remaining, live m1_hand stamps and scripted pins), plus the solve's own inputs
+// (depth, max_turns, second_main), the three leaf-mode overrides (a pass's leaf is part of what a
+// nested breakpoint node scores with) and the condemnation host tag. Scope = g_decision_epoch, the
+// same per-pass scope as the m2 memo (the key's library digest is sound only inside one decision).
+// The body's two side counters are replayed exactly as the m2 memo replays them (audit §6.1).
+//
+// UNBUDGETED PLAY ONLY (g_unbudgeted_play, the latch NoWinLeafMemoArmed uses). A hit skips the
+// solve's ConsumeAt() calls, and in budgeted play units ARE the decision procedure (start gate,
+// overrun guard), so there it would be a play change needing an A/B. Under the latch it changes the
+// work meter only -- which is the point: the depth matrix's H cells abandon on that meter.
+// MTG_ROLLOUT_M1_MEMO_VERIFY=1 recomputes every hit and counts plan mismatches (must be 0).
+namespace m1memo
+{
+    inline bool On()     { static const bool v = EnvOn("MTG_ROLLOUT_M1_MEMO", true); return v; }
+    inline bool Verify() { static const bool v = EnvOn("MTG_ROLLOUT_M1_MEMO_VERIFY"); return v; }
+    // Entries live for one epoch, so the map is emptied when the epoch moves rather than only on
+    // overflow -- a stale entry can never hit, so keeping it only costs memory. The cap is a memory
+    // backstop for a single pathological pass, not the working policy; the dump reports whether it
+    // was ever reached (it decides units when it is).
+    inline std::size_t Cap()
+    {
+        static const std::size_t v =
+            static_cast<std::size_t>(std::max(1, EnvInt("MTG_ROLLOUT_M1_MEMO_CAP", 262144)));
+        return v;
+    }
+    inline thread_local std::unordered_map<TranspositionTable::Key, solvememo::Entry,
+                                           TranspositionTable::KeyHash> t_cache;
+    inline thread_local uint64_t t_epoch = 0;
+    // Tallied only under MTG_ROLLOUT_STATS (verify counts always), printed at exit when nonzero.
+    inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_cap_clears{0}, g_epoch_clears{0};
+    inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0}, g_peak{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (g_hits.load() + g_misses.load() == 0) { return; }
+            std::fprintf(stderr, "[m1-rollout-memo] hits=%llu misses=%llu epoch_clears=%llu"
+                                 " cap_clears=%llu peak=%llu cap=%zu",
+                         (unsigned long long)g_hits.load(), (unsigned long long)g_misses.load(),
+                         (unsigned long long)g_epoch_clears.load(),
+                         (unsigned long long)g_cap_clears.load(),
+                         (unsigned long long)g_peak.load(), Cap());
+            if (Verify())
+            {
+                std::fprintf(stderr, " verified=%llu MISMATCHES=%llu",
+                             (unsigned long long)g_verified.load(),
+                             (unsigned long long)g_mismatches.load());
+            }
+            std::fprintf(stderr, "\n");
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+static void M1MemoClear() { m1memo::t_cache.clear(); }
+
+static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth, int max_turns,
+                                              SearchBudget* budget, bool second_main,
+                                              TranspositionTable* tt)
+{
+    if (depth <= 0 || !m1memo::On() || g_unbudgeted_play == 0 || HumanPlayActive()
+        || (budget != nullptr && !budget->Unlimited()) || g_cantrip_order_site != nullptr)
+    {
+        return TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/true, depth, max_turns,
+                                              budget, /*enforce_budget=*/false, second_main, tt);
+    }
+    TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/true);
+    Fold(k, 0x3E1C);                                 // rollout-m1 key namespace
+    Fold(k, static_cast<uint64_t>(depth));
+    Fold(k, static_cast<uint64_t>(max_turns));
+    Fold(k, second_main ? 1u : 0u);
+    Fold(k, (g_force_heuristic_leaf ? 1u : 0u) | (g_force_value_leaf ? 2u : 0u)
+              | (g_force_constant_leaf ? 4u : 0u));
+    if (g_condemn_suppress) { Fold(k, 0xC5B9); }
+    auto& cache = m1memo::t_cache;
+    if (m1memo::t_epoch != g_decision_epoch)
+    {
+        if (!cache.empty())
+        { cache.clear(); if (s_rollout_stats) { m1memo::g_epoch_clears.fetch_add(1, std::memory_order_relaxed); } }
+        m1memo::t_epoch = g_decision_epoch;
+    }
+    auto it = cache.find(k);
+    if (it != cache.end())
+    {
+        if (s_rollout_stats) { m1memo::g_hits.fetch_add(1, std::memory_order_relaxed); }
+        if (m1memo::Verify())
+        {
+            const TurnSolver::Plan fresh = TurnSolver::SolveWithLookahead(
+                state, /*is_pre_combat=*/true, depth, max_turns, budget,
+                /*enforce_budget=*/false, second_main, tt);
+            m1memo::g_verified.fetch_add(1, std::memory_order_relaxed);
+            if (!solvememo::SamePlan(fresh, it->second.plan))
+            {
+                const uint64_t n = m1memo::g_mismatches.fetch_add(1, std::memory_order_relaxed);
+                if (n < 5)
+                {
+                    std::fprintf(stderr,
+                                 "[m1-rollout-memo] MISMATCH t%d d%d: cached %zu actions vs fresh %zu\n",
+                                 state.turn_number, depth, it->second.plan.actions.size(),
+                                 fresh.actions.size());
+                }
+            }
+        }
+        if (it->second.condemn_drops | it->second.trunc_delta)
+        {
+            g_condemn_drops   += it->second.condemn_drops;
+            g_fs_trunc_events += it->second.trunc_delta;
+        }
+        return it->second.plan;
+    }
+    if (s_rollout_stats) { m1memo::g_misses.fetch_add(1, std::memory_order_relaxed); }
+    const unsigned long long drops_before = g_condemn_drops;
+    const unsigned long long trunc_before = g_fs_trunc_events;
+    TurnSolver::Plan p = TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/true, depth,
+                                                        max_turns, budget,
+                                                        /*enforce_budget=*/false, second_main, tt);
+    // The nested solve can itself open a new pass (a breakpoint node's FSLineWin root bumps the
+    // epoch); an entry is only stored under the epoch it was computed in.
+    if (m1memo::t_epoch != g_decision_epoch) { return p; }
+    if (cache.size() >= m1memo::Cap())
+    {
+        cache.clear();
+        if (s_rollout_stats) { m1memo::g_cap_clears.fetch_add(1, std::memory_order_relaxed); }
+    }
+    cache[k] = solvememo::Entry{ g_decision_epoch, p,
+                                 static_cast<uint32_t>(g_condemn_drops - drops_before),
+                                 static_cast<uint32_t>(g_fs_trunc_events - trunc_before) };
+    if (s_rollout_stats)
+    {
+        const uint64_t sz = cache.size();
+        uint64_t prev = m1memo::g_peak.load(std::memory_order_relaxed);
+        while (sz > prev && !m1memo::g_peak.compare_exchange_weak(prev, sz, std::memory_order_relaxed)) {}
+    }
     return p;
 }
 
