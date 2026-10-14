@@ -1,9 +1,108 @@
 # Hinata's full cast order (MTG_HINATA_ORDER_FULL)
 
-**Status: BUILT, default OFF, and MEASURED NEGATIVE in every configuration -- do not adopt the
-order. Its lasting output is two ENGINE bugs it root-caused in the condemnation filter (bugs 4 and 5
-in `breakpoint-condemnation-status.md`), which are general and worth adopting on their own.**
-Self-contained. Everything needed to resume is here or in git.
+**Status (2026-10-14): the order is SETTLED by the USER and BUILT (commit 514975c9), default OFF; the held-out
+A/B is IN PROGRESS (paused for the night -- PARTIAL numbers and the resume recipe are in
+`hinata-cast-order-RESUME.md`). Do not flip the default before that A/B meets the bar.**
+Self-contained. Everything needed to resume is here or in git. Sections 1-8 below are the HISTORY (the 08-26
+order, its 08-28 revision and the August measurements, which predate the 09-01 Irencrag waste gate, the 09-02
+breakpoint node and the 10-10 restrictor / Crackle fixes); section 0 is the order as it is now.
+
+## 0. The settled order (USER, 2026-10-14)
+
+TOTAL, all main 1 (`MTG_HINATA_ALL_MAIN2` stays off: all-main-2 measured worse):
+
+| slot | card | rank (x64) | why |
+|---|---|---|---|
+| 0 | land drop | `LandDropCastOrderRank` 0 | still SEARCHED at depth > 0; slot 0 is for condemnation only |
+| 1 | Sol Ring | 4 | {1} -> untapped {C}{C} this turn (Izzet Signet 5, sideboard) |
+| 2 | Hinata, Dawn-Crowned | 6 | her per-target discount reaches every TARGETED spell after her |
+| 3 | Reality Spasm | 7 | once the land, rocks and Hinata are down |
+| 4 | Gamble | 8 | before the cantrips (agent tie-break, below) |
+| 5 | Preordain | 10 | before Ponder (agent tie-break, below) |
+| 6 | Ponder | 11 | |
+| 7 | Expressive Iteration | 12 | its exile is use-or-lose THIS turn |
+| 8 | Ornithopter of Paradise | 14 | sick; one more Soulfire / Crackle target |
+| 9 | **Irencrag Feat** | 18 + SET-LEVEL placement | always SECOND LAST (below) |
+| 10 | Soulfire Eruption | 20 | USER: above Opus |
+| 11 | Magma Opus | 21 | |
+| 12 | Crackle with Power | 23 | X takes all remaining mana |
+| 13+ | Icy Blast, Memory Lapse, Remand, Distorting Wake | 30 + MV + name hash | never cast; ordered only for totality |
+
+**Totality.** USER: *"Let's fully order the cards in each list inasmuch as possible. I don't like the randomness
+of choosing the order."* Every live card has its own rank, and `DecisionProvider::CastOrderTotalByName` (new root
+hook, Hinata opts in under the order) makes the shared comparator `CastOrderLessRanked` break a rank tie between
+two DIFFERENT cards by NAME, never by plan / hand order. Two copies of one card keep the root rule (cheapest
+first among rituals, else plan order). Unit-pinned: every one of the 8! hand orders of an 8-card set realises the
+same sequence, and a tie arm (`MTG_HINATA_DORK_TIE`) breaks by name.
+
+**Two agent tie-breaks, put to the USER and not yet contradicted:**
+* **Gamble before the cantrips** -- Gamble's search shuffles the library, so a Gamble after Ponder / Preordain
+  throws away what they set up on top.
+* **Preordain before Ponder** -- each cantrip re-plans after its draw (a breakpoint truncates the plan), so this
+  decides only which goes first; Preordain-first sees more distinct cards (Ponder-first leaves Preordain
+  re-scrying the two Ponder already saw). `MTG_HINATA_PP_STRICT` is now the REVERSE arm (Ponder first). The
+  Ponder -> Preordain -> Ponder interleave stays reachable as single-cantrip subsets, each its own breakpoint;
+  the dedicated interleave is still deferred (`hinata-ponder-preordain-interleave.md`).
+
+### 0.1 Irencrag Feat: always second last
+
+USER, verbatim: *"Your change is fine, but Irencrag needs to be castable after Soulfire and after Magma Opus,
+since it needs to go second last. There has to be flexibility around that."* / *"So, in reality the Irencrag can
+go in any of three spots depending on what other spells are cast, but it is always second last."* / *"So we can
+restrict it using that."*
+
+`max_casts_after: 1` is exactly one more spell of ANY kind, so "second last" means: immediately before whichever
+payoff (Soulfire Eruption, Magma Opus, Crackle with Power) is the plan's LAST cast. Irencrag -> Soulfire,
+Irencrag -> Opus, Irencrag -> Crackle, Soulfire -> Irencrag -> Crackle, Opus -> Irencrag -> Crackle and Soulfire
+-> Opus -> Irencrag -> Crackle are all lines. A scalar rank cannot say that (22 forecloses Irencrag -> Soulfire;
+18 forecloses Soulfire -> Irencrag -> Crackle), so it is built SET-LEVEL, with the Dragonstorm Irencrag-closer
+(`MTG_DRAGONSTORM_IRENCRAG_CLOSER`) as the precedent:
+
+* **Placement** -- `HinataProvider::ArrangeCastOrder` (`MTG_HINATA_IREN_SECOND_LAST`, default ON under the order;
+  =0 -> the scalar 18 alone). The comparator already puts every payoff after every set-up cast, so the plan's
+  last cast is its last payoff whenever it has one; Irencrag moves to just before it. With no payoff it stays
+  at its scalar slot (last, nothing to fund).
+* **The walks count in the same order** -- new hook `DecisionProvider::RestrictorFollowsArrangement`. When it
+  holds, both subset walks (`Solve::consider`, `EnumeratePlans`) count Irencrag's followers in `PlanCastOrder`
+  (comparator + `ArrangeCastOrder`, exactly the order both apply worlds realise), and `RestrictorPrePayable`'s
+  pre-set and `RestrictorSubsetWasted`'s follower read that same order (`RestrictorSubsetWasted` now takes the
+  `arranged` order). Legality and realisation cannot split. (By rank, {Soulfire, Irencrag, Opus} had two
+  followers and was illegal; arranged it has one -- unit-pinned, with the apply casting all three.)
+* **The prune, reconciled with the 09-01 waste gate** -- the gate (`MTG_IRENCRAG_WASTE`, lethal-exempt) now reads
+  the arranged follower. A plan whose Irencrag precedes no payoff leaves it last with no follower and is pruned:
+  that is the position rule's "restrict it using that". Rule 3 ("the payoff NEEDED the float", USER 09-01: "we'll
+  go with your rule, but just those 3 cards") is KEPT, because it is a second fact the position cannot see
+  (Irencrag -> Soulfire on a board that pays the Soulfire anyway). One accounting fix was needed for the new
+  lines: in arranged mode "what the board has left" charges every cast placed before the follower, not just
+  Irencrag's own cost -- otherwise Soulfire -> Irencrag -> Opus, where Soulfire ate the board, reads the float as
+  unneeded and is deleted. Producers' output is still not credited (the keep-the-line direction).
+
+### 0.2 Binding inside cantrip plans
+
+Ponder, Preordain and Expressive Iteration make a set `OrderingOpaque`, which both apply worlds cast in PLAN
+order unless the deck opts in: at depth > 0 the cantrip-first partition ([may-precede] -> [cantrips] -> [rest]),
+which HOISTS Irencrag over a cantrip because it has `ritual_float` (handing the cantrip Irencrag's one cast);
+at depth 0 raw hand order. Hinata now opts into `OrderOpaqueCastsByRank` under the order, so the executor
+(`TakeTurn`) and the rollout (`ApplyPlanDirect`) rank-sort and arrange those sets too -- the order the walks
+count. Unit-pinned on a searched {Ponder, Irencrag, Crackle} plan whose own order is Irencrag-first.
+
+### 0.3 Housekeeping
+
+* `MTG_HINATA_IREN_EARLY` (Irencrag back to 18) is folded into the order and deleted (slot + reader).
+* `CastOrderTierName` renumbered to the current tiers (the 08-28 revision had left Hinata labelled "TUTOR", Spasm
+  "TOP-OF-LIBRARY CANTRIPS", the cantrips "MANA DORK" and Sol Ring unlabelled).
+* The false rank comment "a cantrip cast before her ... paid full price" is fixed: her discount is per target,
+  and Ponder, Preordain, Gamble and EI have none.
+
+---
+
+# HISTORY -- the August order and its measurements (sections 1-8, kept as written)
+
+**August status (SUPERSEDED by section 0): BUILT, default OFF, and MEASURED NEGATIVE in every configuration --
+do not adopt the order. Its lasting output is two ENGINE bugs it root-caused in the condemnation filter (bugs 4
+and 5 in `breakpoint-condemnation-status.md`), which are general and worth adopting on their own.** Those
+numbers predate the 09-01 waste gate, the 09-02 breakpoint node and the 10-10 restrictor / Crackle fixes, and
+measured an order that did not play inside cantrip plans (no `OrderOpaqueCastsByRank`).
 
 ## 1. Why this deck needed an order at all
 
