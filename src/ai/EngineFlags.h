@@ -735,6 +735,32 @@ inline bool SeqEtbUntapEnabled()
     return heurarm::Flag(heurarm::EDF_SEQ_ETB, env_on);
 }
 
+// MTG_EDF_AURA_RANGE -- part 2 of the USER-approved EldraziDisplacerFlicker cast-order package
+// (2026-10-14; docs/design/edf-cast-order-2026-10-14.md). DEFAULT ON; =0 restores the fixed land-Aura
+// slots byte-identically.
+//
+// THE RANGE. Fertile Ground, Trace of Abundance and Overgrowth cost more than the mana they add this
+// turn (mana value > land_aura_extra_mana), so cast at their slot -- ahead of the untappers -- they
+// can leave an untapper unpayable: five lands, {Fertile Ground, Peregrine Drake} pays only Drake-first
+// (the Drake taps ahead, refunds five lands, then the Aura), and the fixed order walked Fertile Ground
+// first and refused the pair every time. The USER's ruling (Q30): "cast first as now, and moved
+// behind the untappers only when the turn is otherwise unpayable". Wild Growth costs nothing net and
+// keeps its slot.
+//
+// WHERE IT LIVES: EldraziFlickerProvider::ArrangeCastOrder, the one set-level hook every site that
+// realises or projects a cast order calls (both apply worlds, the enumeration's sequential walk, the
+// canonical report) -- so executor and rollout stay in lockstep by construction. The projection is
+// the enumeration's own sequential walk (TurnSolver::OrderPaysSequentially: each cast paid on a
+// scratch board with the tap-ahead, the ETB untap and the Aura's bonus resolved between casts), after
+// the whole-turn prepay the apply worlds try first. Read by the provider and by Solve's rescue gate
+// (TurnSolver.cpp), hence one shared reader. Inert for every deck without an etb_untap_lands card in
+// the same plan as a land Aura -- EldraziDisplacerFlicker is the only list that holds one.
+inline bool EdfAuraRangeOn()
+{
+    static const bool env_on = EnvOn("MTG_EDF_AURA_RANGE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EDF_AURA_RANGE, env_on);
+}
+
 // MTG_IRENCRAG_WASTE -- ADOPTED DEFAULT-ON 2026-09-01 (USER: "let's adopt the Irencrag gate");
 // `=0` restores the old behaviour. Adoption evidence, paired 1200x2 at play settings (d5/20ms),
 // negative = better: SHIPPED engine hold -0.0167 (t -3.26, 20 better : 4 worse) / train -0.0117

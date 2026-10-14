@@ -3003,6 +3003,18 @@ public:
                                              const CardParams& pp) const override;
 
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    // THE USER-APPROVED CAST-ORDER PACKAGE (2026-10-14; docs/design/edf-cast-order-2026-10-14.md).
+    // Part 1: the order is TOTAL -- a rank tie between two different cards goes to the card name,
+    // never to hand order (MTG_EDF_CAST_ORDER).
+    bool CastOrderTotalByName() const override;
+    // Parts 2 and 3, the SET-level half no scalar rank can say (the rank sees neither the host nor
+    // what the line can pay): a shroud land Aura goes behind every other land Aura sharing its HOST
+    // (MTG_EDF_SHROUD_STACK), and a land Aura that costs mana net this turn moves behind the
+    // untappers only when the order is otherwise unpayable (MTG_EDF_AURA_RANGE). Both apply worlds,
+    // the enumeration's sequential walk and the canonical report all call this one hook.
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
+    const char* CastOrderTierName(int rank) const override;
 
     // PLAN VALUE = MANA-EQUIVALENTS, NOT A COMBAT CLOCK (MTG_EDF_VAL_COMBO default ON since
     // 2026-09-15; MTG_EDF_VAL_RAMP default OFF, rejected -- measurements in the implementation's
@@ -3215,6 +3227,9 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller);
 bool EdfComboRoutePiecesInPlace(const GameState& s, int controller);
 int  EdfComboRouteTrial(const GameState& s, int controller);   // 0 no, 1 WIN (kills), 2 DEVELOP (bank + cast)
 int  EdfComboRouteApply(GameState& s, int controller);        // same codes; live run on `s`
+// Test seam (MTG_EDF_ROUTE_AURA_ORDER): the HAND INDEX of the land Aura the route's deploy step 2 casts
+// first on this board, -1 when the hand holds none. Reads only; plays nothing.
+int  EdfComboRouteFirstAuraPick(const GameState& s, int controller);
 
 // THE MECHANICAL EQUIP-CHAIN GO-OFF (DecisionProvider::EquipRouteEnabled; the free-Equipment draw
 // engine). Same three-part shape as the EDF route above and the same all-or-nothing discipline:

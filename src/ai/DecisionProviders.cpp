@@ -29072,6 +29072,38 @@ void EdfTurnTrace(const GameState& s, int controller) { EdfTurnTraceImpl(s, cont
 // Byte-identical for every other deck: the provider's ComboRouteEnabled() is false there and the
 // emission site never scans.
 // =================================================================================================
+
+// ---- THE USER-APPROVED EDF CAST-ORDER PACKAGE (2026-10-14) -- the provider-only levers ------------
+// USER: "Your EDF changes look reasonable to me. You can proceed with those." (the draft:
+// docs/design/cast-order-drafts-2026-10-14/EldraziDisplacerFlicker.md; the record with every
+// measurement: docs/design/edf-cast-order-2026-10-14.md). Part 2's reader (MTG_EDF_AURA_RANGE) is
+// shared with TurnSolver and lives in EngineFlags.h. All read only by EldraziFlickerProvider and its
+// COMBO OFF route, so every other deck is byte-identical whatever they say.
+// Part 1 -- the TOTAL order (EldraziFlickerProvider::CastOrderRank + CastOrderTotalByName).
+static bool EdfCastOrderOn()
+{
+    static const bool env = EnvOn("MTG_EDF_CAST_ORDER", true);   // DEFAULT ON; =0 -> the 09-15 ranks
+    return heurarm::Flag(heurarm::EDF_CAST_ORDER, env);
+}
+// Part 3 -- the same-land stack (EldraziFlickerProvider::ArrangeCastOrder).
+static bool EdfShroudStackOn()
+{
+    static const bool env = EnvOn("MTG_EDF_SHROUD_STACK", true);   // DEFAULT ON; =0 -> no host-aware move
+    return heurarm::Flag(heurarm::EDF_SHROUD_STACK, env);
+}
+// Part 4 -- the COMBO OFF route's Aura order (comboroute::DeployPieces step 2).
+static bool EdfRouteAuraOrderOn()
+{
+    static const bool env = EnvOn("MTG_EDF_ROUTE_AURA_ORDER", true);   // DEFAULT ON; =0 -> any-colour first
+    return heurarm::Flag(heurarm::EDF_ROUTE_AURA_ORDER, env);
+}
+// Part 5 -- the COMBO OFF route's second untapper (comboroute::DeployPieces step 3 / Run).
+static bool EdfRouteLoopUntapperOn()
+{
+    static const bool env = EnvOn("MTG_EDF_ROUTE_LOOP_UNTAPPER", true);   // DEFAULT ON; =0 -> refund-only rule
+    return heurarm::Flag(heurarm::EDF_ROUTE_LOOP_UNTAPPER, env);
+}
+
 namespace comboroute
 {
 inline bool On()
@@ -29166,6 +29198,12 @@ struct Ctx
     // then spent that float on the finisher and stranded the next blink. Set, the finish keeps the
     // next blink's mana unless the lands can pay it or the float finishes the kill outright.
     bool        protect_blink = false;
+    // MTG_EDF_ROUTE_LOOP_UNTAPPER's deploy attempts only (see Run): DeployPieces step 3 casts a second
+    // untapper whose LOOP nets more than the payload already down, even when its cast refund is below
+    // its cost. `loop_untapper_fired` records that the rule changed a deploy (else the attempt is the
+    // one that already failed and Run skips it).
+    bool        loop_untapper = false;
+    bool        loop_untapper_fired = false;
     int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
     std::string blink_label;
     std::string log;
@@ -30071,6 +30109,39 @@ static int AvailableTotal(const Ctx& cx)
     }
     return avail;
 }
+// Which land Aura in hand step 2 of the deploy casts next (`h.auras` non-empty).
+// THE DECK'S CAST ORDER (MTG_EDF_ROUTE_AURA_ORDER, part 4; USER Q32 2026-10-14): Wild Growth, Fertile
+// Ground, Trace of Abundance, Overgrowth -- the USER's 09-08 Aura order (cheapest / easiest to cast
+// first; Overgrowth's {G}{G} cannot pay Trace's {R/W}). Lowest CastOrderRank, the name the last
+// tie-break, so the go-off turn plays the order the rest of the deck plays instead of "any-colour
+// first, then hand order", which nobody chose. =0 restores that.
+static int PickDeployAura(const Ctx& cx, const Hand& h)
+{
+    const Player& ap = cx.s.players[cx.me];
+    int pick = h.auras.front();
+    if (EdfRouteAuraOrderOn())
+    {
+        const DecisionProvider& prov = ResolveProvider(cx.s);
+        int best_rank = 0;
+        const CardDefinition* best_d = nullptr;
+        for (int i : h.auras)
+        {
+            const CardDefinition* d = DefOf(ap.hand[i]);
+            if (!d) { continue; }
+            const int r = prov.CastOrderRank(cx.s, *d);
+            if (best_d == nullptr || r < best_rank
+                || (r == best_rank && d->card.m_name.str() < best_d->card.m_name.str()))
+            { best_rank = r; best_d = d; pick = i; }
+        }
+        return pick;
+    }
+    for (int i : h.auras)
+    {
+        const CardDefinition* d = DefOf(ap.hand[i]);
+        if (d && d->params.land_aura_produces.empty()) { pick = i; break; }
+    }
+    return pick;
+}
 static bool DeployPieces(Ctx& cx, bool auras_first)
 {
     Player& ap = cx.s.players[cx.me];
@@ -30111,12 +30182,7 @@ static bool DeployPieces(Ctx& cx, bool auras_first)
         {
             Hand h = ScanHand(cx);
             if (h.auras.empty()) { break; }
-            int pick = h.auras.front();
-            for (int i : h.auras)
-            {
-                const CardDefinition* d = DefOf(ap.hand[i]);
-                if (d && d->params.land_aura_produces.empty()) { pick = i; break; }
-            }
+            const int pick = PickDeployAura(cx, h);
             const CardDefinition* ad = DefOf(ap.hand[pick]);
             if (!ad) { break; }
             DeployDemand(cx);
@@ -30158,7 +30224,33 @@ static bool DeployPieces(Ctx& cx, bool auras_first)
             // worth it: the refund covers the cast (an untapper never loses mana then)
             const int refund = YieldOfSet(cx, set);
             if (b.payload != 0 && refund < d->card.m_mana_cost.ManaValue())
-            { cx.Dbg("skip " + d->card.m_name.str() + ": refund " + std::to_string(refund) + " < cost"); continue; }
+            {
+                // ...OR ITS LOOP IS THE BETTER ONE (MTG_EDF_ROUTE_LOOP_UNTAPPER, part 5; Run's extra
+                // deploy attempts only). The loop blinks the payload with the most untaps, so what a
+                // second untapper is worth is not its cast refund but the loop it makes: per blink,
+                // the yield of the lands its ETB untaps minus the outlet's blink cost. Probe
+                // t4_cloud_first: Cloud on board, Displacer ({2}{C} = 3) in play, three lands
+                // (Yavimaya Coast + Wild Growth 2, Kitchen 1, Adarkar Wastes 1). Cloud's loop untaps
+                // the best two (3) and nets 0; the Drake untaps all three (4) and nets +1, so its
+                // cast's -1 is paid back on the first blink -- and the refund rule skipped it.
+                // Requires the outlet ON the battlefield (with it in hand the deploy still has to pay
+                // for it, which this rule does not price) and a loop net above zero and above the
+                // payload's own.
+                bool loop_better = false;
+                if (cx.loop_untapper && b.outlet != 0)
+                {
+                    const int blink = b.blink.ManaValue();
+                    const int cur_n = std::min(b.payload_untaps, std::max(1, b.lands));
+                    const int cur_net = YieldOfSet(cx, ChooseUntaps(cx, cur_n, b.outlet_needs_c ? 1 : 0, 0)) - blink;
+                    const int new_net = refund - blink;
+                    loop_better = new_net > 0 && new_net > cur_net;
+                    cx.Dbg("loop rule " + d->card.m_name.str() + ": net " + std::to_string(new_net)
+                           + " vs payload " + std::to_string(cur_net));
+                }
+                if (!loop_better)
+                { cx.Dbg("skip " + d->card.m_name.str() + ": refund " + std::to_string(refund) + " < cost"); continue; }
+                cx.loop_untapper_fired = true;
+            }
             const int avail = AvailableTotal(cx);
             if (avail < d->card.m_mana_cost.ManaValue())
             { cx.Dbg("skip " + d->card.m_name.str() + ": avail " + std::to_string(avail) + " < cost"); continue; }
@@ -30486,10 +30578,32 @@ inline bool BoardDeployOn()
 }
 constexpr int kRunUnforced = -2;   // Run's `forced`: no replay pinned (-1 pins the board loop itself)
 
+static const char* AttemptName(int attempt)
+{
+    switch (attempt)
+    {
+        case 0:  return "A (auras first)";
+        case 1:  return "B (auras last)";
+        case 2:  return "C (auras first, loop untapper)";
+        default: return "D (auras last, loop untapper)";
+    }
+}
+// Deploy attempts 2 / 3 (MTG_EDF_ROUTE_LOOP_UNTAPPER, part 5) are attempts 0 / 1 with DeployPieces'
+// second-untapper LOOP rule armed. They run only after 0 / 1 have failed to KILL, and only when the
+// rule actually changed the deploy (otherwise the attempt is one that already failed), so the rule can
+// add a kill and can never displace one. =0 -> the two attempts, byte-identical.
+static int RunAttempts() { return EdfRouteLoopUntapperOn() ? 4 : 2; }
+static void ArmAttempt(Ctx& cx, int attempt)
+{
+    cx.loop_untapper       = attempt >= 2;
+    cx.loop_untapper_fired = false;
+}
+
 static int Run(Ctx& cx, int forced = kRunUnforced)
 {
     if (RouteWon(cx)) { return 1; }
     const Board b0 = ScanBoard(cx);
+    const int attempts = RunAttempts();
     if (b0.outlet != 0 && b0.payload != 0)
     {
         if (!BoardDeployOn() || forced == -1) { cx.attempt_used = -1; return Loop(cx); }
@@ -30504,28 +30618,29 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
             if (direct == 1) { cx.attempt_used = -1; return 1; }
             if (direct == 2) { direct_state = cx.s; direct_ctx.emplace(cx); }
         }
-        for (int attempt = 0; attempt < 2; ++attempt)
+        for (int attempt = 0; attempt < attempts; ++attempt)
         {
             if (forced >= 0 && attempt != forced) { continue; }
             RestoreCtx(cx, snapshot, saved);
+            ArmAttempt(cx, attempt);
             const Snap before = TakeSnap(cx);
-            DeployPieces(cx, /*auras_first=*/attempt == 0);
+            DeployPieces(cx, /*auras_first=*/attempt % 2 == 0);
             // Nothing deployed: this is the loop that already failed above -- do not pay for it twice.
             if (forced < 0 && SameSnap(TakeSnap(cx), before)
                 && cx.s.players[cx.me].lands_played_this_turn
                    == snapshot.players[cx.me].lands_played_this_turn) { continue; }
+            // The loop-untapper rule did not change this deploy: it is attempt 0 / 1 again.
+            if (forced < 0 && attempt >= 2 && !cx.loop_untapper_fired) { continue; }
             cx.protect_blink = true;
             const int r = Loop(cx);
             cx.protect_blink = false;
             if (r == 1 || (forced >= 0 && r != 0))
             {
-                cx.Dbg(std::string("board deploy ") + (attempt == 0 ? "A (auras first)" : "B (auras last)")
-                       + " kills");
+                cx.Dbg(std::string("board deploy ") + AttemptName(attempt) + " kills");
                 cx.attempt_used = attempt;
                 return r;
             }
-            cx.Dbg(std::string("board deploy ") + (attempt == 0 ? "A (auras first)" : "B (auras last)")
-                   + " does not kill");
+            cx.Dbg(std::string("board deploy ") + AttemptName(attempt) + " does not kill");
         }
         if (forced >= 0) { return 0; }
         // No deploy kills: the route is what the loop as it stood made of it (no / DEVELOP).
@@ -30536,16 +30651,34 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
     }
     const GameState snapshot = cx.s;
     const Ctx saved = cx;
-    for (int attempt = 0; attempt < 2; ++attempt)
+    // A DEVELOP from attempt 0 / 1 returns at once when only those two exist. With the loop-untapper
+    // attempts armed it is HELD (and ends attempts 0 / 1 exactly where it used to) while 2 / 3 look
+    // for a KILL, and is restored if neither finds one -- so the outcome differs only where 2 / 3 kill.
+    int                held = 0, held_attempt = -1;
+    GameState          held_state;
+    std::optional<Ctx> held_ctx;
+    for (int attempt = 0; attempt < attempts; ++attempt)
     {
         if (forced >= 0 && attempt != forced) { continue; }
+        if (held != 0 && attempt < 2) { continue; }
         if (attempt > 0) { RestoreCtx(cx, snapshot, saved); }
-        if (DeployPieces(cx, /*auras_first=*/attempt == 0))
+        ArmAttempt(cx, attempt);
+        if (DeployPieces(cx, /*auras_first=*/attempt % 2 == 0))
         {
+            if (forced < 0 && attempt >= 2 && !cx.loop_untapper_fired) { continue; }
             const int r = Loop(cx);
-            if (r != 0) { cx.attempt_used = attempt; return r; }
+            if (r == 1 || (r != 0 && (forced >= 0 || attempts == 2)))
+            { cx.attempt_used = attempt; return r; }
+            if (r == 2 && held == 0)
+            { held = 2; held_attempt = attempt; held_state = cx.s; held_ctx.emplace(cx); }
         }
-        else { cx.Dbg(std::string("deploy order ") + (attempt == 0 ? "A (auras first)" : "B (auras last)") + " leaves no loop"); }
+        else { cx.Dbg(std::string("deploy order ") + AttemptName(attempt) + " leaves no loop"); }
+    }
+    if (held != 0)
+    {
+        RestoreCtx(cx, held_state, *held_ctx);
+        cx.attempt_used = held_attempt;
+        return held;
     }
     cx.Note("no loop: neither deploy order reaches a finish");
     return 0;
@@ -30620,6 +30753,9 @@ static std::uint64_t BoardKey(const GameState& s, int me)
     // other arm's games (the batch-pool-contamination rule the mana cache documents). Folded only
     // when ON, so the =0 key is unchanged.
     if (BoardDeployOn()) { Mix(h, 0xB0A2DDE9u); }
+    // The EDF cast-order package's two route levers (parts 4 and 5) change the trial's answer too.
+    if (EdfRouteAuraOrderOn())    { Mix(h, 0xA0EA0D3Fu); }
+    if (EdfRouteLoopUntapperOn()) { Mix(h, 0x100B0A77u); }
     Mix(h, static_cast<std::uint64_t>(s.turn_number));
     Mix(h, static_cast<std::uint64_t>(me));
     Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life));
@@ -30705,6 +30841,15 @@ int EdfComboRouteTrial(const GameState& s, int me)
     }
     if (s_memo) { memo.m[key] = r; }
     return r;
+}
+
+int EdfComboRouteFirstAuraPick(const GameState& s, int me)
+{
+    GameState copy = s;
+    comboroute::Ctx cx(copy, me);
+    const comboroute::Hand h = comboroute::ScanHand(cx);
+    if (h.auras.empty()) { return -1; }
+    return comboroute::PickDeployAura(cx, h);
 }
 
 int EdfComboRouteApply(GameState& s, int me)
@@ -37856,6 +38001,54 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
     // on ACTIVATIONS, which happen after every cast regardless. =0 restores reducer-first.
     static const bool s_payload_first_env = EnvOn("MTG_EDF_PAYLOAD_FIRST", true);
     const bool payload_first = heurarm::Flag(heurarm::EDF_PAYLOAD_FIRST, s_payload_first_env);
+    // THE TOTAL ORDER (MTG_EDF_CAST_ORDER, part 1 of the USER-approved package, 2026-10-14):
+    //   land > Wild Growth > Fertile Ground > Trace > Overgrowth (the land-Aura block above, the USER's
+    //   09-08 order, unchanged) > Cloud of Faeries > Peregrine Drake > Training Grounds > Eldrazi
+    //   Displacer > Emiel > Dimensional Infiltrator > Essence Depleter > Vexing Shusher > Living Wish >
+    //   Eladamri's Call -- every cast in main 1 (single main is a USER ruling, 2026-09-08).
+    // Every slot is read off PARAMS; the name is only the comparator's last tie-break
+    // (CastOrderTotalByName), so no two different cards ever fall to hand order.
+    //   * UNTAPPERS by mana value, cheapest first (3..5). They used to TIE at 5 and hand order decided --
+    //     which lost a T4 kill (probe t4_drake_first: Yavimaya Coast + Wild Growth, Kitchen, Adarkar
+    //     Wastes, Displacer + Depleter in play, hand [Drake, Cloud]: the walk priced the Drake first, had
+    //     4 of its 5 and dropped the only kill line, at every budget). Under the tap-ahead an untapper
+    //     refunds whole lands and never loses mana, so the cheap one first lowers what the next cast
+    //     needs: Cloud nets +1 off the Aura'd land and the Drake resolves. The USER cast Cloud first in
+    //     all four reference turns that cast both (s1 T3, s6 T4, s8 T3, s11 T6).
+    //   * Training Grounds keeps 6 (payload first) or 2 (MTG_EDF_PAYLOAD_FIRST=0, reducer first).
+    //   * OUTLETS by mana value (7..8): Displacer before Emiel. Payment-only (Emiel's counter trigger is
+    //     always declined, USER 2026-09-30); pinned for determinism and to match the USER's s4 T4 / s12 T4.
+    //   * FINISHERS -- a creature with a mana sink of its own (a drain or an exile-the-top activation) --
+    //     by mana value (10..12), then every creature with no combo role (13): Vexing Shusher is never
+    //     wanted, so it goes last among the creatures.
+    //   * TUTORS (20..21), broken by strict coloured pips (the land-Aura score's colour term): Living Wish
+    //     {1}{G} before Eladamri's Call {G}{W}, as the USER played s6 T4. The fetched card is cast in the
+    //     post-cast re-solve, so a tutor's own slot affects only payment.
+    // MTG_EDF_CAST_ORDER=0 restores the 2026-09-15 ranks (and plan order on their ties) byte-identically.
+    if (EdfCastOrderOn())
+    {
+        const ManaCost& mc = def.card.m_mana_cost;
+        const int mv = mc.ManaValue();
+        const auto band = [](int base, int off, int width)
+        { return base + std::max(0, std::min(width, off)); };
+        if (def.card.IsCreature() && def.params.etb_untap_lands > 0)   { return band(3, mv - 2, 2); }
+        if (def.params.reduces_creature_activation)                    { return payload_first ? 6 : 2; }
+        if (def.card.IsCreature() && def.params.blink_cost.has_value()) { return band(7, mv - 3, 1); }
+        if (def.card.IsCreature())
+        {
+            const bool sink = (def.params.drain_cost.has_value() && def.params.drain_amount > 0)
+                           || def.params.exile_opponent_top_cost.has_value();
+            return sink ? band(10, mv - 2, 2) : 13;
+        }
+        if (def.params.tutor_to_hand)
+        {
+            const int coloured = mc.white + mc.blue + mc.black + mc.red + mc.green + mc.colorless;
+            const int hybrid   = static_cast<int>(mc.hybrid_count);
+            const int strict   = coloured > hybrid ? coloured - hybrid : 0;
+            return band(20, strict - 1, 1);
+        }
+        return GenericProvider::CastOrderRank(s, def);
+    }
     if (payload_first)
     {
         if (def.params.etb_untap_lands > 0)          { return 5; }   // the payload funds what follows
@@ -37865,6 +38058,138 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
     if (def.params.etb_untap_lands > 0)          { return 6; }   // the payload refunds its own cost
     if (def.params.blink_cost.has_value())       { return 7; }   // then the outlet
     return GenericProvider::CastOrderRank(s, def);
+}
+
+bool EldraziFlickerProvider::CastOrderTotalByName() const { return EdfCastOrderOn(); }
+
+const char* EldraziFlickerProvider::CastOrderTierName(int rank) const
+{
+    if (!EdfCastOrderOn()) { return nullptr; }
+    if (rank < -100)              { return "RAMP: land Aura, cheapest / easiest to cast first (USER 09-08)"; }
+    if (rank == 2 || rank == 6)   { return "REDUCER: Training Grounds (after the untappers that fund it)"; }
+    if (rank >= 3 && rank <= 5)   { return "UNTAPPER: ETB untap, cheapest first (its refund funds the rest)"; }
+    if (rank == 7 || rank == 8)   { return "OUTLET: blink, by mana value"; }
+    if (rank >= 10 && rank <= 12) { return "FINISHER: a creature with its own mana sink, by mana value"; }
+    if (rank == 13)               { return "CREATURE: no combo role (last among the creatures)"; }
+    if (rank == 20 || rank == 21) { return "TUTOR (or other noncreature): fetched card cast in the re-solve"; }
+    return nullptr;
+}
+
+// ---- EldraziFlickerProvider::ArrangeCastOrder: the host stack and the land-Aura range -------------
+namespace
+{
+const CardDefinition* EdfActDef(const Action& a)
+{ return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name); }
+bool EdfIsLandAuraCast(const Action& a, const CardDefinition* d)
+{ return a.kind == Action::Kind::CastFromHand && !a.alt_cost && d && d->params.is_land_aura; }
+
+// PART 3 (MTG_EDF_SHROUD_STACK). An Aura spell TARGETS its host (CR 303.4a) and shroud stops that
+// (CR 702.18a), so once Trace of Abundance resolves on a land no other Aura can be cast onto it. The
+// rank (Trace -981 before Overgrowth -974, the USER's 09-08 funding order) is right everywhere except
+// on ONE host: there Trace-then-Overgrowth is an illegal second cast -- ResolveEnchantTarget quietly
+// re-homes the Overgrowth -- while Overgrowth-then-Trace is a legal stack the USER plays (s11 T3, s1
+// T3). So a shroud Aura moves to just behind the LAST non-shroud land Aura declaring the same
+// enchant_target; every other relative order is kept (a stable move). Two shroud Auras on one host are
+// illegal in either order and are left alone. The enumerator offers both Auras the same hosts
+// (LandAuraHostCandidates reads the pre-plan board), so the shared-host plan exists to be realised.
+void EdfStackShroudLast(const std::vector<Action>& acts, std::vector<int>& order)
+{
+    for (std::size_t i = 0; i < order.size(); ++i)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[i])];
+        const CardDefinition* d = EdfActDef(a);
+        if (!EdfIsLandAuraCast(a, d) || !d->params.land_aura_grants_shroud || a.enchant_target <= 0) { continue; }
+        std::size_t last = i;
+        for (std::size_t q = i + 1; q < order.size(); ++q)
+        {
+            const Action& b = acts[static_cast<std::size_t>(order[q])];
+            const CardDefinition* bd = EdfActDef(b);
+            if (EdfIsLandAuraCast(b, bd) && !bd->params.land_aura_grants_shroud
+                && b.enchant_target == a.enchant_target) { last = q; }
+        }
+        if (last == i) { continue; }
+        std::rotate(order.begin() + static_cast<long>(i), order.begin() + static_cast<long>(i) + 1,
+                    order.begin() + static_cast<long>(last) + 1);
+        --i;   // the slot now holds the next cast; the moved Aura has nothing of its host behind it
+    }
+}
+
+// PART 2 (MTG_EDF_AURA_RANGE). A land Aura whose mana value exceeds what it adds this turn
+// (land_aura_extra_mana) -- Fertile Ground, Trace, Overgrowth; never Wild Growth -- has the range
+// [its slot .. behind the last untapper]. It is cast at its slot unless the order as it stands is
+// unpayable the way the apply worlds pay it (the whole-turn prepay first, then cast by cast); then the
+// NEAREST order that pays is taken: the fewest ranged Auras moved, i.e. the fewest pairwise inversions
+// against the given order (ties to the lower subset mask -- deterministic), each moved Aura placed
+// right behind the last untapper in its original relative order, and the host stack re-applied. No
+// candidate pays -> the given order, untouched. Probe aura_drake: five lands, {Fertile Ground,
+// Peregrine Drake} -- the given order walks the Aura first and fails; Drake-first pays (it taps ahead,
+// refunds five lands, then the Aura).
+void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>& acts,
+                                  std::vector<int>& order, bool stack)
+{
+    int last_untapper = -1;
+    for (std::size_t p = 0; p < order.size(); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[p])];
+        const CardDefinition* d = EdfActDef(a);
+        if (a.kind == Action::Kind::CastFromHand && !a.alt_cost && d && d->card.IsCreature()
+            && d->params.etb_untap_lands > 0) { last_untapper = static_cast<int>(p); }
+    }
+    if (last_untapper < 0) { return; }
+    std::vector<int> movable;   // POSITIONS in `order`
+    for (int p = 0; p < last_untapper; ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
+        const CardDefinition* d = EdfActDef(a);
+        if (EdfIsLandAuraCast(a, d)
+            && d->card.m_mana_cost.ManaValue() > d->params.land_aura_extra_mana) { movable.push_back(p); }
+    }
+    if (movable.empty()) { return; }
+    if (TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
+    if (TurnSolver::OrderPrepaysWholeTurn(s, acts, order)) { return; }
+    const int k = std::min(static_cast<int>(movable.size()), 6);   // 63 candidates at most
+    // Each action index's position in the given order, for the inversion count.
+    std::vector<int> pos_of(acts.size(), 0);
+    for (std::size_t p = 0; p < order.size(); ++p) { pos_of[static_cast<std::size_t>(order[p])] = static_cast<int>(p); }
+    struct Cand { int inv; unsigned mask; std::vector<int> ord; };
+    std::vector<Cand> cands;
+    for (unsigned mask = 1; mask < (1u << k); ++mask)
+    {
+        std::vector<int> moved, rest;
+        std::vector<char> is_moved(order.size(), 0);
+        for (int b = 0; b < k; ++b) { if (mask & (1u << b)) { is_moved[static_cast<std::size_t>(movable[static_cast<std::size_t>(b)])] = 1; } }
+        for (std::size_t p = 0; p < order.size(); ++p)
+        {
+            if (is_moved[p]) { moved.push_back(order[p]); continue; }
+            rest.push_back(order[p]);
+            if (static_cast<int>(p) == last_untapper) { rest.insert(rest.end(), moved.begin(), moved.end()); }
+        }
+        if (stack) { EdfStackShroudLast(acts, rest); }
+        int inv = 0;
+        for (std::size_t x = 0; x < rest.size(); ++x)
+        {
+            for (std::size_t y = x + 1; y < rest.size(); ++y)
+            { if (pos_of[static_cast<std::size_t>(rest[x])] > pos_of[static_cast<std::size_t>(rest[y])]) { ++inv; } }
+        }
+        cands.push_back(Cand{ inv, mask, std::move(rest) });
+    }
+    std::stable_sort(cands.begin(), cands.end(), [](const Cand& x, const Cand& y)
+    { return x.inv != y.inv ? x.inv < y.inv : x.mask < y.mask; });
+    for (const Cand& c : cands)
+    {
+        if (c.ord == order) { continue; }
+        if (TurnSolver::OrderPaysSequentially(s, acts, c.ord)) { order = c.ord; return; }
+    }
+}
+}   // namespace
+
+void EldraziFlickerProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                              std::vector<int>& order) const
+{
+    if (order.size() < 2) { return; }
+    const bool stack = EdfShroudStackOn();
+    if (stack) { EdfStackShroudLast(acts, order); }
+    if (EdfAuraRangeOn()) { EdfRangeAurasBehindUntappers(s, acts, order, stack); }
 }
 
 // PLAN VALUE IN MANA-EQUIVALENTS -- the COMBO half ships DEFAULT ON (adopted 2026-09-15), the RAMP

@@ -7640,56 +7640,17 @@ struct SeqChainTrace
 // reject, so an unmodelled action kind or a modelling gap resolves to "no rescue" (return false),
 // which is exactly the status quo. It must never be consulted to REJECT a subset a gate accepted.
 static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state, int copies);
-static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
-                                    const std::vector<int>& sel)
+// The walk over ONE fixed cast order -- SubsetPayableSequential's body, lifted out so a caller that
+// already holds the order (the EDF provider's ArrangeCastOrder range projection, via
+// TurnSolver::OrderPaysSequentially) prices it with exactly this walk. No sort, no arrangement, no
+// retry: `ord` is walked as given. `sel` is the subset (its Vial puts lay their Treasure down first),
+// `seq_rv_charged` the casts SameSubsetRevealSurcharge debited.
+static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>& cands,
+                              const std::vector<int>& sel, const std::vector<int>& ord,
+                              const std::vector<int>& seq_rv_charged)
 {
-    thread_local std::vector<int> order;
-    order.clear();
-    for (int j : sel)
-    {
-        const Action& a = cands[j];
-        if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
-        // NOTE a SacForMana/Suspend-holding subset lands here and is refused ("unmodelled kind").
-        // A rescue-only SacForMana extension was built for the dragonstorm m2 retirement
-        // (MTG_EF_SAC, 2026-09-04) and DELETED the same week: it measured inert on both probe
-        // games (gi673's phantom was MTG_FB_SBA's, gi223 is the interior plan-breadth hole) and
-        // no motivating game ever appeared. `git show cd8debac` has the working implementation
-        // (ApplySacForMana + SacFloatColorFor lockstep pre-pass) if evidence ever arrives.
-        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr)
-        { return false; }                                              // unmodelled kind -> no rescue
-        order.push_back(j);
-    }
-    if (order.empty()) { return true; }
-    // STATIC: this walk is priced per candidate subset, so a live EnvOn() re-walked `environ`
-    // millions of times per game for a tracer nobody has on (callgrind 2026-09-11: the three
-    // MTG_DBG_SEQ reads plus BuildColorFeasibility's MTG_DOMAIN_WIDEN were 1.2-2.3% of an
-    // in-game run's TOTAL instructions). Function-local (not file-scope) so the read still
-    // happens after ApplyHeuristicDefaults, exactly like every other flag in this file.
-    static const bool _dbg = EnvOn("MTG_DBG_SEQ");
-    if (_dbg) { std::fprintf(stderr, "[dbgseq] enter n=%zu:", order.size());
-                for (int j : order) { std::fprintf(stderr, " %s", cands[j].card_name.str().c_str()); }
-                std::fprintf(stderr, "\n"); }
+    static const bool _dbg = EnvOn("MTG_DBG_SEQ");   // the same static read as the caller's
     const DecisionProvider& prov = ResolveProvider(state);
-    // CastOrderActionRank: identity unless the provider moves a concrete cast (a spliced Desperate).
-    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    { return prov.CastOrderActionRank(state, cands[x], prov.CastOrderRank(state, *cands[x].def))
-           < prov.CastOrderActionRank(state, cands[y], prov.CastOrderRank(state, *cands[y].def)); });
-    // The deck's set-level arrangement, as both apply worlds take it (no-op unless the deck arranges:
-    // Dragonstorm's earliest-payable Medallion slot, MTG_DRAGONSTORM_USER_ORDER).
-    ApplyDeckCastArrangement(state, cands, order);
-    // Same-subset reveal debit (Daring Buccaneer). This walk never removes a cast card from the
-    // scratch hand, so its LIVE EffectiveCost keeps seeing Pirates already cast (two lone Buccaneers
-    // would be "rescued" at {R}{R}). Rather than erase-as-it-goes -- which would price only THIS
-    // walk's order, and the rescue must not under-price the order the apply really takes -- the
-    // cast SameSubsetRevealSurcharge debits (priced over both realisable orders) carries
-    // reveal_or_pay_cost on top of its live cost. Empty for every other deck.
-    thread_local std::vector<int> seq_rv_charged;
-    SameSubsetRevealSurcharge(state, cands, sel, &seq_rv_charged);
-
-    // The walk over one candidate order, extracted so a second order can be priced (see the
-    // untapper-hoisted retry below the first call).
-    auto run_walk = [&](const std::vector<int>& ord) -> bool
-    {
     // Warm per-thread scratch board, same contract as SubsetPayableWithFilters' (see PayScratch):
     // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
     PayScratch _pay_scratch(state);
@@ -7921,7 +7882,64 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         }
     }
     return true;
-    };
+}
+
+static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel)
+{
+    thread_local std::vector<int> order;
+    order.clear();
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
+        // NOTE a SacForMana/Suspend-holding subset lands here and is refused ("unmodelled kind").
+        // A rescue-only SacForMana extension was built for the dragonstorm m2 retirement
+        // (MTG_EF_SAC, 2026-09-04) and DELETED the same week: it measured inert on both probe
+        // games (gi673's phantom was MTG_FB_SBA's, gi223 is the interior plan-breadth hole) and
+        // no motivating game ever appeared. `git show cd8debac` has the working implementation
+        // (ApplySacForMana + SacFloatColorFor lockstep pre-pass) if evidence ever arrives.
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr)
+        { return false; }                                              // unmodelled kind -> no rescue
+        order.push_back(j);
+    }
+    if (order.empty()) { return true; }
+    // STATIC: this walk is priced per candidate subset, so a live EnvOn() re-walked `environ`
+    // millions of times per game for a tracer nobody has on (callgrind 2026-09-11: the three
+    // MTG_DBG_SEQ reads plus BuildColorFeasibility's MTG_DOMAIN_WIDEN were 1.2-2.3% of an
+    // in-game run's TOTAL instructions). Function-local (not file-scope) so the read still
+    // happens after ApplyHeuristicDefaults, exactly like every other flag in this file.
+    static const bool _dbg = EnvOn("MTG_DBG_SEQ");
+    if (_dbg) { std::fprintf(stderr, "[dbgseq] enter n=%zu:", order.size());
+                for (int j : order) { std::fprintf(stderr, " %s", cands[j].card_name.str().c_str()); }
+                std::fprintf(stderr, "\n"); }
+    const DecisionProvider& prov = ResolveProvider(state);
+    // CastOrderActionRank: identity unless the provider moves a concrete cast (a spliced Desperate).
+    // A TOTAL deck order (CastOrderTotalByName) breaks a rank tie by name here too, as the apply
+    // worlds' comparator does -- false for every other deck, so their sort is unchanged.
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    {
+        const int rx = prov.CastOrderActionRank(state, cands[x], prov.CastOrderRank(state, *cands[x].def));
+        const int ry = prov.CastOrderActionRank(state, cands[y], prov.CastOrderRank(state, *cands[y].def));
+        if (rx != ry) { return rx < ry; }
+        return CastOrderNameTieLess(state, cands[x], cands[y]);
+    });
+    // The deck's set-level arrangement, as both apply worlds take it (no-op unless the deck arranges:
+    // Dragonstorm's earliest-payable Medallion slot, MTG_DRAGONSTORM_USER_ORDER).
+    ApplyDeckCastArrangement(state, cands, order);
+    // Same-subset reveal debit (Daring Buccaneer). This walk never removes a cast card from the
+    // scratch hand, so its LIVE EffectiveCost keeps seeing Pirates already cast (two lone Buccaneers
+    // would be "rescued" at {R}{R}). Rather than erase-as-it-goes -- which would price only THIS
+    // walk's order, and the rescue must not under-price the order the apply really takes -- the
+    // cast SameSubsetRevealSurcharge debits (priced over both realisable orders) carries
+    // reveal_or_pay_cost on top of its live cost. Empty for every other deck.
+    thread_local std::vector<int> seq_rv_charged;
+    SameSubsetRevealSurcharge(state, cands, sel, &seq_rv_charged);
+
+    // The walk over one candidate order, extracted so a second order can be priced (see the
+    // untapper-hoisted retry below the first call).
+    auto run_walk = [&](const std::vector<int>& ord) -> bool
+    { return SeqWalkFixedOrder(state, cands, sel, ord, seq_rv_charged); };
     if (run_walk(order)) { return true; }
     // ETB-TREASURE-HOISTED RETRY (MTG_ETB_TREASURE_SPEND): the order both apply worlds realise when
     // the rank order cannot pay (ApplyEtbTreasureFundingOrder -- the maker first, so its Treasure
@@ -7999,6 +8017,58 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         }
     }
     return false;
+}
+
+// See TurnSolver.h. The EDF land-Aura range's projection (MTG_EDF_AURA_RANGE): the apply worlds try the
+// whole-turn prepay first and fall to the per-cast payer in the realised order only when it declines,
+// so an order is "otherwise unpayable" exactly when both of these say no.
+bool TurnSolver::OrderPrepaysWholeTurn(const GameState& state, const std::vector<Action>& acts,
+                                       const std::vector<int>& order)
+{
+    std::vector<Action> sub;
+    sub.reserve(order.size());
+    for (int i : order) { sub.push_back(acts[static_cast<std::size_t>(i)]); }
+    PayScratch _scratch(state);
+    GameState& cp = _scratch.Board();
+    LineUnpaidCostScope _luc(LineCastCostTotal(sub));
+    PlanTraits traits;
+    if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, sub); }
+    PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
+    return TurnSolver::BatchPrepayMainCasts(cp, sub);
+}
+
+bool TurnSolver::OrderPaysSequentially(const GameState& state, const std::vector<Action>& acts,
+                                       const std::vector<int>& order)
+{
+    // An apply-site plan may carry an action whose memoized def was never back-filled; the walk reads
+    // `*a.def`, so fill a private copy rather than call such a cast unpayable (which would leave the
+    // apply's order unarranged while the enumeration's walk -- whose candidates are filled -- arranged
+    // it: a lockstep break).
+    const std::vector<Action>* use = &acts;
+    std::vector<Action> filled;
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && a.def == nullptr) { use = &filled; break; }
+    }
+    if (use == &filled)
+    {
+        filled = acts;
+        for (Action& a : filled) { if (a.def == nullptr) { a.def = CardDatabase::Instance().Lookup(a.card_name); } }
+    }
+    std::vector<int> ord;
+    ord.reserve(order.size());
+    for (int j : order)
+    {
+        const Action& a = (*use)[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }   // unmodelled
+        ord.push_back(j);
+    }
+    if (ord.empty()) { return true; }
+    std::vector<int> charged;
+    SameSubsetRevealSurcharge(state, *use, order, &charged);
+    return SeqWalkFixedOrder(state, *use, order, ord, charged);
 }
 
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color
@@ -35666,7 +35736,36 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (rt_nc)   { enumstats::g_c_rt_nc.fetch_add(1, std::memory_order_relaxed); }
         }
         if (resc_tot_short && rescue_total_gate) { mc_store_reject(); return; }
-        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { mc_store_reject(); return; }
+        // THE EDF LAND-AURA RANGE (MTG_EDF_AURA_RANGE; see EngineFlags.h). The filter payer pays every
+        // land Aura FIRST (its producer pass), so a subset that pays only with an Aura moved behind an
+        // untapper -- {Fertile Ground, Peregrine Drake} on five lands -- reads unpayable here although
+        // both apply worlds realise it (EldraziFlickerProvider::ArrangeCastOrder). The sequential walk
+        // takes that arranged order, so it is the one payer this subset can be asked -- and only when the
+        // arrangement really MOVED a cast (otherwise the filter payer's verdict on the rank order
+        // stands). Kept to a subset holding BOTH an untapper and a land Aura (only EDF has untappers),
+        // so the d0 runner and the horizon playouts can play the line the in-window search now finds.
+        const auto range_rescue = [&]() -> bool
+        {
+            if (!untap_credit || !EdfAuraRangeOn()) { return false; }
+            bool aura = false, untapper = false;
+            thread_local std::vector<int> rk, arr;
+            rk.clear();
+            for (int j : sel)
+            {
+                const std::size_t uj = static_cast<std::size_t>(j);
+                if (cand_land_aura[uj]) { aura = true; }
+                if (cand_untapper[uj])  { untapper = true; }
+                if (cands[uj].kind == Action::Kind::CastFromHand && !cands[uj].sacrifice_land) { rk.push_back(j); }
+            }
+            if (!aura || !untapper) { return false; }
+            std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
+            { return CastOrderLess(state, cands[static_cast<std::size_t>(x)], cands[static_cast<std::size_t>(y)]); });
+            arr = rk;
+            ApplyDeckCastArrangement(state, cands, arr);
+            return arr != rk && SubsetPayableSequential(state, cands, sel);
+        };
+        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel)) && !range_rescue())
+        { mc_store_reject(); return; }
         // Reached here on a !mana_ok subset => the real payment RESCUED it. If that subset was also
         // total-short the shortcut's argument is false; say so loudly rather than silently shipping.
         if (enumstats::Enabled())
