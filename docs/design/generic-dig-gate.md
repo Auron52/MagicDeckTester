@@ -339,7 +339,7 @@ would not want to [cycle] (or only very rarely)"* was about adding digs; here th
 passes, look right in expectation, and second-guessing them did not pay. Not root-caused (parked): K=16 is
 a noisy ranker, so these three may be sampling error rather than a real preference.
 
-### Resume (the work was parked 2026-10-13 for a value-leaf generation; nothing below has been run)
+### Resume (the work was parked 2026-10-13 for a value-leaf generation; un-parked 2026-10-14 -- items 1-6 DONE, see each)
 
 The tooling is committed in `scripts/dig_choice_ab/` (written in the worktree's gitignored
 `logs/dig_agent/`; the scripts hard-code that worktree's path in `WT=` / `sys.path` -- edit those two lines to
@@ -353,22 +353,40 @@ keys on the sidecar's canonical path, so a worktree path rebuilds a 1-3 GB table
 1. **gi1106 on the final binary.** The T4-at-three-cells result above was measured on the pre-fold build
    (v2). The fold is exact at b0 (so d8/b0 stands), but it re-prices finite budgets: re-run
    `bash logs/dig_agent/g1106_all.sh <mtg> final` (four lever combinations x d8b0 / ship / d3b10).
+   **DONE 2026-10-14 (mtg.v7 = the final binary + MTG_DIG_TWIN_LAST):** T4 at all three cells with the lever on,
+   with or without MTG_DIG_DEFER_MAIN2, and with MTG_DIG_TWIN_LAST=1; T4 with the lever off and the deferral on;
+   T5 only with both off (the pre-fix tree). The searched dig alone repairs gi1106 at every cell.
 2. **Full unit suite on the final binary** (`mtg-test`, 1032 cases). Green on the pre-fold build; the 9
    dig cases (`-tc="Dig searched choice*,Main-1 dig waits*"`) are green on the final one.
+   **DONE 2026-10-14:** 1032 / 1032 on the final binary (and with MTG_DIG_TWIN_LAST=1).
 3. **Residual census on the final binary**: `bash logs/dig_agent/census2.sh <mtg> <out> 40` (lever on,
    `MTG_TRACE=digauto`). The numbers in the map are from the pre-fold build; the fold does not change which
    plans dig, only which twins are applied, so they should hold.
+   **DONE 2026-10-14** (40 games, d3 b10, `auto` = in-window dig with no sibling): FiveColour 48 (bp_premise 36 /
+   bp_after 12), Pirates 98 (66 / 0, axis 32), Soldiers 32 (24 / 8), treasure_hunt 626 (509 / 44, axis 73), Auras
+   983 (734 / 248), Fluctuator 9,193 (5,092 / 3,994, axis 107); idle 0 and base 0-1 everywhere. The classes are the
+   map's residual rows: `bp_premise` is a pending breakpoint reached THROUGH the dig (its no-dig world is the
+   base's twin), while `bp_after` (a wave-0 variant whose breakpoint fired before the dig) and `axis` (an axis
+   clone) are the one-axis-at-a-time gap -- real automatic digs still inside the window, largest on Fluctuator.
 4. **Executor lockstep**: `bash logs/dig_agent/fdoracle.sh <mtg>` counts `[fd-diverge]` (committed line
    not realised) lever on vs off, d3 b10, six dig decks x 100 games.
+   **DONE 2026-10-14:** one `[fd-diverge]` in each of lever on / off / on + MTG_DIG_TWIN_LAST, the same game
+   (seed 8660086: predicted 5, realised 6) -- the lever does not touch executor lockstep.
 5. **The per-deck bar** for treasure_hunt (+3) and FiveColour (+1): a larger held-out sample at d3 b10 for
    those two decks (`make_dig_ab.py --decks th,fivecolour --cells d3 --seed0 <fresh> --scale 4`), and, if
    the USER wants the churn removed rather than accepted, a budget-staged admission of the twins (a later
    wave: the completeness-preserving shape, per CLAUDE.md) instead of any gate.
+   **DONE 2026-10-14** -- see "Measured 2026-10-14" at the end: FiveColour now meets the bar, treasure_hunt
+   does not (+2 to +4 at every d3 budget).
 6. **Root-cause the three non-clairvoyant slower games** (decision effects, not budget): each arm as one game,
    e.g. `MTG_NC_SEARCH=1 MTG_NC_K=16 MTG_NC_DEPTH=1 mtg decks/FiveColour/FiveColour.cod --profile
    decks/FiveColour/FiveColour.profile.json --seed 8905084 --game-index 83 --games 1 --depth 3 --budget-ms 10
    --ignore-play-profile` with `MTG_DIG_SEARCHED_CHOICE=1` / `=0` and `MTG_TRACE=dig` (also gi185 seed 8905186;
    treasure_hunt gi233 seed 9005234). Raising K (32-64) tells sampling noise from a real preference.
+   **DONE 2026-10-14: sampling noise.** Replayed each arm as one game (`game2.sh`, d3 b10): at K=16 the gaps
+   reproduce (FiveColour gi83 6 vs 4, gi185 6 vs 5, treasure_hunt gi233 5 vs 4); at **K=64 all three tie**
+   (gi83 6 / 6, gi185 5 / 5, gi233 5 / 5). The K=16 ranker's average over 16 reshuffles is too noisy to separate
+   dig from no-dig on these boards, so the NC +3 / +1 is not a preference for declining the gate's digs.
 7. **USER decisions owed**: adopt the lever default ON (clairvoyant bar unmet on two decks by budget churn
    alone; non-clairvoyant also +3 FiveColour / +1 treasure_hunt); delete MTG_DIG_DEFER_MAIN2 (inert in 2,500
    FiveColour games under the lever).
@@ -408,3 +426,59 @@ suite cell (`fivecolour 3 1001 150 10`), so the bar applies there too.
 larger held-out sample (arms: `=0`, lever, lever + order; treasure_hunt + FiveColour d3 b10, plus the ship
 cells and a digest check on the other dig decks). Bring 2 to the USER only if treasure_hunt / FiveColour
 still miss the bar.
+
+### Measured 2026-10-14 (un-parked): option 1, the step-5 sample, and treasure_hunt's budget map
+
+**Option 1 (twins last, MTG_DIG_TWIN_LAST) is inert and was reverted** (e20ea7da, reverted by 71021c80). One
+pooled batch (`scripts/dig_choice_ab/make_twinlast_ab.py`, 73,400 games, seeds 9300001+, arms `dig0` / `new`
+/ `tl`, every dig deck at the three cells, treasure_hunt and FiveColour d3 b10 at 1,200 games per arm):
+`tl` vs `new` is net 0 on all nine decks in every cell, units x0.99-1.00, and 0 of 24 d3 chunks changed
+digest on either focus deck. The d3 b0 exactness cell matched on 250 / 250 games. As predicted above, a
+reorder cannot reach cost paid at nodes where every plan is scored anyway.
+
+**The searched dig on the larger sample** (`new` vs `dig0`, same batch):
+
+| deck | ship | d3 b10 | d0 | net | units x (ship / d3) |
+|---|---|---|---|---|---|
+| FiveColour | 0 | 0 (1 faster / 1 slower, n=1200) | identical | **0** | 1.021 / 1.011 |
+| treasure_hunt | 0 | +0.0033 (1 / 5, n=1200) | identical | **+4** | 1.507 / 1.119 |
+| Fluctuator | 0 | -0.0167 (5 / 0) | identical | -5 | 0.943 / 0.901 |
+| Pirates, EDF, Soldiers, WhiteKnights, Auras, Dragons | 0 | 0 | identical | 0 | 0.97-1.06 |
+
+All six slower games recover at stage 1 (`make_recovery.py`): FiveColour gi902 and treasure_hunt gi135 /
+379 / 578 / 676 / 738. **FiveColour now meets the bar** (the earlier +1 was one game in 300). treasure_hunt
+does not.
+
+**treasure_hunt's budget map** (`scripts/dig_choice_ab/make_budget_map.py`, d3, 1,200 paired games per
+budget, seeds 9600001+; b10 from the batch above):
+
+| budget | net | faster / slower | units x | slower games still slower at d3 b0 |
+|---|---|---|---|---|
+| b10 | +4 | 1 / 5 | 1.119 | 0 of 5 |
+| b20 | +3 | 1 / 4 | 1.077 | 0 of 4 |
+| b40 | +3 | 0 / 3 | 1.066 | 0 of 3 |
+| b80 | +2 | 1 / 1 | 1.087 | 1 of 1 (gi722) |
+
+All 13 slower games recover at stage 1. Replayed at d3 `--budget-ms 0`, **12 of the 13 tie: budget churn,
+and it converges** (5 / 4 / 3 / 0 churn-slower games from b10 to b80, the completeness invariant at work).
+The mechanism is the start gate's, as in gi1: gi135's T1 searched depth 1 with the lever (projected T5,
+played Temple of Epiphany) where the lever-off search reached depth 2 and verified T4 off Sandstone Needle.
+treasure_hunt holds a sac-draw land or a cycler on most turns, so its twins are real second children.
+
+**gi722 (seed 9610723) is not churn: it is a horizon tie-break.** At d3 b0 the lever arm wins T7 against T6
+(at b80 it does not win at all, against T6). T1 has no win inside the d3 horizon, so the executor falls back
+to the lookahead, which ranks no-win plans by the graded leaf (`tb`, opponent life at the horizon: lower is
+better). `MTG_TRACE_SOLVE=1 MTG_TRACE_SOLVE_TURN=1`, last pass: lever off grades the four distinct plans
+4M / 2M / 2M / 4M, and the first 2M (Fiery Islet) commits. With the lever, the no-dig line under the FIRST
+plan reaches 2M as well (2M / 2M / 2M / 4M), and the order tie-break takes it (Thundering Falls). Realised,
+Thundering Falls is a turn slower. Both are equal at the horizon the search was given; depth 6 sees the T6
+win (stage 1). The twin did not lose a line; it produced a tie that the no-win leaf cannot break.
+
+**Verdict for the USER.** The searched dig passes the bar on eight of the nine dig decks (Fluctuator -5,
+FiveColour and six more 0). **treasure_hunt misses it at every d3 budget (+4 / +3 / +3 / +2)**, which includes
+the smoke / regression cell (d3 b10) and the overnight cell (d3 b80). Nothing is unfindable: every slower
+game recovers, the churn converges with budget, and the one non-churn game is a horizon tie. The remaining
+routes are the USER's: accept it (the churn is the cost of a real decision the gate used to make
+automatically); option 2 above (pass-staged twins, which puts the gate's dig back inside the window at
+finite budget); option 3 (treasure_hunt's depth / budget settings); or, separately, a better no-win
+tie-break than plan order, which would address gi722 for every lever, not just this one.
