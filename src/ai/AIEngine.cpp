@@ -3226,7 +3226,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // The land drop is searched (folded into SolveWithLookahead) ONLY for the
         // depth>0 first main. Every other case keeps the pre-fold greedy land play:
         //   - depth 0 (fast greedy runner): the search needs a rollout, so depth 0
-        //     uses the 4-pass heuristic plus the Treasure-Hunt defer special-case;
+        //     uses the 4-pass heuristic plus the providers' defer hooks
+        //     (LandDropAfterDrawEngine, LandDropAfterHandLandTutor);
         //   - the second main at any depth: a land may still be playable post-combat
         //     (e.g. one revealed by Light Up the Stage), played greedily as before.
         // Main2DropEnabled (MTG_MAIN2_DROP, EngineFlags.h): the depth>0 SECOND main is now
@@ -3246,33 +3247,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (is_pre_combat_main && ap_ref.lands_played_this_turn == 0)
             {
-                // "TH before land drop" heuristic: when Treasure Hunt is castable and no
-                // enabler (RT/LE) is in play, defer the land drop to the second TakeTurn
-                // pass so a land drawn by TH (possibly Reliquary Tower) can be used.
-                bool defer_land = false;
-                bool has_enabler = false;
-                for (const Permanent& p : state.battlefield)
-                {
-                    if (p.controller_index != state.active_player_index) { continue; }
-                    auto def = CardDatabase::Instance().LookupCached(p.card);
-                    if (!def) { continue; }
-                    if (def->params.no_max_hand_size || def->params.discard_land_damage > 0)
-                    { has_enabler = true; break; }
-                }
-                if (!has_enabler)
-                {
-                    ManaPool avail = AvailableManaPool(state);
-                    ManaCost th_cost;
-                    th_cost.generic = 1;
-                    th_cost.blue    = 1;
-                    for (const Card& c : ap_ref.hand)
-                    {
-                        auto def = CardDatabase::Instance().LookupCached(c);
-                        if (!def || def->tmpl != CardTemplate::DrawUntilNonland) { continue; }
-                        if (avail.CanPay(th_cost)) { defer_land = true; }
-                        break;
-                    }
-                }
+                // The deck's "hold the drop for the draw" rule (DecisionProvider::
+                // LandDropAfterDrawEngine): TreasureHuntProvider defers the drop to the second
+                // TakeTurn pass when Treasure Hunt is castable without it and no Reliquary Tower /
+                // Land's Edge is out, so a land TH reveals can be the drop. A deck rule, so it lives
+                // in the deck's provider (moved out of this block 2026-10-14, USER); base false.
+                bool defer_land = ResolveProvider(state).LandDropAfterDrawEngine(
+                    state, state.active_player_index);
                 // "Sylvan Scrying before the land drop" (USER, Creature Giving review
                 // 2026-08-19): the ONE cast allowed to precede the drop -- it fetches a land
                 // to hand (another Forbidden Orchard), so deferring lets the fetched land BE

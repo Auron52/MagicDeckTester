@@ -1477,6 +1477,17 @@ public:
     virtual bool LandDropAfterHandLandTutor(const GameState& s, int controller) const
     { (void)s; (void)controller; return false; }
 
+    // LandDropAfterDrawEngine -- depth-0 greedy: HOLD the turn's land drop until after this main's
+    // draw engine, so a land the draw reveals (a Reliquary Tower) can BE the drop. Asked once by the
+    // depth-0 executor's pre-combat land block, before it plays the drop and ahead of
+    // LandDropAfterHandLandTutor; true = do not play the drop now, the engine plays it later in the
+    // same main (the draw engine's second TakeTurn pass). Depth>0 does not ask: the search folds the
+    // drop and carries its own defer option. Base false -> every deck plays its drop first;
+    // TreasureHuntProvider carries the deck's rule (definition in DecisionProviders.cpp). A deck rule,
+    // so it lives in the deck's provider -- moved out of AIEngine::TakeTurn 2026-10-14 (USER).
+    virtual bool LandDropAfterDrawEngine(const GameState& s, int controller) const
+    { (void)s; (void)controller; return false; }
+
     // PostDrawKeepLandName -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
     // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the

@@ -753,6 +753,8 @@ public:
     bool        DiscardLandsFirst(const GameState&) const override;
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;
     bool        ShouldCastDrawEngine(const GameState&, int, const CardDefinition&) const override;
+    // The depth-0 "Treasure Hunt before the land drop" rule (moved here from AIEngine 2026-10-14).
+    bool        LandDropAfterDrawEngine(const GameState&, int) const override;
     std::string PostDrawKeepLandName(const GameState&, int) const override;
     bool        HoldDeferredDropForLethal(const GameState&, int) const override;
     bool        HoldDeferredDropForFurtherDig(const GameState&, int) const override;
