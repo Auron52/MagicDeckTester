@@ -125,6 +125,19 @@ enum class DomAxis : std::uint8_t
     _Count
 };
 
+// The dig worlds a candidate plan is offered BESIDES itself (DecisionProvider::DigOfferAt). The plan's own
+// dig, if any, is the provider's ShouldConsiderDig at the end of its apply; these are its siblings.
+struct DigOffer
+{
+    bool no_dig           = false;   // a NO-DIG twin (Plan::dig_choice 0)
+    bool while_affordable = false;   // a DIG-WHILE-AFFORDABLE variant (Plan::dig_choice 1)
+    // Which plans get them: every plan (a dig source exists now), or only a plan whose OWN land drop is a
+    // sac-draw land (the source arrives with the drop).
+    enum class Plans { None, All, SacDrawDrop };
+    Plans plans = Plans::None;
+    bool Any() const { return (no_dig || while_affordable) && plans != Plans::None; }
+};
+
 class DecisionProvider
 {
 public:
@@ -279,8 +292,18 @@ public:
     // as an AUTOMATIC action: under MTG_DIG_SEARCHED_CHOICE (default ON; USER 2026-10-13 "It
     // shouldn't be automatic") each base plan gets a no-dig twin, so where ShouldConsiderDig passes the
     // search chooses dig vs no-dig; where it fails nothing digs. False means "no dig-while-affordable
-    // variant" (the USER's 2026-09-29 clairvoyance ruling), not "no choice".
+    // variant" (the USER's 2026-09-29 clairvoyance ruling), not "no choice". Which worlds a deck actually
+    // offers is DigOfferAt's (below): a deck that wants its dig prunes the choice there (Treasure Hunt).
     virtual bool        DigDecisionSearched() const { return false; }
+    // DigOfferAt -- THE DIG DECISION'S OPTIONS, BUILT BY THE DECK (USER 2026-10-14: "dig-while-affordable
+    // is okay as a search prune in a provider heuristic if the deck desires it. It is not okay as greedy
+    // logic built into the search." / "I have a preference for actually building the logic and prune into
+    // the provider ... Or a utility that the provider can reference."). The dig worlds each candidate plan
+    // is offered at this state besides itself; the engine materialises exactly this and decides nothing
+    // about it. Build it from the shared utilities (DecisionProviders.h): SearchedDigOffer -- the searched
+    // choice, this default (with the dig-while-affordable variant for a DigDecisionSearched deck) -- or
+    // DigOfferPrunedToGate, the deck's one-option prune (TreasureHuntProvider).
+    virtual DigOffer    DigOfferAt(const GameState& s) const;
 
     // DigResolveOnlyWhenCastable -- for decks whose cycling is FREE and therefore constant
     // (Fluctuator). It began as a 5f PERFORMANCE lever and MEASURED AS A PLAY-QUALITY FIX; both

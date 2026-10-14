@@ -710,6 +710,20 @@ public:
     int TutorSearchWidth() const override { return 2; }
 };
 
+// ---- DIG OFFER UTILITIES (DecisionProvider::DigOfferAt; USER 2026-10-14) -----------------------------------
+// SearchedDigOffer -- THE SEARCHED DIG CHOICE (MTG_DIG_SEARCHED_CHOICE, default ON; USER 2026-10-13 "It
+// shouldn't be automatic"): a no-dig twin for every plan that can reach a dig source -- every plan when a
+// source exists now, else only a plan whose own drop is a sac-draw land -- plus the dig-while-affordable
+// variant when `while_affordable` (an opt-in deck's axis). The provider's gate still restricts the base
+// plan's own dig, so the twin is "don't" beside the gate's "do". With the lever off: the legacy axis only
+// (`while_affordable` decks whose source the PRE-CAST pool can pay), byte-identical to before.
+DigOffer SearchedDigOffer(const DecisionProvider& prov, const GameState& s, bool while_affordable);
+// DigOfferPrunedToGate -- THE DECK'S ONE-OPTION PRUNE: the dig decision is restricted to the provider's
+// gate -- the plan digs exactly where its ShouldConsiderDig passes, nothing where it fails -- and no sibling
+// world is offered. For a deck that WANTS its dig (measured: the no-dig twin near-pure cost); a provider
+// heuristic restricting an option, never logic in the search.
+DigOffer DigOfferPrunedToGate();
+
 // Treasure Hunt + Land's Edge: dig-when-stuck, Land's Edge fire count, deck-aware
 // scry/surveil keep, and land-first discard. Inherits Generic for the rest.
 class TreasureHuntProvider : public DeckProvider
@@ -734,6 +748,7 @@ public:
     bool        HasAnyDigSource (const GameState&) const override;
     bool        ShouldConsiderDig(const GameState&) const override;
     std::string SelectDigSource (const GameState&, const ManaPool&, bool&) const override;
+    DigOffer    DigOfferAt(const GameState&) const override;
     int         LandsEdgeFireCount(const GameState&, int) const override;
     bool        DiscardLandsFirst(const GameState&) const override;
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;
