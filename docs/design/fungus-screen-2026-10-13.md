@@ -1211,6 +1211,20 @@ batches are unavoidable and each is a genuinely different measurement, not a wav
 | 20 ms (the screen's own setting, as the in-ladder control) | 2000 | 1150000 |
 | 80 ms | 2000 | 1160000 |
 | 320 ms | 1200 | 1170000 |
+| 20 ms again — the **seed-matched control**, added once the ladder was already running | 1200 | 1170000 |
+
+**Why the fourth rung exists.** The three ladder rungs each carry their own seed base, which makes
+each one an independent replication but leaves the cross-rung comparison **unpaired**: a margin
+measured at 20 ms and a margin measured at 320 ms sit on different games, so comparing them adds
+between-block variance (measured at 0.017 std / 0.044 2hg in rounds 16–17 — *larger than most
+effects in this screen*) on top of each rung's own se ~0.015. That resolves a collapse of the
+margin and nothing subtler. `spec_round22_b20x.json` is byte-identical to the 320 ms spec except
+`budget_ms` 320 → 20, so **the 20 ms and 320 ms readings run on the identical 1200 games with
+budget as the only difference** — and each arm's own `avg` becomes comparable across the two
+budgets, which is the direct measurement of how much more budget is worth *to that list*. That
+per-arm budget elasticity is the real answer to the user's question: if `z_m24` gains much more
+from 16× budget than `h_F` does, then 20 ms was under-serving the engines and the screen's ranking
+was partly a budget artifact.
 
 Seven arms, spanning the whole trajectory by engine count (Mycoloth / Mycon / Season):
 
@@ -1230,3 +1244,161 @@ cheap list spending its 20 ms better, but `h_F` beat `z_m24` by ~0.10 mean, 6x t
 and more than a plausible budget-allocation effect. The three single cuts are the ones I am
 genuinely unsure about, each being within 0.008 of zero; at these sample sizes they are read for
 **sign and trend only** and must not be quoted as settled.
+
+### Round 22 results — the ladder, and why the UNPAIRED reading misled me
+
+| | b20 (s1150000) | b80 (s1160000) | b320 (s1170000) |
+|---|---|---|---|
+| `h_F` over `z_m24`, std | −0.0985 | −0.0785 | −0.0783 |
+| `h_F` over `z_m24`, 2hg | −0.0925 | −0.0750 | −0.0550 |
+| **single cuts on `z_m24`** (positive = the CUT loses) | | | |
+| Mycoloth 2→1 | −0.0120 / +0.0075 | +0.0105 / +0.0290 | −0.0025 / −0.0116 |
+| Utopia Mycon 3→2 | +0.0060 / +0.0020 | +0.0145 / +0.0390 | +0.0158 / +0.0234 |
+| Doubling Season 1→0 | +0.0115 / +0.0185 | −0.0030 / +0.0020 | +0.0033 / +0.0025 |
+| apparatus floor (`ctl1` − base) | −0.0150 / −0.0155 | −0.0175 / −0.0110 | −0.0075 / −0.0166 |
+
+Read across the three rungs this looks like ~20% margin erosion per 4× budget. **It is not.** Each
+rung carries its own seed base, so that comparison is unpaired and absorbs the between-block drift
+this screen measured at 0.017 std / 0.044 2hg in rounds 16–17 — larger than the effect being read.
+
+**Two readings I got wrong off this table, both corrected by better data.** I reported a Mycoloth
+flip from the b80 column alone; b320 puts its cut back to free-or-gaining, and an intermediate rung
+disagreeing with both neighbours is noise, not a trend. And I called Doubling Season "the cut that
+passed" when it is positive in 5 of 6 readings (mean +0.0058) — **USER-caught**: *"doubling season
+1->0 was worse in both cases, so we don't cut it?"* It is well under the floor and does not resolve,
+but a sign landing the same way 5 times of 6 is evidence and should not have been rounded to zero.
+
+### Round 22's fourth rung — the seed-matched control, which is the result that counts
+
+`spec_round22_b20x.json` is byte-identical to the b320 spec but for `budget_ms` 320 → 20: the same
+1200 games, the same seed base 1170000. So budget is the ONLY difference and the comparison is
+paired at the game level.
+
+| | b20 | b320 (16×) | change |
+|---|---|---|---|
+| `h_F` over `z_m24`, std | −0.0841 | −0.0783 | **+0.0058** |
+| `h_F` over `z_m24`, 2hg | −0.0659 | −0.0550 | **+0.0109** |
+
+**Per-arm budget elasticity — how much each LIST gains from 16× budget** (negative = faster at
+b320). This is the direct answer to the user's question:
+
+| list | engines (Mycoloth/Mycon/Season) | std | 2hg |
+|---|---|---|---|
+| `base` | 4 / 4 / 4 | **−0.0367** | **−0.0709** |
+| `ctl1` | 4 / 4 / 4 | −0.0342 | −0.0766 |
+| `z_m24` | 2 / 3 / 1 | −0.0058 | −0.0134 |
+| `f_E` | 1 / 2 / 0 | −0.0016 | −0.0125 |
+| `h_F` | 0 / 0 / 0 | **+0.0000** | **−0.0025** |
+
+The engine-dense lists ARE budget-starved — `base` gains 15–28× more from extra budget than `h_F`,
+which is saturated at 20 ms. **So the user's hypothesis is confirmed as a mechanism and refuted as
+an explanation:** giving the engine lists 16× more budget closes about a tenth of a ~0.07 margin.
+
+### Rounds 23–24 — the engines re-priced ON `h_F`, at two donors and up to d7/b1000
+
+Round 21's rule applies: a donor census does not transfer across a large composite step, and
+`z_m24` → `h_F` is a large one (`z_m24` still has Utopia Mycon for mana). So the engines were
+re-priced on `h_F` itself. Positive = the ADD loses. Seed 1180000, 2000 games, identical games
+across all three settings.
+
+| add | d5/b20 | d5/b320 | d7/b1000 |
+|---|---|---|---|
+| +1 Mycoloth (Sapherd donor) | +0.0085 / +0.0055 | +0.0090 / +0.0040 | +0.0095 / +0.0050 |
+| +1 Mycoloth (Thallid donor) | +0.0085 / +0.0105 | +0.0090 / +0.0120 | — |
+| +1 Utopia Mycon (Sapherd) | +0.0035 / +0.0055 | +0.0015 / −0.0005 | +0.0020 / −0.0010 |
+| +1 Utopia Mycon (Thallid) | +0.0075 / +0.0140 | +0.0050 / +0.0110 | — |
+| +1 Doubling Season (Sapherd) | +0.0085 / −0.0055 | +0.0090 / −0.0080 | +0.0095 / −0.0075 |
+| +1 Doubling Season (Thallid) | +0.0110 / +0.0095 | +0.0115 / +0.0090 | — |
+| composite `h_F` over `z_m24` | −0.0670 / −0.0685 | −0.0615 / −0.0535 | −0.0615 / −0.0485 |
+
+**The budget-independence is the headline.** Mycoloth's add moves by 0.001 across a 50× budget
+increase and two extra plies. No card's value here depends on budget. Construction check passed:
+`m_ref` reproduced round 22's `k_h_F` (−0.3895/−0.4985 vs −0.3885/−0.4860).
+
+Round 24 (d7/b1000) also came in far cheaper than projected — 21.6 s of core time per game index
+across 14 cells, vs the ~56 s I estimated. Cost grew as budget^0.51 and the depth factor was well
+under 2×, so the aggressive setting is affordable at scale.
+
+### Round 25 — the held-out confirmation, which REVERSED the engine verdict
+
+Seed 1200000 (held out), **6000 games**, d7/b1000. Pairwise se 0.0049 std / 0.0062 2hg.
+
+| pair | std | 2hg |
+|---|---|---|
+| `h_F` + 1 Utopia Mycon over `h_F` | **−0.0117** (t ≈ −2.4) | **−0.0258** (t ≈ −4.2) |
+| `h_F` + 1 Mycoloth over `h_F` | −0.0017 | −0.0082 |
+| `h_F` + 1 Doubling Season over `h_F` | +0.0112 | +0.0028 |
+| `h_F` over `z_m24` | −0.0718 | −0.0505 |
+
+Full ranking: **`mycon` < `myco` < `h_F` < `season` < `z_m24`** — both creature engines landed on
+the gaining side of `h_F`, Mycon clearly.
+
+This contradicts rounds 23–24 on block 1180000 (+0.0020/−0.0010, a null) by ~0.014 ≈ 1.4 combined
+se. Not a hard contradiction — it is seed-block drift again, and round 25 is the better measurement
+on every axis (3× the games, held out, lower se). **It is not resolvable by preferring a block.**
+
+**Note what this does and does not revive.** It does NOT revive "the budget deleted the engines" —
+rounds 22–24 refuted that with budget-invariant effects across 50×. It raises a different and
+narrower possibility: that the screen cut a card a better-powered measurement wants back.
+
+### Round 26 — ABANDONED, and why `--with-floor` is not available here
+
+Every engine effect above sits below the assumed floor (`ctl1`, −0.0098/−0.0175), so the verdict
+rests on sign consistency rather than on any single measurement. `--with-floor` would MEASURE the
+bias instead, and the screening skill prescribes it for exactly this case. It is **dropped**, for
+two independent reasons:
+
+1. It **generates per-arm R=10 keep tables**, and the standing USER constraint is *"We should not
+   be generating any new tables during this process"*, restated 2026-10-14: *"We aren't generating
+   mulligan tables are we? We should not be."* / *"We should still be aliasing an existing table."*
+2. That generation **dies anyway** on `Error: bucket policy names a card this deck does not
+   contain: 'Secluded Courtyard'` — `h_F` is mono-green and `Fungus.buckets.json` still groups the
+   black mana base. Amending a bucket policy is a **USER-only ruling**; an agent must never install
+   or amend a `buckets.json` unasked.
+
+So the floor stays **estimated, not measured**, and must be reported that way. The mitigating
+argument (not a substitute for the measurement): `ctl1` measures base-vs-arm bias, whereas the
+comparisons under test are arm-vs-arm between lists that share a table and differ by two cards, so
+most of the shared-table bias is common-mode and cancels.
+
+Two tooling facts worth recording, each of which cost a 30-second failed run:
+* `--with-floor` refuses on the **presence** of a `formats` key, not on its length — a one-entry
+  `formats` is still refused. A single-format spec has **no** `formats` key and inlines
+  `starting_life` / `opponent_heads` at the top level (`deck_compare.py:1029` rejects having both).
+* `deck_compare` takes `logs/deckcmp/<Deck>/.lock`; two runs on one deck would both rewrite the
+  arm decklists and `numbering.json` under each other. Chain by captured PID, never run two.
+
+### Round 27 — RUNNING, and it is the last open question
+
+Does `h_F` want 1 Utopia Mycon? A **third** fresh held-out block (1210000), **10,000 games**,
+d7/b1000, 16 cells, on the aliased R=30 table (`pool_table: false` — nothing generated).
+
+| arm | list |
+|---|---|
+| `r_ctl1` | the apparatus floor, the standing instrument |
+| `r_h_F` | the recommendation, as reference |
+| `r_mycon1_S` | + 1 Utopia Mycon, donor Yavimaya Sapherd 2→1 |
+| `r_mycon1_T` | + 1 Utopia Mycon, donor Thallid 2→1 |
+| `r_mycon2` | + 2 Utopia Mycon, both donors — the RUNG check |
+| `r_myco1_S` | + 1 Mycoloth, donor Sapherd 2→1 |
+| `r_z_m24` | the engines-intact anchor |
+
+At 10,000 games the pairwise se scales to ~0.0038 std / 0.0048 2hg, so round 25's effect lands at
+t ~3.1 / ~5.4 if real and ~0 if it was drift. The 2-copy rung is the corroborating check: a card
+that genuinely belongs should show a **rung** (second copy worth less than the first), not a flat
+jump that looks like a fixture of one block.
+
+**Prediction on the record: Mycon goes back in at 1 copy.** It is the only card in `h_F` that turns
+surplus saprolings into mana and `h_F` has zero sacrifice outlets — a gap named in round 23's own
+docstring before any of these numbers existed, which I then let two under-powered blocks talk me
+out of. I have mispredicted swap signs in rounds 19 and 21 by over-rating adds; this would be the
+first time I under-rated one.
+
+### State of the recommendation as of round 26
+
+`h_F` is **60 cards, 24 lands, mono-green, fully legal** under the Modern/Legacy/Vintage copy rule
+(Sol Ring at exactly 1, nothing else over cap). It beats `z_m24` by −0.06 to −0.08 at every budget
+from 20 ms to d7/b1000, and that margin is NOT a budget artifact. **It is pending round 27 on one
+card.** `h_F` runs 0 Deathspore Thallid; the user's 1-copy floor was conditional on the list being
+black (*"at least if we have a list with black"*) and this list is mono-green, so it does not bind —
+flagged for the user rather than assumed.
