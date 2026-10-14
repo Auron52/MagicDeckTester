@@ -19426,17 +19426,375 @@ int CritterLifegainProvider::LegendKeepIndex(const GameState& s, int /*controlle
     return keep;
 }
 
+// ---- CritterLifegainProvider: THE USER-SETTLED TOTAL CAST ORDER (2026-10-14) ----------------
+//
+// USER, verbatim: "For CritterLifegain Ajani, Strength of the Pride should go after Ajani's pridemate
+// because it produces them. The activation that produces them should go right after, whereas the +1 can
+// go where you put it originally. Heliod is a trickier one and might require some adjusting. It can go
+// right where it is if it is a creature. Otherwise it probably should go after other creatures until it
+// is one. I'm not entirely sure on that, though. If it isn't a creature after the next 2 have entered
+// then it might actually be better to play it before. This would be rare, but we could search or
+// evaluate this case. Otherwise it seems fine." And, for every deck: "Let's fully order the cards in each
+// list inasmuch as possible. I don't like the randomness of choosing the order."
+//
+// The order (rank = slot * 64 + sub; sub = mana value unless noted; a tie between different names falls
+// to the name, CastOrderTiesByName + the re-sort at the top of ArrangeCastOrder):
+//
+//   slot 10  ENTER-WATCHER: a creature with any_creature_enters_lifegain / own_creature_enters_lifegain
+//            (Soul Warden, Soul's Attendant, Auriok Champion, Daxos). On the battlefield first, each sees
+//            every later entry of the turn; cast after them it sees none. Name order happens to be the
+//            USER's: "Soul Warden" < "Soul's Attendant" (space before apostrophe), "Auriok" < "Daxos".
+//   slot 11  TEAM PAYOFF: lifegain_each_own_creature_counters (Archangel of Thune) -- each later entry is
+//            one counter per watcher on EVERY body, so it goes before the unit payoffs and the bodies
+//            (draft probe 1: hand [Ocelot, Thune] cast Ocelot first even at unlimited budget, 8
+//            counters and a 6-damage attack where Thune first gives 14 and 10).
+//   slot 12  UNIT PAYOFF: a creature with lifegain_self_counters, MORE WHITE PIPS FIRST, then cheapest
+//            (sub = (7 - pips) * 8 + mv): Voice of the Blessed ({W}{W}) before Ajani's Pridemate
+//            ({1}{W}) -- the same trigger, and Voice's second {W} is devotion for Heliod (USER order).
+//   slot 13  the walker cast whose loyalty_ability makes the PRIDEMATE TOKEN (Ajani -2), set by
+//            CastOrderActionRank: "should go after Ajani's pridemate because it produces them".
+//   slot 14  DEVOTION GOD: creature_requires_devotion (Heliod). This is its STATIC slot; ArrangeCastOrder
+//            places it (see there).
+//   slot 15  every other CREATURE (Ocelot Pride, Serra Ascendant, Ranger-Captain of Eos) -- no watcher or
+//            payoff text, so last among creatures where every watcher and payoff sees them enter.
+//   slot 16  a WALKER cast for its +1 or with no activation ("the +1 can go where you put it
+//            originally"): +1 is one gain event whose amount counts creatures, so it follows them.
+//   slot 17  everything else (Unexpectedly Absent: the search only targets spawn tokens at X = 0).
+//
+// THE FLIP (draft section 3 / 4.3, kept: "Otherwise it seems fine"). With the board holding at least 2
+// more watchers than payoffs and no team payoff on it, a payoff cast before a new watcher collects more
+// counters than one cast after it (watcher-first wins only while board watchers <= board payoffs; a tie at
+// payoffs + 1). The payoff block keeps its internal order and moves ahead of the watchers:
+//   slot 4 team, 5 unit, 6 Ajani -2, 7 devotion god, 9 watchers (bodies onwards unchanged).
+// Census over the active player's battlefield (the board the sort sees: the phase start, or the post-
+// breakpoint board in a continuation): watchers = creatures with watcher params; payoffs = permanents with
+// lifegain_self_counters (the Ajani token resolves by name to the real Pridemate entry) or
+// lifegain_target_own_counter (a non-creature Heliod counts); any lifegain_each_own_creature_counters
+// permanent (Thune) turns the flip off -- every event is then worth a whole team.
+//
+// MTG_CRITTER_ORDER=0 (heurarm CRITTER_ORDER) restores the 2026-09-08 mined order exactly:
+// MTG_CRITTER_WATCHER_ORDER (default ON) -- watchers 8, Pridemate / Voice 9, Generic for everything else,
+// no arrangement, no name tie-break, no main-phase pin, no ordering search.
+namespace
+{
+bool CritterOrderOn()
+{
+    static const bool on = EnvOn("MTG_CRITTER_ORDER", true);   // DEFAULT ON; =0 -> the mined order
+    return heurarm::Flag(heurarm::CRITTER_ORDER, on);
+}
+
+enum CritterSlot : int
+{
+    kCritFlipTeam = 4, kCritFlipUnit = 5, kCritFlipAjaniToken = 6, kCritFlipDevotion = 7, kCritFlipWatcher = 9,
+    kCritWatcher = 10, kCritTeam = 11, kCritUnit = 12, kCritAjaniToken = 13, kCritDevotion = 14,
+    kCritBody = 15, kCritWalker = 16, kCritOther = 17,
+};
+constexpr int kCritScale = 64;
+
+bool CritIsWatcherDef(const CardDefinition& d)
+{
+    return d.card.IsCreature()
+        && (d.params.any_creature_enters_lifegain > 0 || d.params.own_creature_enters_lifegain > 0);
+}
+bool CritIsDevotionGod(const CardDefinition& d) { return d.params.creature_requires_devotion > 0; }
+bool CritIsWalker(const CardDefinition& d)      { return d.params.loyalty_start > 0; }
+
+// Pips of `colour` in a printed cost, counted exactly as DevotionTo counts a permanent's (CR 700.5:
+// coloured symbols only, a hybrid pip for both its colours; generic / {X} never).
+int CritPips(const ManaCost& mc, const std::string& colour)
+{
+    if (colour.empty()) { return 0; }
+    const char c = colour[0];
+    int dev = 0;
+    switch (c)
+    {
+        case 'W': dev += mc.white; break;
+        case 'U': dev += mc.blue;  break;
+        case 'B': dev += mc.black; break;
+        case 'R': dev += mc.red;   break;
+        case 'G': dev += mc.green; break;
+        default: break;
+    }
+    for (int i = 0; i < mc.hybrid_count; ++i)
+    {
+        const Color second = static_cast<Color>(mc.hybrid_pair[i] & 0xF);
+        if ((c == 'W' && second == Color::White) || (c == 'U' && second == Color::Blue)
+            || (c == 'B' && second == Color::Black) || (c == 'R' && second == Color::Red)
+            || (c == 'G' && second == Color::Green)) { ++dev; }
+    }
+    return dev;
+}
+
+// Does this walker's loyalty ability #idx make the Pridemate token? Read off the ability's own params
+// (the effect it resolves), never the card name.
+bool CritAbilityMakesPridemateToken(const CardDefinition& d, int idx)
+{
+    return idx >= 0 && idx < static_cast<int>(d.params.loyalty_abilities.size())
+        && d.params.loyalty_abilities[static_cast<std::size_t>(idx)].effect == "pridemate_token";
+}
+
+// The flip census (see the block comment above).
+bool CritFlipActive(const GameState& s)
+{
+    int watchers = 0, payoffs = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        if (q.lifegain_each_own_creature_counters > 0) { return false; }   // a team payoff is out
+        if (p.card.IsCreature()
+            && (q.any_creature_enters_lifegain > 0 || q.own_creature_enters_lifegain > 0)) { ++watchers; }
+        else if (q.lifegain_self_counters > 0 || q.lifegain_target_own_counter)            { ++payoffs;  }
+    }
+    return watchers >= payoffs + 2;
+}
+
+int CritMv(const CardDefinition& d)
+{
+    return std::clamp(static_cast<int>(d.card.m_mana_cost.ManaValue()), 0, 7);
+}
+
+// The definition an ordered entry derives from (OrderDefOf's resolution, without the Garth branch: this
+// deck has no Garth activation or Vial put in its cast list).
+const CardDefinition* CritDefOf(const Action& a)
+{
+    return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+}
+
+// Heliod's placement over one ORDERED cast list (indices into `acts`), the USER's three cases:
+//   AtSlot  -- it enters as a creature at its static slot: it stays.
+//   Walked  -- it does not, but does right after the 1st or 2nd later CREATURE entry: it moves there.
+//   TwoWay  -- not even after those 2: the canonical order puts it after the LAST creature of the list
+//              ("the last creature slot"); the searched alternative is FIRST (before every watcher, so
+//              as a non-creature enchantment it is out for every gain event). `first` / `after` are the
+//              two orders; equal when the two positions coincide (then there is nothing to search).
+// Devotion at a position = the board's (DevotionTo: permanents' printed pips, planeswalkers included,
+// tokens none) + the pips of every PERMANENT spell cast before it in the list + the god's own pip --
+// CR 700.5 as RefreshDevotionCreatures evaluates it when the god enters (the refresh runs above the
+// enter-watcher gate, so a god entering at devotion >= N enters as a creature and the watchers fire).
+// Only the FIRST devotion god of a list is placed; a second copy (the legend rule keeps one) stays at its
+// rank. Never moves the god earlier than its static slot except to FIRST in the searched alternative.
+enum class CritHeliodCase { None, AtSlot, Walked1, Walked2, TwoWay };
+struct CritHeliodPlacement
+{
+    CritHeliodCase       kind = CritHeliodCase::None;
+    std::vector<int>     after;   // the canonical order (== the input order for None / AtSlot)
+    std::vector<int>     first;   // TwoWay only: the god moved to the front
+};
+
+CritHeliodPlacement CritPlaceHeliod(const GameState& s, const std::vector<Action>& acts,
+                                    const std::vector<int>& order)
+{
+    CritHeliodPlacement out;
+    out.after = order;
+    int g = -1;
+    for (int k = 0; k < static_cast<int>(order.size()); ++k)
+    {
+        const CardDefinition* d = CritDefOf(acts[static_cast<std::size_t>(order[k])]);
+        if (d != nullptr && CritIsDevotionGod(*d)) { g = k; break; }
+    }
+    if (g < 0) { return out; }
+    const CardDefinition& god = *CritDefOf(acts[static_cast<std::size_t>(order[g])]);
+    const std::string& colour = god.params.devotion_color;
+    const int need = god.params.creature_requires_devotion;
+    const int own  = CritPips(god.card.m_mana_cost, colour);
+    auto pips_of = [&](int k) -> int
+    {
+        const CardDefinition* d = CritDefOf(acts[static_cast<std::size_t>(order[k])]);
+        return (d != nullptr && d->card.IsPermanentCard()) ? CritPips(d->card.m_mana_cost, colour) : 0;
+    };
+    auto is_creature_entry = [&](int k) -> bool
+    {
+        const CardDefinition* d = CritDefOf(acts[static_cast<std::size_t>(order[k])]);
+        return d != nullptr && d->card.IsCreature() && !CritIsDevotionGod(*d);
+    };
+    int dev = DevotionTo(s, s.active_player_index, colour);
+    for (int k = 0; k < g; ++k) { dev += pips_of(k); }
+    auto move_to_after = [&](int q) -> std::vector<int>   // the god right after list position q (q >= g)
+    {
+        std::vector<int> v;
+        for (int k = 0; k < static_cast<int>(order.size()); ++k)
+        {
+            if (k == g) { continue; }
+            v.push_back(order[static_cast<std::size_t>(k)]);
+            if (k == q) { v.push_back(order[static_cast<std::size_t>(g)]); }
+        }
+        return v;
+    };
+    if (dev + own >= need) { out.kind = CritHeliodCase::AtSlot; return out; }
+    int passed = 0;
+    for (int q = g + 1; q < static_cast<int>(order.size()); ++q)
+    {
+        dev += pips_of(q);
+        if (!is_creature_entry(q)) { continue; }
+        ++passed;
+        if (dev + own >= need)
+        {
+            out.kind  = passed == 1 ? CritHeliodCase::Walked1 : CritHeliodCase::Walked2;
+            out.after = move_to_after(q);
+            return out;
+        }
+        if (passed == 2) { break; }
+    }
+    // TwoWay: after the last creature entry of the list (or the static slot, when none follows it).
+    int last_creature = -1;
+    for (int q = static_cast<int>(order.size()) - 1; q > g; --q)
+    {
+        if (is_creature_entry(q)) { last_creature = q; break; }
+    }
+    out.kind = CritHeliodCase::TwoWay;
+    if (last_creature >= 0) { out.after = move_to_after(last_creature); }
+    out.first.clear();
+    out.first.push_back(order[static_cast<std::size_t>(g)]);
+    for (int k = 0; k < static_cast<int>(order.size()); ++k)
+    {
+        if (k != g) { out.first.push_back(order[static_cast<std::size_t>(k)]); }
+    }
+    return out;
+}
+
+// The deck's total order over a cast list: (effective rank, name), stable. The comparator already sorts
+// by both when it is the caller's sort (CastOrderTiesByName); re-sorting here makes every apply site agree
+// -- including SubsetPayableSequential, which sorts by the bare action rank.
+void CritTotalSort(const GameState& s, const DecisionProvider& prov, const std::vector<Action>& acts,
+                   std::vector<int>& order)
+{
+    thread_local std::vector<std::pair<int, int>> key;   // (rank, index)
+    key.clear();
+    for (int i : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(i)];
+        const CardDefinition* d = CritDefOf(a);
+        const int r = d ? prov.CastOrderActionRank(s, a, prov.CastOrderRank(s, *d)) : kCritOther * kCritScale;
+        key.emplace_back(r, i);
+    }
+    std::stable_sort(key.begin(), key.end(), [&](const std::pair<int, int>& x, const std::pair<int, int>& y)
+    {
+        if (x.first != y.first) { return x.first < y.first; }
+        return acts[static_cast<std::size_t>(x.second)].card_name.str()
+             < acts[static_cast<std::size_t>(y.second)].card_name.str();
+    });
+    for (std::size_t k = 0; k < key.size(); ++k) { order[k] = key[k].second; }
+}
+}   // namespace
+
 // ---- CritterLifegainProvider::CastOrderRank ---------------------------------
 int CritterLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    static const bool s_on = EnvOn("MTG_CRITTER_WATCHER_ORDER", true);
-    if (s_on && def.card.IsCreature())
+    if (!CritterOrderOn())
     {
-        const CardParams& p = def.params;
-        if (p.any_creature_enters_lifegain > 0 || p.own_creature_enters_lifegain > 0) { return 8; }
-        if (p.lifegain_self_counters > 0)                                              { return 9; }
+        // The 2026-09-08 mined order, kept byte-for-byte as the =0 hatch.
+        static const bool s_on = EnvOn("MTG_CRITTER_WATCHER_ORDER", true);
+        if (s_on && def.card.IsCreature())
+        {
+            const CardParams& p = def.params;
+            if (p.any_creature_enters_lifegain > 0 || p.own_creature_enters_lifegain > 0) { return 8; }
+            if (p.lifegain_self_counters > 0)                                              { return 9; }
+        }
+        return GenericProvider::CastOrderRank(s, def);
     }
-    return GenericProvider::CastOrderRank(s, def);
+    const CardParams& p  = def.params;
+    const int         mv = CritMv(def);
+    if (CritIsDevotionGod(def))
+    { return (CritFlipActive(s) ? kCritFlipDevotion : kCritDevotion) * kCritScale + mv; }
+    if (CritIsWatcherDef(def))
+    { return (CritFlipActive(s) ? kCritFlipWatcher : kCritWatcher) * kCritScale + mv; }
+    if (p.lifegain_each_own_creature_counters > 0)
+    { return (CritFlipActive(s) ? kCritFlipTeam : kCritTeam) * kCritScale + mv; }
+    if (def.card.IsCreature() && p.lifegain_self_counters > 0)
+    {
+        const int pips = std::clamp(CritPips(def.card.m_mana_cost, "W"), 0, 7);
+        return (CritFlipActive(s) ? kCritFlipUnit : kCritUnit) * kCritScale + (7 - pips) * 8 + mv;
+    }
+    if (def.card.IsCreature()) { return kCritBody * kCritScale + mv; }
+    if (CritIsWalker(def))     { return kCritWalker * kCritScale + mv; }
+    return kCritOther * kCritScale + mv;
+}
+
+int CritterLifegainProvider::CastOrderRankLatest(const GameState& s, const CardDefinition& def) const
+{
+    // Heliod's range: its static slot to the end of the creature block (the walk and the canonical
+    // two-way order put it after the last creature at the latest).
+    if (CritterOrderOn() && CritIsDevotionGod(def)) { return kCritBody * kCritScale + (kCritScale - 1); }
+    return CastOrderRank(s, def);
+}
+
+int CritterLifegainProvider::CastOrderActionRank(const GameState& s, const Action& a, int rank) const
+{
+    if (!CritterOrderOn() || a.kind != Action::Kind::CastFromHand || a.loyalty_ability < 0) { return rank; }
+    const CardDefinition* d = CritDefOf(a);
+    if (d == nullptr || !CritIsWalker(*d) || !CritAbilityMakesPridemateToken(*d, a.loyalty_ability))
+    { return rank; }
+    return (CritFlipActive(s) ? kCritFlipAjaniToken : kCritAjaniToken) * kCritScale + CritMv(*d);
+}
+
+void CritterLifegainProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                               std::vector<int>& order) const
+{
+    if (!CritterOrderOn() || order.size() < 2) { return; }
+    CritTotalSort(s, *this, acts, order);
+    CritHeliodPlacement hp = CritPlaceHeliod(s, acts, order);
+    if (hp.kind == CritHeliodCase::Walked1 || hp.kind == CritHeliodCase::Walked2
+        || hp.kind == CritHeliodCase::TwoWay)
+    { order = std::move(hp.after); }
+}
+
+bool CritterLifegainProvider::CastOrderTiesByName() const { return CritterOrderOn(); }
+
+// NOT while the SearchOrder gate is open (human play / MTG_UNPRUNED): there the global expansion already
+// offers every distinct permutation of the plan's casts (the viewer is never narrowed), Heliod-first
+// included, and opting in here would REPLACE that full fan with this deck's two candidates.
+bool CritterLifegainProvider::WantsCastOrderingSearch() const
+{ return CritterOrderOn() && !DecisionUnpruned(UnprunedGate::SearchOrder); }
+
+bool CritterLifegainProvider::CastOrderingCandidates(const GameState& s,
+                                                     const std::vector<Action>& /*plan_actions*/,
+                                                     const std::vector<Action>& reorder,
+                                                     std::vector<std::vector<int>>& out) const
+{
+    // Returning true with `out` EMPTY keeps the plan exactly as the enumeration built it (the caller
+    // pushes the base plan when no ordering was produced), so only a plan in Heliod's two-way case is
+    // ever expanded -- into the canonical order (after the creatures) FIRST, then the FIRST variant.
+    if (!CritterOrderOn() || reorder.size() < 2) { return true; }
+    std::vector<int> idx(reorder.size());
+    for (std::size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
+    CritTotalSort(s, *this, reorder, idx);
+    CritHeliodPlacement hp = CritPlaceHeliod(s, reorder, idx);
+    if (hp.kind != CritHeliodCase::TwoWay || hp.first == hp.after) { return true; }
+    out.push_back(std::move(hp.after));
+    out.push_back(std::move(hp.first));
+    return true;
+}
+
+std::optional<DecisionProvider::MainPhase>
+CritterLifegainProvider::MainPhaseOverride(const GameState&, const CardDefinition&) const
+{
+    if (!CritterOrderOn()) { return std::nullopt; }
+    return MainPhase::Main1;
+}
+
+const char* CritterLifegainProvider::CastOrderTierName(int rank) const
+{
+    if (!CritterOrderOn()) { return nullptr; }
+    switch (rank / kCritScale)
+    {
+        case kCritFlipTeam:       return "FLIP -- TEAM PAYOFF (Archangel of Thune) ahead of new watchers: 2+ more watchers than payoffs on the board, no Thune";
+        case kCritFlipUnit:       return "FLIP -- UNIT PAYOFFS (Voice, then Pridemate) ahead of new watchers";
+        case kCritFlipAjaniToken: return "FLIP -- AJANI CAST FOR -2 (the Pridemate token) ahead of new watchers";
+        case kCritFlipDevotion:   return "FLIP -- HELIOD's static slot ahead of new watchers (still placed by devotion)";
+        case kCritFlipWatcher:    return "FLIP -- ENTER-WATCHERS after the payoff block";
+        case kCritWatcher:        return "ENTER-WATCHER: first -- every later entry this turn is a gain event (cheapest, then name)";
+        case kCritTeam:           return "TEAM PAYOFF (Archangel of Thune): every later entry is a counter on every body";
+        case kCritUnit:           return "UNIT PAYOFF: more white pips first (Voice {W}{W} -> Heliod devotion), then Pridemate";
+        case kCritAjaniToken:     return "AJANI CAST FOR -2: the Pridemate token right after Pridemate (CastOrderActionRank)";
+        case kCritDevotion:       return "HELIOD (devotion god): here if it enters as a creature; else after up to the next 2 creature entries until it would; else SEARCHED first vs after the creatures";
+        case kCritBody:           return "OTHER CREATURE: after every watcher and payoff (cheapest, then name)";
+        case kCritWalker:         return "AJANI CAST FOR +1 / no activation: after the creatures (a -2 cast ranks at slot 13)";
+        case kCritOther:          return "other noncreature spell (Unexpectedly Absent): last";
+        default:                  return nullptr;
+    }
 }
 
 // ---- Angels / CritterLifegain cleanup-discard: shared helpers ---------------------------------
