@@ -1,7 +1,9 @@
-# KittyEquipment v3 mulligan profile — paused 2026-10-12, how to resume
+# KittyEquipment v3 mulligan profile — paused 2026-10-14, how to resume
 
-**Status: CANCELLED BY THE USER at 2026-10-12 23:09, mid-`refine`. Nothing is lost.** The journal
-holds 14.6 h of rollouts and is resumable. Branch bookmark: `kitty-v3-mulligan-wip`.
+**Status: PAUSED BY THE USER at 2026-10-14 00:32Z, mid-`refine` at 91.5%. Nothing is lost.** The user
+stopped it to free the box for daytime work and expects to relaunch the same night. The journal holds
+**~26.4 h** of rollouts (14.6 h to 2026-10-12 + 11.75 h on 2026-10-13) and is resumable.
+Branch bookmark: **`kitty-v3-mulligan-wip`** — see "DO NOT REBASE" below, it is the whole ballgame.
 
 ## The one command
 
@@ -10,66 +12,126 @@ MTG_KEEP_ROLLOUT_WALL_SEC=0 MTG_KEEP_FLIP_EPS=0.10 \
   bash scripts/mullgen.sh run decks/KittyEquipment/v3-adelbert-gauntlets fast
 ```
 
-Every token matters:
+Wrapped with a launcher + watcher at `logs/kitty_v3_resume/launch_gen.sh` and `wait_gen.sh`
+(gitignored, so re-create them from this doc if the tree was wiped). Every token matters:
 
 | token | why |
 |---|---|
 | `fast` | **positional, and `mullgen.sh` defaults to `complete`** (`RECIPE=${3:-complete}`). The journal is R=30; `complete` is R=40 and the resume gate refuses it. Omitting this is how the 2026-10-11 launch ran the wrong recipe. |
 | `MTG_KEEP_ROLLOUT_WALL_SEC=0` | now the in-code default (`0279f832`), so this is belt-and-braces. **Never set it non-zero on this path** — see below. |
-| `MTG_KEEP_FLIP_EPS=0.10` | the USER's ruling for this run (2026-10-11). The in-code default stays 0.02 and is still an OPEN question. |
+| `MTG_KEEP_FLIP_EPS=0.10` | the USER's ruling for this run (2026-10-11). **Not in the journal's resume identity**, so omitting it silently resumes at the 0.02 default and MIXES two schedules. The in-code default stays 0.02 and is still an OPEN question. |
 
-## State reached
+## State reached (verified after the stop)
 
 | | |
 |---|---|
-| generation time spent | **14.6 h** (12.9 h + 1.7 h resume) |
-| journal | 252,478 records, 13.1 MB, `R=30 K=15 play_digest=9c8fd2e5a7016018` |
-| `floor` phase | **COMPLETE** — refs fixed, sub-refine 64,422/64,422 (100%), subwave 5 converged, 0 frozen-at-floor |
-| `refine` phase | **12.8%** — 13,687 of 106,746 cell-sides frozen |
-| refine remaining | **16–36 h** (see the estimate note below) |
+| generation time banked | **~26.4 h** |
+| journal | **395,241 records, 23.6 MB, 0 malformed** — `R=30 K=15 depth=2 budget_ms=3 max_mull=6 play_digest=9c8fd2e5a7016018` |
+| `floor` phase | **COMPLETE** (was already complete before the 2026-10-13 resume) |
+| `refine` phase | **91.5%** — 97,717 of 106,746 cell-sides frozen |
+| remaining | 9,029 cell-sides |
+| anomalies | **none** — 0 fail-outs, 0 aborts, 0 abandoned rollouts |
 
-The engine has only three phases: `pre-pool` → `floor` → `refine`. Refine is the last, after which the
-profile is written and `mullgen.sh validate` runs the gates.
+The stop was a hard `SIGTERM` (there are **no signal handlers in `src/`**), but the journal is
+append-mode JSONL flushed every few seconds and verified afterwards: 395,241 records parsed, **0
+malformed**, header identity intact. A hard stop here is safe; it costs at most a few seconds.
 
-### The refine ETA, and why it is a range
+### What remains, and how long
 
-Measured over 21 monitor samples, refine was **accelerating** (2.44 %/h over the first half of the
-samples, 5.43 %/h over the second), giving 35.7 h and 16.0 h respectively. Weight the SLOWER end:
-a cell freezes when its argmin is settled, so the cells still unfrozen are the CLOSE ones that need
-more rollouts to separate — the early acceleration is the easy cells clearing, and the tail should
-decelerate. Do not quote a single number from a short window; that mistake produced a "12 h" estimate
-three times better than the run's own projection.
+The 2026-10-13 session measured the freeze-rate curve properly (105 monitor samples):
 
-## Copies of the journal (it is GITIGNORED — these are the only copies)
+```
+h 0-2     7,577/h  ( 7.10 %/h)
+h 2-4    11,527/h  (10.80 %/h)
+h 4-6    16,031/h  (15.02 %/h)   <- the easy cells clearing
+h 6-8     2,331/h  ( 2.18 %/h)   <- the cliff
+h 8-10    1,594/h  ( 1.49 %/h)
+h10-12    1,210/h  ( 1.13 %/h)   <- gentle decline, ~-24% per 2 h
+```
 
-- `decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.keepmodel.exhaustive.raw.json.journal` (live)
-- `~/.claude/mdt-v3-R30-journal-cancelled-20261012T231032Z.journal.gz` (1.3 MB, persistent docker volume)
-- `~/.claude/mdt-journal-aside-v3-R30-failout-20261012T211921Z.journal` (state at the wall fail-out)
-- `~/.claude/mdt-journal-aside-v3-R16-*.journal` x2 — the SUPERSEDED R=16 run. **Never delete a
-  killed run's journal.**
+Two honest readings of the remaining 9,029:
 
-`decks/**/*.journal` is gitignored, so the branch does NOT carry the journal. Only `~/.claude` and the
-repo survive a container rebuild — `/tmp` and `/workspaces` do not.
+- **flat at the converged ~1,280/h → ~7 h.** At the pause, the last 1 h / 2 h / 3 h windows all agreed
+  (1,287 / 1,270 / 1,297 per hour), which is what makes this a real estimate rather than a burst read.
+- **decline continues at −24% per 2 h → ~13–14 h.** Each successive window has been lower than the last.
+
+Plan against **7–14 h**. Cap `R=30` bounds it absolutely — a cell cannot consume more than R rollouts
+per side, so refine must terminate however close the remaining cells are. **Do not quote a point
+estimate from a short window**: per-5-minute rates still swing 228/h to 5,238/h because of the rollout
+tail below.
+
+### The rollout tail is the cost driver (and there is no hidden cap)
+
+7,301 games exceeded the 30 s reporting threshold in 11.75 h, totalling **~250 core-h** — the tail
+alone is most of the spend:
+
+| | p50 | p75 | p90 | p95 | p99 | p99.9 | max |
+|---|---|---|---|---|---|---|---|
+| tail game time | 66 s | 130 s | 263 s | 401 s | 855 s | 1,860 s | **3,598 s (60 min)** |
+
+157 games over 10 min, 10 over 30 min, 2 over 50 min. **The 3,598 s max is a coincidence, not a 1-hour
+cap** — the next two are 3,031 s and 2,313 s, a smooth tail with no pile-up at the boundary, and the
+only wall (`MTG_KEEP_ROLLOUT_WALL_SEC`) is 0. Nothing is being silently truncated. A single hour-long
+rollout stalls its cell until it returns, which is why freezing arrives in clumps.
+
+## *** DO NOT REBASE BEFORE THE PROFILE IS WRITTEN ***
+
+The previous version of this doc said the next step was "rebase, rebuild, regenerate GT."
+**That instruction would have destroyed the journal.** Resuming requires
+`play_digest 9c8fd2e5a7016018`, and `phase-1-2-deck-analyzer` is now **193 commits ahead** of this
+branch with 30 changed `src/` files (3,605 insertions — TurnSolver, AIEngine, ManaPayment,
+BatchRunner, GoldFishRunner). Staying on `kitty-v3-mulligan-wip` is what keeps the resume legal.
+
+**The sharpest instance, worth internalising:** the shared branch's E.6 commit `14a0ed73` adds **one
+line** to `decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.value.json`
+(`escalation_skip_r = 43.3`). A value sidecar drives play, so that single line of *data* — in a file
+nobody thinks of as code — is very likely enough to move `play_digest` by itself and make 26 h
+unresumable. Before any resume: `grep -c escalation_skip_r` on that sidecar; on this branch it must be
+**0**.
+
+**So the integration order is: finish the profile → THEN rebase → THEN rebuild → THEN regenerate GT.**
+`git merge-tree` previously reported 3 conflicts, all play-code headers (`src/ai/Dominance.h`,
+`HeuristicArm.h`, `TurnSolver.h`); expect more at 193 commits.
+
+### OPEN, and the USER's to decide (flagged 2026-10-13, unanswered)
+
+The table will arrive fitted to this branch's play, which is behind what ships. Accepting that, versus
+a from-scratch run on the merged engine (60–80 h), is a user decision. **Do not settle it by shipping
+quietly.**
 
 ## RESUME PRECONDITIONS
 
-1. **`play_digest` must still be `9c8fd2e5a7016018`.** The resume gate keys on it
-   (`PlayIdentityAllows`). **Any change to play code invalidates this journal** — which is the tension
-   in "optimise the engine, then resume": a play-identical speedup (memoisation, allocation, codegen)
-   keeps it; a play-changing one does not, and then the only options are a from-scratch run or
-   `MTG_KEEP_RETAIN_FOREIGN=9c8fd2e5a7016018`, which mixes two labellers and is a user decision.
-2. **PGO must match `HEAD:src`.** As of the cancel it does NOT (the wall fix `0279f832` changed src
-   after the PGO build), so `harness_bin` falls back to `build/Release`. Run `./build.sh pgo` first.
-3. **Expect this warning, which is benign here:** `RESUME(journal): ... predates the
-   refinement-schedule stamp -- UNVERIFIABLE`. The `669bdc69` stamp lands on the raw's meta, **not on
-   the journal header** — a real gap worth closing. The original run's environment was verified as
-   `MTG_KEEP_FLIP_EPS=0.10` from `/proc/<pid>/environ`, so no schedules are actually mixed.
+1. **Branch `kitty-v3-mulligan-wip`**, and `play_digest` still `9c8fd2e5a7016018`. If a resume is ever
+   refused, **read which field refused** — a refusal is not proof the artifact is dead.
+   `MTG_KEEP_RETAIN_FOREIGN` mixes two labellers and is a USER decision, never an agent's.
+2. **PGO must match `HEAD:src`.** As of this pause it DOES (`889da671`, built 2026-10-13 12:43Z), and
+   `harness_bin` resolves to `./build/PGO/mtg`. **Any other work that runs `./build.sh pgo` overwrites
+   `build/PGO`** — if daytime work happens on another branch, re-run `./build.sh pgo` (~9 min) after
+   switching back, and verify with `cat build/PGO/SRC_TREE` against `git rev-parse HEAD:src`.
+   A stamp mismatch falls back to `build/Release` **silently** (`MTG_PGO=1` does not force it).
+3. **Expect this benign warning:** `RESUME(journal): ... predates the refinement-schedule stamp --
+   UNVERIFIABLE (this run flip_eps=0.1/r_batch=16/se_prior=8)`. The `669bdc69` stamp lands on the raw's
+   meta, **not on the journal header** — a real gap worth closing. The original run's `flip_eps=0.10`
+   was verified from `/proc/<pid>/environ`, so no schedules are actually mixed.
+4. **The engine log is APPEND-mode** (`logs/KittyEquipment_v3-adelbert-gauntlets_mullgen/gen.log`).
+   Find the current run's section after the **last** `RESUME(journal)` line — never with `head`, and
+   never trust a `grep` that may be reading a previous run's lines.
 
-## KNOWN CONTAMINATION: 7 cell-sides
+## Copies of the journal (it is GITIGNORED — these are the only copies)
 
-The wall fail-out left 7 cell-sides (of 213,492) carrying one truncated sample out of R=30: the
-journal persisted their records while the poison list was in-memory only. Bounded and tiny, but a
-fully clean table needs a from-scratch run. Not fixable by resuming.
+Durable, on the `~/.claude` docker volume (survives a container rebuild; `/tmp` and `/workspaces`
+do **not**):
+
+- `~/.claude/mdt-v3-R30-journal-paused-20261014T003255Z.journal.gz` (2.2 MB) — **the state this doc describes**
+- `~/.claude/mdt-v3-R30-prekill-20261014T003210Z.journal.gz` — snapshot taken before the stop
+- `~/.claude/mdt-v3-R30-journal-preresume-20261013T123658Z.journal.gz` — state at the 2026-10-13 resume
+- `~/.claude/mdt-v3-R30-journal-cancelled-20261012T231032Z.journal.gz`
+- `~/.claude/mdt-journal-aside-v3-R30-failout-20261012T211921Z.journal` (wall fail-out state)
+- `~/.claude/mdt-journal-aside-v3-R16-*.journal` x2 — the SUPERSEDED R=16 run
+
+In-tree (gitignored): the live journal plus `.bak1`/`.bak2` (automatic rolling backups,
+`MTG_JOURNAL_BACKUP_S`, default 900 s), `.backup-20261013T124438Z` (mullgen's own pre-run copy) and
+two older ones. **NEVER delete a killed run's journal** — not even one a larger journal supersedes.
 
 ## *** NEVER RE-ARM THE ABANDON WALL ON THIS PATH ***
 
@@ -84,6 +146,12 @@ directly as policy, nothing is additive, and no stage verifies the loss was harm
 
 It cost 12.8 h of compute for a profile that was never written, to reclaim the 3.2 of 220 CPU-h the
 cap was priced at (1.5%). Fixed in `0279f832` (default 1200 → 0). Full post-mortem in that commit.
+
+## KNOWN CONTAMINATION: 7 cell-sides
+
+The 2026-10-12 wall fail-out left 7 cell-sides (of 213,492) carrying one truncated sample out of R=30:
+the journal persisted their records while the poison list was in-memory only. Bounded and tiny, but a
+fully clean table needs a from-scratch run. **Not fixable by resuming.**
 
 ## What runs AFTER refine (all in `mullgen.sh validate`)
 
