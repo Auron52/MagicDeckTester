@@ -2503,9 +2503,21 @@ public:
     // (a winning plan is never dropped). pool_total = the mana the walk paid from. Asked only on decks
     // whose play order IS their CastOrderRank (not the ordering-search decks). Base false; HinataProvider
     // carries the USER's Irencrag rule (MTG_IRENCRAG_WASTE). Moved out of the engine 2026-10-14 (USER).
+    // `arranged`: the subset's casts in the REALISED order (the comparator + ArrangeCastOrder, as both
+    // apply worlds take them) when RestrictorFollowsArrangement says the deck places its restrictor
+    // set-level; nullptr otherwise (followers are then the casts ranked after it).
     virtual bool RestrictorSubsetWasted(const GameState& /*s*/, const std::vector<Action>& /*cands*/,
-                                        const std::vector<int>& /*sel*/, int /*j*/, int /*pool_total*/) const
+                                        const std::vector<int>& /*sel*/, int /*j*/, int /*pool_total*/,
+                                        const std::vector<int>* /*arranged*/) const
     { return false; }
+
+    // RestrictorFollowsArrangement -- does this deck's ArrangeCastOrder PLACE its cast restrictor (a set-level
+    // position rather than a rank)? Then both subset walks count the restrictor's followers -- the
+    // max_casts_after legality, RestrictorPrePayable's pre-set and RestrictorSubsetWasted's follower -- in the
+    // ARRANGED order (the comparator + ArrangeCastOrder: exactly what both apply worlds realise), so legality
+    // and realisation cannot split. Base false -> the rank count, byte-identical. HinataProvider: the USER's
+    // Irencrag rule, "it is always second last" (MTG_HINATA_IREN_SECOND_LAST).
+    virtual bool RestrictorFollowsArrangement(const GameState& /*s*/) const { return false; }
 
     // HoldCastUnlessLethal -- a cast the deck HOLDS unless the plan that casts it wins THIS turn. Asked
     // once per candidate by BOTH subset walks (Solve's consider and EnumeratePlans', lockstep); a subset

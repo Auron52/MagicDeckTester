@@ -73,9 +73,8 @@ enum Slot : int
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
     KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
-    HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata FULL cast order (Ponder/Preordain PEERS)
-    HINATA_PP_STRICT,         // MTG_HINATA_PP_STRICT      ...and split the peers: Ponder before Preordain
-    HINATA_IREN_EARLY,        // MTG_HINATA_IREN_EARLY     LOO: Irencrag back to 18 (any payoff may follow)
+    HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata: the USER's settled TOTAL cast order (2026-10-14)
+    HINATA_PP_STRICT,         // MTG_HINATA_PP_STRICT      ...the REVERSE tie-break: Ponder before Preordain
     HINATA_FIND_LATE,         // MTG_HINATA_FIND_LATE      LOO: tutor/cantrips/dig back to 20 (after her)
     HINATA_PAY_TIE,           // MTG_HINATA_PAY_TIE        LOO: the three payoffs tied at 20 again
     HINATA_GAMBLE_LATE,       // MTG_HINATA_GAMBLE_LATE    tutor AFTER the cantrips (cantrip, then fetch)
@@ -485,6 +484,7 @@ enum Slot : int
     BP_M2_WAVE_FIXPOINT,      // MTG_BP_M2_WAVE_FIXPOINT the main-2 wave walker's variants get the M2 FIXPOINT step (M2FixModeFor, Hinata's opt-in) exactly as main 2's own plan loop does: a variant whose apply fired a breakpoint is followed by the lethal kill-scan and, mode 2, the gated re-entry of the decision on the post-draw state. Without it a walker continuation (the EMPTY one above, a deep rank) went straight to end of turn. Default ON; =0 -> the walker's variants skip the step, byte-identical
     BP_NODE_NESTED_SLOTS,     // MTG_BP_NODE_NESTED_SLOTS the breakpoint NODE's nested breakpoints are reachable: when child 0 (the value-best continuation) reaches further class-on breakpoints, the wave walker opens their slots (rank 0.., then EMPTY) for the pended base plan, as nested discovery already does for every un-hosted plan. On the node's turns a breakpoint INSIDE a continuation took MTG_BP_NESTED_CANON's cands.front() with nothing scored against it. The walker also stops re-walking the pend index itself (the node already searched it in full). Default ON; =0 -> no nested slots for hosted plans, byte-identical
     BP_NEW_ONLY_DEMOTE,       // MTG_BP_NEW_ONLY_DEMOTE MTG_BP_NEW_ONLY's old-cards-only continuations are DEMOTED to the deferred walker's last wave instead of deleted: the rule's premise ("the sibling P u {X} is the same line") fails whenever the sibling's cast ORDER differs from "the plan, then X" -- a rank or a hand-order tie puts X first -- so an order-sensitive line was unfindable at every budget (Mirrorwing: Anger before Oracle's Restoration 88 vs 82, Fists before Gold Rush 50 vs 46, found only with MTG_BP_NEW_ONLY=0). The walker hands them out after a slot's ranks and EMPTY, so a finite budget spends on exactly what it did before; the canon, wave 0, the node's children and every stillborn test still see the filtered list. Default OFF while the USER decides (2026-10-15: the only lever with a deck net above 0 on the held-out A/B, all budget churn); =1 demotes, =0 -> deleted as before, byte-identical
+    HINATA_IREN_SECOND_LAST,  // MTG_HINATA_IREN_SECOND_LAST (under MTG_HINATA_ORDER_FULL) the USER's Irencrag rule as a SET-LEVEL placement (HinataProvider::ArrangeCastOrder): Irencrag Feat is the plan's SECOND-LAST cast, immediately before whichever payoff (Soulfire Eruption / Magma Opus / Crackle with Power) is its last -- "Irencrag can go in any of three spots depending on what other spells are cast, but it is always second last" (USER 2026-10-14), so Irencrag -> Soulfire, Soulfire -> Irencrag -> Crackle and Soulfire -> Opus -> Irencrag -> Crackle are all lines. Both subset walks count its one follower, RestrictorPrePayable's pre-set and the waste gate in that SAME arranged order (RestrictorFollowsArrangement), and the waste gate prunes a plan in which it precedes no payoff. docs/design/hinata-cast-order.md. Default ON; =0 -> the scalar rank 18 alone (ahead of every payoff)
     COUNT
 };
 
@@ -537,7 +537,6 @@ inline const char* Name(int slot)
         "MTG_KE_ORDER_FULL",
         "MTG_HINATA_ORDER_FULL",
         "MTG_HINATA_PP_STRICT",
-        "MTG_HINATA_IREN_EARLY",
         "MTG_HINATA_FIND_LATE",
         "MTG_HINATA_PAY_TIE",
         "MTG_HINATA_GAMBLE_LATE",
@@ -925,6 +924,7 @@ inline const char* Name(int slot)
         "MTG_BP_M2_WAVE_FIXPOINT",
         "MTG_BP_NODE_NESTED_SLOTS",
         "MTG_BP_NEW_ONLY_DEMOTE",
+        "MTG_HINATA_IREN_SECOND_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

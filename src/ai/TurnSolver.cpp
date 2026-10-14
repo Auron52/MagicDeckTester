@@ -35225,11 +35225,16 @@ static void RestrictorRejectTrace(const char* site, const GameState& state, cons
 // order. If even that cannot pay it, no order casts it at all (2HG gi 254 again: no follower count is
 // needed to see that {R}{R}{R} cannot come from two red sources) -- the subset is rejected whatever the
 // casts-after count says, so a lethal-projected phantom cannot be committed turn after turn either.
+//
+// `arranged` (DecisionProvider::RestrictorFollowsArrangement): the subset's casts in the realised order
+// (PlanCastOrder -- the comparator plus the deck's ArrangeCastOrder). The pre-set is then the casts placed
+// BEFORE j in that order, not the casts ranked at or before it: a deck that places its restrictor set-level
+// (Hinata: second last, after a Soulfire ranked behind it) must be judged on the order it actually plays.
 static bool RestrictorPrePayable(const GameState& state, const std::vector<Action>& cands,
                                  const std::vector<int>& sel, int j, int r_rank,
                                  const ManaPool& pool, const ManaCost& combined,
                                  const ColorFeasibility& cf, const ColorDemandIndex* demand,
-                                 bool self_only = false)
+                                 bool self_only = false, const std::vector<int>* arranged = nullptr)
 {
     if (combined.hybrid_count > 0) { return true; }   // unmodelled
     thread_local std::vector<int> pre;
@@ -35238,6 +35243,13 @@ static bool RestrictorPrePayable(const GameState& state, const std::vector<Actio
     ManaPool sup  = pool;
     const DecisionProvider& prov = ResolveProvider(state);
     auto sub = [](int& f, int v) { f = std::max(0, f - v); };
+    // Position of j in the arranged order (-1: not arranged, or j absent -> the rank test).
+    std::ptrdiff_t j_pos = -1;
+    if (arranged != nullptr)
+    {
+        const auto it = std::find(arranged->begin(), arranged->end(), j);
+        if (it != arranged->end()) { j_pos = it - arranged->begin(); }
+    }
     for (int k : sel)
     {
         const Action& a = cands[k];
@@ -35245,7 +35257,14 @@ static bool RestrictorPrePayable(const GameState& state, const std::vector<Actio
         { return true; }   // unmodelled pip shapes -> never reject
         bool in_pre = (k == j);
         if (!in_pre && !self_only && a.kind == Action::Kind::CastFromHand && a.def != nullptr)
-        { in_pre = prov.CastOrderRank(state, *a.def) <= r_rank; }
+        {
+            if (j_pos >= 0)
+            {
+                const auto it = std::find(arranged->begin(), arranged->end(), k);
+                in_pre = it != arranged->end() && (it - arranged->begin()) < j_pos;
+            }
+            else { in_pre = prov.CastOrderRank(state, *a.def) <= r_rank; }
+        }
         if (a.kind == Action::Kind::SacForMana)
         {
             // A pre-pass crack (Lotus Bloom, Dwarven Ruins): its mana precedes every cast.
@@ -37095,14 +37114,30 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             const CardDefinition* rd = cands[j].def;
             const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
             int after = 0;
-            for (int k : sel)
+            // A deck that PLACES its restrictor set-level (RestrictorFollowsArrangement; Hinata: second last,
+            // before the plan's last payoff) is counted in the order it realises -- PlanCastOrder, the
+            // comparator plus ArrangeCastOrder, as both apply worlds take it -- so the legality here, the
+            // pre-set test and the waste gate below read ONE order with the executor and the rollout.
+            thread_local std::vector<int> r_arranged;
+            const std::vector<int>* arranged = nullptr;
+            if (ResolveProvider(state).RestrictorFollowsArrangement(state))
             {
-                if (k == j) { continue; }
-                const CardDefinition* kd = cands[k].def;
-                const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
-                if (k_rank > r_rank)
+                PlanCastOrder(state, cands, sel, r_arranged);
+                const auto it = std::find(r_arranged.begin(), r_arranged.end(), j);
+                if (it != r_arranged.end())
+                { arranged = &r_arranged; after = static_cast<int>(r_arranged.end() - it) - 1; }
+            }
+            if (arranged == nullptr)
+            {
+                for (int k : sel)
                 {
-                    ++after;
+                    if (k == j) { continue; }
+                    const CardDefinition* kd = cands[k].def;
+                    const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
+                    if (k_rank > r_rank)
+                    {
+                        ++after;
+                    }
                 }
             }
             if (after > cands[j].max_casts_after) { return; }   // illegal: too many spells after it
@@ -37113,7 +37148,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // is readmitted. Rank-ordered decks only -- the same scope as that gate.
             if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state)
                 && ((after + 1 > cands[j].max_casts_after
-                     && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand))
+                     && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
+                                              /*self_only=*/false, arranged))
                     || !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
                                              /*self_only=*/true)))
             { RestrictorRejectTrace("solve", state, cands, sel, after); return; }
@@ -37123,7 +37159,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // SCOPE: asked only where the plan's PLAY order IS the rank order (not the ordering-search decks:
             // Dragonstorm measured worse under it, +0.0115, t 5.66, 2 better : 43 worse).
             if (!OrderingSearchEnabled(state)
-                && ResolveProvider(state).RestrictorSubsetWasted(state, cands, sel, j, static_cast<int>(pool.Total())))
+                && ResolveProvider(state).RestrictorSubsetWasted(state, cands, sel, j, static_cast<int>(pool.Total()),
+                                                                 arranged))
             { iren_waste = true; }
         }
         // REALISABLE IN THE DECK'S OWN ORDER (DecisionProvider::OrderedSubsetRealisable; default
@@ -50017,14 +50054,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             const CardDefinition* rd = cands[j].def;
             const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
             int after = 0;
-            for (int k : sel)
+            // RestrictorFollowsArrangement: count in the realised (arranged) order -- lockstep twin of
+            // Solve::consider, see there.
+            thread_local std::vector<int> r_arranged;
+            const std::vector<int>* arranged = nullptr;
+            if (ResolveProvider(state).RestrictorFollowsArrangement(state))
             {
-                if (k == j) { continue; }
-                const CardDefinition* kd = cands[k].def;
-                const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
-                if (k_rank > r_rank)
+                PlanCastOrder(state, cands, sel, r_arranged);
+                const auto it = std::find(r_arranged.begin(), r_arranged.end(), j);
+                if (it != r_arranged.end())
+                { arranged = &r_arranged; after = static_cast<int>(r_arranged.end() - it) - 1; }
+            }
+            if (arranged == nullptr)
+            {
+                for (int k : sel)
                 {
-                    ++after;
+                    if (k == j) { continue; }
+                    const CardDefinition* kd = cands[k].def;
+                    const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
+                    if (k_rank > r_rank)
+                    {
+                        ++after;
+                    }
                 }
             }
             if (s_rollout_stats)
@@ -50043,7 +50094,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // MTG_RESTRICTOR_ORDER_EXACT (lockstep twin of Solve::consider -- reject-only, `after` untouched).
             if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state)
                 && ((after + 1 > cands[j].max_casts_after
-                     && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand))
+                     && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
+                                              /*self_only=*/false, arranged))
                     || !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
                                              /*self_only=*/true)))
             { _ct.label = "irencrag-order"; RestrictorRejectTrace("enum", state, cands, sel, after); return; }
@@ -50074,7 +50126,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
             }
             if (!OrderingSearchEnabled(state)   // scope: rank-ordered decks only -- see the twin's note
-                && ResolveProvider(state).RestrictorSubsetWasted(state, cands, sel, j, static_cast<int>(pool.Total())))
+                && ResolveProvider(state).RestrictorSubsetWasted(state, cands, sel, j, static_cast<int>(pool.Total()),
+                                                                 arranged))
             { iren_waste = true; }
         }
         // Realisable in the deck's own order (lockstep twin of Solve's consider -- see there).

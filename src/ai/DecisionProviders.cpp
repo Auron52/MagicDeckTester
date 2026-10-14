@@ -10253,6 +10253,15 @@ double AntiLifegainProvider::NcLandDropTempoBonus(const GameState& s, int contro
 
 // ---- HinataProvider ---------------------------------------------------------
 
+// The deck's three PAYOFFS -- the terminals Irencrag Feat's one allowed cast exists to fund (USER 2026-09-01:
+// "just those 3 cards"): Crackle with Power ({X} damage sink), Soulfire Eruption (damage = top-card MV, the
+// dig) and Magma Opus (the payoff that draws). By card data, as the rank tiers key on them. One definition
+// for the waste gate and the set-level placement (ArrangeCastOrder), so the two cannot disagree on the set.
+static bool HinataIsPayoff(const CardDefinition& d)
+{
+    return d.params.x_damage_multiplier > 1 || d.params.damage_equals_top_mv || d.params.cast_draw > 0;
+}
+
 // ---- HinataProvider::RestrictorSubsetWasted: the Irencrag waste gate (MTG_IRENCRAG_WASTE) ----------
 // Moved here from TurnSolver.cpp's two subset walks 2026-10-14 (USER: "These should be moved into the
 // provider for sure. That was my intention."), byte-identical. The engine keeps the LEGALITY half (no
@@ -10290,51 +10299,88 @@ double AntiLifegainProvider::NcLandDropTempoBonus(const GameState& s, int contro
 // there -- and the gate measured WORSE on that deck in all four cells (+0.0115, t 5.66,
 // 2 better : 43 worse, paired 1200x2 at d3/d5 x s2002/s3003). Excluding the
 // ordering-search decks is the principled scope, not a per-deck exception.
+//
+// THE SETTLED ORDER (USER 2026-10-14) STATES THIS GATE AS A POSITION RULE: "Irencrag can go in any of three
+// spots depending on what other spells are cast, but it is always second last" / "So we can restrict it
+// using that." With MTG_HINATA_IREN_SECOND_LAST the walks pass the subset's ARRANGED order (`arranged`:
+// ArrangeCastOrder puts Irencrag immediately before the plan's last payoff), and the follower is read from
+// it -- one order with the executor and the rollout. Reconciled with the 09-01 rule rather than replacing
+// it: the placement decides WHERE Irencrag goes, so its follower is always the plan's last payoff when the
+// plan has one; a plan with no payoff leaves it LAST, with no follower, and this gate prunes it (the
+// position rule's "pruned"). Rule 3's "the payoff NEEDED the float" stays, because it is a second,
+// independent fact the position cannot see: Irencrag -> Soulfire on a board that pays the Soulfire alone
+// spent a card and four mana for a float nothing used (USER 2026-09-01: "casting Irencrag to play Soulfire
+// is pretty bad value overall"). The lethal exemption is unchanged.
 bool HinataProvider::RestrictorSubsetWasted(const GameState& s, const std::vector<Action>& cands,
-                                            const std::vector<int>& sel, int j, int pool_total) const
+                                            const std::vector<int>& sel, int j, int pool_total,
+                                            const std::vector<int>* arranged) const
 {
     if (!IrencragWasteGateEnabled()) { return false; }
-    const CardDefinition* rd = cands[j].def;
-    const int r_rank = rd ? CastOrderRank(s, *rd) : 20;
+    // The restrictor's FOLLOWERS: the casts after it in the arranged order when the walk passed one, else
+    // the casts ranked after it (the pre-placement rule, byte-identical with the placement off).
+    thread_local std::vector<int> followers;
+    followers.clear();
+    // What the board has LEFT for the follower once everything cast before it is paid: the casts placed
+    // ahead of Irencrag, and Irencrag. With the scalar rank this was just Irencrag's own cost -- every
+    // pre-ranked cast was ignored, which over-states what is left and so under-states the need: with the
+    // placement, a payoff placed BEFORE Irencrag (Soulfire -> Irencrag -> Opus) is exactly the cast that
+    // ate the board, and ignoring it would call the follower's float unneeded and delete a real line. Their
+    // own output (Reality Spasm's untap, a Sol Ring cast this turn) is NOT credited, which can only
+    // under-state what is left -- the keep-the-line direction.
+    int spent_before = cands[j].cost.ManaValue();
+    if (arranged != nullptr)
+    {
+        const auto it = std::find(arranged->begin(), arranged->end(), j);
+        if (it != arranged->end())
+        {
+            followers.assign(it + 1, arranged->end());
+            spent_before = 0;
+            for (auto p = arranged->begin(); p != it + 1; ++p) { spent_before += cands[*p].cost.ManaValue(); }
+        }
+    }
+    else
+    {
+        const CardDefinition* rd = cands[j].def;
+        const int r_rank = rd ? CastOrderRank(s, *rd) : 20;
+        for (int k : sel)
+        {
+            if (k == j) { continue; }
+            const CardDefinition* kd = cands[k].def;
+            const int k_rank = kd ? CastOrderRank(s, *kd) : 20;
+            if (k_rank > r_rank) { followers.push_back(k); }
+        }
+    }
     int  after = 0;
     bool after_finisher    = false;   // is the follower the FINISHER the slot is reserved for?
     bool after_payoff      = false;   // ...or at least a PAYOFF rather than a cantrip?
     bool after_needs_float = false;   // ...and could it not have been cast without him?
-    for (int k : sel)
+    for (int k : followers)
     {
-        if (k == j) { continue; }
         const CardDefinition* kd = cands[k].def;
-        const int k_rank = kd ? CastOrderRank(s, *kd) : 20;
-        if (k_rank > r_rank)
-        {
-            ++after;
-            if (!kd) { continue; }
-            if (kd->params.x_damage_multiplier > 1) { after_finisher = true; }
-            // A PAYOFF is one of the deck's three terminals (Crackle / Soulfire / Opus) --
-            // the same params the provider's rank tiers key on. USER 2026-09-01 scoped the
-            // rule to exactly these three.
-            const bool is_payoff = kd->params.x_damage_multiplier > 1
-                                || kd->params.damage_equals_top_mv
-                                || kd->params.cast_draw > 0;
-            if (!is_payoff) { continue; }
-            after_payoff = true;
-            // ...and DID IT NEED THE FLOAT? That is the real question the restrictor asks,
-            // and the reason the card-identity rules mis-measured (searched-design §6e):
-            //   * an {X} finisher (Crackle) always converts more mana into more damage, so
-            //     the float is never wasted on it;
-            //   * a FIXED-cost payoff needs the float only when the rest of the pool could
-            //     not have cast it anyway. Soulfire is {6}{R}{R}{R} = NINE, so on turn 3 off
-            //     ~5 mana Irencrag is the only way to cast the deck's dig -- a real play.
-            //     With Hinata out it costs 3-4, the pool covers it, and spending Irencrag on
-            //     it is exactly the waste the USER described ("it seems off to play Soulfire
-            //     with no Hinata, but ... it is a viable play in the worst cases").
-            // Approximate by construction (other casts in the subset also draw on the pool),
-            // which is the safe direction here: over-crediting need keeps a line, never
-            // deletes one.
-            if (kd->params.x_damage_multiplier > 1) { after_needs_float = true; continue; }
-            const int left = pool_total - cands[j].cost.ManaValue();
-            if (cands[k].cost.ManaValue() > left) { after_needs_float = true; }
-        }
+        ++after;
+        if (!kd) { continue; }
+        if (kd->params.x_damage_multiplier > 1) { after_finisher = true; }
+        // A PAYOFF is one of the deck's three terminals (Crackle / Soulfire / Opus) --
+        // the same params the provider's rank tiers key on. USER 2026-09-01 scoped the
+        // rule to exactly these three.
+        if (!HinataIsPayoff(*kd)) { continue; }
+        after_payoff = true;
+        // ...and DID IT NEED THE FLOAT? That is the real question the restrictor asks,
+        // and the reason the card-identity rules mis-measured (searched-design §6e):
+        //   * an {X} finisher (Crackle) always converts more mana into more damage, so
+        //     the float is never wasted on it;
+        //   * a FIXED-cost payoff needs the float only when the rest of the pool could
+        //     not have cast it anyway. Soulfire is {6}{R}{R}{R} = NINE, so on turn 3 off
+        //     ~5 mana Irencrag is the only way to cast the deck's dig -- a real play.
+        //     With Hinata out it costs 3-4, the pool covers it, and spending Irencrag on
+        //     it is exactly the waste the USER described ("it seems off to play Soulfire
+        //     with no Hinata, but ... it is a viable play in the worst cases").
+        // Approximate by construction (colours, and the producers' output, are not modelled).
+        // With the placement the casts ahead of the follower are charged too (spent_before
+        // above); without it only Irencrag's own cost is, as ruled 2026-09-01.
+        if (kd->params.x_damage_multiplier > 1) { after_needs_float = true; continue; }
+        const int left = pool_total - spent_before;
+        if (cands[k].cost.ManaValue() > left) { after_needs_float = true; }
     }
     const int  rule    = IrencragRule();
     const bool iren_ok = rule >= 3 ? after_needs_float   // payoff that NEEDED the float
@@ -10345,52 +10391,47 @@ bool HinataProvider::RestrictorSubsetWasted(const GameState& s, const std::vecto
 }
 
 
-// MTG_HINATA_ORDER_FULL -- the USER's FULL (total) cast order for Hinata, reviewed 2026-08-26.
+// MTG_HINATA_ORDER_FULL -- the USER's SETTLED, TOTAL cast order for Hinata (2026-10-14; first reviewed
+// 2026-08-26, revised 2026-08-28). docs/design/hinata-cast-order.md carries the history and measurements.
 //
-// The generic tiering this replaces puts SEVEN live cards on rank 20 (Gamble, Ponder, Preordain,
-// Expressive Iteration, Soulfire Eruption, Magma Opus, Crackle with Power) plus the four
-// goldfish-inert ones. Ties are why breakpoint condemnation is inert -- a tie is not a decline --
-// and they also leave the CANONICAL continuation (cands[0], the thing MTG_BP_NO_GREEDY_CONT casts
-// instead of a greedy Solve) decided by enumeration order rather than by any judgement. Hinata is
-// the one deck that leans negative under that lever, which is what prompted this order.
+//   land (slot 0, still searched) > Sol Ring > Hinata, Dawn-Crowned > Reality Spasm > Gamble > Preordain
+//   > Ponder > Expressive Iteration > Ornithopter of Paradise > [Irencrag Feat] > Soulfire Eruption
+//   > Magma Opus > Crackle with Power > the never-cast four (Icy Blast, Memory Lapse, Remand, Distorting Wake)
+//
+// All main 1 (MTG_HINATA_ALL_MAIN2 stays off: the main-2 loop measured weaker). TOTAL by the USER's ask: "Let's
+// fully order the cards in each list inasmuch as possible. I don't like the randomness of choosing the
+// order." Every live card has its own rank, and CastOrderTotalByName breaks any remaining tie (the never-cast
+// tier, the leave-one-out arms) by NAME, never by plan / hand order.
 //
 // The USER's rulings, verbatim where they settle a position:
 //   * "Soulfire is typically better than Opus ... I would still put Soulfire higher."
-//   * "Early is okay for Expressive Iteration."  (Its exiled card is playable THIS TURN only, so a
-//     cost-efficient-end placement throws away a third of the card.)
-//   * "Irencrag Feat must be second last as it can only be cast before Crackle."  max_casts_after=1
-//     means exactly one spell may follow, and the USER reserves that slot for Crackle. NOTE the
-//     narrowing this accepts: Irencrag -> Soulfire is no longer expressible.
-//   * On the land drop: "which can be before everything or after drawing. The start is actually
-//     fine with clairvoyant as it can play any land currently in hand or draw and then play a new
-//     type of drawn land." It is NOT ranked here -- the drop is SEARCHED at depth > 0 (folded into
-//     the plan) and measurement says it uses that freedom: over 120 games at play settings, of 233
-//     turns with both a land drop and a draw spell, 51 (22%) play the land AFTER a draw spell.
-//   * On Reality Spasm: "a typical player would Reality Spasm after casting other stuff, but with
-//     clairvoyance this doesn't matter." Kept at the ritual tier (15) so its float precedes the
-//     payoff. It is a DEAD CARD in the current model -- the static-pool planner does not offer
-//     X-untap or chain the freed mana into a same-turn Crackle -- so 15 is a position waiting for
-//     the deferred Layer-2 item, not one that binds today.
+//   * "Early is okay for Expressive Iteration."  (Its exiled card is playable THIS TURN only.)
+//   * Hinata "should be right after Izzet Signet, since a drawn Hinata can still be played later"; Reality
+//     Spasm "as soon as you have your full mana out + Hinata for the turn"; Ornithopter "after Hinata, but
+//     before Soulfire Eruption" (2026-08-28).
+//   * IRENCRAG FEAT (2026-10-14): "Irencrag needs to be castable after Soulfire and after Magma Opus, since it
+//     needs to go second last. There has to be flexibility around that." / "So, in reality the Irencrag can
+//     go in any of three spots depending on what other spells are cast, but it is always second last." /
+//     "So we can restrict it using that." Its scalar rank (18) is the slot after every set-up cast; the
+//     placement is SET-LEVEL (ArrangeCastOrder, MTG_HINATA_IREN_SECOND_LAST): immediately before whichever
+//     payoff is the plan's last cast. max_casts_after = 1 is exactly one more spell of ANY kind, so the
+//     one follower is that payoff. The subset walks count it in the same arranged order
+//     (RestrictorFollowsArrangement) and the waste gate prunes a plan in which it precedes no payoff.
+//   * On the land drop: "which can be before everything or after drawing." It is NOT ranked here -- the drop
+//     is SEARCHED at depth > 0 (folded into the plan); slot 0 is LandDropCastOrderRank, for condemnation.
 //
-// PONDER / PREORDAIN ARE PEERS BY DESIGN (MTG_HINATA_PP_STRICT splits them; see below).
-// USER: "Ponder and Preordain have a bit of a messy relationship (interacting with the top of the
-// deck) ... It's possible you might sometimes want to do Ponder -> Preordain -> Ponder", and then
-// the narrowing that makes it precise: "Only the 'I know what is on the top of the library' effects
-// like Ponder and Preordain are troublesome here." Expressive Iteration looks at three but CONSUMES
-// all three (hand / exile / bottom), so it leaves no known top and is not entangled.
+// Two AGENT tie-breaks put to the USER and not yet contradicted (2026-10-14):
+//   * Gamble BEFORE the cantrips: Gamble's search shuffles the library, so a Gamble after Ponder / Preordain
+//     throws away what they set up on top. (Its random discard also lands on the fullest hand.)
+//   * Preordain BEFORE Ponder: each cantrip re-plans after its draw (a breakpoint truncates the plan), so this
+//     only decides which goes first; Preordain-first sees more distinct cards -- Ponder-first leaves
+//     Preordain re-scrying the two Ponder already saw. MTG_HINATA_PP_STRICT is the reverse (Ponder first).
+//     The Ponder -> Preordain -> Ponder interleave stays reachable as single-cantrip subsets, each its own
+//     breakpoint; the dedicated interleave work is deferred (docs/design/hinata-ponder-preordain-interleave.md).
 //
-// This is the Bonesplitter/Lightning-Greaves case from TurnSolver's condemnation rule: peers at one
-// rank have no enumerated order between them, and the >= tie-exemption stops them condemning each
-// other, so the interleave stays reachable. MEASURED, 120 games at play settings: 12 turns cast more
-// than one top-manipulator and one of them is exactly `Ponder, Preordain, Ponder, Preordain` -- a
-// line a strict Ponder-before-Preordain would delete (it forces Ponder, Ponder, Preordain,
-// Preordain). Rare, but the standing no-lossy-truncation bar rejects frequency as the axis.
-//
-// Deliberately NOT measured into an order: the wider draw-spell sequencing. USER: "sometimes the
-// order of other draw spells can be better done after or before, but a lot of this is, I believe,
-// just clairvoyance." An order fitted to a clairvoyant search would not transfer to the
-// non-clairvoyant path, so every position here is STRUCTURAL (cost, use-or-lose staging, the
-// Irencrag restriction) or an explicit USER call. See docs/design/hinata-cast-order.md.
+// BINDING inside cantrip plans: Ponder / Preordain / Expressive Iteration make a set OrderingOpaque, which
+// the apply worlds cast in PLAN order (the searched-play cantrip-first partition, else hand order) unless the
+// deck opts into OrderOpaqueCastsByRank -- which this order does, so the rank is what plays there too.
 //
 // Param-derived, no card names (house style: a deck gets its order from card DATA).
 static bool HinataOrderFullEnabled()
@@ -10399,24 +10440,28 @@ static bool HinataOrderFullEnabled()
     return heurarm::Flag(heurarm::HINATA_ORDER_FULL, on);
 }
 
-// The A/B arm the USER asked for ("Let's try it both ways regarding ponder and preordain"): break
-// the peer tie into Ponder (7) before Preordain (8). Only meaningful with the full order on.
+// MTG_HINATA_IREN_SECOND_LAST (DEFAULT ON; =0 -> the scalar rank 18 alone, Irencrag ahead of every payoff).
+// Only meaningful with the order on. See ArrangeCastOrder.
+static bool HinataIrencragSecondLast()
+{
+    static const bool on = EnvOn("MTG_HINATA_IREN_SECOND_LAST", true);
+    return heurarm::Flag(heurarm::HINATA_IREN_SECOND_LAST, on);
+}
+
+static bool HinataIrencragPlaced() { return HinataOrderFullEnabled() && HinataIrencragSecondLast(); }
+
+// The REVERSE of the agent tie-break above: Ponder (10) before Preordain (11). Kept so the USER's call on
+// that tie-break can be measured in one pooled batch. Only meaningful with the full order on.
 static bool HinataPonderPreordainStrict()
 {
     static const bool on = EnvOn("MTG_HINATA_PP_STRICT");
     return heurarm::Flag(heurarm::HINATA_PP_STRICT, on);
 }
 
-// LEAVE-ONE-OUT DECOMPOSITION ARMS. The full order measured WORSE than the generic tiering
-// (+0.021 hold t=4.86 / +0.027 train t=6.06, n=3000/cell), and it changes several independent
-// things at once, so a single verdict on "the order" would be uninterpretable. Each flag reverts
-// exactly ONE piece to its generic position; they pool into one batch as heurarm slots.
-static bool HinataIrencragEarly()
-{
-    static const bool on = EnvOn("MTG_HINATA_IREN_EARLY");
-    return heurarm::Flag(heurarm::HINATA_IREN_EARLY, on);
-}
-
+// LEAVE-ONE-OUT DECOMPOSITION ARMS (2026-08). The August order measured WORSE than the generic tiering
+// (+0.021 hold t=4.86 / +0.027 train t=6.06, n=3000/cell), and it changes several independent things at
+// once, so each flag reverts exactly ONE piece to its generic position; they pool into one batch as heurarm
+// slots. (MTG_HINATA_IREN_EARLY, "Irencrag back to 18", was folded into the settled order 2026-10-14.)
 static bool HinataFindLate()
 {
     static const bool on = EnvOn("MTG_HINATA_FIND_LATE");
@@ -10482,8 +10527,10 @@ static int HinataFullOrderRank(const CardDefinition& def)
     // under the drawn-card exemption and stays enumerable. What the pin removes is only holding a
     // Hinata already in hand to cast her after seeing what a cantrip revealed.
     //
-    // She belongs above the find tier on her own merits too: every spell after her is cheaper for
-    // each target it has, so a cantrip cast before her is a cantrip that paid full price.
+    // Her discount is per TARGET, so it reaches the targeted spells after her -- Reality Spasm, Soulfire,
+    // Magma Opus, Crackle -- and never the find tier: Ponder, Preordain, Gamble and Expressive Iteration
+    // have no targets and cost the same on either side of her. Ahead of them she costs nothing (the
+    // drawn-card argument above) and keeps the payoffs that follow them discounted.
     if (p.hinata_cost_reducer)    { return 6; }   // Hinata, Dawn-Crowned
     // 7: THE UNTAP RITUAL, moved up from 15 (USER 2026-08-28: "you want to consider it as soon as
     // you have your full mana out + Hinata for the turn. So, once mana rocks, land and Hinata are
@@ -10502,12 +10549,16 @@ static int HinataFullOrderRank(const CardDefinition& def)
     if (p.untap_x_mana_sources)   { return 7; }   // Reality Spasm
     // 8-12: FIND -- tutor, then card selection, then the dig. MTG_HINATA_FIND_LATE puts the whole
     // tier back at 20 (after her), which is the generic tiering's position.
+    // 8: Gamble BEFORE the cantrips (the USER's slot; agent tie-break: its search shuffles the library,
+    // so after Ponder / Preordain it would throw away what they set up on top).
     if (p.tutor_to_hand)          { return find_base ? find_base
                                                      : (HinataGambleLate() ? 13 : 8); }   // Gamble
-    // 10-11: the two top-of-library manipulators. PEERS unless MTG_HINATA_PP_STRICT.
-    if (p.cast_reorder > 0)       { return find_base ? find_base : 10; }   // Ponder -- reorder 3
-    if (p.cast_scry > 0)          { return find_base ? find_base
-                                                     : (HinataPonderPreordainStrict() ? 11 : 10); }
+    // 10-11: the two top-of-library manipulators, Preordain FIRST (agent tie-break: each re-plans after its
+    // draw, so this decides only which goes first, and Preordain-first sees more distinct cards).
+    // MTG_HINATA_PP_STRICT is the reverse (Ponder first).
+    const bool ponder_first = HinataPonderPreordainStrict();
+    if (p.cast_reorder > 0)       { return find_base ? find_base : (ponder_first ? 10 : 11); }   // Ponder
+    if (p.cast_scry > 0)          { return find_base ? find_base : (ponder_first ? 11 : 10); }   // Preordain
     if (p.expressive_iteration)   { return find_base ? find_base : 12; }   // EI -- use-or-lose exile
     // 14: the dork (USER 2026-08-28: "Ornithopter can go after Hinata,
     // but before Soulfire Eruption"; "It can't get haste, so it only matters as a target for
@@ -10528,17 +10579,14 @@ static int HinataFullOrderRank(const CardDefinition& def)
     // un-condemnable under BpSlotIsAfterSite. It measured play-inert over 6,000 games at its old
     // 10/10 position.
     if (def.tmpl == CardTemplate::ManaDork) { return HinataDorkTie() ? 6 : 14; }   // Ornithopter
-    // 18 or 22: the cast restrictor. The USER's ruling puts it SECOND LAST ("it can only be cast
-    // before Crackle"), which forecloses Irencrag -> Soulfire and Irencrag -> Opus; the generic
-    // tiering had it at 18, ahead of every payoff. MTG_HINATA_IREN_EARLY prices that narrowing.
-    //
-    // MTG_HINATA_PAY_TIE implies it too, and deliberately: "second last" is DEFINED relative to an
-    // ordered payoff block, so with the payoffs tied there is no such slot. That arm is therefore a
-    // BLOCK revert (payoffs + restrictor back to generic), not a single-factor one -- read it that
-    // way. MTG_HINATA_IREN_EARLY is the single-factor Irencrag arm.
+    // 18: the cast restrictor -- after every set-up cast, ahead of the payoffs. This is its SCALAR slot;
+    // the USER's rule is SET-LEVEL ("it is always second last", 2026-10-14) and ArrangeCastOrder places
+    // it immediately before the plan's last payoff (MTG_HINATA_IREN_SECOND_LAST). The 2026-08-28 scalar 22
+    // ("second last ... before Crackle", after Soulfire and Opus) foreclosed Irencrag -> Soulfire and
+    // Irencrag -> Opus, and measured as half of that order's loss; the 18 alone (the old
+    // MTG_HINATA_IREN_EARLY arm, folded in) forecloses Soulfire -> Irencrag -> Crackle instead.
     const bool pay_tie = HinataPayoffsTied();
-    if (p.max_casts_after >= 0)
-    { return (HinataIrencragEarly() || pay_tie) ? 18 : 22; }   // Irencrag Feat
+    if (p.max_casts_after >= 0)   { return 18; }                    // Irencrag Feat
     // 20-23: the payoffs, then the finisher.
     if (p.damage_equals_top_mv)   { return 20; }                    // Soulfire -- USER: above Opus
     if (p.cast_draw > 0)          { return pay_tie ? 20 : 21; }     // Magma Opus -- payoff + draw 2
@@ -10600,11 +10648,10 @@ int HinataProvider::LandDropCastOrderRank() const
 int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!HinataOrderFullEnabled()) { return GenericProvider::CastOrderRank(s, def); }
-    // TOTALITY GUARD, with ONE deliberate exception. Any card landing on a shared tier is separated
-    // deterministically (mana value then name hash, both stable) so a decklist change cannot
-    // silently re-introduce the tie this order exists to remove. The rank-7 peers are exempt
-    // BY DESIGN -- see the header comment -- as is the never-cast tier, whose members are not
-    // candidates at all. Scaled by 64 to leave room.
+    // TOTALITY: every live card has its own tier; the never-cast tier is spread deterministically (mana
+    // value then name hash, both stable), and any tie left over -- there, or under a leave-one-out arm --
+    // falls to the NAME in the comparator (CastOrderTotalByName below), never to plan / hand order.
+    // Scaled by 64 to leave room.
     const int rank = HinataFullOrderRank(def);
     const int base = rank * 64;
     if (rank >= 30)
@@ -10613,6 +10660,69 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
                     + static_cast<int>(def.card.m_name_hash & 0x1F);
     }
     return base;
+}
+
+// The order is TOTAL: a rank tie between two different cards breaks by name (see DecisionProvider).
+bool HinataProvider::CastOrderTotalByName() const { return HinataOrderFullEnabled(); }
+
+// The order BINDS inside cantrip plans. Ponder, Preordain and Expressive Iteration make a set
+// OrderingOpaque, which both apply worlds otherwise cast in PLAN order -- the searched-play cantrip-first
+// partition ([may-precede] -> [cantrips] -> [rest], which HOISTS Irencrag over a cantrip because it has
+// ritual_float, handing the cantrip Irencrag's one allowed cast), or raw hand order at depth 0. With the
+// opt-in the executor (TakeTurn) and the rollout (ApplyPlanDirect) rank-sort the set and arrange it, which
+// is also exactly the order the subset walks count (PlanCastOrder). Draft §7 change 2, USER Q2 yes.
+bool HinataProvider::OrderOpaqueCastsByRank() const { return HinataOrderFullEnabled(); }
+
+// The walks count Irencrag's follower in the arranged order (see ArrangeCastOrder).
+bool HinataProvider::RestrictorFollowsArrangement(const GameState& s) const
+{
+    (void)s;
+    return HinataIrencragPlaced();
+}
+
+// IRENCRAG FEAT IS THE PLAN'S SECOND-LAST CAST (MTG_HINATA_IREN_SECOND_LAST, under the order). USER
+// 2026-10-14: "Irencrag needs to be castable after Soulfire and after Magma Opus, since it needs to go
+// second last. There has to be flexibility around that." / "So, in reality the Irencrag can go in any of
+// three spots depending on what other spells are cast, but it is always second last." / "So we can
+// restrict it using that."
+//
+// `order` arrives sorted by the comparator, which puts every payoff (Soulfire 20 < Opus 21 < Crackle 23)
+// after every set-up cast, so the plan's last cast is its last payoff whenever it has one. Irencrag moves
+// to immediately before it: Irencrag -> Soulfire, Irencrag -> Opus, Irencrag -> Crackle, Soulfire ->
+// Irencrag -> Crackle, Opus -> Irencrag -> Crackle, Soulfire -> Opus -> Irencrag -> Crackle are all lines,
+// and its one allowed cast (max_casts_after = 1: one more spell of ANY kind) is always that payoff. With no
+// payoff in the plan it stays at its scalar slot -- last, with nothing to fund -- and the waste gate prunes
+// the plan (RestrictorSubsetWasted). The Dragonstorm Irencrag-closer (MTG_DRAGONSTORM_IRENCRAG_CLOSER) is
+// the precedent. Every apply site sorts and then calls this (ApplyDeckCastArrangement), and both subset
+// walks count through the same two steps (PlanCastOrder), so legality and realisation cannot split.
+void HinataProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                      std::vector<int>& order) const
+{
+    (void)s;
+    if (order.size() < 2 || !HinataIrencragPlaced()) { return; }
+    auto def_of = [&](int i) -> const CardDefinition*
+    { return acts[i].def ? acts[i].def : CardDatabase::Instance().Lookup(acts[i].card_name); };
+    auto is_restrictor = [&](int i)
+    {
+        if (acts[i].kind != Action::Kind::CastFromHand) { return false; }
+        if (acts[i].max_casts_after >= 0) { return true; }
+        const CardDefinition* d = def_of(i);
+        return d != nullptr && d->params.max_casts_after >= 0;
+    };
+    bool any = false;
+    for (int i : order) { if (is_restrictor(i)) { any = true; break; } }
+    if (!any) { return; }   // the common case: no allocation, order untouched
+    thread_local std::vector<int> restr, rest;
+    restr.clear(); rest.clear();
+    for (int i : order) { (is_restrictor(i) ? restr : rest).push_back(i); }
+    if (rest.empty()) { return; }
+    const int last = rest.back();
+    const CardDefinition* dl = def_of(last);
+    if (acts[last].kind != Action::Kind::CastFromHand || dl == nullptr || !HinataIsPayoff(*dl)) { return; }
+    order.clear();
+    order.insert(order.end(), rest.begin(), rest.end() - 1);
+    order.insert(order.end(), restr.begin(), restr.end());
+    order.push_back(last);
 }
 
 // MTG_HINATA_RANGE -- the RANGE half of the order (USER 2026-08-30: "I don't want arbitrary
@@ -10665,19 +10775,27 @@ int HinataProvider::CastOrderRankLatest(const GameState& s, const CardDefinition
 const char* HinataProvider::CastOrderTierName(int rank) const
 {
     if (!HinataOrderFullEnabled()) { return GenericProvider::CastOrderTierName(rank); }
+    // Keyed on HinataFullOrderRank's tiers (renumbered with the 2026-08-28 revision and the settled order).
+    // Under a leave-one-out arm a card can sit on another card's tier; the label names the tier's owner.
     switch (rank / 64)
     {
-        case 5:  return "MANA ROCK: untapped mana the same turn";
-        case 6:  return "TUTOR: most information, and its random discard is safest on a full hand";
-        case 7:  return "TOP-OF-LIBRARY CANTRIPS (Ponder/Preordain): PEERS, order left to the search";
-        case 8:  return "TOP-OF-LIBRARY CANTRIP: Preordain, split from Ponder (MTG_HINATA_PP_STRICT)";
-        case 9:  return "DIG: Expressive Iteration -- its exile is use-or-lose THIS turn";
-        case 10: return "MANA DORK: sick this turn, but one more target for her discount";
-        case 11: return "ENGINE: Hinata -- before every payoff";
-        case 15: return "RITUAL: float online before the payoff";
+        case 4:  return "MANA ROCK: {1} -> untapped {C}{C} this turn";
+        case 5:  return "MANA ROCK (filter): needs a {1} feeder, nets +1";
+        case 6:  return "ENGINE: Hinata -- her per-target discount reaches every targeted spell after her";
+        case 7:  return "UNTAP RITUAL: Reality Spasm -- once the land, rocks and Hinata are down";
+        case 8:  return "TUTOR: Gamble -- before the cantrips (its search shuffles what they set up)";
+        case 10: return HinataPonderPreordainStrict() ? "TOP-OF-LIBRARY CANTRIP: Ponder (MTG_HINATA_PP_STRICT: first)"
+                                                      : "TOP-OF-LIBRARY CANTRIP: Preordain -- first, sees more distinct cards";
+        case 11: return HinataPonderPreordainStrict() ? "TOP-OF-LIBRARY CANTRIP: Preordain (MTG_HINATA_PP_STRICT: second)"
+                                                      : "TOP-OF-LIBRARY CANTRIP: Ponder";
+        case 12: return "DIG: Expressive Iteration -- its exile is use-or-lose THIS turn";
+        case 13: return "TUTOR after the cantrips (MTG_HINATA_GAMBLE_LATE)";
+        case 14: return "MANA DORK: sick this turn; one more Soulfire / Crackle target";
+        case 18: return HinataIrencragPlaced()
+                      ? "CAST RESTRICTOR: Irencrag Feat -- placed SECOND LAST, right before the plan's last payoff"
+                      : "CAST RESTRICTOR: Irencrag Feat -- scalar slot, ahead of every payoff";
         case 20: return "PAYOFF (dig): Soulfire Eruption";
         case 21: return "PAYOFF (draw): Magma Opus";
-        case 22: return "CAST RESTRICTOR: Irencrag Feat -- only the finisher may follow";
         case 23: return "FINISHER: Crackle with Power -- X consumes all remaining mana";
         case 30: return "NEVER CAST vs a passive opponent (ordered only for totality)";
         default: return nullptr;

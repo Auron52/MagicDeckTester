@@ -309,6 +309,7 @@ add_executable(mtg-test
     test/unit/test_karoo_bounce_search.cpp
     test/unit/test_hinata_crackle_count.cpp
     test/unit/test_restrictor_order.cpp
+    test/unit/test_hinata_cast_order.cpp
     test/unit/test_fungus_revision.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp

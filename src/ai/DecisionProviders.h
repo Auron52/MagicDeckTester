@@ -1047,7 +1047,17 @@ public:
     const char* Name() const override { return "Hinata"; }
     // The Irencrag waste gate (MTG_IRENCRAG_WASTE + the MTG_IRENCRAG_* rule arms): see the definition.
     bool RestrictorSubsetWasted(const GameState& s, const std::vector<Action>& cands,
-                                const std::vector<int>& sel, int j, int pool_total) const override;
+                                const std::vector<int>& sel, int j, int pool_total,
+                                const std::vector<int>* arranged) const override;
+    // The USER's settled order (MTG_HINATA_ORDER_FULL, 2026-10-14) beyond the scalar rank: TOTAL (a tie
+    // breaks by name), BINDING inside cantrip plans (OrderOpaqueCastsByRank), and Irencrag Feat placed
+    // SECOND LAST, right before the plan's last payoff (ArrangeCastOrder, MTG_HINATA_IREN_SECOND_LAST),
+    // with both subset walks counting its follower in that arranged order (RestrictorFollowsArrangement).
+    bool CastOrderTotalByName() const override;
+    bool OrderOpaqueCastsByRank() const override;
+    bool RestrictorFollowsArrangement(const GameState& s) const override;
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
     bool OpponentPlaysLands() const override { return true; }
     // M2 FIXPOINT OPT-IN, mode 2 (ADOPTED 2026-09-06; USER approved the per-deck opt-in and
     // the 18-deck sweep found hinata the only converter). Evidence, both tiers + quiet box:
@@ -1146,8 +1156,8 @@ public:
     // card selection deterministically. ScryKeepOnTop above is re-expressed as a threshold on this
     // rank, so the keep/bottom gate and the ordering share one source of truth.
     int  SituationalCardRank(const GameState&, const Card&) const override;
-    // CastOrderRank -- the USER's FULL (total) cast order, 2026-08-26, behind MTG_HINATA_ORDER_FULL.
-    // Default OFF => the GENERIC card-parameter tiering below still describes the shipped engine.
+    // CastOrderRank -- the USER's FULL (total) cast order (settled 2026-10-14; first reviewed 2026-08-26),
+    // behind MTG_HINATA_ORDER_FULL. OFF => the GENERIC card-parameter tiering below.
     //
     // Why this deck needed one. The generic tiering puts SEVEN live cards on rank 20 -- every
     // cantrip, the tutor and all three payoffs -- and ties are what make breakpoint condemnation
