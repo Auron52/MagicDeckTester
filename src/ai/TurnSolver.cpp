@@ -6649,6 +6649,249 @@ static int StoriedFirstEquipWaiverCredit(const GameState& state, const std::vect
     return best;
 }
 
+// ---- THE METALCRAFT ADDEND, PRICED PER POSITION (MTG_MC_WALK_BOUND, default ON; =0 is the hatch) --
+//
+// EnumeratePlans' scalar mana bound adds `metalcraft_bound` -- the generic of EVERY Equip candidate --
+// whenever a metalcraft reducer is on the battlefield or merely CASTABLE from hand, so that the
+// per-subset credit above gets to price the positions it forgives ("the position has to survive to
+// be priced"). That addend is a ceiling over the whole frame, and on a wide equipment board it is so
+// loose that it stops pruning anything: a KittyEquipment v2 frame with 0-1 untapped mana, Puresteel
+// Paladin in hand ({W}{W}, uncastable) and ~16 Equip groups carries mana_bound 75-98, so every
+// canonical equip arrangement -- ~360k per enumeration -- enters eval_and_push_body and dies at its
+// flat-mana gate. Measured (claude_s8_gi7, the viewer's equip-route DFS at T3): 17.3M body entries
+// for 617 plans over 48 enumerations, ~80% of the process.
+//
+// THE FIX REPLACES THE FRAME CEILING WITH THE CREDIT ITSELF. Per position the walk computes exactly
+// what eval_and_push_body will forgive this selection -- SameTurnMetalcraftEquipCredit, and Kili's
+// StoriedFirstEquipWaiverCredit when that grants nothing (the same order as the body) -- and tests
+//     mcost - credit(sel) <= mana_bound - metalcraft_bound
+// i.e. the scalar bound with the addend swapped for the amount the body really credits THIS
+// selection. credit(sel) never exceeds the addend (it sums a subset of the same Equip generics), so
+// this only ever prunes MORE than the frame ceiling, and only positions whose credited total still
+// exceeds the bound every other credit already rides -- the ones the body's flat gate rejects.
+// That last step is the scalar bound's own soundness argument (each addend bounds its credit); it is
+// CHECKED rather than argued by MTG_MC_WALK_BOUND_VERIFY=1, which feeds every position this test
+// would prune to the body anyway and reports any that yields a plan (it must print violations=0).
+//
+// SCOPE: only frames where `metalcraft_bound > 0` (a reducer present-or-castable AND an Equip still
+// priced above {0}), only the inline walk's scalar path (the selection-exact gate and the two-stage
+// ritual driver keep the frame ceiling), and never when the scalar bound has bailed (INT_MAX). Every
+// deck without Puresteel Paladin is untouched by construction.
+static bool McWalkBoundEnabled()
+{
+    static const bool v = EnvOn("MTG_MC_WALK_BOUND", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+static bool McWalkBoundVerify()
+{
+    static const bool v = EnvOn("MTG_MC_WALK_BOUND_VERIFY");   // DEFAULT OFF; diagnostic only
+    return v;
+}
+namespace mcwalk
+{
+    inline std::atomic<std::uint64_t> g_pruned{0}, g_violations{0}, g_cut_positions{0}, g_cut_violations{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!McWalkBoundVerify()) { return; }
+            std::fprintf(stderr, "[mc-walk-bound] VERIFY pruned=%llu violations=%llu | cut-block "
+                                 "positions=%llu cut_violations=%llu\n",
+                         (unsigned long long)g_pruned.load(), (unsigned long long)g_violations.load(),
+                         (unsigned long long)g_cut_positions.load(),
+                         (unsigned long long)g_cut_violations.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+struct McWalkBound
+{
+    bool              on            = false;
+    int               bound_nomc    = 0;   // the scalar bound with the metalcraft addend removed
+    int               bf_threshold  = 0;   // lowest metalcraft threshold among reducers in play (0 = none)
+    int               bf_artifacts  = 0;   // CountControlledArtifacts at enumeration
+    bool              storied       = false;
+    std::vector<int>  eq_generic;          // per cand: an Equip's baked generic, else 0
+    std::vector<int>  red_threshold;       // per cand: a cast reducer's metalcraft threshold, else 0
+    std::vector<char> art_cast;            // per cand: a cast of an artifact card
+};
+static void BuildMcWalkBound(const GameState& state, const std::vector<Action>& cands, int mana_bound,
+                             int metalcraft_bound, bool any_storied, McWalkBound& out)
+{
+    out.on = false;
+    if (!McWalkBoundEnabled() || metalcraft_bound <= 0
+        || mana_bound == std::numeric_limits<int>::max() || mana_bound < metalcraft_bound) { return; }
+    const int controller = state.active_player_index;
+    out.bound_nomc   = mana_bound - metalcraft_bound;
+    out.bf_threshold = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const int t = d ? d->params.metalcraft_equip_zero_artifacts : 0;
+        if (t > 0 && (out.bf_threshold == 0 || t < out.bf_threshold)) { out.bf_threshold = t; }
+    }
+    out.bf_artifacts = CountControlledArtifacts(state, controller);
+    out.storied      = any_storied;
+    out.eq_generic.assign(cands.size(), 0);
+    out.red_threshold.assign(cands.size(), 0);
+    out.art_cast.assign(cands.size(), 0);
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::Equip) { out.eq_generic[j] = a.cost.generic; }
+        if (a.kind == Action::Kind::CastFromHand && a.def)
+        {
+            out.red_threshold[j] = a.def->params.metalcraft_equip_zero_artifacts;
+            out.art_cast[j]      = a.def->card.HasType(CardType::Artifact) ? 1 : 0;
+        }
+    }
+    out.on = true;
+}
+// The equip-cost credit eval_and_push_body grants `sel`: SameTurnMetalcraftEquipCredit, else (only
+// when that is 0) StoriedFirstEquipWaiverCredit -- the same arithmetic off precomputed tables.
+static int McWalkCredit(const McWalkBound& mb, const std::vector<int>& sel)
+{
+    int thr = mb.bf_threshold, art = mb.bf_artifacts, eq = 0, eq_max = 0;
+    for (int j : sel)
+    {
+        const int t = mb.red_threshold[j];
+        if (t > 0 && (thr == 0 || t < thr)) { thr = t; }
+        art += mb.art_cast[j];
+        eq  += mb.eq_generic[j];
+        if (mb.eq_generic[j] > eq_max) { eq_max = mb.eq_generic[j]; }
+    }
+    if (thr > 0 && art >= thr && eq > 0) { return eq; }
+    return mb.storied ? eq_max : 0;
+}
+
+// THE RADIX CUTS (MTG_MANA_WALK_CUT and MTG_MC_WALK_CUT, both default ON; =0 is each one's hatch).
+// The scalar tests refuse positions one at a time, but the odometer still WALKS each one -- and on the
+// boards this is for, the refused positions are nearly all of them (a 16-digit equip odometer over a
+// 0-1 mana pool). "A reject predicate is not a collapse" (MTG_EQUIP_COPY_SKIP's note), so turn each
+// test into a jump. Fix the digits >= h (the high part H; digit 0 varies fastest) and let everything
+// below vary: the low digits and the independents. If NO completion of H can pass, the walk zeroes the
+// digits below h and carries from h -- the next position whose high part differs. Every position
+// passed over shares the refused high part, so the emitted set, and its order, is unchanged.
+//
+// PLAIN (MTG_MANA_WALK_CUT): the walk's own scalar test, `mcost <= mana_bound`. With every candidate
+// costing >= 0, mcost(H) > mana_bound already refuses the whole block. This one does not lean on
+// eval_and_push_body at all -- the refused positions never reached it -- so it is exact by inspection.
+//
+// METALCRAFT (MTG_MC_WALK_CUT): the per-position credit test above. Over every completion of H:
+//   * credit OFF (no reducer will be present, or the artifact count falls short): the only waiver is
+//     Kili's, the subset's single most expensive equip, so  eff >= mcost(H) - max(eqmax(H), auto)
+//     -- a low equip that is the max pays for its own waiver;
+//   * credit ON: eff >= mcost(H) - eq(H) - eq(auto_sel), plus -- when no reducer is in play, rides
+//     auto_sel, or sits in H -- the cheapest reducer CAST still selectable below h, because the credit
+//     needs that cast and nothing forgives a cast.
+// The artifact threshold is ignored (that only loosens it). If min(OFF, ON) exceeds bound_nomc no
+// position of the block passes the per-position test; MTG_MC_WALK_BOUND_VERIFY checks that claim at
+// every position of every block (cut_violations must read 0).
+//
+// Both need every candidate's mana value >= 0 and an Equip's mana value to be its generic (so a low
+// equip's cost covers its own credit); the tables refuse to arm otherwise.
+static bool ManaWalkCutEnabled()
+{
+    static const bool v = EnvOn("MTG_MANA_WALK_CUT", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+static bool McWalkCutEnabled()
+{
+    static const bool v = EnvOn("MTG_MC_WALK_CUT", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+struct WalkCutTables
+{
+    bool             plain       = false;  // the plain scalar cut is armed
+    int              plain_bound = 0;      // ...against the walk's own mana_bound
+    bool             mc          = false;  // the metalcraft cut is armed (needs an McWalkBound)
+    bool             red_fixed   = false;  // a reducer is in play or rides every subset (auto_sel)
+    int              auto_eq     = 0;      // Equip generic carried by auto_sel (mcost never counts it)
+    int              auto_eq_max = 0;
+    std::vector<int> red_min_below;        // [g] = cheapest reducer CAST among groups < g or the
+                                           //       independents; INT_MAX when there is none
+};
+static bool BuildWalkCutTables(int mana_bound, const McWalkBound& mb, const std::vector<Action>& cands,
+                               const std::vector<std::vector<int>>& groups,
+                               const std::vector<int>& independent, const std::vector<int>& auto_sel,
+                               const std::vector<int>& cand_mv, WalkCutTables& out)
+{
+    constexpr int kNone = std::numeric_limits<int>::max();
+    out.plain = false;
+    out.mc    = false;
+    if (cand_mv.size() != cands.size()) { return false; }
+    // Every candidate a position can select costs >= 0 (and an Equip costs exactly its generic).
+    auto sound = [&](int j) {
+        if (cand_mv[j] < 0) { return false; }
+        return !(cands[j].kind == Action::Kind::Equip && cands[j].cost.generic > cand_mv[j]);
+    };
+    for (const std::vector<int>& g : groups) { for (int j : g) { if (!sound(j)) { return false; } } }
+    for (int j : independent) { if (!sound(j)) { return false; } }
+    out.plain       = ManaWalkCutEnabled() && mana_bound != std::numeric_limits<int>::max();
+    out.plain_bound = mana_bound;
+    out.mc          = mb.on && McWalkCutEnabled();
+    if (out.mc)
+    {
+        out.red_fixed   = mb.bf_threshold > 0;
+        out.auto_eq     = 0;
+        out.auto_eq_max = 0;
+        for (int j : auto_sel)
+        {
+            if (mb.red_threshold[j] > 0) { out.red_fixed = true; }
+            out.auto_eq += mb.eq_generic[j];
+            out.auto_eq_max = std::max(out.auto_eq_max, mb.eq_generic[j]);
+        }
+        int run = kNone;
+        for (int j : independent)
+        { if (mb.red_threshold[j] > 0) { run = std::min(run, cand_mv[j]); } }
+        out.red_min_below.assign(groups.size() + 1, kNone);
+        for (std::size_t g = 0; g < groups.size(); ++g)
+        {
+            out.red_min_below[g] = run;
+            for (int j : groups[g])
+            { if (mb.red_threshold[j] > 0) { run = std::min(run, cand_mv[j]); } }
+        }
+        out.red_min_below[groups.size()] = run;
+    }
+    return out.plain || out.mc;
+}
+// The highest digit h whose high part (digits >= h, as `choice` holds them) no completion can carry
+// past the walk's tests; -1 when there is none. `mc_hit` reports which cut found it (diagnostics).
+static int WalkCutDigit(const McWalkBound& mb, const WalkCutTables& t,
+                        const std::vector<std::vector<int>>& groups, const std::vector<int>& choice,
+                        const std::vector<int>& cand_mv, bool* mc_hit = nullptr)
+{
+    constexpr int kNone = std::numeric_limits<int>::max();
+    long long m_h = 0;
+    int  eq_h = 0, eqmax_h = 0;
+    bool red_h = false;
+    for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+    {
+        if (choice[g] > 0)
+        {
+            const int j = groups[g][choice[g] - 1];
+            m_h += cand_mv[j];
+            if (t.mc)
+            {
+                eq_h    += mb.eq_generic[j];
+                eqmax_h  = std::max(eqmax_h, mb.eq_generic[j]);
+                if (mb.red_threshold[j] > 0) { red_h = true; }
+            }
+        }
+        if (t.plain && m_h > t.plain_bound) { if (mc_hit) { *mc_hit = false; } return g; }
+        if (t.mc)
+        {
+            const long long off = m_h - (mb.storied ? std::max(eqmax_h, t.auto_eq_max) : 0);
+            long long on = std::numeric_limits<long long>::max();
+            if (t.red_fixed || red_h)            { on = m_h - eq_h - t.auto_eq; }
+            else if (t.red_min_below[g] != kNone) { on = m_h - eq_h - t.auto_eq + t.red_min_below[g]; }
+            if (std::min(off, on) > mb.bound_nomc) { if (mc_hit) { *mc_hit = true; } return g; }
+        }
+    }
+    return -1;
+}
+
 // The card number of the Equipment whose equip this plan's storied waiver pays for, or 0. Shared by
 // every PAYMENT site so the score computed by StoriedFirstEquipWaiverCredit above and the mana
 // actually spent cannot disagree -- and so the two worlds (executor and rollout) agree by
@@ -46826,6 +47069,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             cand_mv.resize(cands.size(), 0);
             for (std::size_t j = 0; j < cands.size(); ++j) { cand_mv[j] = cands[j].cost.ManaValue(); }
         }
+        // The metalcraft addend priced per position (see McWalkBound): scalar path only.
+        McWalkBound mcw;
+        if (!gate_on && any_metalcraft)
+        { BuildMcWalkBound(state, cands, mana_bound, metalcraft_bound, any_storied, mcw); }
+        const bool mcw_verify = mcw.on && McWalkBoundVerify();
+        // ...and the RADIX CUTS (MTG_MANA_WALK_CUT / MTG_MC_WALK_CUT, default ON): see WalkCutDigit.
+        WalkCutTables mcc;
+        const bool mcw_cut = !gate_on
+                          && BuildWalkCutTables(mana_bound, mcw, cands, groups, independent, auto_sel,
+                                                cand_mv, mcc);
+        // MTG_MC_WALK_DIAG (diagnostic, default off): where this walk's positions go.
+        static const bool s_walk_diag = EnvOn("MTG_MC_WALK_DIAG");
+        long long wd_visit = 0, wd_copy = 0, wd_dep = 0, wd_cut_hi = 0, wd_cut0 = 0, wd_mc_hit = 0,
+                  wd_outer = 0;
         bool done = false;
         while (!done)
         {
@@ -46858,15 +47115,55 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 for (int g = 0; g < num_groups; ++g)
                 { if (choice[g] > 0) { mcost += cand_mv[groups[g][choice[g] - 1]]; } }
             }
+            // MTG_MC_WALK_CUT: the highest digit h such that NO completion of digits >= h can pass
+            // the per-position metalcraft test below (-1 = none). The whole block is skipped below.
+            // Computed on a piece-dependency / fold-rejected position too: the block's verdict is a
+            // statement about its HIGH PART, so a position those predicates refuse one at a time can
+            // still be the one that discovers the jump. (A copy-class violation has its own jump.)
+            // A position that passes the plain test cannot sit in a plain-cut block (the block's
+            // bound is a lower bound on this position's own cost), so only an unpayable, an
+            // otherwise-refused, or a metalcraft-board position pays for the scan.
+            bool mc_hit = false;
+            const int mc_cut = (!copy_viol && mcw_cut && (mcw.on || copy_skip || mcost > mana_bound))
+                ? WalkCutDigit(mcw, mcc, groups, choice, cand_mv, &mc_hit) : -1;
+            if (s_walk_diag)
+            {
+                ++wd_visit;
+                if (copy_viol) { ++wd_copy; } else if (copy_skip) { ++wd_dep; }
+                if (mc_cut > 0) { ++wd_cut_hi; } else if (mc_cut == 0) { ++wd_cut0; }
+                if (mc_cut >= 0 && mc_hit) { ++wd_mc_hit; }
+            }
+            if (mc_cut >= 0 && mc_hit && mcw_verify && !copy_skip)
+            {
+                // VERIFY: walk the block anyway (no jump below) and require the per-position test to
+                // refuse every imask extension of THIS position -- the claim the jump rests on.
+                for (int imask = 0; imask < (1 << num_ind); ++imask)
+                {
+                    std::vector<int> vs(auto_sel.begin(), auto_sel.end());
+                    int vc = mcost;
+                    for (int g = 0; g < num_groups; ++g)
+                    { if (choice[g] > 0) { vs.push_back(groups[g][choice[g] - 1]); } }
+                    for (int b = 0; b < num_ind; ++b)
+                    { if (imask & (1 << b)) { vs.push_back(independent[b]); vc += cand_mv[independent[b]]; } }
+                    if (vc - McWalkCredit(mcw, vs) <= mcw.bound_nomc)
+                    {
+                        mcwalk::g_cut_violations.fetch_add(1, std::memory_order_relaxed);
+                        std::fprintf(stderr, "[mc-walk-bound] CUT VIOLATION t%d digit=%d mcost=%d\n",
+                                     state.turn_number, mc_cut, vc);
+                    }
+                }
+                mcwalk::g_cut_positions.fetch_add(1, std::memory_order_relaxed);
+            }
             // Group-level early-out FIRST: if this selection is unpayable even with every independent
             // action's float credited, no imask extension of it can be paid, so skip the whole inner
             // loop rather than building `sel` for each of 2^num_ind doomed positions. (Dropping this
             // cost ~2.4pp on burn/Knights, callgrind 2026-07-29.)
-            const bool outer_ok = !copy_skip && (gate_on
+            const bool outer_ok = !copy_skip && (mc_cut < 0 || mcw_verify) && (gate_on
                 ? (mblock > 0 || gate->ind_block
                    || mcost <= gate->pool_total + mgain + gate->ind_gain_all
                                + ManaGateTriangular(mgy + gate->ind_gy_all))
                 : (mcost <= mana_bound));
+            if (s_walk_diag && outer_ok) { ++wd_outer; }
             for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
             {
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
@@ -46904,6 +47201,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                            + ManaGateTriangular(mgy + pgy))
                     : (mcost + pcost <= mana_bound);
                 if (!ok) { continue; }
+                // MTG_MC_WALK_BOUND: the metalcraft addend priced for THIS selection (McWalkBound).
+                if (mcw.on && mcost + pcost - McWalkCredit(mcw, sel) > mcw.bound_nomc)
+                {
+                    if (!mcw_verify) { continue; }
+                    // VERIFY: the body sees it anyway (so the run's output IS the unpruned one), and
+                    // a plan out of a position the bound refused is a soundness violation.
+                    const std::size_t n_before = plans.size();
+                    if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
+                    eval_and_push(sel);
+                    mcwalk::g_pruned.fetch_add(1, std::memory_order_relaxed);
+                    if (plans.size() != n_before)
+                    {
+                        mcwalk::g_violations.fetch_add(1, std::memory_order_relaxed);
+                        std::string nm;
+                        for (int j : sel) { nm += cands[j].card_name.str() + ","; }
+                        std::fprintf(stderr, "[mc-walk-bound] VIOLATION t%d mcost=%d credit=%d bound_nomc=%d [%s]\n",
+                                     state.turn_number, mcost + pcost, McWalkCredit(mcw, sel),
+                                     mcw.bound_nomc, nm.c_str());
+                    }
+                    continue;
+                }
                 // MTG_FOLD_SEARCH_ODO (DEFAULT OFF): tell the receiving eval_and_push that THIS
                 // selection came off an odometer, which is the precondition the canonical-prefix
                 // fold is fenced behind (see foldsel). The loop above is a mixed-radix walk over
@@ -46940,7 +47258,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 { if (choice[d] > 0) { sel_mask |= 1ull << d; } }
                 continue;
             }
+            // RADIX CUT (MTG_MC_WALK_CUT): no completion of digits >= mc_cut passes the metalcraft
+            // test, so zero every digit below it and carry from mc_cut itself -- the next position
+            // whose high part differs. Exact for the same reason as the copy jump above: every
+            // position passed over shares the refused high part. (mc_cut == 0 is the ordinary step.)
             int g = 0;
+            if (mc_cut > 0 && !mcw_verify)
+            {
+                for (int d = 0; d < mc_cut; ++d)
+                {
+                    choice[d] = 0;
+                    if (d < 64) { sel_mask &= ~(1ull << d); }
+                }
+                g = mc_cut;
+            }
             for (; g < num_groups; ++g)
             {
                 ++choice[g];
@@ -46950,6 +47281,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (g < 64) { sel_mask &= ~(1ull << g); }
             }
             if (g == num_groups) { done = true; }
+        }
+        if (s_walk_diag && wd_visit >= 1000)
+        {
+            std::fprintf(stderr,
+                "[walk-diag] t%d groups=%d ind=%d mana_bound=%d mc_on=%d bound_nomc=%d cut_armed=%d "
+                "visit=%lld copy=%lld dep=%lld cut_hi=%lld cut0=%lld mc_hit=%lld outer_ok=%lld\n",
+                state.turn_number, num_groups, num_ind, mana_bound, mcw.on ? 1 : 0,
+                mcw.on ? mcw.bound_nomc : -1, mcw_cut ? 1 : 0, wd_visit, wd_copy, wd_dep, wd_cut_hi,
+                wd_cut0, wd_mc_hit, wd_outer);
+            for (int gg = 0; gg < num_groups; ++gg)
+            {
+                std::string row;
+                for (int j : groups[gg])
+                {
+                    row += cands[j].card_name.str() + "/k" + std::to_string(static_cast<int>(cands[j].kind))
+                         + "/mv" + std::to_string(cand_mv.empty() ? -1 : cand_mv[j]) + " ";
+                }
+                std::fprintf(stderr, "[walk-diag]   g%d: %s\n", gg, row.c_str());
+            }
         }
     }
     else
