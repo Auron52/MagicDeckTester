@@ -475,6 +475,8 @@ enum Slot : int
     AURAS_ORDER_SEARCH,       // MTG_AURAS_ORDER_SEARCH  USER open question (Q19): on a Light-Paws turn (one in play or cast by the plan) a plan holding 2+ Auras also tries every distinct ORDER of its Auras (the approved order first; creatures keep their slots ahead of them), deduplicated by end state -- the existing cast-ordering search (WantsCastOrderingSearch / CastOrderingCandidates), opened for this deck only. Measurement arm, DEFAULT OFF
     LP_FETCH_USER_RULE,       // MTG_LP_FETCH_USER_RULE  USER open question (Q20): the Light-Paws fetch follows the 2026-08-25 wording literally -- a scaler leads iff no LATER fetch of this turn's line can still take it (a castable hand Aura of at least its mana value, before a same-name copy is cast), instead of "no Aura castable this turn or next"; and a scaler that is last-chance competes on realized power, so a Mask can beat a duplicate Armor. DecisionProvider::LightPawsAuraCandidates. Measurement arm, DEFAULT OFF
     LP_FETCH_MV_AWARE,        // MTG_LP_FETCH_MV_AWARE  the NARROW reading of Q20, found root-causing the Auras order's slower games: mode 4 keeps its "an Aura castable this turn or next" horizon, but such an Aura counts as a later fetch only if its fetch can TAKE the candidate (its mana value >= the candidate's). A 1-drop's fetch can never take All That Glitters, so a 2-drop's fetch that passes Glitters over for a 1-drop still in hand is giving it up. Nothing else of mode 4 changes. Overridden by MTG_LP_FETCH_USER_RULE. DecisionProvider::LightPawsAuraCandidates. Measurement arm, DEFAULT OFF
+    ANGELS_ORDER,             // MTG_ANGELS_ORDER  the USER's Angels cast order (approved 2026-10-14): a TOTAL order keyed on card params, names only as the final tie-break -- Sol Ring > Lightning Greaves > Bishop of Wings > Righteous Valkyrie > Archangel of Thune > Lyra, Archangel of Dawn > Giada > Youthful Valkyrie > Lyra Dawnbringer > Lightstall Inquisitor > Resplendent Angel > a duplicate legend already on our battlefield > Serra > Swords > Unexpectedly Absent, plus the two USER caveats in AngelsProvider::ArrangeCastOrder (Giada hoisted right after Greaves when the line needs her hasted {W} for an Angel ranked ahead of her; Thune / Lyra AoD behind Giada and Youthful when no converter is on the board or in the cast set). =0 -> GenericProvider's tiers (the pre-2026-10-14 order, byte-identical). docs/design/angels-cast-order-2026-10-14.md
+    ANGELS_GIADA_M2,          // MTG_ANGELS_GIADA_M2  a NARROW post-combat main for Angels (USER 2026-10-14): it opens ONLY when a vigilant Giada, Font of Hope could attack this turn and is still untapped after combat, and some Angel spell in hand is payable WITH her Angel-only {W} but not without it; inside it the only option is ONE such Angel cast (the admission makes two unaffordable), no other cast, land, equip or activation. A sound identity fold in a goldfish: an Angel payable without her was castable in main 1 alongside that main's casts without tapping her, which is weakly better. docs/design/angels-cast-order-2026-10-14.md
     COUNT
 };
 
@@ -905,6 +907,8 @@ inline const char* Name(int slot)
         "MTG_AURAS_ORDER_SEARCH",
         "MTG_LP_FETCH_USER_RULE",
         "MTG_LP_FETCH_MV_AWARE",
+        "MTG_ANGELS_ORDER",
+        "MTG_ANGELS_GIADA_M2",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

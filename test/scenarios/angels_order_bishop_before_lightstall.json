@@ -1,0 +1,10 @@
+{
+  "_comment": "Angels cast order (USER 2026-10-14, MTG_ANGELS_ORDER; docs/design/angels-cast-order-2026-10-14.md), the draft's probe A: T3, 2 Plains + a Plains drop, hand Lightstall Inquisitor FIRST, then Bishop of Wings. The converter goes before the Angel it watches whatever the hand order: Bishop, then Lightstall, so Bishop's 'whenever an Angel you control enters, you gain 4' fires -- life 24. The generic tiers tied the two and cast in hand order (Lightstall first): life 20.",
+  "deck": "decks/Angels/Angels.cod",
+  "turn": 3, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "battlefield": [ { "name": "Plains" }, { "name": "Plains" } ],
+  "hand": [ "Lightstall Inquisitor", "Bishop of Wings", "Plains" ],
+  "library_filler": "Plains", "library_size": 30,
+  "depth": 5, "budget_ms": 150, "max_turns": 3,
+  "expect_active_life": 24
+}

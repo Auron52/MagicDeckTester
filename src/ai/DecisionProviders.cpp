@@ -20902,6 +20902,439 @@ std::vector<int> AngelsProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- AngelsProvider: the USER's cast order (2026-10-14) ---------------------------------------
+//
+// USER, 2026-10-14: "The angel's order + caveats look good." The draft, its reasoning and its probes:
+// docs/design/cast-order-drafts-2026-10-14/Angels.md; the build and its measurement:
+// docs/design/angels-cast-order-2026-10-14.md. The deck is a CHAIN: CONVERTERS turn an Angel entering
+// into life (Bishop of Wings 4, Righteous Valkyrie = the entrant's live toughness, Seraph Sanctuary 1),
+// ENGINES turn each life-gain event into counters (Thune: every creature; Lyra, Archangel of Dawn:
+// every Angel), and every Angel-enter WATCHER sees only the Angels that enter AFTER it. So:
+//
+//   land drop  first -- ApplyPlanDirect / TakeTurn play it before any cast, so Seraph Sanctuary is
+//              out before the Angels it watches (structural; no rank needed)
+//    1 ROCK          Sol Ring                       mana_rock
+//    2 HASTE EQUIP   Lightning Greaves              is_equipment && equip_grants_haste. Equip is a
+//                                                   trailing action, so this costs no haste; it must be
+//                                                   out before an Angel a same-turn Giada pays for (the
+//                                                   mana-unlock equip fires the moment both are out)
+//    3 CONVERTER     Bishop of Wings                creature, own_creature_enters_lifegain > 0
+//    4 CONVERTER     Righteous Valkyrie             own_creature_enters_lifegain_toughness
+//    5 ENGINE        Archangel of Thune             lifegain_each_own_creature_counters, no subtype filter
+//    6 ENGINE        Lyra, Archangel of Dawn        ... with a recipient subtype filter
+//    7 WATCHER       Giada, Font of Hope            other_subtype_enters_counters_subtype
+//    8 WATCHER       Youthful Valkyrie              own_creature_enters_self_counters > 0
+//    9 LORD          Lyra Dawnbringer               LordEffect template
+//   10 BODY          Lightstall Inquisitor          any other creature, cheapest first
+//   11 BODY          Resplendent Angel              endstep_lifegain_tokens (reads the turn's total)
+//   12 DUP LEGEND    a legendary creature whose NAME is already on our battlefield -- cast only for
+//                    its entry triggers before the legend rule, so it is the last creature
+//   13 WALKER        Serra the Benevolent           loyalty_abilities (her +2 pumps only the fliers
+//                                                   present when it resolves, CR 611.2c)
+//   14 REMOVAL       Swords to Plowshares, then Unexpectedly Absent (Removal template, cheapest first)
+//   15 OTHER         anything unrecognised (a screening arm's new card), name order
+//
+// THE TWO USER CAVEATS -- deterministic rules over the cast SET, so they live in ArrangeCastOrder:
+//   (a) Giada moves to right after Greaves when the line needs her Greaves-hasted {W} to pay for an
+//       Angel ranked AHEAD of her. The payable-order fallback cannot do this: its walk
+//       (CreditCastOutput) does not credit a hasted dork's mana, so every order of such a line reads
+//       unpayable to it. The hoist below runs its own walk that does credit the unlock.
+//   (b) With NO converter on our battlefield or in this cast set, Thune and Lyra AoD drop behind
+//       Giada and Youthful Valkyrie: with no life gained this main the engines are inert, and Giada /
+//       Youthful first is worth at least one counter.
+//
+// TOTAL: rank = slot << 16 | sub-key << 12 | the name's alphabetical ordinal over the database, so two
+// different names never compare equal and hand order never decides anything.
+namespace
+{
+enum AngelsSlot : int
+{
+    kAngRock = 1, kAngHasteEquip, kAngEnterLife, kAngEnterToughLife, kAngTeamEngine, kAngAngelEngine,
+    kAngEnterCounters, kAngSelfCounters, kAngLord, kAngBody, kAngEndstepTokens, kAngDupLegend,
+    kAngWalker, kAngRemoval, kAngOther
+};
+constexpr int kAngSlotShift = 16;
+constexpr int kAngSubShift  = 12;
+
+bool AngelsOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_ANGELS_ORDER", true);   // DEFAULT ON; =0 -> GenericProvider's tiers
+    return heurarm::Flag(heurarm::ANGELS_ORDER, on);
+}
+
+// The card NAME's position in alphabetical order over every loaded definition -- the order's LAST key.
+// Keyed by the interned name's canonical pointer (stable across a re-load of the same cards.json, as
+// the unit tests do). Built once: the database is loaded before any game and is immutable during play.
+// A name the database did not hold at first use reads 0xFFF (impossible in play; a test that loads an
+// extra card file afterwards would see such cards tie with each other).
+int AngelsNameOrdinal(const CardDefinition& def)
+{
+    static const std::unordered_map<const std::string*, int> s_ord = []
+    {
+        std::vector<std::string> names = CardDatabase::Instance().AllNames();
+        std::sort(names.begin(), names.end());
+        std::unordered_map<const std::string*, int> m;
+        int i = 0;
+        for (const std::string& n : names)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+            if (d == nullptr) { continue; }
+            m.emplace(&d->card.m_name.str(), std::min(i++, 0xFFE));
+        }
+        return m;
+    }();
+    const auto it = s_ord.find(&def.card.m_name.str());
+    return it == s_ord.end() ? 0xFFF : it->second;
+}
+
+// The param slot (state-free). See the table above.
+int AngelsBaseSlot(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    const bool creature = def.card.IsCreature();
+    if (p.mana_rock && !creature)                     { return kAngRock; }
+    if (p.is_equipment && p.equip_grants_haste)       { return kAngHasteEquip; }
+    if (creature)
+    {
+        if (p.own_creature_enters_lifegain > 0)       { return kAngEnterLife; }
+        if (p.own_creature_enters_lifegain_toughness) { return kAngEnterToughLife; }
+        if (p.lifegain_each_own_creature_counters > 0)
+        { return p.lifegain_counters_subtypes.empty() ? kAngTeamEngine : kAngAngelEngine; }
+        if (!p.other_subtype_enters_counters_subtype.empty()) { return kAngEnterCounters; }
+        if (p.own_creature_enters_self_counters > 0)  { return kAngSelfCounters; }
+        if (def.tmpl == CardTemplate::LordEffect)     { return kAngLord; }
+        if (p.endstep_lifegain_tokens > 0)            { return kAngEndstepTokens; }
+        return kAngBody;
+    }
+    if (!p.loyalty_abilities.empty())                 { return kAngWalker; }
+    if (def.tmpl == CardTemplate::Removal)            { return kAngRemoval; }
+    return kAngOther;
+}
+
+int AngelsMvSub(const CardDefinition& def)
+{ return std::clamp(static_cast<int>(def.card.m_mana_cost.ManaValue()), 0, 15); }
+
+int AngelsKey(int slot, int sub, const CardDefinition& def)
+{ return (slot << kAngSlotShift) | ((sub & 0xF) << kAngSubShift) | AngelsNameOrdinal(def); }
+
+// The rank a card takes in the order, given whether it is a duplicate legend.
+int AngelsRankOf(const CardDefinition& def, bool dup_legend)
+{
+    const int base = AngelsBaseSlot(def);
+    if (dup_legend && def.card.IsCreature()) { return AngelsKey(kAngDupLegend, base, def); }
+    const bool by_mv = base == kAngBody || base == kAngRemoval || base == kAngOther;
+    return AngelsKey(base, by_mv ? AngelsMvSub(def) : 0, def);
+}
+
+bool AngelsLegendOnOurBattlefield(const GameState& s, const CardDefinition& def)
+{
+    if (!def.card.HasSupertype(Supertype::Legendary)) { return false; }
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == s.active_player_index && p.card.m_name == def.card.m_name) { return true; } }
+    return false;
+}
+
+bool AngelsIsConverter(const CardDefinition& d)
+{ return d.params.own_creature_enters_lifegain > 0 || d.params.own_creature_enters_lifegain_toughness; }
+
+const CardDefinition* AngelsActionDef(const Action& a)
+{ return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name); }
+
+int AngelsHandNumber(const GameState& s, const Action& a)
+{
+    const Player& ap = s.ActivePlayer();
+    if (a.hand_index < 0 || a.hand_index >= static_cast<int>(ap.hand.size())) { return -1; }
+    return ap.hand[static_cast<std::size_t>(a.hand_index)].m_number;
+}
+
+// Caveat (a)'s walk: how many casts of `order` the line PAYS, run the way the executor runs a list (a
+// cast that cannot be paid is skipped and stays in hand), crediting what the generic walk does not --
+// Giada's {W} once she AND the haste Equipment are both on the battlefield (the mana-unlock equip,
+// TurnSolver::ApplyManaUnlockEquips, fires at exactly that moment in both apply worlds), spendable on
+// an Angel spell only. Same aggregate pool and same per-cast cost as FirstUnpayablePos (the stamped
+// Action::cost); a cast rock's same-turn mana is credited as CreditCastOutput does.
+int AngelsPaidCasts(const GameState& s, const std::vector<Action>& acts, const std::vector<int>& order,
+                    int giada_num, int equip_num, bool equip_on_bf)
+{
+    ManaPool pool = AvailableManaPool(s);
+    bool equip_out = equip_on_bf, giada_out = false, granted = false;
+    int  giada_w = 0, paid = 0;
+    for (int idx : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(idx)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = AngelsActionDef(a);
+        if (!a.alt_cost)
+        {
+            ManaCost cost = a.cost;
+            int use_g = 0;
+            if (giada_w > 0 && d != nullptr && CardHasSubtype(d->card, "Angel"))
+            {
+                if (cost.white > 0)        { --cost.white;   use_g = 1; }
+                else if (cost.generic > 0) { --cost.generic; use_g = 1; }
+            }
+            if (!pool.CanPay(cost)) { continue; }
+            PayFromPool(pool, cost);
+            giada_w -= use_g;
+        }
+        ++paid;
+        if (a.rock_mana.Total() > 0) { pool.AddPool(a.rock_mana); }
+        const int num = AngelsHandNumber(s, a);
+        if (num > 0 && num == equip_num) { equip_out = true; }
+        if (num > 0 && num == giada_num) { giada_out = true; }
+        if (!granted && giada_out && equip_out) { giada_w = 1; granted = true; }
+    }
+    return paid;
+}
+}   // namespace
+
+int AngelsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!AngelsOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
+    return AngelsRankOf(def, def.card.IsCreature() && AngelsLegendOnOurBattlefield(s, def));
+}
+
+const char* AngelsProvider::CastOrderTierName(int rank) const
+{
+    if (!AngelsOrderEnabled()) { return GenericProvider::CastOrderTierName(rank); }
+    switch (rank >> kAngSlotShift)
+    {
+        case kAngRock:          return "ROCK: Sol Ring -- its mana pays the rest of the line";
+        case kAngHasteEquip:    return "HASTE EQUIPMENT: Lightning Greaves -- out before an Angel a hasted Giada pays for";
+        case kAngEnterLife:     return "CONVERTER: Bishop of Wings -- every later Angel is a 4-life event";
+        case kAngEnterToughLife:return "CONVERTER: Righteous Valkyrie -- each later entrant's live toughness in life";
+        case kAngTeamEngine:    return "ENGINE: Archangel of Thune (behind Giada/Youthful with no converter)";
+        case kAngAngelEngine:   return "ENGINE: Lyra, Archangel of Dawn (behind Giada/Youthful with no converter)";
+        case kAngEnterCounters: return "WATCHER: Giada -- later Angels enter with counters (after Greaves when her {W} pays an earlier Angel)";
+        case kAngSelfCounters:  return "WATCHER: Youthful Valkyrie -- a counter per later Angel";
+        case kAngLord:          return "LORD: Lyra Dawnbringer -- later entrants +1 toughness";
+        case kAngBody:          return "BODY: Lightstall Inquisitor / other creatures (cheapest first, then name)";
+        case kAngEndstepTokens: return "BODY: Resplendent Angel -- its end step reads the turn's total";
+        case kAngDupLegend:     return "DUPLICATE LEGEND already on our battlefield -- entry triggers only, last creature";
+        case kAngWalker:        return "PLANESWALKER: Serra the Benevolent -- after every creature";
+        case kAngRemoval:       return "REMOVAL: Swords, then Unexpectedly Absent (cheapest first)";
+        case kAngOther:         return "OTHER: unrecognised noncreature (cheapest first, then name)";
+        default:                return nullptr;
+    }
+}
+
+void AngelsProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                      std::vector<int>& order) const
+{
+    if (!AngelsOrderEnabled() || order.size() < 2) { return; }
+    const int me = s.active_player_index;
+    const std::size_t n = order.size();
+    std::vector<const CardDefinition*> defs(n, nullptr);
+    std::vector<int> key(n, 0);
+    bool any_cast = false;
+    for (std::size_t k = 0; k < n; ++k)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[k])];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        defs[k] = AngelsActionDef(a);
+        if (defs[k] != nullptr) { key[k] = CastOrderRank(s, *defs[k]); any_cast = true; }
+    }
+    if (!any_cast) { return; }
+
+    // ---- a SECOND copy of a legend in this set is a duplicate once the first resolves ----------
+    bool rekey = false;
+    {
+        std::vector<InternedName> legends;
+        for (std::size_t k = 0; k < n; ++k)
+        {
+            const CardDefinition* d = defs[k];
+            if (d == nullptr || !d->card.IsCreature() || !d->card.HasSupertype(Supertype::Legendary)) { continue; }
+            if ((key[k] >> kAngSlotShift) == kAngDupLegend) { continue; }   // already one (name on the battlefield)
+            if (std::find(legends.begin(), legends.end(), d->card.m_name) != legends.end())
+            { key[k] = AngelsRankOf(*d, /*dup_legend=*/true); rekey = true; }
+            else { legends.push_back(d->card.m_name); }
+        }
+    }
+
+    // ---- caveat (b): no converter on our battlefield or in this cast set -------------------------
+    bool converter = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd != nullptr && AngelsIsConverter(*pd)) { converter = true; break; }
+    }
+    for (std::size_t k = 0; k < n && !converter; ++k)
+    { if (defs[k] != nullptr && AngelsIsConverter(*defs[k])) { converter = true; } }
+    if (!converter)
+    {
+        for (std::size_t k = 0; k < n; ++k)
+        {
+            const int slot = key[k] >> kAngSlotShift;
+            if (defs[k] == nullptr || (slot != kAngTeamEngine && slot != kAngAngelEngine)) { continue; }
+            // Behind Youthful Valkyrie (sub 0) and ahead of Lyra Dawnbringer, Thune before Lyra AoD.
+            key[k] = AngelsKey(kAngSelfCounters, 8 + (slot - kAngTeamEngine), *defs[k]);
+            rekey = true;
+        }
+    }
+    if (rekey)
+    {
+        std::vector<std::size_t> pos(n);
+        for (std::size_t k = 0; k < n; ++k) { pos[k] = k; }
+        std::stable_sort(pos.begin(), pos.end(), [&](std::size_t x, std::size_t y) { return key[x] < key[y]; });
+        std::vector<int> o2(n);
+        std::vector<const CardDefinition*> d2(n);
+        std::vector<int> k2(n);
+        for (std::size_t k = 0; k < n; ++k) { o2[k] = order[pos[k]]; d2[k] = defs[pos[k]]; k2[k] = key[pos[k]]; }
+        order.swap(o2); defs.swap(d2); key.swap(k2);
+    }
+
+    // ---- caveat (a): Giada right after Greaves when her hasted {W} pays an Angel ahead of her ----
+    // The plan must carry the haste Equip onto THIS Giada (an Equip names its Equipment in
+    // sac_source_id and its host in sac_victim_id), and some Angel must sit between the hoist point and
+    // her -- otherwise moving her cannot change what her mana reaches.
+    std::size_t g = n;
+    for (std::size_t k = 0; k < n; ++k)
+    {
+        if (defs[k] != nullptr && (key[k] >> kAngSlotShift) == kAngEnterCounters
+            && defs[k]->tmpl == CardTemplate::ManaDork) { g = k; break; }
+    }
+    if (g == n) { return; }
+    const int giada_num = AngelsHandNumber(s, acts[static_cast<std::size_t>(order[g])]);
+    if (giada_num <= 0) { return; }
+    int equip_num = -1;
+    for (const Action& e : acts)
+    {
+        if (e.kind != Action::Kind::Equip || e.sac_victim_id != giada_num) { continue; }
+        const CardDefinition* ed = AngelsActionDef(e);
+        if (ed != nullptr && ed->params.equip_grants_haste) { equip_num = e.sac_source_id; break; }
+    }
+    if (equip_num <= 0) { return; }
+    bool equip_on_bf = false;
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == me && p.card.m_number == equip_num) { equip_on_bf = true; break; } }
+    // The hoist point: right after the Equipment's cast, or -- already on the battlefield -- right after
+    // the last cast ranked at or before the haste-Equipment slot.
+    std::size_t at = 0;
+    for (std::size_t k = 0; k < g; ++k)
+    {
+        const bool is_equip = AngelsHandNumber(s, acts[static_cast<std::size_t>(order[k])]) == equip_num;
+        if (is_equip || (equip_on_bf && defs[k] != nullptr && (key[k] >> kAngSlotShift) <= kAngHasteEquip))
+        { at = k + 1; }
+    }
+    if (!equip_on_bf)
+    {
+        bool cast_before = false;
+        for (std::size_t k = 0; k < g; ++k)
+        { if (AngelsHandNumber(s, acts[static_cast<std::size_t>(order[k])]) == equip_num) { cast_before = true; break; } }
+        if (!cast_before) { return; }
+    }
+    bool angel_between = false;
+    for (std::size_t k = at; k < g; ++k)
+    { if (defs[k] != nullptr && CardHasSubtype(defs[k]->card, "Angel")) { angel_between = true; break; } }
+    if (!angel_between) { return; }
+    std::vector<int> hoisted = order;
+    const int gi = hoisted[g];
+    hoisted.erase(hoisted.begin() + static_cast<std::ptrdiff_t>(g));
+    hoisted.insert(hoisted.begin() + static_cast<std::ptrdiff_t>(at), gi);
+    if (AngelsPaidCasts(s, acts, hoisted, giada_num, equip_num, equip_on_bf)
+        > AngelsPaidCasts(s, acts, order, giada_num, equip_num, equip_on_bf))
+    { order.swap(hoisted); }
+}
+
+// ---- AngelsProvider: the narrow Giada second main (USER 2026-10-14) ----------------------------
+//
+// USER, 2026-10-14: "I agree, though, that the second main is potentially wanted here. It would be
+// only exactly cases where Giada can attack and we would use her mana where it would be considered. I
+// wonder if we can use that to reduce any associated costs. The idea would be for it always only to be
+// one spell maximum. We don't need to consider multiple since she can only pay for or help pay for one
+// spell."
+//
+// THE GAP (draft probe 4-e): Giada, Font of Hope has vigilance and "{T}: Add {W}. Spend this mana only
+// to cast an Angel spell." Attacking does not tap her (Combat.cpp's attack-tap honours vigilance), so
+// after combat her {W} is a resource main 1 could only have spent by NOT attacking with her. Angels
+// plays no second main, so "attack, then pay for an Angel" was unfindable at any budget (T3, Giada in
+// play, 2 Plains + a land drop, Righteous Valkyrie + Lightstall Inquisitor in hand: no T5 win).
+//
+// THE PHASE OPENS (RestrictedSecondMainLive, read from the POST-COMBAT state) only when
+//   * our vigilant creature with subtype-restricted mana (Giada) is untapped and could attack this turn
+//     -- not summoning sick, or hasted -- which is also exactly when its {T} works (CR 302.6), and
+//   * some spell of that subtype in hand is payable WITH her {W} but NOT without it.
+// A lethal attack never reaches it (every post-combat site sits behind OpponentHasLost()).
+//
+// THE MENU (RestrictedSecondMainAdmits) is those Angel casts and nothing else: no other cast, no land
+// drop (a land held since main 1 is barred from main 2 already -- HeldLandBarredFromMain2), no equip,
+// no activation, no loyalty ability. AT MOST ONE CAST, structurally: each admitted cast needs her one
+// {W}, and a second one would have to be paid without it, which by admission it cannot be.
+//
+// WHY THE RESTRICTION IS A SOUND IDENTITY FOLD, NOT A LOSSY GATE (the CLAUDE.md completeness test).
+// Main 1 left her untapped, so it paid its casts S from the other sources; whatever those leave is the
+// post-combat pool without her. An Angel payable from that pool alone was payable in main 1 together
+// with S, still without tapping her (the payer holds an attack-capable dork back while the cost allows,
+// ReservableSpecialMask), and casting it there is weakly better in a goldfish -- its entry triggers
+// (Bishop's 4 life, Righteous Valkyrie's toughness gain, the engines' counters, Giada's own counters on
+// it) all land before combat instead of after. Everything else in hand is the same argument. So every
+// refused option is reachable at the same or an earlier point, and nothing becomes unfindable at
+// unlimited budget. GOLDFISH-SPECIFIC like DigSecondMainLive's fold: an opponent who removes or blocks
+// would make holding a cast for after combat a real choice -- re-derive for phase 2.
+//
+// The pools are AvailableManaPool with and without her, exact for this mono-white list's sources
+// (Plains; Remote Farm's {W}{W}; Seraph Sanctuary's and Sol Ring's colourless). Default OFF until the
+// USER's call on the measured cost (docs/design/angels-cast-order-2026-10-14.md).
+namespace
+{
+bool AngelsGiadaM2Enabled()
+{
+    static const bool on = EnvOn("MTG_ANGELS_GIADA_M2", false);   // DEFAULT OFF; =1 opens the phase
+    return heurarm::Flag(heurarm::ANGELS_GIADA_M2, on);
+}
+
+// Our untapped vigilant creature whose mana only pays for one creature subtype, able to attack (and so
+// to tap) this turn. nullptr when there is none.
+const Permanent* AngelsVigilantSubtypeDork(const GameState& s, const CardDefinition** def_out)
+{
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->tmpl != CardTemplate::ManaDork || !d->params.creature_mana_only
+            || d->params.mana_only_subtype.empty()) { continue; }
+        if (!CreatureHasVigilance(p, s) || !CanAttackFull(p, s.battlefield, me)
+            || !CanTapNow(p, s.battlefield)) { continue; }
+        if (def_out != nullptr) { *def_out = d; }
+        return &p;
+    }
+    return nullptr;
+}
+}   // namespace
+
+bool AngelsProvider::RestrictedSecondMainLive(const GameState& s) const
+{
+    if (!AngelsGiadaM2Enabled()) { return false; }
+    const CardDefinition* gd = nullptr;
+    const Permanent* g = AngelsVigilantSubtypeDork(s, &gd);
+    if (g == nullptr) { return false; }
+    bool     built = false;
+    ManaPool with, without;
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        // A hand card is a name-only placeholder: every characteristic comes from the definition.
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand() || !CardHasSubtype(d->card, gd->params.mana_only_subtype)) { continue; }
+        if (!built) { with = AvailableManaPool(s); without = AvailableManaPool(s, g); built = true; }
+        const ManaCost cost = EffectiveSpellCost(*d, s);
+        if (with.CanPay(cost) && !without.CanPay(cost)) { return true; }
+    }
+    return false;
+}
+
+bool AngelsProvider::RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+{
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { return false; }
+    const CardDefinition* gd = nullptr;
+    const Permanent* g = AngelsVigilantSubtypeDork(s, &gd);
+    if (g == nullptr) { return false; }
+    const CardDefinition* d = AngelsActionDef(a);
+    if (d == nullptr || !CardHasSubtype(d->card, gd->params.mana_only_subtype)) { return false; }
+    return AvailableManaPool(s).CanPay(a.cost) && !AvailableManaPool(s, g).CanPay(a.cost);
+}
+
 // ---- CritterLifegainProvider::CleanupDiscardCandidates ----------------------
 //
 // THE USER'S DESIGN (2026-10-09; docs/design/critterlifegain-discard-policy-proposal.md,

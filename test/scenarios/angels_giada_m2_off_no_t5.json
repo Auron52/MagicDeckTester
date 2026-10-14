@@ -1,0 +1,11 @@
+{
+  "_comment": "Control for angels_giada_m2_attack_then_pay.json: the SAME board with MTG_ANGELS_GIADA_M2=0. Angels plays no second main, so vigilant Giada's 'attack, then pay for an Angel' is unfindable at any budget and the game does not end by T5 (opponent at 2). If this ever wins, the lever is no longer what separates the two fixtures.",
+  "deck": "decks/Angels/Angels.cod",
+  "turn": 3, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "battlefield": [ { "name": "Plains" }, { "name": "Plains" }, { "name": "Giada, Font of Hope" } ],
+  "hand": [ "Righteous Valkyrie", "Lightstall Inquisitor", "Plains" ],
+  "library_filler": "Plains", "library_size": 30,
+  "depth": 5, "budget_ms": 300, "max_turns": 5,
+  "env": { "MTG_ANGELS_GIADA_M2": "0" },
+  "expect_no_win": true
+}

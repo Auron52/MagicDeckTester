@@ -2084,6 +2084,25 @@ public:
     // carries its own arm and its own measurement rather than riding the placement lever.
     virtual bool SecondMainNeedsDeferredCast() const { return false; }
 
+    // ---- A DECK-OWNED, PER-TURN, RESTRICTED POST-COMBAT MAIN (first user: Angels' Giada) ---------
+    // For a deck that plays NO second main (uses_second_main false), the provider may open one on
+    // exactly the turns its own rule says combat created something main 1 could not spend, and name
+    // the whole option set inside it. The Jorn / Omnitool shape (UntapSecondMainLive /
+    // DigSecondMainLive), with the deck rule in the provider instead of the engine.
+    //
+    // RestrictedSecondMainLive -- does THIS turn's post-combat main open? Asked of the POST-COMBAT
+    // state at every post-combat site of both worlds (the executor's TakeTurn gate, the rollout's
+    // per-turn second main, FSLineTail and its edge-tail elision, the branch-site candidate loops), so
+    // it MUST be a pure function of the state: lockstep by construction and nothing to fold into a key.
+    // RestrictedSecondMainAdmits -- inside that phase, may this collected action be offered? Applied
+    // at the tail of TurnSolver::CollectActions (post-combat only, never in human play); everything it
+    // refuses is erased, so it is the phase's whole menu. Both default to "no phase" -> byte-identical.
+    // Read through ProviderSecondMainLive (DecisionProviders.h), which never opens one on a deck that
+    // already plays a full second main.
+    virtual bool RestrictedSecondMainLive(const GameState& s) const { (void)s; return false; }
+    virtual bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+    { (void)s; (void)a; return true; }
+
     // MainPhaseOverride -- per-card doctrine consulted BEFORE the engine's template rules (deck
     // knowledge lives in the provider, like the discard doctrines). nullopt = defer to the base
     // template classifier (DirectDamage/spectacle -> Main2, Draw* -> Both, sick Vanilla/ManaDork
