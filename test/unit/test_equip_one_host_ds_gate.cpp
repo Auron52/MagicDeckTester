@@ -82,13 +82,16 @@ struct BoardOh
 };
 
 // arm: {one host, ds gate sees casts}; -1 = the binary's default.
-std::vector<TurnSolver::Plan> PlansOh(const GameState& s, int one_host, int gate)
+// swing: MTG_EQUIP_DS_SWING_FIRST (the doctrine amendment), off unless asked for.
+std::vector<TurnSolver::Plan> PlansOh(const GameState& s, int one_host, int gate, int swing = 0)
 {
-    heurarm::t_arm[heurarm::EQUIP_ONE_HOST]      = static_cast<std::int8_t>(one_host);
-    heurarm::t_arm[heurarm::EQUIP_DS_GATE_CASTS] = static_cast<std::int8_t>(gate);
+    heurarm::t_arm[heurarm::EQUIP_ONE_HOST]       = static_cast<std::int8_t>(one_host);
+    heurarm::t_arm[heurarm::EQUIP_DS_GATE_CASTS]  = static_cast<std::int8_t>(gate);
+    heurarm::t_arm[heurarm::EQUIP_DS_SWING_FIRST] = static_cast<std::int8_t>(swing);
     std::vector<TurnSolver::Plan> v = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
-    heurarm::t_arm[heurarm::EQUIP_ONE_HOST]      = -1;
-    heurarm::t_arm[heurarm::EQUIP_DS_GATE_CASTS] = -1;
+    heurarm::t_arm[heurarm::EQUIP_ONE_HOST]       = -1;
+    heurarm::t_arm[heurarm::EQUIP_DS_GATE_CASTS]  = -1;
+    heurarm::t_arm[heurarm::EQUIP_DS_SWING_FIRST] = -1;
     return v;
 }
 
@@ -150,6 +153,10 @@ TEST_CASE("one-host ds gate: a Kor Duelist in HAND disarms the rule (gi149 T4 sh
     // The committed tree's dead gate: the one host is the Paladin, and the Duelist never gets a rider.
     CHECK_FALSE(AnyEquipOnto(dead, hammer, duelist));
     CHECK_FALSE(AnyEquipOnto(dead, jitte, duelist));
+    // The doctrine amendment keeps it: the Greaves on the battlefield can haste the Duelist.
+    const std::vector<TurnSolver::Plan> amend = PlansOh(b.s, 1, 1, 1);
+    CHECK(AnyLine(amend, "Kor Duelist", hammer, duelist));
+    CHECK(AnyLine(amend, "Kor Duelist", jitte, duelist));
 }
 
 TEST_CASE("one-host ds gate: a Balan in HAND disarms the rule and the Bonesplitters may MOVE to her (gi738 T4 shape)")
@@ -197,4 +204,45 @@ TEST_CASE("one-host ds gate: a castable NON-double-striker leaves the rule in fo
     CHECK(AnyEquipOnto(fix, hammer, paladin));
     CHECK_FALSE(AnyEquipOnto(fix, hammer, sky));
     CHECK(AnyEquipOnto(off, hammer, sky));
+}
+
+TEST_CASE("ds swing-first: a sick double striker with NO haste source does not take a FREE rider from the Paladin (gi66 shape)")
+{
+    // kitty ship gi66 (seed 10100067) T4, after the third Hammer resolved: metalcraft is on, every equip is
+    // {0}, the Kor Duelist is castable but nothing can haste it. Three Hammers on the Paladin are 32 vs 20;
+    // on the Duelist they are worth nothing this turn. The consolidation doctrine offers the riders only to
+    // its top double-strike-potential host -- the Duelist -- so the Paladin line is never enumerated.
+    BoardOh b;
+    const int paladin = b.Put("Puresteel Paladin");
+    const int h1 = b.Put("Colossus Hammer");
+    const int h2 = b.Put("Colossus Hammer");
+    b.Put("Colossus Hammer");
+    b.Put("Plains");
+    const int duelist = b.Hand("Kor Duelist");
+    REQUIRE(EquipCostGenericNow(b.s, 0, *CardDatabase::Instance().Lookup("Colossus Hammer"), paladin) == 0);
+
+    const std::vector<TurnSolver::Plan> doctrine = PlansOh(b.s, 1, 1, 0);
+    const std::vector<TurnSolver::Plan> amend    = PlansOh(b.s, 1, 1, 1);
+    CHECK_FALSE(AnyEquipOnto(doctrine, h1, paladin));       // the hole the amendment closes
+    CHECK(AnyEquipOnto(amend, h1, paladin));
+    CHECK(AnyEquipOnto(amend, h2, paladin));
+    CHECK_FALSE(AnyEquipOnto(amend, h1, duelist));           // a FREE rider is not banked on the sick body
+}
+
+TEST_CASE("ds swing-first: a PAID rider is still offered to the sick double striker (banking stays searched)")
+{
+    // No metalcraft (one artifact), so Bonesplitter's equip is {1}. Two Plains: {W} Duelist + {1} equip.
+    // Banking the equip on the Duelist spends this turn's mana instead of next turn's -- a real trade, so
+    // both hosts must be offered.
+    BoardOh b;
+    const int paladin = b.Put("Puresteel Paladin");
+    const int bs = b.Put("Bonesplitter");
+    b.Put("Plains");
+    b.Put("Plains");
+    const int duelist = b.Hand("Kor Duelist");
+    REQUIRE(EquipCostGenericNow(b.s, 0, *CardDatabase::Instance().Lookup("Bonesplitter"), paladin) == 1);
+
+    const std::vector<TurnSolver::Plan> amend = PlansOh(b.s, 1, 1, 1);
+    CHECK(AnyEquipOnto(amend, bs, paladin));
+    CHECK(AnyLine(amend, "Kor Duelist", bs, duelist));
 }
