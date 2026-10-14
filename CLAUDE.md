@@ -388,6 +388,29 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     not the main phase — wave *k* = turn *k* fully explored. The concession ("something lossier") is
     explicitly conditional on results, and is the user's call to make, never an agent's.
 
+- **NO UNBUDGETED-ONLY CHANGES (user directive, 2026-10-14).** A search change must apply to
+  budgeted play too, unless it STRUCTURALLY requires an unlimited budget. The user's words: *"Generally
+  speaking, I don't like changes that only impact unbudgeted. We should avoid those in the future. The
+  only exception is where the change structurally requires unbudgeted, like perhaps for that
+  no-leaf-until-final-depth mode"* (the lazy leaf, `MTG_LAZY_LEAF`).
+  * **Why: the tiers run ONLY budgeted games.** A change gated on `g_unbudgeted_play` /
+    `budget->Unlimited()` never executes in smoke or regression, so a green tier says nothing about it,
+    and nothing standing catches a later break. On 2026-10-14 the exact Snow unit cuts
+    (`MTG_FS_STRICT_CUT`, `MTG_LA_TIE_PRUNE`/`_TIGHTEN`, `MTG_NOWIN_STORE_UNGRADED`,
+    `MTG_ROLLOUT_M1_MEMO`) were gated that way so budgeted ground truth would stay byte-identical. The
+    user: *"there is nothing wrong with changing the play. The way you did it was a bit of a cop-out.
+    As-in, you really did change things, but you avoided needing to test it"*, and *"Because our tests
+    do not run unbudgeted."*
+  * **Changing budgeted play is fine; test it as a play change.** Run a held-out A/B on the decks that
+    move, then accept smoke/regression GT through the normal flow. Scope a change by where it is VALID,
+    never by what keeps the GT still.
+  * **An exception must say why in its code comment**: what makes the change meaningless or
+    inapplicable under a finite budget, not merely "it would move budgeted play".
+  * **Owed:** the 2026-10-14 cuts above get a budgeted version (after the Snow value leaf). Every other
+    existing unbudgeted-only gate gets either one or a stated structural reason. A minimal unbudgeted
+    backstop in the suite (a few cheap decks whose cases are shown to exercise these paths) is planned,
+    not yet sized.
+
 - **A DECK MUST BE IN THE REGRESSION SUITE BEFORE THE VALUE LEAF OR MULLIGAN PROFILE (user
   directive, 2026-09-26).** Adding the deck to `test/regression_cases.sh` is a **required step of
   the analysis**, and both generators now **refuse to start** (exit 3) without it:
