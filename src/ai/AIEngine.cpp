@@ -7300,17 +7300,12 @@ void AIEngine::UseSurplusLandAbilities(GameState& state,
     // THE SEARCHED CHOICE, REALISED (MTG_DIG_SEARCHED_CHOICE, default ON). This path runs only when the
     // turn carries no recorded script (d0, or the develop-when-stuck fallback), and there the plan's
     // dig_choice is all that says which world the search scored: ApplyPlanDirect suppresses the loop at
-    // 0, digs while affordable at 1, and runs the gate WITHOUT the main-2 deferral at 2. Before the lever
+    // 0, digs while affordable at 1, and runs the gate at 2. Before the lever
     // this function re-decided by heuristic whatever the plan said -- an opt-in deck whose search chose
     // "no dig" still dug here. =0 restores the heuristic-only reactive dig (the d0 plan is -1 either way).
     const bool honour = DigSearchedChoiceOn();
     if (honour && dig_choice == 0) { return; }
     if (!ResolveProvider(state).HasAnyDigSource(state)) { return; }
-    // MAIN 1 IS NOT THE END OF A SPLIT TURN (MTG_DIG_DEFER_MAIN2) -- lockstep with ApplyPlanDirect's
-    // pre-combat dig loop, through the one shared predicate: a payable cast the main-phase filter
-    // withheld from main 1 keeps this main-1-only reactive dig from spending its mana. Like the apply,
-    // only the HEURISTIC default (-1) waits once the choice is searched.
-    if ((!honour || dig_choice < 0) && TurnSolver::Main1DigDefersToMain2(state)) { return; }
     const bool dig_while_affordable = honour && dig_choice == 1;
 
     // Reactive "dig when stuck" used on the depth-0 / develop-when-stuck paths (full-depth

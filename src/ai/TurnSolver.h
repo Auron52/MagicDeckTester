@@ -1357,7 +1357,7 @@ public:
         // line rides breakpoint_actions verbatim, and a committed no-dig line records none.
         // 2 (MTG_DIG_SEARCHED_CHOICE, default ON; USER 2026-10-13 "It shouldn't be automatic") == a
         // BASE plan whose no-dig sibling (0) is in the same candidate list: the provider's gate decides
-        // exactly as at -1, but MTG_DIG_DEFER_MAIN2 does not apply (the sibling IS the no-dig world).
+        // exactly as at -1 (the sibling IS the no-dig world).
         // Every provider holding a dig source gets the sibling under the lever -- the opt-in ones their
         // 0/1 axis, the rest (the USER's 2026-09-29 ruling: no dig-while-affordable axis for them) a
         // no-dig twin only -- so -1 remains only where no sibling exists: the greedy horizon / d0 plan,
@@ -1767,15 +1767,6 @@ public:
     // with the deferred main for creature mana. False whenever the lever/provider is off,
     // in human play, and under MTG_UNPRUNE=mainphase -- same carve-outs as the filter itself.
     static bool CollapsedMainActive(const GameState& state);
-
-    // Does MAIN 1's heuristic dig (the provider's ShouldConsiderDig "dig when stuck") wait for MAIN 2
-    // on this state? True when the filter above is active and a cast it WITHHELD from main 1 (a
-    // Main2-classified hand card) is still payable -- the turn is not stuck, its casts were moved past
-    // combat. ONE reader for both worlds: ApplyPlanDirect's pre-combat dig loop (rollout) and
-    // AIEngine::UseSurplusLandAbilities (the executor's reactive m1 dig). MTG_DIG_DEFER_MAIN2 (default
-    // ON; heurarm slot DIG_DEFER_MAIN2). Under MTG_DIG_SEARCHED_CHOICE it applies to the heuristic
-    // default (-1) only: a base plan with a searched no-dig sibling (dig_choice 2) is not deferred.
-    static bool Main1DigDefersToMain2(const GameState& state);
 
     // Baseline main-phase classification for a hand cast, for the per-deck review report
     // (--cast-order-report). Uses the SAME ClassifyMainPhase the filter uses, so the reviewed
