@@ -7394,6 +7394,39 @@ bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controll
     return false;
 }
 
+// ---- TreasureHuntProvider::LandDropAfterDrawEngine: "Treasure Hunt before the land drop" (depth 0) ------
+// The depth-0 half of the deck's land rule (the USER's "don't play a land BEFORE TH/Throes; the
+// after-play is a search decision", docs/design/th-keep-model-overmulligans-th-hands.md). When a
+// Treasure Hunt in hand is castable from the board's mana WITHOUT the drop and no enabler is out --
+// a no-max-hand-size permanent (Reliquary Tower) or a Land's Edge -- hold the drop so a land the dig
+// reveals (possibly the Tower) can be the drop, played by the draw engine's second TakeTurn pass. With
+// an enabler out the draw is already safe and the drop goes first. The FIRST Treasure Hunt in hand
+// decides (all copies are the same card). Depth > 0 never asks: the search folds the drop, with its own
+// defer option (add_for_land("", "") in TurnSolver's land fold) and ShouldCastDrawEngine's strict flood.
+//
+// Moved here from AIEngine::TakeTurn's pre-combat land block 2026-10-14 (USER: engine-side deck rules
+// move into their deck's provider), byte-identical. The engine block (2026-06-10) priced the cast as a
+// literal {1}{U}; this reads the card's own cost, which is that same {1}{U} for Treasure Hunt, the only
+// DrawUntilNonland card in cards.json.
+bool TreasureHuntProvider::LandDropAfterDrawEngine(const GameState& s, int controller) const
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.no_max_hand_size || d->params.discard_land_damage > 0) { return false; }
+    }
+    const ManaPool avail = AvailableManaPool(s);
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->tmpl != CardTemplate::DrawUntilNonland) { continue; }
+        return avail.CanPay(d->card.m_mana_cost);
+    }
+    return false;
+}
+
 std::string TreasureHuntProvider::PostDrawKeepLandName(const GameState& s, int controller) const
 {
     // After a deferred Treasure Hunt resolves: if the hand is flooding past max size and no
