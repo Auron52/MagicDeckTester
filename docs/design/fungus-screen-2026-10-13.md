@@ -505,3 +505,49 @@ same between, say, a 21st land and a second Sol Ring -- both of which do the sam
 **Predict the composite before running it.** Writing the prediction down first is what makes
 non-additivity visible instead of absorbable: a composite that lands on its predicted sum is
 evidence the pairing is sound, and one that misses names the interacting pair.
+
+## CORRECTION: Sol Ring is capped at ONE copy, and that voids the screen's best measured edit
+
+USER 2026-10-14: *"Sol Ring is not allowed due to my 'number of cards must be legal in Modern,
+Legacy or Vintage' rule"* / *"So only 1 is allowed, because it is Restricted in Vintage and illegal
+everywhere else."* Scryfall confirms exactly that -- `not_legal / banned / restricted` -- and across
+this entire pool **Sol Ring is the ONLY card capped below 4**. Every other card the screen has
+touched, including all the Modern-illegal old ones (Concordant Crossroads, Saproling Burst, Hickory
+Woodlot, Peat Bog, Brightcap Badger, Shroofus Sproutsire, Undercellar Myconid, Wild Growth, Primal
+Vigor), is Legacy/Vintage-legal and therefore still a 4-of. "Old card" does not imply "restricted".
+
+**Consequences, stated plainly because this cost a recommendation:**
+
+* Round 11's `u_solring2` (-0.0945/-0.1140) is **VOID AS A LIST EDIT**. The provisional list built on
+  it is retracted.
+* It is **NOT void as evidence.** It remains the sharpest single result showing this deck's binding
+  constraint is MANA rather than bodies, which is what redirected the screen toward the land count,
+  Concordant Crossroads and Cryptolith Rite. Keep the diagnosis, drop the edit.
+* Round 13's first draft laddered Sol Ring to 3 and 4 copies. It was rewritten before it ran; the
+  mana axis is now served by the legal levers -- Crossroads 1->2->3->4, Wild Growth 2->3->4, the land
+  count 21/22/23 -- plus Beastmaster 2->4 priced on its own donors and the untested third free
+  Doubling Season copy.
+* **The cap is now a GATE rather than a memory.** `logs/fungus_screen/fetch_legality.py` POSTs the
+  pool to Scryfall's `/cards/collection` and caches `{name: max copies}`; every spec builder asserts
+  each arm against it and names the USER rule in the failure message. There is also an explicit
+  `"Sol Ring" not in any arm` assertion, because a cap of 1 on a card already at 1 is invisible to a
+  count check that only looks at maxima.
+* The deck's existing single Sol Ring stays: round 8 priced cutting it as the most expensive single
+  cut in the list (+0.0958/+0.1260).
+
+**Re-derived provisional list, legal edits only** (predicted via `NET_A + d_X`, to be MEASURED):
+
+| edit | funded by | predicted std |
+|---|---|---|
+| Mycoloth 4->2, Beastmaster 2->4, Courtyard 4->0, Forest 4->8 | internal (round 9's c_m2) | -0.0877 |
+| Concordant Crossroads 1->2 | Psychotrope 1->0 | -0.0446 |
+| Brightcap Badger 1->2 | Doubling Season 4->3 | -0.0252 |
+| Shroofus Sproutsire 1->2 | Doubling Season 3->2 | -0.0219 |
+| Tukatongue Thallid 2->3 | Utopia Mycon 4->3 | -0.0100 |
+| Wild Growth 2->3 | Deathspore 2->1 | -0.0090 |
+| 21st land (Vitaspore 2->1, Forest 8->9) | internal | -0.0343 |
+| | **predicted total** | **~ -0.233** |
+
+Only ~0.025t worse than the illegal version, because the loss is spread across many small legal
+edits rather than concentrated in one banned card. The bottom four rows are thin enough that round
+12's adds and round 13's ladders are likely to displace them.
