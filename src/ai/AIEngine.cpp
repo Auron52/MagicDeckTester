@@ -4383,7 +4383,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // consumers, so the depth-0 executor gets the same second pass the rollout's
                   // deferred re-solve arms -- the USER's "cast Worldly Tutor -> now activations
                   // and Turntimber can be cast", always taken at d0 when affordable.
-                  || (TopResolveEnabled() && d->params.tutor_to_top)
+                  || (TopResolveActive(state) && d->params.tutor_to_top)
                   // MTG_ACQ_DIG: an ETB dig (Acclaimed Contender) puts a same-phase-castable
                   // card in hand at resolution, so the depth-0 executor gets the same second
                   // pass the rollout's deferred re-solve arms. Cast path only (see flag note).
@@ -4471,7 +4471,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      // MTG_TOP_RESOLVE: the tutor-to-top reset arms the rollout's deferred
                      // re-solve (TurnSolver twin), so full-depth replay must classify it the
                      // same way or the committed continuation replays at the wrong breakpoint.
-                     || (TopResolveEnabled() && d->params.tutor_to_top)
+                     || (TopResolveActive(state) && d->params.tutor_to_top)
                      // (MTG_BP_ETB_DIG, default ON: the full-depth dig breakpoint arrives through
                      // put_in_hand_armed -- site 10 -- not through this list; see EngineFlags.h.)
                      // MTG_ACQ_DIG is deliberately ABSENT here: the lever is depth-0-only
@@ -4512,7 +4512,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (d == nullptr) { return false; }
         const bool deferred = (AcqResolveEnabled()
                                && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
-                           || (TopResolveEnabled() && d->params.tutor_to_top);
+                           || (TopResolveActive(state) && d->params.tutor_to_top);
         if (!deferred) { return false; }
         const bool inline_class = d->tmpl == CardTemplate::DrawUntilNonland
                                || d->params.cascade_max_mv > 0 || d->params.shuffle_reveal_freecast
@@ -6258,7 +6258,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         acq_pending = true;
         acq_site    = d;
         pin_rdb_hand();
-        if (d != nullptr && TopResolveEnabled() && d->params.tutor_to_top
+        if (d != nullptr && TopResolveActive(state) && d->params.tutor_to_top
             && !(AcqResolveEnabled() && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)))
         { acq_hand.clear(); }
         else { acq_hand = rdb_hand; }

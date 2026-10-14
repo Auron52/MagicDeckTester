@@ -2002,14 +2002,44 @@ public:
     // definition for the full bucket rules. MTG_STOMPY_BUCKET_DISCARD=0 -> generic base (A/B).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
-    // Cast order: USER-PROPOSED tiers (2026-08-21) -- 1-mana elves, Sol Ring, scaling elves
-    // cheapest-first, Call of the Wild, cheat-outs (Turntimber, Natural Order), a dual-position
-    // Worldly Tutor (mid when a top-consumer follows, else last), Vaultborn as the drawing
-    // creature, fatties, Craterhoof last for maximum pump, Mirri's Guile. Gated on
-    // MTG_STOMPY_ORDER (default OFF pending measurement); see the definition + the verbatim
-    // ruling and open items in docs/design/cast-order-rankings.md.
+    // Cast order: the USER's tiers (2026-08-21), as amended by the 2026-10-14 draft the USER
+    // approved ("Let's try out your stompy suggestion") and made TOTAL ("Let's fully order the
+    // cards in each list inasmuch as possible"): 1-mana elves, Sol Ring, Priest, Archdruid, Call of
+    // the Wild, Turntimber (before / after the tutor), Natural Order early, Worldly Tutor mid,
+    // Vaultborn, Ghalta, World War Hulk early, the fatties (Hornet Queen, Elderscale, Apex,
+    // Worldspine, Terastodon), Natural Order late, Hulk late, Craterhoof, Worldly Tutor late.
+    // MTG_STOMPY_ORDER (see the definition; =0 -> the generic tiers). The four "either location"
+    // cards take their slot from the PLAN (ArrangeCastOrder) and the other slot is SEARCHED
+    // (CastOrderingCandidates). Verbatim rulings: docs/design/cast-order-rankings.md §StompySurprise.
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    int         CastOrderRankLatest(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotal() const override;
+    void        ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
+    bool        WantsCastOrderingSearch() const override;
+    bool        CastOrderingCandidates(const GameState&, const std::vector<Action>& plan_actions,
+                                       const std::vector<Action>& reorder,
+                                       std::vector<std::vector<int>>& out) const override;
+    // The tutor-to-top reset (MTG_TOP_RESOLVE) ships WITH the order: the USER's "Worldly Tutor
+    // resets Call of the Wild Activations and Turntimber" is the order's loop half.
+    // MTG_STOMPY_TOP_RESOLVE=0 keeps the order without it; MTG_STOMPY_ORDER=0 drops both.
+    bool        TopResolveOptIn() const override;
+
+    // The dual-position slots of one cast set (see ArrangeCastOrder): which side of its two the
+    // set's Worldly Tutor / Turntimber / Natural Order / World War Hulk takes.
+    struct OrderSlots
+    {
+        bool wt_mid    = false;   // Worldly Tutor mid (a Turntimber in the plan takes its card) vs late
+        bool tt_after  = false;   // Turntimber after the tutor vs on the current top
+        bool no_early  = false;   // Natural Order before the mid tutor vs late
+        bool hulk_late = false;   // World War Hulk after every body vs before the fatties
+    };
+    OrderSlots CanonicalOrderSlots(const GameState&, const std::vector<Action>& acts,
+                                   const std::vector<int>& order) const;
+    int        SlotRank(const GameState&, const CardDefinition&, const OrderSlots&) const;
+    // `order` stable-sorted into the order the slots give (rank, then the fixed key).
+    void       SortBySlots(const GameState&, const std::vector<Action>& acts, std::vector<int>& order,
+                           const OrderSlots&) const;
     // Tutor-top combo lethality (the d0 half of the MTG_TOP_RESOLVE reset): project the tutored
     // Craterhoof arriving through a still-affordable top-consumer (Call activation / spare
     // Turntimber) into the greedy's plan-lethality check, so depth 0 holds the consumer and takes
@@ -3254,6 +3284,13 @@ inline bool ProviderSecondMainLive(const GameState& s)
 {
     return !s.uses_second_main && ResolveProvider(s).RestrictedSecondMainLive(s);
 }
+
+// MTG_TOP_RESOLVE as THIS game's deck plays it: the global lever (EngineFlags.h TopResolveEnabled,
+// default OFF) OR the provider's adopted opt-in (DecisionProvider::TopResolveOptIn --
+// StompySurprise ships it with its USER order). The ONE reader of the tutor-to-top reset for every
+// site in both worlds -- the rollout's arming, the executor's draw-engine / deferred classification,
+// the d0 lethality model and the spell//land hold -- so the executor and the rollout cannot disagree.
+bool TopResolveActive(const GameState& s);
 
 // M2 fixpoint mode for THIS deck (the one reader every host shares -- executor, scored line,
 // rollouts; see DecisionProvider::M2FixpointOptIn). Precedence: a per-job heurarm flag wins

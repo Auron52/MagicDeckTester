@@ -63,11 +63,9 @@ enum Slot : int
     M2_KEY_COARSE,            // MTG_M2_KEY_COARSE         interior-m2 solve memo keys on the m2 dependency set
     M2_FIX_UNFILTERED,        // MTG_M2_FIX_UNFILTERED     fixpoint kill-scan probes ALL plans, not just projected-lethal
     M2_FIX_RESOLVE,           // MTG_M2_FIXPOINT=2         fixpoint mode 2: gated full re-solve on actionable draws
-    STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
+    STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-approved StompySurprise cast order (default ON 2026-10-14)
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
-    STOMPY_WT_LITERAL,        // MTG_STOMPY_WT_LITERAL     tutor census = the USER's two consumers only
-    STOMPY_TT_LITERAL,        // MTG_STOMPY_TT_LITERAL     Turntimber always [7]=12, no post-tutor 15
     KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
     BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
@@ -489,6 +487,8 @@ enum Slot : int
     HINATA_ORDER_BINDING,     // MTG_HINATA_ORDER_BINDING (under MTG_HINATA_ORDER_FULL) the settled order also binds ORDER-OPAQUE sets (HinataProvider::OrderOpaqueCastsByRank: plans holding Ponder / Preordain / Expressive Iteration play the rank order, not the cantrip-first partition or hand order). A decomposition arm for the A/B. Default ON; =0 -> the order binds clean sets only
     HINATA_GAMBLE_SEARCHED,   // MTG_HINATA_GAMBLE_SEARCHED (under MTG_HINATA_ORDER_FULL) Gamble's slot relative to the cantrips is a SEARCHED choice instead of a fixed one: a plan holding Gamble and a cantrip / Expressive Iteration ranked after it is offered in BOTH orders through the cast-ordering search (HinataProvider::WantsCastOrderingSearch + CastOrderingCandidates, the StompySurprise dual-slot shape) -- the arranged order first (Gamble before the cantrips, the coordinator's tie-break), then Gamble moved to just after the last of them. Executor and rollout replay the searched vector order (Plan::searched_order); the rollouts and the d0 runner keep the arranged order. The measured fixed alternatives both lose a cell (before: hinata shipped +13; after, MTG_HINATA_GAMBLE_LATE: hinata d0 +71). Default ON (integration 2026-10-15: net <= 0 on all six cells, 1,331/1,335 slower games recover); =0 -> the arranged order alone
     HINATA_PP_SEARCHED,       // MTG_HINATA_PP_SEARCHED (under MTG_HINATA_ORDER_FULL) PROPOSED second fan, NOT adopted: the Preordain / Ponder relation searched the same way -- a plan holding both is also offered with every Ponder moved before its first Preordain (combined with MTG_HINATA_GAMBLE_SEARCHED: at most four candidate orders, deduplicated). Root-caused on hinata shipped gi 82 (seed 11100083): the T5 kill plays the Soulfire exile Ponder (shuffle), Spasm, Ponder, Spasm, Preordain, Ponder, Crackle; the bound order casts Preordain first and the game is T6 even at d8 b0, T5 with the reverse tie-break. Default OFF (the USER decides); =1 -> the fan
+    STOMPY_ORDER_SEARCH,      // MTG_STOMPY_ORDER_SEARCH (under MTG_STOMPY_ORDER) the four "either location" cards of the USER's StompySurprise order -- Worldly Tutor mid / late, Turntimber before / after the tutor, Natural Order early / late, World War Hulk early / late -- are SEARCHED two-way choices: the plan's slot (StompyProvider::ArrangeCastOrder) is the canonical first try and each such card present at its OTHER slot is one more candidate ordering (StompyProvider::CastOrderingCandidates; WantsCastOrderingSearch). USER: "can choose to cast either location". Search window only: the rollouts beyond the horizon and the d0 runner keep the canonical order. Default ON; =0 -> the canonical order alone
+    STOMPY_TOP_RESOLVE,       // MTG_STOMPY_TOP_RESOLVE (under MTG_STOMPY_ORDER) StompySurprise's opt-in to the tutor-to-TOP reset (MTG_TOP_RESOLVE; DecisionProvider::TopResolveOptIn, read through TopResolveActive): the USER's "Worldly Tutor resets Call of the Wild Activations and Turntimber" ships with the order, the global lever stays OFF for the other tutor_to_top decks. Default ON; =0 -> the order without the reset
     COUNT
 };
 
@@ -532,8 +532,6 @@ inline const char* Name(int slot)
         "MTG_STOMPY_ORDER",
         "MTG_SCALED_LAND_RANK",
         "MTG_TOP_RESOLVE",
-        "MTG_STOMPY_WT_LITERAL",
-        "MTG_STOMPY_TT_LITERAL",
         "MTG_KE_CONDEMN",
         "MTG_BP_CONDEMN_TAIL_EXEMPT",
         "MTG_BP_CONDEMN_ORDER_AWARE",
@@ -933,6 +931,8 @@ inline const char* Name(int slot)
         "MTG_HINATA_ORDER_BINDING",
         "MTG_HINATA_GAMBLE_SEARCHED",
         "MTG_HINATA_PP_SEARCHED",
+        "MTG_STOMPY_ORDER_SEARCH",
+        "MTG_STOMPY_TOP_RESOLVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
