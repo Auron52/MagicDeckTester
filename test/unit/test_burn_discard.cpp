@@ -253,11 +253,23 @@ TEST_CASE("burn discard B3: lands beyond quota, +1 only for a LIVE Blaze")
     CHECK(Burn(dead) == std::vector<int>{ 3, 7, 6, 2, 1, 4, 0, 5 });
 }
 
+// S4 (the land-less Volley shed) is live only with MTG_BURN_VOLLEY_NOLAND_RANK=0 since that lever ships ON
+// (2026-10-14); the tests of the S4 design pin it off for their scope.
+namespace
+{
+struct PinNoLandRankOff
+{
+    PinNoLandRankOff() { heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_RANK] = 0; }
+    ~PinNoLandRankOff() { heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_RANK] = -1; }
+};
+}   // namespace
+
 // One Mountain in play, none in hand: the 1st Volley (0) has its land, Volleys 1 and 6 do not (S4).
 // Below 2 lands -> no Light Up the Stage is kept (S6, last first: 4 then 3). Kept burn Bolt 2 >
 // Skullcrack 5 > Volley 0 -> tail 0 5 2; Swiftspear protected last.
 TEST_CASE("burn discard B4: one land per Shard Volley; Light Up the Stage needs 2 lands")
 {
+    const PinNoLandRankOff s4;
     const GameState s = MakeBurn({ kVolley, kVolley, kBolt, kLuts, kLuts, kSkull, kVolley, kSS },
                                  { kMtn }, {}, 2);
     CHECK(Burn(s) == std::vector<int>{ 1, 6, 4, 3, 0, 5, 2, 7 });
@@ -297,6 +309,7 @@ TEST_CASE("burn discard B6: Shard Volley above the land-less Blaze; a Blood that
 // With no land-less Volley (B6's board: 3 lands, 1 Volley) the lever changes nothing.
 TEST_CASE("burn discard: MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE sheds the 1-damage Blaze before a land-less Volley")
 {
+    const PinNoLandRankOff s4;   // the amendment re-orders S4, which NOLAND_RANK retires
     const GameState s = MakeBurn({ kVolley, kVolley, kBlaze, kSkull, kEid, kSkull, kBlaze, kBlood },
                                  { kMtn, kSS, kGG }, { kGG, kGG, kGG }, 5, 9);
     auto amend = [](const GameState& g, int on)
@@ -376,7 +389,7 @@ TEST_CASE("burn discard: land-light Volley variants keep the lone land-less Voll
 {
     const GameState s = MakeBurn({ kBolt, kVolley, kLuts, kSS, kSkull, kSS, kGG, kLuts }, {}, {}, 2);
     CHECK(BurnVolley(s, kCur) == std::vector<int>{ 1, 7, 2, 4, 0, 3, 5, 6 });
-    CHECK(Burn(s) == BurnVolley(s, kCur));   // all unset = all off
+    CHECK(Burn(s) == BurnVolley(s, kRank));   // all unset = the default: NOLAND_RANK on, the rest off
     CHECK(Gen(s).front() == 2);
     const std::vector<int> keep = { 7, 2, 1, 4, 0, 3, 5, 6 };
     for (const VolleyArm& a : { kK1, kK2, kF1, kF2, kRank, kLate, kK1Late, kK2Late })
@@ -445,6 +458,7 @@ TEST_CASE("burn discard: land-light Volley variants -- slack vs floor, rank vs l
     { CheckPermutation(s, BurnVolley(s, a)); }
 
     // The 2-card cleanup re-ranks per shed: LATE sheds the Light Up the Stage, then a land-less Volley.
+    const PinNoLandRankOff s4;   // LATE is measured against the S4 design (NOLAND_RANK would supersede it)
     heurarm::t_arm[heurarm::BURN_BUCKET_DISCARD]     = 1;
     heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_LATE] = 1;
     GameState t = s;

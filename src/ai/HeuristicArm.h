@@ -452,11 +452,13 @@ enum Slot : int
     // The land-light Shard Volley variants of the USER's burn cleanup-discard buckets (MTG_BURN_BUCKET_DISCARD).
     // USER 2026-10-14: "that rule is probably too aggressive when we are land-light. At least 1 could always be
     // kept and 2 possibly." The USER design's S4 sheds the k-th Volley when fewer than k lands are on board + in
-    // the kept hand. PROPOSED, default OFF, the USER picks (docs/design/burn-discard-policy-proposal.md, 2026-10-14).
+    // the kept hand. NOLAND_RANK ships ON -- it is the USER's own "second ranking" reading and measured best
+    // (d0 12 faster / 0 slower over 160,000 paired games, shipped + d3 byte-identical); the rest stay OFF as
+    // measured alternatives (docs/design/burn-discard-policy-proposal.md, 2026-10-14).
     BURN_VOLLEY_KEEP1,        // MTG_BURN_VOLLEY_KEEP1      the FIRST land-less Volley is not an S4 shed: it stays in the burn order as an ordinary Volley (the k-th Volley needs k-1 lands). Default OFF
     BURN_VOLLEY_KEEP2,        // MTG_BURN_VOLLEY_KEEP2      the first TWO land-less Volleys are not S4 sheds (k-2 lands); overrides KEEP1. Default OFF
     BURN_VOLLEY_KEEP_FLOOR,   // MTG_BURN_VOLLEY_KEEP_FLOOR KEEP1 / KEEP2 read as a FLOOR ("at least 1 [2] could always be kept": max(lands, K) Volleys hold a land) instead of a slack (lands + K). The two agree with no land at all. Default OFF
-    BURN_VOLLEY_NOLAND_RANK,  // MTG_BURN_VOLLEY_NOLAND_RANK no Volley is an S4 shed: a land-less Volley takes the burn-order rank "Shard Volley with no land", directly below the with-land Volley and above the 1-damage Blaze (the USER-adopted MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE order). Supersedes KEEP1 / KEEP2 / NOLAND_LATE (order-identical to any of them on top). Default OFF
+    BURN_VOLLEY_NOLAND_RANK,  // MTG_BURN_VOLLEY_NOLAND_RANK no Volley is an S4 shed: a land-less Volley takes the burn-order rank "Shard Volley with no land", directly below the with-land Volley and above the 1-damage Blaze (the USER-adopted MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE order). Supersedes KEEP1 / KEEP2 / NOLAND_LATE (order-identical to any of them on top). Default ON (USER 2026-10-14: "It could be second ranking, 'shard volley with no land' that loses to more of the potential options"); =0 -> the S4 land-less shed of the USER design
     BURN_VOLLEY_NOLAND_LATE,  // MTG_BURN_VOLLEY_NOLAND_LATE the land-less Volleys (past KEEP1 / KEEP2) shed AFTER S5 (burn beyond lethal) and S6 (the Light Up the Stage the design does not keep) instead of in S4, still ahead of spare creatures and every kept card; the 1-damage Blaze of MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE still sheds ahead of them (a kept one moves up to their slot). Default OFF
     COUNT
 };

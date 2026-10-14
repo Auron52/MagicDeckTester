@@ -9304,7 +9304,8 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
 //   S4 a Shard Volley with no land of its own: the k-th Volley needs k lands among board + kept hand
 //      lands ("One land per volley is okay", USER -- the per-Volley land quota is DROPPED); the
 //      land-light variants (MTG_BURN_VOLLEY_KEEP1 / KEEP2 / KEEP_FLOOR / NOLAND_RANK / NOLAND_LATE,
-//      proposed 2026-10-14, default OFF) are described at their readers below;
+//      2026-10-14; NOLAND_RANK ships ON, which retires S4 at defaults, the rest OFF) are described at
+//      their readers below;
 //   S5 burn beyond lethal, worst first;
 //   S6 a 2nd Light Up the Stage (or every copy below 2 lands across board + hand);
 //   S7 spare creatures past the quota of 2 counting the board, a not-needed Eidolon FIRST;
@@ -9449,7 +9450,7 @@ static bool BurnVolleyKeepFloor()
 }
 static bool BurnVolleyNoLandRank()
 {
-    static const bool on = EnvOn("MTG_BURN_VOLLEY_NOLAND_RANK");   // DEFAULT OFF; =1 enables
+    static const bool on = EnvOn("MTG_BURN_VOLLEY_NOLAND_RANK", true);   // DEFAULT ON (USER direction 2026-10-14); =0 -> S4
     return heurarm::Flag(heurarm::BURN_VOLLEY_NOLAND_RANK, on);
 }
 static bool BurnVolleyNoLandLate()
