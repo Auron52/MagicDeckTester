@@ -19927,6 +19927,50 @@ bool CritterLifegainProvider::CastOrderingCandidates(const GameState& s,
     return true;
 }
 
+// DIAGNOSTIC (MTG_USER_ORDER_TRACE): how a realised executor cast list was classified --
+//   heliod=<at_slot|walked1|walked2|twoway_after|twoway_first>  (a list holding a devotion god + another cast)
+//   flip=1                                                      (the flip is live AND the list holds both a
+//                                                                payoff-block cast and a watcher)
+std::string CritterLifegainProvider::CastOrderTraceNote(const GameState& s, const std::vector<Action>& acts,
+                                                        const std::vector<int>& order) const
+{
+    if (!CritterOrderOn() || order.size() < 2) { return {}; }
+    std::string note;
+    std::vector<int> canon = order;
+    CritTotalSort(s, *this, acts, canon);
+    const CritHeliodPlacement hp = CritPlaceHeliod(s, acts, canon);
+    auto is_god = [&](int i) { const CardDefinition* d = CritDefOf(acts[static_cast<std::size_t>(i)]);
+                               return d != nullptr && CritIsDevotionGod(*d); };
+    switch (hp.kind)
+    {
+        case CritHeliodCase::AtSlot:  note = "heliod=at_slot"; break;
+        case CritHeliodCase::Walked1: note = "heliod=walked1"; break;
+        case CritHeliodCase::Walked2: note = "heliod=walked2"; break;
+        case CritHeliodCase::TwoWay:
+            if (hp.first == hp.after)  { note = "heliod=twoway_single"; }
+            else { note = is_god(order.front()) && !is_god(hp.after.front()) ? "heliod=twoway_first"
+                                                                             : "heliod=twoway_after"; }
+            break;
+        default: break;
+    }
+    if (CritFlipActive(s))
+    {
+        bool payoff = false, watcher = false;
+        for (int i : order)
+        {
+            const CardDefinition* d = CritDefOf(acts[static_cast<std::size_t>(i)]);
+            if (d == nullptr) { continue; }
+            if (CritIsWatcherDef(*d)) { watcher = true; }
+            else if (CritIsDevotionGod(*d) || d->params.lifegain_each_own_creature_counters > 0
+                     || (d->card.IsCreature() && d->params.lifegain_self_counters > 0)
+                     || (CritIsWalker(*d) && CritAbilityMakesPridemateToken(*d, acts[static_cast<std::size_t>(i)].loyalty_ability)))
+            { payoff = true; }
+        }
+        if (payoff && watcher) { note += note.empty() ? "flip=1" : ",flip=1"; }
+    }
+    return note;
+}
+
 std::optional<DecisionProvider::MainPhase>
 CritterLifegainProvider::MainPhaseOverride(const GameState&, const CardDefinition&) const
 {

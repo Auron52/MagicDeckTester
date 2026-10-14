@@ -1278,6 +1278,14 @@ public:
     // rule leaves equal. Default false -> every deck that does not override it is byte-identical.
     virtual bool CastOrderTiesByName() const { return false; }
 
+    // CastOrderTraceNote -- DIAGNOSTIC ONLY: a short note TraceUserCastOrder (MTG_USER_ORDER_TRACE, the
+    // executor's realised order per main) appends as `note=<...>`, so a deck can report how its
+    // set-level arrangement classified a realised cast list (CritterLifegain: Heliod's placement
+    // case). Never read by play. Default empty -> the trace line is unchanged.
+    virtual std::string CastOrderTraceNote(const GameState& s, const std::vector<Action>& actions,
+                                           const std::vector<int>& order) const
+    { (void)s; (void)actions; (void)order; return {}; }
+
     // XCandidates -- candidate X values for an {X} spell (a branching-PRUNE heuristic). The engine
     // asks BEFORE emitting cast variants and emits one cast per returned value (the variants
     // share hand_index, so they are mutually exclusive in the plan), letting the search pick

@@ -3308,10 +3308,13 @@ void TraceUserCastOrder(const GameState& state, const std::vector<Action>& acts,
             if (ExactOrderFirstUnpayable(state, acts, trial) < 0) { mearl = slot; break; }
         }
     }
-    std::fprintf(stderr, "[uo-order] gs=%llu t=%d m=%d route=%s pool=%d n=%zu pays=%d ppays=%d mpos=%d mearl=%d seq=%s\n",
+    // The deck's own classification of this list (DecisionProvider::CastOrderTraceNote; empty for
+    // every deck that does not define one, which leaves the line exactly as it was).
+    const std::string note = ResolveProvider(state).CastOrderTraceNote(state, acts, order);
+    std::fprintf(stderr, "[uo-order] gs=%llu t=%d m=%d route=%s pool=%d n=%zu pays=%d ppays=%d mpos=%d mearl=%d seq=%s%s%s\n",
                  static_cast<unsigned long long>(state.game_seed), state.turn_number, pre_combat ? 1 : 2,
                  route, AvailableManaPool(state).Total(), order.size(), fail, pfail, mpos, mearl,
-                 seq.c_str());
+                 seq.c_str(), note.empty() ? "" : " note=", note.c_str());
     // MTG_USER_ORDER_TRACE=2: also the hand (staged copies starred), the pool and the cast cap.
     static const int s_level = EnvInt("MTG_USER_ORDER_TRACE", 0);
     if (s_level >= 2)
