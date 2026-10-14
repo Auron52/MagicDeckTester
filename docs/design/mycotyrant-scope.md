@@ -289,6 +289,15 @@ Fixed by filtering at the READ: a graveyard card is not a CARD when
 token-creation helper draws its id from `next_token_number`, and deck cards are numbered 1..N -- and
 it is the test several other sites in `SpellEffects.h` already open-code.
 
+**A CONSEQUENCE WORTH KNOWING BEFORE READING THE 2-COPY ARM.** Deriving descend from the
+destination zone means the LEGEND RULE feeds it: `EnforceLegendRule` puts the doomed duplicate into
+its owner's graveyard, and its own comment is explicit that this is a real death (CR 704.5j / 700.4).
+So casting a second Mycotyrant while one is already out IS a descend, and that turn's end step makes
+a token off it. Rules-correct, and modelled for free with no extra wiring -- but it means the 2-copy
+arm has a small source of descend the 1-copy arm does not, which is part of what copy 2 buys rather
+than a confound. (A token COPY of a legend dying the same way is correctly NOT counted: it fails the
+id filter below, and a token is not a permanent card.)
+
 **LEFT OPEN, AND IT IS A REAL BUG INDEPENDENT OF THIS CARD.** A token that leaves the battlefield
 ceases to exist (CR 111.7) and should never persist in a graveyard. It does, at every unguarded
 site. That is not fixed here because `graveyard.size()` is a feature of the learned mid-game
