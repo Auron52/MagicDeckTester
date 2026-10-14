@@ -580,7 +580,10 @@ struct Action
                                        // construction. >= 0 = pinned by the plan; resolution makes
                                        // exactly k copies and does NOT consult the human chooser
                                        // (the choice was already made where the person could see it).
-                                       // Fanned only under HumanPlayActive() / MTG_UNPRUNE=replicate.
+                                       // Fanned in every searched mode (USER no-greedy rule
+                                       // 2026-09-30), also for a cast after a SAME-PLAN Hatchery
+                                       // (MTG_REPLICATE_PENDING) and keyed by the autonomous dedup
+                                       // (MTG_REPLICATE_SIG); never offered to the greedy picker.
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;
