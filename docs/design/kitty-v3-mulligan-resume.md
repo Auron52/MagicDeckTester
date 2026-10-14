@@ -195,12 +195,38 @@ than assumed, before the working tree was touched:
 **`build/PGO` HAS BEEN PRESERVED, because the Fungus work will overwrite it.** At the pause the stamp
 matched (`889da671`), and precondition 2 above says other work on another branch invalidates it. The
 matching binary is copied to **`build/PGO-kitty-v3-889da671/`** (on the persistent `mdt-build-*`
-docker volume, 18 MB). To restore instead of spending ~9 min on `./build.sh pgo`:
+docker volume, 18 MB).
+
+### *** THE PRESERVED COPY IS INCOMPLETE — DO NOT RESTORE FROM IT ***
+
+Found 2026-10-14 13:50Z, before the chained resume launched. `build/PGO-kitty-v3-889da671/` holds
+**only `mtg` and `SRC_TREE`**, and this doc's original restore recipe copied exactly those two files.
+But `build/PGO` holds **TWO** binaries, and **the generation binary is the other one**:
 
 ```
-cp -p build/PGO-kitty-v3-889da671/mtg build/PGO-kitty-v3-889da671/SRC_TREE build/PGO/
+gen.log:  generation binary: ./build/PGO/mtg-analyze   (PGO+LTO; src tree 889da671...)
+```
+
+`harness_pgo_fresh` (`test/lib/harness.sh:60`) checks the stamp plus that **both binaries exist** —
+it never checks which src each one was built from. So the two-file restore would have left
+`mtg-analyze` built from the **Fungus** src (`4fb9a52b`) sitting under a `SRC_TREE` claiming
+`889da671`: a stamp that lies, and the generation running on an engine nobody chose. The resume gate
+would then refuse on `play_digest` and the night would be spent on nothing. ~~`cp -p
+build/PGO-kitty-v3-889da671/{mtg,SRC_TREE} build/PGO/`~~ — **not that.**
+
+**The rule: preserve and restore the WHOLE DIRECTORY, or rebuild.**
+
+```
+cp -a build/PGO build/PGO-<tag>-<srcstamp>          # preserving: -a, the whole dir, never cherry-picked files
+ls build/PGO-<tag>-<srcstamp>                       # restoring:  must list mtg AND mtg-analyze AND SRC_TREE
+cp -p build/PGO-<tag>-<srcstamp>/* build/PGO/
 cat build/PGO/SRC_TREE; git rev-parse HEAD:src      # must be equal, on the kitty branch
 ```
+
+Because the saved set here is incomplete, the 2026-10-14 chained resume **rebuilds**
+(`./build.sh pgo`, ~10-15 min on the kitty branch) rather than restoring, and then writes a
+**complete** set to `build/PGO-kitty-v3-889da671-complete/` so the next restore is legal.
+`logs/kitty_v3_resume/chain_round27_to_kitty.sh` implements this.
 
 **AND THIS DOC WAS STALE ON THE SHARED BRANCH, which is the trap worth recording.**
 `phase-1-2-deck-analyzer` carried the **2026-10-12 CANCELLED** version -- a 14.6 h journal, no
