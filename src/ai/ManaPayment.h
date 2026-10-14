@@ -86,6 +86,11 @@ void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>&
 bool CastOrderLessRanked(const GameState& state, const Action& a, int key_a,
                                                  const Action& b, int key_b);
 
+// The FIXED tie-break of a TOTAL cast order (DecisionProvider::CastOrderTotal): card name, then the
+// tutor target, the own-target (a Natural Order's sacrificed creature) and X -- never plan / hand
+// order. Two casts it calls equal are interchangeable copies of one choice.
+bool CastOrderFixedKeyLess(const Action& a, const Action& b);
+
 // THE cast sort key: the provider RANK, with the card's natural main PHASE folded in as the
 // tie-break beneath it.
 //

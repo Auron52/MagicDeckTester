@@ -327,7 +327,7 @@ int GreedyLandChoiceIndex(const GameState& state)
     // in the scan: another land plays instead, or no land at all (the combo outvalues the drop).
     // Gated on the reset lever + both params in hand -> every other deck/state byte-identical.
     bool hold_top_consumer = false;
-    if (TopResolveEnabled())
+    if (TopResolveActive(state))
     {
         int wt_mv = -1, tt_mv = -1;
         for (const Card& c : ap.hand)

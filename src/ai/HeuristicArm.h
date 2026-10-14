@@ -63,11 +63,9 @@ enum Slot : int
     M2_KEY_COARSE,            // MTG_M2_KEY_COARSE         interior-m2 solve memo keys on the m2 dependency set
     M2_FIX_UNFILTERED,        // MTG_M2_FIX_UNFILTERED     fixpoint kill-scan probes ALL plans, not just projected-lethal
     M2_FIX_RESOLVE,           // MTG_M2_FIXPOINT=2         fixpoint mode 2: gated full re-solve on actionable draws
-    STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
+    STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-approved StompySurprise cast order (default ON 2026-10-14)
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
-    STOMPY_WT_LITERAL,        // MTG_STOMPY_WT_LITERAL     tutor census = the USER's two consumers only
-    STOMPY_TT_LITERAL,        // MTG_STOMPY_TT_LITERAL     Turntimber always [7]=12, no post-tutor 15
     KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
     BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
@@ -463,6 +461,8 @@ enum Slot : int
     REPLICATE_SIG,            // MTG_REPLICATE_SIG the autonomous powerset dedup (EnumeratePlans' plan_signature) keys a PINNED replicate count (#R<k>, Hatchery Sliver). Without it every replicate-count class collapsed to its highest-valued member, so the on-board count fan -- fanned for the USER's no-greedy rule (2026-09-30) -- was picked by the ordering hint `eval += k * EvalCard`, never searched: "Cloudshredder with no copy, Muscle with one" was unfindable at any budget (docs/design/slivers-replicate-searched.md, onboard_split). Only slivers pins a count. Default ON; =0 -> the collapsed signature, byte-identical
     REPLICATE_PENDING,        // MTG_REPLICATE_PENDING the replicate count fan also covers a Sliver cast AFTER a SAME-PLAN Hatchery Sliver (a granter in hand, cast or Vial-put earlier in the plan): pinned k = 0..kmax beside the unpinned cast, and a subset that pins a count with no granter in it is rejected (its pin could never be granted: an exact duplicate of the unpinned cast). Without it that cast had only the unpinned variant, i.e. resolution's greedy max -- a greedy pick inside the search window that also decided WHICH post-Hatchery Sliver got the copies (resolution order). Search window only; human play and the greedy picker unchanged. Default ON; =0 -> byte-identical
     DRAW_HELD_DROP_REPLAY,    // MTG_DRAW_HELD_DROP_REPLAY the depth-0 executor PLAYS a land drop its provider held for a draw engine (DecisionProvider::LandDropAfterDrawEngine: treasure_hunt's "Treasure Hunt before the land drop") after this main's casts when the main cast no draw engine -- the only route that replayed it was the draw engine's second TakeTurn pass, so a main that cast Land's Edge alone lost the drop (cast-order probe A2: no land on T4, won T5; d3/d5/d8 win T4). A held drop the provider still holds as marginal Land's Edge ammo (HoldDeferredDropForLethal) stays held; a played one requests the second pass, which re-solves with its mana. Default ON; =0 -> the drop is lost, byte-identical to before (docs/design/treasure-hunt-land-rule-provider.md)
+    STOMPY_ORDER_SEARCH,      // MTG_STOMPY_ORDER_SEARCH (under MTG_STOMPY_ORDER) the four "either location" cards of the USER's StompySurprise order -- Worldly Tutor mid / late, Turntimber before / after the tutor, Natural Order early / late, World War Hulk early / late -- are SEARCHED two-way choices: the plan's slot (StompyProvider::ArrangeCastOrder) is the canonical first try and each such card present at its OTHER slot is one more candidate ordering (StompyProvider::CastOrderingCandidates; WantsCastOrderingSearch). USER: "can choose to cast either location". Search window only: the rollouts beyond the horizon and the d0 runner keep the canonical order. Default ON; =0 -> the canonical order alone
+    STOMPY_TOP_RESOLVE,       // MTG_STOMPY_TOP_RESOLVE (under MTG_STOMPY_ORDER) StompySurprise's opt-in to the tutor-to-TOP reset (MTG_TOP_RESOLVE; DecisionProvider::TopResolveOptIn, read through TopResolveActive): the USER's "Worldly Tutor resets Call of the Wild Activations and Turntimber" ships with the order, the global lever stays OFF for the other tutor_to_top decks. Default ON; =0 -> the order without the reset
     COUNT
 };
 
@@ -506,8 +506,6 @@ inline const char* Name(int slot)
         "MTG_STOMPY_ORDER",
         "MTG_SCALED_LAND_RANK",
         "MTG_TOP_RESOLVE",
-        "MTG_STOMPY_WT_LITERAL",
-        "MTG_STOMPY_TT_LITERAL",
         "MTG_KE_CONDEMN",
         "MTG_BP_CONDEMN_TAIL_EXEMPT",
         "MTG_BP_CONDEMN_ORDER_AWARE",
@@ -881,6 +879,8 @@ inline const char* Name(int slot)
         "MTG_REPLICATE_SIG",
         "MTG_REPLICATE_PENDING",
         "MTG_DRAW_HELD_DROP_REPLAY",
+        "MTG_STOMPY_ORDER_SEARCH",
+        "MTG_STOMPY_TOP_RESOLVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

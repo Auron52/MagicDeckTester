@@ -997,6 +997,9 @@ inline bool BpRecordVialEnabled()
 // With enough mana the search can loop it across copies (tutor {G} + activation {2}{G}{G} per
 // fatty). Read by the rollout apply (TurnSolver arming) and the executor's draw-engine
 // classification (AIEngine note_draw_engine + is_draw_engine) -- shared reader, lockstep pair.
+// EVERY site reads it through TopResolveActive(state) (DecisionProviders.h) = this global lever OR
+// the deck's opt-in (DecisionProvider::TopResolveOptIn): StompySurprise ships the reset with its USER
+// order (MTG_STOMPY_TOP_RESOLVE, 2026-10-14) while this global default stays OFF for every other deck.
 inline bool TopResolveEnabled()
 {
     // Per-job overridable (heurarm) so the ORDER and the ORDER+LOOP arms of the StompySurprise

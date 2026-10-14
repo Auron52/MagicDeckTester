@@ -42151,7 +42151,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // continuation must re-arm the loop (USER: "a do-while loop. That continues as long
             // as we cast Tutors") -- and it must do so in BOTH recording and scoring modes, or
             // the committed script and the scored line diverge on multi-tutor chains.
-            if (TopResolveEnabled() && def.params.tutor_to_top && !s_human_play)
+            if (TopResolveActive(state) && def.params.tutor_to_top && !s_human_play)
             { deferred_cantrip_resolve = true; deferred_top_rearm = true;
               deferred_cantrip_site = &def; deferred_hand_before.clear(); }
         }
@@ -50854,7 +50854,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         {
             if (AcqResolveEnabled() && (d->params.tutor_to_hand || d->params.damage_equals_top_mv))
             { mask |= 1 << 3; }
-            if (TopResolveEnabled() && d->params.tutor_to_top) { mask |= 1 << 3; }
+            if (TopResolveActive(state) && d->params.tutor_to_top) { mask |= 1 << 3; }
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
         // CASCADE -- the breakpoint belongs to a card this plan does not name and cannot see

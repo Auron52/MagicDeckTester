@@ -2338,6 +2338,25 @@ public:
     // MTG_LEGACY_CAST_TIER_ORDER=1 is the global hatch for a byte-identical A/B.
     virtual bool CastCheapestFirstWithinTier() const { return true; }
 
+    // CastOrderTotal -- the deck's cast order is TOTAL: two DIFFERENT casts that tie on rank (and on
+    // the cheapest-first accelerant key above) are ordered by a FIXED key (CastOrderFixedKeyLess:
+    // card name, then the tutor target, the own-target and X), never by plan / hand order. USER
+    // 2026-10-14 (StompySurprise): "Let's fully order the cards in each list inasmuch as possible.
+    // I don't like the randomness of choosing the order." A rank tie is decided by the order the
+    // enumerator met the cards in hand, which nothing searches -- so where the order matters it is
+    // an unchosen order, and where it does not (identical text) a fixed key costs nothing. Read by
+    // the one shared comparator (CastOrderLessRanked), so executor and rollout agree. Default false
+    // -> plan order breaks the tie, byte-identical for every deck that does not opt in.
+    virtual bool CastOrderTotal() const { return false; }
+
+    // TopResolveOptIn -- this deck ships the tutor-to-TOP reset (MTG_TOP_RESOLVE, EngineFlags.h) as
+    // its own default without flipping the global lever: every reader goes through
+    // TopResolveActive(state) (DecisionProviders.h) = the global lever OR this opt-in, so the
+    // executor and the rollout read one answer per game. StompySurprise opts in with its USER order
+    // (the reset is half of that design). Default false -> byte-identical for every other deck,
+    // including the other tutor_to_top decks (Enlightened Tutor, Giant Harbinger, Forerunner).
+    virtual bool TopResolveOptIn() const { return false; }
+
     // Float-colour collapse for "add N mana of ANY ONE colour" effects (HEURISTIC, provider-owned; NOT
     // byte-identical). These effects emit one cast/sac variant PER candidate colour, and with several Lotus
     // Blooms + Apex in play the per-colour fan-out is the top enumeration driver (branch-stats: up to

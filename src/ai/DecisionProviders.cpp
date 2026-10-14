@@ -25986,17 +25986,17 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
 // route, "cheaper and doesn't waste a card" -- or a spare Turntimber cast), the tutored Hoof
 // arrives hasted through the consumer and swings this turn. Same census idiom and pump formula as
 // TutorCandidates' rank_threat (n^2 + n + 5 on top of the counted base power; under-counting is
-// the safe direction). Gated on TopResolveEnabled(): without the reset the continuation never
-// happens and the projection would be fiction.
+// the safe direction). Gated on TopResolveActive (the global lever or the deck's opt-in): without
+// the reset the continuation never happens and the projection would be fiction.
 bool StompyProvider::HasExtraLethalModel() const
 {
-    return TopResolveEnabled();
+    return TopResolveEnabled() || TopResolveOptIn();
 }
 
 int StompyProvider::ExtraLethalDamage(const GameState& s,
                                       const std::vector<const CardDefinition*>& casting) const
 {
-    if (!TopResolveEnabled()) { return 0; }
+    if (!TopResolveActive(s)) { return 0; }
     const CardDefinition* wt = nullptr;
     const CardDefinition* call_in_plan = nullptr;   // Call def: its CAST or its activation action
     int cast_mv = 0, cast_creatures = 0, tt_in_plan = 0;
@@ -26088,213 +26088,360 @@ int StompyProvider::ExtraLethalDamage(const GameState& s,
     return pump_swing();
 }
 
-// MTG_STOMPY_ORDER -- the USER-PROPOSED StompySurprise cast order (2026-08-21, proposal recorded
-// verbatim in docs/design/cast-order-rankings.md). DEFAULT OFF pending measurement (the
-// heuristic-optimization loop: sweep the suite, report, adopt on approval -- on adoption this
-// becomes a default-on read with an off switch, like the adopted per-deck rules).
+// MTG_STOMPY_ORDER -- the USER's StompySurprise cast order. Proposed by the USER 2026-08-21 (verbatim in
+// docs/design/cast-order-rankings.md §StompySurprise), re-drafted 2026-10-14 against today's list
+// (docs/design/cast-order-drafts-2026-10-14/StompySurprise.md) and APPROVED by the USER the same day:
+// "Let's try out your stompy suggestion. It seems pretty close to what I was looking for and we can fix
+// any issues that show up." Then made TOTAL (USER, same day): "Let's fully order the cards in each list
+// inasmuch as possible. I don't like the randomness of choosing the order." Measured in
+// docs/design/stompy-order-2026-10-14.md. =0 -> the generic tiers (and no Stompy TOP_RESOLVE opt-in),
+// byte-identical to the tree before this order existed.
 static bool StompyOrderEnabled()
 {
-    // Per-job overridable (heurarm) so both arms of the adoption A/B run in ONE pooled batch
-    // rather than one batch per arm -- unset everywhere => the env default, byte-identical.
-    static const bool on = EnvOn("MTG_STOMPY_ORDER");   // default OFF; =1 enables (A/B lever)
+    // Per-job overridable (heurarm) so both arms of an A/B run in ONE pooled batch.
+    static const bool on = EnvOn("MTG_STOMPY_ORDER", true);   // DEFAULT ON; =0 -> the generic tiers
     return heurarm::Flag(heurarm::STOMPY_ORDER, on);
 }
 
-// LITERAL-ORDER PROBES (2026-08-25). The gate-2 failure asks a question the USER put first: are we
-// failing to implement their written order, or did their order miss a case? Two clauses in the rank
-// below are ENGINE ADDITIONS beyond the verbatim list in docs/design/cast-order-rankings.md, and
-// each one is what flips a sampled counterexample. These levers restore the written list so the two
-// hypotheses can be told apart by measurement instead of by reading.
-//
-// MTG_STOMPY_WT_LITERAL -- the tutor's mid-vs-last census counts ONLY the two consumers the USER
-// named ("resets Call of the Wild Activations and Turntimber"). The shipped census also counts an
-// enters-draw engine (Vaultborn, own_creature_enters_draw), which the written [9] never mentions.
-// Counterexample s1500000g137 T4: the set is {Worldly Tutor, Vaultborn Tyrant}; the rank casts the
-// tutor first (14 < 16) and wins T6, the searched order casts Vaultborn first and wins T5. Under the
-// literal census the tutor has no consumer, ranks 24, and casts last -- the winning order.
-static bool StompyWtLiteral()
+// MTG_STOMPY_ORDER_SEARCH -- the four "either location" cards (Worldly Tutor mid / late, Turntimber
+// before / after the tutor, Natural Order early / late, World War Hulk early / late) are SEARCHED two-way
+// choices: the USER's slot (read off the plan, ArrangeCastOrder) is the canonical first try, and each
+// such card present at its OTHER slot is one more candidate ordering the search scores
+// (CastOrderingCandidates). The USER's own text: "can choose to cast either location". The rollouts
+// beyond the horizon and the depth-0 runner keep the canonical order (the ordering expansion lives in
+// the searched plan list only). DEFAULT ON; =0 -> the canonical order alone (the dual slots become a
+// prune, which is what failed gate 2 in 2026-08).
+static bool StompyOrderSearchEnabled()
 {
-    static const bool on = EnvOn("MTG_STOMPY_WT_LITERAL");
-    return heurarm::Flag(heurarm::STOMPY_WT_LITERAL, on);
+    static const bool on = EnvOn("MTG_STOMPY_ORDER_SEARCH", true);   // DEFAULT ON; =0 -> canonical only
+    return heurarm::Flag(heurarm::STOMPY_ORDER_SEARCH, on);
 }
 
-// MTG_STOMPY_TT_LITERAL -- Turntimber keeps the USER's single [7] position (rank 12) and never takes
-// the post-tutor 15. Rank 15 is a later refinement (the gi47 root cause) that puts Turntimber AFTER
-// the tutor whenever one is held and the top is unstacked; the written list puts [7] BEFORE [9].
-// Counterexample s1000000g444 T3: the set is {Worldly Tutor, Turntimber, Mirri's Guile}; the rank
-// casts the tutor first and wins T5, the searched order consumes the unstacked top with Turntimber
-// FIRST and wins T4 -- i.e. the USER's original 12-before-14.
-static bool StompyTtLiteral()
+// MTG_STOMPY_TOP_RESOLVE -- the deck's opt-in to the tutor-to-TOP reset (MTG_TOP_RESOLVE, EngineFlags.h),
+// read through TopResolveActive. The USER's [9] "Worldly Tutor (resets Call of the Wild Activations and
+// Turntimber when cast)": the order's Turntimber-after-the-tutor slot is only half a design without it
+// (2026-08-25: the order and the reset measured best TOGETHER). Shipped as a per-deck opt-in so the other
+// tutor_to_top decks (Enlightened Tutor, Giant Harbinger, Forerunner of the Coalition) are untouched.
+// Live only with the order. DEFAULT ON; =0 -> the order without the reset.
+static bool StompyTopResolveEnabled()
 {
-    static const bool on = EnvOn("MTG_STOMPY_TT_LITERAL");
-    return heurarm::Flag(heurarm::STOMPY_TT_LITERAL, on);
+    static const bool on = EnvOn("MTG_STOMPY_TOP_RESOLVE", true);   // DEFAULT ON; =0 -> no reset
+    return heurarm::Flag(heurarm::STOMPY_TOP_RESOLVE, on);
 }
+
+bool TopResolveActive(const GameState& s)
+{
+    return TopResolveEnabled() || ResolveProvider(s).TopResolveOptIn();
+}
+
+namespace
+{
+// The ranks (LOWER = earlier), x100 so the dual slots and the fatty group fit between the USER's tiers.
+// [n] = the USER's 2026-08-21 tier number.
+constexpr int kStompyElf1       = 300;    // [1]  Elvish Mystic = Fyndhorn Elves = Llanowar Elves
+constexpr int kStompySolRing    = 500;    // [2]
+constexpr int kStompyPriest     = 600;    // [3]
+constexpr int kStompyArchdruid  = 700;    // [4]
+constexpr int kStompyCall       = 800;    // [5]  the cast; activations trail every cast
+constexpr int kStompyTTBefore   = 1200;   // [7]  Turntimber on the CURRENT top (its default)
+constexpr int kStompyNOEarly    = 1300;   // [8]  Natural Order, only before a mid tutor
+constexpr int kStompyWTMid      = 1400;   // [9]  Worldly Tutor, only when a Turntimber takes its card
+constexpr int kStompyTTAfter    = 1500;   // [7]' Turntimber on the tutor's stacked card
+constexpr int kStompyVaultborn  = 1600;   // [10]
+constexpr int kStompyGhalta     = 1700;   //      NEW (09-17 list)
+constexpr int kStompyHulkEarly  = 1750;   //      NEW, no Craterhoof / Ghalta in hand
+constexpr int kStompyFatty      = 1800;   // [11] + 10 x mana value - 1 for a token maker
+constexpr int kStompyTerastodon = 1990;   // [11] last of the group
+constexpr int kStompyNOLate     = 2000;   // [12] the DEFAULT Natural Order
+constexpr int kStompyHulkLate   = 2050;   //      NEW, a Craterhoof / Ghalta in hand
+constexpr int kStompyHoof       = 2100;   // [14] last for maximum pump
+constexpr int kStompyGuile      = 2200;   //      Mirri's Guile (not in the 09-17 list)
+constexpr int kStompyWTLate     = 2400;   // [14]' the DEFAULT Worldly Tutor: next turn's draw / upkeep Call
+
+// World War Hulk's chapter I frees a creature from HAND, so its slot reads the hand: late (after every
+// body, before a hard-cast Craterhoof) when a team pump or a hand-deployer is there to free, else early.
+bool StompyHulkLateByHand(const GameState& s)
+{
+    for (const Card& hc : s.players[s.active_player_index].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd && (hd->params.etb_team_pump_per_creature || hd->params.etb_put_creature_cards_from_hand))
+        { return true; }
+    }
+    return false;
+}
+
+const CardDefinition* StompyDefOf(const Action& a)
+{
+    return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+}
+
+bool StompyIsCast(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land;
+}
+
+// The four dual-position classes, by param.
+enum StompyDual : unsigned { kDualWT = 1u, kDualTT = 2u, kDualNO = 4u, kDualHulk = 8u };
+unsigned StompyDualClass(const CardParams& p)
+{
+    if (p.tutor_to_top)                                 { return kDualWT; }
+    if (p.look_top_put_creature_count > 0)              { return kDualTT; }
+    if (p.tutor_to_battlefield_single)                  { return kDualNO; }
+    if (!p.saga_ch1_free_cast_creature_colors.empty())  { return kDualHulk; }
+    return 0u;
+}
+}   // namespace
 
 int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!StompyOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
     const CardParams& p = def.params;
-    // The USER's tiers (their numbering in [brackets]). All param-derived, no names. Three of the
-    // fourteen cannot be expressed by a cast rank and are OPEN ITEMS in the rankings doc: [6]
-    // Call-of-the-Wild activations (the executor dispatches every activation AFTER every cast --
-    // right for the tutor->activation compose, inexpressible for activate-on-the-unknown-top-
-    // BEFORE-the-tutor lines), the [9] "Worldly Tutor resets the top-consumers" re-enable (needs
-    // a breakpoint-style re-solve, not an order), and the UPKEEP Call activation (pre-draw window
-    // so a late tutor's target is dumped into play for 4 instead of drawn -- not modelled yet).
-    if (p.tutor_to_top)
-    {
-        // [9 vs 14] Worldly Tutor casts MID-turn only when something can still consume the
-        // tutored top AFTER it resolves this turn: a Call activation (trails every cast) or an
-        // enters-draw engine (Vaultborn -- on the battlefield watching, or in hand to cast later
-        // at 16). Otherwise it is the turn's LAST cast, setting up next turn's upkeep/draw
-        // ("can choose to cast either location").
-        // StompyWtLiteral drops the enters-draw engine from BOTH censuses -- the USER's [9] names
-        // only Call activations and Turntimber. See the lever's note above.
-        const bool draw_engine_counts = !StompyWtLiteral();
-        bool consumer = false;
-        for (const Permanent& q : s.battlefield)
-        {
-            if (q.controller_index != s.active_player_index) { continue; }
-            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-            if (qd && (qd->params.activated_reveal_top_cost.has_value()
-                       || (draw_engine_counts && qd->params.own_creature_enters_draw > 0)))
-            { consumer = true; break; }
-        }
-        if (!consumer)
-        {
-            // Hand consumers include a Turntimber (look_top): it now ranks 15 -- AFTER this 14 --
-            // exactly so the {tutor, Turntimber} pair composes; without counting it here a
-            // Call-less/Vaultborn-less hand would send the tutor to 24 (after 15) and break it.
-            // Under TT_LITERAL Turntimber sits at 12 (BEFORE this 14), so a hand Turntimber is no
-            // longer a reason to cast the tutor mid -- it already precedes us.
-            // Independent of WT_LITERAL: the USER's [9] DOES name Turntimber as a consumer, so a
-            // hand Turntimber keeps counting there. Only TT_LITERAL (which moves it to 12, ahead of
-            // us) removes the reason. Keeping the two levers separable is the point of the probe.
-            const bool hand_tt_counts = !StompyTtLiteral();
-            for (const Card& hc : s.players[s.active_player_index].hand)
-            {
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (hd && (hd->params.activated_reveal_top_cost.has_value()
-                           || (draw_engine_counts && hd->params.own_creature_enters_draw > 0)
-                           || (hand_tt_counts && hd->params.look_top_put_creature_count > 0)))
-                { consumer = true; break; }
-            }
-        }
-        return consumer ? 14 : 24;
-    }
+    // All param-derived, no names (house style). The four "either location" cards return their DEFAULT
+    // slot here; the plan moves them (ArrangeCastOrder) and the search tries the other one
+    // (CastOrderingCandidates).
+    if (p.tutor_to_top)                    { return kStompyWTLate; }     // [14]' default: last cast
+    if (p.look_top_put_creature_count > 0) { return kStompyTTBefore; }   // [7] default: the current top
+    if (p.tutor_to_battlefield_single)     { return kStompyNOLate; }     // [12] default: full census
+    if (!p.saga_ch1_free_cast_creature_colors.empty())
+    { return StompyHulkLateByHand(s) ? kStompyHulkLate : kStompyHulkEarly; }
     if (def.tmpl == CardTemplate::ManaDork)
     {
-        // [1] 1-mana elves first ("Sol Ring can't fund these, but they can be funded by scaling
-        // elves if they are played early"); [3-4] scaling elves cheapest-first ("more elves can
-        // still be discounted and the cheapest is easiest to do this with").
+        // [1] 1-mana elves first ("Sol Ring can't fund these, but they can be funded by scaling elves if
+        // they are played early"); [3-4] scaling elves cheapest-first ("more elves can still be discounted
+        // and the cheapest is easiest to do this with"). The three 1-drops have identical text; the
+        // order's fixed key (CastOrderTotal) puts them by name.
         if (!p.mana_per_creature_subtype.empty())
-        { return def.card.m_mana_cost.ManaValue() <= 2 ? 6 : 7; }
-        return 3;
+        { return def.card.m_mana_cost.ManaValue() <= 2 ? kStompyPriest : kStompyArchdruid; }
+        return kStompyElf1;
     }
-    if (p.mana_rock && !def.card.IsCreature())   { return 5;  }  // [2] Sol Ring: funds almost everything else
-    if (p.activated_reveal_top_cost.has_value()) { return 8;  }  // [5] Call of the Wild (cast)
-    if (p.look_top_put_creature_count > 0)
-    {
-        // [7 vs post-tutor] Turntimber Symbiosis: rank 12 consumes the CURRENT top -- right when
-        // that top was intentionally stacked (a tutor already resolved this turn: upkeep Guile, an
-        // earlier pass's Worldly Tutor). But when an UNCAST tutor_to_top is still in HAND and the
-        // top is unstacked, a plan pairing {Worldly Tutor, Turntimber} at 12-before-14 executes
-        // Turntimber into seven blanks and leaves the tutor's stack with no consumer -- one
-        // Turntimber copy = the compose is dead (measured: d5 gi47's hold line realizes T4 under
-        // reset-only and T5 under the order flag for exactly this reason). USER: "they will almost
-        // certainly be better if Worldly Tutor was just cast" -- so it slots AFTER the mid tutor
-        // (15), and the re-solve loop still re-enables a second copy either way. Known edge, in
-        // the doc: with TWO Turntimbers + a tutor, both share rank 15, losing "spend #1 on the
-        // unknown top first"; the loop's pass structure, not the rank, is the route for that.
-        const bool stacked = (s.top_stacked_turn == s.turn_number);
-        if (!stacked && !StompyTtLiteral())
-        {
-            for (const Card& hc : s.players[s.active_player_index].hand)
-            {
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (hd && hd->params.tutor_to_top) { return 15; }
-            }
-        }
-        return 12;   // the USER's [7]; TT_LITERAL takes this branch unconditionally
-    }
-    if (p.tutor_to_battlefield_single)
-    {
-        // [8 vs 12] Natural Order (USER update, 2026-08-21): DEFAULT is LATE -- after the normal
-        // creatures, just before Craterhoof ("That would avoid us sacrificing creatures early and
-        // would allow us to drop a powerful Craterhoof with it"): the resolution-time sac-victim /
-        // fetch census sees the finished board (measured: NO-before-fatty cost gi106 27->17 and
-        // gi445 30->10 by starving the fetch census). The EARLY copy exists solely because "the
-        // only reason I stuck Natural order in its current spot is to avoid random shuffles before
-        // effects that deal with the top of the library" -- so it fires only when a mid-turn
-        // Worldly Tutor stack is live (a tutor_to_top in HAND and a top-consumer to follow -- the
-        // same census that gives the tutor rank 14): NO's shuffle must land BEFORE that stack, and
-        // any cast after the tutor precedes the trailing consumers. No live mid-tutor -> no stack
-        // to bury before rank 19 (a rank-24 tutor casts last, after us), so LATE is safe.
-        for (const Card& hc : s.players[s.active_player_index].hand)
-        {
-            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-            if (hd == nullptr || !hd->params.tutor_to_top) { continue; }
-            // LOCKSTEP with the tutor's rank-14 census above, including under the literal-order
-            // probes: the two MUST agree (see below), so both levers are read here identically.
-            const bool draw_engine_counts2 = !StompyWtLiteral();
-            const bool hand_tt_counts2     = !StompyTtLiteral();
-            bool consumer = false;
-            for (const Permanent& q : s.battlefield)
-            {
-                if (q.controller_index != s.active_player_index) { continue; }
-                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-                if (qd && (qd->params.activated_reveal_top_cost.has_value()
-                           || (draw_engine_counts2 && qd->params.own_creature_enters_draw > 0)))
-                { consumer = true; break; }
-            }
-            if (!consumer)
-            {
-                // Same census as the tutor's rank-14 test (incl. a hand Turntimber at 15) -- the
-                // two MUST agree, else a {tutor, Turntimber, Natural Order} hand ranks the tutor
-                // mid (14) while this sees "no consumer", goes late (19), and shuffles the stack.
-                for (const Card& hc2 : s.players[s.active_player_index].hand)
-                {
-                    const CardDefinition* hd2 = CardDatabase::Instance().LookupCached(hc2);
-                    if (hd2 && (hd2->params.activated_reveal_top_cost.has_value()
-                                || (draw_engine_counts2 && hd2->params.own_creature_enters_draw > 0)
-                                || (hand_tt_counts2 && hd2->params.look_top_put_creature_count > 0)))
-                    { consumer = true; break; }
-                }
-            }
-            if (consumer) { return 13; }   // early: shuffle before the live tutor stack
-            break;
-        }
-        return 19;                         // late: full-census fetch, right before Craterhoof
-    }
-    if (p.etb_team_pump_per_creature)            { return 20; }  // [12] Craterhoof: last for maximum pump
+    if (p.mana_rock && !def.card.IsCreature())   { return kStompySolRing; }   // [2] funds almost everything else
+    if (p.activated_reveal_top_cost.has_value()) { return kStompyCall; }      // [5] Call of the Wild (cast)
+    if (p.etb_team_pump_per_creature)            { return kStompyHoof; }      // [14] Craterhoof: maximum pump
+    // Ghalta puts every creature card in hand onto the battlefield: anything hard-cast before it spent mana
+    // it would have saved, and a Craterhoof it puts enters with the team and counts it. After Vaultborn,
+    // which draws off its entries.
+    if (p.etb_put_creature_cards_from_hand)      { return kStompyGhalta; }
     if (p.own_creature_enters_draw > 0
-        && def.card.IsCreature())                { return 16; }  // [10] drawing creature (Vaultborn)
-    if (p.upkeep_reorder > 0)                    { return 22; }  // [13] Mirri's Guile: irrelevant this turn
-    if (def.card.IsCreature())                   { return 18; }  // [11] normal fatties: order doesn't matter
-    return GenericProvider::CastOrderRank(s, def);
+        && def.card.IsCreature())                { return kStompyVaultborn; } // [10] drawing creature
+    if (p.upkeep_reorder > 0)                    { return kStompyGuile; }     // Mirri's Guile: irrelevant this turn
+    if (def.card.IsCreature())
+    {
+        // [11] "Normal creatures, order doesn't matter" -- made TOTAL by a stated rule (USER 2026-10-14):
+        //   * Terastodon LAST: its ETB destroys up to three of OUR noncreature permanents for 3/3
+        //     Elephants, TAPPED ones first (SpellEffects: Forests, then other lands, Sol Ring, other
+        //     noncreatures, Call of the Wild last) -- after the rest of the group has tapped what it pays
+        //     with, more of what it eats is already spent;
+        //   * the rest CHEAPEST FIRST (Elderscale 7, Apex 9, Worldspine 11): a cast the line cannot pay
+        //     after all is then the dearest one, not a cheap body behind it;
+        //   * at equal mana value a token maker first (Hornet Queen before Elderscale): more bodies.
+        // None of them reads another's entry (the Insects and Elephants are below power 4, so Vaultborn
+        // draws nothing off them); every card that reads them comes later.
+        if (p.etb_destroy_own_noncreature_max > 0) { return kStompyTerastodon; }
+        const int mv = std::min(18, def.card.m_mana_cost.ManaValue());
+        return kStompyFatty + 10 * mv - (p.etb_self_creates_tokens > 0 ? 1 : 0);
+    }
+    // Not in the list: the generic tier, after the authored tier of the same hundred.
+    return GenericProvider::CastOrderRank(s, def) * 100 + 99;
+}
+
+int StompyProvider::CastOrderRankLatest(const GameState& s, const CardDefinition& def) const
+{
+    // The late end of a dual card's two slots (breakpoint condemnation reads it: a card is condemned at a
+    // site only when even its latest position precedes the site).
+    if (StompyOrderEnabled())
+    {
+        switch (StompyDualClass(def.params))
+        {
+            case kDualWT:   return kStompyWTLate;
+            case kDualTT:   return kStompyTTAfter;
+            case kDualNO:   return kStompyNOLate;
+            case kDualHulk: return kStompyHulkLate;
+            default:        break;
+        }
+    }
+    return CastOrderRank(s, def);
+}
+
+bool StompyProvider::CastOrderTotal() const { return StompyOrderEnabled(); }
+
+bool StompyProvider::TopResolveOptIn() const { return StompyOrderEnabled() && StompyTopResolveEnabled(); }
+
+bool StompyProvider::WantsCastOrderingSearch() const
+{
+    return StompyOrderEnabled() && StompyOrderSearchEnabled();
+}
+
+// THE DUAL SLOTS READ THE PLAN, not the hand (the documented over-trigger of the 08-21 rank: "an UNCAST
+// hand tutor still forces NO early"):
+//   * Worldly Tutor MID only when a Turntimber IN THE PLAN takes the stacked card (USER [9]). A Call of
+//     the Wild activation is served by the late tutor -- activations trail every cast -- and Vaultborn is
+//     not a consumer (the agent-added clause, measured 2 better : 0 worse to remove, is retired).
+//   * Turntimber AFTER the tutor exactly then ("they will almost certainly be better if Worldly Tutor was
+//     just cast"); otherwise on the current top (USER [7]).
+//   * Natural Order EARLY only before a mid tutor, so its shuffle precedes the stack (USER [8]: "to avoid
+//     random shuffles before effects that deal with the top of the library"); otherwise late (USER [12]).
+//   * The top already STACKED this turn (an earlier pass's tutor, its card still on top): Turntimber
+//     consumes it where it stands, and the tutor has no Turntimber after it, so it goes late.
+//   * World War Hulk reads the HAND (its chapter I frees a hand card): see StompyHulkLateByHand.
+StompyProvider::OrderSlots StompyProvider::CanonicalOrderSlots(const GameState& s,
+                                                               const std::vector<Action>& acts,
+                                                               const std::vector<int>& order) const
+{
+    int n_wt = 0, n_tt = 0;
+    for (int i : order)
+    {
+        if (!StompyIsCast(acts[i])) { continue; }
+        const CardDefinition* d = StompyDefOf(acts[i]);
+        if (d == nullptr) { continue; }
+        if (d->params.tutor_to_top)                    { ++n_wt; }
+        if (d->params.look_top_put_creature_count > 0) { ++n_tt; }
+    }
+    const Player& ap = s.players[s.active_player_index];
+    const bool stacked = s.top_stacked_turn == s.turn_number && !ap.library.empty()
+                      && ap.library.front().m_number == s.top_stacked_card_number;
+    OrderSlots S;
+    S.wt_mid    = n_wt > 0 && n_tt > 0 && !stacked;
+    S.tt_after  = S.wt_mid;
+    S.no_early  = S.wt_mid;
+    S.hulk_late = StompyHulkLateByHand(s);
+    return S;
+}
+
+int StompyProvider::SlotRank(const GameState& s, const CardDefinition& d, const OrderSlots& S) const
+{
+    switch (StompyDualClass(d.params))
+    {
+        case kDualWT:   return S.wt_mid    ? kStompyWTMid    : kStompyWTLate;
+        case kDualTT:   return S.tt_after  ? kStompyTTAfter  : kStompyTTBefore;
+        case kDualNO:   return S.no_early  ? kStompyNOEarly  : kStompyNOLate;
+        case kDualHulk: return S.hulk_late ? kStompyHulkLate : kStompyHulkEarly;
+        default:        return CastOrderRank(s, d);
+    }
+}
+
+void StompyProvider::SortBySlots(const GameState& s, const std::vector<Action>& acts,
+                                 std::vector<int>& order, const OrderSlots& S) const
+{
+    // Only a plain cast set is re-sorted (every action this deck's plans order); anything else keeps the
+    // comparator's order.
+    std::vector<int> key(acts.size(), 0);
+    for (int i : order)
+    {
+        const CardDefinition* d = StompyDefOf(acts[i]);
+        if (!StompyIsCast(acts[i]) || d == nullptr) { return; }
+        key[static_cast<std::size_t>(i)] = CastOrderKey(s, d, SlotRank(s, *d, S));
+    }
+    // TOTAL: rank, then the fixed key -- never plan / hand order (two casts the fixed key calls equal are
+    // copies of one choice).
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    {
+        const int kx = key[static_cast<std::size_t>(x)], ky = key[static_cast<std::size_t>(y)];
+        if (kx != ky) { return kx < ky; }
+        return CastOrderFixedKeyLess(acts[x], acts[y]);
+    });
+}
+
+// The set-level half of the order: the comparator sorted by each card's DEFAULT slot; this moves the dual
+// cards to the slot the PLAN gives them. Called at every site that realises a cast order (executor main
+// plan + continuation, rollout apply, the payability walks), so they agree. A searched ordering
+// (Plan::searched_order) replays its vector order instead -- that is how the other slot is played.
+void StompyProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                      std::vector<int>& order) const
+{
+    if (!StompyOrderEnabled() || order.size() < 2) { return; }
+    SortBySlots(s, acts, order, CanonicalOrderSlots(s, acts, order));
+}
+
+// The searched two-way slots (MTG_STOMPY_ORDER_SEARCH). The canonical order (the plan's slots) is tried
+// first, then ONE variant per dual-position card present, at its other slot, every other card where the
+// plan puts it; deduplicated by sequence here and by end state by the caller. Each candidate is finished
+// the way the un-searched apply finishes an order (range ladder, wipe recheck, payable-order fallback), so
+// the canonical candidate is the line an un-searched plan would have realised. A set with no dual card, or
+// whose variants all coincide with the canonical order, returns NO candidate: the base plan is kept as it
+// is (un-searched, canonical) and nothing is applied twice.
+bool StompyProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                            const std::vector<Action>& reorder,
+                                            std::vector<std::vector<int>>& out) const
+{
+    (void)plan_actions;
+    if (!StompyOrderEnabled()) { return false; }
+    out.clear();
+    const int n = static_cast<int>(reorder.size());
+    unsigned present = 0u;
+    for (const Action& a : reorder)
+    {
+        if (!StompyIsCast(a)) { continue; }
+        if (const CardDefinition* d = StompyDefOf(a)) { present |= StompyDualClass(d->params); }
+    }
+    if (present == 0u) { return true; }
+    std::vector<int> all(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) { all[static_cast<std::size_t>(i)] = i; }
+    const OrderSlots S0 = CanonicalOrderSlots(s, reorder, all);
+    auto build = [&](const OrderSlots& S)
+    {
+        std::vector<int> o = all;
+        SortBySlots(s, reorder, o, S);
+        ApplyCastOrderRangeLadder(s, reorder, o);
+        ApplyEnablerWipeRecheck(s, reorder, o);
+        ApplyPayableCastOrder(s, reorder, o);
+        return o;
+    };
+    auto same_sequence = [&](const std::vector<int>& x, const std::vector<int>& y)
+    {
+        if (x.size() != y.size()) { return false; }
+        for (std::size_t k = 0; k < x.size(); ++k)
+        {
+            const Action& ax = reorder[static_cast<std::size_t>(x[k])];
+            const Action& ay = reorder[static_cast<std::size_t>(y[k])];
+            if (CastOrderFixedKeyLess(ax, ay) || CastOrderFixedKeyLess(ay, ax)) { return false; }
+        }
+        return true;
+    };
+    out.push_back(build(S0));
+    for (const unsigned cls : { kDualTT, kDualNO, kDualWT, kDualHulk })
+    {
+        if ((present & cls) == 0u) { continue; }
+        OrderSlots S = S0;
+        if (cls == kDualWT)   { S.wt_mid    = !S.wt_mid; }
+        if (cls == kDualTT)   { S.tt_after  = !S.tt_after; }
+        if (cls == kDualNO)   { S.no_early  = !S.no_early; }
+        if (cls == kDualHulk) { S.hulk_late = !S.hulk_late; }
+        std::vector<int> o = build(S);
+        bool dup = false;
+        for (const std::vector<int>& prev : out) { if (same_sequence(prev, o)) { dup = true; break; } }
+        if (!dup) { out.push_back(std::move(o)); }
+    }
+    if (out.size() == 1) { out.clear(); }   // nothing to search: keep the base plan un-searched
+    return true;
 }
 
 const char* StompyProvider::CastOrderTierName(int rank) const
 {
     if (!StompyOrderEnabled()) { return nullptr; }
+    if (rank > kStompyFatty && rank < kStompyTerastodon)
+    { return "FATTY [11]: cheapest first, a token maker first at equal cost (Hornet Queen before Elderscale)"; }
     switch (rank)
     {
-        case 3:  return "1-MANA ELF: first (Sol Ring can't fund {G}; early elves feed the scalers)";
-        case 5:  return "SOL RING: successfully funds almost everything else";
-        case 6:  return "SCALING ELF, cheapest first (Priest): later elves still get the discount";
-        case 7:  return "SCALING ELF (Archdruid): after the cheaper scaler";
-        case 8:  return "CALL OF THE WILD: down before the cheat-outs (activations trail every cast)";
-        case 12: return "TURNTIMBER SYMBIOSIS: cheat-out before the hand fatties";
-        case 13: return "NATURAL ORDER (early): shuffle must land before the live tutor's stack";
-        case 14: return "WORLDLY TUTOR (mid): a live top-consumer follows (Call activation / enters-draw)";
-        case 15: return "TURNTIMBER SYMBIOSIS (post-tutor): a held tutor stacks first, then this consumes it";
-        case 16: return "DRAWING CREATURE (Vaultborn): right after the tutor -- the draw IS the tutored card";
-        case 18: return "FATTY: order doesn't matter";
-        case 19: return "NATURAL ORDER (late): full board census -- don't sac early, fetch can be the hoof";
-        case 20: return "CRATERHOOF: last for maximum pump";
-        case 22: return "MIRRI'S GUILE: irrelevant for this turn";
-        case 24: return "WORLDLY TUTOR (late): set next turn's upkeep/draw (upkeep Call = dump it for 4)";
-        default: return nullptr;
+        case kStompyElf1:       return "1-MANA ELF [1]: first (Sol Ring can't fund {G}; early elves feed the scalers) -- identical text, by name";
+        case kStompySolRing:    return "SOL RING [2]: successfully funds almost everything else";
+        case kStompyPriest:     return "SCALING ELF [3], cheapest first (Priest): later elves still get the discount";
+        case kStompyArchdruid:  return "SCALING ELF [4] (Archdruid): after the cheaper scaler";
+        case kStompyCall:       return "CALL OF THE WILD [5]: down before the cheat-outs (activations trail every cast)";
+        case kStompyTTBefore:   return "TURNTIMBER [7] on the current top (default; SEARCHED vs after the tutor)";
+        case kStompyNOEarly:    return "NATURAL ORDER [8] early: only before a mid tutor in the plan (SEARCHED vs late)";
+        case kStompyWTMid:      return "WORLDLY TUTOR [9] mid: only when a Turntimber in the plan takes its card (SEARCHED vs late)";
+        case kStompyTTAfter:    return "TURNTIMBER [7] after the tutor: the plan's mid tutor stacks, then this consumes it";
+        case kStompyVaultborn:  return "DRAWING CREATURE [10] (Vaultborn): draws off every later power-4+ entry";
+        case kStompyGhalta:     return "GHALTA: puts every creature card in hand onto the battlefield (a put Craterhoof counts the team)";
+        case kStompyHulkEarly:  return "WORLD WAR HULK early: no Craterhoof / Ghalta in hand -- chapter I frees the biggest body first (SEARCHED vs late)";
+        case kStompyTerastodon: return "FATTY [11] Terastodon: LAST of the group -- its ETB eats our TAPPED permanents for Elephants";
+        case kStompyNOLate:     return "NATURAL ORDER [12] late (default): full board census -- don't sac early, fetch can be the hoof";
+        case kStompyHulkLate:   return "WORLD WAR HULK late: a Craterhoof / Ghalta in hand -- frees it after every body (SEARCHED vs early)";
+        case kStompyHoof:       return "CRATERHOOF [14]: last for maximum pump";
+        case kStompyGuile:      return "MIRRI'S GUILE: irrelevant for this turn";
+        case kStompyWTLate:     return "WORLDLY TUTOR [14'] late (default): next turn's draw / upkeep Call (SEARCHED vs mid)";
+        default:                return nullptr;
     }
 }
 
