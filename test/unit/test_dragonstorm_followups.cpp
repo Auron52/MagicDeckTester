@@ -737,3 +737,83 @@ TEST_CASE("Dragon order, apply level: Lathliss before the other Dragon makes the
         CHECK(tokens == (lath_first ? 1 : 0));
     }
 }
+
+namespace
+{
+bool PlanHasSpliceFu(const TurnSolver::Plan& p)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.splice_count > 0) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("d0 runner: a spliced subset no legal order pays in full is refused (MTG_DRAGONSTORM_D0_SPLICE_REFUSE)")
+{
+    // Regression d0 s2857 gi855 T2, on two Mountains: {Seething Song, Desperate+splice, Desperate+splice,
+    // Desperate, Dragonstorm} with three Desperates in hand. The order-free totals admit it -- the only order
+    // that funds Seething casts a plain Desperate FIRST and then splices a copy that has left the hand. The
+    // legal arrangement (the two spliced casts before the plain one) fails at its first cast, Seething, and
+    // the payable fallback finds nothing legal either. The old test refuses only a failure AT a spliced cast,
+    // so the d0 runner committed the set and cast one plain Desperate for nothing.
+    ArmFu user(heurarm::DRAGONSTORM_USER_ORDER, true);
+    const GameState s = BoardFu({ "Mountain", "Mountain" },
+        { "Seething Song", "Desperate Ritual", "Desperate Ritual", "Desperate Ritual", "Dragonstorm" }, 2);
+    const std::vector<Action> cands = { CastFu(s, "Seething Song"), CastFu(s, "Desperate Ritual", 1),
+                                        CastFu(s, "Desperate Ritual", 1), CastFu(s, "Desperate Ritual"),
+                                        CastFu(s, "Dragonstorm") };
+    const std::vector<int> all = { 0, 1, 2, 3, 4 };
+    // A spliced set that DOES pay in a legal order (four Mountains, two copies: spliced first 4 -> 6 red,
+    // then the plain copy 2 -> +3) and a non-spliced set that does not pay at all (Seething on two lands).
+    const GameState s4 = BoardFu({ "Mountain", "Mountain", "Mountain", "Mountain" },
+                                 { "Desperate Ritual", "Desperate Ritual", "Dragonstorm" }, 4);
+    const std::vector<Action> legal = { CastFu(s4, "Desperate Ritual", 1), CastFu(s4, "Desperate Ritual") };
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::DRAGONSTORM_D0_SPLICE_REFUSE, on);
+        // Outside the depth-0 runner (the search's rollouts and searched frames): the old test, either arm.
+        REQUIRE_FALSE(TurnSolver::InD0Runner());
+        CHECK(DsProvFu().OrderedSubsetRealisable(s, cands, all));
+        TurnSolver::GreedyPermit d0(TurnSolver::GreedySite::D0Runner, 0);
+        REQUIRE(TurnSolver::InD0Runner());
+        CHECK(DsProvFu().OrderedSubsetRealisable(s, cands, all) == !on);
+        CHECK(DsProvFu().OrderedSubsetRealisable(s4, legal, { 0, 1 }));       // a legal order pays: kept
+        CHECK(DsProvFu().OrderedSubsetRealisable(s, cands, { 0, 4 }));        // no splice: untouched
+    }
+    {
+        // A USER-order provider hook: with the USER order off the whole test is off.
+        ArmFu off(heurarm::DRAGONSTORM_USER_ORDER, false);
+        ArmFu arm(heurarm::DRAGONSTORM_D0_SPLICE_REFUSE, true);
+        TurnSolver::GreedyPermit d0(TurnSolver::GreedySite::D0Runner, 0);
+        CHECK(DsProvFu().OrderedSubsetRealisable(s, cands, all));
+    }
+}
+
+TEST_CASE("d0 runner: the gi855 hand on two lands does not commit the unpayable splice plan (MTG_DRAGONSTORM_D0_SPLICE_REFUSE)")
+{
+    // The same board through the d0 runner's own pick (TurnSolver::Solve under a D0Runner permit). With the
+    // lever off it commits a spliced plan whose legal order cannot pay (the executor then casts the plain
+    // Desperate alone); with it on, any spliced plan it still picks is paid in full by its realised order.
+    ArmFu user(heurarm::DRAGONSTORM_USER_ORDER, true);
+    GameState s = BoardFu({ "Mountain", "Mountain" },
+        { "Seething Song", "Desperate Ritual", "Desperate Ritual", "Desperate Ritual", "Dragonstorm" }, 2);
+    for (int k = 0; k < 4; ++k) { s.players[0].library[static_cast<std::size_t>(k)] = CardFu("Scourge of Valkas", 950 + k); }
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::DRAGONSTORM_D0_SPLICE_REFUSE, on);
+        const TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true,
+            TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, 0));
+        std::vector<int> ord;
+        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+        { if (plan.actions[i].kind == Action::Kind::CastFromHand) { ord.push_back(i); } }
+        std::stable_sort(ord.begin(), ord.end(),
+                         [&](int x, int y) { return CastOrderLess(s, plan.actions[x], plan.actions[y]); });
+        ApplyDeckCastArrangement(s, plan.actions, ord);
+        ApplyPayableCastOrder(s, plan.actions, ord);
+        const bool pays = ExactOrderFirstUnpayable(s, plan.actions, ord) < 0;
+        if (on) { CHECK((!PlanHasSpliceFu(plan) || pays)); }
+        else    { CHECK(PlanHasSpliceFu(plan)); CHECK_FALSE(pays); }   // the old commit: the waste
+    }
+}

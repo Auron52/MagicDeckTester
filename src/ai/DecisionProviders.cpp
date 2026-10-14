@@ -11298,7 +11298,8 @@ bool DragonstormProvider::CastUnderCastCap(const GameState& s, const CardDefinit
 //     that has left the hand (SubsetHasIllegalSplice counts copies, not the order; s7600052 T5).
 // Judged on the subset's own realised order -- the comparator, ArrangeCastOrder and the payable-order
 // fallback, exactly what the apply would do -- with the exact walk: refused only when that walk first
-// fails AT an Apex (with a restrictor in the set) or AT a spliced cast.
+// fails AT an Apex (with a restrictor in the set) or AT a spliced cast -- and, in the depth-0 runner only,
+// for a spliced subset wherever it fails (MTG_DRAGONSTORM_D0_SPLICE_REFUSE, below).
 // USER order rule 7 at the SUBSET (MTG_DRAGONSTORM_IRENCRAG_CLOSER, DragonstormIrencragCloserOn in
 // EngineFlags.h): a subset holding the restrictor needs a closer to spend its one remaining cast on --
 // unless it holds an Apex, whose exile may bring the closer (the post-Apex merge then decides, with the
@@ -11354,6 +11355,34 @@ bool DragonstormProvider::OrderedSubsetRealisable(const GameState& s0, const std
     const Action& f = cands[ord[fail]];
     const CardDefinition* fd = f.def ? f.def : CardDatabase::Instance().Lookup(f.card_name);
     if (f.splice_count > 0) { return false; }
+    // THE DEPTH-0 RUNNER: a spliced subset that no legal order pays IN FULL is refused wherever the walk
+    // fails (MTG_DRAGONSTORM_D0_SPLICE_REFUSE). The test above catches a failure AT the spliced cast; the
+    // common d0 shape fails EARLIER. {Seething, Desperate+splice x2, Desperate, Dragonstorm} on two lands
+    // (regression d0 s2857 gi855 T2): the totals admit it because the only order that funds Seething casts a
+    // plain Desperate first and then splices a copy already gone; the legal arrangement fails at Seething,
+    // so the d0 runner committed it, cast one plain Desperate for three red nothing spent, and lost the copy.
+    // Scoped to the d0 runner: the search's rollouts and searched frames keep the at-the-splice test.
+    // Measured 2026-10-14 (fresh seeds 10300001+, lever vs =0): d0 40,000 games 95 faster / 4 slower (-135),
+    // 2HG d0 10,000 11 / 1 (-16), every slower game recovers at stage 1; d3 b10 and shipped byte-identical.
+    // The verdict is the exact walk's: one known pessimism (an Unclaimed Territory spent on a noncreature
+    // generic while a later Kolaghan owes its {B}) refuses a plan the executor could pay -- see the doc.
+    if (spliced && TurnSolver::InD0Runner() && DragonstormD0SpliceRefuseOn())
+    {
+        if (UserOrderTraceOn())   // MTG_USER_ORDER_TRACE (diagnostic): which subsets the lever refuses
+        {
+            std::string seq;
+            for (int k : ord)
+            {
+                if (!seq.empty()) { seq += "|"; }
+                seq += cands[k].card_name.str();
+                if (cands[k].splice_count > 0) { seq += ":s" + std::to_string(cands[k].splice_count); }
+            }
+            std::fprintf(stderr, "[uo-d0-splice-refuse] gs=%llu t=%d pool=%d fail=%d card=%s seq=%s\n",
+                         static_cast<unsigned long long>(s.game_seed), s.turn_number,
+                         AvailableManaPool(s).Total(), fail, f.card_name.str().c_str(), seq.c_str());
+        }
+        return false;
+    }
     return !(restrictor && fd != nullptr && fd->params.impulse_exile > 0);
 }
 
