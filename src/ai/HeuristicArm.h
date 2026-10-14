@@ -368,6 +368,8 @@ enum Slot : int
     LEAF_GREEDY_D2,           // MTG_LEAF_GREEDY_D2  the beyond-horizon leaf is a GREEDY playout (fidelity 0) inside any commit-the-line pass of nominal depth >= 2; shallower passes keep the 1-ply leaf. See EffectiveFdLeafDepth (TurnSolver.cpp) for the evidence and the rule (default OFF)
     LEAF_GREEDY_D3,           // MTG_LEAF_GREEDY_D3  ...the same rule at depth >= 3 (default OFF; the threshold the Snow H-cell evidence points at)
     LEAF_GREEDY_D4,           // MTG_LEAF_GREEDY_D4  ...the same rule at depth >= 4 (default OFF)
+    LEAF_GREEDY_D3_UNL,       // MTG_LEAF_GREEDY_D3_UNL  ...the depth >= 3 rule, but ONLY in a pass whose budget is UNLIMITED (a budgeted d3 pass keeps the 1-ply leaf); composes with _D4 (default OFF)
+    LEAF_GREEDY_SHORT,        // MTG_LEAF_GREEDY_SHORT   ...and whichever depth rule is on applies only to a leaf that covers <= 2 turns before max_turns; a leaf carrying the evaluation further keeps the 1-ply lookahead (default OFF)
     COUNT
 };
 
@@ -697,6 +699,8 @@ inline const char* Name(int slot)
         "MTG_LEAF_GREEDY_D2",
         "MTG_LEAF_GREEDY_D3",
         "MTG_LEAF_GREEDY_D4",
+        "MTG_LEAF_GREEDY_D3_UNL",
+        "MTG_LEAF_GREEDY_SHORT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -90,6 +90,8 @@ static thread_local int t_search_leaf_first_turn_depth = -1;
 // The nominal depth of the commit-the-line PASS this thread is inside (the depth its outermost
 // FSLineWin node was entered with; -1 = not inside one). Set by FSLineWin's root node, RAII-restored.
 static thread_local int t_fs_pass_depth = -1;
+// ...and whether that pass runs on an UNLIMITED budget (MTG_LEAF_GREEDY_D3_UNL keys on it).
+static thread_local bool t_fs_pass_unlimited = false;
 // LEAF FIDELITY BY PASS DEPTH (MTG_LEAF_GREEDY_D2 / _D3 / _D4, per-job heurarm, default OFF): the
 // threshold K at or above which a pass's beyond-horizon leaf is a greedy playout; INT_MAX = rule off.
 // WHY A PASS-DEPTH RULE (Snow, 2026-10-13, paired per game, greedy leaf vs the 1-ply one, unbounded):
@@ -107,14 +109,33 @@ static int LeafGreedyFromDepth()
     static const bool e4 = EnvOn("MTG_LEAF_GREEDY_D4");
     if (heurarm::Flag(heurarm::LEAF_GREEDY_D2, e2)) { return 2; }
     if (heurarm::Flag(heurarm::LEAF_GREEDY_D3, e3)) { return 3; }
+    // WHY AN UNLIMITED-ONLY ARM: the any-budget depth-3 rule moved shipped play (fleet smoke shapes,
+    // held-out: 1 better / 29 worse of 7,385). Under a binding budget the cheap leaf lets the depth-3
+    // pass FINISH, and its commit replaces the depth-2 pass scored by the 1-ply leaf -- a trade the
+    // 1-ply leaf wins. With no budget there is no such substitution: every pass finishes, and Snow's
+    // H3 was identical on 83/83 paired games. Same scoping as the lazy leaf (unlimited budgets only).
+    static const bool e3u = EnvOn("MTG_LEAF_GREEDY_D3_UNL");
+    if (t_fs_pass_unlimited && heurarm::Flag(heurarm::LEAF_GREEDY_D3_UNL, e3u)) { return 3; }
     if (heurarm::Flag(heurarm::LEAF_GREEDY_D4, e4)) { return 4; }
     return std::numeric_limits<int>::max();
 }
-static inline int EffectiveFdLeafDepth()
+// MTG_LEAF_GREEDY_SHORT: the depth rule binds only a SHORT leaf -- one that covers <= 2 turns before
+// max_turns. WHY: the unbudgeted fleet read of the depth >= 4 rule lost 3 of 470 H4 games, all on the
+// two combo decks, and both traced to the same shape -- an early-turn decision (Hinata T1 Ponder,
+// Treasure Hunt T2 dig-before-land) whose window ends before the kill, so a leaf carrying 3-4 turns
+// decides the tie, and the greedy playout cannot see the combo the 1-ply leaf finds. The leaves that
+// make Snow's heavy games heavy are mid-game decisions whose leaf covers 1-2 turns.
+static bool LeafGreedyShortOnly()
+{
+    static const bool e = EnvOn("MTG_LEAF_GREEDY_SHORT");
+    return heurarm::Flag(heurarm::LEAF_GREEDY_SHORT, e);
+}
+static inline int EffectiveFdLeafDepth(int leaf_turn, int max_turns)
 {
     if (s_fd_leaf_depth_env != nullptr && *s_fd_leaf_depth_env) { return s_fd_leaf_depth; }
     if (t_search_leaf_depth >= 0) { return t_search_leaf_depth; }   // the deck's own setting wins
-    if (t_fs_pass_depth >= LeafGreedyFromDepth()) { return 0; }
+    if (t_fs_pass_depth >= LeafGreedyFromDepth()
+        && (!LeafGreedyShortOnly() || max_turns - leaf_turn + 1 <= 2)) { return 0; }
     return s_fd_leaf_depth;
 }
 TurnSolver::SearchLeafDepthScope::SearchLeafDepthScope(int depth, int first_turn_depth)
@@ -58140,7 +58161,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // rollout only CONSUMES the budget (enforce_budget is false inside), so it
         // never truncates -- the start gate alone reads the budget, between passes.
         GameState leaf = state;
-        int w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
+        int w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(state.turn_number, max_turns), max_turns, budget, cutoff, second_main, tt);
         g_fs_leaf_wt_sum += w;
         return { w, {} };
     }
@@ -58595,10 +58616,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // sets it: every node below is the same pass, and its leaves read the pass, not their own depth.
     struct FsPassDepthScope
     {
-        int saved;
-        FsPassDepthScope(bool root, int d) : saved(t_fs_pass_depth) { if (root) { t_fs_pass_depth = d; } }
-        ~FsPassDepthScope() { t_fs_pass_depth = saved; }
-    } _fs_pass(bp_root, depth);
+        int saved; bool saved_unl;
+        FsPassDepthScope(bool root, int d, bool unl) : saved(t_fs_pass_depth), saved_unl(t_fs_pass_unlimited)
+        { if (root) { t_fs_pass_depth = d; t_fs_pass_unlimited = unl; } }
+        ~FsPassDepthScope() { t_fs_pass_depth = saved; t_fs_pass_unlimited = saved_unl; }
+    } _fs_pass(bp_root, depth, budget == nullptr || budget->Unlimited());
     g_bp_root_enum = bp_root;
     groupwave::g_state.max_dropped = 0;   // reset; capture right after (nested scoring-time
                                           // enumerations would otherwise leak into it)
