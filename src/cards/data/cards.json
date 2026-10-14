@@ -6503,6 +6503,24 @@
    }
   },
   {
+   "name": "Cryptolith Rite",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Creatures you control have \"{T}: Add one mana of any color.\" [MODELLED BY REUSING BRIGHTCAP BADGER'S EXISTING GRANT, WHICH IS WHY THIS COSTS NO C++ -- granted_tap_mana_subtypes [Fungus, Saproling] + granted_tap_mana_color G hand every matching body a shared synthetic ManaDork face through ManaDefOf, the same machinery the Badger already runs in this very deck. That route is token-safe, summoning-sickness-correct and Concordant-Crossroads-aware for free, and it is already threaded through all of its call sites in BOTH the executor and the rollout. It is also cheap for the SEARCH rather than dear: the dup-collapse key is (CardDefinition pointer, storage_counters, storage_hold_this_turn, CounterList equality), so ONE shared face folds a dozen interchangeable Saprolings into a single class -- which is the opposite of the powerset-over-identical-bodies shape that is this deck's documented cost centre. Six per-colour faces would break that fold, which is exactly why the single-colour grant is the right screening shape. THIS IS THE ONLY CANDIDATE THAT CHANGES THE DECK'S CURVE RATHER THAN ITS CEILING, and the measured metric is average winning turn: twenty lands plus a dozen bodies tapping for mana is how a {3}{G}{G} Mycoloth or a {4}{G} Doubling Season arrives on turn three. [PARTIAL, and the two gaps both err in the SAFE direction -- a win here is trustworthy, a loss would have to be re-measured faithfully. (1) The grant is scoped to [Fungus, Saproling] instead of all creatures, which reaches 25 of candidate-b's 26 creature CARDS and 100% of its tokens; the single miss is Brightcap Badger itself (a Badger Druid). (2) \"any color\" is narrowed to {G}, so it cannot pay the three black pips in the list (Deathspore Thallid {1}{B}, Slimefoot {1}{B}{G}, and Deathbloom Thallid if that card is also in the arm). Both omissions REMOVE mana this card really provides, so the card is under-modelled, never over-modelled.] [KNOWN ENGINE DEFECT THIS CARD WOULD EXPOSE IN A FAITHFUL BUILD: LiveManaGrant short-circuits on the first grant source it finds, so with Cryptolith Rite AND Brightcap Badger on the battlefield, board ORDER would decide whose scope survives. Inert on the screening route above because the two grants are byte-identical; a faithful implementation must union-merge them.]]",
+   "template": "custom",
+   "parameters": {
+    "granted_tap_mana_subtypes": [
+     "Fungus",
+     "Saproling"
+    ],
+    "granted_tap_mana_color": "G"
+   }
+  },
+  {
    "name": "Overgrowth",
    "mana_cost": "{2}{G}",
    "types": [
@@ -8921,6 +8939,55 @@
    }
   },
   {
+   "name": "Yavimaya Sapherd",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, create a 1/1 green Saproling creature token. [FULLY MODELLED, JSON ONLY -- etb_self_creates_tokens 1 on the shared etb_created_token_* spec (the Nest Invader / Goblin Instigator pattern), fired from the ETB cascade in SpellEffects.h, which is reached from every entry route in BOTH worlds. Mandatory and untargeted, so there is nothing to surface to a human. The token goes through CreateToken, the chokepoint Doubling Season's token half hooks, so the deck's four Seasons make it 2/4/8/16 Saprolings; the BODY is not a token and is never doubled. TWO BODIES FOR THREE MANA IS THE WHOLE CARD, and both are lorded here: Sporecrown Thallid's subtypes_affected [Fungus, Saproling] matches the printed Fungus AND the Saproling token (CardHasSubtype against the token's own Card -- no CardDefinition lookup anywhere on that path, which is required because every Saproling in this deck is definition-less). It is also TWO DECLARED ATTACKERS for Beastmaster Ascension, whose quest counters come one per declared attacker and whose anthem pumps the same combat that crosses seven. THE SAPROLING IS LEGAL FODDER AND THE FUNGUS BODY IS NOT: Utopia Mycon's, Psychotrope Thallid's and Vitaspore Thallid's sac_creature_requires_subtype \"Saproling\" gates on the subtype, so the token feeds all three while the Sapherd itself can only ever be eaten by Mycoloth's devour. SAID PLAINLY BECAUSE A SCREEN THAT LIKES THIS CARD IS MOSTLY LIKING THE SECOND BODY: this is a DOWNGRADED FIFTH UNDERCELLAR MYCONID -- the same {2}{G}, and the Myconid carries this ETB token PLUS a self-death token PLUS \"{T}: Add one mana of any color\". The only axis the Sapherd wins is +1 printed power. [PARTIAL: the printed 2/2's blocking value is unmodelled and structurally INERT -- the goldfish opponent never attacks, the same disclosure Thallid Shell-Dweller's 5 toughness carries.]]",
+   "template": "custom",
+   "parameters": {
+    "etb_self_creates_tokens": 1,
+    "etb_created_token_power": 1,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Saproling"
+    ],
+    "created_token_color": "G"
+   }
+  },
+  {
+   "name": "Deathbloom Thallid",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "When this creature dies, create a 1/1 green Saproling creature token. [FULLY MODELLED, JSON ONLY -- dies_watch_includes_self true with an EMPTY dies_watch_subtype (= watch only its OWN death) plus dies_trigger_creates_tokens 1 on the dies_token_* spec. This is Tukatongue Thallid's parameter set on a bigger body, and it fires from OnCreatureDies, the single funnel every death site routes through (the toughness state-based action, the sac outlets, devour's deferred victims, the legend rule, combat). THE BODY IS THE CARD IN THIS LIST: at 3 mana for a 3/2 it is the biggest cheap beater in the pool, Sporecrown Thallid's [Fungus, Saproling] lord reads the printed Fungus and makes it a 4/3, and it is one declared attacker for a Beastmaster quest counter at the same rate a 1/1 is. GOLDFISH REACHABILITY OF THE DEATH HALF IS NEAR ZERO, disclosed because it is easy to mis-read: the passive opponent never blocks, damages or removes, and the three \"Sacrifice a Saproling\" outlets gate on sac_creature_requires_subtype \"Saproling\" -- this card is a FUNGUS, so NONE of them can eat it. The only routine route is MYCOLOTH'S DEVOUR, which takes any creature we control. ON A MYCOLOTH-FREE LIST THE TRIGGER IS PROVABLY DEAD and this is a vanilla 3/2 -- which matters, because the screen's own best arms cut Mycoloth. WHERE THE TRIGGER DOES PAY IS DEVOUR FODDER: DefaultSacExpendabilityRank treats a self-replacing body as token-tier expendable, so the devour ladder reaches it just behind the 1/1s; eating it gives Mycoloth 2 counters (4 under a Season) AND refunds a Saproling, and because devour's victim death triggers are DEFERRED until Mycoloth has entered (CR 702.81b) that Saproling correctly arrives too late to be eaten by the same devour. SLIMEFOOT DOES NOT DRAIN FOR IT: dies_watch_subtype \"Saproling\" does not match a Fungus, so only the Saproling it leaves behind can later pay. BLACK PIP: {2}{B} is payable off Peat Bog, Blooming Marsh and Secluded Courtyard (creature-only coloured mana, and this is a creature). [PARTIAL: the printed 3/2's blocking and trading value is unmodelled and structurally INERT -- no blockers exist, so the only thing power does here is reach the face.]]",
+   "template": "custom",
+   "parameters": {
+    "dies_watch_includes_self": true,
+    "dies_trigger_creates_tokens": 1,
+    "dies_token_power": 1,
+    "dies_token_toughness": 1,
+    "dies_token_subtypes": [
+     "Saproling"
+    ],
+    "created_token_color": "G"
+   }
+  },
+  {
    "name": "The Mycotyrant",
    "mana_cost": "{1}{B}{G}",
    "types": [
@@ -9079,6 +9146,46 @@
    }
   },
   {
+   "name": "Spore Swarm",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Create three 1/1 green Saproling creature tokens. [FULLY MODELLED, JSON ONLY -- it is Brightcap Badger's Fungus Frolic half at three tokens instead of two, on the identical cast_creates_tokens / cast_created_token_* parameter set, so there is no new code path and no new enumeration axis. Each token rides CreateToken, the chokepoint Doubling Season's token half hooks, so the deck's four Seasons make this 6/12/24/48 Saprolings off one card. Every token is lorded by Sporecrown Thallid ([Fungus, Saproling] matched against the token's own Card) and is legal fodder for all three \"Sacrifice a Saproling\" outlets, and each is a declared attacker for a Beastmaster Ascension quest counter the turn after it lands. THIS IS THE HONEST FLOOR OF THE TOKEN-SPELL FAMILY: no condition, no board requirement, no enabler -- which is exactly why it belongs in the census as the control that the conditional ones must beat. [PARTIAL: printed as an INSTANT, but the engine enumerates casts only in the main phases; WHY inert -- the passive goldfish opponent offers nothing to respond to and tokens must arrive before declare-attackers to matter here anyway.] [PARTIAL and ONE-WAY AGAINST THIS CARD: EvalCard has no branch for cast_creates_tokens and falls through to `return DMG` (100), a cantrip's value, so this card is UNDER-evaluated in the arm that plays it. Its measured delta is a LOWER BOUND. The fix moves GT for both Fungus configs and is therefore adopt-and-measure, not bundled here.]]",
+   "template": "custom",
+   "parameters": {
+    "cast_creates_tokens": 3,
+    "cast_created_token_power": 1,
+    "cast_created_token_toughness": 1,
+    "cast_created_token_subtypes": [
+     "Saproling"
+    ],
+    "cast_created_token_color": "G"
+   }
+  },
+  {
+   "name": "Saproling Migration",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Kicker {4}. Create two 1/1 green Saproling creature tokens. If this spell was kicked, create four of those tokens instead. [THE UNKICKED HALF IS MODELLED, THE KICKER IS NOT, AND THE OMISSION IS ONE-WAY AGAINST THIS CARD. cast_creates_tokens 2 on Fungus Frolic's identical parameter set gives two bodies for two mana -- the best unconditional rate in the pool -- doubled to 4/8/16/32 by the deck's four Doubling Seasons. WHAT IS MISSING: kicker is an optional additional cost chosen at cast time and exists NOWHERE in this engine (`grep kicker src/` is empty). It would be a binary cast variant riding Action::chosen_x in {0,1}, which is ALREADY folded at every one of ~20 sites, so the work is small -- but it is src work and this card entered the census on the JSON-only route. THE BIAS IS MATERIAL, NOT COSMETIC: the kicked mode is four tokens (32 under four Seasons) at {5}{G}, a cost this deck routinely reaches on turns 4-5, which is exactly the window its win turns cluster in. A one-sided simplification flatters whichever arm does NOT play the card, so this card's measured delta is a LOWER BOUND and must be reported as one; if it screens near the line, build the kicker and re-measure rather than ruling on this number. [PARTIAL: EvalCard has no cast_creates_tokens branch either, so the under-evaluation above compounds -- both errors push the same way.]]",
+   "template": "custom",
+   "parameters": {
+    "cast_creates_tokens": 2,
+    "cast_created_token_power": 1,
+    "cast_created_token_toughness": 1,
+    "cast_created_token_subtypes": [
+     "Saproling"
+    ],
+    "cast_created_token_color": "G"
+   }
+  },
+  {
    "name": "Doubling Season",
    "mana_cost": "{4}{G}",
    "types": [
@@ -9087,6 +9194,35 @@
    "subtypes": [],
    "keywords": [],
    "oracle_text": "If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead. [Two static REPLACEMENT effects (CR 614) -- never on the stack, never responded to -- modelled as two independent flags so a tokens-only doubler (Parallel Lives) or a counters-only one (Corpsejack Menace) can reuse the halves. The token half hooks inside CreateToken, already the single funnel every token in the engine goes through; the counter half hooks inside the PutPlusCounters / PutSporeCounters / PutQuestCounters chokepoints. Scope is per-CONTROLLER (\"under YOUR control\"), which is what keeps the engine's opponent-gifted tokens (Forbidden Orchard, Varchild's Survivors) correctly undoubled. N copies MULTIPLY: each replacement applies once and each sees the count the previous one already doubled (CR 614.5/616.1), so the multiplier is 2^N -- x16 with all four. Ordering multiple copies is technically a CR 616.1 choice but provably inert (every copy applies the same x2 to the same event), so it is not surfaced. Counters a permanent ENTERS WITH are doubled (CR 121.6/614.1c -- the planeswalker double-loyalty ruling), which is what makes Mycoloth's devour compound: devour 3 gives 6 counters, 12 under one Season, and the upkeep Saprolings are then doubled AGAIN at the token step. Counter REMOVAL is never doubled -- a cost is not a \"put\" -- so the Thallids' \"remove three spore counters\" is untouched.]",
+   "template": "custom",
+   "parameters": {
+    "doubles_tokens": true,
+    "doubles_counters": true
+   }
+  },
+  {
+   "name": "Parallel Lives",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If one or more tokens would be created under your control, twice that many of those tokens are created instead. [FULLY MODELLED, JSON ONLY -- doubles_tokens true, which is exactly Doubling Season's token half, hooked at the CreateToken chokepoint every token in this deck already flows through. IT IS A STRICTLY WORSE DOUBLING SEASON FOR ONE LESS MANA, and the gap is bigger than it looks in THIS deck, because this archetype multiplies through COUNTERS as much as through tokens: Mycoloth's devour +1/+1 counters and its upkeep clause that reads them, Beastmaster Ascension's quest counters, and the spore counters on nine bodies all route through the counter chokepoints that doubles_counters hooks and this card does not touch. SO WHY SCREEN IT AT ALL: the USER's standing prior is that *multiples are not super good*, and round 8 measured Doubling Season 4->3 as a free cut -- so the real question is not 'Parallel Lives vs Doubling Season' but 'a 4-mana token doubler vs the FOURTH copy of a 5-mana everything-doubler', which is a different and much closer question. [PARTIAL: none. The omission relative to Doubling Season is the card's real text.]]",
+   "template": "custom",
+   "parameters": {
+    "doubles_tokens": true
+   }
+  },
+  {
+   "name": "Primal Vigor",
+   "mana_cost": "{4}{G}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If one or more tokens would be created under your control, twice that many of those tokens are created instead. If one or more counters would be put on a permanent you control, twice that many of those counters are put on it instead. Each other player may also benefit from this effect. [FULLY MODELLED FOR OUR SIDE, JSON ONLY -- doubles_tokens + doubles_counters, i.e. Doubling Season's exact parameter pair, so this is a FIFTH Doubling Season joining BOTH exponents: 4x where a token-only doubler is 2x on the two counter-to-token chains (Mycoloth's devour counters feeding its upkeep clause, and Saproling Burst's fade counters), and it halves Beastmaster Ascension's attacker requirement again. Six mana is the whole objection, in a deck trying to win on turn six. [PARTIAL, AND IT RUNS AGAINST THE REST OF THE CENSUS -- this is the one card the goldfish OVER-rates: the real card's last line is symmetric ('each other player may also benefit'), which is a genuine drawback in a real game and is worth exactly ZERO here, because the passive opponent creates no tokens and no counters. So where every other arm in this census is biased AGAINST its card, this one is biased FOR it. Do not adopt it on a thin margin.]]",
    "template": "custom",
    "parameters": {
     "doubles_tokens": true,
