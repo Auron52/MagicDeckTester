@@ -129,6 +129,145 @@ Cross-deck (verbatim):
 - *"For Distance to castable I think it makes sense to have a smarter model if we can."* -- the shared
   model in docs/design/discard-distance-model.md replaces the per-deck crude proxies.
 
+#### Amendment ADOPTED by the USER (2026-10-13)
+
+`MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE`, default ON: while S4 holds a Shard Volley with no land of its own, a
+live Searing Blaze that would deal only 1 (no kept hand land) is shed ahead of it, in S4's slot. USER: *"The
+burn one seems okay."* Measurement and the named game (d3 s6105084 gi 83): docs/design/final-ab-2026-10-13.md.
+
+#### Shard Volley when land-light (2026-10-14) -- PROPOSED variants, default OFF, the USER decides
+
+**The finding (2026-10-13 d0 A/B, docs/design/final-ab-2026-10-13.md).** Over 80,000 d0 games the design
+was 8 games slower than the old generic (max-MV) discard; the adopted Blaze amendment fixed 3. The other 5
+(seed 9310001 + gi: gi 1048, 8292, 12620, 17376, 20102) are hands with NO land on board or in hand, where S4
+sheds every Volley ("the k-th Volley needs k lands") ahead of an unkept Light Up the Stage, a spare Eidolon
+or a 2nd Skullcrack.
+
+**USER (2026-10-14, verbatim):** *"Yeah, that rule is probably too aggressive when we are land-light. At
+least 1 could always be kept and 2 possibly. I think we can give some wiggle room. To be clear, the original
+rule here was authored by an agent and I kind of half-heartedly agreed it might make sense, but seeing this in
+action and thinking about it we need to be less aggressive. However, there are still many cards Shard Volley
+does lose to in these cases. It could be second ranking, 'shard volley with no land' that loses to more of
+the potential options."*
+
+**The variants** (heurarm slots, `EnvOn`, all default OFF; with all off the ranking is the committed tree's
+byte-for-byte). `T` = lands on board + kept hand lands; the design lets the first `T` Volleys (burn order)
+hold a land and sheds the rest in S4.
+
+| slot | what it does |
+|---|---|
+| `MTG_BURN_VOLLEY_KEEP1` (K1) | the first land-less Volley is not an S4 shed: `T + 1` Volleys are ordinary burn |
+| `MTG_BURN_VOLLEY_KEEP2` (K2) | the first two: `T + 2` (overrides K1) |
+| `MTG_BURN_VOLLEY_KEEP_FLOOR` (F) | K1 / K2 read as a FLOOR instead: `max(T, K)` -- the literal "at least 1 could always be kept". Identical to the slack reading with no land at all (all five named hands); from `T >= K` on it is the design |
+| `MTG_BURN_VOLLEY_NOLAND_RANK` (RANK) | no Volley is ever an S4 shed; a land-less Volley takes the burn-order rank "Shard Volley with no land" (placement below) |
+| `MTG_BURN_VOLLEY_NOLAND_LATE` (LATE) | the land-less Volleys (past K1 / K2) keep a shed slot of their own, moved from S4 to just after S6 |
+
+**Where "Shard Volley with no land" sits (RANK), and why.** Burn order: Bolt > Skullcrack > Blaze (creature
++ kept land, 3) > Blood that kills (3) > Shard Volley > **Shard Volley with no land** > Blaze with no land (1)
+> Blood that cannot kill (0).
+* Below the with-land Volley, Blaze-with-land and Blood-that-kills: by definition (it is the same card one
+  land short), and those already outrank a Volley.
+* ABOVE Blaze-with-no-land: that is the USER-adopted amendment (2026-10-13, `MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE`:
+  "a 1-damage Blaze sheds ahead of a land-less Volley"). The card reason: a land-less Volley is 3 damage for
+  {R} the turn one more land arrives, and on the kill turn its sacrifice is free -- the Mountain that pays the
+  {R} can be the land sacrificed (CR 601.2g-h: mana abilities are activated before costs are paid) -- while
+  the dry Blaze is {R}{R} for 1 and needs an opponent creature.
+* ABOVE the Blood that cannot kill (0 face), the unkept Light Up the Stage (S6: a 2nd copy, or any copy below
+  2 lands) and a spare creature (S7: in practice a not-needed Eidolon; Goblin Guide / Swiftspear are
+  protected): the design already sheds all three ahead of the 1-damage Blaze, so above it is forced by the
+  amendment. The cards agree: below 2 lands Light Up the Stage costs {2}{R} (Spectacle {R} needs damage
+  dealt first, so two mana in practice) and a 2nd copy overlaps the first (staged until the end of the next
+  turn); a not-needed Eidolon is a {R}{R} 2/2 that deals us 2 for every spell we cast. And so do the losing
+  games: three of the five (12620, 17376, 1048 T3) are a Volley shed ahead of an unkept Light Up the Stage,
+  two (8292 T3, 1048 T4) ahead of a spare Eidolon.
+* **Consequence:** nothing on this list sorts between two Shard Volleys, so RANK is order-identical to never
+  shedding a Volley for want of a land (K = infinity). K1+RANK and K2+RANK are therefore provably identical
+  to RANK (no Volley is left to reach S4) and are not measured; the code makes RANK supersede the others and
+  a unit test pins it.
+* **LATE is the "loses to more of the potential options" reading, measured so the USER can compare.** The
+  land-less Volleys keep a slot of their own, after S5 (burn beyond lethal) and S6 (the unkept Light Up the
+  Stage), still ahead of a spare creature, the 0-face Blood and every kept card. It breaks the transitivity
+  above (spare Eidolon < dry Blaze < land-less Volley < spare Eidolon), which is why it is not my placement.
+  The amendment still holds under it: a KEPT 1-damage Blaze moves up to just ahead of the late Volleys; one
+  already beyond lethal (S5) is ahead of them where it is.
+
+**Measured (2026-10-14).** ONE pooled paired batch, commit 08d36471 (src tree 6f0a1111, on 77e094a2),
+1,700,000 games: 10 arms x {shipped (value_play d6, b20) 4,000; d3 b10 6,000; d0 160,000} games each.
+Seeds: the 2026-10-13 A/B's (ship 9300001+, d3 9305001+, d0 9310001+; seed = base + gi, game_index = gi)
+plus fresh held-out ones (ship 10200001+, d3 10210001+, d0 10220001+), 50/50 at ship and d0, 4,000 + 2,000
+at d3. Loss = 9, paired per game. "generic" = `MTG_BURN_BUCKET_DISCARD=0`; "cur" = the design + the adopted
+Blaze amendment, i.e. the committed tree (the arm with every new slot off is byte-identical to the
+pre-change binary: probe digests equal).
+
+| arm | ship 4,000 vs cur | d3 6,000 vs cur | d0 160,000 vs cur (old / new) | d0 vs generic |
+|---|---|---|---|---|
+| cur (the design) | -- | -- | -- | 1 faster / 14 slower, **+13** |
+| K1 | 0 / 0 | 0 / 0 | **8 / 0, -8** (3 / 5) | 2 / 7, +5 |
+| K2 | 0 / 0 | 0 / 0 | **12 / 0, -12** (5 / 7) | 2 / 3, +1 |
+| F1 (K1 as a floor) | 0 / 0 | 0 / 0 | 8 / 0, -8 -- the same games as K1 | 2 / 7, +5 |
+| F2 (K2 as a floor) | 0 / 0 | 0 / 0 | 12 / 0, -12 -- the same games as K2 | 2 / 3, +1 |
+| RANK | 0 / 0 | 0 / 0 | **12 / 0, -12** -- the same games as K2 | 2 / 3, +1 |
+| LATE | 0 / 0 | 0 / 0 | 8 / 0, -8 (2 / 6) | 1 / 6, +5 |
+| K1+LATE | 0 / 0 | 0 / 0 | 9 / 0, -9 (3 / 6) | 2 / 6, +4 |
+| K2+LATE | 0 / 0 | 0 / 0 | 12 / 0, -12 -- the same games as K2 | 2 / 3, +1 |
+
+(faster / slower vs the reference, net = sum of turn differences.) At the shipped setting every arm's PLAY
+is byte-identical to cur (0 of 160 job digests differ; the generic differs in 1 chunk, no win turn); at d3
+the arms change play in 3-4 of 120 chunks and no win turn. At d0 the floor and slack readings change play in
+9 (K1 / F1) and 4 (K2 / F2) of 320 chunks but never a win turn, so the data do not choose between the two
+readings of "at least 1 could always be kept".
+
+**No arm has a slower game than cur in any cell (170,000 paired games per arm), so the slower-game recovery
+bar is vacuous.** For information, every candidate's games still slower than the GENERIC discard were
+replayed at stage 1 (`--depth W --budget-ms 100`, W = generic's turn) and stage 2 (`--depth 8 --budget-ms 0`)
+-- see "the residual" below.
+
+**The five named games** (d0, seed 9310001 + gi; win turn, 9 = unwon):
+
+| gi | generic | cur | K1 / F1 | K2 / F2 / RANK / K2+LATE | LATE / K1+LATE | what the winning arms do |
+|---|---|---|---|---|---|---|
+| 1048 | 8 | 9 | 9 | **8** | 9 | T3 (no land, 2 Volleys) shed the unkept Light Up the Stage instead of a Volley; T4 the spare Eidolon (T4 > 3) |
+| 8292 | 7 | 8 | 8 | **7** | 8 | T3 (no land, 2 Volleys) shed the spare Eidolon (creature quota met) instead of a Volley |
+| 12620 | 6 | 7 | **6** | **6** | **6** | T2 (no land, 1 Volley) shed the 2nd Light Up the Stage instead of the Volley |
+| 17376 | 5 | 6 | **5** | **5** | **5** | T2 (no land, 1 Volley) shed a Light Up the Stage instead of the Volley |
+| 20102 | 4 | 5 | 5 | 5 | 5 | every arm sheds the Volley ahead of the 2nd Skullcrack -- the USER burn order (below) |
+
+All 16 games any arm moves (d0; nothing moves at ship or d3): faster under EVERY arm: 12620, 17376 (old),
+5762, 25618, 31448, 33514, 77776 (new). Faster under K2 / F2 / RANK / K2+LATE but not K1 / F1: 1048, 8292
+(old), 33644, 36730 (new) -- the 2nd land-less Volley. LATE misses 1048, 8292, 36730 and 72260 (old; cur =
+generic = 7, every other arm 6): in each it sheds a land-less Volley ahead of a SPARE EIDOLON, which is exactly
+the extra option LATE makes the Volley lose to -- 4 games, 0 the other way. 76294 (new) is the one game where
+cur beats the generic (6 vs 7); every arm keeps it.
+
+**The residual: three games every arm still loses to the generic discard (20102, 28164, 74468), and they are
+not S4.** All three are hands with no land anywhere, where the Volley is the LAST card of the USER's burn
+order (Bolt > Skullcrack > ... > Shard Volley) and is shed ahead of a 2nd Skullcrack; the generic sheds the
+Skullcrack (MV 2) and on the kill turn casts Bolt + Volley off two lands (1 mana each, the Volley's land
+sacrificed after it tapped) where Skullcrack alone costs 2. No variant here touches the burn order, so they
+stay. Recovery (vs the generic's turn) for the K2 / RANK arm: 28164 recovers at stage 1 (d6 b100: T6); 20102
+and 74468 do not, at stage 1 or at stage 2 (d8 b0: T5 and T7 -- the same turns cur and every other arm reach
+there). Across all arms 21 of 52 slower-than-generic games recover at stage 1 and none of the other 31 at
+stage 2; none of them is slower than cur.
+
+Summaries: `logs/burn_volley/` in the agent worktree `.claude/worktrees/agent-ad3abe568de212302` (analysis.txt, the recovery listings, the named-game
+discards); scripts `scripts/burn_volley_ab/` (make_ab.py builds / analyses the batch, make_recovery.py the two
+stages, named_games.sh + named_summary.py the per-arm discards of named games).
+
+**Agent recommendation (the USER decides):** RANK, or K2 -- they measure the same (12 faster / 0 slower at d0
+over 160,000 games, nothing moves at ship or d3, every slower-than-generic game they leave is the burn order's
+Skullcrack-over-Volley). RANK is the simpler rule: it removes S4 outright (the agent-authored rule the USER
+"half-heartedly agreed" to) and gives the land-less Volley a burn-order rank; K2 keeps S4 for a 3rd land-less
+Volley and never measured different from RANK. K1 / F1 leave 4 games on the table (the 2nd land-less Volley:
+1048, 8292, 33644, 36730). LATE, the "loses to more of the potential options" reading, loses the 4 spare-Eidolon
+games against RANK and gains none. The slack-vs-floor reading never changed a win turn.
+
+**Questions for the USER (surfaced, not blocking):**
+1. Which arm, if any (agent default: none adopted; all ship OFF).
+2. "At least 1 could always be kept and 2 possibly": a floor (`max(lands, K)`) or one/two Volleys of slack past
+   the lands (`lands + K`)? Measured identical on win turns; implemented both.
+3. The residual 20102 / 28164 / 74468 are the burn ORDER, not S4: with no land anywhere a 2nd Skullcrack ({1}{R})
+   outranks a Shard Volley ({R}, its land free on the kill turn). No variant touches the USER's order.
+
 ---
 
 ## The original proposal (2026-09-23, AI-authored; superseded where the section above differs)
