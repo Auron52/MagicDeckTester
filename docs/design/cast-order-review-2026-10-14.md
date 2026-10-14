@@ -27,6 +27,138 @@ How the decks split by status:
 - `\|` separates main 1 from main 2. A cast is in main 1 unless marked.
 - "land" is the land drop.
 
+## USER rulings from the walk-through (2026-10-14) -- these SUPERSEDE the drafts below
+
+Each deck was reviewed by the integrating agent first (draft + card text + the USER's earlier rulings), and its
+suggestion was put to the USER. Settled items only; a deck not listed here is not settled yet.
+
+### CROSS-DECK RULING: every order is TOTAL (USER 2026-10-14)
+USER: "Let's fully order the cards in each list inasmuch as possible. I don't like the randomness of choosing the
+order." -> no tie is ever left to hand / plan order. Functionally identical cards still get a fixed order (by
+name); equal-looking cards get a stated tie-break rule; the comparator falls back to a fixed key (name), never to
+input order, and a unit test pins that permuting the hand does not change the realised order. A SEARCHED choice
+(the search tries the USER's slot first and decides) is not randomness and stays where approved.
+
+### Hinata2 -- SETTLED
+- The USER's 08-28 order stands, with Gamble before the cantrips (the agent's reason: Gamble's search shuffles
+  the library, so a Gamble after Ponder/Preordain throws away what they set up; the hand size argument does not
+  hold, a cantrip replaces itself) and the order made BINDING inside cantrip / Expressive Iteration plans
+  (HinataProvider opts into OrderOpaqueCastsByRank).
+- IRENCRAG FEAT (USER): "Your change is fine, but Irencrag needs to be castable after Soulfire and after Magma
+  Opus, since it needs to go second last. There has to be flexibility around that." -> Irencrag is always
+  SECOND LAST IN THE PLAN: immediately before whichever payoff the plan ends on. Irencrag -> Soulfire,
+  Irencrag -> Opus, Irencrag -> Crackle, Soulfire -> Irencrag -> Crackle and Opus -> Irencrag -> Crackle are
+  all expressible; the search chooses the payoff set. Since "only one more spell" leaves second last as the
+  only useful slot, the placement follows from the plan (no extra branch is needed).
+  USER, confirming: "So, in reality the Irencrag can go in any of three spots depending on what other spells are
+  cast, but it is always second last." / "So we can restrict it using that." -> the RESTRICTION: a plan casts
+  Irencrag only as its second-last spell with Soulfire, Magma Opus or Crackle as the last; any other plan holding
+  Irencrag is pruned (the 09-01 "just those 3 cards" waste gate, stated as a position rule).
+  Implementation: a set-level placement (ArrangeCastOrder, the Dragonstorm Irencrag-closer precedent), and the
+  two subset walks + the provider's waste gate (HinataProvider::RestrictorSubsetWasted) must count Irencrag's
+  follower in the SAME arranged order, or legality and realisation split.
+- Main phase: unchanged (all main 1; all-main-2 measured worse).
+
+### StompySurprise -- APPROVED TO TRY (USER 2026-10-14)
+USER: "Let's try out your stompy suggestion. It seems pretty close to what I was looking for and we can fix any
+issues that show up." The suggestion (from the draft, reviewed):
+land > Mystic = Fyndhorn = Llanowar > Sol Ring > Priest > Archdruid > Call of the Wild > Turntimber (before OR
+after Worldly Tutor, searched) > Natural Order early (searched; only with a mid tutor in the plan) > Worldly Tutor
+mid (searched; only when a Turntimber in the plan takes the stacked card) > Vaultborn > Ghalta (new) > World War
+Hulk early (no Craterhoof/Ghalta in hand) > Elderscale = Hornet Queen = Terastodon = Apex = Worldspine > Natural
+Order late (default) > World War Hulk late (Craterhoof or Ghalta in hand) > Craterhoof > Worldly Tutor late
+(default). All main 1. Shipped WITH TOP_RESOLVE (the USER's Worldly Tutor reset) as a Stompy opt-in; the four
+"either location" cards are searched two-way choices, the USER's slot first; the dual-position tests read the
+PLAN, not the hand; Vaultborn is not a top-consumer.
+Queued, separate (defaults yes, not yet answered explicitly): the viewer chooser for MTG_UPKEEP_CALL then ON;
+engine fixes -- Call of the Wild activation timing searched (today every activation trails every cast, so a
+Call-put creature never counts for a same-turn Craterhoof and the USER's [6] is inexpressible), and World War
+Hulk's chapter-I freed creature searched (today a resolution-time pick).
+
+### Prevent Damage -- USER direction 2026-10-14 (revised order pending confirmation)
+USER: "I have some concerns about prevent damages' order having so much search in the middle. I don't think that
+needs to be fully searched. I would always choose Vito before Rhox, since Rhox is pretty much only that effective
+with Vito. Spellshock and Manabarbs are similarily only good if we have active drain effects, but you might have
+some point that these are relevant and potentially searchable if we already have active drain. I think we can at
+least minimize what we search there."
+Revised (agent, put back to the USER): land > Tamanoa > GSZ for Tamanoa > Purity (sb) > Dina (and GSZ for Dina) >
+Vito [Vito > Dina when Rhox or Bilbo is already on the battlefield] > Rhox > Bilbo (sb) > wished bodies (cheapest
+first) > Spellshock > Manabarbs > Living Wish > Beseech > GSZ X=0 > Rolling Earthquake > Pyrohemia. The ONLY search:
+Spellshock and Manabarbs each get a second slot (right after Tamanoa / GSZ, before the creature casts) and only
+when a drain is already on the battlefield at the start of the main; Manabarbs' two-way only matters once a plan
+that casts it pays land by land (today every land is tapped before it resolves).
+
+### Auras -- SETTLED ORDER (USER 2026-10-14), two questions still open
+No earlier USER cast order for Auras exists anywhere on record (docs, git, code, transcripts back to 09-11); the
+USER: "For now if you can provide fully split orders for me to review I'll just work from that." then "Maybe Lion
+Umbra before Daybreak just in case." The order (all main 1):
+land > Light-Paws > Kor Spiritdancer > Slippery Bogle > Gladecover Scout > Armadillo Cloak > Alpha Authority >
+Spirit Mantle > Spirit Link > Gryff's Boon > Hyena Umbra > Spider Umbra > Audacity > Rancor > Ancestral Mask > All
+That Glitters > Ethereal Armor > Lion Umbra > Daybreak Coronet.
+Lion Umbra before Coronet -- USER's reason: "So that you could play 2 Daybreak." "(if light paws is out)": casting
+Lion Umbra (MV 2) lets Light-Paws fetch a Daybreak Coronet (MV 2, a name not yet controlled) while our own Coronet
+is still in hand -- two Coronets, the same duplicate-the-later-card principle as Ethereal Armor last (4 Coronets,
+1 Lion Umbra in the list). Also: "enchant modified creature" accepts counters / Equipment, Coronet needs an Aura.
+Open: search the Aura order on Light-Paws turns (this order first)? Fix the Light-Paws fetch pick to the USER's
+08-25 wording as its own measured change?
+
+### CritterLifegain -- SETTLED (USER 2026-10-14)
+USER: "For CritterLifegain Ajani, Strength of the Pride should go after Ajani's pridemate because it produces them.
+The activation that produces them should go right after, whereas the +1 can go where you put it originally. Heliod
+is a trickier one and might require some adjusting. It can go right where it is if it is a creature. Otherwise it
+probably should go after other creatures until it is one. I'm not entirely sure on that, though. If it isn't a
+creature after the next 2 have entered then it might actually be better to play it before. This would be rare,
+but we could search or evaluate this case. Otherwise it seems fine."
+Order (all main 1): land > Soul Warden > Soul's Attendant > Auriok Champion > Daxos > Archangel of Thune > Voice of
+the Blessed > Ajani's Pridemate > Ajani, Strength of the Pride WHEN CAST FOR ITS -2 (the Pridemate token; the
+activation rides the cast, so it fires right after) > Heliod > Ocelot Pride > Serra Ascendant > Ranger-Captain of
+Eos > Ajani WHEN CAST FOR ITS +1 > Unexpectedly Absent.
+HELIOD: at its slot if it enters as a creature (white devotion >= 5); otherwise it walks later past up to the
+next 2 creature entries until it is one; if it still is not a creature after 2, a two-way SEARCHED choice: first
+(before every watcher, so it is out for every gain) or after the creatures (rare, so cheap).
+The flip (payoffs before a new watcher when board watchers >= payoffs + 2 and no Thune) kept ("Otherwise it seems
+fine").
+Implementation: Ajani's slot by the loyalty ability the cast action carries (CastOrderActionRank sees
+Action::loyalty_ability); Heliod by a set-level placement (ArrangeCastOrder) in both worlds.
+
+### EldraziDisplacerFlicker -- SETTLED (USER 2026-10-14: "Your EDF changes look reasonable to me. You can proceed with those.")
+Order (all main 1): land > Wild Growth > Fertile Ground > Trace of Abundance > Overgrowth > Cloud of Faeries >
+Peregrine Drake > Training Grounds > Eldrazi Displacer > Emiel the Blessed > Dimensional Infiltrator > Essence
+Depleter > Vexing Shusher > Living Wish > Eladamri's Call. Plus: (2) Fertile Ground / Trace / Overgrowth may move
+behind the untappers when the turn is otherwise unpayable (engine: the payable-order projection must credit an
+untapper's refund and a land Aura's bonus); (3) Trace after any other Aura on the SAME land (the Overgrowth-then-
+Trace stack restored); (4) the COMBO OFF route deploys Auras in this order; (5) the route no longer skips a second
+untapper whose cast refund is below its cost when its loop is the net-positive one.
+
+### Angels -- SETTLED (USER 2026-10-14: "The angel's order + caveats look good.")
+Order (main 1): land > Sol Ring > Lightning Greaves > Bishop of Wings > Righteous Valkyrie > Archangel of Thune >
+Lyra, Archangel of Dawn > Giada, Font of Hope > Youthful Valkyrie > Lyra Dawnbringer > Lightstall Inquisitor >
+Resplendent Angel > a duplicate legend already on the battlefield > Serra the Benevolent > Swords to Plowshares >
+Unexpectedly Absent. Caveats: Giada moves to right after Greaves when the line needs her Greaves-hasted {W} for an
+Angel ranked ahead of her; with no converter (Bishop / Righteous / Seraph Sanctuary) on the board or in the casts,
+Thune and Lyra AoD drop behind Giada and Youthful.
+SECOND MAIN (USER): "I agree, though, that the second main is potentially wanted here. It would be only exactly
+cases where Giada can attack and we would use her mana where it would be considered. I wonder if we can use that to
+reduce any associated costs. The idea would be for it always only to be one spell maximum. We don't need to consider
+multiple since she can only pay for or help pay for one spell." -> a main 2 opens ONLY when a vigilant Giada can
+attack this turn and her post-combat {W} (Angel spells only) pays for or helps pay for an Angel; main 2 holds AT
+MOST ONE cast, which must use her mana. Lever, measured, adoption on the bar.
+
+### BreachingDragonstorm -- SETTLED (USER 2026-10-14), low priority
+USER: "I'm not too worried about Breaching Dragonstorm's order, since it literally dumps most of the creatures in the
+deck on the field. I don't think we can fail to kill with essentially any order so your order is fine. Plus, there
+is almost no chance of casting two of these spells in one turn. The cheapest is 5 mana, so that would need 10 mana."
+Order (main 1): land > Breaching Dragonstorm > Boarding Party > Annoyed Altisaur > Maelstrom Wanderer > Creative
+Technique > Call Forth the Tempest > Sakashima's Protege, with the provider opting into OrderOpaqueCastsByRank so
+the rank applies at all. Implement batched with other low-stakes decks.
+
+### Soldiers -- SETTLED (USER 2026-10-14: "Soldiers' order also looks good.")
+Order (main 1): land > Champion of the Parish > Recruiter of the Guard > Ranger-Captain of Eos > Thalia's Lieutenant
+(at 4, the amendment: after Champion and the tutors) > Aether Vial > Recruitment Officer > Esper Sentinel > Thalia,
+Guardian of Thraben > Coppercoat Vanguard > Cathar Commando > Jirina > Harbin > Brutal Cathar > Field Marshal >
+General Kudro > King Darien XLVIII > Rick (6-17 order-free; the measured 10-04 sequence keeps it total). Fix the two
+"user-proposed" labels (vial-put-interleaving.md:42, the soldiers_vial_after_tutor_continuation scenario comment).
+
 ## Start here: eight answers that unblock most of the rest
 
 There are 141 questions below. Each has a default, but a default is not an adoption: until you answer, the
