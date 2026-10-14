@@ -365,3 +365,143 @@ it was fixed before round 7 ran. Round 7's `w5`/`w6` pair prices what is left of
 60-card lists (Mycoloth 4, Vitaspore 4, Doubling Season 2 -- the most Mycoloth and the most haste
 routes the list can hold) with the lever flipped via `arm_flags`, so the only difference between the
 two arms is the lever and even the Season/Mycoloth interaction is common to both.
+
+---
+
+# Rounds 9-13 (2026-10-14): the USER hands over the list decision, and the screen finds the wrong axis had been under test
+
+**THE GOVERNING CHANGE IS NOT A MEASUREMENT.** USER 2026-10-14: *"From my perspective my part is
+just to give you constraints on cards not to remove. The rest is up to you."* Their only reserved
+input is now **1 Deathspore Thallid, and only if the list holds black** -- so mono-green is REOPENED,
+having been recorded as closed by that floor. Everything else is the agent's to settle on numbers,
+and *"Only when your screening is done should we stop."* Two further standing priors from the same
+exchange: *"multiples are not super good"* applies across the list, not just to Doubling Season; and
+*"some of them may be easier to play, but just not as strong"* -- i.e. the goldfish overprices
+castability and prices interaction at zero, and a report must say which way the model errs per card
+rather than routing around it.
+
+## Round 9 (seed 1020000): the primary-vs-conservative margin was the devour pin
+
+| arm | std | 2hg | ms/game std |
+|---|---|---|---|
+| c_m2 Mycoloth 2 / Vitaspore 2 (= round 5's conservative `c_a2_court0`) | **-0.0877** (t=-9.99) | **-0.2112** (t=-19.11) | 339 |
+| c_m1 Mycoloth 1 / Vitaspore 3 (never measured before) | -0.0865 | -0.2035 | 380 |
+| c_m0 Mycoloth 0 / Vitaspore 4 (= round 5's primary `c_z1_court0`) | -0.0853 | -0.1960 | 407 |
+| s_slime2_death1 Slimefoot 1->2 off the spendable Deathspore | +0.0015 (t=+0.37) | -0.0143 (t=-2.98) | 436 |
+
+**c_m2 vs c_m0 = -0.0025 +-0.0087 (t=-0.29) std / -0.0152 +-0.0110 (t=-1.38) 2hg.** Round 5 had c_m0
+ahead by -0.0297 +-0.0113 (t=-2.62). The Mycoloth Main2 devour pin was worth the entire margin, and
+the correction accrued where round 9 predicted -- wholly to the Mycoloth-holding side -- carrying it
+just past parity. The ladder is monotone in both formats and the new middle rung sits between the
+ends, so no optimum hides at 1.
+
+**DECIDED: the Mycoloth-2 shape is the working base.** Tie-broken on nominal direction in both
+formats plus **17% cheaper per game**, which matters on its own against the 3x suite-cost rule.
+To be re-confirmed on held-out seeds against the final composite rather than treated as settled.
+
+Slimefoot 2 is a live candidate, not banked: its `d*` of 0.066t is only 1.2x the 0.054t measured
+scatter reference, so the 2hg gain is not clearly above the apparatus floor.
+
+## Round 11 (seed 1040000): THE DECK IS MANA-STARVED, NOT BODY-STARVED
+
+Every up-count arm pays the one Psychotrope, so each reads against the control `u_vita3`
+(-0.0152 std / -0.0173 2hg) as `value(this copy) - value(Vitaspore #3)`.
+
+| raise ONE copy | std | NET | 2hg | NET |
+|---|---|---|---|---|
+| **Sol Ring 1->2** | **-0.0945** (t=-12.9) | **-0.0793** | **-0.1140** | **-0.0967** |
+| Beastmaster Ascension 2->3 | -0.0565 | -0.0413 | -0.1090 | -0.0917 |
+| Concordant Crossroads 1->2 | -0.0475 | -0.0323 | -0.0527 | -0.0354 |
+| Brightcap Badger 1->2 | -0.0372 | -0.0220 | -0.0493 | -0.0320 |
+| Shroofus Sproutsire 1->2 | -0.0333 | -0.0181 | -0.0643 | -0.0470 |
+| Tukatongue 2->3 | -0.0257 | -0.0105 | -0.0267 | -0.0094 |
+| Wild Growth 2->3 | -0.0227 | -0.0075 | -0.0340 | -0.0167 |
+| Slimefoot 1->2 | -0.0110 | +0.0042 | -0.0293 | -0.0120 |
+| Deathspore 2->3 | -0.0110 | +0.0042 | -0.0147 | +0.0026 |
+
+| cut | std | 2hg | verdict |
+|---|---|---|---|
+| Doubling Season 4->3 | -0.0032 (t=-1.09) | +0.0065 (t=+1.61) | FREE; replicates round 8's -0.0037/+0.0022 |
+| Doubling Season 4->2 | -0.0070 (t=-1.70) | +0.0063 (t=+1.14) | ALSO FREE -- two copies spendable |
+| **Utopia Mycon 4->3** | **+0.0005 (t=+0.14)** | **-0.0003 (t=-0.06)** | dead null; the USER asked for this proven |
+| Utopia Mycon 4->2 | +0.0083 | +0.0127 | cheap, not free |
+| Undercellar Myconid 4->2 | +0.0602 | +0.0710 | expensive; round 8's rung 1 was +0.0265, so additive |
+| Saproling Burst 4->2 | +0.0715 | +0.0960 | expensive; rung 1 +0.0305, so additive |
+| **21 lands** (Vitaspore 2->1, Forest 4->5) | **-0.0343** | **-0.0403** | more lands is BETTER |
+| 19 lands (Peat Bog 4->3, Vitaspore 2->3) | +0.0310 | +0.0460 | fewer is worse |
+
+**The three best edits in the round are all about having mana sooner.** That reframes a screen which
+had been a five-drop-trimming exercise, and it is why Cryptolith Rite became the add to watch.
+**FIVE free slots exist, not one**: Psychotrope, two Doubling Seasons, one Utopia Mycon, and the
+Deathspore the USER's floor permits.
+
+**Two reading errors in round 8 that this round corrected.** (1) "Only Psychotrope is free"
+understated the room by two slots. (2) Round 8's four LAND rows paid into Forest, so they rank the
+lands against each other and do NOT free a spell slot -- counting Courtyard -0.0095 or Peat Bog
+-0.0120 as spendable was a category error, and the land COUNT axis was untested until round 11.
+
+## Round 12 (seed 1050000): the add census, on the SHIPPED table via bucket aliases
+
+Twelve arms, every one `Psychotrope 1->0 + <new card> 0->1`, with `a_vita3` as the control. Four
+candidates needed no implementation at all (Sporesower Thallid, Thallid, Thallid Shell-Dweller, The
+Mycotyrant) and seven were cards.json-only, so breadth cost card data and nothing else.
+
+**The apparatus is the part worth recording.** USER: *"We should not be generating any new tables
+during this process"* and *"You obviously have to alias them."* A `pool_table: true` run would
+GENERATE an R=10 table and move the round off the R=60 apparatus rounds 4-11 used, so levels would
+stop comparing. Instead `logs/fungus_screen/stage_aliased_table.sh` copies the shipped table and adds
+each new card's NAME to the bucket of the card it most resembles -- the mechanism `deck_compare.py`
+actually sees, since a profile-level `mulligan.keep_table_alias` is INVISIBLE to its coverage check
+(that is what made round 1b run table-free). K stays at 17; an alias never adds a bucket. Result:
+`keep table shared, on every arm (all cards covered)`, worst-arm fall-through 1.19%.
+
+The alias assumption is real and bounded: the mulligan decision treats the substitute like its host,
+which holds the keep/bottom policy FIXED across arms by construction -- exactly what isolates the
+in-play difference -- but it cannot say a new card would want a different keep policy.
+
+## Round 13 (seed 1060000): laddering the mana levers
+
+Sol Ring 2/3/4 and the land count 21/22/23, plus Crossroads 2->3 and Beastmaster 2->4. Each Sol Ring
+rung spends one more documented free donor and is paired with its OWN same-donor control, so a rung
+reads as `value(Sol Ring #k) - value(the filler it displaced)` instead of being flattered by donors
+that gain. Fall-through runs 1.19% / 3.35% / 6.32% as the 1-of climbs (the declared `max_fallback`
+0.07 exists for this; the default 0.01 refuses), one-way against the ladder, so every rung is a
+LOWER bound -- about 0.004t of understatement at four copies against an effect of 0.079. The land
+arms carry none of it: bucket [13] already holds 8 copies and a bucket at >= 7 cannot overflow.
+
+## Still untested after round 13
+
+* **Doubling Season 4->1.** Both 4->3 and 4->2 are free; a third free copy would be a sixth slot.
+* **The composite**, which is the only thing that can confirm the greedy pairing of adds against
+  donors is additive -- round 5 already caught strong non-additivity between two land cuts.
+* **Mono-green post-fix**, reopened by the USER's conditional Deathspore floor.
+
+## The swap arithmetic, and why it is exact rather than a splice
+
+Every round in this screen fills with Vitaspore Thallid, which turns out to make the assembly
+algebra cancel cleanly. Writing `v3` for `value(Vitaspore #3)`:
+
+* A round-8 donor arm (cut X by one, add one Vitaspore) measured `d_X = v3 - cost(X)`.
+* A round-11/12 up-count or add arm (cut Psychotrope, add A) measured
+  `delta_A = value(A) - cost(Psychotrope)`, and the control `u_vita3 = v3 - cost(Psychotrope)`,
+  so the NET column is `NET_A = delta_A - u_vita3 = value(A) - v3`.
+
+Therefore an arbitrary swap "cut X, add A" has
+
+        value(swap) = value(A) - cost(X) = NET_A + d_X
+
+-- both terms directly measured, with `v3` cancelling. No absolute card value is ever needed, which
+is just as well, since a screen cannot produce one.
+
+**It has a free consistency check, and the check passes.** Predicting the one swap that was measured
+directly: `NET(Sol Ring #2) + d_psycho0 = -0.0793 + (-0.0123) = -0.0916`, against the measured
+`u_solring2 = -0.0945`. Agreement to 0.003t -- about two standard errors -- so the additive model is
+good to roughly that precision at one-slot scale. That is the licence for a GREEDY assembly (adds
+sorted by `NET` ascending against donors sorted by `d_X` ascending, taking pairs while the sum is
+negative), and the bound on how far to trust it: the composite round must still MEASURE the result,
+because round 5 caught strong non-additivity between two land cuts and nothing here rules out the
+same between, say, a 21st land and a second Sol Ring -- both of which do the same job.
+
+**Predict the composite before running it.** Writing the prediction down first is what makes
+non-additivity visible instead of absorbable: a composite that lands on its predicted sum is
+evidence the pairing is sound, and one that misses names the interacting pair.
