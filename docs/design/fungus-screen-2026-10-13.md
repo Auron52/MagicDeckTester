@@ -664,3 +664,58 @@ alternative spend for the Mycotyrant and Crossroads-#3 slots) and `w_mono` (mono
 **Predictions on the record before the run: `w_A` -0.195 std / -0.305 2hg; `w_B` -0.253 / -0.375;
 `w_C - w_B` -0.0133 / -0.0530.** Worst-arm fall-through is 4.90%, one-way against the candidate
 arms, so the measured gains are LOWER bounds by roughly 0.003t.
+
+## Round 14 RESULT: the composite holds to ~8%, mono-green wins std, and two of my calls were wrong
+
+| arm | std | 2hg | mean |
+|---|---|---|---|
+| **w_mono** mono-green | **-0.2752** | -0.3595 | -0.3174 |
+| **w_D** Crossroads 2 + Shroofus 2 + Badger 2 | -0.2480 | **-0.3972** | **-0.3226** |
+| w_C w_B + Mycoloth 4->2 | -0.2507 | -0.3760 | -0.3134 |
+| w_B the predicted candidate | -0.2365 | -0.3475 | -0.2920 |
+| w_A Mycoloth-neutral, 20 lands | -0.1765 | -0.2790 | -- |
+| w_land25 five extra lands only | -0.1042 | -0.1212 | -- |
+| w_beast4 Beastmaster 2->4 only | -0.0983 | -0.1953 | -- |
+
+**THE ADDITIVITY ANSWER, which is the point of the round.** Predicted w_A -0.195/-0.305 and w_B
+-0.253/-0.375; measured -0.1765/-0.2790 and -0.2365/-0.3475. Short by 6.5-9.5%, in the SAME
+direction in both formats and both arms, and ~0.003t of that is the one-way fall-through penalty. So
+`value(cut X, add A) = NET_A + d_X` carried an eight-round screen with a small, consistent,
+CONSERVATIVE bias. Writing the prediction down first is what made that legible rather than absorbable.
+
+**My Crossroads-3 + Mycotyrant choice was worse than Shroofus-2 + Badger-2:** `w_D - w_B` =
+-0.0115 std / -0.0497 2hg in favour of the alternative. I had already decided to cut Crossroads to 2
+on the unmodelled-drawback argument below, so the measurement and the judgement agree independently.
+Note this is TWO changes at once, so it does NOT establish which half was weak -- round 15's `x_E`
+puts The Mycotyrant back uncontested.
+
+**MONO-GREEN WINS std** by -0.0245 +-0.0119 (t=-2.06) and loses 2hg to `w_D` by -0.0377. The colour
+question the USER reopened is genuinely live, and the two co-equal formats disagree about it.
+
+**Beastmaster 2->4 replicated held-out** (-0.0983/-0.1953 here vs -0.0885/-0.1878 in round 13),
+which matters because it now carries the assembly. Format split again -0.0970 (t=-14.9).
+
+**Lands are real but second-rate per slot.** `w_land25` spends the same five slots as `w_A` for
+-0.1042 against -0.1765. The ladder is dead linear at ~0.020/land through 25 and has not turned; a
+good spell buys ~0.035/slot. So lands take the slots spells do not want. `w_land25` is also the only
+arm whose format split is small (-0.0170 vs ~-0.10 everywhere else): lands help both formats about
+equally, while every spell edit is worth roughly twice as much in 2hg.
+
+### The Concordant Crossroads judgement, recorded because it is not a number
+
+Crossroads carries two unmodelled properties and both bite only at TWO OR MORE copies:
+
+1. It is a **World enchantment** (CR 704.5m: all but the most recently played World permanent go to
+   their owners' graveyards). cards.json's own note already says the rule is not modelled and that
+   the invariant "GOES LIVE AT TWO OR MORE COPIES, where a second would kill the first in paper and
+   the engine would keep both".
+2. Its haste grant is **symmetric** -- "All creatures have haste", both sides. `HasHasteFromLords` is
+   controller-scoped, which is sound here only because the goldfish's bodies never attack.
+
+The world-rule gap turns out to be nearly inert for a specific reason: haste does not stack, so a
+second copy on the battlefield adds nothing in either world, and the measured gain from extra copies
+is DRAW CONSISTENCY, which is legitimate. (If anything the model slightly UNDER-rates multiples in a
+Mycotyrant list, since in paper the replaced copy reaches the graveyard and counts toward descend.)
+The symmetric grant is the one that matters in paper, and it is the mirror image of the USER's
+warning -- a card that measures well partly because its downside is invisible. Hence the call to run
+2 rather than 3, which `w_D` then supported independently; round 15's `x_G` prices going to 1.
