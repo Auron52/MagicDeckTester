@@ -180,6 +180,26 @@ Skullcrack > Light Up the Stage > Eidolon of the Great Revel.
   face-damage spell precedes Light Up in the same plan, so Swiftspear -> burn -> Light Up for {R} becomes findable
   (seed 9295 gi 294, a turn-3 kill the engine misses at every budget).
 
+### Fluctuator -- SETTLED (USER 2026-10-14)
+USER: "I guess the Fluctuator order is okay. The order doesn't matter much in that deck, except that cycling always
+goes at the end. (that should also be placed) Why can't we use a land drawn by cycling? We should be able to consider
+it whether this is in a go-off heuristic or actual search. And yes, let's look into potential problems."
+Order (single main): land > Unearth > Enlightened Tutor > Drannith Stinger > Fluctuator > Hollow One > a second
+Fluctuator (one already on the battlefield; it does nothing) > CYCLING (every cycling activation comes after every cast
+of its window -- the USER asked for it to be PLACED in the order explicitly, not left implicit in the dig loop).
+Forsake the Worldly is never cast (its only targets are our own Fluctuator / Hollow One).
+- A LAND DRAWN BY CYCLING (USER): it must be considerable as the turn's land drop, by the dig chain's own rule (the
+  go-off heuristic) and by the search. Today it is not, for four reasons found in the code: (1) a land draw never
+  stops the chain -- the only exception is Fluctuator's pending-Unearth case (DigResolveEvenOnLand); (2) at a nonland
+  draw the "anything castable now?" gate (AnyHandCastableNow) counts only battlefield mana, never the open drop; (3)
+  the deck has no second main, so no later pass plays the drop -- unless the chain stops, the drop is lost for the
+  turn; (4) the fodder pick (SelectDigSource) may cycle the land away -- the USER's "occasionally an untapped land"
+  protection (ledger 7.5) was never built.
+- INVESTIGATE (USER: "yes, let's look into potential problems"): the free Hollow Ones the chain cycled or left in
+  hand (4 of 30 probes), and a census of lands drawn by cycling with the drop open and never played.
+- Open: skip a second Fluctuator entirely (MTG_NO_REDUNDANT_REDUCER, built, OFF) -- not answered; it is measured and
+  stays OFF until the USER rules.
+
 ## Start here: eight answers that unblock most of the rest
 
 There are 141 questions below. Each has a default, but a default is not an adoption: until you answer, the
