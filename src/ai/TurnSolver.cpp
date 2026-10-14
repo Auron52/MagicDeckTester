@@ -2937,10 +2937,23 @@ static const bool s_legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
 static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
 {
     if (!s_move_order || plans.size() < 2) { return; }
+    const bool twin_last = DigTwinLastOn();
     std::stable_sort(plans.begin(), plans.end(),
-        [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+        [twin_last](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn; }
+            // Dig siblings last (MTG_DIG_TWIN_LAST): a fan's 0 / 1 plans after every non-sibling of
+            // the same win class, so a node whose base plans already win never applies a twin, and a
+            // budget that runs out mid-node has spent on base plans first. A base is never a sibling
+            // (it is marked 2) and shares its twin's other keys, so it still sorts ahead of it -- the
+            // order DigFoldMemo needs. Families of wave-0 variants are not split: twins are cloned
+            // from base plans only, after AppendBreakpointVariants.
+            if (twin_last)
+            {
+                const bool sa = a.dig_group != 0 && (a.dig_choice == 0 || a.dig_choice == 1);
+                const bool sb = b.dig_group != 0 && (b.dig_choice == 0 || b.dig_choice == 1);
+                if (sa != sb) { return sb; }
+            }
             // Pump-waste tie-break (SubsetPumpWasted): a plan whose pump payload cannot be
             // used sorts after its siblings, so among horizon-tied wins first-verified-win
             // commits the line the tuned auto-fire hold would pick. Below wins_this_turn on
