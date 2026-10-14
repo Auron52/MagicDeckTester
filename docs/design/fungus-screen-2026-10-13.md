@@ -953,3 +953,66 @@ drift of **0.017 std / 0.044 2hg** between seed blocks, which is larger than mos
 being chased. So **absolute deltas versus base are not comparable across rounds** -- only
 within-pool paired differences are, since those share seeds and the apparatus. Every number in
 this section is within-pool, and the final recommendation quotes one pool rather than splicing.
+
+---
+
+## Round 18 RESULT (seed 1110000): every arm beats `z_m24`
+
+The three free cuts from round 17 (Doubling Season 1→0, Utopia Mycon 3→2, Blooming Marsh 4→0 with
+the four slots staying land as Forest) free **two spell slots**. Each arm spends them differently;
+`f_ref` is `z_m24` in the same pool, so every number below is a within-pool paired difference.
+
+| arm | the two slots | std | 2hg | mean vs `z_m24` |
+|---|---|---|---|---|
+| **`f_E`** | `f_A` + Mycoloth 2→1 → Badger #3 | **−0.0740** | **−0.0645** | **−0.0692** |
+| `f_A` | Crossroads #3 + Saproling Migration #2 | −0.0597 | −0.0470 | −0.0533 |
+| `f_C` | Yavimaya Sapherd #2 + Thallid #2 | −0.0459 | −0.0465 | −0.0462 |
+| `f_B` | Brightcap Badger #3 + Shroofus #3 | −0.0382 | −0.0507 | −0.0444 |
+| `f_D` | 2 Spore Swarm | −0.0297 | −0.0333 | −0.0315 |
+| `f_free` | both slots BLANK (2 Vitaspore) | −0.0185 | −0.0150 | −0.0167 |
+
+### The predictions, scored
+
+* `f_free` predicted **−0.014**, measured **−0.0167**. The three cuts measured −0.0069, −0.0065
+  and −0.0025 separately, so an exactly additive composite is −0.0159 and this ran **5%
+  super-additive** — against round 14's 6.5–9.5% sub-additive. Both are within noise of exact, so
+  the swap algebra is well calibrated for means over a wide range of composite sizes.
+* The best *spend* arm was predicted at **−0.045 to −0.055**; `f_A` landed at **−0.0533**, inside
+  the band. `f_E`, added as an extra, beat it.
+
+### `f_A` and `f_E` won while carrying the round's only handicap
+
+Raising Crossroads to 3 makes untabled compositions reachable, so those two arms ran at
+**3.75% / 3.77%** fall-through against **1.58%** on every other arm — a one-way penalty *against*
+them. They won anyway, which makes both wins **lower bounds**. That is the direction that makes a
+result safe to build the next round on.
+
+### What `f_E` decomposes to
+
+`f_E − f_A` is exactly (Mycoloth 2→1) + (Badger 2→3) = −0.0143 / −0.0175, mean −0.0159. Round 17
+priced Mycoloth 2→1 at −0.0012, a null. So **Brightcap Badger #3 is worth about −0.015 alone**.
+
+The structural story is coherent and it is round 11's finding one level on. Round 11 said the deck
+was *mana-starved, not body-starved*; with 24 lands and Sol Ring the mana is now there, and the
+payoff has become **cheap bodies plus haste** — the deck keeps asking for more Badger, Crossroads
+and Migration while shedding Doubling Season, Utopia Mycon and Mycoloth. Note Mycoloth 4→0 was
+round 1b's single best arm (`a3`, −0.1502/−0.2243) *before* the Main-2 devour pin was fixed, and
+round 9 then found the 2/1/0 ladder monotone the other way *after* the fix. Round 19 re-tests 1→0
+on a list that has moved 0.41 turns since either reading — the only honest way to settle a number
+that has already flipped sign once.
+
+### `f_E`, the leading list (60 cards, 24 lands, mono-green)
+
+```
+1 Sol Ring              2 Utopia Mycon          1 Mycoloth
+4 Sporecrown Thallid    2 Tukatongue Thallid    3 Brightcap Badger
+4 Undercellar Myconid   2 Shroofus Sproutsire   4 Beastmaster Ascension
+2 Wild Growth           4 Saproling Burst       3 Concordant Crossroads
+2 Saproling Migration   1 Thallid               1 Yavimaya Sapherd
+LANDS (24)   20 Forest  4 Hickory Woodlot
+```
+
+No Doubling Season at all — a card the USER likes and expected to keep ("*I like Doubling Season
+and think it is strong*"), though they also said reducing it "*may very well be defensible*" and
+that multiples are not super good. The screen took it to zero on numbers: the last copy was worth
+−0.0069 to CUT in round 17, and nothing in round 18 wanted it back.
