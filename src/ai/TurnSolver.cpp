@@ -4069,6 +4069,11 @@ static bool BpPlanMadeACast()
 struct BpEnumEntry
 {
     std::vector<TurnSolver::Plan> plans;
+    // MTG_BP_NEW_ONLY_DEMOTE: the continuations MTG_BP_NEW_ONLY filtered OUT of `plans` (old cards
+    // only), kept for the deferred walker's last wave (TurnSolver::kBpDemotedChoice). Empty with the
+    // lever off -- and never read by the canon, wave 0, the node or any stillborn test, which all
+    // keep seeing exactly `plans`.
+    std::vector<TurnSolver::Plan> demoted;
     // WHICH DECISION FILLED THIS ENTRY (MTG_BP_ENUM_EPOCH; see BpEnumEpochScoped). Every SIBLING
     // memo in this family -- solvememo, enummemo, the candidate dedup -- stamps and checks this,
     // and the stated reason is that their shared key is only exact WITHIN one decision. This cache
@@ -4694,6 +4699,34 @@ static bool BpNewOnlyActive(const GameState&)
 bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
 {
     return BpNewOnlyActive(state);
+}
+
+// MTG_BP_NEW_ONLY_DEMOTE -- the rule above, made a budget ORDER instead of a deletion (2026-10-14).
+//
+// WHERE THE SIBLING ARGUMENT FAILS. "A continuation of P that casts only old cards is that sibling's
+// line with an EMPTY continuation" -- the same cards, yes, but not always the same SEQUENCE. The
+// sibling P u {X} is applied in the deck's cast order (provider rank; within a rank, plan order --
+// which for an opaque set is the enumerator's, i.e. hand order), while the continuation casts X
+// AFTER the breakpoint. When X ranks before a card of P, or the tie falls the other way, the two are
+// different lines, and when the order matters the continuation's line exists nowhere else. Found by
+// the Mirrorwing cast-order draft (build/scratch/castorder): with Zada + Instigator + Frontline
+// Heroism every trick leaves a Soldier the next fan copies onto, so Ancestral Anger before Oracle's
+// Restoration deals 88 where Oracle first deals 82, and Fists of Flame before Gold Rush 50 against
+// 46 -- both unreachable at budget 0 with the rule on, both found with MTG_BP_NEW_ONLY=0. That is
+// the BAD shape of the budget doctrine: a gate consulted at every budget, unlimited included.
+//
+// THE GOOD SHAPE. The dropped entries are kept (BpEnumEntry::demoted) and reachable only through
+// the deferred wave walker, which hands them out LAST in each slot -- after its ranks and its EMPTY
+// -- and through the node's pend slot the same way. So a finite budget still spends on exactly the
+// filtered list first (the cost the rule was adopted for), nothing the filtered list feeds changes
+// (the canon's cands.front(), wave 0's ranks, ArmNew's empty-list test, NSKIP's length, the node's
+// children), and an unlimited budget reaches every continuation. A demoted entry whose sibling DOES
+// realise its order lands on the sibling's state and dies in the post-apply dedup for the price of
+// one apply, which is the whole residual cost.
+static bool BpNewOnlyDemoteOn()
+{
+    static const bool on = EnvOn("MTG_BP_NEW_ONLY_DEMOTE", true);   // DEFAULT ON; =0 deletes as before
+    return heurarm::Flag(heurarm::BP_NEW_ONLY_DEMOTE, on);
 }
 
 // WAVE 0's STILLBORN TEST (was MTG_BP_ARM_NEW; unconditional since 2026-10-01, step 28 of
@@ -18981,6 +19014,9 @@ bool TurnSolver::InBpContinuation() { return g_bp_continuation_depth > 0; }
 // is eligible (the one at bp_at), so there is at most one write. Thread_local -- the search is
 // single-threaded per game, and the batch runner plays games concurrently.
 static thread_local int g_bp_cands_last = 0;
+// ...and the same breakpoint's DEMOTED list length (MTG_BP_NEW_ONLY_DEMOTE; BpEnumEntry::demoted),
+// written beside it by the same enumeration so the walker learns both from one apply.
+static thread_local int g_bp_demoted_last = 0;
 
 // ---- WAVE 0's MISSING STILLBORN TEST (MTG_BP_ARM_NEW) ------------------------------------------
 //
@@ -19014,6 +19050,11 @@ static thread_local int g_bp_cands_last = 0;
 // Indexed by the ordinal of the class-on breakpoint within the apply -- the same numbering `bp_at`
 // uses -- and only filled for ordinals wave 0 can actually target (< BpSearchDepth()).
 static thread_local std::vector<int> g_bp_base_lens;
+// The DEMOTED list length (MTG_BP_NEW_ONLY_DEMOTE) at the breakpoint g_bp_base_lens[0] measured --
+// written with that first push, read only while g_bp_base_lens.size() == 1 (ArmNewDupAll's case), so
+// it never needs its own reset. A stillborn decline records it in the walker's W0Len, so the slot it
+// would otherwise skip still hands out its demoted wave without a probe apply.
+static thread_local int g_bp_base_dlen0 = -1;
 
 // ...AND HOW MANY CLASS-ON BREAKPOINTS THE APPLY REACHED IN TOTAL. Required for soundness, and the
 // first cut (2026-09-27) was wrong without it: smoke at shipped defaults read 95 passed / 2 failed (burn d3 gi16,
@@ -40198,8 +40239,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (static_cast<int>(g_bp_base_lens.size()) < BpSearchDepth())
             {
-                const std::size_t n =
-                    TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat).size();
+                BpEnumEntry* const be = BpEnumEntryFor(state, is_pre_combat);
+                const std::size_t n = be->plans.size();
+                // ...and its DEMOTED length, for the stillborn decline's slot record (see
+                // g_bp_base_dlen0; MTG_BP_NEW_ONLY_DEMOTE). Same lookup, nothing re-enters.
+                if (g_bp_base_lens.empty()) { g_bp_base_dlen0 = static_cast<int>(be->demoted.size()); }
                 g_bp_base_lens.push_back(static_cast<int>(n));
                 if (s_rollout_stats)
                 {
@@ -40228,12 +40272,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // and nothing it calls re-enters the enumerator, so the memo entry cannot be invalidated
             // underneath it. The by-value form was deep-copying every Plan's whole vector<Action> on
             // every apply, which perf put at 25.6% of a pathological Fungus label game.
-            const std::vector<TurnSolver::Plan>& cands =
-                TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
+            // The memo ENTRY, not just its list: the demoted list (MTG_BP_NEW_ONLY_DEMOTE) lives
+            // beside it. Same lookup EnumerateBreakpointPlansRef makes, same lifetime contract.
+            BpEnumEntry* const bp_ent = BpEnumEntryFor(state, is_pre_combat);
+            const std::vector<TurnSolver::Plan>& cands = bp_ent->plans;
             // How LONG is the ranked list? The caller can only emit bp_choice = 0..W-1 blind, so
             // report the real length back for the deferred-wave loop (and MTG_BP_CANDS_PROBE).
             // See g_bp_cands_last -- write-only for now, hence byte-identical.
-            g_bp_cands_last = static_cast<int>(cands.size());
+            g_bp_cands_last   = static_cast<int>(cands.size());
+            g_bp_demoted_last = static_cast<int>(bp_ent->demoted.size());
             // Child-dup predictor sizing (MEASUREMENT, MTG_ROLLOUT_STATS only): on the k=0 apply,
             // count the list's distinct content fingerprints for the node host (see
             // g_bp_cands_fp_distinct). bp_choice==0 gates it to once per list, same as BpCands.
@@ -40348,6 +40395,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (ci >= 0)
                 {
                     out      = cands[ci];
+                    resolved = true;
+                }
+            }
+            // DEMOTED (kBpDemotedChoice + j; MTG_BP_NEW_ONLY_DEMOTE): entry j of the list
+            // MTG_BP_NEW_ONLY filtered out, handed out by the walker's last wave only. Past the end
+            // (the list is empty with the lever off) it falls through to EMPTY like any overrun.
+            else if (TurnSolver::IsBpDemotedChoice(plan.bp_choice))
+            {
+                const std::size_t j = static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice);
+                if (j < bp_ent->demoted.size())
+                {
+                    out      = bp_ent->demoted[j];
                     resolved = true;
                 }
             }
@@ -51844,6 +51903,52 @@ namespace
         static const bool on = EnvOn("MTG_BP_WAVE_NSKIP", true);
         return on;
     }
+    // ---- EVERY CONTINUATION OPEN TO THE SEARCH (docs/design/bp-empty-arm-deferred-site.md) -------
+    // USER 2026-10-14: *"All options should be open to the search except those that heuristics in the
+    // provider close."* USER 2026-09-30: "done with this phase" is always a scored option. The engine
+    // closures the audit in that doc found, each a host that stopped short of an option it owed (the
+    // fifth, MTG_BP_NEW_ONLY_DEMOTE, sits with MTG_BP_NEW_ONLY itself):
+    //
+    // MTG_BP_WAVE_EMPTY -- the walker retired a slot at the end of its list, so the slot's EMPTY ("cast
+    // nothing more") was applied as a probe at most and never scored. Wave 0 emits an EMPTY arm only for
+    // the plans and indices it fans (bp_at < BpSearchDepth() of a plan in BpWave0SiteMask), so for a
+    // site it defers (site 3, MTG_BP_SITE3_DEFER), a plan past MTG_BP_MAXBASE, and EVERY nested index,
+    // MTG_BP_BASE_CANON's cands.front() was the only continuation the search ever scored there.
+    // Hinata2 shipped gi 137: "Soulfire, then nothing; main 2 re-decides" is the T7 kill, and no budget
+    // reached it. The EMPTY is handed out LAST in its slot (after rank n-1), so a finite budget spends
+    // first on exactly what it spent on before -- the ordering the budget doctrine asks for.
+    inline bool BpWaveEmptyOn()
+    {
+        static const bool on = EnvOn("MTG_BP_WAVE_EMPTY", true);   // DEFAULT ON; =0 restores the retire
+        return heurarm::Flag(heurarm::BP_WAVE_EMPTY, on);
+    }
+    // MTG_BP_WAVE_UNHOSTED_SITES -- BpWaveSiteMask removes the node's sites on the node's TURNS
+    // (BpNodeHostsThisTurn is turn-keyed: it cannot see the host), on the premise that the node searched
+    // them in full. Three hosts never pend a plan at all -- SolveWithLookahead's candidate loop (the
+    // executor's no-committed-line fallback and every re-solve root), and both group-wave tranches --
+    // so on those turns a site-3 plan there had no wave 0 (SITE3_DEFER), no walker and no node: the
+    // canon was its only continuation at any budget. Such a host now walks the full BpSiteMask.
+    inline bool BpWaveUnhostedSitesOn()
+    {
+        static const bool on = EnvOn("MTG_BP_WAVE_UNHOSTED_SITES", true);   // DEFAULT ON; =0 reverts
+        return heurarm::Flag(heurarm::BP_WAVE_UNHOSTED_SITES, on);
+    }
+    // MTG_BP_WAVE_NEW_LAST -- ORDERING ONLY, default OFF: the walker hands out the new options above
+    // (a slot's EMPTY, its demoted wave) only once no slot has an in-list rank left -- one final wave
+    // across the node rather than the end of each slot. The same hand-outs at an unlimited budget;
+    // under a finite one the old ranks are spent first in full. Built as the churn mitigation the
+    // budget doctrine names (order the new options later), measured as an arm.
+    inline bool BpWaveNewLastOn()
+    {
+        static const bool on = EnvOn("MTG_BP_WAVE_NEW_LAST");
+        return heurarm::Flag(heurarm::BP_WAVE_NEW_LAST, on);
+    }
+    // MTG_BP_NODE_NESTED_SLOTS -- see BpWaveWalker::AddHostedNested.
+    inline bool BpNodeNestedSlotsOn()
+    {
+        static const bool on = EnvOn("MTG_BP_NODE_NESTED_SLOTS", true);   // DEFAULT ON; =0 reverts
+        return heurarm::Flag(heurarm::BP_NODE_NESTED_SLOTS, on);
+    }
     // ---- MTG_BP_W0_UNIF_COLLAPSE: the same stillborn argument, applied to WAVE 0 ----------------
     //
     // NSKIP above declines a WAVE slot whose ranks can only hand out something already scored. Wave 0
@@ -52086,6 +52191,7 @@ public:
     {
         int n     = -1;   // continuation list length the apply observed (g_bp_cands_last)
         int max_k = -1;   // highest rank wave 0 actually APPLIED for this slot
+        int m     = -1;   // its DEMOTED list length (g_bp_demoted_last; -1 = not observed)
     };
     using KnownLens = std::unordered_map<uint64_t, W0Len>;
     // `node_key` (MTG_BP_NSKIP_GLOBAL; nullptr = off) is this node's state dedup key, the half of the
@@ -52093,13 +52199,27 @@ public:
     //
     // `no_bp` (MTG_BP_WAVE_NOBP; nullptr = off) holds the indices of base plans whose OWN apply
     // reached no breakpoint occurrence at all. See the gate in the loop.
+    //
+    // `host_pends` -- can THIS host pend a base plan at the breakpoint node (does it pass the node a
+    // capture)? Only FSLineWin's and FSLineTail's plan loops ever do, and only when node_host_here.
+    // See BpWaveUnhostedSitesOn for why the mask has to know.
     BpWaveWalker(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
-                 std::size_t limit, const KnownLens* known_n = nullptr,
-                 const TranspositionTable::Key* node_key = nullptr,
-                 const std::unordered_set<std::size_t>* no_bp = nullptr)
+                 std::size_t limit, const KnownLens* known_n,
+                 const TranspositionTable::Key* node_key,
+                 const std::unordered_set<std::size_t>* no_bp,
+                 bool host_pends)
         : m_known_n(known_n), m_node_key(node_key)
     {
-        const int  sites  = BpWaveSiteMask(state);
+        // A SEARCHED apply: outside a playout and outside a continuation-list derivation, the two
+        // places MTG_BP_BASE_CANON stands down (BpUnbranchedCanon). It is exactly where a base plan's
+        // line at a breakpoint is cands.front() rather than EMPTY, so it is exactly where the two
+        // levers below have an option to add; elsewhere they would only re-score the base plan.
+        const bool searched_apply = g_rollout_nest == 0 && g_bp_enum_depth == 0;
+        m_empty  = searched_apply && BpWaveEmptyOn();
+        m_demote = searched_apply && BpNewOnlyDemoteOn();
+        m_new_last = (m_empty || m_demote) && BpWaveNewLastOn();
+        const int  sites  = (!host_pends && searched_apply && BpWaveUnhostedSitesOn())
+                          ? BpSiteMask() : BpWaveSiteMask(state);
         const bool dig_bp = BpDigFanoutPending(state, sites);
         if (limit > plans.size()) { limit = plans.size(); }
         for (std::size_t i = 0; i < limit; ++i)
@@ -52170,13 +52290,72 @@ public:
     bool Next(const std::vector<TurnSolver::Plan>& plans, TurnSolver::Plan& out)
     {
         const std::size_t n = m_slots.size();
+        // MTG_BP_WAVE_NEW_LAST (ordering only): the slots' EMPTY / demoted hand-outs wait until NO slot
+        // has an in-list rank left, instead of following each slot's own last rank. Same set of
+        // hand-outs either way; only WHEN a finite budget reaches them moves.
+        if (m_new_last)
+        {
+            for (std::size_t tried = 0; tried < n; ++tried)
+            {
+                const std::size_t here = (m_cursor + tried) % n;
+                Slot& sl = m_slots[here];
+                if (sl.done || (sl.n >= 0 && sl.k_next >= sl.n)) { continue; }
+                m_cursor       = (here + 1) % n;
+                m_last         = here;
+                m_last_k       = sl.k_next++;
+                out            = plans[sl.base];
+                out.bp_choice  = m_last_k;
+                out.bp_at      = sl.at;
+                out.bp_wave0   = false;
+                if (BpWaveProbeOn()) { BpWaveAt(sl.at); }
+                return true;
+            }
+        }
         for (std::size_t tried = 0; tried < n; ++tried)
         {
             const std::size_t here = m_cursor;
             m_cursor = (m_cursor + 1) % n;
             Slot& sl = m_slots[here];
             if (sl.done) { continue; }
-            if (sl.n >= 0 && sl.k_next >= sl.n) { sl.done = true; continue; }
+            if (sl.n >= 0 && sl.k_next >= sl.n)
+            {
+                // THE SLOT'S "CAST NOTHING MORE" (MTG_BP_WAVE_EMPTY). Every in-list rank has been
+                // handed out; before retiring, hand out the explicit EMPTY arm -- LAST, so a finite
+                // budget spends on exactly what it spent on before and only then on this. Owed only
+                // by a slot wave 0 never touched (see Slot::empty_owed), and only for a NON-empty
+                // list: with n == 0 the continuation already is EMPTY on every arm, base plan
+                // included, so there is nothing new to score.
+                if (sl.empty_owed && sl.n > 0 && sl.k_next == sl.n)
+                {
+                    sl.empty_owed  = false;
+                    m_last         = here;
+                    m_last_k       = sl.k_next++;
+                    m_last_empty   = true;
+                    out            = plans[sl.base];
+                    out.bp_choice  = kBpEmptyChoice;   // the sentinel, not rank n: same line, no
+                    out.bp_at      = sl.at;            // enumeration, and the executor plays it
+                    out.bp_wave0   = false;            // as EMPTY whether or not the line verified
+                    if (BpWaveProbeOn()) { BpWaveAt(sl.at); }
+                    return true;
+                }
+                // ...and AFTER it, the slot's DEMOTED wave (MTG_BP_NEW_ONLY_DEMOTE): the old-cards-only
+                // continuations MTG_BP_NEW_ONLY keeps out of the list. Last of all, so every budget
+                // reaches them only after everything it reached before.
+                if (m_demote && sl.m > 0 && sl.d_next < sl.m)
+                {
+                    m_last         = here;
+                    m_last_k       = sl.k_next;
+                    m_last_demoted = true;
+                    out            = plans[sl.base];
+                    out.bp_choice  = TurnSolver::kBpDemotedChoice + sl.d_next++;
+                    out.bp_at      = sl.at;
+                    out.bp_wave0   = false;
+                    if (BpWaveProbeOn()) { BpWaveAt(sl.at); }
+                    return true;
+                }
+                sl.done = true;
+                continue;
+            }
             m_last     = here;
             m_last_k   = sl.k_next++;
             out            = plans[sl.base];
@@ -52187,6 +52366,70 @@ public:
             return true;
         }
         return false;
+    }
+
+    // MTG_BP_NODE_NESTED_SLOTS: open the NESTED slots [pend_at + 1, want) of base plan `idx`, which
+    // the breakpoint NODE hosted at index `pend_at` (the node searched that index in full: its whole
+    // list plus EMPTY). `want` is how many class-on breakpoints child 0 -- the value-best
+    // continuation, which is what MTG_BP_NESTED_CANON hands every variant at an index it does not
+    // target -- reached. A slot here hands out (base, bp_at = at, rank k), i.e. cands.front() at the
+    // pend index and rank k at `at`: the same single deviation nested discovery opens for every
+    // un-hosted plan. The plan's own mask selection never made it a base on the node's turns
+    // (BpWaveSiteMask drops the node's sites there), so without this nothing ever did.
+    //
+    // The pend index itself is marked covered, so a base that IS a walker base for another site
+    // (an inline site 0 ahead of the cantrip) stops re-walking ranks the node already scored.
+    void AddHostedNested(const std::vector<TurnSolver::Plan>& plans, std::size_t idx, int pend_at,
+                         int want)
+    {
+        if (idx >= plans.size() || pend_at < 0) { return; }
+        std::size_t bi = m_bases.size();
+        for (std::size_t j = 0; j < m_bases.size(); ++j) { if (m_bases[j] == idx) { bi = j; break; } }
+        const bool fresh = (bi == m_bases.size());
+        if (fresh) { m_bases.push_back(idx); }
+        if (m_at_count.size() < m_bases.size()) { m_at_count.resize(m_bases.size(), 0); }
+        m_covered.insert(SlotKey(bi, pend_at));
+        // A base this walker already owns has opened [0, m_at_count) itself; never open a slot twice.
+        const int from = std::max(pend_at + 1, fresh ? 0 : m_at_count[bi]);
+        for (int at = from; at < want; ++at)
+        {
+            if (m_covered.count(SlotKey(bi, at)) != 0) { continue; }
+            m_covered.insert(SlotKey(bi, at));
+            m_slots.push_back(Slot{ idx, bi, at, 0, 0, -1, false, m_empty });
+            if (BpWaveProbeOn()) { g_bp_wave_probe.nested.fetch_add(1, std::memory_order_relaxed); }
+        }
+        // A FRESH base never opens the indices before the pend (no route ever selected it for them;
+        // the canon audit owns that question), so its own discovery resumes past what was opened here.
+        if (fresh) { m_at_count[bi] = std::max(want, pend_at + 1); }
+    }
+
+    // MTG_BP_NEW_ONLY_DEMOTE: the DEMOTED wave of the pend index of base plan `idx`, which the node
+    // hosted (its children walked the whole filtered list plus EMPTY; `m` is the demoted length child
+    // 0 measured there). A slot with its ranks already exhausted, so Next() hands out only the demoted
+    // entries -- after every other slot's ranks, round-robin, like any last wave.
+    void AddHostedDemoted(const std::vector<TurnSolver::Plan>& plans, std::size_t idx, int pend_at,
+                          int m)
+    {
+        if (!m_demote || idx >= plans.size() || pend_at < 0 || m <= 0) { return; }
+        std::size_t bi = m_bases.size();
+        for (std::size_t j = 0; j < m_bases.size(); ++j) { if (m_bases[j] == idx) { bi = j; break; } }
+        if (bi == m_bases.size())
+        {
+            m_bases.push_back(idx);
+            m_at_count.resize(m_bases.size(), 0);
+            m_at_count[bi] = pend_at + 1;   // see AddHostedNested: a fresh base opens nothing before
+        }
+        else
+        {
+            // A base this walker already owns for another site may hold a slot at the pend index
+            // already; that slot learns the same demoted length and hands the wave out itself.
+            for (const Slot& s : m_slots) { if (s.base_slot == bi && s.at == pend_at) { return; } }
+            // ...and if it does not yet, the node owns the index's ranks: never open it here.
+            m_covered.insert(SlotKey(bi, pend_at));
+        }
+        Slot ds{ idx, bi, pend_at, 0, 0, 0, false, false };
+        ds.m = m;
+        m_slots.push_back(ds);
     }
 
     // Report what the apply of the last handed-out variant observed: `n` = the continuation list's
@@ -52202,15 +52445,40 @@ public:
     // Returns true when the rank was past the end, which is what terminates the walk for this slot:
     // every further rank resolves to the same EMPTY. NOT "a copy of its own base plan" -- that was
     // true of the deleted greedy fallback only; see the overrun comment in bp_searched_plan.
-    bool Report(const std::vector<TurnSolver::Plan>& plans, int n, int seen)
+    //
+    // ...EXCEPT the slot's explicit EMPTY hand-out (MTG_BP_WAVE_EMPTY), which returns false: it is a
+    // line to SCORE, not a probe. Its apply enumerates nothing (the sentinel resolves before the
+    // list), so `n` is meaningless there and is neither stored nor memoised; `seen` is real and
+    // still opens nested slots.
+    //
+    // `m` (MTG_BP_NEW_ONLY_DEMOTE) is the same breakpoint's DEMOTED list length, read from the same
+    // apply (g_bp_demoted_last); -1 = the host does not track it. A slot that still owes demoted
+    // hand-outs is not retired at the end of its list -- Next() hands them out last.
+    bool Report(const std::vector<TurnSolver::Plan>& plans, int n, int seen, int m = -1)
     {
+        if (m_last_empty || m_last_demoted)
+        {
+            // The slot's EMPTY or one of its DEMOTED entries: a line to score. Neither enumerates
+            // the slot's list again in a way that could change it, so `n` and `m` stay as learned;
+            // Next() retires the slot when nothing is owed any more.
+            const bool was_empty = m_last_empty;
+            m_last_empty   = false;
+            m_last_demoted = false;
+            Slot& es = m_slots[m_last];
+            if (was_empty && !(m_demote && es.m > 0)) { es.done = true; }
+            const std::size_t ebi = es.base_slot;
+            if (seen > 0 && BpNestDiscover()) { AddSlots(plans, ebi, seen); }
+            return false;
+        }
         Slot& sl = m_slots[m_last];
         sl.n = n;
+        if (m >= 0) { sl.m = m; }
         const std::size_t bi = sl.base_slot;
         const bool past_end = (n <= m_last_k);
         if (past_end)
         {
-            sl.done = true;
+            // Retired -- unless its DEMOTED wave is still owed (MTG_BP_NEW_ONLY_DEMOTE).
+            sl.done = !(m_demote && sl.m > 0);
             // Retired on its FIRST hand-out: the list was already shorter than the rank this slot
             // opened at, so the apply bought nothing but `n`. See slots_stillborn.
             if (BpWaveProbeOn() && m_last_k == sl.k0)
@@ -52252,7 +52520,17 @@ private:
         int         k_next;     // next rank to hand out
         int         n;          // the list's real length, -1 until an apply reports it
         bool        done;
+        // MTG_BP_WAVE_EMPTY: this slot still owes its explicit EMPTY hand-out. Set for a slot wave 0
+        // never touched (k0 == 0): a base plan wave 0 did not fan, and every nested index. A wave-0
+        // slot (k0 == W) owes nothing -- AppendBreakpointVariants emitted its EMPTY arm unconditionally.
+        bool        empty_owed;
+        // MTG_BP_NEW_ONLY_DEMOTE: the slot's DEMOTED list length (-1 until an apply reports it) and
+        // the next entry of it to hand out.
+        int         m      = -1;
+        int         d_next = 0;
     };
+    static uint64_t SlotKey(std::size_t bi, int at)
+    { return (static_cast<uint64_t>(bi) << 8) | static_cast<uint64_t>(at & 0xFF); }
 
     // Ensure base `bi` has slots for bp_at = 0 .. want-1. Wave 0 covered ranks 0..W-1 of
     // bp_at < BpSearchDepth() for a plan it fanned out (bp_wave0), so those resume at rank W; every
@@ -52267,6 +52545,9 @@ private:
         const int         wid  = BpSearchWidth();
         for (int at = m_at_count[bi]; at < want; ++at)
         {
+            // Opened already by AddHostedNested, or the node's own pend index (MTG_BP_NODE_NESTED_SLOTS).
+            // Empty -- and so never consulted -- unless that lever registered a hosted plan.
+            if (!m_covered.empty() && m_covered.count(SlotKey(bi, at)) != 0) { continue; }
             const int k0 = (w0 && at < BpSearchDepth()) ? wid : 0;
             // STILLBORN SKIP (see BpWaveNSkipOn): wave 0 already measured this breakpoint's list,
             // every rank from k0 up is past its end, AND wave 0 already applied a past-the-end rank
@@ -52286,8 +52567,25 @@ private:
                 else if (it->second.n >= 0
                          && it->second.n <= k0 && it->second.max_k >= it->second.n)
                 {
-                    g_bp_wave_probe.nskip_slots.fetch_add(1, std::memory_order_relaxed);
-                    continue;
+                    // ...but a slot whose DEMOTED wave is still owed is not stillborn
+                    // (MTG_BP_NEW_ONLY_DEMOTE). Wave 0 already measured both lengths, so open it with
+                    // them filled in: Next() goes straight to the demoted entries, no probe apply.
+                    // An unmeasured demoted length (-1) opens the slot as before (one probe).
+                    if (m_demote && it->second.m != 0)
+                    {
+                        if (it->second.m > 0)
+                        {
+                            Slot ds{ idx, bi, at, k0, k0, it->second.n, false, false };
+                            ds.m = it->second.m;
+                            m_slots.push_back(ds);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        g_bp_wave_probe.nskip_slots.fetch_add(1, std::memory_order_relaxed);
+                        continue;
+                    }
                 }
                 else
                 { g_bp_wave_probe.nskip_live.fetch_add(1, std::memory_order_relaxed); }
@@ -52324,7 +52622,9 @@ private:
                     // reason this mode stays default 0.
                     const bool g_skip = (k0 > 0) ? (git->second < k0)
                                                  : (gmode >= 2 && git->second == 0);
-                    if (g_skip && !BpNSkipGlobalVerify())
+                    // (The cross-node memo cannot carry the demoted length, so under
+                    // MTG_BP_NEW_ONLY_DEMOTE it never declines a slot -- default mode 0 anyway.)
+                    if (g_skip && !BpNSkipGlobalVerify() && !m_demote)
                     {
                         g_bplen_skips.fetch_add(1, std::memory_order_relaxed);
                         g_bp_wave_probe.nskip_slots.fetch_add(1, std::memory_order_relaxed);
@@ -52332,7 +52632,7 @@ private:
                     }
                 }
             }
-            m_slots.push_back(Slot{ idx, bi, at, k0, k0, -1, false });
+            m_slots.push_back(Slot{ idx, bi, at, k0, k0, -1, false, m_empty && k0 == 0 });
             if (at > 0 && BpWaveProbeOn())
             { g_bp_wave_probe.nested.fetch_add(1, std::memory_order_relaxed); }
         }
@@ -52347,7 +52647,83 @@ private:
     std::size_t              m_cursor = 0;
     std::size_t              m_last   = 0;
     int                      m_last_k = 0;
+    bool                     m_empty  = false;        // MTG_BP_WAVE_EMPTY in force at this host
+    bool                     m_last_empty = false;    // the last hand-out was a slot's EMPTY
+    bool                     m_demote = false;        // MTG_BP_NEW_ONLY_DEMOTE in force at this host
+    bool                     m_last_demoted = false;  // the last hand-out was a DEMOTED entry
+    bool                     m_new_last = false;      // MTG_BP_WAVE_NEW_LAST: new options after ALL ranks
+    std::unordered_set<uint64_t> m_covered;           // MTG_BP_NODE_NESTED_SLOTS: (base, at) already opened
 };
+
+// One node-hosted plan whose value-best child reached nested breakpoints (MTG_BP_NODE_NESTED_SLOTS):
+// the plan's index in the host's list, the node's pend index, and child 0's class-on breakpoint count.
+// Recorded by the two node hosts' child loops and handed to the walker (BpWaveWalker::AddHostedNested).
+struct NodeNested
+{
+    std::size_t idx;
+    int         pend_at;
+    int         want;
+    int         demoted;   // MTG_BP_NEW_ONLY_DEMOTE: the pend index's demoted length (AddHostedDemoted)
+};
+
+// The node's record for one hosted plan, read off child 0's apply (both node hosts call this right
+// after it): its nested breakpoint count (MTG_BP_NODE_NESTED_SLOTS) and the demoted length at the pend
+// index (MTG_BP_NEW_ONLY_DEMOTE). Searched applies only -- inside a playout the nested canon stands
+// down (EMPTY is the default there) and the walker hands out neither wave.
+static void NodeRecordChild0(std::vector<NodeNested>& out, std::size_t idx, int pend_at)
+{
+    if (g_rollout_nest != 0 || g_bp_enum_depth != 0) { return; }
+    const bool nested  = BpNodeNestedSlotsOn() && g_bp_seen_last > pend_at + 1;
+    const bool demoted = BpNewOnlyDemoteOn() && g_bp_demoted_last > 0;
+    if (nested || demoted)
+    {
+        out.push_back(NodeNested{ idx, pend_at, nested ? g_bp_seen_last : pend_at + 1,
+                                  demoted ? g_bp_demoted_last : 0 });
+    }
+}
+
+// ...and hands it to the walker.
+static void NodeNestedToWalker(BpWaveWalker& w, const std::vector<TurnSolver::Plan>& plans,
+                               const std::vector<NodeNested>& recs)
+{
+    for (const NodeNested& nn : recs)
+    {
+        if (nn.want > nn.pend_at + 1) { w.AddHostedNested(plans, nn.idx, nn.pend_at, nn.want); }
+        if (nn.demoted > 0)           { w.AddHostedDemoted(plans, nn.idx, nn.pend_at, nn.demoted); }
+    }
+}
+
+// See the declaration in TurnSolver.h. A host's loop with the apply replaced by a fixed report.
+std::vector<TurnSolver::WalkerStep> TurnSolver::WaveWalkerTraceForTest(const GameState& state,
+                                                                       const std::vector<Plan>& plans,
+                                                                       int list_len, int seen,
+                                                                       bool host_pends, int hosted,
+                                                                       int hosted_at, int hosted_want,
+                                                                       int demoted_len, int hosted_demoted)
+{
+    std::vector<WalkerStep> out;
+    BpWaveWalker w(state, plans, plans.size(), nullptr, nullptr, nullptr, host_pends);
+    if (hosted >= 0)
+    {
+        if (hosted_want > hosted_at + 1)
+        { w.AddHostedNested(plans, static_cast<std::size_t>(hosted), hosted_at, hosted_want); }
+        if (hosted_demoted > 0)
+        { w.AddHostedDemoted(plans, static_cast<std::size_t>(hosted), hosted_at, hosted_demoted); }
+    }
+    Plan v;
+    for (int guard = 0; guard < 100000 && w.Next(plans, v); ++guard)
+    {
+        // A rank enumerates the slot's lists, an EMPTY or a DEMOTED hand-out reports what its own
+        // apply would: no fresh length.
+        const bool listed = (v.bp_choice < kBpEmptyChoice);
+        // A nested index's list is one entry longer per index (list_len + bp_at), so a test can tell
+        // a slot that finishes early from one that does not.
+        const int  n_here = (list_len > 0) ? list_len + v.bp_at : 0;
+        const bool skip   = w.Report(plans, listed ? n_here : 0, seen, listed ? demoted_len : -1);
+        out.push_back(WalkerStep{ static_cast<int>(w.LastBase()), v.bp_choice, v.bp_at, !skip });
+    }
+    return out;
+}
 
 // Post-apply dedup for the LOOKAHEAD wave loop, with the probe attribution the FSLineWin loop has
 // always had and this one never did. Returns true when the variant repeats a state and the caller
@@ -59615,6 +59991,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // RECORD, never skip, exactly like FSLineWin's bp_seen_states.
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_child_seen;
+        std::vector<NodeNested> node_nested;   // MTG_BP_NODE_NESTED_SLOTS: handed to the walker below
         // MTG_BP_DUPE_TRACE only: who first claimed each key (0 = an ordinary base plan, 1 = a
         // node child) and with what base-cast signature. Empty and untouched when the flag is off.
         const bool dupe_trace = DupeTraceOn();
@@ -59662,6 +60039,108 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // repeated state, so a no-dig twin whose base did not dig is always a skip-to-be.
         DigFoldMemo m2_dig_fold;
         m2_dig_fold.on = DigSearchedChoiceOn();
+        // ---- THE M2 FIXPOINT STEP (MTG_M2_FIXPOINT; EngineFlags.h / M2FixModeFor) -----------------
+        // ONE body for the two places a main-2 line can need it: this loop's own plans, and the wave
+        // walker's variants below (MTG_BP_M2_WAVE_FIXPOINT) -- the walker used to send its lines
+        // straight to end of turn, so a continuation it reached (the slot's EMPTY above all: "cast
+        // nothing more, then re-decide main 2 with what the breakpoint drew") never got the step a
+        // plan of this loop gets. Moved here verbatim from the loop.
+        //
+        // This plan's apply fired a breakpoint, so cards may have entered hand mid-plan
+        // (hinata gi=66: EI draws Crackle, six sources untapped, turn ends). LETHAL-ONLY,
+        // like the interior twin (ApplySecondMainInSearch) and the executor re-entry: scan
+        // the post-draw m2 plan set for an IMMEDIATE kill and adopt it as a second m2
+        // PhasePlan (the executor replays consecutive m2 phases in order); a non-kill scan
+        // falls through to the plain EOT tail unchanged. An unconditional re-solve here was
+        // the measured net-red form -- extra non-lethal casts deviate the future from
+        // everything the outer line priced.
+        //
+        // Returns kM2FixNone (fall through to the plain EOT tail, on `s2` as this left it -- the
+        // staged merge stays applied, as it always did), kM2FixHandled (the mode-2 re-entry scored
+        // this line's tail; skip the plain one) or kM2FixReturn (`ret` is the line to return: an
+        // immediate kill, or `best` at a first-verified-win horizon exit).
+        constexpr int kM2FixNone = 0, kM2FixHandled = 1, kM2FixReturn = 2;
+        auto m2_fixpoint = [&](const TurnSolver::Plan& q, GameState& s2, std::vector<Action>& bp,
+                               TurnSolver::SearchLine& ret) -> int
+        {
+            if (!(m2fmode != 0 && g_bp_fired_last > 0 && g_m2fix_nest < 1)) { return kM2FixNone; }
+            // The second m2 PhasePlan is replayed as a fresh executor TakeTurn pass
+            // (GameEngine::MainPhase's committed re-entry), whose head re-merges the staged
+            // cards AFTER everything this plan drew -- see MergeStagedToHandEnd.
+            MergeStagedToHandEnd(s2);
+            ++g_m2fix_nest;   // the scan's applies must not re-enter the scan
+            std::vector<TurnSolver::Plan> fx = M2DropLive(s2)
+                ? EnumeratePlansWithLand(s2, false) : EnumeratePlansM2Memoized(s2);
+            for (const TurnSolver::Plan& e : fx)
+            {
+                // Projected-lethal plans only -- see ApplySecondMainInSearch's filter note
+                // (the filter's justification is open; MTG_M2_FIX_UNFILTERED is the A/B).
+                if (!e.wins_this_turn && !M2FixUnfiltered()) { continue; }
+                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                { ++g_fs_trunc_events; break; }
+                ConsumeAt(budget, unitsite::kFsMain2);
+                PROF_INC(gamestate_copies);
+                GameState probe = s2;
+                std::vector<Action> bp2;
+                ApplyPlanDirect(probe, e, false, &bp2);
+                if (probe.ActivePlayer().life <= 0) { continue; }
+                if (OpponentHasLost(probe))
+                {
+                    if (m2t_here)
+                    { std::fprintf(stderr, "[m2t] T%d d%d q=%s FIXPOINT-KILL e=%s\n",
+                                   state.turn_number, depth, m2t_sum(q).c_str(),
+                                   m2t_sum(e).c_str()); }
+                    --g_m2fix_nest;
+                    TurnSolver::Plan q_rec = q;
+                    q_rec.breakpoint_actions = std::move(bp);
+                    TurnSolver::Plan e_rec = e;
+                    e_rec.breakpoint_actions = std::move(bp2);
+                    ret = { state.turn_number,
+                            { { false, std::move(q_rec) }, { false, std::move(e_rec) } } };
+                    return kM2FixReturn;
+                }
+            }
+            --g_m2fix_nest;
+            // ---- MODE 2: the gated RE-SOLVE is a RE-ENTRY of this very decision on the
+            // post-draw state (M2FixpointMode; new-information condemnation, see the mode-2
+            // helpers). The recursion enumerates the post-draw plans INCLUDING the empty
+            // plan -- whose tail is exactly the plain EOT tail below -- so when the gate
+            // fires it REPLACES the plain tail: a strict generalization, no double scoring.
+            // The nest guard keeps the recursion single-level; a continuation that draws
+            // again is covered by the recursion's own node/wave hosting, not more nesting.
+            if (m2fmode >= 2)
+            {
+                const std::vector<InternedName> drawn = M2FixDrawnDelta(m2fix_hand0, s2);
+                if (M2FixActionable(fx, drawn)
+                    && !(budget != nullptr && !budget->Unlimited() && budget->Exhausted()))
+                {
+                    ++g_m2fix_nest;
+                    TurnSolver::SearchLine cont =
+                        FSLineTail(s2, depth, max_turns, std::min(cutoff, best.win_turn),
+                                   second_main, tt, lc, budget);
+                    --g_m2fix_nest;
+                    if (m2t_here)
+                    { std::fprintf(stderr, "[m2t] T%d d%d q=%s FIXPOINT-RESOLVE cont=%d best=%d\n",
+                                   state.turn_number, depth, m2t_sum(q).c_str(),
+                                   cont.win_turn, best.win_turn); }
+                    if (cont.win_turn < best.win_turn)
+                    {
+                        best.win_turn = cont.win_turn;
+                        best.phases.clear();
+                        TurnSolver::Plan q_rec = q;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        best.phases.push_back({ false, std::move(q_rec) });
+                        best.phases.insert(best.phases.end(),
+                                           cont.phases.begin(), cont.phases.end());
+                        best.truncated = best.truncated || cont.truncated;
+                        if (FsHorizonExitOn() && cont.win_turn <= state.turn_number + depth)
+                        { ++g_fs_hexits; ret = best; return kM2FixReturn; }
+                    }
+                    return kM2FixHandled;   // the recursion scored the empty continuation == the plain tail
+                }
+            }
+            return kM2FixNone;
+        };
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -59840,8 +60319,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (ct) { t1 = std::chrono::steady_clock::now(); }
                     GameState& s3 = s3_buf;
                     std::vector<Action> bp3;
-                    g_bp_cands_last = 0;
+                    g_bp_cands_last   = 0;
+                    g_bp_demoted_last = 0;
                     ApplyPlanDirect(s3, v, false, &bp3, nullptr, &node_snap);
+                    // The node's nested / demoted waves -- the FSLineWin host's twin (see there).
+                    if (k == 0 && node_n < 0)
+                    { NodeRecordChild0(node_nested, static_cast<std::size_t>(&q - post.data()), node_snap.bp_seen); }
                     if (ct)
                     {
                         t2 = std::chrono::steady_clock::now();
@@ -59987,90 +60470,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 q_rec.breakpoint_actions = std::move(bp);
                 return { state.turn_number, { { false, std::move(q_rec) } } };
             }
-            // ---- M2 FIXPOINT KILL-SCAN (MTG_M2_FIXPOINT; see EngineFlags.h) ------------------
-            // This plan's apply fired a breakpoint, so cards may have entered hand mid-plan
-            // (hinata gi=66: EI draws Crackle, six sources untapped, turn ends). LETHAL-ONLY,
-            // like the interior twin (ApplySecondMainInSearch) and the executor re-entry: scan
-            // the post-draw m2 plan set for an IMMEDIATE kill and adopt it as a second m2
-            // PhasePlan (the executor replays consecutive m2 phases in order); a non-kill scan
-            // falls through to the plain EOT tail unchanged. An unconditional re-solve here was
-            // the measured net-red form -- extra non-lethal casts deviate the future from
-            // everything the outer line priced.
-            if (m2fmode != 0 && g_bp_fired_last > 0 && g_m2fix_nest < 1)
+            // ---- M2 FIXPOINT KILL-SCAN (MTG_M2_FIXPOINT; see EngineFlags.h and m2_fixpoint) ----
             {
-                // The second m2 PhasePlan is replayed as a fresh executor TakeTurn pass
-                // (GameEngine::MainPhase's committed re-entry), whose head re-merges the staged
-                // cards AFTER everything this plan drew -- see MergeStagedToHandEnd.
-                MergeStagedToHandEnd(s2);
-                ++g_m2fix_nest;   // the scan's applies must not re-enter the scan
-                std::vector<TurnSolver::Plan> fx = M2DropLive(s2)
-                    ? EnumeratePlansWithLand(s2, false) : EnumeratePlansM2Memoized(s2);
-                for (const TurnSolver::Plan& e : fx)
-                {
-                    // Projected-lethal plans only -- see ApplySecondMainInSearch's filter note
-                    // (the filter's justification is open; MTG_M2_FIX_UNFILTERED is the A/B).
-                    if (!e.wins_this_turn && !M2FixUnfiltered()) { continue; }
-                    if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
-                    { ++g_fs_trunc_events; break; }
-                    ConsumeAt(budget, unitsite::kFsMain2);
-                    PROF_INC(gamestate_copies);
-                    GameState probe = s2;
-                    std::vector<Action> bp2;
-                    ApplyPlanDirect(probe, e, false, &bp2);
-                    if (probe.ActivePlayer().life <= 0) { continue; }
-                    if (OpponentHasLost(probe))
-                    {
-                        if (m2t_here)
-                        { std::fprintf(stderr, "[m2t] T%d d%d q=%s FIXPOINT-KILL e=%s\n",
-                                       state.turn_number, depth, m2t_sum(q).c_str(),
-                                       m2t_sum(e).c_str()); }
-                        --g_m2fix_nest;
-                        TurnSolver::Plan q_rec = q;
-                        q_rec.breakpoint_actions = std::move(bp);
-                        TurnSolver::Plan e_rec = e;
-                        e_rec.breakpoint_actions = std::move(bp2);
-                        return { state.turn_number,
-                                 { { false, std::move(q_rec) }, { false, std::move(e_rec) } } };
-                    }
-                }
-                --g_m2fix_nest;
-                // ---- MODE 2: the gated RE-SOLVE is a RE-ENTRY of this very decision on the
-                // post-draw state (M2FixpointMode; new-information condemnation, see the mode-2
-                // helpers). The recursion enumerates the post-draw plans INCLUDING the empty
-                // plan -- whose tail is exactly the plain EOT tail below -- so when the gate
-                // fires it REPLACES the plain tail: a strict generalization, no double scoring.
-                // The nest guard keeps the recursion single-level; a continuation that draws
-                // again is covered by the recursion's own node/wave hosting, not more nesting.
-                if (m2fmode >= 2)
-                {
-                    const std::vector<InternedName> drawn = M2FixDrawnDelta(m2fix_hand0, s2);
-                    if (M2FixActionable(fx, drawn)
-                        && !(budget != nullptr && !budget->Unlimited() && budget->Exhausted()))
-                    {
-                        ++g_m2fix_nest;
-                        TurnSolver::SearchLine cont =
-                            FSLineTail(s2, depth, max_turns, std::min(cutoff, best.win_turn),
-                                       second_main, tt, lc, budget);
-                        --g_m2fix_nest;
-                        if (m2t_here)
-                        { std::fprintf(stderr, "[m2t] T%d d%d q=%s FIXPOINT-RESOLVE cont=%d best=%d\n",
-                                       state.turn_number, depth, m2t_sum(q).c_str(),
-                                       cont.win_turn, best.win_turn); }
-                        if (cont.win_turn < best.win_turn)
-                        {
-                            best.win_turn = cont.win_turn;
-                            best.phases.clear();
-                            TurnSolver::Plan q_rec = q;
-                            q_rec.breakpoint_actions = std::move(bp);
-                            best.phases.push_back({ false, std::move(q_rec) });
-                            best.phases.insert(best.phases.end(),
-                                               cont.phases.begin(), cont.phases.end());
-                            best.truncated = best.truncated || cont.truncated;
-                            if (FsHorizonExitOn() && cont.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
-                        }
-                        continue;   // the recursion scored the empty continuation == the plain tail
-                    }
-                }
+                TurnSolver::SearchLine fx_ret;
+                const int fx = m2_fixpoint(q, s2, bp, fx_ret);
+                if (fx == kM2FixReturn)  { return fx_ret; }
+                if (fx == kM2FixHandled) { continue; }   // the re-entry scored this line's tail
             }
             const bool m2t_skip3 = m2t_here && EnvInt("MTG_M2T_TRACE", 0) >= 3;
             if (!SimulateEndAndStartNextTurn(s2))
@@ -60138,7 +60543,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // variant is checked against every node child and every recorded base plan.
         if (BpWavesHere(budget))
         {
-            BpWaveWalker walker(state, post, m2_scanned);
+            BpWaveWalker walker(state, post, m2_scanned, nullptr, nullptr, nullptr,
+                                /*host_pends=*/node_host_here);
+            // The node's nested breakpoints and demoted waves (see the FSLineWin host's twin).
+            NodeNestedToWalker(walker, post, node_nested);
+            // MTG_BP_M2_WAVE_FIXPOINT: give the walker's lines this loop's fixpoint step (m2_fixpoint).
+            static const bool s_m2w_fix_env = EnvOn("MTG_BP_M2_WAVE_FIXPOINT", true);   // DEFAULT ON; =0 reverts
+            const bool m2w_fix = m2fmode != 0 && heurarm::Flag(heurarm::BP_M2_WAVE_FIXPOINT, s_m2w_fix_env);
             if (!walker.Empty())
             {
                 TurnSolver::Plan v;
@@ -60159,7 +60570,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     GameState s = (hit != prefix_cache.end()) ? hit->second.state : state;
                     std::vector<Action> bp;
                     g_bp_cands_last = 0;          // 0 == this apply reached no eligible breakpoint
-                    g_bp_seen_last  = 0;          // ... and reached no nested one either
+                    g_bp_seen_last  = 0; g_bp_demoted_last = 0;          // ... and reached no nested one either
+                    if (m2w_fix) { g_bp_fired_last = 0; }   // the fixpoint gate reads THIS apply's count
                     if (hit != prefix_cache.end())
                     { ApplyPlanDirect(s, v, false, &bp, nullptr, &hit->second); }
                     else if (s_m2w_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
@@ -60169,10 +60581,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         if (snap.valid) { prefix_cache.emplace(ck, std::move(snap)); }
                     }
                     else { ApplyPlanDirect(s, v, false, &bp); }
-                    // Past the end of the list: the continuation fell back to greedy -- a copy of
-                    // its own base plan (already scored); the slot retires. The apply's counts are
-                    // reported alongside so nested indices open their own slots.
-                    if (walker.Report(post, g_bp_cands_last, g_bp_seen_last)) { continue; }
+                    // Past the end of the list: the slot retires (the walker hands the slot's EMPTY
+                    // out explicitly, under MTG_BP_WAVE_EMPTY, and Report scores that one). The
+                    // apply's counts are reported alongside so nested indices open their own slots.
+                    if (walker.Report(post, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last)) { continue; }
                     const TranspositionTable::Key wk = BuildDedupKey(s);
                     if (!node_child_seen.insert(wk).second) { continue; }
                     if (s.ActivePlayer().life <= 0) { continue; }   // self-lethal guard, as above
@@ -60181,6 +60593,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         TurnSolver::Plan q_rec = v;
                         q_rec.breakpoint_actions = std::move(bp);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
+                    }
+                    if (m2w_fix)
+                    {
+                        TurnSolver::SearchLine fx_ret;
+                        const int fx = m2_fixpoint(v, s, bp, fx_ret);
+                        if (fx == kM2FixReturn)  { return fx_ret; }
+                        if (fx == kM2FixHandled) { continue; }   // the re-entry scored this line's tail
                     }
                     if (!SimulateEndAndStartNextTurn(s)) { continue; }
                     ExpireStagedCards(s);
@@ -61141,6 +61560,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // is declined only on an entry recorded by its OWN base plan, in this same frontier, from that
     // plan's own apply -- never inferred across nodes.
     std::unordered_map<std::size_t, TranspositionTable::Key> armnew_dup_all;
+    std::unordered_map<std::size_t, int> armnew_dlen;   // ...its breakpoint's demoted length (MTG_BP_NEW_ONLY_DEMOTE)
     // ---- THE WAVE-0 COLLAPSES, IN THIS HOST FOR THE FIRST TIME (see the w0collapse namespace) ---
     // MTG_BP_W0_FSW carries the two ADOPTED skips (NOBP + uniform) into this loop, which never had
     // either; MTG_BP_W0_CHAIN_COLLAPSE adds the chain arm's, which exists in neither host. Both
@@ -61190,6 +61610,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         { if ((PlanOpensBreakpoint(state, p) & BpNodeHostSites()) != 0) { node_host_here = true; break; } }
     }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
+    std::vector<NodeNested> node_nested;   // MTG_BP_NODE_NESTED_SLOTS: handed to the wave walker below
 
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
@@ -61333,6 +61754,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                        | static_cast<uint64_t>(p.bp_at & 0xFF)];
                         e.n     = 0;
                         e.max_k = std::max(e.max_k, p.bp_choice);
+                        {
+                            const auto dl = armnew_dlen.find(static_cast<std::size_t>(p.bp_base));
+                            e.m = (dl != armnew_dlen.end()) ? dl->second : -1;
+                        }
                         if (nskip_global_here && p.bp_choice == 0
                             && p.bp_base < static_cast<int>(pre.size()))
                         {
@@ -61423,7 +61848,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // attributed to this breakpoint. Both reset and read are behind the flag => off is
         // byte-identical.
         const bool nskip_here = BpWaveNSkipOn();
-        if (nskip_here) { g_bp_cands_last = 0; }
+        if (nskip_here) { g_bp_cands_last = 0; g_bp_demoted_last = 0; }
         // ...and the same one-apply-measures-it convention for the wave-0 collapses. The two
         // breakpoint counters are MONOTONIC and read as a delta (see g_bp_any_last for why a reset
         // would be unsafe under a node-hosted re-entry); the chain channel is per-apply and so does
@@ -61501,6 +61926,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             armnew_dup_all.emplace(static_cast<std::size_t>(&p - pre.data()),
                                    ArmNewVerifyOn() ? BuildDedupKey(s) : TranspositionTable::Key{});
+            // ...with the demoted length that one breakpoint measured (MTG_BP_NEW_ONLY_DEMOTE), for
+            // the decline's slot record below.
+            armnew_dlen.emplace(static_cast<std::size_t>(&p - pre.data()), g_bp_base_dlen0);
         }
         if (armnew_expect != nullptr)
         {
@@ -61526,6 +61954,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                            | static_cast<uint64_t>(p.bp_at & 0xFF)];
             e.n     = g_bp_cands_last;
             e.max_k = std::max(e.max_k, p.bp_choice);
+            e.m     = g_bp_demoted_last;   // MTG_BP_NEW_ONLY_DEMOTE (same enumeration as `n`)
         }
         // ...and the same fact, keyed so every OTHER node can use it (MTG_BP_NSKIP_GLOBAL). Content
         // key, not position: (node state, base plan fingerprint, bp_at). Recorded on the same
@@ -61601,8 +62030,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     LoadPlanState(s3_buf, node_snap.state, reuse_s);
                     GameState& s3 = s3_buf;
                     std::vector<Action> bp3;
-                    g_bp_cands_last = 0;
+                    g_bp_cands_last   = 0;
+                    g_bp_demoted_last = 0;
                     ApplyPlanDirect(s3, v, true, &bp3, nullptr, &node_snap);
+                    // Child 0 is cands.front() -- what MTG_BP_NESTED_CANON hands every variant at an
+                    // index it does not target -- so the class-on breakpoints IT reaches past the pend
+                    // are exactly the nested slots the walker owes this plan (AddHostedNested), and its
+                    // enumeration at the pend measured the demoted list (AddHostedDemoted). The
+                    // resume seeds g_bp_seen_last with the pend index, so this is THIS child's count.
+                    if (k == 0 && node_n < 0)
+                    { NodeRecordChild0(node_nested, static_cast<std::size_t>(&p - pre.data()), node_snap.bp_seen); }
                     if (node_n < 0)
                     {
                         node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last;
@@ -62051,7 +62488,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (BpWavesHere(budget) && !gdom_no_waves)
     {
         BpWaveWalker walker(state, pre, scanned, bp_known_n.empty() ? nullptr : &bp_known_n,
-                            nskip_global_here ? &node_dedup_key : nullptr);
+                            nskip_global_here ? &node_dedup_key : nullptr, nullptr,
+                            /*host_pends=*/node_host_here);
+        // The node's nested breakpoints and demoted waves (MTG_BP_NODE_NESTED_SLOTS /
+        // MTG_BP_NEW_ONLY_DEMOTE; see BpWaveWalker::AddHostedNested / AddHostedDemoted).
+        NodeNestedToWalker(walker, pre, node_nested);
         if (walker.Empty())
         {
             if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
@@ -62092,7 +62533,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 GameState s = (hit != prefix_cache.end()) ? hit->second.state : state;
                 std::vector<Action> bp;
                 g_bp_cands_last = 0;              // 0 == this apply reached no eligible breakpoint
-                g_bp_seen_last  = 0;              // ... and reached no nested one either
+                g_bp_seen_last  = 0; g_bp_demoted_last = 0;              // ... and reached no nested one either
                 if (hit != prefix_cache.end())
                 { ApplyPlanDirect(s, v, true, &bp, nullptr, &hit->second); }
                 else if (s_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
@@ -62105,7 +62546,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Past the end of the list: the continuation fell back to greedy, so this variant is
                 // a copy of its own base plan (already scored) and the slot retires. The apply's
                 // breakpoint COUNT is reported alongside so nested indices open their own slots.
-                if (walker.Report(pre, g_bp_cands_last, g_bp_seen_last))
+                if (walker.Report(pre, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                 {
                     if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1); }
                     continue;
@@ -62303,7 +62744,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 GameState s = state;
                 bp_out.clear();
                 g_bp_cands_last = 0;
-                g_bp_seen_last  = 0;
+                g_bp_seen_last  = 0; g_bp_demoted_last = 0;
                 ApplyPlanDirect(s, v, true, &bp_out);
                 // Post-apply state dedup against everything scored at this node: a tranche plan
                 // whose extra cast strands (a silent no-op) collapses onto an already-scored state
@@ -62360,14 +62801,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // unlimited budget, re-breaking the wave doctrine for the plans this phase adds.
             if (BpWavesHere(budget))
             {
-                BpWaveWalker gw_walker(state, tp, tp.size());
+                BpWaveWalker gw_walker(state, tp, tp.size(), nullptr, nullptr, nullptr,
+                                       /*host_pends=*/false);   // tranche plans apply without a capture
                 TurnSolver::Plan v;
                 while (gw_walker.Next(tp, v))
                 {
                     if (!score_tranche_plan(v, gw_bp, gw_won)) { gw_stop = true; break; }
                     // Report AFTER the apply inside score_tranche_plan set g_bp_cands_last /
                     // g_bp_seen_last (a dedup/self-kill early-out leaves them from this apply).
-                    gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last);
+                    gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last);
                     if (gw_won)
                     {
                         TurnSolver::Plan p_rec = v;
@@ -66663,6 +67105,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                 | static_cast<uint64_t>(pl.bp_at & 0xFF)];
             e.n     = g_bp_cands_last;
             e.max_k = std::max(e.max_k, pl.bp_choice);
+            e.m     = g_bp_demoted_last;   // MTG_BP_NEW_ONLY_DEMOTE (same enumeration as `n`)
         };
         // EOT dominance (MTG_DOM_CENSUS / MTG_DOM_PRUNE): the per-pass end-of-turn sibling frontier.
         // Per PASS, not per decision: every candidate in this loop reaches its boundary having
@@ -66812,7 +67255,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 DedupCensusOn() ? g_stranded_tapdraw_count : 0;
             GameState copy = state;
             // Make g_bp_cands_last describe THIS apply (same reset FSLineWin does, same reason).
-            if (w0len_here) { g_bp_cands_last = 0; }
+            if (w0len_here) { g_bp_cands_last = 0; g_bp_demoted_last = 0; }
             // ...and the chain channel, which is per-apply for the same reason (-2 = never reached
             // a continuation list, so the host reads nothing stale).
             if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
@@ -67316,7 +67759,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             BpWaveWalker walker(state, candidates, candidates.size(),
                                 bp_w0_lens.empty() ? nullptr : &bp_w0_lens,
                                 nullptr,
-                                bp_nobp.empty() ? nullptr : &bp_nobp);
+                                bp_nobp.empty() ? nullptr : &bp_nobp,
+                                /*host_pends=*/false);   // this loop never passes the node a capture
             if (walker.Empty())
             {
                 if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
@@ -67358,7 +67802,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     auto hit = s_prefix_cache ? prefix_cache.find(ck) : prefix_cache.end();
                     GameState copy = (hit != prefix_cache.end()) ? hit->second.state : state;
                     g_bp_cands_last = 0;
-                    g_bp_seen_last  = 0;
+                    g_bp_seen_last  = 0; g_bp_demoted_last = 0;
                     if (is_pre_combat)
                     {
                         if (hit != prefix_cache.end())
@@ -67379,7 +67823,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             }
                         }
                         else { ApplyPlanDirect(copy, v, true); }
-                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last))
+                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
@@ -67400,7 +67844,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     else
                     {
                         ApplyPlanDirect(copy, v, false);
-                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last))
+                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
@@ -67487,7 +67931,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
                 g_bp_cands_last = 0;
-                g_bp_seen_last  = 0;
+                g_bp_seen_last  = 0; g_bp_demoted_last = 0;
                 if (is_pre_combat)
                 {
                     ApplyPlanDirect(copy, v, true);
@@ -67533,12 +67977,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // Deferred bp ranks OF the tranche plans (see the FSLineWin twin's reasoning).
                 if (BpWavesHere(budget))
                 {
-                    BpWaveWalker gw_walker(state, tp, tp.size());
+                    BpWaveWalker gw_walker(state, tp, tp.size(), nullptr, nullptr, nullptr,
+                                       /*host_pends=*/false);   // tranche plans apply without a capture
                     Plan v;
                     while (gw_walker.Next(tp, v))
                     {
                         if (!score_gw(v, won)) { gw_stop = true; break; }
-                        gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last);
+                        gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last);
                         if (won) { report(state.turn_number, depth - 1); return v; }
                     }
                     if (gw_stop) { break; }
@@ -68733,6 +69178,14 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
     return BpEnumEntryFor(state, is_pre_combat)->plans;
 }
 
+// The same entry's DEMOTED list (MTG_BP_NEW_ONLY_DEMOTE) -- the executor's twin of the rollout's
+// kBpDemotedChoice resolution, so both index the one memoised derivation.
+std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointDemoted(const GameState& state,
+                                                                     bool is_pre_combat)
+{
+    return BpEnumEntryFor(state, is_pre_combat)->demoted;
+}
+
 // See the LIFETIME CONTRACT on the declaration: valid only until the next enumeration on this thread.
 const std::vector<TurnSolver::Plan>& TurnSolver::EnumerateBreakpointPlansRef(const GameState& state,
                                                                             bool is_pre_combat)
@@ -69244,9 +69697,12 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
 //
 // `count_stats` is false for the verifier's re-derivation, so the firing counters keep measuring
 // PLAY rather than double-counting the checker's own work.
+// `demoted_out` (MTG_BP_NEW_ONLY_DEMOTE; nullptr = discard, the verifier's call): receives the entries
+// MTG_BP_NEW_ONLY filters out, in the same ranking order the survivors get.
 static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& state,
                                                               bool is_pre_combat,
-                                                              bool count_stats)
+                                                              bool count_stats,
+                                                              std::vector<TurnSolver::Plan>* demoted_out = nullptr)
 {
     const int  mode   = BpCondemnDropMode();
     const bool demote = (mode == 2);   // condemned lines ranked LAST (list keeps every entry)
@@ -69496,17 +69952,21 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         }
         std::vector<TurnSolver::Plan> survivors;
         survivors.reserve(plans.size());
+        // MTG_BP_NEW_ONLY_DEMOTE: a dropped entry is kept for the walker's last wave instead of
+        // deleted (see BpNewOnlyDemoteOn). Read per job (the memo key folds the whole heurarm arm).
+        const bool demote = demoted_out != nullptr && !s_newonly_dry && BpNewOnlyDemoteOn();
         for (TurnSolver::Plan& p : plans)
         {
             const bool k = keep(p);
             if (trace_here)
             {
-                std::cerr << "   " << (k ? "KEEP " : "DROP ") << PlanDesc(p)
+                std::cerr << "   " << (k ? "KEEP " : (demote ? "DEMOTE " : "DROP ")) << PlanDesc(p)
                           << (p.land_decided && !p.land_to_play.empty() ? ("  land[" + p.land_to_play + "]") : "")
                           << (k ? std::string("  <") + last_why + ">" : std::string{})
                           << "\n";
             }
             if (k || s_newonly_dry) { survivors.push_back(std::move(p)); }
+            else if (demote)        { demoted_out->push_back(std::move(p)); }
         }
         if (count_stats && s_rollout_stats)
         {
@@ -69529,6 +69989,8 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     // rank-preservation guarantee rests entirely on that -- it is a property of where the sort sits,
     // not something the marking below has to be careful about.
     if (BpCandsOrderEnabled()) { MoveOrderPlans(plans); }
+    if (BpCandsOrderEnabled() && demoted_out != nullptr && !demoted_out->empty())
+    { MoveOrderPlans(*demoted_out); }   // the demoted wave in the same value order as the list
     if (mark)
     {
         // Applied here, after the memo's derivation and before the entry is stored, so the executor's
@@ -69795,8 +70257,9 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
 
     // Derive, rank, and (drop modes 2/3) mark the condemned entries -- see BpDeriveContinuationList,
     // which the verifier above shares so a marked list is never diffed against an unmarked one.
+    std::vector<TurnSolver::Plan> demoted;   // MTG_BP_NEW_ONLY_DEMOTE (empty with the lever off)
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
-                                                                  /*count_stats=*/true);
+                                                                  /*count_stats=*/true, &demoted);
     plancache::ReportHiwater("bp", state, plans);
 
     if (keyed)
@@ -69813,7 +70276,9 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         // whole vector<Plan> results and it is never epoch- or game-cleared, so it was byte-unbounded.
         // Over budget => clear (same reclaim as clear-on-full, so the cache stays useful); an entry
         // that alone exceeds the whole budget is served uncached via the scratch path below.
-        const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
+        const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans))
+                            + (demoted.empty() ? 0LL
+                                               : static_cast<long long>(plancache::ApproxPlansBytes(demoted)));
         if (cache.size() >= s_bp_enum_cap || !plancache::Fits(psz))
         {
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
@@ -69824,7 +70289,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         {
             plancache::Acquire(psz, plancache::t_bp_bytes);
             BpEnumEntry ent;
-            ent.plans = std::move(plans);
+            ent.plans   = std::move(plans);
+            ent.demoted = std::move(demoted);
             ent.epoch = g_decision_epoch;   // stamped unconditionally; see BpEnumEpochScoped
             // insert_or_assign, not emplace: under MTG_BP_ENUM_EPOCH a stale-epoch entry is still
             // PRESENT in the map (the hit site only declines to serve it), and emplace would leave
@@ -69839,7 +70305,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // nothing is reused across calls -- the no-cache world stays a true re-probe-every-time A/B).
     static thread_local BpEnumEntry scratch;
     scratch = BpEnumEntry{};
-    scratch.plans = std::move(plans);
+    scratch.plans   = std::move(plans);
+    scratch.demoted = std::move(demoted);
     return &scratch;
 }
 
@@ -73448,6 +73915,8 @@ static void PlanDumpList(const GameState& state, const std::vector<TurnSolver::P
             extra += " bp_choice=";
             if (p.bp_choice >= TurnSolver::kBpChainChoice)
             { extra += "CHAIN+" + std::to_string(p.bp_choice - TurnSolver::kBpChainChoice); }
+            else if (TurnSolver::IsBpDemotedChoice(p.bp_choice))
+            { extra += "DEMOTED+" + std::to_string(p.bp_choice - TurnSolver::kBpDemotedChoice); }
             else if (p.bp_choice >= TurnSolver::kBpEmptyChoice)
             { extra += "EMPTY-ARM(done acting)"; }
             else

@@ -1,0 +1,15 @@
+{
+ "deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+ "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 88,
+ "battlefield": [
+  { "name": "Mountain" }, { "name": "Forest" }, { "name": "Forest" },
+  { "name": "Zada, Hedron Grinder", "sick": false },
+  { "name": "Goblin Instigator", "sick": false },
+  { "name": "Frontline Heroism" }
+ ],
+ "hand": [ "Oracle's Restoration", "Ancestral Anger", "Fortifying Draught" ],
+ "library_filler": "Mirrorwing Dragon", "library_size": 40,
+ "depth": 5, "budget_ms": 0, "max_turns": 4,
+ "expect_win_turn": 4,
+ "comment": "MTG_BP_NEW_ONLY_DEMOTE (docs/design/bp-empty-arm-deferred-site.md; board from the 2026-10-14 Mirrorwing cast-order draft). Zada + Goblin Instigator + Frontline Heroism: every trick leaves a Soldier the next fan copies onto, so the ORDER of two tricks decides which gets the extra payload. Ancestral Anger -> Oracle's Restoration -> Fortifying Draught deals 88; Oracle first deals 82. Oracle and Anger tie in the cast order and the tie falls to hand order, which lists Oracle first here, so the sibling {Anger, Oracle, Draught} casts Oracle first. The 88 line is 'Anger alone, then Oracle + Draught at its breakpoint' -- an old-cards-only continuation MTG_BP_NEW_ONLY deleted as that sibling's duplicate, so it was unreachable even at budget 0. Demoted to the walker's last wave it is found. Control: MTG_BP_NEW_ONLY_DEMOTE=0 must give no win (opponent at 84)."
+}

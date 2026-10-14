@@ -4770,15 +4770,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // ACTS: the realised line is not the line that was ranked. Mirrors bp_searched_plan's
             // own special-case, which likewise runs BEFORE the cands walk, so neither world pays an
             // enumeration for it.
-            if (plan.bp_choice == TurnSolver::kBpEmptyChoice)
+            // DEMOTED lockstep (TurnSolver::kBpDemotedChoice + j, MTG_BP_NEW_ONLY_DEMOTE): the search
+            // scored entry j of this breakpoint's DEMOTED list -- the same memo entry's second list --
+            // so the executor plays that entry. Past its end (never emitted) it is treated as EMPTY,
+            // exactly as bp_searched_plan's overrun is.
+            const std::vector<TurnSolver::Plan> demoted =
+                TurnSolver::IsBpDemotedChoice(plan.bp_choice)
+                    ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main)
+                    : std::vector<TurnSolver::Plan>{};
+            const std::size_t dj = TurnSolver::IsBpDemotedChoice(plan.bp_choice)
+                ? static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice) : 0;
+            if (plan.bp_choice == TurnSolver::kBpEmptyChoice
+                || (TurnSolver::IsBpDemotedChoice(plan.bp_choice) && dj >= demoted.size()))
             {
                 extra              = TurnSolver::Plan{};
                 extra.land_decided = true;   // nothing downstream greedy-plays a drop we declined
                 bp_searched_here   = true;
             }
-            else if (bp_idx_resolved >= 0 && bp_idx_resolved < static_cast<int>(cands.size()))
+            else if (TurnSolver::IsBpDemotedChoice(plan.bp_choice)
+                     || (bp_idx_resolved >= 0 && bp_idx_resolved < static_cast<int>(cands.size())))
             {
-                extra            = cands[bp_idx_resolved];
+                extra            = TurnSolver::IsBpDemotedChoice(plan.bp_choice) ? demoted[dj]
+                                                                                 : cands[bp_idx_resolved];
                 bp_searched_here = true;
                 // The continuation's land drop is part of the searched decision; play it first so
                 // its mana funds the casts (mirrors bp_play_searched_land in ApplyPlanDirect).
@@ -5310,15 +5323,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // EMPTY ARM lockstep -- the pod twin of the main site's special-case. Same
                         // reason, same shape: the sentinel is not an index and must not fall through
                         // to the re-solve, which would act where the search scored "done".
-                        if (plan.bp_choice == TurnSolver::kBpEmptyChoice)
+                        // DEMOTED lockstep -- the pod twin of the main site's (MTG_BP_NEW_ONLY_DEMOTE).
+                        const bool pod_dem = TurnSolver::IsBpDemotedChoice(plan.bp_choice);
+                        const std::vector<TurnSolver::Plan> pod_demoted = pod_dem
+                            ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main)
+                            : std::vector<TurnSolver::Plan>{};
+                        const std::size_t pod_dj = pod_dem
+                            ? static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice) : 0;
+                        if (plan.bp_choice == TurnSolver::kBpEmptyChoice
+                            || (pod_dem && pod_dj >= pod_demoted.size()))
                         {
                             extra              = TurnSolver::Plan{};
                             extra.land_decided = true;
                             pod_bp_searched    = true;
                         }
-                        else if (plan.bp_choice < static_cast<int>(cands.size()))
+                        else if (pod_dem || plan.bp_choice < static_cast<int>(cands.size()))
                         {
-                            extra           = cands[plan.bp_choice];
+                            extra           = pod_dem ? pod_demoted[pod_dj] : cands[plan.bp_choice];
                             pod_bp_searched = true;
                             // The continuation's land is part of the searched decision
                             // (mirrors bp_play_searched_land; no Karoo reservation can be live
@@ -6688,9 +6709,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             TurnSolver::Site9Trace("ex", state, plan, is_pre_combat_main);
             const std::vector<TurnSolver::Plan> cands =
                 TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
-            if (plan.bp_choice < static_cast<int>(cands.size()))
+            // DEMOTED lockstep (MTG_BP_NEW_ONLY_DEMOTE) -- the site-9 twin of the main site's.
+            const bool pe_dem = TurnSolver::IsBpDemotedChoice(plan.bp_choice);
+            const std::vector<TurnSolver::Plan> pe_demoted = pe_dem
+                ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main)
+                : std::vector<TurnSolver::Plan>{};
+            const std::size_t pe_dj = pe_dem
+                ? static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice) : 0;
+            if (pe_dem ? (pe_dj < pe_demoted.size()) : (plan.bp_choice < static_cast<int>(cands.size())))
             {
-                extra       = cands[plan.bp_choice];
+                extra       = pe_dem ? pe_demoted[pe_dj] : cands[plan.bp_choice];
                 pe_searched = true;
                 if (extra.land_decided && !extra.land_to_play.empty())
                 { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)

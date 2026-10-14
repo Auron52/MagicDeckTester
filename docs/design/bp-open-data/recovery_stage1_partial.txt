@@ -1,0 +1,5 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+creature_giving_d3_g298_s1: played=1 avg=5.0000 digest=906ea6631d816852 ms=4029 units=66553
+bruna_d3_g5_s1: played=1 avg=5.0000 digest=252472a74bd5580f ms=18947 units=47544
+hinata_ship_g85_s1: played=1 avg=5.0000 digest=3082397f6531925e ms=102942 units=215852
+creature_giving_ship_g196_s1: played=1 avg=6.0000 digest=b0d34bac06c68576 ms=227130 units=258371

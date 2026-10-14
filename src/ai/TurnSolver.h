@@ -1764,6 +1764,37 @@ public:
     // a special choice only node-hosted sites can reach.
     static constexpr int kBpEmptyChoice = 1 << 20;
 
+    // DEMOTED CONTINUATION (MTG_BP_NEW_ONLY_DEMOTE). bp_choice == kBpDemotedChoice + j is not a rank
+    // either: it resolves at the targeted breakpoint to entry j of the breakpoint's DEMOTED list --
+    // the old-cards-only continuations MTG_BP_NEW_ONLY used to delete -- which the same memo entry
+    // derives beside the main list (EnumerateBreakpointDemoted). Placed between the EMPTY and the
+    // CHAIN sentinels so every `< kBpEmptyChoice` plain-rank test and every `>= kBpChainChoice` chain
+    // test leaves it alone. Public because the executor must resolve it exactly as the rollout did.
+    static constexpr int kBpDemotedChoice = (1 << 20) + (1 << 12);
+    static constexpr int kBpDemotedMax    = (1 << 20) - (1 << 12);   // j range (far beyond any list)
+    static bool IsBpDemotedChoice(int c)
+    { return c >= kBpDemotedChoice && c < kBpDemotedChoice + kBpDemotedMax; }
+    static std::vector<Plan> EnumerateBreakpointDemoted(const GameState& state, bool is_pre_combat);
+
+    // TEST SEAM (unit tests only; not read by play). Drives the deferred wave walker (BpWaveWalker in
+    // TurnSolver.cpp) over `plans` exactly as a host does -- Next(), apply, Report() -- with every
+    // apply of a rank reporting a continuation list of `list_len` + bp_at entries (0 stays 0) and
+    // `seen` class-on breakpoints (an EMPTY hand-out reports `seen` too and, as in a real apply, no
+    // list length).
+    // `host_pends` is the host's node capability; hosted >= 0 registers plan `hosted` as node-hosted
+    // at index `hosted_at` with child 0 reaching `hosted_want` breakpoints (AddHostedNested). Every
+    // rank apply also reports a DEMOTED list of `demoted_len` entries (MTG_BP_NEW_ONLY_DEMOTE), and
+    // `hosted_demoted` > 0 registers that many for the hosted plan's pend index (AddHostedDemoted).
+    // Returns one step per hand-out: which plan, the variant's bp_choice / bp_at, and whether the
+    // host would SCORE it (Report returned false) or retire it as a probe.
+    struct WalkerStep { int base; int bp_choice; int bp_at; bool scored; };
+    static std::vector<WalkerStep> WaveWalkerTraceForTest(const GameState& state,
+                                                          const std::vector<Plan>& plans,
+                                                          int list_len, int seen, bool host_pends,
+                                                          int hosted = -1, int hosted_at = -1,
+                                                          int hosted_want = -1, int demoted_len = 0,
+                                                          int hosted_demoted = 0);
+
     // BREAKPOINT SITE 7 -- the Birthing Pod CHAIN (bit 7 of MTG_BP_SITES, default ON). A Pod
     // activation's fetch is a mid-phase event that creates a NEW actionable object: the fetched
     // creature is a legal sac victim for a SECOND untapped Pod (and outlet fodder) in the SAME
