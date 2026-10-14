@@ -328,6 +328,164 @@ TEST_CASE("burn discard: MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE sheds the 1-damage 
     CHECK(amend(b6, 0) == std::vector<int>{ 0, 1, 2, 4, 5, 3, 6, 7 });
 }
 
+// ---- the land-light Shard Volley variants (PROPOSED 2026-10-14, all default OFF) -----------------------------
+// USER 2026-10-14: "that rule is probably too aggressive when we are land-light. At least 1 could always be
+// kept and 2 possibly. ... It could be second ranking, 'shard volley with no land' that loses to more of the
+// potential options." Every expected order below is derived by hand from the variant's definition
+// (DecisionProviders.cpp, at the readers); tier C (protected Guide / Swiftspear) is MV desc, then index.
+namespace
+{
+struct VolleyArm
+{
+    int k1 = -1, k2 = -1, floor = -1, rank = -1, late = -1;
+};
+std::vector<int> BurnVolley(const GameState& s, VolleyArm a)
+{
+    heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP1]       = static_cast<std::int8_t>(a.k1);
+    heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP2]       = static_cast<std::int8_t>(a.k2);
+    heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP_FLOOR]  = static_cast<std::int8_t>(a.floor);
+    heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_RANK] = static_cast<std::int8_t>(a.rank);
+    heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_LATE] = static_cast<std::int8_t>(a.late);
+    std::vector<int> v = Burn(s);
+    heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP1]       = -1;
+    heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP2]       = -1;
+    heurarm::t_arm[heurarm::BURN_VOLLEY_KEEP_FLOOR]  = -1;
+    heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_RANK] = -1;
+    heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_LATE] = -1;
+    return v;
+}
+const VolleyArm kCur{ 0, 0, 0, 0, 0 };
+const VolleyArm kK1{ 1, 0, 0, 0, 0 };
+const VolleyArm kK2{ 0, 1, 0, 0, 0 };
+const VolleyArm kF1{ 1, 0, 1, 0, 0 };
+const VolleyArm kF2{ 0, 1, 1, 0, 0 };
+const VolleyArm kRank{ 0, 0, 0, 1, 0 };
+const VolleyArm kLate{ 0, 0, 0, 0, 1 };
+const VolleyArm kK1Late{ 1, 0, 0, 0, 1 };
+const VolleyArm kK2Late{ 0, 1, 0, 0, 1 };
+}   // namespace
+
+// d0 seed 9322621 gi 12620's T2 cleanup: no land anywhere, no opponent creature. Bolt 0, Skullcrack 4 (r0) kept;
+// the Volley 1 has no land (0 lands < 1) -> S4. Below 2 lands no Light Up the Stage is kept (S6: 7 then 2).
+// Creatures GG 6, Swiftspear 3 kept, Swiftspear 5 spare (all protected -> tier C 3 5 6). Ladder R0 R4.
+//   current: S4 1, S6 7 2, tail 4 0                  -> 1 7 2 4 0 | 3 5 6   (sheds the Volley; generic: LUtS 2)
+//   every variant: the lone Volley is kept (K1 / K2 / F1 / F2: 0 + K >= 1; RANK: never S4; LATE: after S6),
+//   so the unkept Light Up the Stage goes first. K / RANK: ladder R0 R4 R1 -> 7 2 1 4 0; LATE: S6 7 2, late 1,
+//   tail 4 0 -> the same order.
+TEST_CASE("burn discard: land-light Volley variants keep the lone land-less Volley over an unkept Light Up the Stage")
+{
+    const GameState s = MakeBurn({ kBolt, kVolley, kLuts, kSS, kSkull, kSS, kGG, kLuts }, {}, {}, 2);
+    CHECK(BurnVolley(s, kCur) == std::vector<int>{ 1, 7, 2, 4, 0, 3, 5, 6 });
+    CHECK(Burn(s) == BurnVolley(s, kCur));   // all unset = all off
+    CHECK(Gen(s).front() == 2);
+    const std::vector<int> keep = { 7, 2, 1, 4, 0, 3, 5, 6 };
+    for (const VolleyArm& a : { kK1, kK2, kF1, kF2, kRank, kLate, kK1Late, kK2Late })
+    {
+        CHECK(BurnVolley(s, a) == keep);
+        CheckPermutation(s, BurnVolley(s, a));
+    }
+}
+
+// d0 seed 9318293 gi 8292's T3 cleanup: no land anywhere; Volleys 0, 4; Bolt 2, Skullcrack 6; GG 7, Swiftspears
+// 1 / 5, Eidolon 3. Eidolon is NOT needed (GG + 2 Swiftspears fill the quota): S7, waived (MV 2, unprotected).
+// Burn walk Bolt 2 > Skullcrack 6 > Volley 0 > Volley 4. Kept creatures GG 7, Swiftspear 1; Swiftspear 5 spare.
+//   current / F-less LATE (nothing in S5 / S6): S4 0 4, S7 3, tail 6 2      -> 0 4 3 6 2 | 1 5 7
+//   K1 = F1 = K1+LATE: Volley 0 ordinary (ladder R2 R6 R0), S4 4            -> 4 3 0 6 2 | 1 5 7
+//   K2 = F2 = RANK = K2+LATE: both ordinary (ladder R2 R6 R0 R4), S7 3      -> 3 4 0 6 2 | 1 5 7
+//   generic (Eidolon protected): Skullcrack 6 first.
+TEST_CASE("burn discard: land-light Volley variants on two land-less Volleys and a spare Eidolon")
+{
+    const GameState s = MakeBurn({ kVolley, kSS, kBolt, kEid, kVolley, kSS, kSkull, kGG }, {}, {}, 3);
+    CHECK(Waived(s, 3));
+    CHECK(Gen(s).front() == 6);
+    const std::vector<int> cur = { 0, 4, 3, 6, 2, 1, 5, 7 };
+    const std::vector<int> one = { 4, 3, 0, 6, 2, 1, 5, 7 };
+    const std::vector<int> two = { 3, 4, 0, 6, 2, 1, 5, 7 };
+    CHECK(BurnVolley(s, kCur) == cur);
+    CHECK(BurnVolley(s, kLate) == cur);
+    CHECK(BurnVolley(s, kK1) == one);
+    CHECK(BurnVolley(s, kF1) == one);
+    CHECK(BurnVolley(s, kK1Late) == one);
+    CHECK(BurnVolley(s, kK2) == two);
+    CHECK(BurnVolley(s, kF2) == two);
+    CHECK(BurnVolley(s, kRank) == two);
+    CHECK(BurnVolley(s, kK2Late) == two);
+}
+
+// The board that separates every arm. T4, one Mountain in play, none in hand, no opponent creature: Volleys
+// 0 1 2, Light Up the Stage 3, Bolt 4, Skullcrack 5, GG 6, Eidolon 7 (T4: not needed -> S7, waived, MV 2).
+// Lands 1 -> the 1st Volley holds it. Below 2 lands the Light Up the Stage is unkept (S6). Burn walk Bolt 4 >
+// Skullcrack 5 > Volley 0 > 1 > 2; GG kept (protected, tier C).
+//   current (= F1: max(1, 1) = 1):  S4 1 2, S6 3, S7 7, tail 0 5 4             -> 1 2 3 7 0 5 4 6
+//   K1 (= F2: max(1, 2) = 2):       Volley 1 ordinary; S4 2, S6 3, S7 7, tail 1 0 5 4 -> 2 3 7 1 0 5 4 6
+//   K2 (lands + 2 = 3) = RANK:      all ordinary; S6 3, S7 7, tail 2 1 0 5 4  -> 3 7 2 1 0 5 4 6
+//   LATE:                           S6 3, late 1 2, S7 7, tail 0 5 4           -> 3 1 2 7 0 5 4 6
+//   K1+LATE:                        S6 3, late 2, S7 7, tail 1 0 5 4           -> 3 2 7 1 0 5 4 6
+//   RANK supersedes the others: RANK+K1, RANK+LATE = RANK.
+TEST_CASE("burn discard: land-light Volley variants -- slack vs floor, rank vs late")
+{
+    const GameState s = MakeBurn({ kVolley, kVolley, kVolley, kLuts, kBolt, kSkull, kGG, kEid }, { kMtn }, {}, 4);
+    CHECK(Waived(s, 7));
+    const std::vector<int> cur  = { 1, 2, 3, 7, 0, 5, 4, 6 };
+    const std::vector<int> k1   = { 2, 3, 7, 1, 0, 5, 4, 6 };
+    const std::vector<int> all  = { 3, 7, 2, 1, 0, 5, 4, 6 };
+    const std::vector<int> late = { 3, 1, 2, 7, 0, 5, 4, 6 };
+    CHECK(BurnVolley(s, kCur) == cur);
+    CHECK(BurnVolley(s, kF1) == cur);
+    CHECK(BurnVolley(s, kK1) == k1);
+    CHECK(BurnVolley(s, kF2) == k1);
+    CHECK(BurnVolley(s, kK2) == all);
+    CHECK(BurnVolley(s, kRank) == all);
+    CHECK(BurnVolley(s, kLate) == late);
+    CHECK(BurnVolley(s, kK1Late) == std::vector<int>{ 3, 2, 7, 1, 0, 5, 4, 6 });
+    CHECK(BurnVolley(s, kK2Late) == all);
+    CHECK(BurnVolley(s, VolleyArm{ 1, 0, 0, 1, 0 }) == all);
+    CHECK(BurnVolley(s, VolleyArm{ 0, 1, 1, 1, 1 }) == all);
+    for (const VolleyArm& a : { kCur, kK1, kK2, kF1, kF2, kRank, kLate, kK1Late, kK2Late })
+    { CheckPermutation(s, BurnVolley(s, a)); }
+
+    // The 2-card cleanup re-ranks per shed: LATE sheds the Light Up the Stage, then a land-less Volley.
+    heurarm::t_arm[heurarm::BURN_BUCKET_DISCARD]     = 1;
+    heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_LATE] = 1;
+    GameState t = s;
+    const int done = CleanupDiscardShed(t, &kReq, 2, -1, false, true, nullptr);
+    heurarm::t_arm[heurarm::BURN_VOLLEY_NOLAND_LATE] = -1;
+    heurarm::t_arm[heurarm::BURN_BUCKET_DISCARD]     = -1;
+    REQUIRE(done == 2);
+    REQUIRE(t.players[0].graveyard.size() == 2);
+    CHECK(t.players[0].graveyard[0].m_name == kLuts);
+    CHECK(t.players[0].graveyard[1].m_name == kVolley);
+}
+
+// The amendment (MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE, ON) under the variants. Board A: one Mountain, an
+// opponent 2/2 (the Blaze is live but has no kept land: 1 damage, KEPT -- need 20), T4. Volleys 0 1, Blaze 2,
+// LUtS 3 (unkept, S6), Bolt 4, GG 5, Eidolon 6 (S7), Skullcrack 7. Walk Bolt 4 > Skullcrack 7 > Volley 0 (the
+// land) > Volley 1 (none) > Blaze 2 (r4).
+//   current: the dry Blaze moves up to S4 ahead of Volley 1: S4 2 1, S6 3, S7 6, tail 0 7 4  -> 2 1 3 6 0 7 4 5
+//   LATE:    S6 3, then the KEPT dry Blaze moves up with the late Volley: 2 1, S7 6         -> 3 2 1 6 0 7 4 5
+//   K1 = RANK: no land-less Volley, the amendment is idle; the dry Blaze is the lowest kept burn, behind the
+//            unkept LUtS and the spare Eidolon: S6 3, S7 6, tail 2 1 0 7 4                -> 3 6 2 1 0 7 4 5
+//   F1 (max(1, 1) = 1) = current.
+// Board B is the amendment's own board (gi 83, lethal assembled): both dry Blazes are BEYOND lethal (S5), so
+// under LATE they shed in S5 where they are, still ahead of the late Volley 1: S5 6 2 0 7, late 1, S7 4.
+TEST_CASE("burn discard: land-light Volley variants keep the 1-damage Blaze below a land-less Volley")
+{
+    const GameState a = MakeBurn({ kVolley, kVolley, kBlaze, kLuts, kBolt, kGG, kEid, kSkull }, { kMtn }, { kGG }, 4);
+    CHECK(BurnVolley(a, kCur) == std::vector<int>{ 2, 1, 3, 6, 0, 7, 4, 5 });
+    CHECK(BurnVolley(a, kF1) == std::vector<int>{ 2, 1, 3, 6, 0, 7, 4, 5 });
+    CHECK(BurnVolley(a, kLate) == std::vector<int>{ 3, 2, 1, 6, 0, 7, 4, 5 });
+    CHECK(BurnVolley(a, kK1) == std::vector<int>{ 3, 6, 2, 1, 0, 7, 4, 5 });
+    CHECK(BurnVolley(a, kRank) == std::vector<int>{ 3, 6, 2, 1, 0, 7, 4, 5 });
+
+    const GameState b = MakeBurn({ kVolley, kVolley, kBlaze, kSkull, kEid, kSkull, kBlaze, kBlood },
+                                 { kMtn, kSS, kGG }, { kGG, kGG, kGG }, 5, 9);
+    CHECK(BurnVolley(b, kCur) == std::vector<int>{ 2, 6, 1, 0, 7, 4, 5, 3 });   // the amendment test's order
+    CHECK(BurnVolley(b, kLate) == std::vector<int>{ 6, 2, 0, 7, 1, 4, 5, 3 });
+    // K1 / RANK: both Volleys hold a place in the walk, beyond lethal; no land-less Volley, amendment idle.
+    CHECK(BurnVolley(b, kK1) == std::vector<int>{ 6, 2, 1, 0, 7, 4, 5, 3 });
+    CHECK(BurnVolley(b, kRank) == std::vector<int>{ 6, 2, 1, 0, 7, 4, 5, 3 });
+}
+
 TEST_CASE("burn discard: MTG_BURN_BUCKET_DISCARD=0 is exactly the generic ranking, protection intact")
 {
     const std::vector<GameState> boards = {
