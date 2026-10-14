@@ -392,7 +392,7 @@ The final A/B's Dragonstorm d0 gi 580 / 700 / 1308 (ab5 seeds 6190581 / 6190701 
 illegal, as `final-ab-2026-10-13.md` says. None is the class-A payment defect (their orders read unpayable,
 `pays` >= 0; class A reads `pays=-1` with an unpaid cast).
 
-**Found, not fixed -- d0 commits spliced subsets no legal order can pay.** On the tip all five d0 games (gi757,
+**Found, not fixed -- d0 commits spliced subsets no legal order can pay.** (Fixed in Round 4 below.) On the tip all five d0 games (gi757,
 gi855; final-ab 580 / 700 / 1308) spend a turn on a subset like {Seething, Desperate+splice, Desperate+splice,
 Desperate, Dragonstorm}: the enumerator admits it (order-free credit; `SubsetHasIllegalSplice` counts copies, not
 order), the legal arrangement fails at its FIRST cast (Seething on two lands, `pays=0`), and
@@ -414,3 +414,16 @@ d0 runner and the rollouts choose, outside this round's scope.
   budget, recovers at d4 b100 and d8 b0); shipped 300: 0 / 0. Search units +0.3% (d3 and shipped).
 * Not run: any regression tier. The smoke / regression Dragonstorm GT will move (the three named games get faster)
   and is for whoever runs the tiers to accept.
+
+## Round 4 (2026-10-14): the d0 runner no longer commits an unpayable spliced subset
+
+USER: *"Sure, let's fix it."* -- the "Found, not fixed" proposal of Round 3. `MTG_DRAGONSTORM_D0_SPLICE_REFUSE`
+(heurarm slot `DRAGONSTORM_D0_SPLICE_REFUSE`, default ON, `=0` byte-identical to 77e094a2): inside the depth-0
+runner only, `OrderedSubsetRealisable` refuses a spliced subset whenever its realised order and the payable
+fallback both fail the exact walk, not only when the walk fails AT the spliced cast. Full write-up:
+`dragonstorm-d0-splice-refusal.md`. The five Round-3 games: gi855 5 -> 3, final-ab gi580 3 -> 2, gi700 5 -> 4,
+gi1308 6 -> 5 (each now the d8 b0 legal optimum); gi757 unchanged at 5 (not this class on the tip). Fresh-seed A/B
+(10300001+): Dragonstorm d0 40,000 games 95 faster / 4 slower (-135), 2HG d0 10,000 11 / 1 (-16), d3 b10 and
+shipped byte-identical, five non-splice decks byte-identical; all five slower games recover at stage 1 (four are
+the "Rite of Flame -> Ruby Medallion" phantom the `=0` arm won off, one is an exact-walk pessimism with an
+Unclaimed Territory and Kolaghan's {B}, found and not fixed).
