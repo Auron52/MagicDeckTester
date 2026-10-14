@@ -462,6 +462,7 @@ enum Slot : int
     BURN_VOLLEY_NOLAND_LATE,  // MTG_BURN_VOLLEY_NOLAND_LATE the land-less Volleys (past KEEP1 / KEEP2) shed AFTER S5 (burn beyond lethal) and S6 (the Light Up the Stage the design does not keep) instead of in S4, still ahead of spare creatures and every kept card; the 1-damage Blaze of MTG_BURN_VOLLEY_KEEP_OVER_DRY_BLAZE still sheds ahead of them (a kept one moves up to their slot). Default OFF
     REPLICATE_SIG,            // MTG_REPLICATE_SIG the autonomous powerset dedup (EnumeratePlans' plan_signature) keys a PINNED replicate count (#R<k>, Hatchery Sliver). Without it every replicate-count class collapsed to its highest-valued member, so the on-board count fan -- fanned for the USER's no-greedy rule (2026-09-30) -- was picked by the ordering hint `eval += k * EvalCard`, never searched: "Cloudshredder with no copy, Muscle with one" was unfindable at any budget (docs/design/slivers-replicate-searched.md, onboard_split). Only slivers pins a count. Default ON; =0 -> the collapsed signature, byte-identical
     REPLICATE_PENDING,        // MTG_REPLICATE_PENDING the replicate count fan also covers a Sliver cast AFTER a SAME-PLAN Hatchery Sliver (a granter in hand, cast or Vial-put earlier in the plan): pinned k = 0..kmax beside the unpinned cast, and a subset that pins a count with no granter in it is rejected (its pin could never be granted: an exact duplicate of the unpinned cast). Without it that cast had only the unpinned variant, i.e. resolution's greedy max -- a greedy pick inside the search window that also decided WHICH post-Hatchery Sliver got the copies (resolution order). Search window only; human play and the greedy picker unchanged. Default ON; =0 -> byte-identical
+    DRAW_HELD_DROP_REPLAY,    // MTG_DRAW_HELD_DROP_REPLAY the depth-0 executor PLAYS a land drop its provider held for a draw engine (DecisionProvider::LandDropAfterDrawEngine: treasure_hunt's "Treasure Hunt before the land drop") after this main's casts when the main cast no draw engine -- the only route that replayed it was the draw engine's second TakeTurn pass, so a main that cast Land's Edge alone lost the drop (cast-order probe A2: no land on T4, won T5; d3/d5/d8 win T4). A held drop the provider still holds as marginal Land's Edge ammo (HoldDeferredDropForLethal) stays held; a played one requests the second pass, which re-solves with its mana. Default ON; =0 -> the drop is lost, byte-identical to before (docs/design/treasure-hunt-land-rule-provider.md)
     COUNT
 };
 
@@ -879,6 +880,7 @@ inline const char* Name(int slot)
         "MTG_BURN_VOLLEY_NOLAND_LATE",
         "MTG_REPLICATE_SIG",
         "MTG_REPLICATE_PENDING",
+        "MTG_DRAW_HELD_DROP_REPLAY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

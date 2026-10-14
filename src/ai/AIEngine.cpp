@@ -3213,8 +3213,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // TakeTurn pass when Treasure Hunt is castable without it and no Reliquary Tower /
                 // Land's Edge is out, so a land TH reveals can be the drop. A deck rule, so it lives
                 // in the deck's provider (moved out of this block 2026-10-14, USER); base false.
+                // m_draw_deferred_drop arms the post-cast replay for a main that then casts no draw
+                // engine (MTG_DRAW_HELD_DROP_REPLAY).
                 bool defer_land = ResolveProvider(state).LandDropAfterDrawEngine(
                     state, state.active_player_index);
+                m_draw_deferred_drop = defer_land;
                 // "Sylvan Scrying before the land drop" (USER, Creature Giving review
                 // 2026-08-19): the ONE cast allowed to precede the drop -- it fetches a land
                 // to hand (another Forbidden Orchard), so deferring lets the fetched land BE
@@ -6575,6 +6578,35 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                    < state.ActivePlayer().LandDropsAvailable())
         {
             TryPlayLand(state);
+            cast_draw_engine = true;
+        }
+    }
+
+    // Held-for-the-draw drop (LandDropAfterDrawEngine, depth-0 only): the pre-combat land block held
+    // the drop because a draw engine (Treasure Hunt) was castable, and the only route that played it
+    // was the draw engine's second TakeTurn pass -- which only a CAST draw engine requests. A main that
+    // then casts no draw engine (the greedy took Land's Edge alone) LOST the drop: cast-order probe A2,
+    // T4 with four lands, Treasure Hunt + Land's Edge + Islands in hand, played no land and won T5,
+    // where d3/d5/d8 play land, Land's Edge, Treasure Hunt and win T4. The Creature Giving tutor-defer
+    // above is the same lost-drop class (losing its drop outright cost +0.32 at d0). So: play it now,
+    // and request the second pass, which re-solves with its mana (here: the Treasure Hunt it can now
+    // afford). A main that DID cast a draw engine keeps today's route (the breakpoint continuation /
+    // the second pass decide the drop with the draw known). The provider keeps its own hold: a drop it
+    // holds as the marginal Land's Edge ammo for a lethal this turn (HoldDeferredDropForLethal) stays
+    // held. MTG_DRAW_HELD_DROP_REPLAY=0 -> the drop is lost, byte-identical to before.
+    // MEASURED (treasure_hunt, held-out paired, one pooled batch): d0 100,000 games -0.00500 turns/game,
+    // 1074 faster / 337 slower, t -8.83; d3 b10 and shipped byte-identical; every other deck identical.
+    // 336/337 slower games recover at d5 b100; the last is the order-opaque hand-order gap (see
+    // docs/design/treasure-hunt-land-rule-provider.md).
+    if (m_draw_deferred_drop)
+    {
+        m_draw_deferred_drop = false;
+        const Player& dp = state.ActivePlayer();
+        if (DrawHeldDropReplayOn() && m_lookahead_depth == 0 && is_pre_combat_main && !cast_draw_engine
+            && dp.lands_played_this_turn < dp.LandDropsAvailable()
+            && !ResolveProvider(state).HoldDeferredDropForLethal(state, state.active_player_index)
+            && TryPlayLand(state))
+        {
             cast_draw_engine = true;
         }
     }
