@@ -1,0 +1,3 @@
+stompy ship 287 4 5
+stompy ship 1526 3 4
+stompy ship 2653 3 4

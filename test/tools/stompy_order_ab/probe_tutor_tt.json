@@ -1,0 +1,32 @@
+{
+  "deck": "decks/StompySurprise/StompySurprise.cod",
+  "profile": "decks/StompySurprise/StompySurprise.profile.json",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 9,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Forest", "controller": 0, "tapped": false},
+    {"name": "Llanowar Elves", "controller": 0, "tapped": false, "sick": false},
+    {"name": "Llanowar Elves", "controller": 0, "tapped": false, "sick": false},
+    {"name": "Fyndhorn Elves", "controller": 0, "tapped": false, "sick": false},
+    {"name": "Elvish Mystic", "controller": 0, "tapped": false, "sick": false}
+  ],
+  "hand": ["Worldly Tutor", "Turntimber Symbiosis"],
+  "library_top": ["Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Craterhoof Behemoth"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "expect_win_turn": 4,
+  "log_out": "logs/play/probe_tutor_tt.json",
+  "_comment": "PROBE: the USER's headline combo -- Worldly Tutor puts Craterhoof on top, Turntimber puts it in play (8 mana: 8 Forests; the four elves stay untapped to attack). Craterhoof is 11 deep, outside Turntimber's look-7, so only the tutor composes it. Four 1/1 elves + the hasted Hoof = 5 creatures, X = 5: 4 x 6 + 10 = 34 >= 20, the T4 kill."
+}
