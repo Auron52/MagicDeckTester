@@ -15049,6 +15049,29 @@ static bool UnsickEquipHostEnabled()
     return heurarm::Flag(heurarm::EQUIP_UNSICK_HOST, env);
 }
 
+// MTG_EQUIP_DS_SWING_FIRST -- DEFAULT OFF (a PROPOSED amendment to the USER's consolidation
+// doctrine; the USER decides). The doctrine's rider host is "the top double-strike-potential host"
+// whatever its summoning sickness, so a Kor Duelist cast THIS turn with no haste source takes every
+// rider and attacks with none of them, while the non-sick Paladin beside it is never offered.
+// The USER's own rulings both say the opposite for the no-ds case -- 2026-08-22 *"put it on one
+// creature with no summoning sickness"*, 2026-10-11 *"(not summoning-sick preferred)"* -- and the
+// dead cast half of the one-host gate (MTG_EQUIP_DS_GATE_CASTS) had been masking this on every frame
+// where the Duelist was still in hand: kitty ship gi66 / gi135 / gi190 (seeds 10100067 / 10100136 /
+// 10100191) go T4 -> T5 once the gate is fixed. With this on, the ds pick is the top ds-potential
+// host that can ATTACK this turn (battlefield and not sick, printed haste, or a haste Equipment in
+// the frame -- the Greaves line of gi149); when the only double striker cannot, the doctrine falls
+// to the 08-22 rule (the best host that can swing) and STILL offers the sick double striker for a
+// PAID equip (banking it pays this turn's mana instead of next turn's -- a real trade, searched).
+// A FREE equip is offered only onto the host that swings: under metalcraft the move onto the
+// double striker next turn is also free, so the swinging line has the same next-turn board plus
+// this turn's damage (Grafted Wargear, whose re-equip sacrifices, keeps both).
+// docs/design/kitty-one-host-rootcause.md.
+static bool EquipDsSwingFirstEnabled()
+{
+    static const bool env = EnvOn("MTG_EQUIP_DS_SWING_FIRST");   // DEFAULT OFF
+    return heurarm::Flag(heurarm::EQUIP_DS_SWING_FIRST, env);
+}
+
 // MTG_EQUIP_PIECE_DEPS -- hoist the stranded-equip rejection from the subset to the odometer digit.
 // Byte-identical by construction (it rejects a subset of what SubsetHasStrandedEquip rejects, and
 // that guard still runs), so the hatch exists as a cost A/B rather than a behaviour one.
@@ -26066,6 +26089,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //     play) -- the viewer must offer the human every legal pair.
             // A MOVE toward the chosen host is deliberately still offered: consolidating a piece off
             // another creature onto the pile is literally "put everything on that creature".
+            // MTG_EQUIP_DS_SWING_FIRST, filled lazily: a haste Equipment on the battlefield (1/0, -1 =
+            // not read yet), the cheapest one in hand (-1 = none) and the turn's spare mana.
+            int haste_equip_avail = -1;
+            int hand_haste_cost   = -1;
+            int spare_all         = 0;
             int one_host_id = 0;
             if (EquipOneHostEnabled() && !s_eqdom_open && !hosts.empty()
                 && !FrameHasDoubleStrikeSource(state, actions))
@@ -26230,8 +26258,85 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // Never move an equipment OFF a double-striking host.
                     if (!(moving && host_stats(attached_to[e]).ds))
                     {
-                        for (const std::pair<int, int>& r : ranked_rider)          // top ds-potential
-                        { if (ds_potential(r.second)) { keep.push_back(r); break; } }
+                        // MTG_EQUIP_DS_SWING_FIRST (DEFAULT OFF; see EquipDsSwingFirstEnabled): the
+                        // ds pick must be able to attack THIS turn. A FRESH equip only -- a move is
+                        // the old doctrine (staying put is always the alternative).
+                        if (EquipDsSwingFirstEnabled() && !moving)
+                        {
+                            // The haste sources the frame can still use, read once per call: a haste
+                            // Equipment already on the battlefield (Greaves re-equips for {0}), else the
+                            // cheapest one in hand, which must fit beside the host's own cast in the
+                            // turn's spare mana (gi332: a Greaves in hand that the turn cannot pay for
+                            // does not make the Kor Duelist an attacker).
+                            if (haste_equip_avail < 0)
+                            {
+                                haste_equip_avail = 0;
+                                for (std::size_t q = 0; q < equips.size(); ++q)
+                                {
+                                    if (!equips[q].first->params.equip_grants_haste) { continue; }
+                                    bool on_bf = false;
+                                    for (const Permanent& p : state.battlefield)
+                                    {
+                                        if (p.controller_index == state.active_player_index
+                                            && p.card.m_number == equips[q].second->m_number)
+                                        { on_bf = true; break; }
+                                    }
+                                    if (on_bf) { haste_equip_avail = 1; break; }
+                                    const int c = EffectiveCost(*equips[q].first, state).ManaValue();
+                                    if (hand_haste_cost < 0 || c < hand_haste_cost) { hand_haste_cost = c; }
+                                }
+                                spare_all = SpareUntappedMana(state, state.active_player_index) + drop_headroom;
+                            }
+                            auto ds_can_attack = [&](int id) {
+                                for (const Host& h : hosts)
+                                {
+                                    if (h.id != id) { continue; }
+                                    if (h.haste || (!h.in_hand && !h.fresh)) { return true; }
+                                    if (haste_equip_avail == 1)              { return true; }
+                                    if (hand_haste_cost < 0)                 { return false; }
+                                    int need = hand_haste_cost;
+                                    if (h.in_hand)
+                                    {
+                                        const HostStats st = host_stats(id);
+                                        if (st.def) { need += EffectiveCost(*st.def, state).ManaValue(); }
+                                    }
+                                    return need <= spare_all;
+                                }
+                                return false;
+                            };
+                            int ds_any = -1, ds_ok = -1;
+                            for (std::size_t r = 0; r < ranked_rider.size(); ++r)
+                            {
+                                if (!ds_potential(ranked_rider[r].second)) { continue; }
+                                if (ds_any < 0) { ds_any = static_cast<int>(r); }
+                                if (ds_can_attack(ranked_rider[r].second))
+                                { ds_ok = static_cast<int>(r); break; }
+                            }
+                            if (ds_ok >= 0)
+                            { keep.push_back(ranked_rider[static_cast<std::size_t>(ds_ok)]); }
+                            else if (ds_any >= 0)
+                            {
+                                const std::pair<int, int> sick = ranked_rider[static_cast<std::size_t>(ds_any)];
+                                int swing = -1;
+                                for (std::size_t r = 0; r < ranked_rider.size(); ++r)
+                                {
+                                    if (static_cast<int>(r) == ds_any) { continue; }
+                                    if (host_can_swing(ranked_rider[r].second))
+                                    { swing = static_cast<int>(r); break; }
+                                }
+                                if (swing >= 0)
+                                { keep.push_back(ranked_rider[static_cast<std::size_t>(swing)]); }
+                                const bool paid = EquipCostGenericNow(state, state.active_player_index,
+                                                                      *ed, sick.second) > 0;
+                                if (swing < 0 || paid || ed->params.equip_sacrifices_prior_host)
+                                { keep.push_back(sick); }
+                            }
+                        }
+                        else
+                        {
+                            for (const std::pair<int, int>& r : ranked_rider)      // top ds-potential
+                            { if (ds_potential(r.second)) { keep.push_back(r); break; } }
+                        }
                         if (kemba_id != 0
                             && !(moving && ed->params.equip_sacrifices_prior_host))
                         {
