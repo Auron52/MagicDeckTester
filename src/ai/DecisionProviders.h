@@ -2669,6 +2669,9 @@ public:
     bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
                                 const std::vector<Action>& reorder,
                                 std::vector<std::vector<int>>& out) const override;
+    // Diagnostic (MTG_USER_ORDER_TRACE): Heliod's placement case and the flip, per realised list.
+    std::string CastOrderTraceNote(const GameState&, const std::vector<Action>&,
+                                   const std::vector<int>&) const override;
 };
 
 // SelesnyaLifegain (GW "whenever you gain life" ramp-into-fatties: Wellwisher / Blighted Steppe /
