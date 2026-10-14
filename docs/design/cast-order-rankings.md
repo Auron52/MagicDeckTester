@@ -1030,6 +1030,13 @@ open item below.
 
 ## StompySurprise
 
+**2026-10-14: the USER APPROVED the amended order** (*"Let's try out your stompy suggestion. It seems pretty
+close to what I was looking for and we can fix any issues that show up."*) and asked for it TOTAL (*"Let's
+fully order the cards in each list inasmuch as possible."*). Implemented (`e1f1bba1`: total ranks, the four
+dual slots read off the plan and searched two-way, the Stompy TOP_RESOLVE opt-in); measurement IN
+PROGRESS (partial: shipped 2,750 games, 10 faster / 3 slower, net -7). The implemented order, every
+tie-break and the measurement: **docs/design/stompy-order-2026-10-14.md**. The text below is the history.
+
 **PROPOSED (USER, 2026-08-21) — implemented behind `MTG_STOMPY_ORDER` (default OFF), measured,
 awaiting the USER's adoption call.** `StompyProvider::CastOrderRank` + `CastOrderTierName` deliver
 the tiers; adopt → default-on read with an off switch, per the adopted per-deck rules.

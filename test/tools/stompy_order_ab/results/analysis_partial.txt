@@ -1,0 +1,11 @@
+loss = 9; paired per game; net = sum(new - old) turns (negative = new faster)
+
+deck       cell       n      old      new   fast   slow    net   ident     units
+stompy     ship    2750   4.1109   4.1084     10      3     -7    1713    1.9058
+
+== OFF switch (new binary, MTG_STOMPY_ORDER=0) vs the base binary, same games ==
+
+== IDENTITY: every other deck, base binary vs new binary at defaults ==
+identity: 48 games compared, 0 (deck, cell) with a difference
+
+3 slower games -> /workspaces/MagicDeckTester/build/scratch/stompy-order/ab_v2/slower_partial.txt
