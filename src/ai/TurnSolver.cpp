@@ -9864,6 +9864,25 @@ static bool FreeCastPruneEnabled()
     return s_fc_prune;
 }
 
+// MTG_FREECAST_X_ZERO -- DEFAULT ON (a rules-defect fix); `=0` restores the dead read, byte-identical
+// to 77e094a2. CR 107.3b, in short: a spell with {X} in its mana cost that is cast without paying its
+// mana cost (and not for an alternative cost that includes X) has X = 0 -- a mere cost REDUCTION, even
+// to zero, does not count (under Hinata's discount X stays the player's choice). The post-combat
+// free-cast bank was written to honour it -- `if (f.def && f.def->card.m_mana_cost.has_x)
+// f.chosen_x = 0` -- but `f` is a copy of a
+// CastFromHand candidate whose Action::def CollectActions fills only in its closing resolve pass, a few
+// lines BELOW the bank. So `f.def` was always null there and the ruling never applied (dead since it
+// was written, 0d166914): every X variant (chosen_x > 0) got a free twin that paid nothing and still
+// resolved at its X -- a free X = 5 Crackle, a free X = k Rolling Earthquake. The fix resolves the def
+// the way the closing pass does (CollectedActionDef) and emits an {X} spell's free variants ONLY from
+// its X = 0 candidates. Reachable only with a live bank (Maelstrom Archangel), i.e. only FiveColour,
+// whose list holds no {X} spell -- inert on every shipped deck. docs/design/precollect-def-dead-reads.md
+static bool FreeCastXZeroEnabled()
+{
+    static const bool env_on = EnvOn("MTG_FREECAST_X_ZERO", true);   // DEFAULT ON
+    return heurarm::Flag(heurarm::FREECAST_X_ZERO, env_on);
+}
+
 // ---- MTG_ATTACK_FREECAST_DAMAGE: Maelstrom Archangel's free cast in the this-turn projection -------
 // "Whenever this creature deals combat damage to a player, you may cast a spell from your hand without
 // paying its mana cost." Combat banks one charge per connecting free-caster (Combat.cpp,
@@ -23469,6 +23488,21 @@ static bool SubsetHasIdleReleaseMove(const std::vector<Action>& cands, const std
     return false;
 }
 
+// The card definition CollectActions' closing pass stamps on every action ("Resolve each action's card
+// definition ONCE", at the end of CollectActions): a hand-sourced action reads its hand card's memoized
+// def, anything else is looked up by name. ONE expression, shared by that pass and by every block INSIDE
+// CollectActions that must read a candidate's definition before the pass has run -- where Action::def
+// is still nullptr for every CastFromHand candidate, because no cast emitter sets it. Reading `a.def`
+// there instead is a DEAD read: it silently disables whatever rule it guards (the free-cast bank's
+// CR 107.3b X = 0, MTG_FREECAST_X_ZERO; the one-host double-strike gate, MTG_EQUIP_DS_GATE_CASTS).
+// docs/design/precollect-def-dead-reads.md lists every such site.
+static const CardDefinition* CollectedActionDef(const Player& ap, const Action& a)
+{
+    return (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+               ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
+               : CardDatabase::Instance().Lookup(a.card_name);
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     const Player& ap = state.ActivePlayer();
@@ -31223,6 +31257,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 mv_floor = mvs[keep - 1];
             }
         }
+        // CR 107.3b -- an {X} spell cast without paying its mana cost has X = 0 (MTG_FREECAST_X_ZERO,
+        // see FreeCastXZeroEnabled). Its free variants are therefore exactly its X = 0 CANDIDATES,
+        // taken as enumerated; an X > 0 variant has no free twin. Re-stamping the X > 0 variants as
+        // X = 0 instead would be wrong twice over: every X-derived field the emitter stamped
+        // (direct_damage, eval, ritual_float, a Chord / Zenith tutor_target above the cap) would
+        // still describe the old X, and the copies would be effect-identical duplicates of one cast.
+        // Whether an X = 0 cast is a line at all stays the emitter's and its provider's call, exactly
+        // as for a paid cast: Rolling Earthquake and the tuck removal keep X = 0 (XCandidates), a
+        // Libation trick always offers it, a Chord / Zenith offers it for a mana-value-0 target or as
+        // its fail-to-find; an X burn's XCandidates never returns 0 (a 0-damage burn is not cast),
+        // and Genesis Wave / Reality Spasm resolve to no-ops at X = 0 and are not offered.
+        // The def is RESOLVED here (CollectedActionDef) because every candidate's Action::def is
+        // still null until the closing pass below -- which is exactly why the old in-place
+        // `f.def && f.def->card.m_mana_cost.has_x` check never fired. Inert unless the hand holds an
+        // {X} spell while a charge is banked; non-{X} cards that carry another axis on chosen_x
+        // (Unite the Coalition's mode split) are untouched.
+        const bool x_zero = FreeCastXZeroEnabled();
         for (int slot = 0; slot < slots; ++slot)
         {
             for (std::size_t i = 0; i < base_n; ++i)
@@ -31230,13 +31281,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (actions[i].kind != Action::Kind::CastFromHand) { continue; }
                 if (actions[i].alt_cost) { continue; }        // alt-cost casts are already free
                 if (mv_floor >= 0 && actions[i].card_mv < mv_floor) { continue; }
+                if (x_zero && actions[i].chosen_x != 0)
+                {
+                    const CardDefinition* xd = CollectedActionDef(ap, actions[i]);
+                    if (xd != nullptr && xd->card.m_mana_cost.has_x) { continue; }   // X > 0: not free
+                }
                 Action f = actions[i];
                 f.cost          = ManaCost{};                 // cast without paying its mana cost
-                if (f.card_mv > 0 && f.def && f.def->card.m_mana_cost.has_x)
-                {
-                    // Ruling: an {X} spell cast without paying its cost has X = 0.
-                    f.chosen_x = 0;
-                }
                 f.free_cast     = true;
                 f.sac_source_id = -1000 - slot;               // bank slot (mutual exclusion)
                 actions.push_back(std::move(f));
@@ -31251,12 +31302,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // card's memoized def (Card::m_def) instead of re-hashing the name string (the by-name Lookup
     // was ~a third of the string-hash cost in a Hinata gen profile). Byte-identical (same def);
     // graveyard/other actions (hand_index < 0) fall back to the by-name Lookup.
-    for (Action& a : actions)
-    {
-        a.def = (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
-                    ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
-                    : CardDatabase::Instance().Lookup(a.card_name);
-    }
+    // EVERYTHING ABOVE THIS LOOP SEES `a.def == nullptr` FOR A CAST CANDIDATE: a block up there that
+    // needs a definition must call CollectedActionDef (the same expression), never read `def`.
+    for (Action& a : actions) { a.def = CollectedActionDef(ap, a); }
 
     // Main-phase classification filter (USER design 2026-08-14; helpers above CollectActions).
     // Drop Main2-classified hand casts from the PRE-combat enumeration only -- the post-combat
