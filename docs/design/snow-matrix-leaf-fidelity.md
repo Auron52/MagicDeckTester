@@ -130,49 +130,135 @@ and 70/70 paired H2 games at the same win turn. It completes s10010 gi37 at H3 (
 abandoned. Real, but it does not move the tail that drove the stop -- the leaf does. Full record:
 docs/design/snow-look-cap-and-defer-levers.md on that branch.
 
-## 8. The resume this enables (the USER's call -- not started)
+## 8. (superseded) The matrix-only override
 
-```
-cd .claude/worktrees/snow-vl
-git cherry-pick 4a60ec66        # scripts only: src unchanged -> check_freeze is a no-op, no rebuild
-mkdir -p logs/vlq_snow/phaseC_leaf1_aside
-mv logs/vlq_snow/matrix.txt* logs/vlq_snow/wins logs/vlq_snow/matrix.log logs/vlq_snow/heartbeat.txt \
-   logs/vlq_snow/slow_games.log logs/vlq_snow/phaseC_leaf1_aside/
-MTG_MATRIX_FD_LEAF_DEPTH=0 MTG_MATRIX_FD_LEAF_FROM=3 \
-  setsid nohup bash scripts/valueleaf.sh run decks/Snow > logs/snow-vl-run2.out 2>&1 &
-```
-
-Phase A (14,347 rows) and B (RMSE 0.4802) are kept; phase C starts fresh (the stamp guard refuses to
-mix it with the banked 1-ply chunks). From the stopped run's own records the COMPLETED games were
-cheap everywhere (mean 7.5 s/game at H4, 6.9 s at H5); the ~390 core-h it still projected was the
-skip-listed games burning to 40M in cell after cell. Run it with the box to itself: the matrix's
-condemnation rule is wall-clock based.
+The first route was a per-run env override (`MTG_MATRIX_FD_LEAF_DEPTH=0 MTG_MATRIX_FD_LEAF_FROM=3`)
+applied to every deck in the run. Superseded by the per-deck calibration in section 10 and removed from
+the pooled driver; kept here only so the history reads.
 
 ## 9. A GENERAL rule instead of a matrix override (USER 2026-10-14)
 
 > *"My recommendation is to figure out whether we can come up with a generally adoptable rule like this."*
 
+*(The per-job heurarm flags named here were later replaced by one numeric job field; section 10.)*
+
 **The rule: leaf fidelity by PASS depth.** A commit-the-line pass of nominal depth >= K scores its
 horizon with a greedy playout; shallower passes keep the 1-ply leaf. The pass depth is set by the
 root FSLineWin node and read by `EffectiveFdLeafDepth` (below an explicit `MTG_FD_LEAF_DEPTH` and a
 deck's own `search_leaf_depth`). Per-job flags `MTG_LEAF_GREEDY_D2/_D3/_D4` (+ `_D3_UNL`, the
-depth-3 rule only in an UNLIMITED-budget pass). Flags off is byte-identical.
+depth-3 rule only in an UNLIMITED-budget pass; built, measured dead, deleted -- see below). Flags off is
+byte-identical.
 
 **Shipped (budgeted) play, every suite deck** -- smoke-tier cell shapes at depth >= 3 on held-out
 seeds (+900000), plus Snow's 720 extra d3/b10 + d5/b20 games, one pooled batch, paired
 (`test/leaf_greedy_ab.sh`, run `fleet1`):
 
-| arm | paired games | digests moved | win turns moved | better / worse |
-|---|---|---|---|---|
-| D3 | 10,930 | 91 | 39 | 1 / 29 (at 7,385 read) |
-| **D4** | 10,930 | **0** | **0** | 0 / 0 |
+| arm | paired games | win turns moved | better / worse |
+|---|---|---|---|
+| K=3 | 11,030 | 39 | 1 / 38 |
+| **K=4** | 11,030 | **0** (0 digests) | 0 / 0 |
 
-D3 is NOT adoptable under a budget, and the mechanism is specific: at d3/b10 the 1-ply leaf often
-cannot finish the depth-3 pass, so play commits the depth-2 pass; the cheap leaf lets the depth-3 pass
-finish and its greedy-scored commit replaces the depth-2 one scored by the 1-ply leaf -- and the 1-ply
-leaf wins that trade. Unbudgeted there is no substitution (every pass finishes), which is why H3 was
-identical there. D4 never changed a single game's play in shipped cells.
+K=3 is NOT adoptable fleet-wide under a budget, and the mechanism is specific: at d3/b10 the 1-ply leaf
+often cannot finish the depth-3 pass, so play commits the depth-2 pass; the cheap leaf lets the depth-3
+pass finish and its greedy-scored commit replaces the depth-2 one scored by the 1-ply leaf -- and the
+1-ply leaf wins that trade. **Snow is the exception: K=3 moved 0 of its ~1,140 budgeted games.**
 
-**Unbudgeted H cells, every suite deck** (run `hcells`, 15 games x deck x cell, 10M ceiling; the d3
-arm is greedy at H3-H5, so at H4/H5 it IS the D4 arm): H5 0 moved of 330 (22 decks), H4 0 moved of
-~320 (units 0.12-1.0x per deck). H3: see below.
+**Unbudgeted H cells, every suite deck** (run `hcells`, 15 games x deck x cell, 10M ceiling; the arm
+is greedy from depth 3, so at H4/H5 it IS the K=4 / K=5 rule). Every moved game is WORSE:
+
+| cell | paired | moved (all worse) | decks |
+|---|---|---|---|
+| H3 | ~490 | 9 | Creature Giving, FiveColour, Hinata2 x2, Kitty, Minotaur, Mirrorwing, Prevent Damage, Treasure Hunt |
+| H4 | 470 | 3 | Hinata2 x2 (T1 Ponder), Treasure Hunt (T2 dig before land) |
+| H5 | 472 | 0 | -- |
+
+The leaf's influence decays with depth (1.8% -> 0.6% -> 0 of games), which is the premise of the rule;
+but at H3/H4 the combo decks still lean on it. The H4 losses are early-turn decisions whose window ends
+before the kill, so a leaf carrying 3-4 turns decides the tie and the greedy playout misses the combo
+the 1-ply leaf finds.
+
+**Two deck-agnostic refinements, both DEAD (built, measured, deleted):**
+
+* *Bind only SHORT leaves* (covering <= 2 turns before max_turns). Recovers every combo game (0 moved
+  of 382 unbudgeted, 0 of 3,670 budgeted), but gives back Snow's savings: Snow's ordinary H5 games
+  abandon at 10M exactly as at base (gi0/3/11), gi6 9.6M -> 1.34M instead of 0.17M, gi4 1.34M =
+  base. Snow's cost sits in the SAME long early-turn leaves the combo decks need.
+* *Key on leaf width.* Snow's leaf lookahead averages 77-96 candidates per turn (mostly 64-127),
+  Hinata2's 3.7, but Treasure Hunt's losing H4 game has 2,355 leaf turns in the 64-127 band too
+  (`MTG_LEAF_STATS`, branch `snow-rollout`). No threshold separates them.
+
+## 10. The rule as a per-deck MEASUREMENT in the value-leaf pipeline (USER 2026-10-14)
+
+> *"Can we apply this more generally rather than as another flag?"* -- then, of the three options
+> offered (one engine default at K=4; the pipeline measures K per deck; a lossless cheaper 1-ply leaf):
+> *"let's try option 2."*
+
+A per-deck profile key was built first (`search_leaf_greedy_from_depth`) and withdrawn in favour of
+this: no hand-set setting, the pipeline decides each deck's threshold from data every time it runs.
+
+**Phase C0, leaf calibration** (`scripts/valueleaf.sh`, between B and C; `run_leafcal` in the matrix
+driver). For every deck in the queue, one pooled batch plays each H cell of depth >= 3 twice on the same
+50 held-out games (seed 12012) -- 1-ply leaf and greedy leaf -- using the matrix's own H-cell job shape
+(one shared helper, `_h_arm_fields`). K = the shallowest depth such that every cell at or above it moved
+no win turn over >= 30 completed pairs; none = every H cell keeps the 1-ply leaf. The verdict goes to
+`<queue>/leafcal.json` and `DECISIONS.txt`, and `status` prints it. The matrix then sets the per-job
+field `leaf_greedy_from_depth: K` on that deck's H cells of depth >= K.
+
+* **Engine:** one per-job numeric arm (`valuearm::Arm::leaf_greedy_from`, manifest
+  `leaf_greedy_from_depth`), read by `LeafGreedyFromDepth`. Nothing else sets it: no env, no profile
+  key, no default. Unset is byte-identical (smoke + regression all PASS).
+* **Why only H >= 3, and why only the matrix:** H1/H2 are scored by their leaf (Snow H1 0 better / 11
+  worse of 50) and cheap; under a budget the rule is a play lever, not a cost one (K=3 moved 1 better /
+  38 worse of 11,030 budgeted fleet games), and shipped play is budgeted.
+* **Ceiling:** the calibration's games run under a 10M-unit ceiling so the 1-ply arm's heavy games cost
+  minutes; games either arm abandons are unpaired. Same population restriction the matrix's skip list
+  makes. Snow's heavy games were identical in win turn under the greedy leaf anyway (section 1).
+* **Power:** 50 games detect a per-game loss rate of ~6% at 95%. The fleet's measured rates were 7-13%
+  per affected deck and cell (Hinata2 H4 2 of 15), so the decks known to need the 1-ply leaf are caught;
+  a rarer loss can pass.
+* **Resume:** the matrix stamps the thresholds (`<matrix>.fdleaf`) and refuses to resume a table banked
+  under different ones. A queue that predates C0 (Snow's) runs it on the next `run`; its banked matrix
+  must be moved aside first.
+* **Phase A is unaffected:** rows never see the job field; and with a greedy leaf in the label search
+  anyway, 24 Snow games gave 139 rows identical as sets.
+
+**Measured for Snow (first real run, 2026-10-14, 22 min wall / ~8 core-h, nearly all of it the 1-ply
+arm's games hitting the 10M ceiling): K=4.** H5 0 of 36 moved (0.08x units), H4 0 of 33 (0.04x), H3 **2
+of 40 worse** (games 25 and 39 at seed 12012, 5->6 and 6->7, both reproduced in solo replays). The
+earlier hand reads (H3 0 of 98) were themselves underpowered. So Snow's matrix keeps the 1-ply leaf at
+H3 and the H3 heavy games: the skip list is projected at ~43 of ~600 (~7%) rather than ~21.
+
+**What 50 games can and cannot certify.** 0 moved in n pairs still admits a per-game loss rate up to
+1 - 0.05^(1/n): ~9% at n=33, 2% at ~150, 0.2% at ~1,500. The matrix derives the trust candidate at
+tol = 0.002 turns against the best H cell -- exactly the H4/H5 cells the greedy leaf changes -- so
+certifying the rule at the derivation's own precision needs ~1,500 pairs per cell, i.e. playing the
+1-ply cells the rule exists to skip. The screen catches gross damage (Snow H3 at 5%, combo decks at
+7-13%); it cannot certify a 1% effect.
+
+**So the FINAL product is A/B'd with the rule on and off** (USER: *"we should still A/B test the final
+result with it off and on"*, *"separately from the rest of the leaf"*, *"as an additional test if it was
+adopted"*). The rule never touches the model; it can only move the settings phase D derives from the H
+rows (fallback crossover, no_fallback, trust candidate). After phase D, for every deck with a K,
+`leafrule_counterfactual` re-derives those settings with each greedy H row shifted DOWN by the worst
+case C0's own pairs allow (`--h-shift`, `--write-to` in the deriver). Same settings -> ON and OFF are the
+same product, recorded, nothing played. Different -> phase E adds ONE arm, `leafOFF`, on the A/B seeds,
+paired against the staged arm (which is the ON product): same model, only those settings differ, at
+PLAY settings -- which is the right yardstick, since a setting play's budget never reaches cannot cost
+anything (USER: *"if a setting is fully unreachable due to cost it also will not come up so much because
+the budget will cut it off"*). ON ships unless it is notably worse than OFF (delta > 0.002 at paired
+t > 2), in which case OFF's settings -- which lean toward falling back to the heuristic, the safe side --
+replace them in the staged model. Every outcome goes to `DECISIONS.txt`. Tested on Prevent Damage's
+completed matrix: the worst-case shift (H4 -0.087, H5 -0.080) moves its crossover at committed depths 7
+and 8 (take at H5 -> H4); a negligible shift moves nothing.
+
+**Expected for Snow** (from sections 1, 5 and 9; superseded by the measurement above at H3): K=3; ordinary H3-H5 games 14-36x fewer units, heavy
+games 46-460x; skip list ~21 of ~600 instead of 110 (the rest are V-cell or H1/H2 abandons no leaf
+reaches); the matrix phase on the order of an hour instead of the ~390 core-h the stopped run projected,
+plus the calibration's own ~3-4 core-h.
+
+**The profile guard stays:** `scripts/valueleaf.sh` stamps the profiles' `search_leaf_*` keys
+(`<queue>/freeze.leaf`, backfilled from `freeze.commit` for older queues) and hard-stops on a change,
+because the budgeted play fingerprint cannot see a leaf change that only bites unbudgeted passes.
+
+Section 8's matrix-only env override (`MTG_MATRIX_FD_LEAF_DEPTH` / `_FROM` with a variant profile) is
+superseded by C0 and removed from the pooled driver.

@@ -53,32 +53,149 @@ for _k, _d in _REG.items():
     PROFILES[_k] = _d.profile
     PROFILES[_k + deck_registry.STAGED_SUFFIX] = _d.profile
 
-FDL_DEPTH=""   # set by run_incremental from MTG_MATRIX_FD_LEAF_DEPTH
-FDL_FROM=1
-_FDL_MADE={}
-def fdleaf_profile(dname, outdir):
-    """A deck folder differing from the real one ONLY in its profile's `search_leaf_depth` (siblings
-    symlinked, so the keep table and value sidecar are the shipped ones -- valueleaf.sh's
-    make_variant_deck pattern). Built once per deck per run."""
-    if dname in _FDL_MADE: return _FDL_MADE[dname]
-    prof=PROFILES.get(dname)
-    if not prof or not os.path.exists(prof):
-        raise SystemExit("leaf override needs %s's profile, and it has none on disk (%r)" % (dname, prof))
-    src=os.path.dirname(os.path.abspath(prof))
-    dest=os.path.join(os.path.abspath(outdir), "fdleaf_variant", dname)
-    os.makedirs(dest, exist_ok=True)
-    for f in os.listdir(src):
-        if f == os.path.basename(prof): continue
-        lk=os.path.join(dest, f)
-        if os.path.lexists(lk): os.remove(lk)
-        os.symlink(os.path.join(src, f), lk)
-    pj=json.load(open(prof)); pj["search_leaf_depth"]=int(FDL_DEPTH)
-    out=os.path.join(dest, os.path.basename(prof))
-    json.dump(pj, open(out,"w"), indent=1)
-    print("  leaf override: H cells >= H%d read %s (search_leaf_depth=%s)" % (FDL_FROM, out, FDL_DEPTH),
+# LEAF FIDELITY BY PASS DEPTH, per deck: {deck: K}. An H cell of depth >= K scores its committed pass's
+# horizon with a greedy playout instead of the 1-ply leaf (job field "leaf_greedy_from_depth"; see
+# LeafGreedyFromDepth in src/ai/TurnSolver.cpp). Filled by run_incremental from --leaf-greedy-from, the
+# file the leaf calibration below writes; empty = every H cell keeps the 1-ply leaf.
+LEAF_K={}
+
+
+def _h_arm_fields(prof):
+    """The H arm, per job (see ai/ValueArm.h) -- ONE definition shared by the matrix and the leaf
+    calibration, so the calibration measures exactly the cells the matrix will run.
+
+    The H-cell ladder runs its warm-up passes on the cheap leaf and only the committed pass on the
+    heuristic. Guarded on the sidecar EXISTING, so a missing model does not error -- every H cell just
+    silently takes the slow path (1.35x-84.8x more work)."""
+    f={"value_model":False}
+    if prof and os.path.exists(prof):
+        f.update(value_profile=prof, ladder_value_leaf=True)
+    return f
+
+
+# ==================== LEAF CALIBRATION (valueleaf.sh phase C0, USER 2026-10-14) ====================
+# Which H cells may score their horizon with a greedy playout instead of the 1-ply leaf, measured PER
+# DECK, because no deck-agnostic threshold is free. 2026-10-14, every suite deck, unbudgeted, 15 paired
+# games per deck per cell, every moved game WORSE: H3 9 of ~490 (8 decks), H4 3 of 470 (Hinata2 x2,
+# Treasure Hunt), H5 0 of 472 -- while Snow moved 0 at every one of H3-H5 at 14-460x fewer units, and
+# its heavy games were what drove its value-leaf run to an 18% skip rate. The cost and the quality sit
+# in the same leaves (early-turn decisions whose 3-4-turn leaf decides the tie), so no rule on depth,
+# turn, leaf length or width separates the decks; whether a deck's greedy playout finds the 1-ply
+# leaf's lines is a property of the deck, and this measures it.
+#
+# THE RULE (USER: "0 is neutral"): for each deck, play every H cell of depth >= LEAFCAL_MIN_DEPTH twice
+# on the same games -- 1-ply leaf and greedy leaf -- and hand the matrix the shallowest K such that
+# EVERY cell at or above K moved no win turn over a sample of at least LEAFCAL_MIN_PAIRED games. A cell
+# with a moved game, or with too few completed pairs to say, keeps the 1-ply leaf for itself and every
+# cell below it. H1/H2 are never candidates: a shallow pass is scored BY its leaf (Snow H1 0 better /
+# 11 worse of 50) and they are cheap on the 1-ply leaf anyway.
+#
+# WHAT IT CANNOT SEE. Games either arm abandons at LEAFCAL_CEIL are unpaired, so the verdict covers the
+# games that complete under it. That is the same population restriction the matrix's own skip list
+# makes, at a lower ceiling so the 1-ply arm's heavy games cost minutes rather than hours; on Snow the
+# heavy games measured identical win turns under the greedy leaf anyway (design doc section 1). And 50
+# games detect a per-game loss rate of ~6% at 95%; rarer losses can pass -- the fleet's measured rates
+# were 7-13% per affected deck and cell.
+LEAFCAL_MIN_DEPTH=3
+LEAFCAL_GAMES=50
+LEAFCAL_MIN_PAIRED=30
+LEAFCAL_SEED=12012          # held out: the matrix plays 8008/9009/10010/11011 + offset, rows 900000+
+LEAFCAL_CEIL=10000000       # per-game unit ceiling (the fleet H-cell reads used the same)
+
+
+def _read_units(winsdir, nm):
+    """{global_index: units} from `<winsdir>/<nm>.units` (MTG_DUMP_UNITS); {} if absent."""
+    try:
+        with open(os.path.join(winsdir, nm + ".units")) as fh:
+            return {int(f[0]): int(f[1]) for f in (l.split() for l in fh) if len(f) >= 2}
+    except (OSError, ValueError):
+        return {}
+
+
+def run_leafcal(args):
+    depths=[d for d in args.hdepths if d >= LEAFCAL_MIN_DEPTH]
+    outdir=os.path.splitext(args.leafcal)[0]+".d"
+    winsdir=os.path.join(outdir, "wins")
+    os.makedirs(winsdir, exist_ok=True)
+    jobs=[]
+    for dname in args.decks:
+        deck_file, prof, mt = DECKS[dname]
+        for d in depths:
+            for arm in ("base", "greedy"):
+                j={"name":"%s_H%d__%s" % (dname, d, arm), "deck":deck_file, "profile":PROFILES.get(dname),
+                   "games":LEAFCAL_GAMES, "seed":LEAFCAL_SEED, "game_index":0,
+                   "depth":d, "budget_ms":0, "max_turns":mt, "ignore_play_profile":True,
+                   "abandon_units":LEAFCAL_CEIL, "abandon_floor_units":LEAFCAL_CEIL,
+                   # deepest 1-ply cells first: they are the tail
+                   "weight":d*10 + (1 if arm == "base" else 0)}
+                j.update(_h_arm_fields(prof))
+                # Exactly the cell's own committed pass: warm-ups run on the value leaf and the lazy
+                # probe is leafless, so K = d changes nothing else in the cell.
+                if arm == "greedy": j["leaf_greedy_from_depth"]=d
+                jobs.append(j)
+    man=os.path.join(outdir, "manifest.json")
+    # Only the WALL-CLOCK backstop travels: no condemnation (a calibration cell is never reference-only).
+    condemn={"max_game_predict_sec":args.max_game_predict_sec, "max_game_wall_sec":args.max_game_wall_sec}
+    json.dump({"condemn":condemn, "jobs":jobs}, open(man, "w"))
+    env=dict(os.environ)
+    for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
+              "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE",
+              "MTG_VALUE_STARTGATE_ALPHA","MTG_LADDER_VALUE_LEAF"):
+        env.pop(k, None)
+    if env.get("MTG_FD_LEAF_DEPTH","").strip():
+        sys.exit("REFUSING: MTG_FD_LEAF_DEPTH is exported; it would override both arms' leaf.")
+    env["MTG_DUMP_UNITS"]="1"
+    env.setdefault("MTG_BATCH_HEARTBEAT", os.path.join(outdir, "heartbeat.txt"))
+    cmd=[MTG,"--batch",man,"--game-log-dir",winsdir]+(["--threads",str(args.workers)] if args.workers>0 else [])
+    print("LEAF CALIBRATION: %d decks x H%s x {1-ply, greedy} x %d games (seed %d, ceiling %dM units) "
+          "-- ONE pool" % (len(args.decks), depths, LEAFCAL_GAMES, LEAFCAL_SEED, LEAFCAL_CEIL//1000000),
           flush=True)
-    _FDL_MADE[dname]=out
-    return out
+    t0=time.time()
+    with open(os.path.join(outdir, "batch.out"), "w") as fo, open(os.path.join(outdir, "batch.err"), "w") as fe:
+        rc=subprocess.run(cmd, stdout=fo, stderr=fe, env=env).returncode
+    if rc != 0:
+        sys.exit("leaf calibration pool exited %d (see %s/batch.err) -- nothing written" % (rc, outdir))
+    res={}
+    for dname in args.decks:
+        mt=DECKS[dname][2]
+        cells={}
+        for d in depths:
+            nb, ng = "%s_H%d__base" % (dname, d), "%s_H%d__greedy" % (dname, d)
+            b, g = dict(_read_wins(winsdir, nb) or []), dict(_read_wins(winsdir, ng) or [])
+            ub, ug = _read_units(winsdir, nb), _read_units(winsdir, ng)
+            common=sorted(set(b) & set(g))
+            moved=[o for o in common if b[o] != g[o]]
+            better=sum(1 for o in moved if _lp_value(g[o], mt) < _lp_value(b[o], mt))
+            # ENGAGEMENT. A greedy arm whose units match the 1-ply arm on EVERY paired game did not run
+            # the rule: an engine that predates the job field ignores it silently, and its "0 moved" would
+            # hand the matrix a threshold nobody measured. (A deck whose own search_leaf_depth already
+            # pins the leaf gets here too, and no K is right for it as well.)
+            engaged=any(ub.get(o) != ug.get(o) for o in common)
+            cells[str(d)]={"paired":len(common), "moved":len(moved), "better":better,
+                           "worse":len(moved)-better, "moved_games":moved, "engaged":engaged,
+                           "unpaired_base":LEAFCAL_GAMES-len(b), "unpaired_greedy":LEAFCAL_GAMES-len(g),
+                           "units_base":sum(ub.get(o, 0) for o in common),
+                           "units_greedy":sum(ug.get(o, 0) for o in common)}
+        K=None
+        for d in sorted(depths, reverse=True):
+            c=cells[str(d)]
+            if c["engaged"] and c["moved"] == 0 and c["paired"] >= LEAFCAL_MIN_PAIRED: K=d
+            else: break
+        res[dname]={"K":K, "cells":cells}
+    json.dump({"games":LEAFCAL_GAMES, "seed":LEAFCAL_SEED, "ceiling_units":LEAFCAL_CEIL,
+               "min_depth":LEAFCAL_MIN_DEPTH, "min_paired":LEAFCAL_MIN_PAIRED,
+               "wall_sec":round(time.time()-t0, 1), "decks":res}, open(args.leafcal, "w"), indent=1)
+    for dname, r in res.items():
+        print("  %-28s K=%s" % (dname, r["K"] if r["K"] else "none (every H cell keeps the 1-ply leaf)"))
+        for d in depths:
+            c=r["cells"][str(d)]
+            ratio=(c["units_greedy"]/c["units_base"]) if c["units_base"] else float("nan")
+            print("    H%d  paired %2d  moved %d (%d better / %d worse)  unpaired %d/%d  units %.3fx%s%s"
+                  % (d, c["paired"], c["moved"], c["better"], c["worse"], c["unpaired_base"],
+                     c["unpaired_greedy"], ratio,
+                     "" if c["engaged"] else "  NOT ENGAGED (identical units -- stale engine?)",
+                     ("  games " + ",".join(map(str, c["moved_games"]))) if c["moved_games"] else ""))
+    print("  wall %.1f min -> %s" % ((time.time()-t0)/60, args.leafcal), flush=True)
 
 
 # NOTE: the single-invocation helper `run()` that used to live here is DELETED. It ran ONE `mtg` per
@@ -759,41 +876,36 @@ def run_incremental(args):
         c.update(chunks=[], intractable=False, running=False, first_wall=None, ceil=0); _refresh(c)
     state_path=args.out+".cells.json"
     src_now=_src_fingerprint()
-    # THE LEAF-FIDELITY OVERRIDE (MTG_MATRIX_FD_LEAF_DEPTH=<n>, MTG_MATRIX_FD_LEAF_FROM=<k>, default 1).
-    # H cells of depth >= k score their horizon with an n-ply beyond-horizon leaf instead of the engine's
-    # default (1-ply). Carried PER JOB, through a variant profile (`search_leaf_depth`, the per-deck key
-    # Melira Pod ships), never through MTG_FD_LEAF_DEPTH: one pool holds every cell, and an environment
-    # variable cannot differ between them. V cells are never touched (the value leaf replaces the
-    # rollout; Snow V4 measured byte-identical, units included), and neither is anything outside this
-    # pool -- phase A's label games and phase E's A/B run on the shipped profile.
-    #
-    # WHY A THRESHOLD. Snow 2026-10-13, paired ordinary games, greedy leaf vs the 1-ply one: H3 0 better /
-    # 0 worse of 83 at 0.028x the units, but H1 0 / 11 worse of 50 (+0.22 t/game) and H2 0 / 2 of 25. A
-    # shallow search leans on its leaf; a deep one barely reads it. So the override is only sound where
-    # it measures identical, and the threshold is how that is said. See
-    # docs/design/snow-matrix-leaf-fidelity.md.
+    # THE PER-DECK LEAF THRESHOLD (--leaf-greedy-from <leafcal.json>, written by run_leafcal): H cells of
+    # depth >= the deck's K score their committed pass's horizon with a greedy playout. Carried PER JOB
+    # (job field "leaf_greedy_from_depth"), never through an environment variable: one pool holds every
+    # cell of every deck. V cells are never touched (the value leaf replaces the rollout; Snow V4
+    # measured byte-identical, units included), nor is anything outside this pool.
     #
     # THE STAMP. Nothing else in the resume path can see this (the src and smoke-digest play fingerprints
-    # are blind to an env var), so a table banked under one leaf and resumed under another would hold two
-    # H references. The setting is stamped beside the state and a mismatch refuses to resume. "" is the
-    # engine default, so a run that never sets it is unaffected.
-    global FDL_DEPTH, FDL_FROM
-    FDL_DEPTH=os.environ.get("MTG_MATRIX_FD_LEAF_DEPTH","").strip()
-    FDL_FROM=int(os.environ.get("MTG_MATRIX_FD_LEAF_FROM","1") or "1")
+    # are budgeted, and the rule is an unbudgeted-only change), so a table banked under one leaf and
+    # resumed under another would hold two H references. The map is stamped beside the state and a
+    # mismatch refuses to resume. "" = no rule, so a run without a calibration is unaffected.
+    global LEAF_K
+    LEAF_K={}
+    if args.leaf_greedy_from:
+        cal=json.load(open(args.leaf_greedy_from))
+        LEAF_K={d: int(r["K"]) for d, r in cal.get("decks", {}).items() if r.get("K") and d in args.decks}
     if os.environ.get("MTG_FD_LEAF_DEPTH","").strip():
         sys.exit("REFUSING: MTG_FD_LEAF_DEPTH is exported around the matrix. It would override every "
-                 "cell's leaf (H and V alike) and outrank the per-job profile; use "
-                 "MTG_MATRIX_FD_LEAF_DEPTH (+ MTG_MATRIX_FD_LEAF_FROM) instead.")
-    fdl_now=("%s@H%d" % (FDL_DEPTH, FDL_FROM)) if FDL_DEPTH else ""
+                 "cell's leaf (H and V alike) and outrank the per-job threshold.")
+    fdl_now=",".join("%s:H%d" % (d, k) for d, k in sorted(LEAF_K.items()))
     fdl_path=args.out+".fdleaf"
     fdl_banked=open(fdl_path).read().strip() if os.path.exists(fdl_path) else ""
     if os.path.exists(state_path) and fdl_banked != fdl_now:
-        sys.exit("REFUSING TO RESUME: %s was banked with leaf override %r but this run has %r. "
+        sys.exit("REFUSING TO RESUME: %s was banked with greedy-leaf thresholds %r but this run has %r. "
                  "The two leaves are different H references and one table cannot hold both. Move the "
-                 "matrix outputs (%s.*, wins/) aside to start phase C fresh, or rerun with the banked value."
-                 % (state_path, fdl_banked or "(engine default)", fdl_now or "(engine default)", args.out))
-    if fdl_now:
-        with open(fdl_path,"w") as f: f.write(fdl_now+"\n")
+                 "matrix outputs (%s.*, wins/) aside to start phase C fresh."
+                 % (state_path, fdl_banked or "(none)", fdl_now or "(none)", args.out))
+    with open(fdl_path,"w") as f: f.write(fdl_now+"\n")
+    for d, k in sorted(LEAF_K.items()):
+        print("  leaf threshold: %s H cells of depth >= %d score their horizon with a greedy playout "
+              "(leaf calibration)" % (d, k), flush=True)
     if os.path.exists(state_path):                       # resume: skip already-committed chunks
         try:
             saved={_cell_key(x):x for x in json.load(open(state_path))}
@@ -1144,22 +1256,16 @@ def run_incremental(args):
                      # in build_queue so the queue's order survives into the pool; a bare cost weight
                      # here silently reimposed LPT and made the set-completion ordering inert.
                      "weight":ch["w"]}
-                # Leaf-fidelity override: H cells at or past the threshold read the variant profile.
-                if FDL_DEPTH and arm == "H" and c["depth"] >= FDL_FROM:
-                    job["profile"]=fdleaf_profile(dname, os.path.dirname(args.out) or ".")
+                # Per-deck greedy-leaf threshold (see LEAF_K / run_leafcal).
+                if c["arm"] == "H" and LEAF_K.get(dname) and c["depth"] >= LEAF_K[dname]:
+                    job["leaf_greedy_from_depth"]=LEAF_K[dname]
                 # THE ARM, per job (see ai/ValueArm.h). This is what lets both arms share one queue.
                 if c["arm"]=="V":
                     job.update({"value_model":True, "value_profile":prof,
                                 "value_min_depth":args.value_min_depth,
                                 "value_startgate_alpha":8.0})
                 else:
-                    # The H-cell ladder runs its warm-up passes on the cheap leaf and only the
-                    # committed pass on the heuristic. Guarded on the sidecar EXISTING, so a missing
-                    # model does not error -- every H cell just silently takes the slow path
-                    # (1.35x-84.8x more work).
-                    job["value_model"]=False
-                    if prof and os.path.exists(prof):
-                        job["value_profile"]=prof; job["ladder_value_leaf"]=True
+                    job.update(_h_arm_fields(prof))
                 jobs.append(job)
         man=args.out+".manifest.json"
         # CONDEMNATION now travels with the manifest and is applied inside the pool, continuously.
@@ -1578,7 +1684,15 @@ def main():
                          "That is strictly better than a number chosen here: os.cpu_count() over-reports "
                          "inside a cgroup with a restricted cpuset, and any hand-picked value is one more "
                          "way to under-fill the box. Pass a number only to deliberately run small.")
+    ap.add_argument("--leafcal",default=None,metavar="OUT.json",
+                    help="run the per-deck LEAF CALIBRATION (paired H cells >= 3, 1-ply vs greedy leaf) "
+                         "and write each deck's greedy-leaf threshold K to OUT.json; plays no matrix")
+    ap.add_argument("--leaf-greedy-from",default=None,metavar="LEAFCAL.json",
+                    help="the matrix's H cells of depth >= each deck's calibrated K use the greedy leaf")
     args=ap.parse_args()
+    if args.leafcal:
+        run_leafcal(args)
+        return
     if not args.incremental:
         sys.exit("the monolithic path is REMOVED -- incremental batching is the only route "
                  "(one pooled queue, resumable, no per-cell tail). Drop --no-incremental.")

@@ -454,7 +454,7 @@ def completeness_error(deck, V, trust_depth, no_fallback, h_conv, tol, target_de
 
 
 def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=True, allow_partial=False,
-               set_mullgen=True):
+               set_mullgen=True, write_to=None):
     deck = block["deck"]
     prof = NAME2VALUE.get(deck)
     if prof is None:
@@ -661,12 +661,12 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
     print("  %-9s trust=%s no_fb=%s  crossover(c->take@hc): %s%s%s"
           % (deck, td, no_fallback,
              " ".join("%d->%s" % (c, hc) for c, hc in zip(cdepths, effective_vals)),
-             ov_note, "" if dry else "  [-> %s]" % prof))
+             ov_note, "" if dry else "  [-> %s]" % (write_to or prof)))
     for w in warns:
         print("    ⚠ NON-MONOTONIC: %s" % w)
     if not dry:
         # Match the trained sidecar's compact single-line format (default separators) so the diff is minimal.
-        json.dump(nd, open(prof, "w"))
+        json.dump(nd, open(write_to or prof, "w"))
     return True
 
 
@@ -711,7 +711,24 @@ def main():
                          "gets the shallowest converged heuristic depth. Budget is never invented: an "
                          "existing mull_gen_budget_ms is preserved, an absent one stays absent.")
     ap.add_argument("--dry-run", action="store_true", help="print the derivation but do NOT write")
+    # THE LEAF-RULE COUNTERFACTUAL (valueleaf.sh phase D, USER 2026-10-14: "we should still A/B test the
+    # final result with it off and on ... separately from the rest of the leaf ... as an additional
+    # test if it was adopted"). When phase C0 let H cells of depth >= K score their horizon with a
+    # greedy playout, the H rows those cells report can sit higher (worse) than the 1-ply leaf would
+    # have scored them, and every H-dependent setting derived here inherits that. Playing those cells
+    # on the 1-ply leaf to find out is the cost C0 exists to avoid, so the counterfactual is BOUNDED
+    # instead: shift each greedy H row DOWN by the most the calibration's own paired games allow
+    # (0 moved in n pairs admits a per-game loss rate up to 1 - 0.05^(1/n), one turn per moved game),
+    # re-derive, and let phase E play the two settings against each other at PLAY settings.
+    ap.add_argument("--h-shift", default=None, metavar="D=DELTA[,D=DELTA]",
+                    help="subtract DELTA turns from heuristic row D (its mean and every per-game record) "
+                         "before deriving -- the leaf-rule counterfactual; needs exactly one --decks entry")
+    ap.add_argument("--write-to", default=None, metavar="PATH",
+                    help="write the derived sidecar to PATH instead of the deck's staged model (needs "
+                         "exactly one --decks entry)")
     args = ap.parse_args()
+    if (args.h_shift or args.write_to) and (not args.decks or len(args.decks) != 1):
+        sys.exit("--h-shift / --write-to name ONE deck's output: pass exactly one --decks entry")
 
     blocks = parse_log(args.log, average=args.average_seeds)
     cells_path = args.cells or (args.log + ".cells.json")
@@ -723,6 +740,20 @@ def main():
     if not blocks:
         print("no deck blocks parsed from %s" % args.log); sys.exit(1)
     want = args.decks or list(blocks)
+    if args.h_shift:
+        blk = blocks.get(want[0])
+        if blk is None:
+            print("  %-9s SKIP (not in log)" % want[0]); sys.exit(1)
+        for item in args.h_shift.split(","):
+            d, delta = item.split("=")
+            d, delta = int(d), float(delta)
+            if d not in blk["H"]:
+                continue
+            blk["H"][d] -= delta
+            pg = (blk.get("_pg") or {}).get(("H", d))
+            if pg:
+                for k in pg: pg[k] -= delta
+            print("  %-9s H%d shifted by -%.4f turns (leaf-rule counterfactual)" % (want[0], d, delta))
     print("=== value-leaf table -> metadata  (tol=%.4f offset=%d margin=%.3f%s) from %s ==="
           % (args.tol, args.offset, args.margin, "  [DRY-RUN]" if args.dry_run else "", args.log))
     ok = True
@@ -731,7 +762,7 @@ def main():
             print("  %-9s SKIP (not in log)" % deck); continue
         ok &= write_deck(blocks[deck], args.tol, args.offset, args.margin, args.dry_run, args.scalar_max_depth,
                          set_esc_cap=not args.no_escalation_cap, allow_partial=args.allow_partial,
-                         set_mullgen=not args.no_mullgen)
+                         set_mullgen=not args.no_mullgen, write_to=args.write_to)
     if not ok:
         print("REFUSED to write one or more decks (incomplete/inconclusive table). "
               "Extend the ladder and re-measure, or pass --allow-partial if the state is intentional.")

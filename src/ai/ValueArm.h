@@ -151,6 +151,12 @@ struct Arm
     // candidates for `=0`), so what has to be measured is (slot count x deck) and an env static pins
     // one count per process. -1 unset => env => the deck's BpChainSlotOptIn => 1.
     int         bp_chain_slot     = -1;
+    // LEAF FIDELITY BY PASS DEPTH (manifest "leaf_greedy_from_depth"): a commit-the-line pass of nominal
+    // depth >= this scores its horizon with a greedy playout instead of the 1-ply leaf. Set ONLY by the
+    // value-leaf matrix on its unbudgeted H cells, from the per-deck leaf calibration stage
+    // (scripts/valueleaf.sh) -- see LeafGreedyFromDepth (TurnSolver.cpp) for why it is measured per
+    // deck and why it is not a play setting. Per-job so the calibration's paired arms share one pool.
+    int         leaf_greedy_from  = -1;     // <=0 unset => rule off
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure
     // heuristic leaf on a deck that ships a model. Note this must be explicit: sidecar PRESENCE is

@@ -326,6 +326,8 @@ MAX_GAME_WALL_SEC=12600      # 3.5 h -- stage 2, within the user's 3-4 h
 # TT 4.1 GB + FSL 5.0 GB + reserve 6.4 GB ~ 15.5 GB engine worst case.
 AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
+# The leaf-rule A/B (leafrule_counterfactual) adds ONE arm, leafOFF, on these same seeds: it pairs against
+# the staged arm, which already is the ON product.
 PLAY_GAMES=500
 PLAY_SEEDS="610000 611000 612000 613000"
 # TRUST ACCEPTANCE arms (user, 2026-08-15): the depth matrix nominates a `value_trust_depth`
@@ -534,6 +536,7 @@ fi
 
 ALL_ROWS=$ROWDIR/all.rows
 MATRIX_TXT=$VLQ/matrix.txt          # per-run: a single-deck run must not overwrite the fleet table
+LEAFCAL=$VLQ/leafcal.json           # phase C0: per-deck greedy-leaf threshold for the H cells
 # Derived AFTER single-deck mode has finalised VLQ. Set beside SLOW_GAME_MS above, it captured the
 # fleet default (logs/vlq/slow_games.log) and every single-deck run appended to the same shared file
 # -- the FiveColour run's 17 slow games landed there while its own queue dir showed none.
@@ -626,6 +629,57 @@ check_decks() {
     log "  Archive the old queue and re-run, e.g.:"
     log "    mv $VLQ ${VLQ}_<old-list-name>"
     log "    mv 'logs/eval/<stem>.value.STAGED.json' 'logs/eval/<stem>.<old-list-name>.value.STAGED.json'"
+    return 1
+}
+
+# LEAF-SHAPE fingerprint: `<key> <json of the profile's search_leaf_* keys>` per deck, sorted -- the
+# working tree's profiles, or (with a rev) the profiles as committed at that rev.
+#
+# Those keys set the horizon leaf the H cells are scored with (search_leaf_depth,
+# search_leaf_first_turn_depth), so changing one mid-run puts H cells measured on two different leaves
+# into one table. NEITHER other guard is guaranteed to see it: the decklist stamp hashes the list, not
+# the profile, and the play fingerprint is budgeted d3 probes plus smoke digests, which a change that
+# only bites unbudgeted deep passes leaves byte-identical (a greedy leaf for passes of depth >= 3 moved
+# 0 of ~1,140 budgeted Snow games while cutting its unbudgeted H3-H5 cells 14-60x). check_freeze would
+# then report PLAY UNCHANGED and keep every banked chunk -- the exact mix this stops. 2026-10-14, Snow.
+# (Phase C0's per-deck thresholds are not a profile key; the matrix driver stamps those itself.)
+leaf_fingerprint() {
+    local rev=${1:-} row key dir stem f top
+    top=$(git rev-parse --show-toplevel)
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem _ <<<"$row"
+        f="$dir/$stem.profile.json"
+        if [ -n "$rev" ]; then git show "$rev:$(realpath -m --relative-to="$top" "$f")" 2>/dev/null
+        else cat "$f" 2>/dev/null; fi | python3 -c '
+import json, sys
+try:    p = json.load(sys.stdin)
+except Exception: p = {}
+print(sys.argv[1], json.dumps({k: v for k, v in p.items() if k.startswith("search_leaf")}, sort_keys=True))' "$key"
+    done | sort
+}
+
+# A leaf-shape change is a HARD STOP, like a decklist change, but for the opposite reason: here most of
+# the run IS salvageable (V cells never read the rollout leaf, and an H cell shallower than the rule's
+# threshold is untouched), and which cells to move aside is the operator's call, not this script's.
+# A queue frozen before this stamp existed is backfilled from the profiles at its frozen commit, so the
+# guard covers runs already in flight.
+check_leaf_keys() {
+    local frozen=$VLQ/freeze.leaf now
+    if [ ! -e "$frozen" ]; then
+        [ -s "$VLQ/freeze.commit" ] || return 0      # nothing frozen yet; phase_freeze stamps it
+        leaf_fingerprint "$(cat "$VLQ/freeze.commit")" > "$frozen"
+        log "leaf-shape stamp backfilled from the profiles at $(cat "$VLQ/freeze.commit")"
+    fi
+    now=$(leaf_fingerprint)
+    [ "$now" = "$(cat "$frozen")" ] && { rm -f "$frozen.now"; return 0; }
+    printf '%s\n' "$now" > "$frozen.now"
+    log "ABORT: a deck profile's search_leaf_* keys changed under this queue, so its H cells would mix two"
+    log "  horizon leaves. The play fingerprint cannot see this (budgeted play is unchanged by design)."
+    diff <(cat "$frozen") <(printf '%s\n' "$now") | sed 's/^/    /' | while read -r l; do log "$l"; done
+    log "  Move aside the matrix chunks of every H cell the new keys change (search_leaf_depth: every H cell;"
+    log "  search_leaf_first_turn_depth: every H cell) and the skip list they fed, then accept:"
+    log "    mv $frozen.now $frozen"
+    log "  See docs/design/snow-matrix-leaf-fidelity.md section 10."
     return 1
 }
 
@@ -770,6 +824,7 @@ phase_freeze() {
     # Which DECK(s) this queue measures -- see deck_fingerprint. Stamped here so every later `run`
     # can refuse to resume a queue whose decklist has been replaced.
     deck_fingerprint > "$VLQ/freeze.decks"
+    leaf_fingerprint > "$VLQ/freeze.leaf"
     log "FROZEN at $(cat "$VLQ/freeze.commit")  src-tree $(cut -c1-12 "$VLQ/freeze.src")"
     log "decklist(s) $(wc -l < "$VLQ/freeze.decks" | tr -d ' ') stamped -> $VLQ/freeze.decks"
     bash build.sh >> "$VLQ/build.log" 2>&1 || { log "ABORT: build failed, see $VLQ/build.log"; return 1; }
@@ -958,6 +1013,37 @@ staged_keys() {
     done
     echo "$out"
 }
+# --------------------------------------- PHASE C0: LEAF CALIBRATION (per deck, before the matrix)
+# Which H cells may score their horizon with a greedy playout instead of the 1-ply leaf. The 1-ply leaf
+# is nearly all of a deep H cell's work on a wide deck (Snow: ~116 candidates per simulated turn, each
+# rolled out; its 2026-10-13 run hit the per-game ceiling on 18% of games, almost all at H4/H5), while
+# on combo decks it decides real games (fleet, unbudgeted: H3 9 of ~490 and H4 3 of 470 worse under a
+# greedy leaf, all on decks whose greedy playout misses the kill). No single threshold is free on every
+# deck, so it is MEASURED per deck here (USER 2026-10-14, option 2 of three): paired H3..Hmax games,
+# 1-ply vs greedy, ONE pool; K = the shallowest depth from which every cell moved no win turn ("0 is
+# neutral"). The matrix's H cells of depth >= K then use the greedy leaf; a deck with no clean cell
+# keeps the 1-ply leaf everywhere. Needs the staged model (the H cells' warm-up passes run on it), so it
+# sits after phase B. Never stops the run: the verdict is recorded in $DECISIONS like every other call
+# this script makes on its own. Mechanism and evidence: run_leafcal in the matrix driver,
+# docs/design/snow-matrix-leaf-fidelity.md.
+phase_leafcal() {
+    done_p C0_leafcal && return 0
+    local keys; keys=$(staged_keys)
+    [ -n "$keys" ] || { log "PHASE C0 ABORT: no staged models"; return 1; }
+    log "PHASE C0: leaf calibration over$keys -- paired H cells >= 3, 1-ply vs greedy leaf, ONE pool"
+    python3 scripts/attic/valueleaf_depth_matrix.py --leafcal "$LEAFCAL" --decks $keys --hdepths $HDEPTHS \
+        --max-game-predict-sec "$MAX_GAME_PREDICT_SEC" --max-game-wall-sec "$MAX_GAME_WALL_SEC" \
+        > "$VLQ/leafcal.log" 2>&1 \
+        || { log "PHASE C0 ABORT: calibration pool failed (see $VLQ/leafcal.log) -- NOT marked, re-run to retry"; return 1; }
+    [ -s "$LEAFCAL" ] || { log "PHASE C0 ABORT: no $LEAFCAL written"; return 1; }
+    while IFS= read -r l; do log "  $l"; done < "$VLQ/leafcal.log"
+    { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE C0 leaf calibration (taken without stopping)"
+      echo "    rule: the matrix's H cells of depth >= K use the greedy leaf, K = the shallowest depth from"
+      echo "    which every paired cell moved no win turn; no K = the 1-ply leaf everywhere."
+      sed 's/^/    /' "$VLQ/leafcal.log"; echo; } >> "$DECISIONS"
+    mark C0_leafcal
+}
+
 phase_matrix() {
     done_p C_matrix && return 0
     local keys; keys=$(staged_keys)
@@ -968,6 +1054,9 @@ phase_matrix() {
     log "    full-depth pass before the ladder; answer-identical (per-game win turns verified), worth"
     log "    -10.4% at d4 / -36.8% at d5 in units on Snow. A MEDIAN-game lever -- the tail is the"
     log "    backstop's job, not this one. Self-disables on any budgeted cell."
+    # The per-deck greedy-leaf thresholds from phase C0 (absent on a queue that predates it: no rule).
+    local LEAFCAL_ARG=()
+    [ -s "$LEAFCAL" ] && LEAFCAL_ARG=(--leaf-greedy-from "$LEAFCAL")
     MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
         --hdepths $HDEPTHS --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
@@ -979,6 +1068,7 @@ phase_matrix() {
         --abandon-units "$ABANDON_FLOOR_UNITS" \
         --max-game-predict-sec "$MAX_GAME_PREDICT_SEC" \
         --max-game-wall-sec "$MAX_GAME_WALL_SEC" \
+        ${LEAFCAL_ARG[@]+"${LEAFCAL_ARG[@]}"} \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
     local mrc=$?
     # The driver exits 3 when the pooled batch died before reporting every chunk (Snow 2026-09-22:
@@ -1040,7 +1130,74 @@ phase_meta() {
     log "PHASE D: crossover + trust depth ->$keys"
     python3 scripts/attic/valueleaf_table_to_metadata.py "$MATRIX_TXT" \
         --decks $keys --average-seeds 2>&1 | tee -a "$VLQ/driver.log"
+    leafrule_counterfactual
     mark D_meta
+}
+
+# THE LEAF-RULE COUNTERFACTUAL (USER 2026-10-14: "we should still A/B test the final result with it off
+# and on", "separately from the rest of the leaf", "as an additional test if it was adopted"; and on why
+# play settings are the right yardstick: "if a setting is fully unreachable due to cost it also will not
+# come up so much because the budget will cut it off").
+#
+# Phase C0 can let a deck's H cells of depth >= K score their horizon with a greedy playout. That never
+# touches the model (rows are identical); it can only move the H-dependent SETTINGS derived above -- the
+# fallback crossover, value_no_fallback, the trust candidate -- because the greedy H rows may sit higher
+# than the 1-ply leaf would have scored them. Playing those cells on the 1-ply leaf to find out is the
+# cost C0 exists to avoid, and C0's 50-game screen cannot bound the shift to the derivation's 0.002-turn
+# tolerance (that needs ~1,500 pairs per cell). So the OFF product is bounded instead: re-derive with
+# each greedy H row shifted DOWN by the most C0's own pairs allow (0 moved in n pairs admits a loss rate
+# up to 1 - 0.05^(1/n), one turn per moved game) -- the worst case for the rule, and conservative. If no
+# play-relevant setting moves, ON and OFF are the same product and nothing is played. If one does, phase
+# E plays the OFF sidecar against the staged one on the A/B seeds -- same model, only those settings
+# differ -- and phase E's verdict decides which settings ship.
+leafrule_counterfactual() {
+    [ -s "$LEAFCAL" ] || return 0
+    local row key dir stem mkey base games staged off sh diff
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        staged=logs/eval/$stem.value.STAGED.json
+        off=$VLQ/$stem.value.LEAFOFF.json
+        rm -f "$off"
+        [ -s "$staged" ] || continue
+        sh=$(python3 -c '
+import json, sys
+r = json.load(open(sys.argv[1])).get("decks", {}).get(sys.argv[2])
+if r and r.get("K"):
+    print(",".join("%s=%.4f" % (d, 1 - 0.05 ** (1.0 / c["paired"]))
+                   for d, c in sorted(r["cells"].items(), key=lambda x: int(x[0]))
+                   if int(d) >= r["K"] and c["paired"] > 0))' "$LEAFCAL" "${mkey}_staged")
+        [ -n "$sh" ] || continue
+        log "  leaf rule ($stem): counterfactual H shift $sh (worst case C0's pairs allow)"
+        python3 scripts/attic/valueleaf_table_to_metadata.py "$MATRIX_TXT" --decks "${mkey}_staged" \
+            --average-seeds --h-shift "$sh" --write-to "$off" >> "$VLQ/driver.log" 2>&1 \
+            || { log "  leaf rule ($stem): counterfactual derivation REFUSED (see driver.log) -- no OFF arm"
+                 rm -f "$off"
+                 { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE D leaf rule: $stem counterfactual REFUSED by the deriver"
+                   echo "    the ON settings ship untested against OFF; see $VLQ/driver.log"; echo; } >> "$DECISIONS"
+                 continue; }
+        diff=$(python3 - "$staged" "$off" <<'PY'
+import json, sys
+a, b = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+def play(v):
+    xo = v.get("value_fallback_crossover") or {}
+    return {"crossover": list(zip(xo.get("committed_depths", []), xo.get("take_heuristic_at_hdepth", []))),
+            "no_fallback": v.get("value_no_fallback"),
+            "trust_candidate": v.get("value_trust_depth_candidate"),
+            "escalation_cap": (v.get("value_play") or {}).get("escalation_cap")}
+pa, pb = play(a), play(b)
+print("; ".join("%s ON=%s OFF=%s" % (k, pa[k], pb[k]) for k in pa if pa[k] != pb[k]))
+PY
+)
+        if [ -z "$diff" ]; then
+            log "  leaf rule ($stem): ON and worst-case OFF derive the SAME play settings -- nothing to play"
+            rm -f "$off"
+            { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE D leaf rule: $stem -- greedy H cells cannot have moved a play setting"
+              echo "    worst-case shift $sh changes no crossover / no_fallback / trust candidate / escalation cap"; echo; } >> "$DECISIONS"
+        else
+            log "  leaf rule ($stem): settings DIFFER under the worst case -- phase E plays staged vs leafOFF"
+            log "    $diff"
+        fi
+    done
 }
 
 # --------------------- PHASE E: A/B + play sweeps for every deck, ONE pooled batch (MEASURED ONLY)
@@ -1067,6 +1224,14 @@ phase_measure() {
             h_job "$key-live_s$s"   "$(deck_file "$vroot/$key/live" "$stem")"   "$vroot/$key/live/$stem.profile.json"   "$AB_GAMES" "$s"
             h_job "$key-staged_s$s" "$(deck_file "$vroot/$key/staged" "$stem")" "$vroot/$key/staged/$stem.profile.json" "$AB_GAMES" "$s"
         done
+        # LEAF-RULE A/B (see leafrule_counterfactual): the worst-case OFF settings on the A/B seeds, paired
+        # against the staged arm above, which IS the ON product -- so it costs one arm, not two.
+        if [ -s "$VLQ/$stem.value.LEAFOFF.json" ]; then
+            make_variant_deck "$vroot/$key/leafoff" "$dir" "$stem" "$VLQ/$stem.value.LEAFOFF.json"
+            for s in $AB_SEEDS; do
+                h_job "$key-leafOFF_s$s" "$(deck_file "$vroot/$key/leafoff" "$stem")" "$vroot/$key/leafoff/$stem.profile.json" "$AB_GAMES" "$s"
+            done
+        fi
         # TRUST ACCEPTANCE arms, pooled into this same queue (never a second batch -- a wave is a
         # loop). Only when the matrix nominated a candidate; the OFF arm is the staged model exactly
         # as it stands (no trust), the ON arm is that plus value_trust_depth = the candidate, so the
@@ -1158,6 +1323,40 @@ PY
         echo "=== $key: play-profile target_depth sweep (baseline $bl = shipped) ===" | tee -a "$VLQ/driver.log"
         grep -E "^(d[0-9]+|dflt)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_play.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "$bl" 2>&1 | tee -a "$VLQ/driver.log"
+        # LEAF-RULE VERDICT. ON (staged) vs worst-case OFF at play settings. ON keeps its settings unless it
+        # is NOTABLY WORSE than OFF (delta > $TRUST_TOL turns at paired t > +2, the adoption bar's quality
+        # test); then OFF's H-dependent settings replace ON's in the staged model -- they lean toward
+        # falling back to the heuristic, the safe side. The adoption A/B above measured ON, which the
+        # record says. Cost is not judged: the two differ only in which line is taken, not in search.
+        if grep -qE "^leafOFF_s" "$VLQ/m_$key.log"; then
+            echo "=== $key: leaf rule -- staged (greedy H cells, ON) vs worst-case 1-ply settings (OFF) ===" | tee -a "$VLQ/driver.log"
+            grep -E "^(staged|leafOFF)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_leafrule.log"
+            local lv; lv=$(python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_leafrule.log" leafOFF --verdict staged \
+                             --tol "$TRUST_TOL" 2>&1 | tee -a "$VLQ/driver.log" | grep '^VERDICT')
+            if python3 - "$lv" "$TRUST_TOL" <<'PY'
+import re, sys
+m = re.search(r"delta=([-+\d.]+) t=([-+\d.]+)", sys.argv[1])
+sys.exit(0 if m and float(m.group(1)) > float(sys.argv[2]) and float(m.group(2)) > 2.0 else 1)
+PY
+            then
+                python3 - "logs/eval/$stem.value.STAGED.json" "$VLQ/$stem.value.LEAFOFF.json" <<'PY'
+import json, sys
+st, off = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+for k in ("value_leaf_table", "value_fallback_crossover", "value_no_fallback"):
+    if k in off: st[k] = off[k]
+    else: st.pop(k, None)
+json.dump(st, open(sys.argv[1], "w"))
+PY
+                log "  leaf rule ($stem): ON NOTABLY WORSE than worst-case OFF -- OFF's settings installed in the staged model"
+                { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E leaf rule: $stem -- ON notably worse, OFF settings SHIPPED in staged"
+                  echo "    $lv"
+                  echo "    note: the staged-vs-live adoption A/B measured the ON settings"; echo; } >> "$DECISIONS"
+            else
+                log "  leaf rule ($stem): ON not notably worse than worst-case OFF -- ON settings kept"
+                { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E leaf rule: $stem -- ON kept (not notably worse than worst-case OFF)"
+                  echo "    $lv"; echo; } >> "$DECISIONS"
+            fi
+        fi
         # TRUST ACCEPTANCE. The matrix nominated the candidate; these games decide it. --apply
         # promotes an accepted candidate into the STAGED model's value_trust_depth, which is not
         # adoption by itself -- the staged model goes live only through phase E.5 below.
@@ -1327,10 +1526,11 @@ finish|run)
     harness_pgo_ensure
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
     _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
-    for ph in phase_freeze phase_rows phase_split phase_train phase_matrix phase_riskgate \
+    for ph in phase_freeze phase_rows phase_split phase_train phase_leafcal phase_matrix phase_riskgate \
               phase_meta phase_measure phase_adopt phase_skipcal phase_mullgen; do
         check_freeze || exit 1
         check_decks  || exit 1
+        check_leaf_keys || exit 1
         $ph || { log "STOPPED at $ph"; exit 1; }
     done
     log "=== COMPLETE -- review the A/B + sweep reports above ==="
@@ -1342,6 +1542,7 @@ status)
     ph_label() { case $1 in
         00_freeze) echo "0 freeze+build";; A_rows)   echo "A rows        ";;
         A_split)   echo "A split       ";; B_train)  echo "B train       ";;
+        C0_leafcal) echo "C0 leaf calib ";;
         C_matrix)  echo "C matrix      ";; C_riskgate) echo "C.5 risk gate ";;
         D_meta)    echo "D metadata    ";; E_measure)  echo "E measure     ";;
         E_adopt)   echo "E.5 adopt     ";;
@@ -1362,10 +1563,16 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C_matrix C_riskgate D_meta E_measure E_adopt E6_skipcal F_mullgen; do
+    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E_measure E_adopt E6_skipcal F_mullgen; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done
+    if [ -s "$LEAFCAL" ]; then
+        echo "leaf calib : $(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))['decks']
+print('; '.join('%s K=%s' % (k, v['K'] or 'none') for k, v in sorted(d.items())))" "$LEAFCAL" 2>/dev/null)"
+    fi
     echo
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
@@ -1469,6 +1676,7 @@ ab)
     log "=== NO-MATRIX ADOPTION A/B: staged (as-is, presence-only) vs live, + play sweep ==="
     check_freeze || exit 1
     check_decks  || exit 1
+    check_leaf_keys || exit 1
     phase_freeze && phase_measure || { log "STOPPED in ab"; exit 1; }
     log "=== AB COMPLETE -- nothing adopted; review the report above ==="
     ;;

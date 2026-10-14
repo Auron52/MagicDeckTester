@@ -245,13 +245,14 @@ Restarting is the normal case, not an error path:
 Each run gets its own queue dir (`logs/vlq_<deck>`), so a single-deck run never collides with a fleet
 run's rows, table or markers.
 
-## What it does — five phases, three tails
+## What it does — the phases and their tails
 
 | phase | what | games |
 |---|---|---|
 | A rows | dump labelled positions at SHIPPED play (K=3 searched labels) | yes — one pooled batch |
 | A split | bucket by seed, dedupe on `(seed, turn)`, sort | no |
 | B train | GBDT → `logs/eval/<stem>.value.STAGED.json` | no |
+| C0 leaf calibration | per deck: paired H3..H5, 1-ply vs greedy horizon leaf → the depth K from which the matrix's H cells use the greedy leaf | yes — one pooled batch, short tail (10M-unit ceiling) |
 | C matrix | H×V depth matrix, the whole thing in ONE pool | yes — one pooled batch, one tail |
 | D metadata | derive crossover + NOMINATE a `value_trust_depth_candidate` into the staged sidecar | no |
 | E measure | staged-vs-live A/B + play sweep + **trust acceptance (ON vs OFF)** | yes — one pooled batch |
@@ -297,6 +298,20 @@ removed, back to R = 0. `bash scripts/valueleaf.sh skipcal
 [decks/<Deck> ...]` runs it alone for leaves that are already live (backfill, or a hand-installed leaf). An
 adopted allowance is committed like a leaf, with the deck's smoke and regression GT re-accepted.
 Design and evidence: `docs/design/escalation-skip-calibration-stage.md`.
+
+**Phase C0 decides which H cells may use a greedy horizon leaf** (USER 2026-10-14). On a wide deck the
+1-ply leaf is nearly all of a deep H cell's work (Snow's 2026-10-13 run abandoned 18% of its games at the
+per-game ceiling, almost all at H4/H5), while on combo decks it decides real games -- so no single
+threshold is free, and the stage measures it per deck: 50 paired games per H cell >= 3, K = the shallowest
+depth from which every cell moved no win turn. It is the one barrier that is a real dependency of the
+matrix (K picks the H cells' leaf), and it is short: its games run under a 10M-unit ceiling. The verdict is
+recorded in `DECISIONS.txt`; the matrix stamps the thresholds and refuses to resume a table banked under
+different ones. A queue that predates C0 runs it on its next `run`, and its banked matrix must be moved
+aside first. A 50-game screen cannot certify the rule at the derivation's 0.002-turn precision, so
+**whenever C0 adopts a K, the final product is also A/B'd with the rule on and off** (USER 2026-10-14):
+phase D re-derives the H-dependent settings under the worst-case shift C0's pairs allow, and if any
+play setting moves, phase E plays that `leafOFF` sidecar against the staged one on the A/B seeds; ON
+ships unless notably worse. Evidence: `docs/design/snow-matrix-leaf-fidelity.md`.
 
 ## The three traps that cost real time
 
