@@ -1052,19 +1052,41 @@ OVERNIGHT_CASES=(
   "kittyv2 5 5005  125 40"
   "kittyv2 5 6006  125 40"
   "kittyv2 5 7007  125 40"
-  # kittyv3: see the SMOKE block. Same 4-seed shape as kittyv2.
+  # kittyv3: see the SMOKE block. EXPANDED at the keep-table adoption, 2026-10-14 -- the ENTRY-style
+  # quarter shape above (shared with kittyv2) existed because a deck WITHOUT a keep table is at its
+  # most expensive: every mulliganed game plays out each candidate bottom as a full game. v3's
+  # exhaustive table (a9a17e64) replaces that with a lookup and MEASURED 2.90x (d3) / 2.99x (d5)
+  # fewer search units per game, so the saving buys sample instead of being banked.
+  #
+  # SIZED BY THE USER, 2026-10-14: *"In my mind it kind of fits more in the middle tier, though,
+  # along with Dragonstorm, Fluctuator etc. at about 3000 games."* So this is EXACTLY fluctuator's
+  # overnight shape -- same depths, same budgets, same counts -- rather than invented numbers:
+  # d3 4x500 b20 + d5 4x250 b40 = 3,000 searched games (2x the old 1,500).
+  #
+  # COST, from the 2026-10-14 tier (424 jobs, 9.4 worker-h) where v3 measured 2.1% / 0.20 worker-h
+  # at the old counts: 96% of its cost is searched (d3 68%, d5 28%), so 2x searched lands at ~0.39
+  # worker-h = ~4.1% of the tier. That is LESS than the ~5.8% the tier was paying for this deck
+  # yesterday (same rows, table absent), so the expansion is a net cost REDUCTION that still
+  # doubles the sample.
+  #
+  # v1 (6,000 searched, 7.6%) and kittyv2 (1,500, 3.4%) are both due to be dropped once v3 is
+  # finished and shown to beat v2 (USER 2026-10-14), keeping their references: *"The only games we
+  # will continue to play from the old lists should be the references. We'll hold on to those."*
+  # That drop is INDEPENDENT of this file -- test/viewer_protocol_check.py derives
+  # references/<dir> -> decks/<name>/<name>.{cod,txt} FROM THE FOLDER LAYOUT and never reads
+  # regression_cases.sh, so removing cases cannot stop a reference being replayed.
   "kittyv3 0  4004 2000 0"
   "kittyv3 0  6006 2000 0"
   "kittyv3 0  8008 2000 0"
   "kittyv3 0 10010 2000 0"
-  "kittyv3 3 4004  250 20"
-  "kittyv3 3 5005  250 20"
-  "kittyv3 3 6006  250 20"
-  "kittyv3 3 7007  250 20"
-  "kittyv3 5 4004  125 40"
-  "kittyv3 5 5005  125 40"
-  "kittyv3 5 6006  125 40"
-  "kittyv3 5 7007  125 40"
+  "kittyv3 3 4004  500 20"
+  "kittyv3 3 5005  500 20"
+  "kittyv3 3 6006  500 20"
+  "kittyv3 3 7007  500 20"
+  "kittyv3 5 4004  250 40"
+  "kittyv3 5 5005  250 40"
+  "kittyv3 5 6006  250 40"
+  "kittyv3 5 7007  250 40"
   # dragons: same shape. Probed at b20/b40: d3 ~1.39 s/game, d5 ~3.60 s/game (0.54x/0.45x
   # minotaur) => ~3.6 core-hours added. Combined with kitty this is ~+5.4 core-hours on a tier
   # that ran ~9.6 core-hours, i.e. ~40 min wall on a free box against an 8 h budget.
