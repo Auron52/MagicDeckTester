@@ -109,9 +109,30 @@ Base (`ff3e205b`, `build/scratch/edf-order/bin/mtg.base`), `logs/edf-order/probe
 Pinned as fixtures: `test/scenarios/edf_untappers_cheapest_first_t4.json` (expect_win_turn 4) and
 `test/scenarios/edf_aura_range_drake_first.json` (validate_line accept). Unit 1067/1067, scenarios 162/162.
 
+## References (all 24, base `mtg.base` vs new `mtg.new`, 2026-10-15)
+
+`logs/edf-order/refs.sh` (box lock), outputs `build/scratch/edf-order/refs/{base,new}/`. No reference file
+was modified.
+
+| check | base | new |
+|---|---|---|
+| `ref_bench.py` (search from turn 1, shipped d5/b20) | 4.208 avg, 0/24 short, 4 faster than human | **identical, game for game** (4.208, 0/24 short) |
+| `viewer_protocol_check.py --strict` | 3 ok, 21 repaired, 0 drift / enum-gap / board-diverged | **same counts**; 5 refs repair different menu indices (the menu order moved), every replay ends on the same win turn |
+| `ref_handoff_sweep.py` (637 frames) | 8 short | **7 short**: 636 frames identical, 1 FASTER (`claude_s5_gi4` T4 post_main #0, 5 -> 4, no longer short), 0 slower |
+
+## Identity (2026-10-15)
+
+`logs/edf-order/ident.sh`: every suite deck (33 lists) x d0 40 / d3b10 20 / shipped 20 games, seed 11500001,
+plus FiveColour 2HG d3 40, plus EDF with ALL FIVE parts OFF on the A/B's own seeds (shipped 40, d3 60, d0 200).
+**114 of 114 jobs digest-identical** between the base binary and the new one. Units equal except kitty d3 /
+kitty shipped / kittyv3 shipped / snow shipped (within 0.4%, digests identical): those decks never reach this
+code (no EDF provider, no untapper), so that is the batch's job-to-thread scheduling, not this change.
+Bruna and Fungus (the other land-Aura decks) are byte-identical: parts 2 and 3 need an untapper or live in
+the EDF provider.
+
 ## Measurement
 
-NOT RUN YET (see RESUME).
+IN FLIGHT (see RESUME).
 
 ## RESUME (2026-10-14 night stop, coordinator: the box goes to a value-leaf generation)
 
