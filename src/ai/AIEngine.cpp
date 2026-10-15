@@ -7490,7 +7490,14 @@ bool AIEngine::UseSurplusLandAbilities(GameState& state,
     // that land's mana (a drawn Stinger it now pays for), the LandDropAfterDrawEngine replay's shape.
     // Depth 0 only: at depth > 0 the search owns every land decision. The hold-fuel land-drop rule
     // ("Don't play any fuel once you are going off") still holds it, exactly as at the main's start.
-    if (m_lookahead_depth == 0 && dug_a_land && state.stack.empty()
+    // MTG_DIG_DRAWN_LAND_D0 -- DEFAULT OFF, MEASURED WORSE (round 2, 60,000 paired d0 games: +54 /
+    // +39 net against the order alone): the greedy plays EVERY such land, and on this deck a land in
+    // hand is also next turn's cycle ("often you don't even want to play the third land, because it
+    // costs a cycling card"). The searched chain-end re-solve weighs exactly that trade; the d0 runner
+    // cannot, so it keeps the 16dfb7e4 behaviour. =1 for the A/B.
+    static const bool s_d0_drop = EnvOn("MTG_DIG_DRAWN_LAND_D0");   // DEFAULT OFF; =1 enables
+    if (heurarm::Flag(heurarm::DIG_DRAWN_LAND_D0, s_d0_drop)
+        && m_lookahead_depth == 0 && dug_a_land && state.stack.empty()
         && ResolveProvider(state).DigUsesDrawnLandDrop(state)
         && ap.lands_played_this_turn < ap.LandDropsAvailable()
         && !(GreedyHoldLandEnabled()

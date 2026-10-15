@@ -70,9 +70,12 @@ void FoPut(GameState& s, const std::string& name, int number, bool tapped = fals
 
 struct FoArms
 {
-    explicit FoArms(int order = -1, int drawn = -1, int keep = -1)
+    // `funded` defaults to 0: the order tests pin the USER's order itself; the funded amendment
+    // (default ON in play) has its own test case below.
+    explicit FoArms(int order = -1, int drawn = -1, int keep = -1, int funded = 0)
     {
         heurarm::Clear();
+        if (funded >= 0) { heurarm::t_arm[heurarm::FLUCT_ORDER_FUNDED] = static_cast<std::int8_t>(funded); }
         if (order >= 0) { heurarm::t_arm[heurarm::FLUCT_ORDER]         = static_cast<std::int8_t>(order); }
         if (drawn >= 0) { heurarm::t_arm[heurarm::FLUCT_DRAWN_LAND]    = static_cast<std::int8_t>(drawn); }
         if (keep >= 0)  { heurarm::t_arm[heurarm::FLUCT_KEEP_UNTAPPED] = static_cast<std::int8_t>(keep); }
