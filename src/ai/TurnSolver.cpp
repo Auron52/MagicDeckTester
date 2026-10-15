@@ -36065,15 +36065,8 @@ static int KillTriggerComboCredit(const GameState& state, const std::vector<Acti
                                   const std::vector<int>& sel)
 {
     if (!KillTriggerComboOn()) { return 0; }
-    int target = -1, n = 0;
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-    {
-        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
-        if (p.controller_index == state.active_player_index || !p.card.IsCreature()) { continue; }
-        target = i;
-        if (++n > 1) { return 0; }
-    }
-    if (n != 1) { return 0; }
+    // The selection first (a handful of casts; empty of kill-trigger burn for every other deck), so the
+    // battlefield walk below runs only for a plan that could earn the credit.
     thread_local std::vector<int> ord;
     ord.clear();
     bool any_trigger = false;
@@ -36088,6 +36081,15 @@ static int KillTriggerComboCredit(const GameState& state, const std::vector<Acti
         if (d.params.death_trigger_damage > 0 && a.direct_damage <= 0) { any_trigger = true; }
     }
     if (!any_trigger) { return 0; }
+    int target = -1, n = 0;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index == state.active_player_index || !p.card.IsCreature()) { continue; }
+        target = i;
+        if (++n > 1) { return 0; }
+    }
+    if (n != 1) { return 0; }
     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
     { return CastOrderLess(state, cands[static_cast<std::size_t>(x)], cands[static_cast<std::size_t>(y)]); });
     const int tough = state.battlefield[static_cast<std::size_t>(target)].EffectiveToughness();
