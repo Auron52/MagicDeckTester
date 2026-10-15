@@ -9132,55 +9132,72 @@ std::vector<int> VialProvider::CleanupDiscardCandidates(
 
 // ---- SoldiersProvider --------------------------------------------------------
 
-// MTG_SOLDIERS_ORDER -- PROPOSED total cast order for Soldiers (analyze-deck, 2026-10-04). A USER
-// QUESTION, not an adoption: docs/design/cast-order-rankings.md ("Soldiers") carries the proposal
-// and its measurement. DEFAULT OFF; per-job overridable so both arms run in ONE pooled batch.
-// Off => VialProvider::CastOrderRank, i.e. today's generic tiers (every creature tied at 10, Vial
-// at 20, ties kept in plan order).
+// MTG_SOLDIERS_ORDER -- the Soldiers TOTAL cast order. AGENT-AUTHORED (analyze-deck, 2026-10-04), then
+// USER-APPROVED 2026-10-14 as amended ("Soldiers' order also looks good."; docs/design/cast-order-review-
+// 2026-10-14.md "Soldiers -- SETTLED", measured in docs/design/soldiers-breaching-cast-order-2026-10-15.md).
+// DEFAULT ON; =0 => VialProvider::CastOrderRank, i.e. the generic tiers (every creature tied at 10, Vial
+// at 20, ties kept in plan order). Per-job overridable so both arms run in ONE pooled batch.
 static bool SoldiersOrderEnabled()
 {
-    static const bool on = EnvOn("MTG_SOLDIERS_ORDER");   // default OFF; =1 enables (A/B lever)
+    static const bool on = EnvOn("MTG_SOLDIERS_ORDER", true);   // DEFAULT ON (USER-approved); =0 -> generic
     return heurarm::Flag(heurarm::SOLDIERS_ORDER, on);
 }
 
-// The order is TOTAL over the 60 (no two distinct cards share a rank -- condemnation needs a total
-// order) and the land drop stays FIRST (generic: no cantrip in the deck). Role classes are read
-// from PARAMS where a param expresses the role; the value order WITHIN the vanilla/lord bodies is
-// deck knowledge keyed on the name (the FiveColour/Equipment precedent), and any card not named
-// falls back to its generic rank +100 -- after every named card, still deterministic.
-//   1 Champion of the Parish  -- Human-enters watcher WITHOUT the Lieutenant's ETB: first, so every
-//                                later Human this turn is +1 counter on it.
-//   2 Recruiter of the Guard  -- creature tutor to hand: early, so the fetched card can still be cast
-//   3 Ranger-Captain of Eos      this turn (and both are Humans, so after Champion).
-//   4 Aether Vial             -- the deck's only noncreature spell: BEFORE Thalia (her tax binds our
-//                                own noncreature spells -- {1} -> {2}).
-//   5 Recruitment Officer     -- cheap body whose {3}{W} dig wants to come after the casts.
-//   6..15 bodies and lords    -- cheapest/vanilla first, lords late (static: order-free) --
-//                                Esper Sentinel, Thalia (after Vial: rank > 4), Coppercoat, Cathar
-//                                Commando, Jirina, Harbin, Brutal Cathar, Field Marshal, Kudro,
-//                                King Darien, Rick.
-//   17 Thalia's Lieutenant    -- LAST: its ETB counters every OTHER Human, including this turn's.
+// The approved order (main 1, land FIRST -- the deck has no draw spell, and Fortified Beachhead enters
+// untapped by revealing a Soldier, which every creature in the 60 is):
+//   land > Champion of the Parish > Recruiter of the Guard > Ranger-Captain of Eos > Thalia's Lieutenant
+//   > Aether Vial > Recruitment Officer > Esper Sentinel > Thalia, Guardian of Thraben > Coppercoat Vanguard
+//   > Cathar Commando > Jirina > Harbin > Brutal Cathar > Field Marshal > General Kudro > King Darien XLVIII
+//   > Rick.
+// Every role slot is read off PARAMS:
+//    1 Champion       own_creature_enters_self_counters, WITHOUT the Lieutenant's ETB: first, so every
+//                     later Human this turn (cast or Vial-put) is a +1/+1 counter on it.
+//    2 Recruiter      tutor_to_hand + tutor_max_toughness: early, so a fetched Champion / Lieutenant joins
+//    3 Ranger-Captain tutor_to_hand (mv <= 1)  the continuation at its own slot and still precedes this
+//                     turn's other Humans.
+//    4 Lieutenant     etb_each_other_own_creature_counters (tested FIRST: it also carries Champion's
+//                     watcher param). The USER's amendment, from LAST to 4th: after Champion (+2 instead
+//                     of +1) and the tutors; against any other Human the pair totals +1 either way, and
+//                     its watcher still counts a duplicate legend that dies to the legend rule.
+//    5 Aether Vial    upkeep_adds_charge -- the deck's only noncreature spell, BEFORE Thalia, whose
+//                     symmetric tax binds it ({1} -> {2}).
+//    6 Officer        activated_dig_count -- its {3}{W} dig is a trailing activation wherever it is cast.
+// The rest (approved slots 7-17) is ORDER-FREE -- no enter-trigger reads them, no cost effect touches a
+// creature spell, and everything cast this turn is summoning sick -- so its order is a tie-break, kept
+// TOTAL as the USER asked: CHEAPEST FIRST by mana value (a param), and within one mana value the
+// measured 10-04 sequence, by name (the final tie-break only). Thalia (noncreature_spell_tax) leads her
+// mana value. The key is 100 + 10*mv + k: Sentinel 111 | Thalia 120, Coppercoat 121, Cathar Commando
+// 122, Jirina 123, Harbin 124 | Brutal Cathar 131, Field Marshal 132, Kudro 133, King Darien 134 | Rick
+// 141. A card the deck does not hold falls to 200 + its generic rank, after every card it does, and
+// two such cards are ordered by NAME (CastOrderTotalByName) -- never by hand order.
+static constexpr int kSoldiersFreeBase   = 100;
+static constexpr int kSoldiersUnlisted   = 200;
 int SoldiersProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!SoldiersOrderEnabled()) { return VialProvider::CastOrderRank(s, def); }
     const CardParams& p = def.params;
-    if (p.etb_each_other_own_creature_counters > 0)                     { return 17; }  // Lieutenant
+    if (p.etb_each_other_own_creature_counters > 0)                     { return 4; }   // Lieutenant
     if (p.own_creature_enters_self_counters > 0)                        { return 1; }   // Champion
-    if (p.upkeep_adds_charge)                                           { return 4; }   // Aether Vial
-    if (p.noncreature_spell_tax > 0)                                    { return 7; }   // Thalia
     if (p.tutor_to_hand && p.tutor_max_toughness >= 0)                  { return 2; }   // Recruiter
     if (p.tutor_to_hand)                                                { return 3; }   // Ranger-Captain
-    if (p.activated_dig_count > 0)                                      { return 5; }   // Officer
-    static const std::pair<const char*, int> kBodies[] = {
-        {"Esper Sentinel", 6}, {"Coppercoat Vanguard", 8}, {"Cathar Commando", 9},
-        {"Jirina, Dauntless General", 10}, {"Harbin, Vanguard Aviator", 11},
-        {"Brutal Cathar", 12}, {"Field Marshal", 13}, {"General Kudro of Drannith", 14},
-        {"King Darien XLVIII", 15}, {"Rick, Steadfast Leader", 16},
+    if (p.upkeep_adds_charge)                                           { return 5; }   // Aether Vial
+    if (p.activated_dig_count > 0)                                      { return 6; }   // Officer
+    const int mv = std::min(def.card.m_mana_cost.ManaValue(), 9);
+    if (p.noncreature_spell_tax > 0)                                    { return kSoldiersFreeBase + 10 * mv; }  // Thalia
+    // The 10-04 sequence within a mana value (k >= 1; Thalia holds k = 0 of hers).
+    static const std::pair<const char*, int> kFree[] = {
+        {"Esper Sentinel", 1},
+        {"Coppercoat Vanguard", 1}, {"Cathar Commando", 2}, {"Jirina, Dauntless General", 3},
+        {"Harbin, Vanguard Aviator", 4},
+        {"Brutal Cathar", 1}, {"Field Marshal", 2}, {"General Kudro of Drannith", 3}, {"King Darien XLVIII", 4},
+        {"Rick, Steadfast Leader", 1},
     };
-    for (const auto& [name, rank] : kBodies)
-    { if (def.card.m_name == name) { return rank; } }
-    return 100 + VialProvider::CastOrderRank(s, def);
+    for (const auto& [name, k] : kFree)
+    { if (def.card.m_name == name) { return kSoldiersFreeBase + 10 * mv + k; } }
+    return kSoldiersUnlisted + VialProvider::CastOrderRank(s, def);
 }
+
+bool SoldiersProvider::CastOrderTotalByName() const { return SoldiersOrderEnabled(); }
 
 const char* SoldiersProvider::CastOrderTierName(int rank) const
 {
@@ -9188,19 +9205,17 @@ const char* SoldiersProvider::CastOrderTierName(int rank) const
     switch (rank)
     {
         case 1:  return "HUMAN-ENTERS WATCHER (Champion): first -- every later Human this turn is a counter";
-        case 2:  return "CREATURE TUTOR (toughness<=2): early, the fetched card can still be cast";
+        case 2:  return "CREATURE TUTOR (toughness<=2): early, the fetched card joins at its own slot";
         case 3:  return "CREATURE TUTOR (mv<=1): early, after Champion";
-        case 4:  return "AETHER VIAL: the only noncreature spell -- before Thalia taxes it";
-        case 5:  return "ACTIVATED-DIG BODY (Officer): cheap, its {3}{W} dig comes after the casts";
-        case 6:  return "VANILLA 1-DROP";
-        case 7:  return "THALIA (noncreature tax): AFTER every noncreature spell this turn";
-        case 8: case 9: case 10: case 11: case 12:
-                 return "BODY: cheapest/simplest first";
-        case 13: case 14: case 15: case 16:
-                 return "LORD/ANTHEM: static, order-free -- late";
-        case 17: return "ETB-COUNTERS-EACH-OTHER-HUMAN (Lieutenant): LAST -- counters this turn's Humans too";
-        default: return rank >= 100 ? "UNNAMED CARD: generic rank + 100" : nullptr;
+        case 4:  return "ETB-COUNTERS-EACH-OTHER-HUMAN (Lieutenant): after Champion and the tutors (USER amendment)";
+        case 5:  return "AETHER VIAL: the only noncreature spell -- before Thalia taxes it";
+        case 6:  return "ACTIVATED-DIG BODY (Officer): cheap, its {3}{W} dig is a trailing activation";
+        case 120: return "THALIA (noncreature tax): after Aether Vial; leads the mana-value-2 bodies";
+        default: break;
     }
+    if (rank > kSoldiersFreeBase && rank < kSoldiersUnlisted)
+    { return "ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value"; }
+    return rank >= kSoldiersUnlisted ? "UNLISTED CARD: generic rank + 200, then name" : nullptr;
 }
 
 // ---- SoldiersProvider::CleanupDiscardCandidates ------------------------------
