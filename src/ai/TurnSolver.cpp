@@ -39826,7 +39826,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         push(reserved_shot);                           // last resorts: hold SOMETHING
         push(reserved_depl);
     }
-    if (TapAttackerRungEnabled() && reserved_atk && reserved_atk != reserved)
+    // MTG_HOLD_RELEASE_YIELD (d): the single-attacker rung holds ONE body, so it goes AFTER the
+    // partial rungs below (which hold as many bodies as the turn can spare, releasing the biggest
+    // producers first) -- tried first, it paid gi287's 6-mana turn holding one Fyndhorn and left the
+    // other to be tapped ahead of Priest of Titania whenever Priest sat later on the battlefield.
+    if (!hold_yield_on && TapAttackerRungEnabled() && reserved_atk && reserved_atk != reserved)
     { push(reserved_atk); }
     // PARTIAL CREATURE HOLD (MTG_DORK_HOLD_PARTIAL, default ON, adopted 2026-08-26 -- the USER's
     // margin-1 combo games, 2026-08-21). When even the creatures-only hold is unaffordable, the
@@ -39870,6 +39874,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             rungs[n_rungs++] = hold | reserved_shot | reserved_depl;
         }
     }
+    if (hold_yield_on && TapAttackerRungEnabled() && reserved_atk && reserved_atk != reserved)
+    { push(reserved_atk); }
     ManaPool produced;
     bool ok = false;
     // Which hold the accepted solve ran under. The shrink post-pass below must start from it, not

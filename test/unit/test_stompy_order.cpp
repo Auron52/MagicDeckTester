@@ -448,3 +448,35 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): the prepay keeps both 1/1 elves
     }
     heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
 }
+
+TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): gi287's 6-mana turn holds BOTH Fyndhorns and taps Priest, wherever it sits")
+{
+    // T3, Forest x3, Fyndhorn Elves x2, Priest of Titania; the line is Elvish Archdruid x2 (6 mana): the
+    // lands pay 3 and Priest's one tap (3 Elves) the rest, so both 1/1s swing. The historical ladder tried
+    // the single-attacker rung first (hold ONE Fyndhorn) and then tapped the other ahead of Priest when
+    // Priest sat later on the battlefield.
+    for (const auto& ord : std::vector<std::vector<std::string>>{
+             { kFyndhorn, kFyndhorn, kPriest }, { kPriest, kFyndhorn, kFyndhorn }, { kFyndhorn, kPriest, kFyndhorn } })
+    {
+        CAPTURE(ord[0]); CAPTURE(ord[1]); CAPTURE(ord[2]);
+        heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = 1;
+        GameState s = HoldBoardSo(ord);
+        // The board helper lays Forest, Forest, Sol Ring: make the third source a Forest.
+        for (Permanent& p : s.battlefield)
+        {
+            if (p.card.m_name.str() != kSolRing) { continue; }
+            const int num = p.card.m_number;
+            p.card = DefSo("Forest").card;
+            p.card.m_number = num;
+        }
+        s.players[0].hand.push_back(CardSo(kArch, 12));
+        std::vector<Action> acts = { CastSo(s, kArch), CastSo(s, kArch) };
+        REQUIRE(TurnSolver::BatchPrepayMainCasts(s, acts));
+        int fyndhorn_up = 0;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_name.str() == kFyndhorn && !p.tapped) { ++fyndhorn_up; } }
+        CHECK(fyndhorn_up == 2);
+        CHECK(TappedSo(s, kPriest));
+        heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
+    }
+}
