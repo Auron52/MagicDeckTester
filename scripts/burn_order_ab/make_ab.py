@@ -48,6 +48,7 @@ ARMS2 = [
 ]
 ARMS_ALL = ARMS + ARMS2
 ALL_ON = {O: True, M2: True, CR: True, NA: False, BF: True, SO: False}
+ALL_ON2 = dict(ALL_ON, MTG_KILL_TRIGGER_COMBO=True)   # the follow-up batch's identity: every lever incl. KT
 
 # Disjoint blocks inside 11600001..11699999 (the walk's allocation for burn). Sized above the brief's
 # floor (>= 4000 shipped / 6000 d3 / 20000 d0 for burn, half for burn2hg): every cell is cheap here.
@@ -112,11 +113,12 @@ def build(a):
                                 min(ch, n - c), SEEDS[(deck, cell)] + c, c, fl, extra))
     if a.recovery_from:
         jobs.extend(recovery_jobs(a.recovery_from, a.recovery_arms.split(",")))
-    if not a.no_identity and a.which != "new2":
+    if not a.no_identity:
+        idflags = {"base": None, "new": ALL_ON, "new2": ALL_ON2}[a.which]
         for key, v in sorted(suite_decks().items()):
             for cell, g in ID_GAMES.items():
                 jobs.append(job("id.%s.%s" % (key, cell), v["DECK_FILE"], v["DECK_PROF"], cell, g,
-                                ID_SEED, 0, ALL_ON if a.which == "new" else None))
+                                ID_SEED, 0, idflags))
     def cost(j):
         p = j["name"].split(".")
         if p[0] == "rec":
