@@ -35,8 +35,12 @@ def build(out):
 
 def count(out):
     # The trace has no job name; game seeds identify the cell (11200001 + 100000k + 30000c + gi).
+    # Only the NEW arm writes notes (the =0 arm's CastOrderTraceNote is empty); every other counter below counts
+    # trace lines from whatever ran, so in a two-arm batch it is both arms together.
     def cell_of(gs):
         off = gs - 11200001
+        if off < 0 or off >= 200000:
+            return None                      # an identity deck's game
         k, r = divmod(off, 100000)
         c = r // 30000
         return ("critter", "critter2hg")[k], CELLS[c][0]
@@ -50,6 +54,8 @@ def count(out):
             continue
         gs, t, mm, route, seq, note = int(m.group(1)), int(m.group(2)), m.group(3), m.group(4), m.group(5), m.group(6)
         key = cell_of(gs)
+        if key is None:
+            continue
         n = len([x for x in seq.split("|") if x]) if seq else 0
         c = tot[key]
         c["lines"] += 1
