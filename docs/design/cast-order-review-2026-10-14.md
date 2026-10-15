@@ -200,6 +200,24 @@ Forsake the Worldly is never cast (its only targets are our own Fluctuator / Hol
 - Open: skip a second Fluctuator entirely (MTG_NO_REDUNDANT_REDUCER, built, OFF) -- not answered; it is measured and
   stays OFF until the USER rules.
 
+### KittyEquipment -- SETTLED (USER 2026-10-15)
+USER: "I guess v1s order is okay except thatwe should split the equipment. The creatures going after equipment is not
+all that important." and "Sram should be main 1 like Puresteel."
+Order (v1, every cast main 1; one order for v1/v2/v3): land > Sol Ring > Puresteel Paladin > Stoneforge Mystic > Kor
+Duelist > Kemba, Kha Regent > Armored Skyhunter > Balan, Wandering Knight > Bonesplitter > Colossus Hammer > O-Naginata >
+Shadowspear > Lightning Greaves > Umezawa's Jitte > Grafted Wargear > Loxodon Warhammer. Swords to Plowshares /
+Unexpectedly Absent are never cast (USER 10-04).
+- "SPLIT THE EQUIPMENT": every Equipment gets its own slot. Cheapest first (the most Puresteel draws per mana), then BY
+  NAME within a cost -- the USER's total-order rule (a fixed key, never hand order). This replaces today's 8-bit
+  name-HASH tie-break; the only realised change on v1 is Colossus Hammer moving from 4th to 2nd among the {1}s (the
+  Equipment casts do not interact: the Puresteel draws are deferred past every cast of the plan and equips trail).
+- Hosts before Equipment stays (the 10-04 order); the 08-25 Kor Duelist note is superseded (USER: "not all that
+  important").
+- SRAM, SENIOR EDIFICER (v2/v3) is MAIN 1, like Puresteel (USER) -- pin every cast/ETB draw watcher to Main1 in the
+  provider.
+- Agent defaults taken with it (surfaced, not contested): delete the unused MTG_KE_ORDER_FULL; fix the report's tier
+  labels (decode the class from the composite key).
+
 ## Start here: eight answers that unblock most of the rest
 
 There are 141 questions below. Each has a default, but a default is not an adoption: until you answer, the
