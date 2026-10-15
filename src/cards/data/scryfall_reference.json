@@ -417,6 +417,17 @@
     "toughness": "1",
     "type_line": "Creature — Human Monk"
   },
+  "Avenger of Zendikar": {
+    "cmc": 7.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "When this creature enters, create a 0/1 green Plant creature token for each land you control.\nLandfall — Whenever a land you control enters, you may put a +1/+1 counter on each Plant creature you control.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Elemental"
+  },
   "Azorius Chancery": {
     "cmc": 0.0,
     "keywords": [],
@@ -1066,6 +1077,17 @@
     "toughness": "5",
     "type_line": "Legendary Creature — Spider Human Hero"
   },
+  "Courser of Kruphix": {
+    "cmc": 3.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{1}{G}{G}",
+    "oracle_text": "Play with the top card of your library revealed.\nYou may play lands from the top of your library.\nLandfall — Whenever a land you control enters, you gain 1 life.",
+    "power": "2",
+    "toughness": "4",
+    "type_line": "Enchantment Creature — Centaur"
+  },
   "Crackle with Power": {
     "cmc": 2.0,
     "keywords": [],
@@ -1106,6 +1128,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Cryptolith Rite": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Creatures you control have \"{T}: Add one mana of any color.\"",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Crystalline Sliver": {
     "cmc": 2.0,
     "keywords": [],
@@ -1114,6 +1145,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Sliver"
+  },
+  "Cultivate": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Daring Buccaneer": {
     "cmc": 1.0,
@@ -1172,6 +1212,15 @@
     "power": "2",
     "toughness": "3",
     "type_line": "Creature — Minotaur Berserker"
+  },
+  "Deathbloom Thallid": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "When this creature dies, create a 1/1 green Saproling creature token.",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Creature — Fungus"
   },
   "Deathrite Shaman": {
     "cmc": 1.0,
@@ -1531,6 +1580,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Evolving Wilds": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Expedite": {
     "cmc": 1.0,
@@ -2166,6 +2224,15 @@
     "toughness": "2",
     "type_line": "Creature — Sliver"
   },
+  "Haunted Fengraf": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{3}, {T}, Sacrifice this land: Return a creature card at random from your graveyard to your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Haven of the Spirit Dragon": {
     "cmc": 0.0,
     "keywords": [],
@@ -2537,6 +2604,17 @@
     "power": "2",
     "toughness": "4",
     "type_line": "Legendary Creature — Cat Cleric"
+  },
+  "Khalni Heart Expedition": {
+    "cmc": 2.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Landfall — Whenever a land you control enters, you may put a quest counter on this enchantment.\nRemove three quest counters from this enchantment and sacrifice it: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "King Darien XLVIII": {
     "cmc": 3.0,
@@ -3174,6 +3252,15 @@
     "toughness": "4",
     "type_line": "Creature — Fungus"
   },
+  "Myriad Landscape": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Mystic Monastery": {
     "cmc": 0.0,
     "keywords": [],
@@ -3276,6 +3363,17 @@
     "toughness": null,
     "type_line": "Legendary Planeswalker — Oko"
   },
+  "Omnath, Locus of Rage": {
+    "cmc": 7.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{3}{R}{R}{G}{G}",
+    "oracle_text": "Landfall — Whenever a land you control enters, create a 5/5 red and green Elemental creature token.\nWhenever Omnath or another Elemental you control dies, Omnath deals 3 damage to any target.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Elemental"
+  },
   "Open the Armory": {
     "cmc": 2.0,
     "keywords": [],
@@ -3334,6 +3432,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Parallel Lives": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Pashalik Mons": {
     "cmc": 3.0,
     "keywords": [],
@@ -3362,6 +3469,17 @@
     "power": "2",
     "toughness": "3",
     "type_line": "Creature — Drake"
+  },
+  "Phylath, World Sculptor": {
+    "cmc": 6.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{4}{R}{G}",
+    "oracle_text": "When Phylath enters, create a 0/1 green Plant creature token for each basic land you control.\nLandfall — Whenever a land you control enters, put four +1/+1 counters on target Plant you control.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Elemental"
   },
   "Plague Drone": {
     "cmc": 4.0,
@@ -3441,6 +3559,26 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Primal Vigor": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "If one or more tokens would be created, twice that many of those tokens are created instead.\nIf one or more +1/+1 counters would be put on a creature, twice that many +1/+1 counters are put on that creature instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
+  "Primeval Titan": {
+    "cmc": 6.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{4}{G}{G}",
+    "oracle_text": "Trample\nWhenever this creature enters or attacks, you may search your library for up to two land cards, put them onto the battlefield tapped, then shuffle.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Giant"
   },
   "Prodigious Growth": {
     "cmc": 6.0,
@@ -3522,6 +3660,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Radiant Fountain": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "When this land enters, you gain 2 life.\n{T}: Add {C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Rageblood Shaman": {
     "cmc": 3.0,
     "keywords": [
@@ -3550,6 +3697,27 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Rampaging Baloths": {
+    "cmc": 6.0,
+    "keywords": [
+      "Landfall",
+      "Trample"
+    ],
+    "mana_cost": "{4}{G}{G}",
+    "oracle_text": "Trample\nLandfall — Whenever a land you control enters, create a 4/4 green Beast creature token.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Beast"
+  },
+  "Rampant Growth": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Rancor": {
     "cmc": 1.0,
@@ -3879,6 +4047,17 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Saproling Migration": {
+    "cmc": 2.0,
+    "keywords": [
+      "Kicker"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Kicker {4} (You may pay an additional {4} as you cast this spell.)\nCreate two 1/1 green Saproling creature tokens. If this spell was kicked, create four of those tokens instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Scalding Tarn": {
     "cmc": 0.0,
     "keywords": [],
@@ -3936,6 +4115,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Snow Land"
+  },
+  "Search for Tomorrow": {
+    "cmc": 3.0,
+    "keywords": [
+      "Suspend"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Search your library for a basic land card, put it onto the battlefield, then shuffle.\nSuspend 2—{G} (Rather than cast this card from your hand, you may pay {G} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Searing Blaze": {
     "cmc": 2.0,
@@ -4423,6 +4613,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Spore Swarm": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "Create three 1/1 green Saproling creature tokens.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Sporecrown Thallid": {
     "cmc": 2.0,
     "keywords": [],
@@ -4654,6 +4853,15 @@
     "toughness": "9",
     "type_line": "Creature — Elephant"
   },
+  "Terramorphic Expanse": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Terror": {
     "cmc": 2.0,
     "keywords": [],
@@ -4702,6 +4910,17 @@
     "power": "0",
     "toughness": "5",
     "type_line": "Creature — Fungus"
+  },
+  "The Mycotyrant": {
+    "cmc": 3.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{1}{B}{G}",
+    "oracle_text": "Trample\nThe Mycotyrant's power and toughness are each equal to the number of creatures you control that are Fungi and/or Saprolings.\nAt the beginning of your end step, create X 1/1 black Fungus creature tokens with \"This token can't block,\" where X is the number of times you descended this turn. (You descend each time a permanent card is put into your graveyard from anywhere.)",
+    "power": "*",
+    "toughness": "*",
+    "type_line": "Legendary Creature — Elder Fungus"
   },
   "Three Tree City": {
     "cmc": 0.0,
@@ -5174,6 +5393,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Yavimaya Sapherd": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "When this creature enters, create a 1/1 green Saproling creature token.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Fungus"
   },
   "Young Pyromancer": {
     "cmc": 2.0,

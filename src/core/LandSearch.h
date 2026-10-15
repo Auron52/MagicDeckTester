@@ -453,6 +453,30 @@ inline void ApplyLandSearchActivation(GameState& state, int controller, int src_
     ApplyLandSearchActivationPinned(state, controller, src_idx, def, pin);
 }
 
+// Re-find a list of permanents by card NUMBER after the battlefield was appended to / erased from
+// (a land search appends lands; a fetched Karoo's bounce erases one). Both operations keep the
+// relative order of the survivors, so the j-th occurrence of a number among `nums` maps to the j-th
+// battlefield permanent carrying it -- exact even if two entries share a number. A permanent that
+// is gone is dropped (an attacker cannot leave this way; the guard is for completeness).
+inline std::vector<int> RefindByNumberInOrder(const GameState& state, const std::vector<int>& nums)
+{
+    std::vector<int> out;
+    out.reserve(nums.size());
+    for (std::size_t i = 0; i < nums.size(); ++i)
+    {
+        int seen_before = 0;
+        for (std::size_t k = 0; k < i; ++k) { if (nums[k] == nums[i]) { ++seen_before; } }
+        int hit = -1;
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            if (state.battlefield[static_cast<std::size_t>(j)].card.m_number != nums[i]) { continue; }
+            if (seen_before-- == 0) { hit = j; break; }
+        }
+        if (hit >= 0) { out.push_back(hit); }
+    }
+    return out;
+}
+
 // Primeval Titan's ATTACK half ("whenever this creature enters OR ATTACKS"), at the CR 508.4 point
 // in BOTH worlds (GameEngine::CombatPhase and TurnSolver's SimulateCombat call it right after
 // ApplyAttackModalTriggers, before the attack-token block): once per DECLARED attacker carrying
@@ -478,16 +502,12 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
         { any = true; }
     }
     if (!any) { return; }
-    for (const int num : nums)
+    for (std::size_t ai = 0; ai < nums.size(); ++ai)
     {
-        int slot = -1;
-        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
-        {
-            if (state.battlefield[static_cast<std::size_t>(j)].card.m_number == num
-                && state.battlefield[static_cast<std::size_t>(j)].controller_index == controller)
-            { slot = j; break; }
-        }
-        if (slot < 0) { continue; }
+        const std::vector<int> now = RefindByNumberInOrder(state, nums);
+        if (ai >= now.size()) { break; }
+        const int slot = now[ai];
+        if (state.battlefield[static_cast<std::size_t>(slot)].controller_index != controller) { continue; }
         const CardDefinition* d =
             CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(slot)].card);
         if (d == nullptr || !d->params.land_search_on_enter_or_attack || d->params.land_search_count <= 0)
@@ -496,19 +516,9 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
         PerformLandSearch(state, controller, LandSearchSpecOf(d->params),
                           d->card.m_name.str() + " (attack)", pin);
     }
-    // Repair the attacker indices by number (a Karoo bounce erased a slot; appended lands shifted
-    // nothing before them, but the erase may have).
-    std::vector<int> fixed;
-    fixed.reserve(nums.size());
-    for (const int num : nums)
-    {
-        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
-        {
-            if (state.battlefield[static_cast<std::size_t>(j)].card.m_number == num)
-            { fixed.push_back(j); break; }
-        }
-    }
-    atk_idx = std::move(fixed);
+    // Repair the attacker indices (a Karoo bounce erased a slot; appended lands shifted nothing
+    // before them, but the erase may have).
+    atk_idx = RefindByNumberInOrder(state, nums);
 }
 
 // Is `p` a counter-costed land-search source (Khalni Heart Expedition) -- and is it crackable NOW?
@@ -610,15 +620,5 @@ inline void FireCombatLandSearchCracks(GameState& state, int controller, std::ve
         }
     }
     if (!any) { return; }
-    std::vector<int> fixed;
-    fixed.reserve(atk_nums.size());
-    for (const int num : atk_nums)
-    {
-        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
-        {
-            if (state.battlefield[static_cast<std::size_t>(j)].card.m_number == num)
-            { fixed.push_back(j); break; }
-        }
-    }
-    atk_idx = std::move(fixed);
+    atk_idx = RefindByNumberInOrder(state, atk_nums);
 }

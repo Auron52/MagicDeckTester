@@ -470,6 +470,15 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
+            // A suspend card that is ALSO castable (Search for Tomorrow) needs its suspend variant told
+            // apart from the cast in the menu; a suspend-only card (Lotus Bloom) keeps its bare name.
+            case Action::Kind::Suspend:
+            {
+                const CardDefinition* sd = CardDatabase::Instance().Lookup(a.card_name.str());
+                tag = (sd && sd->card.m_mana_cost.ManaValue() > 0) ? a.card_name + " (suspend)"
+                                                                    : std::string(a.card_name.str());
+                break;
+            }
             case Action::Kind::DigDraw:
                 tag = (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw"; break;
             // Battlefield activations (FiveColour): label as abilities, not bare card names --

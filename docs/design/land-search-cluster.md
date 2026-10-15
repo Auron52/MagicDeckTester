@@ -33,6 +33,7 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
   in-combat Khalni cracks continue the same packed stream.
 * `Plan::upkeep_land_search_choice` -- Search for Tomorrow off suspend, packed per arrival.
 * `Plan::combat_crack_choice` -- the in-combat Khalni crack (bitmask over Khalni-type permanents).
+* `Plan::land_search_acts_first` -- the land-search activations before the casts (see gap 1).
 * Human play: sequential `tutor_etb` prompts per land (DECISIONS.md), the `landsearch=` verb for the
   activations, the `dig` prompt for the in-combat crack.
 
@@ -54,18 +55,16 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
 
 ## Known gaps (DEFERRED -- each is a missing capability, not a heuristic)
 
-1. **Activation-vs-cast ORDER (follow-up (b)).** `ApplyPlanDirect` / the executor apply every board
-   activation in the TRAILING pass, after the plan's casts. So "crack Evolving Wilds / Myriad / Khalni
-   BEFORE casting Avenger of Zendikar (one more land -> one more Plant) or Phylath (Wilds -> a basic
-   -> one more Plant)" is not one plan; only "cast, then crack" (landfall counters on the new Plants)
-   is. Usually dominated (counters on every Plant beat one more 0/1), but not provably (the extra
-   Plant scales every future landfall). Fix shape: a plan flag `land_search_acts_first`, fanned only
-   for a plan holding both a land-search activation and a cast whose ETB COUNTS lands
-   (`etb_tokens_per_land`), applied in BOTH worlds as a pre-cast pass over the land-search
-   activations (and skipped by the trailing pass); folded into every plan key like the other pins.
-   The executor twin is the risk (its main loop carries breakpoints, staged breaks and draw-engine
-   classification); it must mirror ApplyPlanDirect's position exactly. The land-drop analogue is
-   already searched (`Plan::land_after_casts`).
+1. *(Closed 2026-10-15, follow-up (b).)* **Activation-vs-cast ORDER.** Board activations run in the
+   TRAILING pass, after the plan's casts, so "crack Evolving Wilds / Myriad / Khalni BEFORE casting
+   Avenger of Zendikar or Phylath" (more lands -> more Plants from the ETB count) was not one plan.
+   `Plan::land_search_acts_first` now twins every plan that both activates a land search and casts a
+   card whose ETB counts lands (`etb_tokens_per_land`); the twin applies the land-search activations in
+   the PRE-CAST pass (`TurnSolver::ApplyLandSearchActsFirst`, one body for both worlds, at the
+   Lotus/Suspend point before the batch prepay) and the trailing pass skips them
+   (`WithoutLandSearchActs`). Remaining boundary: the twin is not generated inside a breakpoint
+   continuation, and only for an ETB that COUNTS lands (an ordinary landfall watcher already prefers
+   cast-then-crack, which is the default order). Human play orders freely (`human_action_order`).
 2. **Search for Tomorrow hard-cast mana.** The untapped basic a HARD-CAST Search for Tomorrow puts is
    not credited to the same plan's later casts by the subset mana math (the Crop Rotation precedent,
    `Deliberately NOT modelled` in TurnSolver), so "Search for Tomorrow, then a spell paid with the

@@ -6303,6 +6303,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
     // every default-flag game; it is what makes that lever's executor half exist at all.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // Plan::land_search_acts_first -- lockstep twin of ApplyPlanDirect's pre-cast pass: the plan's
+    // land-search activations run now, through the ONE shared body, at the same point relative to the
+    // line hold above (installed first in both worlds) and the plan-traits scope below (installed
+    // after in both); the trailing pass skips them.
+    if (plan.land_search_acts_first) { TurnSolver::ApplyLandSearchActsFirst(state, plan.actions); }
     // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
     // prepay and every cast payment below. Null scope (levers off) changes nothing.
     PlanTraits _plan_traits;
@@ -6716,10 +6721,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
     }
 
-    if (pending_cont_acts.empty()) { exec_trailing_activations(plan.actions); }
+    // Plan::land_search_acts_first: its land-search activations already ran before the casts.
+    const std::vector<Action> exec_trail = plan.land_search_acts_first
+        ? TurnSolver::WithoutLandSearchActs(plan.actions) : std::vector<Action>{};
+    const std::vector<Action>& exec_own_acts = plan.land_search_acts_first ? exec_trail : plan.actions;
+    if (pending_cont_acts.empty()) { exec_trailing_activations(exec_own_acts); }
     else
     {
-        std::vector<Action> all = plan.actions;
+        std::vector<Action> all = exec_own_acts;
         all.insert(all.end(), pending_cont_acts.begin(), pending_cont_acts.end());
         exec_trailing_activations(all);
     }

@@ -1425,7 +1425,8 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
-                  || first.combat_crack_choice != dup.combat_crack_choice);
+                  || first.combat_crack_choice != dup.combat_crack_choice
+                  || first.land_search_acts_first != dup.land_search_acts_first);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     if (!cls.empty()) { cls += "] "; }
@@ -8426,6 +8427,39 @@ static int CountAttackGatherPump(const GameState& state, int active,
     return after - before;
 }
 
+bool TurnSolver::IsLandSearchActivation(const Action& a)
+{
+    return a.kind == Action::Kind::ActivatePermAbility
+        && (a.ability_mode == Action::AbilityMode::SacLandSearch
+            || a.ability_mode == Action::AbilityMode::QuestSacLandSearch);
+}
+
+void TurnSolver::ApplyLandSearchActsFirst(GameState& state, const std::vector<Action>& acts)
+{
+    const int me = state.active_player_index;
+    for (const Action& a : acts)
+    {
+        if (!IsLandSearchActivation(a) || a.def == nullptr) { continue; }
+        if (!PermAbilitySourceLive(state, me, a.sac_source_id, a.ability_mode)) { continue; }
+        const bool taps = PermAbilityTaps(a.ability_mode);
+        if (taps) { SetPermTapped(state, me, a.sac_source_id, true); }   // {T} before the mana (CR 602.2a)
+        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false))
+        {
+            if (taps) { SetPermTapped(state, me, a.sac_source_id, false); }
+            continue;
+        }
+        ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
+    }
+}
+
+std::vector<Action> TurnSolver::WithoutLandSearchActs(const std::vector<Action>& acts)
+{
+    std::vector<Action> out;
+    out.reserve(acts.size());
+    for (const Action& a : acts) { if (!IsLandSearchActivation(a)) { out.push_back(a); } }
+    return out;
+}
+
 // Projection twin of Primeval Titan's ATTACK trigger (FireAttackLandSearch): the lands it fetches
 // enter at declare-attackers, before damage, so their LANDFALL payloads (Avenger of Zendikar's +1/+1
 // on every Plant, Phylath's +4 on one) grow the attacking Plants THIS combat. The very same helper
@@ -8462,14 +8496,10 @@ static int CountAttackLandSearchPump(const GameState& state, int active,
     FireAttackLandSearch(t, active, atk_idx);
     FireCombatLandSearchCracks(t, active, atk_idx);
     int after = 0;
-    for (int num : nums)
+    for (const int qi : RefindByNumberInOrder(t, nums))   // occurrence-exact (see the helper)
     {
-        for (const Permanent& q : t.battlefield)
-        {
-            if (q.card.m_number != num) { continue; }
-            after += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
-            break;
-        }
+        const Permanent& q = t.battlefield[static_cast<std::size_t>(qi)];
+        after += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
     }
     return after - before;
 }
@@ -16826,6 +16856,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A5E0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.upkeep_land_search_choice + 2))); }
     if (p.combat_crack_choice != -1)
     { fold(0x1A5F0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_crack_choice + 2))); }
+    if (p.land_search_acts_first) { fold(0x1A60AC75ull); }
     return h;
 }
 // DIAGNOSTIC ONLY (MTG_DEDUP_CENSUS). Names every Action field on which two candidates that share an
@@ -17089,6 +17120,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
+        && !p.land_search_acts_first
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
@@ -17107,7 +17139,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
 // that turned out inert (a sweep with nothing kept back, a counter nobody could pay) lands on its
 // base plan's state and costs one apply, not a rollout (docs/design/no-greedy-in-search-window.md,
 // cost ledger). Ordinary plans still only RECORD (MTG_FS_PRE_STATE_SKIP widens that).
-static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
+static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
 {
     return p.bp_choice >= 0 || p.scry_choice >= 0 || p.etbdig_choice >= 0 || p.tutor_choice >= 0
         || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
@@ -17123,6 +17155,11 @@ static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0;
 }
+// ...and the land-search ORDER twin (Plan::land_search_acts_first) is a variant too -- but a twin is
+// still a BASE for the land-search pick axes (its own picks are searched), which is why the axes ask
+// the ExceptOrder form.
+static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
+{ return PlanIsAxisVariantExceptOrder(p) || p.land_search_acts_first; }
 // SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above).
 static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p); }
 
@@ -33155,6 +33192,7 @@ namespace solvememo
             || a.attack_land_search_choice != b.attack_land_search_choice
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
             || a.combat_crack_choice != b.combat_crack_choice
+            || a.land_search_acts_first != b.land_search_acts_first
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
             || a.etbcounter_choice != b.etbcounter_choice || a.sweep_choice != b.sweep_choice
@@ -42939,6 +42977,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                  && (a.convoke_green > 0 || a.convoke_other > 0))
         { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
     }
+    // Plan::land_search_acts_first: the plan's land-search activations run HERE, before the batch
+    // prepay and every cast (so a cast's ETB counts the lands they put). Executor twin: the same
+    // TurnSolver::ApplyLandSearchActsFirst at AIEngine::TakeTurn's pre-cast pass. The trailing pass
+    // below then skips them (WithoutLandSearchActs). False for every other plan -> no-op.
+    if (plan.land_search_acts_first) { TurnSolver::ApplyLandSearchActsFirst(state, plan.actions); }
 
     // PLAN TRAITS for the payment layer (mana-order-and-reserve-overhaul.md layer 3): computed
     // once, in scope over the prepay AND the casts below. Mirrored in AIEngine::TakeTurn through
@@ -43034,11 +43077,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (const Action& a : plan.actions)
             { if (TurnSolver::IsTrailingActivation(a.kind)) { line_order_trace("trailing", a); } }
         }
-        if (pending_cont_acts.empty()) { apply_trailing_activations(plan.actions); }
+        // Plan::land_search_acts_first: its land-search activations already ran before the casts.
+        const std::vector<Action> trail = plan.land_search_acts_first
+            ? TurnSolver::WithoutLandSearchActs(plan.actions) : std::vector<Action>{};
+        const std::vector<Action>& own_acts = plan.land_search_acts_first ? trail : plan.actions;
+        if (pending_cont_acts.empty()) { apply_trailing_activations(own_acts); }
         else
         {
             // The plan's own activations, then every queued continuation's, as ONE trailing pass.
-            std::vector<Action> all = plan.actions;
+            std::vector<Action> all = own_acts;
             all.insert(all.end(), pending_cont_acts.begin(), pending_cont_acts.end());
             apply_trailing_activations(all);
         }
@@ -53106,7 +53153,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         const int me = state.active_player_index;
         auto base_plan = [](const TurnSolver::Plan& p)
         {
-            return !PlanIsAxisVariant(p) && p.sac_pins.empty() && p.rad_mode == -1
+            return !PlanIsAxisVariantExceptOrder(p) && p.sac_pins.empty() && p.rad_mode == -1
                 && p.saga_target_choice == -1 && p.saga_ch1_choice == -1
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
                 && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
@@ -53125,6 +53172,35 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             width_cache.emplace(d, w);
             return w;
         };
+        // (0) ACTIVATION-BEFORE-CAST ORDER (Plan::land_search_acts_first; follow-up (b)). A twin of
+        //     every base plan that both ACTIVATES a land search (Evolving Wilds / Myriad Landscape /
+        //     Khalni Heart Expedition) and CASTS a card whose ETB counts lands (etb_tokens_per_land:
+        //     Avenger of Zendikar, Phylath) -- the one shape where the order changes the board: crack
+        //     first and the ETB makes one or two more Plants; cast first (the base plan) and the
+        //     crack's landfall pumps the Plants it made. Neither dominates, so both are scored. Outer
+        //     plans only (a continuation's activations keep the trailing order).
+        if (!cont_axes_only)
+        {
+            std::vector<TurnSolver::Plan> twins;
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (!base_plan(p) || p.land_search_acts_first) { continue; }
+                bool acts = false, counts_lands = false;
+                for (const Action& a : p.actions)
+                {
+                    if (TurnSolver::IsLandSearchActivation(a)) { acts = true; continue; }
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+                    if (d != nullptr && d->params.etb_tokens_per_land > 0) { counts_lands = true; }
+                }
+                if (!acts || !counts_lands) { continue; }
+                TurnSolver::Plan v = p;
+                v.land_search_acts_first = true;
+                twins.push_back(std::move(v));
+            }
+            all.insert(all.end(), std::make_move_iterator(twins.begin()),
+                                  std::make_move_iterator(twins.end()));
+        }
         // (1) In-plan pins.
         {
             std::vector<TurnSolver::Plan> extra;
@@ -53169,8 +53245,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 }
                 const int n = n_cast + n_act;
                 if (n == 0) { continue; }
+                // Ordinal order = resolution order: casts then the trailing activations, or -- for a
+                // Plan::land_search_acts_first twin -- the activations first.
                 std::vector<std::size_t> w(static_cast<std::size_t>(n));
-                for (int i = 0; i < n; ++i) { w[static_cast<std::size_t>(i)] = i < n_cast ? w_cast : w_act; }
+                for (int i = 0; i < n; ++i)
+                {
+                    w[static_cast<std::size_t>(i)] = p.land_search_acts_first
+                        ? (i < n_act ? w_act : w_cast) : (i < n_cast ? w_cast : w_act);
+                }
                 std::size_t product = 1;
                 for (std::size_t wi : w) { product = std::min<std::size_t>(product * std::max<std::size_t>(wi, 1), 1u << 20); }
                 if (product <= 1) { continue; }
@@ -53470,7 +53552,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 448;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15)
+static constexpr std::size_t kPlanDomAssertedSize = 448;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_acts_first, in padding)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -53625,7 +53707,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             x += "|ls";
             for (int s : pl.land_search_pins)     { add(s); }
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
-            add(pl.combat_crack_choice);
+            add(pl.combat_crack_choice); add(pl.land_search_acts_first);
             x += "|bpacts";
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
@@ -71140,7 +71222,15 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { gyPlayNames.push_back(a.tutor_target); continue; }
             if (channel_declared && a.kind == Action::Kind::Channel)
             { channelNames.push_back(a.card_name); continue; }
-            if (suspend_declared && a.kind == Action::Kind::Suspend)
+            // A suspend card that is ALSO hard-castable (Search for Tomorrow, {2}{G}) is the case the
+            // suspend= verb was built for: `cast=<name>` must mean the CAST, never the suspend, so its
+            // Suspend action is matched ONLY against a declared suspend= (the adventure rule: compared
+            // unconditionally). A suspend-only card (Lotus Bloom, no mana cost) keeps the legacy
+            // by-name match, so no saved reference moves.
+            if (a.kind == Action::Kind::Suspend
+                && (suspend_declared || [&]{
+                        const CardDefinition* sd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+                        return sd != nullptr && sd->card.m_mana_cost.ManaValue() > 0; }()))
             { suspendNames.push_back(a.card_name); continue; }
             // NO `continue`: an adventure IS a hand cast and still belongs in the cast multiset, so
             // the human declares `cast=Brightcap Badger` exactly as they would for the creature and
@@ -71287,7 +71377,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedChannels) { continue; }
         }
-        if (suspend_declared)
+        if (suspend_declared || !suspendNames.empty())
         {
             std::vector<std::string> v2 = suspendNames;
             std::sort(v2.begin(), v2.end());

@@ -21,6 +21,7 @@
 #include "core/HeuristicDefaults.h"
 #include "deck/DeckLoader.h"
 #include "ai/DecisionProviders.h"
+#include "ai/TurnSolver.h"
 #include "runner/GoldFishRunner.h"
 
 #include <algorithm>
@@ -441,4 +442,32 @@ TEST_CASE("Land search: the IN-COMBAT Khalni crack is pinned by a bitmask, consu
     REQUIRE(atk.size() == 1);
     CHECK(s.battlefield[static_cast<std::size_t>(atk[0])].card.m_number == 10);
     CHECK(s.players[0].library.size() == 0);   // four basics fetched across the two cracks
+}
+
+TEST_CASE("Land search: Plan::land_search_acts_first -- the shared pre-cast pass cracks, the trailing list drops it")
+{
+    LoadCards();
+    GameState s = Fresh();
+    Put(s, "Forest", 9, false);
+    Put(s, "Khalni Heart Expedition", 11, false);
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 11) { p.quest_counters = 3; } }
+    Lib(s, "Forest", 50); Lib(s, "Forest", 51);
+    Action crack;
+    crack.kind          = Action::Kind::ActivatePermAbility;
+    crack.card_name     = "Khalni Heart Expedition";
+    crack.def           = &D("Khalni Heart Expedition");
+    crack.sac_source_id = 11;
+    crack.ability_mode  = Action::AbilityMode::QuestSacLandSearch;
+    Action cast;
+    cast.kind      = Action::Kind::CastFromHand;
+    cast.card_name = "Avenger of Zendikar";
+    const std::vector<Action> acts{ cast, crack };
+    CHECK(TurnSolver::IsLandSearchActivation(crack));
+    CHECK_FALSE(TurnSolver::IsLandSearchActivation(cast));
+    const std::vector<Action> trail = TurnSolver::WithoutLandSearchActs(acts);
+    REQUIRE(trail.size() == 1);
+    CHECK(trail[0].kind == Action::Kind::CastFromHand);
+    TurnSolver::ApplyLandSearchActsFirst(s, acts);
+    CHECK(CountIn(s.players[0].graveyard, "Khalni Heart Expedition") == 1);
+    CHECK(CountOnBf(s, "Forest", /*tapped=*/true) == 2);
 }
