@@ -14,7 +14,9 @@ Seed of game gi in (deck, cell) = seed0 + 20000 * deck_index + 5000 * cell_index
 import argparse, json, os, re, sys
 from collections import defaultdict
 
-PRIMARY = "/workspaces/MagicDeckTester"
+# Root the deck/profile paths resolve against: BP_DATA_ROOT (stage_data.sh's copy on the build volume) or the
+# primary checkout.
+PRIMARY = os.environ.get("BP_DATA_ROOT", "/workspaces/MagicDeckTester")
 ALL_DECKS = [  # (key, deck, profile) -- test/regression_cases.sh DECK_FILE / DECK_PROF, in that order
     ("fungus", "decks/Fungus/Fungus.cod", "decks/Fungus/Fungus.profile.json"),
     ("fungusb", "decks/Fungus/candidate-b-2026-09/Fungus.cod", "decks/Fungus/candidate-b-2026-09/Fungus.profile.json"),
@@ -53,8 +55,11 @@ ALL_DECKS = [  # (key, deck, profile) -- test/regression_cases.sh DECK_FILE / DE
 KEYS = [d[0] for d in ALL_DECKS]
 LEVERS = ["MTG_BP_WAVE_EMPTY", "MTG_BP_WAVE_UNHOSTED_SITES", "MTG_BP_M2_WAVE_FIXPOINT", "MTG_BP_NODE_NESTED_SLOTS",
           "MTG_BP_NEW_ONLY_DEMOTE"]
+# Every arm names MTG_BP_NEW_ONLY_DEMOTE explicitly: its default flipped to OFF on 2026-10-15 (USER decision
+# pending), so "on" = all five levers and "nodemote" = F1-F4 = the shipped default, on any binary.
 ARMS = {
-    "on": {},
+    "on": {"MTG_BP_NEW_ONLY_DEMOTE": True},
+    "ship": {},                                        # whatever the binary defaults to (F1-F4 since ee8a2644)
     "off": {k: False for k in LEVERS},
     "empty": {k: False for k in LEVERS if k != "MTG_BP_WAVE_EMPTY"},          # walker EMPTY alone
     "unhost": {k: False for k in LEVERS if k != "MTG_BP_WAVE_UNHOSTED_SITES"},
@@ -65,8 +70,9 @@ ARMS = {
     "nom2fix": {"MTG_BP_M2_WAVE_FIXPOINT": False},
     "nonested": {"MTG_BP_NODE_NESTED_SLOTS": False},
     "nodemote": {"MTG_BP_NEW_ONLY_DEMOTE": False},
-    "onnl": {"MTG_BP_WAVE_NEW_LAST": True},           # all levers on, new options after ALL ranks
-    "demote": {k: False for k in LEVERS if k != "MTG_BP_NEW_ONLY_DEMOTE"},
+    "onnl": {"MTG_BP_WAVE_NEW_LAST": True, "MTG_BP_NEW_ONLY_DEMOTE": True},   # all five, new options after ALL ranks
+    "nl14": {"MTG_BP_WAVE_NEW_LAST": True, "MTG_BP_NEW_ONLY_DEMOTE": False},  # F1-F4, new options after ALL ranks
+    "demote": dict({k: False for k in LEVERS if k != "MTG_BP_NEW_ONLY_DEMOTE"}, MTG_BP_NEW_ONLY_DEMOTE=True),
 }
 CELLS = [("ship", None, 20), ("d3", 3, 10), ("d0", 0, 0), ("x3", 3, 0), ("xs", None, 0)]
 CELL_IX = {c[0]: i for i, c in enumerate(CELLS)}
