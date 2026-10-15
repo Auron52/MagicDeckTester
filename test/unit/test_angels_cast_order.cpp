@@ -357,6 +357,37 @@ TEST_CASE("Payer: MTG_LINE_SPARE_TIGHT keeps Remote Farm's second {W} for the li
     }
 }
 
+TEST_CASE("Angels order: the PROPOSED Giada-first amendment (MTG_ANGELS_GIADA_FIRST) and its default")
+{
+    ArmAO arm(1, 0);
+    auto order_of = [](GameState& s, const std::vector<std::string>& hand, int first)
+    {
+        heurarm::t_arm[heurarm::ANGELS_GIADA_FIRST] = static_cast<std::int8_t>(first);
+        std::vector<std::string> o = TurnSolver::CanonicalNonSacCastOrder(s, CastPlan(s, hand));
+        heurarm::t_arm[heurarm::ANGELS_GIADA_FIRST] = -1;
+        return o;
+    };
+    // (c) no engine: Righteous behind Giada only with the lever.
+    {
+        const std::vector<std::string> hand = {"Righteous Valkyrie", "Giada, Font of Hope"};
+        GameState s = BoardAO(30, hand, {"Bishop of Wings"});
+        CHECK(order_of(s, hand, -1) == std::vector<std::string>{"Righteous Valkyrie", "Giada, Font of Hope"});
+        CHECK(order_of(s, hand, 1) == std::vector<std::string>{"Giada, Font of Hope", "Righteous Valkyrie"});
+        // ...an engine on the battlefield keeps the USER's order.
+        GameState s2 = BoardAO(30, hand, {"Bishop of Wings", "Archangel of Thune"});
+        CHECK(order_of(s2, hand, 1) == std::vector<std::string>{"Righteous Valkyrie", "Giada, Font of Hope"});
+    }
+    // (d) one converter: Lyra AoD behind Giada with the lever; two converters keep her ahead.
+    {
+        const std::vector<std::string> hand = {"Lyra, Archangel of Dawn", "Giada, Font of Hope"};
+        GameState s = BoardAO(30, hand, {"Righteous Valkyrie"});
+        CHECK(order_of(s, hand, -1) == std::vector<std::string>{"Lyra, Archangel of Dawn", "Giada, Font of Hope"});
+        CHECK(order_of(s, hand, 1) == std::vector<std::string>{"Giada, Font of Hope", "Lyra, Archangel of Dawn"});
+        GameState s2 = BoardAO(30, hand, {"Righteous Valkyrie", "Bishop of Wings"});
+        CHECK(order_of(s2, hand, 1) == std::vector<std::string>{"Lyra, Archangel of Dawn", "Giada, Font of Hope"});
+    }
+}
+
 TEST_CASE("Angels order: MTG_ANGELS_ORDER=0 is exactly the generic tiers")
 {
     ArmAO arm(0, 0);
