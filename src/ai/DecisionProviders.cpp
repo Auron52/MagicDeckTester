@@ -9330,17 +9330,19 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
 //   Searing Blood > Skullcrack > Light Up the Stage > Eidolon of the Great Revel.
 // The record and the measurement: docs/design/burn-cast-order-2026-10-15.md.
 //
-// MTG_BURN_ORDER (default OFF until its A/B is read; heurarm slot). Off -> the generic tiers, exactly.
+// MTG_BURN_ORDER (default ON: it meets the adoption bar with MTG_BURN_BLOOD_FIRST, 2026-10-15; heurarm
+// slot). Off -> the generic tiers, exactly.
 static bool BurnOrderEnabled()
 {
-    static const bool on = EnvOn("MTG_BURN_ORDER");   // DEFAULT OFF until measured; =1 enables
+    static const bool on = EnvOn("MTG_BURN_ORDER", true);   // DEFAULT ON (measured 2026-10-15); =0 -> generic
     return heurarm::Flag(heurarm::BURN_ORDER, on);
 }
-// MTG_BURN_M2_RULE (default OFF until measured) and its narrower reading MTG_BURN_M2_NARROW (OFF; a
-// USER question): see BurnProvider::Main2CastAllowed.
+// MTG_BURN_M2_RULE (default ON, measured 2026-10-15; it needs MTG_KILL_TRIGGER_COMBO, see EngineFlags.h)
+// and its narrower reading MTG_BURN_M2_NARROW (OFF: measured worse in every cell; a USER question): see
+// BurnProvider::Main2CastAllowed.
 static bool BurnM2RuleEnabled()
 {
-    static const bool on = EnvOn("MTG_BURN_M2_RULE");   // DEFAULT OFF until measured; =1 enables
+    static const bool on = EnvOn("MTG_BURN_M2_RULE", true);   // DEFAULT ON (measured 2026-10-15); =0 disables
     return heurarm::Flag(heurarm::BURN_M2_RULE, on);
 }
 static bool BurnM2NarrowEnabled()
@@ -9348,15 +9350,19 @@ static bool BurnM2NarrowEnabled()
     static const bool on = EnvOn("MTG_BURN_M2_NARROW");   // DEFAULT OFF (USER question); =1 enables
     return heurarm::Flag(heurarm::BURN_M2_NARROW, on);
 }
-// MTG_BURN_BLOOD_FIRST -- a PROPOSED amendment to the USER's order, NOT adopted (a USER question):
-// Searing Blood before Searing Blaze. See BurnOrderRankOf. DEFAULT OFF -> the USER's list verbatim.
+// MTG_BURN_BLOOD_FIRST -- a PROPOSED amendment to the USER's order (a USER question): Searing Blood
+// before Searing Blaze WHEN BLOOD ALONE CANNOT KILL its target (BurnProvider::CastOrderActionRank);
+// otherwise, and with no opposing creature, the USER's list verbatim. DEFAULT ON PENDING THE USER: the
+// literal list misses the adoption bar on games this fixes (burn2hg seed 11670387 gi 386: T4 -> T5, not
+// recovered at d8 b0); =0 gives the literal list.
 static bool BurnBloodFirstEnabled()
 {
-    static const bool on = EnvOn("MTG_BURN_BLOOD_FIRST");   // DEFAULT OFF (USER question); =1 enables
+    static const bool on = EnvOn("MTG_BURN_BLOOD_FIRST", true);   // DEFAULT ON pending the USER (measured 2026-10-15); =0 -> the literal list
     return heurarm::Flag(heurarm::BURN_BLOOD_FIRST, on);
 }
 
-// The order is read from PARAMS; the NAME is only the final tie-break (ArrangeCastOrder). Ranks:
+// The order is read from PARAMS; the NAME is only the final tie-break (CastOrderTotalByName ->
+// CastOrderNameTieLess, the canonical total-order tie-break). Ranks:
 //   10 + mv  HASTE CREATURE (Goblin Guide, Monastery Swiftspear): first -- each attacks this turn, and
 //            Swiftspear's prowess ("Whenever you cast a noncreature spell") sees every later spell.
 //   20+2*mv  BURN (DirectDamage: Bolt, Shard Volley, Searing Blaze, Searing Blood, Skullcrack) by mana
