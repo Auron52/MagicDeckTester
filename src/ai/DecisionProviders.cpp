@@ -21919,7 +21919,7 @@ void FluctuatorProvider::ArrangeCastOrder(const GameState& s, const std::vector<
     });
     for (std::size_t i = 0; i < keys.size(); ++i) { order[i] = keys[i].idx; }
 
-    // MTG_FLUCT_ORDER_FUNDED (default OFF, measured): WHICH CASTS SURVIVE A SET THAT CANNOT BE PAID.
+    // MTG_FLUCT_ORDER_FUNDED (default ON, measured): WHICH CASTS SURVIVE A SET THAT CANNOT BE PAID.
     // The USER's order assumes the set is paid in full (the joint prepay), and then its sequence is
     // payment-neutral. But the flat pool books Capital City's FED colour as a wild on top of the land
     // that feeds it -- a net-zero conversion credited as +1 -- so the d0 greedy and the playouts pick
@@ -21930,7 +21930,10 @@ void FluctuatorProvider::ArrangeCastOrder(const GameState& s, const std::vector<
     // over 40,000 games, every slower game read so far this shape). So: walk the set with the REAL
     // payer on a copy, in the USER's order; if it pays in full, nothing changes. If it does not,
     // Unearth and the Tutor go after Hollow One, so the survivors are the deck's engine and wincon.
-    static const bool s_funded = EnvOn("MTG_FLUCT_ORDER_FUNDED");   // DEFAULT OFF; =1 enables
+    // DEFAULT ON since the round-2 A/B (2026-10-15): with it the order meets the bar at every cell
+    // (d0 -588 / -325 net where the order alone was +204 / +67); =0 restores the order exactly as
+    // approved. Adopting it is the USER's call -- surfaced, see the design doc.
+    static const bool s_funded = EnvOn("MTG_FLUCT_ORDER_FUNDED", true);
     if (heurarm::Flag(heurarm::FLUCT_ORDER_FUNDED, s_funded))
     {
         GameState pay = s;
