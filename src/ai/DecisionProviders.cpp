@@ -6180,7 +6180,7 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
 //
 // The order, on the current list (land first, then every nonland card, one per position):
 //
-//   land > Light-Paws > Kor Spiritdancer > Gladecover Scout > Slippery Bogle > Armadillo Cloak >
+//   land > Light-Paws > Kor Spiritdancer > Slippery Bogle > Gladecover Scout > Armadillo Cloak >
 //   Alpha Authority > Spirit Mantle > Spirit Link > Gryff's Boon > Hyena Umbra > Spider Umbra >
 //   Audacity > Rancor > Ancestral Mask > All That Glitters > Ethereal Armor > Lion Umbra > Daybreak Coronet
 //
@@ -6188,7 +6188,10 @@ std::vector<int> AurasProvider::CleanupDiscardCandidates(
 //   * CREATURES FIRST. The Aura engines must be on the battlefield before any Aura is cast -- Light-Paws
 //     ("whenever an Aura you control enters, if you cast it": aura_cast_tutor_attach) ahead of Kor
 //     Spiritdancer ("whenever you cast an Aura spell, draw": draw_on_aura_cast / aura_self_buff_*) -- and
-//     every host must exist before an Aura targets it. The other creatures follow by name.
+//     every host must exist before an Aura targets it. Then the other creatures, Slippery Bogle before
+//     Gladecover Scout as the USER's settled list has them (2026-10-15 correction): the two are vanilla
+//     1-mana 1/1 hexproof bodies, and the one param that separates them is Bogle's HYBRID pip ({G/U}
+//     against {G}), so the key is hybrid-cost first, then the name.
 //   * PLAIN AURAS (no aura_scale_*, no aura_enchant_requires): HIGHEST mana value first, so the big fetch
 //     brackets fire first and the 1-drop fetch comes last; within one mana value the WEAKEST first by
 //     aura_power_bonus (toughness, flying, first strike, reach, trample and lifelink are all worth 0 here
@@ -6247,15 +6250,16 @@ int NameKey(const std::string& n)
 constexpr int kEarly              = 0;    // an unrecognised card the generic order puts before creatures
 constexpr int kLightPaws          = 1;    // aura_cast_tutor_attach
 constexpr int kKor                = 2;    // draw_on_aura_cast / aura_self_buff_*
-constexpr int kCreature           = 3;    // every other creature, by name
+constexpr int kCreatureHybrid     = 3;    // another creature with a hybrid pip (Slippery Bogle {G/U}), by name
+constexpr int kCreature           = 4;    // every other creature (Gladecover Scout), by name
 constexpr int kMvCap              = 7;    // mana values above this share the top band
 constexpr int kPowSlots           = 8;    // power bonuses 0..7
-constexpr int kPlainBase          = 4;    // + (kMvCap - mv) * kPowSlots + power: 4..67
-constexpr int kScalerBase         = kPlainBase + (kMvCap + 1) * kPowSlots;   // + (kMvCap - mv): 68..75
-constexpr int kRestrictedModified = kScalerBase + kMvCap + 1;               // 76: enchant modified creature
-constexpr int kRestrictedAnother  = kRestrictedModified + 1;                // 77: another Aura attached
-constexpr int kRestrictedOther    = kRestrictedAnother + 1;                 // 78: any other requirement
-constexpr int kLate               = kRestrictedOther + 1;                   // 79: an unrecognised card
+constexpr int kPlainBase          = 5;    // + (kMvCap - mv) * kPowSlots + power: 5..68
+constexpr int kScalerBase         = kPlainBase + (kMvCap + 1) * kPowSlots;   // + (kMvCap - mv): 69..76
+constexpr int kRestrictedModified = kScalerBase + kMvCap + 1;               // 77: enchant modified creature
+constexpr int kRestrictedAnother  = kRestrictedModified + 1;                // 78: another Aura attached
+constexpr int kRestrictedOther    = kRestrictedAnother + 1;                 // 79: any other requirement
+constexpr int kLate               = kRestrictedOther + 1;                   // 80: an unrecognised card
 
 bool IsCreatureAura(const CardDefinition& d) { return d.params.is_aura && !d.params.is_land_aura; }
 }   // namespace auras_order
@@ -6271,6 +6275,7 @@ int AurasProvider::CastOrderRank(const GameState& s, const CardDefinition& def) 
     {
         if (p.aura_cast_tutor_attach)                          { cls = kLightPaws; }
         else if (p.draw_on_aura_cast || p.aura_self_buff_power > 0) { cls = kKor; }
+        else if (def.card.m_mana_cost.hybrid_count > 0)        { cls = kCreatureHybrid; }
         else                                                   { cls = kCreature; }
     }
     else if (IsCreatureAura(def))
@@ -6301,6 +6306,7 @@ const char* AurasProvider::CastOrderTierName(int rank) const
     if (cls == kEarly)     { return "EARLY: a card off the list the generic order puts before creatures (accelerant)"; }
     if (cls == kLightPaws) { return "ENGINE: Light-Paws -- on the battlefield before any Aura, so every Aura cast fetches"; }
     if (cls == kKor)       { return "ENGINE: Kor Spiritdancer -- before any Aura, so every Aura cast draws"; }
+    if (cls == kCreatureHybrid) { return "CREATURE (hybrid cost): a host before the Auras that target it; Bogle before Scout (USER list)"; }
     if (cls == kCreature)  { return "CREATURE: a host before the Auras that target it (by name)"; }
     if (cls >= kPlainBase && cls < kScalerBase)
     { return "PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name"; }

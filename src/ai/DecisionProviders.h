@@ -2005,7 +2005,8 @@ public:
     bool CleanupDiscardShedStable() const override;
     // Cast order: the USER-approved order (2026-10-14, "Otherwise the auras order seems okay"),
     // TOTAL and UNCONDITIONAL -- the same on every turn, whether or not a Light-Paws is in play:
-    // Light-Paws > Kor > the other creatures (by name) > plain Auras (highest mana value first,
+    // Light-Paws > Kor > the other creatures (hybrid cost first -- Bogle > Scout, the USER's list -- then
+    // by name) > plain Auras (highest mana value first,
     // weakest power first within one mana value, then by name) > scalers (highest mana value first)
     // > restricted Auras ("enchant modified creature" before "another Aura attached"). Keyed on
     // params; the name is only the final tie-break, so no two different cards ever compare equal.
