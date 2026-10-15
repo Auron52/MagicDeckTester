@@ -151,8 +151,102 @@ the payer fix).
 
 ### Batch 3: the payer fix and the amendment
 
-(filled in below when the batch lands)
+Same seeds; T = `MTG_LINE_SPARE_TIGHT`, A = `MTG_ANGELS_GIADA_FIRST`. Net vs OLD (loss = 9), work units
+vs OLD in brackets for the searched cells:
+
+| cell | P1T | P12T | P1TA | P12TA |
+|---|---|---|---|---|
+| angels ship | -92 (92 f / 0 s) [0.928] | -162 (162 / 0) [0.989] | -92 (93 / 1) [0.928] | -162 (163 / 1) [0.989] |
+| angels d3 b10 | -148 (149 / 1) [0.981] | -277 (280 / 3) [0.983] | -148 (150 / 2) [0.981] | -278 (281 / 3) [0.983] |
+| angels d0 | -272 (280 / 9) | -284 (292 / 9) | -273 (282 / 10) | -285 (294 / 10) |
+| angels2hg ship | -44 (44 / 0) [0.951] | -75 (75 / 0) [1.028] | -45 (45 / 0) [0.949] | -76 (76 / 0) [1.025] |
+| angels2hg d3 b10 | -80 (82 / 2) [0.989] | -123 (126 / 3) [1.008] | -83 (83 / 0) [0.989] | -126 (127 / 1) [1.009] |
+| angels2hg d0 | -223 (221 / 4) | -229 (228 / 6) | -224 (223 / 5) | -230 (230 / 7) |
+
+The new3 binary with every new lever off reproduces batch 1's P1 on a seed prefix of every cell
+byte-for-byte. Recovery (stage 1, then stage 2): every d0 slower game recovers at stage 1. Searched:
+P1T 3 slower, 0 recover; P12T 6, 3 recover at stage 1 -- the non-recovering ones are EXACTLY the three
+Giada-counter games (gi873, gi1165, gi2425): the payer fix cleared every other one. The amendment fixes
+those three and breaks three others (angels ship gi3574, d3 gi349, d3 gi3554, under P1TA / P12TA):
+there Righteous-first's 2 life is what crosses Righteous's own +7 anthem a turn later (gi3574: life 28
+vs 26 on T4, the T4 kill needs the anthem). Neither deterministic order dominates; P1TA vs P1T is a wash
+(net -1 to -3 turns per cell, slower 1 / 2 / 8 at ship / d3 / d0).
+
+So the amendment is replaced by a SEARCHED pair, `MTG_ANGELS_GIADA_SEARCH` (default OFF): when Giada and
+an Angel the USER's order puts ahead of her (Righteous, Thune, Lyra AoD) share a cast set, the
+cast-ordering search tries both orders (the USER's first) and keeps the better end state; every other set
+is enumerated exactly as before. All six games (the three Giada-counter games and the amendment's three)
+recover at stage 2 under it. Batch 4 measures it.
+
+The payer fix outside Angels (171 identity jobs, every other suite deck, 24 games x d0 / d3 / shipped,
+fix ON vs the base binary): 7 jobs move, every one DIGEST-ONLY (0 faster / 0 slower): bruna2hg d3,
+dragonstorm d3, dragonstorm2hg d3, stompy d0, stompy d3, stompy2hg d0, stompy2hg d3. The larger paired
+sample of those decks is the "blast" batch below.
+
+References with every new lever on (`MTG_ANGELS_GIADA_M2`, `MTG_LINE_SPARE_TIGHT`,
+`MTG_ANGELS_GIADA_FIRST`): `viewer_protocol_check.py --strict` 20 ok, 1 repaired, 0 drift; `ref_bench.py`
+4.900 search vs 4.900 human, 0/10 short -- unchanged.
+
+### The payer fix outside Angels (the "blast" batch)
+
+Fix OFF vs ON on the same binary, held-out seeds 11600001+, the decks whose identity cells moved:
+
+| deck cell | games | avg OFF -> ON | faster | slower | digest-only | units ON/OFF |
+|---|---|---|---|---|---|---|
+| dragonstorm d3 b10 | 600 | 4.3833 -> 4.3817 | 1 | 0 | 5 | 0.996 |
+| dragonstorm shipped | 300 | 4.4233 -> 4.4233 | 0 | 0 | 4 | 1.001 |
+| dragonstorm2hg d3 | 300 | 4.5233 -> 4.5233 | 0 | 0 | 1 | 1.002 |
+| bruna d3 / bruna2hg d3 | 100 / 100 | unchanged | 0 | 0 | 0 | 1.000 |
+| stompy d0 / d3 / shipped | 2000 / 600 / 300 | unchanged | 0 | 0 | 0 | 1.000 |
+| stompy2hg d0 / d3 | 1000 / 300 | unchanged | 0 | 0 | 0 | 1.000 |
+
+So: 0 slower games anywhere, one faster, a handful of play-changed (digest-only) games on Dragonstorm
+(the colour-tight ritual deck the line-spare rule was written for) -- those decks' GT digests will move.
+
+### Batch 4: the searched Giada pair (`MTG_ANGELS_GIADA_SEARCH`)
+
+S = the searched pair, on top of T. The new4 binary with S off reproduces batch 3's P12T byte-for-byte.
+
+| cell | P1TS vs OLD | P12TS vs OLD | TS vs T (same binary) | units vs OLD (P1TS / P12TS) |
+|---|---|---|---|---|
+| angels ship | -93 (93 f / 0 s) | -163 (163 / 0) | 1 faster, 0 slower | 0.931 / 0.991 |
+| angels d3 b10 | -150 (150 / 0) | -279 (281 / 2) | 2 / 0 | 0.982 / 0.984 |
+| angels d0 | -272 (280 / 9) | -284 (292 / 9) | 0 / 0 | - |
+| angels2hg ship | -45 (45 / 0) | -76 (76 / 0) | 1 / 0 | 0.953 / 1.030 |
+| angels2hg d3 b10 | -83 (83 / 0) | -126 (127 / 1) | 3 / 0 | 0.990 / 1.010 |
+| angels2hg d0 | -223 (221 / 4) | -229 (228 / 6) | 0 / 0 | - |
+
+The pair costs +0.1-0.2% work units over T. EVERY slower game vs OLD recovers at STAGE 1 (31 game-arm
+entries: P1TS 13 d0; P12TS 15 d0 + 3 searched). With S the whole adoption bar is met; without it the three
+Giada-counter games are the only ones that do not recover.
 
 ## Defaults as shipped
 
-(filled in below)
+| lever | default | why |
+|---|---|---|
+| `MTG_ANGELS_ORDER` | ON | the USER's order; never fall back to the generic tiers. Strongly better in every cell. With the payer fix the only slower games that do not recover are the three Giada-counter games (USER question 1). |
+| `MTG_ANGELS_GIADA_M2` | ON | met the bar and is cheap: over the order alone 296 faster / 6 slower; +6.5% work units at the shipped cell (+7.8% 2HG), 0.99x / 1.03x the pre-order tree. Its slower games vs OLD all recover except the same three order games. |
+| `MTG_LINE_SPARE_TIGHT` | ON | a payer bug fix (a zero-surplus colour line no longer spends the owed colour on generic). Clears 10 of the 13 Angels lost lines; outside Angels 0 slower games, 1 faster, digest-only moves on Dragonstorm. |
+| `MTG_ANGELS_GIADA_FIRST` | OFF | changes the USER's order; a wash (it trades three lost games for three others). Kept only as the measured record of why a deterministic rule does not work here. |
+| `MTG_ANGELS_GIADA_SEARCH` | OFF | changes how the USER's order is applied (the caveats were asked for as deterministic rules, not search) -- USER question 1. |
+
+The final binary at its defaults reproduces batch 3's P12T arm on a seed prefix (30 games shipped + 30 d3).
+Giada's card note (cards.json, oracle text only) now says vigilance pays off through this main.
+
+## USER questions
+
+1. **Righteous Valkyrie / Lyra, Archangel of Dawn ahead of Giada** (your order: Bishop > Righteous > Thune
+   > Lyra AoD > Giada). Three held-out games lose Giada's +1/+1 counters to that order (angels d3 gi873,
+   angels2hg d3 gi2425: Righteous first gives 2 life instead of N counters on Righteous, each losing by
+   exactly one damage; angels2hg d3 gi1165: Lyra AoD first at one converter) and no budget recovers them.
+   A deterministic flip (Giada first with no engine / with one converter) trades them for three other lost
+   games where Righteous-first's 2 life is what crosses its own +7 anthem. The option that fixes all six
+   is to SEARCH that one pair (your order first, Giada-first as the alternative) -- `MTG_ANGELS_GIADA_SEARCH`:
+   0 to 3 game-turns faster per cell over the order + payer fix, 0 slower, +0.1-0.2% work, and with it
+   every slower game of the A/B recovers at stage 1. You asked for the caveats as deterministic
+   rules, so it is OFF. Turn it on? *Default taken: off.*
+2. **The narrow-main reading.** "Would pay for, or help pay for" + "it must use Giada's mana" is read as
+   "an Angel that cannot be paid WITHOUT her" (an Angel the lands alone pay was castable in main 1, where
+   it is at least as good). *Default taken: that reading.*
+3. **The payer fix ships ON for every deck** (it is a bug fix, measured 0 slower games outside Angels).
+   Dragonstorm / Bruna 2HG / Stompy digests move. *Default taken: on.*

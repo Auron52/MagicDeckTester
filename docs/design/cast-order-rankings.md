@@ -51,6 +51,13 @@ Sanctuary) on our battlefield or in the cast set, Archangel of Thune and Lyra, A
 behind Giada and Youthful Valkyrie. A duplicate legend (its name already on our battlefield, or a second
 copy in the same set) is the last creature.
 
+**Measured 2026-10-15, SHIPPED DEFAULT ON** together with the narrow Giada second main
+(`MTG_ANGELS_GIADA_M2`, ON) and the payer fix it exposed (`MTG_LINE_SPARE_TIGHT`, ON): vs the generic
+tiers, held-out paired, angels shipped -162 game-turns / 4000 games (162 faster, 0 slower), d3 b10
+-277 / 6000, d0 -284 / 20000; angels2hg -75 / -123 / -229. References unchanged (21 replays clean,
+bench 4.900 = human). Open USER question: three games lose Giada's counters to Righteous Valkyrie /
+Lyra AoD ranked ahead of her; searching that one pair (`MTG_ANGELS_GIADA_SEARCH`, OFF) recovers them.
+
 ```
 # Cast order -- decks/Angels/Angels.cod
 # provider: Angels   ideal-order draw tier: off   cantrip max mv: 1
