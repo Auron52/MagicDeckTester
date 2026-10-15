@@ -333,13 +333,32 @@ TEST_CASE("Fluct drawn land: the §4.3 line (drop the drawn Capital City, cast t
 // Fluctuator out, Polluted Mire + Blasted Landscape untapped (no red, no dual), NO land in hand at
 // plan time, so the plan cannot drop. The chain draws Capital City and Drannith Stinger in either
 // order, then Mires. Hook OFF: no re-solve can see the drop -- the land draw never re-solves and the
-// Stinger reads "uncastable" -- so the Stinger stays in hand (protected: no Unearth) and the turn deals
-// nothing. Hook ON: the re-solve opens (at the Stinger draw when the City came first, at the City
-// draw when it came second) and the base plan's continuation drops the City and casts the Stinger.
+// Stinger reads "uncastable" -- so NO plan casts the Stinger (it stays in hand, protected: no Unearth).
+// Hook ON: the re-solve opens (at the Stinger draw when the City came first, at the City draw when it
+// came second). Its UNBRANCHED default is EMPTY -- the base plan plays exactly the old line -- and the
+// line is a searched VARIANT: the plan with bp_at = that breakpoint and bp_choice = the "Capital City +
+// Drannith Stinger" entry drops the City, casts the Stinger, and the rest of the chain pings.
+// Apply `base` as a variant taking continuation k at breakpoint 0; true if it realised `pred`.
+template <typename Pred>
+static bool SomeVariantRealises(const GameState& pre, const TurnSolver::Plan& base, Pred pred)
+{
+    for (int k = 0; k < 12; ++k)
+    {
+        TurnSolver::Plan v = base;
+        v.bp_choice = k;
+        v.bp_at     = 0;
+        GameState s = pre;
+        TurnSolver::ApplyPlan(s, v, true);
+        if (pred(s)) { return true; }
+    }
+    return false;
+}
 static void CheckDrawnLandLine(const std::vector<std::string>& top)
 {
     const std::vector<std::string> hand = { "Forsake the Worldly", "Forsake the Worldly", "Forsake the Worldly" };
     const std::vector<std::string> board = { kF, "Polluted Mire", "Blasted Landscape" };
+    auto line = [](const GameState& s)
+    { return OnBf(s, kS) && OnBf(s, "Capital City") && s.players[1].life < 20; };
     for (int on : { 0, 1 })
     {
         FoArms arms(1, on, on);
@@ -352,20 +371,12 @@ static void CheckDrawnLandLine(const std::vector<std::string>& top)
             base = &p; break;
         }
         REQUIRE(base != nullptr);
+        INFO("hook=" << on << " top=" << top[0]);
         GameState s = pre;
         TurnSolver::ApplyPlan(s, *base, true);
-        INFO("hook=" << on << " top=" << top[0]);
-        if (on == 0)
-        {
-            CHECK_FALSE(OnBf(s, kS));
-            CHECK(s.players[1].life == 20);
-        }
-        else
-        {
-            CHECK(OnBf(s, kS));
-            CHECK(OnBf(s, "Capital City"));
-            CHECK(s.players[1].life < 20);   // the rest of the chain pings
-        }
+        CHECK_FALSE(OnBf(s, kS));            // the base plan is the old line, hook or not
+        CHECK(s.players[1].life == 20);
+        CHECK(SomeVariantRealises(pre, *base, line) == (on == 1));   // the land line exists iff the hook is on
     }
 }
 
@@ -383,7 +394,7 @@ TEST_CASE("Fluct drawn land: a drawn TAPPED land is offered as the drop at the c
 {
     // No Fluctuator yet: cycling costs {2}. Three untapped lands, the drop open, no land in hand at plan
     // time; one {2} cycle of Forsake draws a tapped Smoldering Crater. Hook OFF: the drop is lost.
-    // Hook ON: the chain-end re-solve offers it; the list's front (the base plan's continuation) plays it.
+    // Hook ON: the chain-end re-solve offers it as a searched variant (its default is EMPTY: the old line).
     const std::vector<std::string> hand = { "Forsake the Worldly", kS };
     const std::vector<std::string> board = { "Polluted Mire", "Blasted Landscape", "Irrigated Farmland" };
     for (int on : { 0, 1 })
@@ -404,7 +415,11 @@ TEST_CASE("Fluct drawn land: a drawn TAPPED land is offered as the drop at the c
         INFO("hook=" << on);
         const bool cycled = !InHandFo(s, "Forsake the Worldly");
         REQUIRE(cycled);
-        if (on == 0) { CHECK(InHandFo(s, "Smoldering Crater")); CHECK(s.players[0].lands_played_this_turn == 0); }
-        else         { CHECK(OnBf(s, "Smoldering Crater"));     CHECK(s.players[0].lands_played_this_turn == 1); }
+        // The plan itself is the old line (the chain-end breakpoint defaults to EMPTY)...
+        CHECK(InHandFo(s, "Smoldering Crater"));
+        CHECK(s.players[0].lands_played_this_turn == 0);
+        // ...and the drop of the dug Crater is a searched variant of it iff the hook is on.
+        auto dropped = [](const GameState& g) { return OnBf(g, "Smoldering Crater") && g.players[0].lands_played_this_turn == 1; };
+        CHECK(SomeVariantRealises(pre, *dig, dropped) == (on == 1));
     }
 }

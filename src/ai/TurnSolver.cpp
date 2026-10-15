@@ -3772,6 +3772,16 @@ static thread_local bool g_bp_site_activated = false;
 // ...and the TURN the snapshot was taken on (-1 = no snapshot).
 static thread_local int g_bp_site_turn = -1;
 
+// A breakpoint the DRAWN-LAND hook ADDED (DecisionProvider::DigUsesDrawnLandDrop: the land-draw re-solve,
+// the nonland re-solve that only the open drop made castable, the chain-end re-solve). Its UNBRANCHED
+// default -- a base plan, or a variant at a breakpoint it does not target -- is EMPTY, never the canon
+// front: before the hook these breakpoints did not exist, so EMPTY is exactly the old line, and the old
+// line must stay the default (otherwise a base plan takes "drop the land, cast the {1} Hollow One" at
+// every one of them, and a line needing the old choice at two of them leaves the one-deviation
+// neighbourhood -- unreachable at ANY budget: round 2 measured 47 such slower games, identical at d8/b0).
+// The new land lines are reached as explicit variants, like every other searched continuation.
+static thread_local bool g_bp_hook_site_empty_default = false;
+
 // A BREAKPOINT SNAPSHOT DESCRIBES ONE TURN, AND MUST NOT OUTLIVE IT (MTG_BP_CONDEMN_SAME_TURN,
 // DEFAULT ON). Soundness guard, in the same class as BpTurnManaSettled, and like it this conjunct
 // can only ever RE-ADMIT a candidate.
@@ -46759,16 +46769,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Stinger drawn with an untapped Capital City in hand is not read as "uncastable".
             const bool land_unlocks = drop_hook && !drawn_land_name.empty()
                                    && TurnSolver::DropOpenLandEnablesCast(state, &drawn_land_name);
-            const bool resolve_now = !drew_land
-                                  || ResolveProvider(state).DigResolveEvenOnLand(state)
-                                  || land_unlocks;
+            const bool even_on_land = drew_land && ResolveProvider(state).DigResolveEvenOnLand(state);
+            const bool resolve_now = !drew_land || even_on_land || land_unlocks;
+            // Does this re-solve exist ONLY because of the hook? Then its unbranched default is EMPTY
+            // (g_bp_hook_site_empty_default): the old line stays the default, the land line a variant.
+            bool hook_only_site = drew_land && !even_on_land && land_unlocks;
             if (resolve_now
                 && ResolveProvider(state).DigResolveOnlyWhenCastable()
                 && !DecisionUnpruned(UnprunedGate::DigResolve)
-                && !AnyHandCastableNow(state)
-                && !(drop_hook && (land_unlocks || TurnSolver::DropOpenLandEnablesCast(state))))
+                && !AnyHandCastableNow(state))
             {
-                continue;   // cycle on; nothing this re-solve could have deployed
+                if (!(drop_hook && (land_unlocks || TurnSolver::DropOpenLandEnablesCast(state))))
+                {
+                    continue;   // cycle on; nothing this re-solve could have deployed
+                }
+                hook_only_site = true;   // the pre-hook gate would have skipped this re-solve
             }
             // "Don't play any fuel once you are going off. Just cycle everything." (USER,
             // 2026-09-05.) The dig-site half of HoldFuelWhileComboing: while the chain can close,
@@ -46792,7 +46807,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // "greedy Solve()s actually reached from inside the search", and bumping it before
                 // the searched attempt counted the site's successes as greedy too -- which is the
                 // exact reading error the counter exists to prevent.
-                bp_searched_plan(4, extra);   // resolves to the plan's continuation or EMPTY
+                {
+                    // A hook-only site defaults to EMPTY (see g_bp_hook_site_empty_default); for every
+                    // other site, and every deck without the hook, this is false -> byte-identical.
+                    const bool saved_empty = g_bp_hook_site_empty_default;
+                    g_bp_hook_site_empty_default = hook_only_site;
+                    bp_searched_plan(4, extra);   // resolves to the plan's continuation or EMPTY
+                    g_bp_hook_site_empty_default = saved_empty;
+                }
                 ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
@@ -46840,7 +46862,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (out_breakpoint) { bp_sink_push(end_sink); }
                 TurnSolver::Plan extra;
-                bp_searched_plan(4, extra);   // the continuation the plan carries, or EMPTY
+                {
+                    // A hook-only site: its unbranched default is EMPTY (the pre-hook line).
+                    const bool saved_empty = g_bp_hook_site_empty_default;
+                    g_bp_hook_site_empty_default = true;
+                    bp_searched_plan(4, extra);   // the continuation the plan carries, or EMPTY
+                    g_bp_hook_site_empty_default = saved_empty;
+                }
                 ContPinFrame _cpf(extra, end_sink);
                 bp_play_searched_land(extra, end_sink);
                 apply_continuation_precasts(extra);
@@ -79209,6 +79237,7 @@ static bool CanonContNoActsOn()
 bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, const Plan& plan,
                                    int seen_before, bool class_on, Plan& out)
 {
+    if (g_bp_hook_site_empty_default) { return false; }   // a drawn-land hook site: EMPTY (see the decl)
     if (BpNestedCanon() && g_bp_enum_depth == 0 && class_on
         && (g_rollout_nest == 0 || BpNestedCanonPlayout())
         && plan.bp_choice >= 0 && !plan.bp_all && seen_before >= 0 && seen_before != plan.bp_at)
