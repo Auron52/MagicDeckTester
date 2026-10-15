@@ -325,6 +325,38 @@ TEST_CASE("Angels order caveat (a): Giada right after Greaves when her hasted {W
     }
 }
 
+TEST_CASE("Payer: MTG_LINE_SPARE_TIGHT keeps Remote Farm's second {W} for the line at zero surplus")
+{
+    // The A/B's lost-line class (angels ship gi2060 and its siblings): Remote Farm ({T}, remove a
+    // depletion counter: {W}{W}) + Seraph Sanctuary ({C}), casting Sol Ring, Righteous Valkyrie {2}{W},
+    // Lightstall Inquisitor {W} in the USER's order. Sol Ring takes the {C}; Righteous's {W} taps the
+    // Farm and its {2} must come from Sol Ring's {C}{C}, so the Farm's second {W} floats for Lightstall.
+    // With the strict SHORT test the generic ate that {W} (owed 1, supply 1 -> "not short") and
+    // Lightstall stayed in hand; the zero-surplus test pays the generic off the spare Sol Ring.
+    for (int tight : {0, 1})
+    {
+        CAPTURE(tight);
+        ArmAO arm(1, 0);
+        heurarm::t_arm[heurarm::LINE_SPARE_TIGHT] = static_cast<std::int8_t>(tight);
+        const std::vector<std::string> hand = {"Lightstall Inquisitor", "Righteous Valkyrie", "Sol Ring"};
+        GameState s = BoardAO(0, hand, {"Seraph Sanctuary"});
+        PutAO(s, "Remote Farm", 9);
+        Counter dep; dep.type = Counter::Type::Depletion; dep.count = 2;
+        s.battlefield.back().counters.Add(dep);
+        TurnSolver::Plan plan = CastPlan(s, hand);
+        const std::vector<std::string> want = {"Sol Ring", "Righteous Valkyrie", "Lightstall Inquisitor"};
+        CHECK(TurnSolver::CanonicalNonSacCastOrder(s, plan) == want);
+        TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+        if (tight) { CHECK(s.players[0].hand.empty()); }
+        else
+        {
+            REQUIRE(s.players[0].hand.size() == 1);   // the defect the lever fixes, pinned
+            CHECK(s.players[0].hand[0].m_name == "Lightstall Inquisitor");
+        }
+        heurarm::t_arm[heurarm::LINE_SPARE_TIGHT] = -1;
+    }
+}
+
 TEST_CASE("Angels order: MTG_ANGELS_ORDER=0 is exactly the generic tiers")
 {
     ArmAO arm(0, 0);

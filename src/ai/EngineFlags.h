@@ -186,6 +186,16 @@ inline bool LineSpareGenericFirstOn()
     return heurarm::Flag(heurarm::LINE_SPARE_GENERIC_FIRST, env_on);
 }
 
+// MTG_LINE_SPARE_TIGHT (DEFAULT OFF; a proposed payer fix, measured in
+// docs/design/angels-cast-order-2026-10-14.md) -- LineSpareSourceMask's SHORT test also fires at ZERO
+// surplus: the rest of the line owes EXACTLY what the float plus the non-spare board can make of a colour,
+// so a generic pip that spends one of those units strands a later pip. Same payer, same lockstep.
+inline bool LineSpareTightOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_SPARE_TIGHT");
+    return heurarm::Flag(heurarm::LINE_SPARE_TIGHT, env_on);
+}
+
 // MTG_DRAGONSTORM_DRAGON_ORDER (DEFAULT ON; =0 disables) -- DragonstormProvider::CastOrderingCandidates
 // also offers every distinct order of the set's hard-cast Dragons (USER order on). Read only there; the
 // searched order rides Plan::searched_order into both apply worlds.
