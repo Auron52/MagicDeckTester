@@ -2642,17 +2642,33 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 // than {1}{R}. Ranking by the printed cost put the spliced copy early and dropped it exactly like
 // Seething Song. Was a byte-identical twin pair (TurnSolver's CastOrderLess / AIEngine's
 // CastOrderLessAI); executor and rollout now share this definition.
+// THE NAME TIE-BREAK of a TOTAL deck order (DecisionProvider::CastOrderTotalByName; USER 2026-10-14:
+// "I don't like the randomness of choosing the order"). Two casts whose sort keys tie are ordered by the
+// NAME of the card their order derives from (OrderDefOf -- a Garth activation as its copy), so different
+// cards never fall back to plan (hand) order. Copies of one card compare equal (stable: plan order).
+// A byte-wise std::string compare, so Linux and MSVC agree (std::hash would not). False unless the
+// provider opts in -- every other deck is byte-identical. (The canonical copy, integration commit 2ac8db0b.)
+static const CardDefinition* OrderDefOf(const Action& a);
+bool CastOrderNameTieLess(const GameState& state, const Action& a, const Action& b)
+{
+    if (LegacyCastTierOrder() || !ResolveProvider(state).CastOrderTotalByName()) { return false; }
+    const CardDefinition* da = OrderDefOf(a);
+    const CardDefinition* db = OrderDefOf(b);
+    const std::string& na = da ? da->card.m_name.str() : a.card_name.str();
+    const std::string& nb = db ? db->card.m_name.str() : b.card_name.str();
+    return na < nb;
+}
+
 bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
                                                  const Action& b, int rb)
 {
     if (ra != rb) { return ra < rb; }
     if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
     const DecisionProvider& prov = ResolveProvider(state);
-    // A TOTAL deck order (CastOrderTotalByName): two DIFFERENT cards on one rank fall back to the
-    // name, a fixed key -- never to plan / hand order (USER 2026-10-14: "I don't like the randomness
-    // of choosing the order"). Two copies of one card keep the rule below.
-    if (prov.CastOrderTotalByName() && a.card_name != b.card_name)
-    { return a.card_name.str() < b.card_name.str(); }
+    // A TOTAL deck order breaks the tie by name and nothing else (the deck's own rank already orders
+    // whatever cost should order, so the accelerant rule below is not consulted -- mixing the two keys
+    // could make the comparator intransitive across a ritual / non-ritual tie).
+    if (prov.CastOrderTotalByName()) { return CastOrderNameTieLess(state, a, b); }
     if (!prov.CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
     // Reuse the action's memoized def (back-filled once per node, == Lookup(card_name)) instead of
     // re-hashing the name string on every comparison -- this comparator runs O(n log n) per sort.
