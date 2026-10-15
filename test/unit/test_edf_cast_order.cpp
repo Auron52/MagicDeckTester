@@ -58,7 +58,7 @@ struct ArmGuard
     ~ArmGuard() { heurarm::t_arm[slot] = -1; }
 };
 
-GameState BaseState(int turn)
+GameState BaseState(int turn, int lib = 20)
 {
     EnsureCardsCo();
     GameState s;
@@ -68,7 +68,7 @@ GameState BaseState(int turn)
     s.players[1].life     = 20;
     s.deck_has_land_aura  = true;
     s.m_provider          = &ProvCo();
-    for (int i = 0; i < 20; ++i) { s.players[0].library.push_back(PhCo("Brushland", 900 + i)); }
+    for (int i = 0; i < lib; ++i) { s.players[0].library.push_back(PhCo("Brushland", 900 + i)); }
     return s;
 }
 
@@ -204,6 +204,11 @@ TEST_CASE("EDF order (part 3): Trace goes behind an Overgrowth on the SAME land,
     GameState s = BaseState(4);
     const int coast = PutCo(s, "Yavimaya Coast", 57);
     const int brush = PutCo(s, "Brushland", 6);
+    // Enough mana that the stack pays either way (part 3b moves only an order that pays).
+    PutCo(s, "Brushland", 7);
+    PutCo(s, "Kitchen", 29);
+    PutCo(s, "Adarkar Wastes", 1);
+    PutCo(s, "Mariposa Military Base", 35);
     const Action trace_c = CastCo(s, "Trace of Abundance", 47, coast);
     const Action og_c    = CastCo(s, "Overgrowth", 38, coast);
     const Action og_b    = CastCo(s, "Overgrowth", 39, brush);
@@ -264,6 +269,24 @@ TEST_CASE("EDF order (part 3): the apply stacks Overgrowth then Trace on the ONE
         TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
         CHECK(AurasOn(s, coast) == std::vector<std::string>{ "Trace of Abundance" });
     }
+}
+
+// Part 3b: when the legal stack cannot be paid -- Overgrowth's {G}{G} bonus cannot pay Trace's {R/W}, and
+// here Overgrowth's own cost takes the only white source -- the order stays as given (Trace first; the
+// Overgrowth is then re-homed at resolution, which is what played before part 3).
+TEST_CASE("EDF order (part 3b): the same-land move is taken only when the moved order pays")
+{
+    GameState s = BaseState(4);
+    const int coast = PutCo(s, "Yavimaya Coast", 57);
+    PutCo(s, "Brushland", 6);
+    PutCo(s, "Kitchen", 29);
+    PutCo(s, "Kitchen", 30);
+    const Action trace_c = CastCo(s, "Trace of Abundance", 47, coast);
+    const Action og_c    = CastCo(s, "Overgrowth", 38, coast);
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, { og_c, trace_c }, { 0, 1 }));
+    CHECK(Realised(s, { og_c, trace_c }) == std::vector<std::string>{ "Trace of Abundance", "Overgrowth" });
+    ArmGuard g(heurarm::EDF_SHROUD_STACK_PAYS, 0);   // =0: move unconditionally (part 3 as first built)
+    CHECK(Realised(s, { og_c, trace_c }) == std::vector<std::string>{ "Overgrowth", "Trace of Abundance" });
 }
 
 // ---- part 2 ---------------------------------------------------------------------------------------
@@ -391,4 +414,70 @@ TEST_CASE("EDF route (part 5): the live apply realises the kill")
     bool drake = false;
     for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == "Peregrine Drake") { drake = true; } }
     CHECK(drake);
+}
+
+// ---- part 4b --------------------------------------------------------------------------------------
+
+namespace
+{
+// The A/B's shipped game seed 11300164 gi 163, the OLD arm's T3 board (it went off that turn): Conservatory
+// carrying Wild Growth, Yavimaya Coast; hand Aether Hub (the land drop), Peregrine Drake, Overgrowth, Emiel,
+// Cloud of Faeries, a second Wild Growth; the library is the 32 cards that go-off drew, in order. In the
+// USER's Aura order the route casts the Wild Growth first: it takes the best host and Yavimaya Coast pays for
+// it, Overgrowth has to go on the Hub, and the Coast -- the only blue land the untap set will refresh -- is
+// spent, so the Drake finds no {U}. Overgrowth first lands on the Coast and the loop runs.
+GameState G163Board(int first_num)
+{
+    GameState s = BaseState(3, 0);
+    int num = first_num;
+    for (const char* nm : { "Aether Hub", "Peregrine Drake", "Overgrowth", "Emiel the Blessed",
+                            "Cloud of Faeries", "Wild Growth" })
+    { s.players[0].hand.push_back(PhCo(nm, num++)); }
+    for (const char* nm : { "Eldrazi Displacer", "Aether Hub", "Fertile Ground", "Shivan Gorge", "Living Wish",
+                            "Mariposa Military Base", "Emiel the Blessed", "Conservatory", "Wild Growth", "Wild Growth",
+                            "Living Wish", "Trace of Abundance", "Eldrazi Displacer", "Brushland", "Living Wish",
+                            "Trace of Abundance", "Cloud of Faeries", "Trace of Abundance", "Adarkar Wastes",
+                            "Overgrowth", "Fertile Ground", "Brushland", "Aether Hub", "Peregrine Drake",
+                            "Mariposa Military Base", "Fertile Ground", "Yavimaya Coast", "Overgrowth",
+                            "Peregrine Drake", "Fertile Ground", "Peregrine Drake", "Trace of Abundance" })
+    { s.players[0].library.push_back(PhCo(nm, num++)); }
+    for (int i = 0; i < 8; ++i) { s.players[0].library.push_back(PhCo("Brushland", num++)); }
+    for (const char* nm : { "Azorius Chancery", "Adarkar Wastes", "Cloud of Faeries", "Eldrazi Displacer",
+                            "Mariposa Military Base", "Vexing Shusher", "Essence Depleter", "Dimensional Infiltrator" })
+    { s.players[0].sideboard.push_back(PhCo(nm, num++)); }
+    for (int i = 0; i < 50; ++i) { s.players[1].library.push_back(PhCo("Brushland", num++)); }
+    s.opponent_library_dealt = true;
+    s.players[0].life = 19;
+    const int cons = PutCo(s, "Conservatory", num++);
+    PutCo(s, "Wild Growth", num++, cons);
+    PutCo(s, "Yavimaya Coast", num++);
+    return s;
+}
+int TrialPerms(const GameState& s, int arm)
+{
+    ArmGuard g(heurarm::EDF_ROUTE_AURA_PERMS, arm);
+    return EdfComboRouteTrial(s, 0);
+}
+}   // namespace
+
+TEST_CASE("EDF route (part 4b): another Aura order is tried when the USER's order kills nothing")
+{
+    CHECK_MESSAGE(TrialPerms(G163Board(5000), 0) != 1, "precondition: the USER's Aura order alone does not kill");
+    CHECK(TrialPerms(G163Board(6000), 1) == 1);   // WIN (Overgrowth first)
+    {
+        ArmGuard g(heurarm::EDF_ROUTE_AURA_ORDER, 0);   // the pre-part-4 order (hand order here) kills too
+        CHECK(TrialPerms(G163Board(7000), 0) == 1);
+    }
+}
+
+// ---- the PROPOSED tutor order (default OFF) -------------------------------------------------------
+
+TEST_CASE("EDF order (proposal): MTG_EDF_TUTOR_LIBRARY_FIRST puts Eladamri's Call before Living Wish")
+{
+    GameState s = BaseState(4);
+    const Action wish = CastCo(s, "Living Wish", 31);
+    const Action call = CastCo(s, "Eladamri's Call", 17);
+    CHECK(Realised(s, { call, wish }) == std::vector<std::string>{ "Living Wish", "Eladamri's Call" });   // USER order
+    ArmGuard g(heurarm::EDF_TUTOR_LIBRARY_FIRST, 1);
+    CHECK(Realised(s, { wish, call }) == std::vector<std::string>{ "Eladamri's Call", "Living Wish" });
 }

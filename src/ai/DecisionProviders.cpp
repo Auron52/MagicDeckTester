@@ -31666,6 +31666,26 @@ static bool EdfRouteLoopUntapperOn()
     static const bool env = EnvOn("MTG_EDF_ROUTE_LOOP_UNTAPPER", true);   // DEFAULT ON; =0 -> refund-only rule
     return heurarm::Flag(heurarm::EDF_ROUTE_LOOP_UNTAPPER, env);
 }
+// ---- Amendments the package's A/B found (docs/design/edf-cast-order-2026-10-14.md, "Root causes") ------
+// Part 3b -- the same-land move only when it pays. Inert unless part 3 is on.
+static bool EdfShroudStackPaysOn()
+{
+    static const bool env = EnvOn("MTG_EDF_SHROUD_STACK_PAYS", true);   // DEFAULT ON; =0 -> move unconditionally
+    return heurarm::Flag(heurarm::EDF_SHROUD_STACK_PAYS, env);
+}
+// Part 4b -- the route's other Aura orders, after the USER's. Inert unless part 4 is on.
+static bool EdfRouteAuraPermsOn()
+{
+    static const bool env = EnvOn("MTG_EDF_ROUTE_AURA_PERMS", true);   // DEFAULT ON; =0 -> the USER's order only
+    return heurarm::Flag(heurarm::EDF_ROUTE_AURA_PERMS, env);
+}
+// PROPOSED, default OFF (it reverses the USER-approved "Living Wish > Eladamri's Call"; the USER decides):
+// the library tutor before the sideboard-only Wish. Read inside part 1's ranks only.
+static bool EdfTutorLibraryFirstOn()
+{
+    static const bool env = EnvOn("MTG_EDF_TUTOR_LIBRARY_FIRST");   // DEFAULT OFF; =1 -> Call before Wish
+    return heurarm::Flag(heurarm::EDF_TUTOR_LIBRARY_FIRST, env);
+}
 
 namespace comboroute
 {
@@ -31767,6 +31787,11 @@ struct Ctx
     // one that already failed and Run skips it).
     bool        loop_untapper = false;
     bool        loop_untapper_fired = false;
+    // MTG_EDF_ROUTE_AURA_PERMS's attempts only (see Run): `aura_order` is a priority over the distinct
+    // land-Aura names in hand when the route started (empty = the USER's order, part 4); `aura_order_fired`
+    // records that it picked a different Aura than the USER's order would (else the attempt is a repeat).
+    std::vector<std::string> aura_order;
+    bool        aura_order_fired = false;
     int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
     std::string blink_label;
     std::string log;
@@ -32678,7 +32703,7 @@ static int AvailableTotal(const Ctx& cx)
 // first; Overgrowth's {G}{G} cannot pay Trace's {R/W}). Lowest CastOrderRank, the name the last
 // tie-break, so the go-off turn plays the order the rest of the deck plays instead of "any-colour
 // first, then hand order", which nobody chose. =0 restores that.
-static int PickDeployAura(const Ctx& cx, const Hand& h)
+static int PickDeployAura(Ctx& cx, const Hand& h)
 {
     const Player& ap = cx.s.players[cx.me];
     int pick = h.auras.front();
@@ -32695,6 +32720,22 @@ static int PickDeployAura(const Ctx& cx, const Hand& h)
             if (best_d == nullptr || r < best_rank
                 || (r == best_rank && d->card.m_name.str() < best_d->card.m_name.str()))
             { best_rank = r; best_d = d; pick = i; }
+        }
+        // PART 4b (MTG_EDF_ROUTE_AURA_PERMS): one of Run's later attempts names another priority over
+        // the Auras (cx.aura_order); the USER's order above is the attempt that always runs first.
+        if (!cx.aura_order.empty())
+        {
+            int best_pos = 1 << 20, alt = pick;
+            for (int i : h.auras)
+            {
+                const CardDefinition* d = DefOf(ap.hand[i]);
+                if (!d) { continue; }
+                const auto it = std::find(cx.aura_order.begin(), cx.aura_order.end(), d->card.m_name.str());
+                const int pos = it == cx.aura_order.end() ? (1 << 19) : static_cast<int>(it - cx.aura_order.begin());
+                if (pos < best_pos) { best_pos = pos; alt = i; }
+            }
+            if (DefOf(ap.hand[alt]) != best_d) { cx.aura_order_fired = true; }
+            pick = alt;
         }
         return pick;
     }
@@ -33141,32 +33182,101 @@ inline bool BoardDeployOn()
 }
 constexpr int kRunUnforced = -2;   // Run's `forced`: no replay pinned (-1 pins the board loop itself)
 
-static const char* AttemptName(int attempt)
+// THE DEPLOY ATTEMPTS, in the order Run tries them. 0 / 1 are the two deploy orders (Auras first / last).
+// 2 / 3 (MTG_EDF_ROUTE_LOOP_UNTAPPER, part 5) are 0 / 1 with DeployPieces' second-untapper LOOP rule armed.
+// After those (MTG_EDF_ROUTE_AURA_PERMS, part 4b) come the OTHER orders of the distinct land Auras in hand,
+// Auras first, each without and then with the loop rule: the USER's Aura order (part 4) is always the
+// first one tried, and another order runs only when every earlier attempt failed to KILL. Every extra
+// attempt runs only when its rule actually changed the deploy (otherwise it repeats one that failed),
+// so they can add a kill and can never displace one. Both levers =0 -> attempts 0 / 1, byte-identical.
+struct Attempt
 {
-    switch (attempt)
+    bool                     auras_first = true;
+    bool                     loop        = false;
+    std::vector<std::string> aura_order;   // empty = the USER's order
+};
+static std::string AttemptName(const std::vector<Attempt>& at, int i)
+{
+    const Attempt& a = at[static_cast<std::size_t>(i)];
+    std::string n = std::string(1, static_cast<char>('A' + std::min(i, 25))) + " (auras "
+                  + (a.auras_first ? "first" : "last") + (a.loop ? ", loop untapper" : "");
+    if (!a.aura_order.empty())
     {
-        case 0:  return "A (auras first)";
-        case 1:  return "B (auras last)";
-        case 2:  return "C (auras first, loop untapper)";
-        default: return "D (auras last, loop untapper)";
+        n += ", aura order";
+        for (const std::string& s : a.aura_order) { n += " " + s; }
     }
+    return n + ")";
 }
-// Deploy attempts 2 / 3 (MTG_EDF_ROUTE_LOOP_UNTAPPER, part 5) are attempts 0 / 1 with DeployPieces'
-// second-untapper LOOP rule armed. They run only after 0 / 1 have failed to KILL, and only when the
-// rule actually changed the deploy (otherwise the attempt is one that already failed), so the rule can
-// add a kill and can never displace one. =0 -> the two attempts, byte-identical.
-static int RunAttempts() { return EdfRouteLoopUntapperOn() ? 4 : 2; }
-static void ArmAttempt(Ctx& cx, int attempt)
+static std::vector<Attempt> RunAttempts(const Ctx& cx)
 {
-    cx.loop_untapper       = attempt >= 2;
+    std::vector<Attempt> at;
+    const bool loop = EdfRouteLoopUntapperOn();
+    at.push_back(Attempt{ true, false, {} });
+    at.push_back(Attempt{ false, false, {} });
+    if (loop)
+    {
+        at.push_back(Attempt{ true, true, {} });
+        at.push_back(Attempt{ false, true, {} });
+    }
+    if (EdfRouteAuraOrderOn() && EdfRouteAuraPermsOn())
+    {
+        // The distinct land Auras in hand, in the USER's order (lowest CastOrderRank, then name).
+        const Player& ap = cx.s.players[cx.me];
+        const DecisionProvider& prov = ResolveProvider(cx.s);
+        std::vector<std::pair<int, std::string>> names;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = DefOf(c);
+            if (!IsLandAura(d)) { continue; }
+            const std::string nm = d->card.m_name.str();
+            bool dup = false;
+            for (const auto& p : names) { if (p.second == nm) { dup = true; break; } }
+            if (!dup) { names.push_back({ prov.CastOrderRank(cx.s, *d), nm }); }
+        }
+        std::sort(names.begin(), names.end());
+        if (names.size() >= 2)
+        {
+            std::vector<std::string> perm;
+            for (const auto& p : names) { perm.push_back(p.second); }
+            const std::vector<std::string> user = perm;
+            // Lexicographic permutations of the rank-sorted list, the identity (the USER's order) skipped;
+            // capped at 5 (all of them for three distinct Auras).
+            int added = 0;
+            std::vector<int> idx(perm.size());
+            for (std::size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
+            while (added < 5 && std::next_permutation(idx.begin(), idx.end()))
+            {
+                std::vector<std::string> o;
+                for (int k : idx) { o.push_back(user[static_cast<std::size_t>(k)]); }
+                at.push_back(Attempt{ true, false, o });
+                if (loop) { at.push_back(Attempt{ true, true, o }); }
+                ++added;
+            }
+        }
+    }
+    return at;
+}
+static void ArmAttempt(Ctx& cx, const Attempt& a)
+{
+    cx.loop_untapper       = a.loop;
     cx.loop_untapper_fired = false;
+    cx.aura_order          = a.aura_order;
+    cx.aura_order_fired    = false;
+}
+// An extra attempt whose rule did not change the deploy repeats one that already failed.
+static bool AttemptIsRepeat(const Ctx& cx, const Attempt& a)
+{
+    if (a.loop && !cx.loop_untapper_fired) { return true; }
+    if (!a.aura_order.empty() && !cx.aura_order_fired) { return true; }
+    return false;
 }
 
 static int Run(Ctx& cx, int forced = kRunUnforced)
 {
     if (RouteWon(cx)) { return 1; }
     const Board b0 = ScanBoard(cx);
-    const int attempts = RunAttempts();
+    const std::vector<Attempt> at = RunAttempts(cx);
+    const int attempts = static_cast<int>(at.size());
     if (b0.outlet != 0 && b0.payload != 0)
     {
         if (!BoardDeployOn() || forced == -1) { cx.attempt_used = -1; return Loop(cx); }
@@ -33184,26 +33294,26 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
         for (int attempt = 0; attempt < attempts; ++attempt)
         {
             if (forced >= 0 && attempt != forced) { continue; }
+            const Attempt& a = at[static_cast<std::size_t>(attempt)];
             RestoreCtx(cx, snapshot, saved);
-            ArmAttempt(cx, attempt);
+            ArmAttempt(cx, a);
             const Snap before = TakeSnap(cx);
-            DeployPieces(cx, /*auras_first=*/attempt % 2 == 0);
+            DeployPieces(cx, a.auras_first);
             // Nothing deployed: this is the loop that already failed above -- do not pay for it twice.
             if (forced < 0 && SameSnap(TakeSnap(cx), before)
                 && cx.s.players[cx.me].lands_played_this_turn
                    == snapshot.players[cx.me].lands_played_this_turn) { continue; }
-            // The loop-untapper rule did not change this deploy: it is attempt 0 / 1 again.
-            if (forced < 0 && attempt >= 2 && !cx.loop_untapper_fired) { continue; }
+            if (forced < 0 && AttemptIsRepeat(cx, a)) { continue; }
             cx.protect_blink = true;
             const int r = Loop(cx);
             cx.protect_blink = false;
             if (r == 1 || (forced >= 0 && r != 0))
             {
-                cx.Dbg(std::string("board deploy ") + AttemptName(attempt) + " kills");
+                cx.Dbg(std::string("board deploy ") + AttemptName(at, attempt) + " kills");
                 cx.attempt_used = attempt;
                 return r;
             }
-            cx.Dbg(std::string("board deploy ") + AttemptName(attempt) + " does not kill");
+            cx.Dbg(std::string("board deploy ") + AttemptName(at, attempt) + " does not kill");
         }
         if (forced >= 0) { return 0; }
         // No deploy kills: the route is what the loop as it stood made of it (no / DEVELOP).
@@ -33214,9 +33324,9 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
     }
     const GameState snapshot = cx.s;
     const Ctx saved = cx;
-    // A DEVELOP from attempt 0 / 1 returns at once when only those two exist. With the loop-untapper
-    // attempts armed it is HELD (and ends attempts 0 / 1 exactly where it used to) while 2 / 3 look
-    // for a KILL, and is restored if neither finds one -- so the outcome differs only where 2 / 3 kill.
+    // A DEVELOP from attempt 0 / 1 returns at once when only those two exist. With later attempts armed
+    // it is HELD (and ends attempts 0 / 1 exactly where it used to) while they look for a KILL, and is
+    // restored if none finds one -- so the outcome differs only where a later attempt kills.
     int                held = 0, held_attempt = -1;
     GameState          held_state;
     std::optional<Ctx> held_ctx;
@@ -33224,18 +33334,19 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
     {
         if (forced >= 0 && attempt != forced) { continue; }
         if (held != 0 && attempt < 2) { continue; }
+        const Attempt& a = at[static_cast<std::size_t>(attempt)];
         if (attempt > 0) { RestoreCtx(cx, snapshot, saved); }
-        ArmAttempt(cx, attempt);
-        if (DeployPieces(cx, /*auras_first=*/attempt % 2 == 0))
+        ArmAttempt(cx, a);
+        if (DeployPieces(cx, a.auras_first))
         {
-            if (forced < 0 && attempt >= 2 && !cx.loop_untapper_fired) { continue; }
+            if (forced < 0 && AttemptIsRepeat(cx, a)) { continue; }
             const int r = Loop(cx);
             if (r == 1 || (r != 0 && (forced >= 0 || attempts == 2)))
             { cx.attempt_used = attempt; return r; }
             if (r == 2 && held == 0)
             { held = 2; held_attempt = attempt; held_state = cx.s; held_ctx.emplace(cx); }
         }
-        else { cx.Dbg(std::string("deploy order ") + AttemptName(attempt) + " leaves no loop"); }
+        else { cx.Dbg(std::string("deploy order ") + AttemptName(at, attempt) + " leaves no loop"); }
     }
     if (held != 0)
     {
@@ -33319,6 +33430,7 @@ static std::uint64_t BoardKey(const GameState& s, int me)
     // The EDF cast-order package's two route levers (parts 4 and 5) change the trial's answer too.
     if (EdfRouteAuraOrderOn())    { Mix(h, 0xA0EA0D3Fu); }
     if (EdfRouteLoopUntapperOn()) { Mix(h, 0x100B0A77u); }
+    if (EdfRouteAuraOrderOn() && EdfRouteAuraPermsOn()) { Mix(h, 0xA0EA9E25u); }   // part 4b
     Mix(h, static_cast<std::uint64_t>(s.turn_number));
     Mix(h, static_cast<std::uint64_t>(me));
     Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life));
@@ -40704,6 +40816,13 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
         }
         if (def.params.tutor_to_hand)
         {
+            // PROPOSED (MTG_EDF_TUTOR_LIBRARY_FIRST, default OFF -- it reverses the USER's approved pair).
+            // The draft called the two tutors' order payment-only; the A/B says otherwise at depth 0: the
+            // second tutor's fetch is chosen after the first resolves, so Wish-first spends the only route
+            // to the sideboard finishers on the piece the Call could have fetched from the library (d0
+            // seed 11320013 gi 12: Wish -> Displacer, Call -> Cloud, no finisher, T6; Call first: Call ->
+            // Displacer, Wish -> Infiltrator, T5). Library tutor first, sideboard Wish last.
+            if (EdfTutorLibraryFirstOn()) { return def.params.wish_from_sideboard ? 21 : 20; }
             const int coloured = mc.white + mc.blue + mc.black + mc.red + mc.green + mc.colorless;
             const int hybrid   = static_cast<int>(mc.hybrid_count);
             const int strict   = coloured > hybrid ? coloured - hybrid : 0;
@@ -40850,7 +40969,25 @@ void EldraziFlickerProvider::ArrangeCastOrder(const GameState& s, const std::vec
 {
     if (order.size() < 2) { return; }
     const bool stack = EdfShroudStackOn();
-    if (stack) { EdfStackShroudLast(acts, order); }
+    if (stack)
+    {
+        std::vector<int> moved = order;
+        EdfStackShroudLast(acts, moved);
+        // PART 3b (MTG_EDF_SHROUD_STACK_PAYS, DEFAULT ON). The legal stack is not always a PAYABLE one:
+        // Overgrowth's bonus is {G}{G}, which cannot pay Trace's {R/W} (the USER's own reason for Trace
+        // first), so on a board whose only {R}/{W} the Overgrowth's cost spends, Overgrowth-then-Trace
+        // casts Overgrowth alone where Trace-then-Overgrowth cast both (the second Aura re-homed at
+        // resolution). The A/B's depth-0 cell lost turns exactly there (seed 11320001 + gi 1199 / 2003 /
+        // 2173). So the move is taken when the moved order pays the way the apply worlds pay it -- the
+        // whole-turn prepay, or cast by cast -- and otherwise the order stays as given: what played
+        // before part 3. =0 moves unconditionally.
+        if (moved != order)
+        {
+            if (!EdfShroudStackPaysOn() || TurnSolver::OrderPrepaysWholeTurn(s, acts, moved)
+                || TurnSolver::OrderPaysSequentially(s, acts, moved))
+            { order.swap(moved); }
+        }
+    }
     if (EdfAuraRangeOn()) { EdfRangeAurasBehindUntappers(s, acts, order, stack); }
 }
 
