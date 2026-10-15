@@ -1,0 +1,24 @@
+{
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "profile": "decks/StompySurprise/StompySurprise.profile.json",
+ "turn": 2,
+ "on_the_play": false,
+ "max_turns": 9,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {"name": "Forest", "controller": 0, "tapped": false},
+  {"name": "Fyndhorn Elves", "controller": 0, "tapped": false, "sick": false}
+ ],
+ "hand": ["Natural Order", "Sol Ring", "Priest of Titania", "Elvish Mystic"],
+ "library_top": ["Forest", "Elvish Archdruid", "Call of the Wild", "Apex Altisaur", "Forest", "Llanowar Elves",
+                 "Turntimber Symbiosis", "Elvish Mystic", "Turntimber Symbiosis", "Vaultborn Tyrant", "Forest",
+                 "Elderscale Wurm", "Worldly Tutor", "Forest", "Natural Order", "Craterhoof Behemoth",
+                 "Forest", "Craterhoof Behemoth"],
+ "library_filler": "Forest",
+ "library_size": 20,
+ "depth": 3,
+ "budget_ms": 0,
+ "expect_win_turn": 3,
+ "_comment": "PROBE (stompy ship gi1526): the T2 board with Elvish Archdruid moved to the T3 draw, so no T2 plan can hold it. Old line: T2 Sol Ring + Priest + Mystic, T3 Archdruid + Natural Order -> Craterhoof."
+}

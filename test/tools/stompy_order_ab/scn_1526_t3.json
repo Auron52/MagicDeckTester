@@ -1,0 +1,28 @@
+{
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "profile": "decks/StompySurprise/StompySurprise.profile.json",
+ "turn": 3,
+ "on_the_play": false,
+ "max_turns": 9,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {"name": "Forest", "controller": 0, "tapped": false},
+  {"name": "Forest", "controller": 0, "tapped": false},
+  {"name": "Sol Ring", "controller": 0, "tapped": false},
+  {"name": "Fyndhorn Elves", "controller": 0, "tapped": false, "sick": false},
+  {"name": "Priest of Titania", "controller": 0, "tapped": false, "sick": false},
+  {"name": "Elvish Mystic", "controller": 0, "tapped": false, "sick": false}
+ ],
+ "hand": ["Elvish Archdruid", "Natural Order"],
+ "library_top": ["Terastodon", "Call of the Wild", "Apex Altisaur", "Forest", "Llanowar Elves",
+                 "Turntimber Symbiosis", "Elvish Mystic", "Turntimber Symbiosis", "Vaultborn Tyrant", "Forest",
+                 "Elderscale Wurm", "Worldly Tutor", "Forest", "Natural Order", "Craterhoof Behemoth",
+                 "Forest", "Craterhoof Behemoth"],
+ "library_filler": "Forest",
+ "library_size": 20,
+ "depth": 3,
+ "budget_ms": 0,
+ "expect_win_turn": 3,
+ "_comment": "PROBE (stompy ship gi1526): the old arm's T3 board. Old line: Archdruid + Natural Order -> Craterhoof, 21 damage."
+}
