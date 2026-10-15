@@ -4892,9 +4892,14 @@ bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
 // children), and an unlimited budget reaches every continuation. A demoted entry whose sibling DOES
 // realise its order lands on the sibling's state and dies in the post-apply dedup for the price of
 // one apply, which is the whole residual cost.
+//
+// DEFAULT OFF WHILE THE USER DECIDES (2026-10-15). It modifies MTG_BP_NEW_ONLY, a rule the USER
+// adopted, and on the held-out A/B it was the only one of the five completeness levers with a deck net
+// above 0 (creature_giving +2, mirrorwing +1, bruna +1, every slower game recovering at stage 1 -- budget
+// churn) at +20-30% units on Mirrorwing / Pirates / Stompy. Measured: docs/design/bp-empty-arm-deferred-site.md.
 static bool BpNewOnlyDemoteOn()
 {
-    static const bool on = EnvOn("MTG_BP_NEW_ONLY_DEMOTE", true);   // DEFAULT ON; =0 deletes as before
+    static const bool on = EnvOn("MTG_BP_NEW_ONLY_DEMOTE");   // DEFAULT OFF (USER decision); =1 demotes
     return heurarm::Flag(heurarm::BP_NEW_ONLY_DEMOTE, on);
 }
 
