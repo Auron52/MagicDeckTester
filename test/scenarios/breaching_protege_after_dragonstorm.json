@@ -1,0 +1,58 @@
+{
+  "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "active_life": 20,
+  "opponent_life": 12,
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "library_top": [
+    "Boarding Party",
+    "Boarding Party"
+  ],
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 7,
+  "_comment": "The USER-APPROVED BreachingDragonstorm cast order (2026-10-14, MTG_BREACH_ORDER): Sakashima's Protege LAST, because it enters as a copy of a permanent that entered this turn -- every earlier cast only adds copy targets. Eleven lands, hand Sakashima's Protege + Breaching Dragonstorm (Protege FIRST in hand), the top two cards Boarding Party. Dragonstorm first: its ETB walk free-casts the top Boarding Party (6/3 haste); then Protege (its own cascade finds nothing below MV 6) enters as a copy of an entrant (the heuristic copies the 6-power Boarding Party) -- 12 hasty power = lethal on T6. Every card in the deck is ORDER-OPAQUE, so before the order the set cast in plan (= hand) order: Protege first, with nothing to copy, and only one Boarding Party connects (T7; MTG_BREACH_ORDER=0 reproduces it). DEPTH 0 ON PURPOSE: at depth > 0 (d3 b200 and d5 b0 both measured 2026-10-15) the search casts in the new order too but its own line predicts the Protege entering UNCOPIED (6 damage, T7) -- a separate copy-choice finding, docs/design/soldiers-breaching-cast-order-2026-10-15.md, not the order. Draft: docs/design/cast-order-drafts-2026-10-14/BreachingDragonstorm.md section 4.2.",
+  "battlefield": [
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Sakashima's Protege",
+    "Breaching Dragonstorm"
+  ],
+  "expect_win_turn": 6
+}

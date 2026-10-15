@@ -641,6 +641,17 @@ public:
     // NOT prefix-stable while the buckets are on (the land tie-break reads the HELD payoffs, and a filter
     // loses its feeder when the last other land goes), so a multi-card cleanup is re-ranked per shed.
     bool CleanupDiscardShedStable() const override;
+    // MTG_BREACH_ORDER -- the USER-APPROVED TOTAL cast order (2026-10-14, docs/design/cast-order-review-
+    // 2026-10-14.md "BreachingDragonstorm -- SETTLED"; measured in docs/design/soldiers-breaching-cast-
+    // order-2026-10-15.md): land > Breaching Dragonstorm > Boarding Party > Annoyed Altisaur > Maelstrom
+    // Wanderer > Creative Technique > Call Forth the Tempest > Sakashima's Protege, all main 1. Every
+    // nonland card here is ORDER-OPAQUE (cascade, Creative Technique, Breaching Dragonstorm's walk), so
+    // the rank is read only because OrderOpaqueCastsByRank opts in; a rank tie between two different
+    // cards goes to the NAME. DEFAULT ON; =0 => DeckProvider (plan = hand order) byte-for-byte.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        OrderOpaqueCastsByRank() const override;
+    bool        CastOrderTotalByName() const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
