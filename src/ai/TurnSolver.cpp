@@ -35746,7 +35746,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // so the d0 runner and the horizon playouts can play the line the in-window search now finds.
         const auto range_rescue = [&]() -> bool
         {
-            if (!untap_credit || !EdfAuraRangeOn()) { return false; }
+            if (!untap_credit || !EdfAuraRangeSolveOn()) { return false; }   // part 2b
             bool aura = false, untapper = false;
             thread_local std::vector<int> rk, arr;
             rk.clear();

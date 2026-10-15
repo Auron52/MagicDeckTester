@@ -472,6 +472,11 @@ enum Slot : int
     EDF_SHROUD_STACK,         // MTG_EDF_SHROUD_STACK       part 3: a shroud land Aura (Trace) goes behind every other land Aura sharing its HOST, so Overgrowth-then-Trace on one land is legal again
     EDF_ROUTE_AURA_ORDER,     // MTG_EDF_ROUTE_AURA_ORDER   part 4: the COMBO OFF route deploys land Auras in the cast order, not any-colour first then hand order
     EDF_ROUTE_LOOP_UNTAPPER,  // MTG_EDF_ROUTE_LOOP_UNTAPPER part 5: the COMBO OFF route casts a second untapper whose LOOP nets more, even when its cast refund is below its cost
+    // Amendments found by the package's A/B (root causes in docs/design/edf-cast-order-2026-10-14.md):
+    EDF_SHROUD_STACK_PAYS,    // MTG_EDF_SHROUD_STACK_PAYS  part 3b: the same-host move is taken only when the moved order pays (else the order as given: the second Aura is re-homed, as before part 3)
+    EDF_ROUTE_AURA_PERMS,     // MTG_EDF_ROUTE_AURA_PERMS   part 4b: when the route's deploy in the USER's Aura order kills nothing, it tries the other Aura orders (the USER's always first)
+    EDF_AURA_RANGE_SOLVE,     // MTG_EDF_AURA_RANGE_SOLVE   part 2b: Solve's (d0 runner + horizon playouts) rescue of a range-arranged subset; =0 keeps part 2 in the window and the applies only
+    EDF_TUTOR_LIBRARY_FIRST,  // MTG_EDF_TUTOR_LIBRARY_FIRST PROPOSED (default OFF, a USER decision): Eladamri's Call before Living Wish -- the sideboard-only Wish goes last, so the library tutor fills the shared need first
     COUNT
 };
 
@@ -896,6 +901,10 @@ inline const char* Name(int slot)
         "MTG_EDF_SHROUD_STACK",
         "MTG_EDF_ROUTE_AURA_ORDER",
         "MTG_EDF_ROUTE_LOOP_UNTAPPER",
+        "MTG_EDF_SHROUD_STACK_PAYS",
+        "MTG_EDF_ROUTE_AURA_PERMS",
+        "MTG_EDF_AURA_RANGE_SOLVE",
+        "MTG_EDF_TUTOR_LIBRARY_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

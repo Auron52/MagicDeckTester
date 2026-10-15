@@ -760,6 +760,14 @@ inline bool EdfAuraRangeOn()
     static const bool env_on = EnvOn("MTG_EDF_AURA_RANGE", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::EDF_AURA_RANGE, env_on);
 }
+// MTG_EDF_AURA_RANGE_SOLVE (part 2b; DEFAULT ON, inert unless MTG_EDF_AURA_RANGE is on): Solve's rescue of
+// a subset the range arranges (the d0 runner and the horizon playouts). =0 keeps the range in the search
+// window and the two applies only -- the split the A/B uses to attribute part 2 by where it acts.
+inline bool EdfAuraRangeSolveOn()
+{
+    static const bool env_on = EnvOn("MTG_EDF_AURA_RANGE_SOLVE", true);   // DEFAULT ON; =0 disables
+    return EdfAuraRangeOn() && heurarm::Flag(heurarm::EDF_AURA_RANGE_SOLVE, env_on);
+}
 
 // MTG_IRENCRAG_WASTE -- ADOPTED DEFAULT-ON 2026-09-01 (USER: "let's adopt the Irencrag gate");
 // `=0` restores the old behaviour. Adoption evidence, paired 1200x2 at play settings (d5/20ms),
