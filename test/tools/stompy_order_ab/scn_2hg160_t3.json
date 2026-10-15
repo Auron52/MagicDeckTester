@@ -1,0 +1,50 @@
+{
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "profile": "decks/StompySurprise/StompySurprise.profile.json",
+ "turn": 3,
+ "on_the_play": false,
+ "max_turns": 9,
+ "active_life": 27,
+ "opponent_life": 30,
+ "opponent_heads": 2,
+ "battlefield": [
+  {
+   "name": "Turntimber, Serpentine Wood",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Priest of Titania",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Priest of Titania",
+  "Worldly Tutor",
+  "Natural Order",
+  "Fyndhorn Elves"
+ ],
+ "library_top": [
+  "Natural Order",
+  "Forest",
+  "Forest",
+  "Forest",
+  "Craterhoof Behemoth",
+  "Ghalta, Stampede Tyrant",
+  "Craterhoof Behemoth",
+  "Elderscale Wurm",
+  "Forest"
+ ],
+ "library_filler": "Forest",
+ "library_size": 25,
+ "depth": 3,
+ "budget_ms": 0,
+ "_comment": "PROBE (stompy2hg ship gi160): the base arm's T3 board. Base line: Priest + Fyndhorn + Worldly Tutor (Craterhoof to the top), T4 Natural Order x2 (Ghalta puts the drawn Craterhoof; the second Craterhoof), lethal vs 30."
+}
