@@ -274,7 +274,16 @@ def main():
     if trust is not None:
         print("  (trusted at V%d%s -- trust depth is a CANDIDATE, not a short-circuit; see burn)"
               % (trust, " <= play depth" if trust <= play_d else " > play depth"))
-    cands = [(1, 3), (2, 3), (3, 3), (3, 20)]
+    # BUDGET-1 ARMS AND THE SHIPPED CONTRACT (USER, 2026-10-15: "Phase F should have the option to choose
+    # something like that"). Snow's keep table was generated at d2 b1 -- the setting that made its ~227 h
+    # run affordable at all -- and a 2026-10-15 re-derivation proposed d2 b3 (~1.27x per rollout) only
+    # because b1 was not on this menu. b1 is the cheapest budget a SEARCHED labeller runs at (d0 is the
+    # measured cliff), so every depth tried at b3 is also tried at b1. And the deck's CURRENT mull_gen_*
+    # pair is always a candidate, so phase F can never replace a setting it did not measure.
+    cands = [(1, 1), (2, 1), (3, 1), (1, 3), (2, 3), (3, 3), (3, 20)]
+    cur = (vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms"))
+    if all(isinstance(x, int) and x > 0 for x in cur):
+        cands.append(cur)
     if trust is not None:
         # A BUDGET LADDER at the trust depth, not just b3 and play_b (USER, 2026-09-08: "trust at 5
         # means we seriously consider d5 b20 or equivalent"). Reaching the leaf TERMINATES the
