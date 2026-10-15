@@ -1044,6 +1044,9 @@ public:
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     const char* CastOrderTierName(int rank) const override;
     bool CastOrderTotalByName() const override;
+    // MTG_BURN_BLOOD_FIRST (PROPOSED amendment, OFF): Searing Blood one slot earlier -- before Searing
+    // Blaze -- when Blood alone cannot kill its target (see the definition for both measured boards).
+    int  CastOrderActionRank(const GameState& s, const Action& a, int rank) const override;
     bool OrderOpaqueCastsByRank() const override;
     bool SacLandCastsInOrder() const override;
     int  LandPlanTieKey(const GameState& s, const std::vector<Action>& acts, bool plays_land,

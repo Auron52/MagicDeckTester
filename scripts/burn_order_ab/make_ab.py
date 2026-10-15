@@ -171,8 +171,15 @@ def analyse(dbase, dnew):
                 slow = [g for g in gis if dd[g] > 0]
                 ma = sum(w[g] for g in gis) / len(gis)
                 mb = sum(base[g] for g in gis) / len(gis)
-                ur = un[(deck, cell, arm)] / ub[(deck, cell, "old")] if ub[(deck, cell, "old")] else 0.0
-                mr = msn[(deck, cell, arm)] / msb[(deck, cell, "old")] if msb[(deck, cell, "old")] else 0.0
+                # Work is paired by CHUNK: only the chunks both sides ran (the base ran the full sizes).
+                chunks = [nm.split(".")[3] for nm in rn if nm.startswith("%s.%s.%s." % (deck, cell, arm))]
+                pu = [(rn["%s.%s.%s.%s" % (deck, cell, arm, c)], rb.get("%s.%s.old.%s" % (deck, cell, c)))
+                      for c in chunks]
+                pu = [(x, y) for x, y in pu if y is not None]
+                bu = sum(y["units"] for _, y in pu)
+                bm = sum(y["ms"] for _, y in pu)
+                ur = sum(x["units"] for x, _ in pu) / bu if bu else 0.0
+                mr = sum(x["ms"] for x, _ in pu) / bm if bm else 0.0
                 pr("%-8s %-5s %-6s %6d %8.4f %8.4f %6d %6d %+6d %8.3f %8.3f" % (
                     deck, cell, arm, len(gis), ma, mb, len(fast), len(slow), sum(dd.values()), ur, mr))
                 for g in slow:

@@ -183,20 +183,31 @@ TEST_CASE("burn order: the USER's total order, by params with a name tie-break, 
           == std::vector<std::string>({ kGG, kSS, kBolt, kBolt, kVolley, kEid }));
 }
 
-TEST_CASE("burn order, the PROPOSED amendment MTG_BURN_BLOOD_FIRST: Searing Blood before Searing Blaze")
+TEST_CASE("burn order, the PROPOSED amendment MTG_BURN_BLOOD_FIRST: Searing Blood before Searing Blaze only when Blood alone cannot kill")
 {
-    const GameState s = BurnState({}, 3, {}, 20, 4, 30, true);
     Pin o(heurarm::BURN_ORDER, true);
+    auto with_opp = [](const char* body, int salt)
+    {
+        GameState s = BurnState({}, 3, {}, 20, 4, salt, true);
+        PutB(s, body, 90);
+        s.battlefield.back().controller_index = 1;
+        s.battlefield.back().owner_index = 1;
+        return s;
+    };
+    const GameState big   = with_opp("Boros Reckoner", 30);   // a 3/3: Blood alone does not kill it
+    const GameState small = with_opp(kGG, 31);                // a 2/2: Blood alone kills it
+    const GameState none  = BurnState({}, 3, {}, 20, 4, 32, true);
+    const std::vector<std::string> blood_first = { kGG, kSS, kBolt, kVolley, kBlood, kBlaze, kSkull, kLuts, kEid };
+    std::vector<std::string> rev(kUserOrder.rbegin(), kUserOrder.rend());
     {
         Pin b(heurarm::BURN_BLOOD_FIRST, true);
-        CHECK(ProvB().CastOrderRank(s, DefB(kBlood)) == 23);
-        const std::vector<std::string> want = { kGG, kSS, kBolt, kVolley, kBlood, kBlaze, kSkull, kLuts, kEid };
-        std::vector<std::string> h(kUserOrder.rbegin(), kUserOrder.rend());
-        CHECK(Realised(s, h) == want);
-        CHECK(Realised(s, kUserOrder) == want);
+        CHECK(Realised(big, rev) == blood_first);
+        CHECK(Realised(big, kUserOrder) == blood_first);
+        CHECK(Realised(small, rev) == kUserOrder);   // Blaze first: Blood can still pump our own Swiftspear
+        CHECK(Realised(none, rev) == kUserOrder);
     }
     Pin b(heurarm::BURN_BLOOD_FIRST, false);
-    CHECK(Realised(s, { kBlood, kBlaze }) == std::vector<std::string>({ kBlaze, kBlood }));   // the USER's list
+    CHECK(Realised(big, rev) == kUserOrder);          // the USER's list, verbatim
 }
 
 TEST_CASE("burn order OFF: the generic tiers, Shard Volley trails, ties keep plan order (the control)")
