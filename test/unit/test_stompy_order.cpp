@@ -369,3 +369,82 @@ TEST_CASE("Stompy order: the shared comparator's fixed key -- by name for this d
     CHECK_FALSE(CastOrderLess(g, em, ll));   // a tie: stable, plan order decides
     CHECK_FALSE(CastOrderLess(g, ll, em));
 }
+
+// ---- MTG_HOLD_RELEASE_YIELD: the prepay hold ladder is position-free and spends Priest first ------
+//
+// StompySurprise gi1526 T3 (docs/design/stompy-order-2026-10-14.md §4): Forest x2, Sol Ring, Fyndhorn
+// Elves, Elvish Mystic, Priest of Titania untapped; the line is Elvish Archdruid + Natural Order (7 mana,
+// Priest the sacrifice). The kill needs both 1/1 elves UNTAPPED to attack: the lands + Sol Ring pay 4 and
+// Priest's tap the other 3. The historical ladder held ONE attacker (the lowest battlefield index among
+// the equal-power bodies) before it tried holding two, so with Priest entered after both 1-drops a 1/1
+// paid instead of Priest.
+namespace
+{
+GameState HoldBoardSo(const std::vector<std::string>& creatures_in_order)
+{
+    EnsureCardsSo();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.players[0].life = s.players[1].life = gamesetup::StartingLife();
+    s.players[0].lands_played_this_turn = 1;
+    s.m_provider = &ProvSo();
+    int num = 300;
+    auto put = [&](const std::string& n)
+    {
+        Permanent p;
+        p.card             = DefSo(n).card;
+        p.card.m_number    = num++;
+        p.controller_index = 0;
+        p.owner_index      = 0;
+        s.battlefield.push_back(p);
+    };
+    put("Forest"); put("Forest"); put("Sol Ring");
+    for (const std::string& c : creatures_in_order) { put(c); }
+    s.players[0].hand.push_back(CardSo(kArch, 10));
+    s.players[0].hand.push_back(CardSo(kNO, 11));
+    for (int k = 0; k < 20; ++k) { s.players[0].library.push_back(CardSo("Forest", 900 + k)); }
+    return s;
+}
+
+int NumberOfSo(const GameState& s, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return p.card.m_number; } }
+    return 0;
+}
+
+bool TappedSo(const GameState& s, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return p.tapped; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): the prepay keeps both 1/1 elves up and spends Priest, wherever it sits")
+{
+    const std::vector<std::vector<std::string>> orders = {
+        { kFyndhorn, kMystic, kPriest },   // Priest after both 1-drops: the historical ladder tapped one
+        { kMystic, kFyndhorn, kPriest },
+        { kPriest, kFyndhorn, kMystic },
+        { kMystic, kPriest, kFyndhorn },
+        { kFyndhorn, kPriest, kMystic } };
+    for (const bool fix : { true, false })
+    {
+        heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = fix ? 1 : 0;
+        bool every_order_keeps_both = true;
+        for (const auto& ord : orders)
+        {
+            CAPTURE(fix); CAPTURE(ord[0]); CAPTURE(ord[1]); CAPTURE(ord[2]);
+            GameState s = HoldBoardSo(ord);
+            std::vector<Action> acts = { CastSo(s, kArch), CastSo(s, kNO, kHoof) };
+            acts[1].soulfire_own_targets = NumberOfSo(s, kPriest);   // Priest is the sacrifice
+            REQUIRE(TurnSolver::BatchPrepayMainCasts(s, acts));
+            const bool both_up = !TappedSo(s, kFyndhorn) && !TappedSo(s, kMystic);
+            if (fix) { CHECK(both_up); CHECK(TappedSo(s, kPriest)); }
+            every_order_keeps_both = every_order_keeps_both && both_up;
+        }
+        // Off: the historical ladder spends an attacker in at least one battlefield order (the defect).
+        if (!fix) { CHECK_FALSE(every_order_keeps_both); }
+    }
+    heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
+}
