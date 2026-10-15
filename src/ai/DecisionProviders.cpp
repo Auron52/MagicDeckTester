@@ -21286,6 +21286,89 @@ void AngelsProvider::ArrangeCastOrder(const GameState& s, const std::vector<Acti
     { order.swap(hoisted); }
 }
 
+// ---- AngelsProvider: the PROPOSED searched Giada order (MTG_ANGELS_GIADA_SEARCH, default OFF) ------
+//
+// WHY A SEARCHED PAIR AND NOT A RULE. The A/B's slower games that recover at no budget lose Giada's +1/+1
+// counters to an Angel the USER's order puts ahead of her (Righteous Valkyrie with no engine: angels d3
+// gi873, angels2hg d3 gi2425; Lyra AoD at one converter: angels2hg d3 gi1165). The deterministic rule
+// that fixes them (MTG_ANGELS_GIADA_FIRST) breaks three OTHER games (angels ship gi3574, d3 gi349 / gi3554)
+// where Righteous-first's 2 life is what crosses its own +7 anthem a turn later. Neither order dominates,
+// so the honest shape is to let the search see both: the cast-ordering search (WantsCastOrderingSearch)
+// applies each candidate ordering on a copy, dedups by end state and scores what survives. The USER's
+// order stays the canonical first candidate, and every set without the pair returns NO candidates, so the
+// enumerator keeps its plan exactly as before (no extra apply, no searched_order flag).
+namespace
+{
+bool AngelsGiadaSearchEnabled()
+{
+    static const bool on = EnvOn("MTG_ANGELS_GIADA_SEARCH", false);   // DEFAULT OFF (proposed)
+    return heurarm::Flag(heurarm::ANGELS_GIADA_SEARCH, on);
+}
+}   // namespace
+
+bool AngelsProvider::WantsCastOrderingSearch() const { return AngelsGiadaSearchEnabled(); }
+
+bool AngelsProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                            const std::vector<Action>& reorder,
+                                            std::vector<std::vector<int>>& out) const
+{
+    out.clear();
+    if (!AngelsGiadaSearchEnabled() || !AngelsOrderEnabled()) { return true; }   // empty: keep the plan
+    // pa[j] = the plan_actions index of reorder[j] (the enumerator builds `reorder` in that order).
+    std::vector<int> pa;
+    for (int ai = 0; ai < static_cast<int>(plan_actions.size()); ++ai)
+    {
+        const Action& a = plan_actions[static_cast<std::size_t>(ai)];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { pa.push_back(ai); }
+    }
+    if (pa.size() != reorder.size() || pa.size() < 2) { return true; }
+    auto slot_of = [&](int ai) -> int
+    {
+        const CardDefinition* d = AngelsActionDef(plan_actions[static_cast<std::size_t>(ai)]);
+        return d != nullptr ? (CastOrderRank(s, *d) >> kAngSlotShift) : 0;
+    };
+    auto ahead_of_giada = [](int slot)
+    { return slot == kAngEnterToughLife || slot == kAngTeamEngine || slot == kAngAngelEngine; };
+    bool giada = false, ahead = false;
+    for (int ai : pa)
+    {
+        const int sl = slot_of(ai);
+        giada = giada || sl == kAngEnterCounters;
+        ahead = ahead || ahead_of_giada(sl);
+    }
+    if (!giada || !ahead) { return true; }
+    // The USER's order exactly as both apply worlds realise a clean set: rank sort, the set arrangement
+    // (caveats a/b), the payable-order fallback -- over plan_actions, so caveat (a) sees the plan's Equip.
+    std::vector<int> ord = pa;
+    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+    { return CastOrderLess(s, plan_actions[static_cast<std::size_t>(x)], plan_actions[static_cast<std::size_t>(y)]); });
+    ApplyDeckCastArrangement(s, plan_actions, ord);
+    ApplyPayableCastOrder(s, plan_actions, ord);
+    std::vector<int> canon;
+    canon.reserve(ord.size());
+    for (int ai : ord)
+    {
+        for (std::size_t j = 0; j < pa.size(); ++j) { if (pa[j] == ai) { canon.push_back(static_cast<int>(j)); break; } }
+    }
+    if (canon.size() != pa.size()) { return true; }
+    // The alternative: Giada moved ahead of the first of those Angels still ahead of her.
+    int g = -1, f = -1;
+    for (int k = 0; k < static_cast<int>(canon.size()); ++k)
+    {
+        const int sl = slot_of(pa[static_cast<std::size_t>(canon[static_cast<std::size_t>(k)])]);
+        if (sl == kAngEnterCounters && g < 0) { g = k; }
+        if (ahead_of_giada(sl) && f < 0 && g < 0) { f = k; }
+    }
+    if (g < 0 || f < 0) { return true; }   // she already precedes them (the Greaves hoist): nothing to try
+    std::vector<int> alt = canon;
+    const int gi = alt[static_cast<std::size_t>(g)];
+    alt.erase(alt.begin() + g);
+    alt.insert(alt.begin() + f, gi);
+    out.push_back(std::move(canon));
+    out.push_back(std::move(alt));
+    return true;
+}
+
 // ---- AngelsProvider: the narrow Giada second main (USER 2026-10-14) ----------------------------
 //
 // USER, 2026-10-14: "I agree, though, that the second main is potentially wanted here. It would be

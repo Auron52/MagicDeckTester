@@ -565,6 +565,15 @@ public:
     // one {W} can fund one of them, and neither is payable without it). Everything else stays main 1.
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
+    // PROPOSED (MTG_ANGELS_GIADA_SEARCH, default OFF -- the order is the USER's): when Giada and an Angel
+    // the USER's order puts ahead of her (Righteous Valkyrie, Archangel of Thune, Lyra AoD) are cast in
+    // the same set, the search tries BOTH orders -- the USER's (canonical, first) and Giada moved ahead of
+    // them -- and keeps the better end state. Neither order dominates (counters vs life thresholds); see
+    // docs/design/angels-cast-order-2026-10-14.md. Every other set keeps the canonical order unsearched.
+    bool WantsCastOrderingSearch() const override;
+    bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                const std::vector<Action>& reorder,
+                                std::vector<std::vector<int>>& out) const override;
 };
 
 // Bruna, Light of Alabaster (Bant Auras/Equipment voltron, Glittering Wish sideboard; onboarded

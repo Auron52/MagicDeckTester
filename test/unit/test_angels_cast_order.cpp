@@ -388,6 +388,47 @@ TEST_CASE("Angels order: the PROPOSED Giada-first amendment (MTG_ANGELS_GIADA_FI
     }
 }
 
+TEST_CASE("Angels order: the PROPOSED searched Giada pair (MTG_ANGELS_GIADA_SEARCH)")
+{
+    ArmAO arm(1, 0);
+    auto cands = [](const GameState& s, const TurnSolver::Plan& plan, int on)
+    {
+        heurarm::t_arm[heurarm::ANGELS_GIADA_SEARCH] = static_cast<std::int8_t>(on);
+        std::vector<Action> reorder;
+        for (const Action& a : plan.actions) { if (a.kind == Action::Kind::CastFromHand) { reorder.push_back(a); } }
+        std::vector<std::vector<int>> out;
+        const bool r = Angels().CastOrderingCandidates(s, plan.actions, reorder, out);
+        const bool wants = Angels().WantsCastOrderingSearch();
+        heurarm::t_arm[heurarm::ANGELS_GIADA_SEARCH] = -1;
+        CHECK(r);
+        CHECK(wants == (on == 1));
+        std::vector<std::vector<std::string>> names;
+        for (const auto& o : out)
+        {
+            std::vector<std::string> n;
+            for (int j : o) { n.push_back(reorder[static_cast<std::size_t>(j)].card_name.str()); }
+            names.push_back(n);
+        }
+        return names;
+    };
+    {
+        // The pair: the USER's order first, then Giada ahead of Righteous.
+        const std::vector<std::string> hand = {"Giada, Font of Hope", "Lightstall Inquisitor", "Righteous Valkyrie"};
+        GameState s = BoardAO(30, hand, {"Bishop of Wings"});
+        const auto got = cands(s, CastPlan(s, hand), 1);
+        REQUIRE(got.size() == 2);
+        CHECK(got[0] == std::vector<std::string>{"Righteous Valkyrie", "Giada, Font of Hope", "Lightstall Inquisitor"});
+        CHECK(got[1] == std::vector<std::string>{"Giada, Font of Hope", "Righteous Valkyrie", "Lightstall Inquisitor"});
+        CHECK(cands(s, CastPlan(s, hand), 0).empty());   // lever off: nothing to search
+    }
+    {
+        // No pair (Lightstall ranks after Giada anyway): no candidates -> the plan is kept unsearched.
+        const std::vector<std::string> hand = {"Giada, Font of Hope", "Lightstall Inquisitor"};
+        GameState s = BoardAO(30, hand);
+        CHECK(cands(s, CastPlan(s, hand), 1).empty());
+    }
+}
+
 TEST_CASE("Angels order: MTG_ANGELS_ORDER=0 is exactly the generic tiers")
 {
     ArmAO arm(0, 0);
