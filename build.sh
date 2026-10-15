@@ -74,6 +74,31 @@ if ! command -v c++ >/dev/null 2>&1 && ! command -v g++ >/dev/null 2>&1; then
   exit 1
 fi
 
+# A LINKED WORKTREE ON THE 9p REPO MOUNT BUILDS ON THE BUILD VOLUME. The repo is a 9p mount of the Windows
+# host folder and has died outright twice (docs/design/repo-mount-failures.md). A binary that lives on it
+# is killed by SIGBUS when a text page cannot be re-read, and every compile pushes its objects through it.
+# The primary checkout's build/ is already a Docker volume (devcontainer.json), so a worktree's build/
+# becomes a symlink into it: build/wt/<worktree>. Only on first build (an existing build/ is left alone),
+# only for a linked worktree, and only when the tree is on 9p while the primary's build/ is not.
+# Builds are recreatable, so nothing is lost if the volume is; sources and artifacts stay in the repo.
+if [ ! -e build ] && [ "$(git rev-parse --git-dir 2>/dev/null)" != "$(git rev-parse --git-common-dir 2>/dev/null)" ] \
+   && command -v findmnt >/dev/null 2>&1 && [ "$(findmnt -n -o FSTYPE -T . 2>/dev/null)" = 9p ]; then
+  primary="$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")"
+  if [ -d "$primary/build" ] && [ "$(findmnt -n -o FSTYPE -T "$primary/build" 2>/dev/null)" != 9p ]; then
+    vol="$primary/build/wt/$(basename "$PWD")"
+    mkdir -p "$vol" && ln -s "$vol" build
+    echo ">>> build/ -> $vol (linked worktree: builds live on the build volume, off the 9p repo mount)"
+  fi
+fi
+# A build dir outside the tree must still find THIS tree's src/ai/data/heuristic_defaults.env: the engine
+# resolves it by walking UP from the binary's real path (HeuristicDefaults.h), which from
+# <primary>/build/wt/<name>/<Config>/ would otherwise reach the PRIMARY checkout's copy -- silently the
+# wrong tree. A `src` link beside the configs makes the walk stop at this tree's file first.
+if [ -L build ]; then
+  bt="$(readlink -f build)"
+  if [ -L "$bt/src" ] || [ ! -e "$bt/src" ]; then ln -sfn "$PWD/src" "$bt/src"; fi
+fi
+
 # PGO+LTO mode: its own single-config tree (build/pgo-work/ -> binaries in build/PGO/), trained on the
 # named decks. Explicit Release type, so it can never be the -O0 tree the guard below exists for.
 # See scripts/build_pgo.sh for the why/how and the SRC_TREE stamp scripts/mullgen.sh checks.

@@ -41,6 +41,8 @@
 
 # Build directories
 build/
+# a linked worktree's build/ is a SYMLINK into the build volume (build.sh); `build/` matches directories only
+/build
 Build/
 build-*/
 

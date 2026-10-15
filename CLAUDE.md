@@ -507,6 +507,14 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     the hand-played references it saved were lost with the container. The viewer now refuses to
     start from a temporary root (`c7487fb9`), but that guard covers the viewer only -- a worktree
     holding unpushed commits or uncommitted edits under `/tmp` is just as exposed.
+  * **Recreatable output goes on the build VOLUME; everything persistent STAYS on the Windows drive
+    (USER ruling 2026-10-15, after the 9p mount died twice).** `build.sh` makes a worktree's `build/` a
+    symlink into `<primary>/build/wt/<worktree>` on its first build, so binaries cannot SIGBUS and
+    compiles stay off 9p. Long ad-hoc batches run staged on the volume via `scripts/vol_stage.py`;
+    `--publish logs/<dir>` copies the results back where the user can see them. The repo, references and
+    generation artifacts (value-leaf queues, keep journals) stay on the Windows drive -- do NOT propose
+    moving them (*"I lost references to that before so I would rather persist the changes"*). See
+    `docs/design/repo-mount-failures.md`.
   * **Clean up occasionally, but only what has NOTHING TO ADD** (the user's words: *"we probably do
     want to occasionally clean them up if there are old outdated worktrees with nothing to add"*).
     `python3 scripts/worktree_audit.py` is the test, made explicit: a worktree is STALE only when it
