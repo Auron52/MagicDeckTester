@@ -1,0 +1,88 @@
+{
+  "_comment": [
+    "Landfall 2026-10-15: the land in the MIDDLE of the cast sequence (Plan::land_slot k >= 1). Seven",
+    "Forests and four OLD (non-sick) 0/1 Plant tokens, hand Avenger of Zendikar + Lava Spike + Mountain,",
+    "opponent at 7. Exact lethal T6 needs the Mountain BETWEEN the two casts: cast Avenger (the seven",
+    "Forests), play the Mountain (Avenger's landfall: a +1/+1 counter on every Plant, the four old ones",
+    "swing for 4), then Lava Spike off the Mountain (3). Land-first: Avenger enters after the land, no",
+    "counter, 3 damage. Land after ALL casts: no red for Lava Spike, 4 damage. So the T6 win is only the",
+    "mid-sequence position, applied lockstep by both worlds (the slot hooks in ApplyPlanDirect's",
+    "apply_plan_actions and AIEngine::TakeTurn's main cast loops)."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 7,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [
+    "Avenger of Zendikar",
+    "Lava Spike",
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "expect_win_turn": 6
+}

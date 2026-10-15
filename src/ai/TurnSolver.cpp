@@ -16710,7 +16710,10 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // (and so are two target ranks), and a fingerprint that cannot tell them apart re-steals the
     // decision the axis exists to give the search. Gated on the non-default value, so every plan of
     // every deck without a landfall card keeps its exact prior fingerprint.
-    if (p.land_after_casts)            { fold(0x4C41465445ull); }   // "LAFTE"
+    // The POSITION (Plan::land_slot): -1 folds exactly what the old land_after_casts bool folded; a
+    // mid-sequence position k folds its own value.
+    if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { fold(0x4C41465445ull); }   // "LAFTE"
+    else if (p.land_slot > 0) { fold(0x4C534C4F54ull); fold(static_cast<uint64_t>(p.land_slot)); }   // "LSLOT"
     // ...and the land's SOURCE ZONE (Courser of Kruphix's top vs a hand copy): the same must-fold.
     if (p.land_from_top)               { fold(0x4C544F50ull); }       // "LTOP"
     if (p.landfall_target_choice >= 0) { fold(static_cast<uint64_t>(p.landfall_target_choice + 2) * 89); }
@@ -16991,7 +16994,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
 {
     return p.actions.empty() && p.breakpoint_actions.empty()
         && p.land_decided && p.land_to_play.empty() && p.fetch_target.empty()
-        && p.land_face.empty() && !p.land_after_casts && !p.land_from_top
+        && p.land_face.empty() && p.land_slot == 0 && !p.land_from_top
         && p.landfall_target_choice == -1
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.bounce_choice == -1
@@ -19428,6 +19431,26 @@ bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinitio
         // Site 6 -- state-keyed, because the draw belongs to the WATCHER (Puresteel Paladin), not
         // to the Equipment resolving here.
         || TurnSolver::EquipmentDrawBreakpoint(state, def);
+}
+
+bool TurnSolver::PutsLandfallWatcher(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+        && a.kind != Action::Kind::ActivateVial) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents);
+}
+
+void TurnSolver::LandSlotWatchersFirst(const std::vector<Action>& acts, std::vector<int>& order)
+{
+    std::stable_partition(order.begin(), order.end(),
+                          [&acts](int i) { return PutsLandfallWatcher(acts[static_cast<std::size_t>(i)]); });
+}
+
+bool TurnSolver::PlanCastsEnumeratedPostDrop(const Plan& p)
+{
+    return p.land_decided && !p.land_to_play.empty() && !p.land_from_top
+        && p.land_slot != kLandSlotAfterCasts;
 }
 
 bool TurnSolver::TopLandNewlyPlayable(int top_snapshot, const GameState& state, bool drop_reserved)
@@ -32957,7 +32980,7 @@ namespace solvememo
             || a.combat_aura_swap_choice != b.combat_aura_swap_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
-            || a.land_after_casts != b.land_after_casts
+            || a.land_slot != b.land_slot
             || a.land_from_top != b.land_from_top
             || a.landfall_target_choice != b.landfall_target_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
@@ -33155,9 +33178,9 @@ static GameState WithPlanLandDrop(const GameState& state, const TurnSolver::Plan
     if (plan.land_to_play.empty()) { return base; }
     static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
     const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
-    // A land-after-casts plan (Plan::land_after_casts) is played after the casts exactly like the
+    // A land played after (any of) the casts (Plan::land_slot != 0) is deferred exactly like the
     // Karoo -- the caller's deferred play handles both.
-    if ((s_karoo_defer && ld && ld->params.etb_bounce_land) || plan.land_after_casts)
+    if ((s_karoo_defer && ld && ld->params.etb_bounce_land) || plan.land_slot != 0)
     {
         if (karoo_out != nullptr) { *karoo_out = plan.land_to_play; }
         return base;
@@ -38256,15 +38279,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     std::string karoo_fetch;
     // Land Auras whose host is the deferred karoo (name, host number), cast right after it lands.
     std::vector<std::pair<std::string, int>> karoo_host_auras;
-    // SEARCHED LAND-AFTER-CASTS (Plan::land_after_casts, 2026-10-15): the SAME deferral as the
-    // Karoo's -- `karoo_deferred` reserves the drop and every breakpoint guard that keys on it
-    // applies unchanged -- but for an ordinary land, which keeps the rest of its land choice: the
-    // face, the rad mode and the searched ETB look (scry_choice) ride to the deferred play. The
-    // Karoo path itself is untouched (a Karoo is ALWAYS deferred and never carries this flag).
-    // Lockstep twin: AIEngine::TakeTurn.
+    // SEARCHED LAND POSITION (Plan::land_slot != 0, 2026-10-15): the SAME deferral as the Karoo's --
+    // `karoo_deferred` reserves the drop and every breakpoint guard that keys on it applies unchanged
+    // -- but for an ordinary land, which keeps the rest of its land choice: the face, the rad mode and
+    // the searched ETB look (scry_choice) ride to the deferred play. The Karoo path itself is
+    // untouched (a Karoo is ALWAYS deferred and never carries a slot). Lockstep twin:
+    // AIEngine::TakeTurn.
     bool        land_after_deferred = false;
     std::string deferred_land_face;
     int         deferred_rad_mode   = -1;
+    // ...and WHERE (Plan::land_slot): k >= 1 plays it right after the k-th landfall-watcher cast of
+    // the plan's OWN cast section (the slot hook in apply_plan_actions, armed for the top-level call
+    // only by land_slot_top_armed), -1 / an unreached k at the after-all-casts point below.
+    int         deferred_land_slot      = 0;
+    int         deferred_watchers_seen  = 0;
+    bool        land_slot_top_armed     = false;
     // ...and the deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix), for the Karoo
     // and the land-after drop alike: a deferred TOP land is played from the top at the deferred
     // point, and if a cast changed the top in between, PlayLandByName refuses it -- in both worlds
@@ -38314,10 +38343,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     karoo_fetch     = plan.fetch_target;
                     karoo_from_top  = plan.land_from_top;
                 }
-                else if (plan.land_after_casts)
+                else if (plan.land_slot != 0)
                 {
-                    // Searched land-after-casts timing (see land_after_deferred above): reserve the
-                    // drop exactly as for a Karoo; the land is played after the main casts.
+                    // Searched land position (see land_after_deferred above): reserve the drop exactly
+                    // as for a Karoo; the land is played after its watcher cast or after the casts.
                     karoo_deferred      = true;
                     land_after_deferred = true;
                     karoo_land_name     = plan.land_to_play;
@@ -38325,6 +38354,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     deferred_land_face  = plan.land_face;
                     deferred_rad_mode   = plan.rad_mode;
                     karoo_from_top      = plan.land_from_top;
+                    deferred_land_slot  = plan.land_slot;
                 }
                 else
                 {
@@ -38362,6 +38392,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             SimulateLandPlay(state);
         }
     }
+
+    // THE DEFERRED (non-Karoo) LAND DROP -- played at its searched position (Plan::land_slot): right
+    // after the k-th landfall-watcher cast (the slot hook in apply_plan_actions) or after all the
+    // casts (below). Carries the rest of the land choice -- face, rad mode, source zone, and the
+    // searched ETB look (scry_choice) / Karoo bounce pin -- exactly as the land-first play does, and
+    // OnLandEntered fires inside the shared land body, so a watcher cast before it sees it enter.
+    // Lockstep with AIEngine::TakeTurn's exec_play_deferred_land.
+    auto play_deferred_land = [&]()
+    {
+        karoo_deferred      = false;
+        land_after_deferred = false;
+        deferred_land_slot  = 0;
+        ScriptedTopChoice    _stc(plan.scry_choice);
+        ScriptedBounceChoice _sbc(plan.bounce_choice);
+        PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode,
+                       karoo_from_top);
+    };
 
     // Deploy creatures via Aether Vial before casting spells so lord effects are live.
     auto apply_vial = [&](const std::string& name)
@@ -41241,6 +41288,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             explicit TruncScope(bool& f) : flag(f), saved(f) { f = false; }
             ~TruncScope() { flag = saved; }
         } _trunc(bp_truncate);
+        // THE LAND-POSITION HOOK (Plan::land_slot >= 1, 2026-10-15). The plan's deferred land is
+        // played right after the k-th landfall-watcher action (TurnSolver::PutsLandfallWatcher) THIS
+        // section dispatches, so every later cast of the section can spend it. Armed for the
+        // TOP-LEVEL plan's section only (land_slot_top_armed, consumed here so a continuation
+        // re-entering this lambda never counts toward the plan's position). `truncated_before`: an
+        // action a partition truncation skipped is not dispatched, so it is not counted (the
+        // executor's loop has already broken out by then -- lockstep). Inert (one bool) for every
+        // plan without a position, i.e. every plan of every deck without a landfall card.
+        const bool slot_top = land_slot_top_armed;
+        land_slot_top_armed = false;
+        auto slot_hook = [&](const Action& a, bool truncated_before)
+        {
+            if (!slot_top || truncated_before) { return; }
+            if (!land_after_deferred || deferred_land_slot <= 0) { return; }
+            if (!TurnSolver::PutsLandfallWatcher(a)) { return; }
+            if (++deferred_watchers_seen == deferred_land_slot) { play_deferred_land(); }
+        };
+        // ...and a position plan's tied-rank watchers go first (TurnSolver::LandSlotWatchersFirst).
+        const bool slot_order = slot_top && land_after_deferred && deferred_land_slot > 0;
         // Indices of sac-land casts already applied by the Spectacle hoist (opaque branch); the
         // trailing sac loop skips them so they are not double-cast. Empty for every plan without a
         // hoisted Spectacle enabler.
@@ -41300,16 +41366,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("vial", a);
+                    const bool tb = bp_truncate;
                     apply_vial(a.card_name);
                     fire_unlock();
+                    slot_hook(a, tb);
                 }
                 else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("cast", a);
                     prep_free(a);
+                    const bool tb = bp_truncate;
                     cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
+                    slot_hook(a, tb);
                 }
                 // ...and the board activation the human put HERE fires here, not in the trailing
                 // pass (Plan::human_action_order). A one-action slice through the SAME dispatcher
@@ -41458,7 +41528,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -41499,6 +41569,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || is_ordered_garth(a) || is_put(a))
                     { ord.push_back(i); }
                 }
+                if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, ord); }   // land position: ties
                 if (OpaqueCastOrderActive(state))
                 {
                     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
@@ -41514,9 +41585,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); continue; }
+                    const bool tb = bp_truncate;
+                    if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     const int dbg_before = dbg_count(a);
                     prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
+                    slot_hook(a, tb);
                     dbg_cast("ord", a, dbg_before);
                 }
             }
@@ -41533,6 +41606,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || is_ordered_garth(acts[i]) || is_put(acts[i]))
                     { order.push_back(i); }
                 }
+                if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, order); }   // land position: ties
                 std::stable_sort(order.begin(), order.end(), [&](int x, int y)
                 { return CastOrderLess(state, acts[x], acts[y]); });
                 // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end
@@ -41548,10 +41622,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); continue; }
+                    const bool tb = bp_truncate;
+                    if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     prep_free(a);
                     cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
+                    slot_hook(a, tb);
                 }
             }
         }
@@ -41562,14 +41638,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
+                const bool tb = bp_truncate;
                 cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                slot_hook(a, tb);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
+                const bool tb = bp_truncate;
                 cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                slot_hook(a, tb);
             }
         }
 
@@ -42635,7 +42715,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // above has already drained them, but the invariant should not depend on that.
     pre_taps_armed = plan.searched_order;
     PlanSoulbondDeclineScope _sbd_top(plan.soulbond_decline);   // Plan::soulbond_decline (executor twin: TakeTurn)
+    land_slot_top_armed = true;   // the plan's land position counts THIS section's casts (consumed at entry)
     apply_plan_actions(plan.actions, plan.searched_order);
+    land_slot_top_armed = false;
     pre_taps_armed   = false;
     human_seq_inline = false;
 
@@ -42766,20 +42848,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // above). Done before the deferred-cantrip re-solve so the drop is taken (lands_played==1)
     // and that re-solve never plays a freshly-revealed land as the drop. AIEngine mirrors this
     // (its Karoo play sits between the main cast loop and the breakpoint replay).
-    if (karoo_deferred && land_after_deferred)
-    {
-        // The SEARCHED land-after-casts drop (Plan::land_after_casts): the plan's casts have all
-        // resolved, so a landfall permanent among them sees this land enter (OnLandEntered fires
-        // inside PlayLandFromHand). Carries the rest of the land choice -- face, rad mode, and the
-        // searched ETB look (scry_choice) -- exactly as the land-first play does. Lockstep with
-        // AIEngine::TakeTurn's deferred play.
-        karoo_deferred      = false;
-        land_after_deferred = false;
-        ScriptedTopChoice    _stc(plan.scry_choice);
-        ScriptedBounceChoice _sbc(plan.bounce_choice);
-        PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode,
-                       karoo_from_top);
-    }
+    // The SEARCHED land-after-ALL-casts drop (Plan::land_slot == -1), or a position-k drop whose k-th
+    // watcher cast never came: the plan's casts have all resolved, so every landfall permanent among
+    // them sees this land enter. Lockstep with AIEngine::TakeTurn's deferred play.
+    if (karoo_deferred && land_after_deferred) { play_deferred_land(); }
     if (karoo_deferred)
     {
         karoo_deferred = false;
@@ -48120,9 +48192,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (p.land_decided)            { sig += "|land="  + p.land_to_play; }
             if (!p.fetch_target.empty())   { sig += "|fetch=" + p.fetch_target; }
             if (!p.land_face.empty())      { sig += "|face="  + p.land_face; }
-            // The land's TIMING and SOURCE are identity too (Plan::land_after_casts / land_from_top):
+            // The land's POSITION and SOURCE are identity too (Plan::land_slot / land_from_top):
             // appended only when set, so every other plan's signature is unchanged.
-            if (p.land_after_casts)        { sig += "|after"; }
+            if (p.land_slot != 0)          { sig += "|at" + std::to_string(static_cast<int>(p.land_slot)); }
             if (p.land_from_top)           { sig += "|top"; }
         }
         return sig;
@@ -51130,9 +51202,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // (all of them today) are byte-identical; the point is that the state mismatch above
                 // is only half the missing information, and the other half is "what else does this
                 // plan do this turn", which the provider currently guesses at.
-                // A land-after-casts plan (Plan::land_after_casts) has NOT played its land when this
+                // A land played after a cast (Plan::land_slot != 0) has NOT played its land when this
                 // tutor resolves, so it is the pre-land state for every post-land read below.
-                const bool land_before_casts = !p.land_to_play.empty() && !p.land_after_casts;
+                const bool land_before_casts = !p.land_to_play.empty() && p.land_slot == 0;
                 const PlanContext pc{ &p.actions, ai, &p.land_to_play,
                                       /*land_done=*/axis_postland && land_before_casts };
                 PlanContextScope _pcs(&pc);
@@ -52327,10 +52399,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         auto build_hmap = [&](const TurnSolver::Plan& p) -> bool
         {
             int drop = -1;
-            // A land-after-casts plan (Plan::land_after_casts) was enumerated on the board WITHOUT
-            // its land played, so its hand indices are the state's own: no drop to remove. Nor does
-            // a library-TOP land (Plan::land_from_top, Courser) ever leave the hand.
-            if (!p.land_to_play.empty() && !p.land_after_casts && !p.land_from_top)
+            // A land-after-ALL-casts plan was enumerated on the board WITHOUT its land played, so its
+            // hand indices are the state's own: no drop to remove. Nor does a library-TOP land
+            // (Plan::land_from_top, Courser) ever leave the hand. A mid-sequence position-k plan is a
+            // clone of a land-FIRST plan, so it does (TurnSolver::PlanCastsEnumeratedPostDrop).
+            if (TurnSolver::PlanCastsEnumeratedPostDrop(p))
             {
                 for (int i = 0; i < static_cast<int>(sc_ap.hand.size()); ++i)
                 {
@@ -52787,7 +52860,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand)
+static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -52902,7 +52975,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
                               + "|" + std::to_string(all[i].bounce_choice)
                               // timing + source (landfall / Courser): suffixes only when set, so
                               // every other deck's key strings are unchanged.
-                              + (all[i].land_after_casts ? "|after" : "")
+                              + (all[i].land_slot != 0 ? "|at" + std::to_string(static_cast<int>(all[i].land_slot)) : "")
                               + (all[i].land_from_top ? "|top" : ""), 'P'));
         }
         // EXACT-MATCH KEY for EVERY plan-level sub-decision axis, pushed unconditionally (including
@@ -52934,7 +53007,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
-            add(pl.land_after_casts); add(pl.landfall_target_choice);
+            add(pl.land_slot); add(pl.landfall_target_choice);
             add(pl.land_from_top);   // Courser: in padding, so the size pin below cannot catch it
             add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
             add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
@@ -53711,18 +53784,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     add_for_land("", "");
     const std::size_t defer_end = all.size();
 
-    // ---- SEARCHED LAND-DROP TIMING: "cast the landfall payoff, THEN play the land" ---------------
-    // (Plan::land_after_casts, 2026-10-15.) Every plan above plays its land FIRST, so a landfall
-    // permanent cast in the same plan never sees this turn's land: "cast Rampaging Baloths, then play
-    // a Forest" (a 4/4 Beast now) was inexpressible at ANY budget -- a missing capability under the
-    // no-greedy rule, not a heuristic. This clones each DEFERRED-drop plan (land_to_play == "", whose
-    // casts were enumerated -- and are therefore affordable -- on the board WITHOUT the land) once per
-    // land option the land-first enumeration offered, with the land played after the casts. The
-    // land-first plans all remain, so nothing is lost: both orders are enumerable.
+    // ---- SEARCHED LAND-DROP POSITION: "cast the landfall payoff, THEN play the land" -------------
+    // (Plan::land_slot, 2026-10-15.) Every plan above plays its land FIRST, so a landfall permanent
+    // cast in the same plan never sees this turn's land: "cast Rampaging Baloths, then play a Forest"
+    // (a 4/4 Beast now) and "cast Khalni Heart Expedition, play the land (a quest counter), then cast
+    // Rampant Growth with its mana" were inexpressible at ANY budget -- a missing capability under the
+    // no-greedy rule, not a heuristic. Two clone families add the land's other positions; the
+    // land-first plans all remain, so nothing is lost (every position is enumerable).
+    //
+    //   AFTER ALL CASTS (land_slot -1): each DEFERRED-drop plan (land_to_play == "", whose casts were
+    //   enumerated -- and are therefore affordable -- WITHOUT the land), once per land option the
+    //   land-first enumeration offered (offered_lands: hand and library-top lands, Karoos excluded --
+    //   a Karoo is always played after the casts already).
+    //
+    //   RIGHT AFTER THE k-TH WATCHER CAST (land_slot k >= 1): each LAND-FIRST plan (casts enumerated
+    //   WITH the land's mana, so the casts after position k may spend it), once per landfall-watcher
+    //   cast it holds (TurnSolver::PutsLandfallWatcher -- the predicate both worlds' cast loops count
+    //   by). Those are the only positions that can matter: moving the land past a NON-watcher cast
+    //   triggers the same watchers and gives its mana to fewer casts. A position whose prefix cannot
+    //   be paid without the land simply does less when applied (a wasted line, scored as one).
     //
     // GATED to where the order can matter, which is also what keeps it free elsewhere:
     //   * the deck holds a landfall card (GameState::deck_has_landfall) -- otherwise offered_lands is
-    //     never filled and this block does nothing (byte-identical for every other deck);
+    //     never filled and no position clone is made (byte-identical for every other deck);
     //   * the plan CASTS something that puts a landfall watcher onto the battlefield -- the card
     //     itself has a landfall trigger, or it is a mass put (Genesis Wave) that can put one. When no
     //     cast does, every landfall watcher this land could trigger was already on the battlefield
@@ -53730,47 +53814,61 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     //     life, quest counters) firing before or after an unrelated cast reaches the same end state,
     //     so the order folds away. (Disclosed boundary: a future NON-watcher cast that MAKES a
     //     payload's target subtype -- a non-landfall Plant maker -- or a "whenever you gain life"
-    //     watcher cast beside Courser would need adding here.)
-    // The variant carries nothing else of the base plan's land: face / fetch come from the option,
-    // and the scry / rad sub-axes fan over it later exactly as over a land-first plan.
-    // Human play gets the same variants (the viewer never narrows) through the `landafter=` verb.
-    // NOT inside a breakpoint-continuation derivation (g_bp_enum_depth > 0): a continuation's land is
-    // played by bp_play_searched_land BEFORE its casts in both worlds, so a land-after continuation
-    // would only duplicate its land-first sibling under a false label. (Disclosed gap: a landfall
-    // watcher cast in a CONTINUATION cannot yet take the continuation's own land after it.)
-    if (g_bp_enum_depth == 0 && !offered_lands.empty() && defer_end > defer_begin)
+    //     watcher cast beside Courser would need adding to PutsLandfallWatcher.)
+    // A -1 variant carries nothing else of the base plan's land (face / fetch / source come from the
+    // option); a k variant keeps its base plan's whole land choice. The scry / rad / bounce sub-axes
+    // fan over both later exactly as over a land-first plan. Human play gets the same variants (the
+    // viewer never narrows) through `landafter=` and the `landat=<k>` modifier.
+    // NOT inside a breakpoint-continuation derivation (g_bp_enum_depth > 0) yet: a continuation's land
+    // is played by bp_play_searched_land BEFORE its casts in both worlds, so a positioned continuation
+    // would only duplicate its land-first sibling under a false label.
+    if (g_bp_enum_depth == 0 && state.deck_has_landfall)
     {
-        auto puts_landfall_watcher = [](const CardDefinition* d)
+        const auto watchers_in = [](const TurnSolver::Plan& p)
         {
-            return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents);
+            int n = 0;
+            for (const Action& a : p.actions) { if (TurnSolver::PutsLandfallWatcher(a)) { ++n; } }
+            return n;
         };
         std::vector<TurnSolver::Plan> after;
-        for (std::size_t i = defer_begin; i < defer_end; ++i)
+        if (!offered_lands.empty() && defer_end > defer_begin)
+        {
+            for (std::size_t i = defer_begin; i < defer_end; ++i)
+            {
+                const TurnSolver::Plan& p = all[i];
+                if (p.actions.empty()) { continue; }   // nothing cast: land-after == land-first
+                if (watchers_in(p) == 0) { continue; }
+                for (const LandOption& lo : offered_lands)
+                {
+                    TurnSolver::Plan v = p;
+                    v.land_decided  = true;
+                    v.land_to_play  = lo.land;
+                    v.fetch_target  = lo.fetch;
+                    v.land_face     = lo.face;
+                    v.land_slot     = TurnSolver::kLandSlotAfterCasts;
+                    v.land_from_top = lo.top;   // a top land is played after the casts FROM THE TOP
+                    after.push_back(std::move(v));
+                }
+            }
+        }
+        const std::size_t n_after = after.size();
+        for (std::size_t i = 0; i < defer_begin; ++i)
         {
             const TurnSolver::Plan& p = all[i];
-            if (p.actions.empty()) { continue; }   // nothing cast: land-after == land-first
-            bool live = false;
-            for (const Action& a : p.actions)
-            {
-                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
-                    && a.kind != Action::Kind::ActivateVial) { continue; }
-                if (puts_landfall_watcher(CardDatabase::Instance().Lookup(a.card_name))) { live = true; break; }
-            }
-            if (!live) { continue; }
-            for (const LandOption& lo : offered_lands)
+            if (!p.land_decided || p.land_to_play.empty() || p.actions.empty() || p.land_slot != 0)
+            { continue; }
+            const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
+            if (ld != nullptr && ld->params.etb_bounce_land) { continue; }   // a Karoo: after-all already
+            const int w = watchers_in(p);
+            for (int k = 1; k <= w && k <= 127; ++k)
             {
                 TurnSolver::Plan v = p;
-                v.land_decided     = true;
-                v.land_to_play     = lo.land;
-                v.fetch_target     = lo.fetch;
-                v.land_face        = lo.face;
-                v.land_after_casts = true;
-                v.land_from_top    = lo.top;   // a top land is played after the casts FROM THE TOP
+                v.land_slot = static_cast<int8_t>(k);
                 after.push_back(std::move(v));
             }
         }
-        TRACE("landafter", "T%d land-after-casts -> %zu variants (%zu land options)",
-              state.turn_number, after.size(), offered_lands.size());
+        TRACE("landafter", "T%d land position -> %zu after-casts + %zu mid-sequence variants (%zu land options)",
+              state.turn_number, n_after, after.size() - n_after, offered_lands.size());
         all.insert(all.end(), std::make_move_iterator(after.begin()),
                               std::make_move_iterator(after.end()));
     }
@@ -68788,8 +68886,9 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         auto land_pick_index = [&](const TurnSolver::Plan& p) -> int
         {
             if (!p.land_decided || p.land_to_play.empty()) { return -1; }
-            // A library-TOP land (Courser) never came out of the hand: nothing to map back.
-            if (p.land_from_top) { return -1; }
+            // A library-TOP land (Courser) never came out of the hand, and an after-all-casts plan was
+            // enumerated before its land: nothing to map back (TurnSolver::PlanCastsEnumeratedPostDrop).
+            if (!TurnSolver::PlanCastsEnumeratedPostDrop(p)) { return -1; }
             int first = -1;
             for (std::size_t i = 0; i < ap.hand.size(); ++i)
             {
@@ -69344,7 +69443,9 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // part of what the human picked -- named only when set, so every other label is unchanged.
         s += "land=" + p.land_to_play;
         if (p.land_from_top)    { s += " (from library top)"; }
-        if (p.land_after_casts) { s += " (after the casts)"; }
+        if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { s += " (after the casts)"; }
+        else if (p.land_slot > 0)
+        { s += " (after landfall cast #" + std::to_string(static_cast<int>(p.land_slot)) + ")"; }
         s += "; ";
     }
     int le_count = 0;
@@ -70091,6 +70192,28 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     }
 
     const std::string wantLand = spec.has_land ? spec.land : std::string();
+    // The line's land POSITION in Plan::land_slot's own terms. `landafter=` / `landat=all` is -1;
+    // `landat=<k>` names the line's k-th CAST (the human's click order), which the engine expresses as
+    // "after the m-th landfall-watcher cast" -- so cast k must itself put a watcher (a land later than
+    // a watcher but before the next one is not a position the engine offers: it triggers the same
+    // watchers and gives its mana to fewer casts), and m counts the watchers up to and including it.
+    // A k that is not such a position matches no plan and falls through to the legality checks.
+    int wantSlot = spec.land_slot;
+    if (spec.has_land && spec.land_at_cast > 0)
+    {
+        int  m = 0;
+        bool kth_is_watcher = false;
+        for (int i = 0; i < spec.land_at_cast && i < static_cast<int>(spec.casts.size()); ++i)
+        {
+            Action probe;
+            probe.kind      = Action::Kind::CastFromHand;
+            probe.card_name = spec.casts[static_cast<std::size_t>(i)];
+            kth_is_watcher  = PutsLandfallWatcher(probe);
+            if (kth_is_watcher) { ++m; }
+        }
+        wantSlot = (kth_is_watcher && spec.land_at_cast <= static_cast<int>(spec.casts.size()))
+                 ? m : std::numeric_limits<int8_t>::max();
+    }
     // Names a plain `cast=` must satisfy with a HAND cast (see the mirror check in the plan loop):
     // non-`act=` cast tokens for a card both in hand and on the battlefield, capped at hand copies.
     std::map<std::string, int> hand_cast_need;
@@ -70224,10 +70347,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         const Plan& p = plans[i];
         const std::string planLand = p.land_decided ? p.land_to_play : std::string();
         if (planLand != wantLand) { continue; }
-        // The land's TIMING (Plan::land_after_casts) is matched exactly: `land=` is the land-first
-        // plan, `landafter=` the land-after-casts one. A deck with no landfall card has no
-        // land-after plans, and its `land=` lines match exactly what they always did.
-        if (!planLand.empty() && p.land_after_casts != spec.land_after_casts) { continue; }
+        // The land's POSITION (Plan::land_slot) is matched exactly: `land=` is the land-first plan,
+        // `landafter=` the after-all-casts one, `landat=<k>` the mid-sequence one (wantSlot above). A
+        // deck with no landfall card has no positioned plans, and its `land=` lines match exactly what
+        // they always did.
+        if (!planLand.empty() && p.land_slot != wantSlot) { continue; }
         // ...and its SOURCE ZONE (Plan::land_from_top, Courser of Kruphix): `landtop=` is the library
         // top, `land=` / `landafter=` a hand copy. Every saved reference names a hand land, so it
         // matches exactly what it always did.
@@ -71257,7 +71381,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     // Overgrown Tomb"). Function-scope RAII: every `return out` below restores the choosers.
     RevealLogPause pause_stage2;
 
-    if (spec.has_land && spec.land_after_casts)
+    if (spec.has_land && spec.land_slot == kLandSlotAfterCasts)
     {
         // `landafter=` (Plan::land_after_casts): the land is played AFTER the casts, so its mana
         // must NOT fund them -- the affordability sim below runs on the board without it. Only its

@@ -304,7 +304,7 @@ TEST_CASE("Composition: 'cast Rampaging Baloths, THEN play the TOP Forest' is en
     {
         bool baloths = false;
         for (const Action& a : p.actions) { if (a.card_name.str() == "Rampaging Baloths") { baloths = true; } }
-        if (baloths && p.land_after_casts && p.land_from_top && p.land_to_play == "Forest")
+        if (baloths && p.land_slot == TurnSolver::kLandSlotAfterCasts && p.land_from_top && p.land_to_play == "Forest")
         { after_top = &p; break; }
     }
     REQUIRE(after_top != nullptr);

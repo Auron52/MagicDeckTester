@@ -1,0 +1,85 @@
+{
+  "_comment": [
+    "Landfall 2026-10-15: the `landat=<k>` line verb (Plan::land_slot). On the",
+    "landfall_position_avenger_land_spike board, the human's 'cast Avenger, play the Mountain, cast Lava",
+    "Spike' (`land=Mountain;landat=1;...`) must be ACCEPTED -- matched to the land_slot 1 plan (the land",
+    "right after the first landfall-watcher cast)."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 7,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [
+    "Avenger of Zendikar",
+    "Lava Spike",
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "validate_line": "land=Mountain;landat=1;cast=Avenger of Zendikar;cast=Lava Spike",
+  "expect_verdict": "accept"
+}

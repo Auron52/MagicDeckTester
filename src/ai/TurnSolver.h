@@ -972,26 +972,44 @@ public:
         // rollout re-searches lands every turn exactly as the real game does.
         bool        land_decided = false;
         // (Placed beside land_decided, in the padding before land_to_play: no size cost.)
-        // SEARCHED LAND-DROP TIMING (2026-10-15, the Landfall deck). false (default) == the land is
-        // played FIRST, before every cast, so its mana funds them -- the historical and still the
-        // default order. true == the land is played AFTER this plan's main casts, through the very
-        // path the Karoo deferral already uses in both worlds (ApplyPlanDirect / AIEngine::TakeTurn
-        // `karoo_deferred`), so a landfall permanent CAST in this plan is on the battlefield when the
-        // land enters and its trigger fires this turn: "cast Rampaging Baloths, THEN play the land"
-        // is a Beast now, where land-first is no Beast. Without this field that line was
-        // inexpressible at every budget -- a missing searched capability, not a heuristic.
+        // SEARCHED LAND-DROP POSITION (2026-10-15, the Landfall deck): WHERE in this plan's cast
+        // sequence the land is played. It used to be a bool (land_after_casts: first, or after ALL the
+        // casts); it is now a position, because "cast Khalni Heart Expedition, play the land (a quest
+        // counter), THEN cast Rampant Growth with the new land's mana" and "cast Avenger of Zendikar,
+        // play the land (its counters), THEN cast Khalni with the land's mana" put the land in the
+        // MIDDLE of the sequence -- lines the two-valued axis could not express at any budget.
         //
-        // EMITTED ONLY where the order can matter: EnumeratePlansWithLandUncached clones each
-        // DEFERRED-drop plan (land_to_play == "", whose casts were enumerated -- and are therefore
-        // affordable -- WITHOUT the land) once per land option, iff the deck holds a landfall card
-        // and one of the plan's casts puts a landfall watcher onto the battlefield. Every land-first
-        // plan stays enumerated alongside, so the axis is lossless; a deck with no landfall card
-        // never emits one (byte-identical). Composes with the other land sub-decisions: the deferred
-        // play carries fetch_target / land_face / rad_mode / scry_choice exactly as the land-first
-        // play does (and is designed to carry a land_from_top source bit the same way, see
-        // logs/landfall_drafts/_courser_design.md). Human play: the `landafter=` line verb.
-        bool        land_after_casts = false;
-        // (Placed after land_after_casts, in the same padding before land_to_play: no size cost --
+        //   kLandSlotFirst (0, default) -- before every cast: the historical order, byte-identical.
+        //   kLandSlotAfterCasts (-1)    -- after ALL the plan's main casts (the old land_after_casts
+        //                                  == true; the `landafter=` verb, unchanged), through the
+        //                                  Karoo deferral path in both worlds.
+        //   k >= 1                      -- right after the k-th cast of this plan's cast section that
+        //                                  puts a landfall watcher onto the battlefield
+        //                                  (TurnSolver::PutsLandfallWatcher), counted in DISPATCH order,
+        //                                  before the next cast -- so every later cast can spend the
+        //                                  land's mana. If fewer than k such casts are dispatched, the
+        //                                  land falls back to the after-all-casts point (never lost).
+        //
+        // Positions are only ever right AFTER a watcher cast because those are the only ones the
+        // land's timing can matter at: moving a land later past a NON-watcher cast triggers the same
+        // watchers and gives the land's mana to fewer casts. A position-k plan also dispatches its
+        // tied-rank watcher casts ahead of tied non-watchers (LandSlotWatchersFirst: only the
+        // otherwise-arbitrary plan-order tie-break moves, never a provider rank), so "Khalni, land,
+        // Rampant Growth" is reachable whichever card the hand happened to list first.
+        //
+        // EMITTED ONLY where the order can matter (a deck with a landfall card, a plan that casts a
+        // landfall watcher -- GameState::deck_has_landfall keeps every other deck byte-identical):
+        //   -1: cloned from each DEFERRED-drop plan (casts enumerated, so affordable, WITHOUT the land)
+        //       once per offered land option;
+        //   k : cloned from each LAND-FIRST plan (casts enumerated WITH the land's mana) once per
+        //       watcher cast it holds -- so a k-plan's hand_index values index the POST-drop hand,
+        //       exactly like its land-first base (PlanCastsEnumeratedPostDrop).
+        // Every land-first plan stays enumerated alongside, so the axis is lossless. Composes with the
+        // other land sub-decisions (fetch_target / land_face / rad_mode / scry_choice / bounce_choice
+        // and land_from_top ride to the deferred play). Human play: `landafter=` (-1) and the
+        // `landat=<k>` modifier (after the line's k-th cast; CheckLine maps it to the watcher count).
+        int8_t      land_slot = 0;
+        // (Placed after land_slot, in the same padding before land_to_play: no size cost --
         // which is exactly why kPlanDomAssertedSize cannot notice it; the census key carries it by hand.)
         // THE LAND'S SOURCE ZONE (2026-10-15, Courser of Kruphix: "You may play lands from the top of
         // your library"). false (default) == land_to_play names a HAND copy, as always; true == it
@@ -1000,8 +1018,8 @@ public:
         // a silent swap is the auras-gi20 divergence class). EVERY site that carries land_face carries
         // this too (record / replay / continuation / deferred play), and every plan identity key folds
         // it: a top Forest and a hand Forest leave different libraries and hands, so they are
-        // different lines, BRANCHED and never folded. Composes with land_after_casts (a top land played
-        // after the casts) and the other land sub-decisions. Human play: the `landtop=` line verb.
+        // different lines, BRANCHED and never folded. Composes with land_slot (a top land played
+        // after a cast) and the other land sub-decisions. Human play: the `landtop=` line verb.
         bool        land_from_top = false;
         std::string land_to_play;
 
@@ -1522,6 +1540,29 @@ public:
     // section twin), so they count the same breakpoints. Deck-constant gated: false at the first test
     // for every deck without a play-from-top card.
     static bool TopLandNewlyPlayable(int top_snapshot, const GameState& state, bool drop_reserved);
+
+    // ---- THE LAND-DROP POSITION (Plan::land_slot, 2026-10-15) -----------------------------------
+    static constexpr int8_t kLandSlotFirst      = 0;    // before every cast (the default)
+    static constexpr int8_t kLandSlotAfterCasts = -1;   // after ALL the main casts (`landafter=`)
+    // Does this action put a LANDFALL WATCHER onto the battlefield -- a cast / graveyard cast / Vial
+    // put of a card with a landfall trigger (CardDefinition::landfall_watcher), or a mass put that
+    // can put one (Genesis Wave, reveal_x_put_permanents)? THE ONE predicate the position axis is
+    // built on: the enumeration emits a position after each such action, and both worlds' cast
+    // loops count exactly these actions to find position k (lockstep by construction).
+    static bool PutsLandfallWatcher(const Action& a);
+    // A position-k plan's cast ORDER: stable-partition `order` (indices into `acts`) so the
+    // landfall-watcher actions come first. Applied BEFORE the stable CastOrderLess sort, so it moves
+    // only the otherwise-arbitrary plan-order tie-break inside a rank -- never a provider rank. Both
+    // worlds call it at the same point for the same plans (the rollout's apply_plan_actions, the
+    // executor's main and continuation loops).
+    static void LandSlotWatchersFirst(const std::vector<Action>& acts, std::vector<int>& order);
+    // Were this plan's casts enumerated on the board WITH its land already played -- so its
+    // hand_index values index the POST-drop hand? True for a hand land played first or at a
+    // position (a position-k plan is a clone of a land-first plan) and for a hand Karoo (removed from
+    // the enumeration copy); false for no land, a library-top land (never in hand) and an
+    // after-all-casts plan (enumerated without the land). The hand-index maps (the sac axis's
+    // build_hmap, the new-only filter) key on it.
+    static bool PlanCastsEnumeratedPostDrop(const Plan& p);
 
     // ...and the test that decides WHICH SITE NUMBER the resulting breakpoint gets: does an EXISTING
     // param-keyed class already claim this cast? Site 10 is the FALLBACK for what the whitelists
@@ -2103,9 +2144,13 @@ public:
         bool        pass = false;            // explicit pass / cast nothing, no land
         bool        has_land = false;        // play a land this phase
         std::string land;                    // the land card name (has_land)
-        // "landafter=<name>": the land is played AFTER the line's casts (Plan::land_after_casts), so
-        // a landfall permanent the line casts sees it. false == `land=`, land-first, as always.
-        bool        land_after_casts = false;
+        // The land's POSITION (Plan::land_slot): 0 == `land=`, land-first, as always; -1 ==
+        // "landafter=<name>" or the "landat=all" modifier, after ALL the line's casts.
+        int         land_slot = 0;
+        // "landat=<k>" (k >= 1): the land is played right after the line's k-th cast (`casts` order,
+        // i.e. the human's click order). CheckLine maps it onto Plan::land_slot (the count of landfall-
+        // watcher casts up to and including cast k, which must itself put a watcher). 0 = unset.
+        int         land_at_cast = 0;
         // "landtop=<name>": the land is the library TOP (Plan::land_from_top, Courser of Kruphix).
         // false == a hand copy, as `land=` / `landafter=` always meant, so saved references replay
         // unchanged.

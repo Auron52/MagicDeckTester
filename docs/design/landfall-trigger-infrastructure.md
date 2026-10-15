@@ -50,10 +50,22 @@ letters), `landfall_counters_each` + `_subtype` (Avenger; the "may" resolved YES
 
 ## 3. Searched axes added
 
-* `Plan::land_after_casts` -- land-drop TIMING. Cloned from each deferred-drop plan (casts enumerated
-  without the land) once per offered land option, iff the deck holds a landfall card and a cast in the
-  plan puts a landfall watcher onto the battlefield (the card itself, or a Genesis Wave). Applied
-  through the Karoo deferral path in both worlds. Line verb `landafter=`.
+* `Plan::land_slot` -- the land-drop POSITION in the cast sequence (was the bool `land_after_casts`,
+  first or after all). `0` first (default); `-1` after ALL the casts (cloned from each deferred-drop
+  plan, whose casts were enumerated without the land, once per offered land option); `k >= 1` right
+  after the k-th cast that puts a landfall watcher onto the battlefield (cloned from each LAND-FIRST
+  plan, whose casts may spend the land's mana, once per watcher cast). Positions only ever follow a
+  watcher cast: moving the land past a non-watcher cast triggers the same watchers and gives its mana
+  to fewer casts. The ONE predicate is `TurnSolver::PutsLandfallWatcher` (a landfall card, or a mass
+  put such as Genesis Wave): the enumeration emits a position per such action and both worlds' cast
+  loops count exactly those actions (ApplyPlanDirect's slot hook in `apply_plan_actions`, armed for the
+  top-level section only; AIEngine::TakeTurn's `exec_slot_hook` in every main cast loop) and play the
+  deferred land through the Karoo deferral path; a position whose watcher never comes plays after all
+  the casts. A positioned plan dispatches its TIED-rank watcher casts first
+  (`TurnSolver::LandSlotWatchersFirst`, before the stable rank sort -- only the otherwise-arbitrary
+  plan-order tie-break moves, never a provider rank), so "Khalni, land, Rampant Growth" is reachable
+  whichever card the hand listed first. Gated on `deck_has_landfall` + a watcher cast in the plan, so
+  every other deck is byte-identical. Line verbs `landafter=` (-1) and `landat=<k>` / `landat=all`.
 * `Plan::landfall_target_choice` -- a whole-turn rank policy into the provider-ordered,
   identity-folded targets of a targeted landfall trigger (`LandfallTargetFoldKey`,
   `DecisionProvider::LandfallCounterTargetOrder`). Turn-scoped, folded into the solve memo key while
@@ -115,12 +127,9 @@ record of what was built.
 
 ## 4. Deferred (not built)
 
-1. **A land in the MIDDLE of the cast order.** `land_after_casts` plays the land after ALL the plan's
-   casts, so "cast Khalni Heart Expedition, play the land, then cast a 3-drop with the new land's
-   mana" is still not expressible. The natural route is a breakpoint after the watcher cast whose
-   continuation plays the drop (the deferred drop is already reserved), but continuation plans play
-   their land before their casts (`bp_play_searched_land`), and the axis is deliberately not emitted
-   inside a continuation derivation (`g_bp_enum_depth > 0`).
+1. ~~**A land in the MIDDLE of the cast order.**~~ BUILT 2026-10-15 as `Plan::land_slot` (section 3).
+   Still open at that point: the position axis is not emitted inside a breakpoint-continuation
+   derivation (`g_bp_enum_depth > 0`), because a continuation's land is played before its casts.
 2. **Fold boundary of the timing axis.** It is emitted only when a cast puts a landfall watcher. For
    the current pool that is sound; a future NON-watcher cast that makes a landfall payload's target
    subtype (a non-landfall Plant maker), or a "whenever you gain life" watcher cast beside Courser of

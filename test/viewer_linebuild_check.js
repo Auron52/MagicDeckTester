@@ -667,6 +667,56 @@ function checkLibraryTopLand() {
   return fails;
 }
 
+// THE LAND'S POSITION IN THE CAST SEQUENCE (engine Plan::land_slot, 2026-10-15). On a decision that
+// offers positioned lines (a plan with land_after_casts or land_slot), a land queued AFTER a cast takes
+// its position from the queue: after every cast -> `landafter=` (hand) / `landat=all` (top); BETWEEN two
+// casts -> `landat=<k>`, k = the casts queued before it in click order. A land queued first, or on a
+// decision that offers no positioned line, encodes `land=` exactly as it always did.
+function checkLandPosition() {
+  const hand = [{ name: 'Forest', num: 31 }, { name: 'Khalni Heart Expedition', num: 40 },
+                { name: 'Rampant Growth', num: 41 }];
+  const offers = { me: { hand, land_drops_left: 1 }, plans: [{ land_slot: 1 }] };
+  const plain  = { me: { hand, land_drops_left: 1 }, plans: [{}] };
+  const fails = [];
+
+  // Khalni, Forest, Rampant Growth -> the Forest sits after cast #1.
+  let p = [];
+  p = LB.queueCard(offers, p, 'Khalni Heart Expedition', 'permanent');
+  p = LB.queueCard(offers, p, 'Forest', 'land');
+  p = LB.queueCard(offers, p, 'Rampant Growth', 'nonpermanent');
+  if (LB.encodeLine(p) !== 'land=Forest;landat=1;cast=Khalni Heart Expedition;cast=Rampant Growth')
+    fails.push(`mid position -> ${LB.encodeLine(p)}`);
+  // Khalni, Rampant Growth, Forest -> after every cast: `landafter=` (the legacy verb).
+  let q = [];
+  q = LB.queueCard(offers, q, 'Khalni Heart Expedition', 'permanent');
+  q = LB.queueCard(offers, q, 'Rampant Growth', 'nonpermanent');
+  q = LB.queueCard(offers, q, 'Forest', 'land');
+  if (LB.encodeLine(q) !== 'landafter=Forest;cast=Khalni Heart Expedition;cast=Rampant Growth')
+    fails.push(`after all -> ${LB.encodeLine(q)}`);
+  // Forest first -> land-first, no position token.
+  let r = [];
+  r = LB.queueCard(offers, r, 'Forest', 'land');
+  r = LB.queueCard(offers, r, 'Khalni Heart Expedition', 'permanent');
+  if (LB.encodeLine(r) !== 'land=Forest;cast=Khalni Heart Expedition') fails.push(`land first -> ${LB.encodeLine(r)}`);
+  // No positioned line offered (every deck without a landfall card): click order never matters.
+  let t = [];
+  t = LB.queueCard(plain, t, 'Khalni Heart Expedition', 'permanent');
+  t = LB.queueCard(plain, t, 'Forest', 'land');
+  t = LB.queueCard(plain, t, 'Rampant Growth', 'nonpermanent');
+  if (LB.encodeLine(t) !== 'land=Forest;cast=Khalni Heart Expedition;cast=Rampant Growth')
+    fails.push(`no positioned line offered -> ${LB.encodeLine(t)}`);
+  // A library-TOP land in the middle carries the same modifier.
+  const top = { me: { hand, land_drops_left: 1, library_top: { name: 'Forest', number: 7, playable_land: true } },
+                plans: [{ land_slot: 1 }] };
+  let u = [];
+  u = LB.queueCard(top, u, 'Khalni Heart Expedition', 'permanent');
+  u = LB.queueCard(top, u, 'Forest', 'land', true);
+  u = LB.queueCard(top, u, 'Rampant Growth', 'nonpermanent');
+  if (LB.encodeLine(u) !== 'landtop=Forest;landat=1;cast=Khalni Heart Expedition;cast=Rampant Growth')
+    fails.push(`top land mid position -> ${LB.encodeLine(u)}`);
+  return fails;
+}
+
 function main() {
   const refs = collectRefs();
   if (!refs.length) { console.log('no reference games found under references/'); return 0; }
@@ -729,9 +779,13 @@ function main() {
   topFails.forEach(m => console.log(`  FAIL  library-top land: ${m}`));
   console.log(`Viewer library-top land: ${topFails.length ? 'WRONG' : 'the revealed top queues as landtop=, separate from a hand copy'} ` +
               `(${topFails.length} FAIL)`);
+  const posFails = checkLandPosition();
+  posFails.forEach(m => console.log(`  FAIL  land position: ${m}`));
+  console.log(`Viewer land position: ${posFails.length ? 'WRONG' : 'a land between two casts encodes landat=<k>, after all landafter='} ` +
+              `(${posFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
-          + tapFails.length + topFails.length) ? 1 : 0;
+          + tapFails.length + topFails.length + posFails.length) ? 1 : 0;
 }
 
 process.exit(main());

@@ -21,7 +21,7 @@
 //     counter, Courser's life.
 //  5. THE GATE: with GameState::deck_has_landfall clear, a land entry walks nothing -- the one bool
 //     is the whole cost for a deck without a landfall card.
-//  6. LAND-DROP TIMING (Plan::land_after_casts): "cast Baloths, then play the land" is enumerated
+//  6. LAND-DROP TIMING (Plan::land_slot -1, after the casts): "cast Baloths, then play the land" is enumerated
 //     and, applied, makes the Beast; the land-first plan stays enumerated beside it; a plan whose
 //     casts put no landfall watcher gets no land-after variant.
 #include <doctest/doctest.h>
@@ -428,8 +428,8 @@ TEST_CASE("Land-drop timing: 'cast Baloths, THEN play the land' is enumerated an
         bool casts_baloths = false;
         for (const Action& a : p.actions) { if (a.card_name.str() == kBaloths) { casts_baloths = true; } }
         if (!casts_baloths || p.land_to_play != "Forest") { continue; }
-        if (p.land_after_casts) { if (after == nullptr) { after = &p; } }
-        else                    { land_first = true; }
+        if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { if (after == nullptr) { after = &p; } }
+        else if (p.land_slot == 0)                          { land_first = true; }
     }
     CHECK(land_first);                              // both orders stay enumerable (lossless)
     REQUIRE(after != nullptr);
@@ -449,7 +449,7 @@ TEST_CASE("Land-drop timing: no landfall watcher cast in the plan -> no land-aft
     s.players[0].hand.push_back(HandLf("Terastodon", 1));   // a cast that is not a watcher
     s.players[0].hand.push_back(HandLf("Forest", 2));
     for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
-    { CHECK_FALSE(p.land_after_casts); }
+    { CHECK(p.land_slot == 0); }
 }
 
 TEST_CASE("Land-drop timing: a deck with no landfall card never emits a land-after variant")
@@ -461,5 +461,103 @@ TEST_CASE("Land-drop timing: a deck with no landfall card never emits a land-aft
     s.players[0].hand.push_back(HandLf(kBaloths, 1));
     s.players[0].hand.push_back(HandLf("Forest", 2));
     for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
-    { CHECK_FALSE(p.land_after_casts); }
+    { CHECK(p.land_slot == 0); }
+}
+
+// ---- LAND-DROP POSITION (Plan::land_slot k >= 1, 2026-10-15) ------------------------------------
+// The land in the MIDDLE of the cast sequence: right after the k-th landfall-watcher cast, so the
+// casts after it may spend its mana. Before this axis "cast Avenger, play the land, cast Khalni with
+// its mana" and "cast Khalni, play the land, cast the next spell with its mana" were inexpressible.
+
+TEST_CASE("Land position: 'cast Avenger, play the land, cast Khalni with its mana' is enumerated and applied")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    for (int i = 0; i < 8; ++i) { PutLf(s, "Forest", 10 + i); }
+    s.players[0].hand.push_back(HandLf(kAvenger, 1));
+    s.players[0].hand.push_back(HandLf(kKhalni, 2));
+    s.players[0].hand.push_back(HandLf("Forest", 3));
+    const TurnSolver::Plan* mid = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool avenger = false, khalni = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() == kAvenger) { avenger = true; }
+            if (a.card_name.str() == kKhalni)  { khalni  = true; }
+        }
+        if (avenger && khalni && p.land_to_play == "Forest" && p.land_slot == 1) { mid = &p; break; }
+    }
+    REQUIRE(mid != nullptr);
+    GameState t = s;
+    TurnSolver::ApplyPlan(t, *mid, true);
+    CHECK(CountNamed(t, kAvenger) == 1);
+    CHECK(CountNamed(t, kKhalni) == 1);                  // paid with the land played after Avenger
+    CHECK(t.players[0].lands_played_this_turn == 1);
+    // Avenger's ETB counted 8 lands (the Forest came after it), and its landfall put a counter on
+    // every one of those 8 Plants.
+    int plants = 0, countered = 0;
+    for (const Permanent& p : t.battlefield)
+    {
+        if (!CardHasSubtype(p.card, "Plant")) { continue; }
+        ++plants;
+        if (PlusCountersOn(p) >= 1) { ++countered; }
+    }
+    CHECK(plants == 8);
+    CHECK(countered == 8);
+}
+
+TEST_CASE("Land position: tied-rank watchers go first -- 'Khalni, play the Mountain, Lava Spike off it'")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    for (int i = 0; i < 3; ++i) { PutLf(s, "Forest", 10 + i); }
+    // Lava Spike is listed FIRST in hand: Khalni and Lava Spike share a cast-order rank, so without the
+    // position plan's watchers-first tie-break the canonical order would cast Lava Spike before the
+    // Mountain exists.
+    s.players[0].hand.push_back(HandLf("Lava Spike", 1));
+    s.players[0].hand.push_back(HandLf(kKhalni, 2));
+    s.players[0].hand.push_back(HandLf("Mountain", 3));
+    const TurnSolver::Plan* mid = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool spike = false, khalni = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() == "Lava Spike") { spike  = true; }
+            if (a.card_name.str() == kKhalni)      { khalni = true; }
+        }
+        if (spike && khalni && p.land_to_play == "Mountain" && p.land_slot == 1) { mid = &p; break; }
+    }
+    REQUIRE(mid != nullptr);
+    GameState t = s;
+    const int opp_before = t.players[1].life;
+    TurnSolver::ApplyPlan(t, *mid, true);
+    CHECK(t.players[1].life == opp_before - 3);          // Lava Spike resolved off the Mountain
+    const Permanent* kh = nullptr;
+    for (const Permanent& p : t.battlefield) { if (p.card.m_name.str() == kKhalni) { kh = &p; } }
+    REQUIRE(kh != nullptr);
+    CHECK(kh->quest_counters == 1);                      // the Mountain entered after Khalni
+}
+
+TEST_CASE("Land position: one variant per watcher cast, none for a plan casting no watcher")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    for (int i = 0; i < 9; ++i) { PutLf(s, "Forest", 10 + i); }
+    s.players[0].hand.push_back(HandLf(kKhalni, 1));
+    s.players[0].hand.push_back(HandLf(kCourser, 2));
+    s.players[0].hand.push_back(HandLf("Lava Spike", 3));
+    s.players[0].hand.push_back(HandLf("Forest", 4));
+    int max_slot = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        int watchers = 0;
+        for (const Action& a : p.actions) { if (TurnSolver::PutsLandfallWatcher(a)) { ++watchers; } }
+        CHECK(p.land_slot <= watchers);                  // a position names a watcher this plan casts
+        if (p.land_slot > max_slot) { max_slot = p.land_slot; }
+    }
+    CHECK(max_slot == 2);                                // Khalni + Courser in one plan -> positions 1, 2
 }

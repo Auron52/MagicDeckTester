@@ -3177,12 +3177,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Land Auras whose host is the deferred karoo (name, host number) -- lockstep twin of
     // ApplyPlanDirect's karoo_host_auras (Bruna sweep D): held by cast_by_name, cast after the karoo.
     std::vector<std::pair<std::string, int>> karoo_host_auras;
-    // SEARCHED LAND-AFTER-CASTS (Plan::land_after_casts) -- lockstep twin of ApplyPlanDirect's
-    // land_after_deferred: an ordinary land the committed plan scored as played AFTER its casts rides
-    // the Karoo deferral (karoo_deferred reserves the drop) and keeps its face / rad mode / scry pin.
+    // SEARCHED LAND POSITION (Plan::land_slot != 0) -- lockstep twin of ApplyPlanDirect's
+    // land_after_deferred: an ordinary land the committed plan scored as played AFTER a cast rides the
+    // Karoo deferral (karoo_deferred reserves the drop) and keeps its face / rad mode / scry pin.
     bool        land_after_deferred = false;
     std::string deferred_land_face;
     int         deferred_rad_mode   = -1;
+    // ...and WHERE: k >= 1 right after the plan's k-th landfall-watcher cast (exec_slot_hook in the
+    // main cast loops below), -1 / an unreached k after the main cast loop. Twin of ApplyPlanDirect's
+    // deferred_land_slot / deferred_watchers_seen.
+    int         deferred_land_slot      = 0;
+    int         deferred_watchers_seen  = 0;
     // The deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix) -- lockstep twin of
     // ApplyPlanDirect's karoo_from_top: a deferred top land is played from the top or not at all.
     bool        karoo_from_top      = false;
@@ -3832,10 +3837,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     karoo_fetch     = plan.fetch_target;
                     karoo_from_top  = plan.land_from_top;
                 }
-                else if (plan.land_after_casts)
+                else if (plan.land_slot != 0)
                 {
-                    // The searched land-after-casts timing: reserve the drop like a Karoo and play
-                    // it after the main cast loop (lockstep with ApplyPlanDirect).
+                    // The searched land position: reserve the drop like a Karoo and play it after its
+                    // watcher cast or after the main cast loop (lockstep with ApplyPlanDirect).
                     karoo_deferred      = true;
                     land_after_deferred = true;
                     karoo_land_name     = plan.land_to_play;
@@ -3843,6 +3848,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     deferred_land_face  = plan.land_face;
                     deferred_rad_mode   = plan.rad_mode;
                     karoo_from_top      = plan.land_from_top;
+                    deferred_land_slot  = plan.land_slot;
                 }
                 else
                 {
@@ -6124,6 +6130,32 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the ordered cast sequence below -- vector position on the searched/human route, its card's
     // CastOrderRank otherwise. Lockstep twin: ApplyPlanDirect's apply_plan_actions.
     auto is_put = [](const Action& a) { return a.kind == Action::Kind::ActivateVial; };
+    // THE DEFERRED (non-Karoo) LAND DROP at its searched position (Plan::land_slot) -- lockstep twin
+    // of ApplyPlanDirect's play_deferred_land: same face / rad mode / source / scry + bounce pins the
+    // search scored. exec_slot_hook plays it right after the plan's k-th landfall-watcher cast
+    // (TurnSolver::PutsLandfallWatcher, the predicate both worlds count by), called once per main-loop
+    // cast/put AFTER the cast resolved -- an action a breakpoint truncation broke out before is never
+    // reached, exactly as the rollout's hook skips a truncated one. A position whose watcher never
+    // comes plays after the main cast loop (below). Inert (one bool) for a plan without a position.
+    auto exec_play_deferred_land = [&]()
+    {
+        karoo_deferred      = false;
+        land_after_deferred = false;
+        deferred_land_slot  = 0;
+        ScriptedTopChoice    _stc(plan.scry_choice);
+        ScriptedBounceChoice _sbc(plan.bounce_choice);
+        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, deferred_land_face, deferred_rad_mode,
+                            karoo_from_top);
+    };
+    auto exec_slot_hook = [&](const Action& a)
+    {
+        if (!land_after_deferred || deferred_land_slot <= 0) { return; }
+        if (!TurnSolver::PutsLandfallWatcher(a)) { return; }
+        if (++deferred_watchers_seen == deferred_land_slot) { exec_play_deferred_land(); }
+    };
+    // A position plan's tied-rank watcher casts go first (TurnSolver::LandSlotWatchersFirst), at the
+    // same point (before the stable rank sort) as ApplyPlanDirect's slot_order.
+    const bool exec_slot_order = land_after_deferred && deferred_land_slot > 0;
     // Plan::soulbond_decline (lockstep twin of ApplyPlanDirect's scope): a plan the search scored
     // as "cast the Paladin, do not pair it" is realised that way here too.
     PlanSoulbondDeclineScope _sbd_plan(plan.soulbond_decline);
@@ -6189,10 +6221,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         for (const Action& a : plan.actions)
         {
-            if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); continue; }
+            if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
-            if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
+            if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
             m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
@@ -6285,6 +6318,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             const Action& a = plan.actions[i];
             m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            exec_slot_hook(a);
         }
     }
     // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
@@ -6332,6 +6366,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (is_hoisted_minter(a)) { continue; }   // already cast in the hoist (MTG_MINT_CREDIT_EXACT)
         ord.push_back(i);
     }
+    if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(plan.actions, ord); }   // land position: ties
     if (OpaqueCastOrderActive(state))
     {
         std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
@@ -6345,7 +6380,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : ord)
     {
         const Action& a = plan.actions[oi];
-        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); continue; }
+        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -6365,11 +6400,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
         {
             cast_alt(a.card_name, a.alt_lifegain); resolve_now();
+            exec_slot_hook(a);
         }
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
             m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
@@ -6419,6 +6456,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate) || is_put(a))
         { order.push_back(i); }
     }
+    if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(plan.actions, order); }   // land position: ties
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
     // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end and walk them
@@ -6432,7 +6470,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
-        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); continue; }
+        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -6450,8 +6488,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             continue;
         }
-        if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
+        if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
         m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+        exec_slot_hook(a);
         const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
         // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
@@ -6496,13 +6535,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); }
+        { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
     }
     for (const Action& a : plan.actions)
     {
         if (staged_break || bp_trunc_exec) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
-        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
+        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); exec_slot_hook(a); }
     }
 
     // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
@@ -6692,18 +6731,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // catch-all breakpoint/dig replay below -- the same logical point as the rollout (which
     // plays it right after apply_plan_actions, before its deferred-cantrip re-solve). Taking the
     // drop here (lands_played==1) keeps a later breakpoint from playing a revealed land as it.
-    if (karoo_deferred && land_after_deferred)
-    {
-        // The searched land-after-casts drop (Plan::land_after_casts) -- lockstep with
-        // ApplyPlanDirect's deferred play: the casts above have resolved, so a landfall permanent
-        // among them sees this land enter. Same face / rad mode / scry pin the search scored.
-        karoo_deferred      = false;
-        land_after_deferred = false;
-        ScriptedTopChoice    _stc(plan.scry_choice);
-        ScriptedBounceChoice _sbc(plan.bounce_choice);
-        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, deferred_land_face, deferred_rad_mode,
-                            karoo_from_top);
-    }
+    // The searched land-after-ALL-casts drop (Plan::land_slot -1), or a position-k drop whose k-th
+    // watcher cast never came -- lockstep with ApplyPlanDirect's deferred play: the casts above have
+    // resolved, so a landfall permanent among them sees this land enter.
+    if (karoo_deferred && land_after_deferred) { exec_play_deferred_land(); }
     if (karoo_deferred)
     {
         karoo_deferred = false;

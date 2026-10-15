@@ -396,11 +396,24 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             { os << " -> " << ld->params.mdfc_back_name << " (back face)"; }
             else { os << " (back face)"; }
         }
-        // SEARCHED LAND-DROP TIMING (Plan::land_after_casts): the land is played AFTER this plan's
-        // casts, so a landfall permanent it casts sees it. Annotated only when set, so every plan of
-        // every deck without a landfall card reads exactly as before -- and the two orders of one
-        // land + cast set are never byte-identical menu twins (the rad_mode / land_face lesson above).
-        if (plan.land_after_casts) { os << " (after the casts)"; }
+        // SEARCHED LAND-DROP POSITION (Plan::land_slot): the land is played AFTER this plan's casts
+        // (-1) or right after its k-th landfall-watcher cast (k), so a landfall permanent it casts sees
+        // it. Annotated only when set, so every plan of every deck without a landfall card reads
+        // exactly as before -- and the positions of one land + cast set are never byte-identical menu
+        // twins (the rad_mode / land_face lesson above).
+        if (plan.land_slot == TurnSolver::kLandSlotAfterCasts) { os << " (after the casts)"; }
+        else if (plan.land_slot > 0)
+        {
+            // Name the watcher cast it follows, in the plan's own action order (the k-th watcher).
+            int seen = 0; std::string after_name;
+            for (const Action& a : plan.actions)
+            {
+                if (!TurnSolver::PutsLandfallWatcher(a)) { continue; }
+                if (++seen == plan.land_slot) { after_name = a.card_name.str(); break; }
+            }
+            os << " (after " << (after_name.empty() ? "landfall cast #" + std::to_string(plan.land_slot)
+                                                    : after_name) << ")";
+        }
         // THE LAND'S SOURCE (Plan::land_from_top, Courser of Kruphix): the library top, not a hand
         // copy. Annotated only when set (every other deck reads byte-identically), and the top Forest
         // and a hand Forest are never menu twins.
@@ -1432,7 +1445,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             bool has_collapse = false;
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "|"
                             + std::to_string(plans[i].rad_mode)
-                            + (plans[i].land_after_casts ? "@after" : "")
+                            + (plans[i].land_slot != 0 ? "@at" + std::to_string(plans[i].land_slot) : "")
                             + (plans[i].land_from_top ? "@top" : "") + "#";
             for (const Action& a : plans[i].actions)
             {
@@ -1601,11 +1614,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // seed-8 representative logic below keeps its job.
         auto plan_identity = [&](const TurnSolver::Plan& p) -> std::string
         {
-            // The land's TIMING is identity too (Plan::land_after_casts): land-first and land-after
+            // The land's POSITION is identity too (Plan::land_slot): land-first and land-after
             // over one cast list are different lines, never menu twins.
             // ...and its SOURCE (Plan::land_from_top, Courser): a top Forest and a hand Forest are
             // different lines too.
-            std::string k = p.land_to_play + "|" + p.land_face + (p.land_after_casts ? "@after" : "")
+            std::string k = p.land_to_play + "|" + p.land_face
+                          + (p.land_slot != 0 ? "@at" + std::to_string(p.land_slot) : "")
                           + (p.land_from_top ? "@top" : "") + "#";
             for (const Action& a : p.actions) { k += payload_key(a); k += ';'; }
             return k;
@@ -1659,7 +1673,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         {
             if (hide_bundle[i] || taken[i]) { continue; }
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face
-                            + (plans[i].land_after_casts ? "@after" : "")
+                            + (plans[i].land_slot != 0 ? "@at" + std::to_string(plans[i].land_slot) : "")
                             + (plans[i].land_from_top ? "@top" : "") + "#";
             std::vector<std::string> nm;
             nm.reserve(plans[i].actions.size());
@@ -1750,10 +1764,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         os << ", \"land\": ";
         if (p.land_decided && !p.land_to_play.empty()) { JsonStr(os, p.land_to_play); }
         else                                            { os << "null"; }
-        // The searched land-drop TIMING (Plan::land_after_casts): emitted only when set, so every
+        // The searched land-drop POSITION (Plan::land_slot): emitted only when set, so every
         // other plan serialises byte-identically. The GUI's line builder reads it to encode a land it
         // queued AFTER a cast as `landafter=` (and only when the menu offers such a line).
-        if (p.land_after_casts) { os << ", \"land_after_casts\": true"; }
+        // -1 keeps the original `land_after_casts` key (the GUI and saved decisions read it); a
+        // mid-sequence position k is `land_slot` (the k-th landfall-watcher cast it follows).
+        if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { os << ", \"land_after_casts\": true"; }
+        else if (p.land_slot > 0) { os << ", \"land_slot\": " << static_cast<int>(p.land_slot); }
         // The land's SOURCE (Plan::land_from_top, Courser of Kruphix): emitted only when set, so every
         // other plan serialises byte-identically. The GUI encodes a top land it queued as `landtop=`.
         if (p.land_from_top) { os << ", \"land_from_top\": true"; }
@@ -3813,9 +3830,10 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
-// "land=<name>", "landafter=<name>" (the land played AFTER the casts -- Plan::land_after_casts),
+// "land=<name>", "landafter=<name>" (the land played AFTER the casts -- Plan::land_slot -1),
 // "landtop=<name>" (the land is the library TOP -- Plan::land_from_top, Courser of Kruphix),
-// "landat=all" (modifier: the line's land, hand or top, is played AFTER the casts),
+// "landat=all" | "landat=<k>" (POSITION modifier for the line's land, hand or top: after all the
+// casts, or right after the line's k-th cast -- Plan::land_slot),
 // "cast=<name>", "act=<board source name>" (a cast= that must be an ACTIVATION), "vial=<name>", "retrace=<name>", "landsedge=<n>",
 // "sacout=<outlet name>" (repeat for repeat activations),
 // "equip=<equipment name>[#<source m_number>][@<host m_number>]",
@@ -3843,17 +3861,22 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         std::string key = tok.substr(0, eq);
         std::string val = tok.substr(eq + 1);
         if      (key == "land")      { ls.has_land = true; ls.land = val; }
-        // "landafter=<name>": the same land, played AFTER the line's casts (Plan::land_after_casts)
+        // "landafter=<name>": the same land, played AFTER the line's casts (Plan::land_slot -1)
         // -- "cast Rampaging Baloths, then play the Forest". `land=` keeps meaning land-FIRST, so
         // every saved reference replays unchanged.
-        else if (key == "landafter") { ls.has_land = true; ls.land = val; ls.land_after_casts = true; }
+        else if (key == "landafter") { ls.has_land = true; ls.land = val; ls.land_slot = TurnSolver::kLandSlotAfterCasts; }
         // "landtop=<name>": the land is the library TOP (Plan::land_from_top, Courser of Kruphix).
         // `land=` / `landafter=` keep meaning a HAND copy, so every saved reference replays unchanged.
         else if (key == "landtop")   { ls.has_land = true; ls.land = val; ls.land_from_top = true; }
-        // "landat=all": TIMING modifier for whichever land token the line carries -- played after the
-        // casts. `landtop=<name>;landat=all` is a top land after the casts (`landafter=` names only a
-        // hand copy, and keeps doing so).
-        else if (key == "landat" && val == "all") { ls.land_after_casts = true; }
+        // "landat=all" / "landat=<k>": POSITION modifier for whichever land token the line carries --
+        // after all the casts, or right after the line's k-th cast (click order; CheckLine maps k onto
+        // Plan::land_slot's watcher count). `landtop=<name>;landat=all` is a top land after the casts
+        // (`landafter=` names only a hand copy, and keeps doing so).
+        else if (key == "landat")
+        {
+            if (val == "all") { ls.land_slot = TurnSolver::kLandSlotAfterCasts; }
+            else              { ls.land_at_cast = std::max(0, std::atoi(val.c_str())); }
+        }
         else if (key == "cast")      { ls.casts.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }

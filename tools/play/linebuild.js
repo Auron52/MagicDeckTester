@@ -421,12 +421,32 @@
          + (ac.length ? '+' + ac.join('+') : '');
   }
 
-  // LAND-DROP TIMING (engine Plan::land_after_casts, 2026-10-15). Does this decision offer ANY line
-  // that plays its land AFTER the casts? Only a deck holding a landfall card ever does, and only on
-  // a turn where a cast can put a landfall permanent onto the battlefield; everywhere else this is
+  // LAND-DROP POSITION (engine Plan::land_slot, 2026-10-15). Does this decision offer ANY line that
+  // plays its land AFTER a cast -- after all of them (`land_after_casts`) or right after a landfall
+  // cast in the middle (`land_slot`)? Only a deck holding a landfall card ever does, and only on a
+  // turn where a cast can put a landfall permanent onto the battlefield; everywhere else this is
   // false and a queued land encodes as `land=` exactly as it always did.
   function offersLandAfter(decision) {
-    return !!(decision && Array.isArray(decision.plans) && decision.plans.some(pl => pl && pl.land_after_casts));
+    return !!(decision && Array.isArray(decision.plans)
+              && decision.plans.some(pl => pl && (pl.land_after_casts || pl.land_slot)));
+  }
+  // An entry that encodes into the engine's LineSpec::casts (a `cast=` or `act=` token) -- what a
+  // `landat=<k>` position counts. Mirrors encodeLine's cast filter exactly.
+  function isSpecCast(p) {
+    return p && p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace'
+        && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act');
+  }
+  // The queued land's POSITION, from where it sits in the queue: '' = first (before every cast),
+  // 'all' = after every cast, or the number of casts before it (`landat=<k>`). Only a land queued
+  // AFTER a cast on a decision that offers positioned lines (`after`, stamped by queueCard) is
+  // positioned at all; every other land is land-first, exactly as before.
+  function landPosition(plan, l) {
+    if (!l || !l.after) return '';
+    const i = plan.indexOf(l);
+    const before = plan.slice(0, i).filter(isSpecCast).length;
+    const later  = plan.slice(i + 1).filter(isSpecCast).length;
+    if (before === 0) return '';
+    return later === 0 ? 'all' : String(before);
   }
   // A queued entry that is a cast/activation the land could come AFTER (not a land, pretap, LE discard).
   function isCastLike(p) { return p && p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'pretap'; }
@@ -446,9 +466,14 @@
     // A land queued from the library TOP (`fromTop`, Courser) encodes as `landtop=` -- `land=` keeps
     // meaning a HAND copy, so every saved reference replays unchanged -- and its timing rides the
     // `landat=all` modifier (`landafter=` names a hand copy only).
-    const parts = []; const l = planLand(plan);
-    if (l && l.fromTop) { parts.push('landtop=' + l.name); if (l.after) parts.push('landat=all'); }
-    else if (l) parts.push((l.after ? 'landafter=' : 'land=') + l.name);
+    // A land queued BETWEEN two casts (`after`, with a cast still to come) encodes its position as
+    // `landat=<k>` -- k = the casts before it, in click order (CheckLine maps k onto the engine's
+    // Plan::land_slot, which counts landfall casts) -- "cast Khalni, play the Forest, cast Rampant
+    // Growth with its mana". After every cast it stays `landafter=` (hand) / `landat=all` (top).
+    const parts = []; const l = planLand(plan); const pos = landPosition(plan, l);
+    if (l && l.fromTop) { parts.push('landtop=' + l.name); if (pos) parts.push('landat=' + pos); }
+    else if (l && pos === 'all') parts.push('landafter=' + l.name);
+    else if (l) { parts.push('land=' + l.name); if (pos) parts.push('landat=' + pos); }
     // Taps first: they are what the rest of the line is paid from.
     for (const p of plan) if (isPreTap(p)) parts.push(preTapToken(p));
     for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act')) parts.push(lineVerb(p) + '=' + p.name);
@@ -654,7 +679,7 @@
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
-           offersLandAfter, topLandOffered,
+           offersLandAfter, topLandOffered, landPosition,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
