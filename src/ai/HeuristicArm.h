@@ -63,7 +63,7 @@ enum Slot : int
     M2_KEY_COARSE,            // MTG_M2_KEY_COARSE         interior-m2 solve memo keys on the m2 dependency set
     M2_FIX_UNFILTERED,        // MTG_M2_FIX_UNFILTERED     fixpoint kill-scan probes ALL plans, not just projected-lethal
     M2_FIX_RESOLVE,           // MTG_M2_FIXPOINT=2         fixpoint mode 2: gated full re-solve on actionable draws
-    STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-approved StompySurprise cast order (default ON 2026-10-14)
+    STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-approved StompySurprise cast order (default OFF pending the payment fix, 2026-10-15)
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
     KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
