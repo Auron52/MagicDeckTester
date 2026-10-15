@@ -93,6 +93,8 @@
   //   adventure=  Brightcap Badger's adventure half (names the PARENT card)     (LineSpec::adventures)
   //   blink=      Emiel / Eldrazi Displacer, "<outlet>[@<target m_number>]"    (LineSpec::blinks)
   //   taplife=    Wellwisher's "{T}: gain 1 life for each Elf" (names the SOURCE) (LineSpec::tap_lifes)
+  //   landsearch= Evolving Wilds / Myriad Landscape / Khalni Heart Expedition crack (names the SOURCE;
+  //               the lands are picked at resolution)                      (LineSpec::land_searches)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
   const MODE_VERBS = { jittemode: true, gyexile: true };

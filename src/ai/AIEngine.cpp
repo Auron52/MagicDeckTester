@@ -3694,6 +3694,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // executor half, and the realised chapter is the one the scored line simulated.
             // Write-when->=0, and it must survive to next turn's draw step (see the GameState note).
             if (plan.saga_target_choice >= 0) { state.scripted_saga_target = plan.saga_target_choice; }
+            // Search for Tomorrow's searched off-suspend pick: the SAME shared-consumer shape as the
+            // saga target (CastOffSuspend reads the GameState field in both worlds, at the next
+            // upkeep), so the state write is the whole executor half. Write-when->=0.
+            if (plan.upkeep_land_search_choice >= 0)
+            { state.scripted_upkeep_land_search = plan.upkeep_land_search_choice; }
             // Searched dork attack/hold lockstep (MTG_DORK_ATK_SEARCH): the committed m1 plan's
             // combat-variant choice pins this turn's DeclareAttackers, so the realised combat is
             // the one the scored line simulated. Write-when->=0; m2 plans never carry the field.
@@ -3966,6 +3971,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedSacLand _ssac_exec(plan.sac_pins);      // executor/rollout lockstep for the searched
                                                     // sac-land picks (one entry per sac ordinal,
                                                     // resolved at the true state); empty inert
+    ScriptedLandSearch _sls_exec(plan.land_search_pins);   // executor/rollout lockstep for the
+                                                    // searched land-search picks (core/LandSearch.h:
+                                                    // one entry per land-search ordinal); empty inert
     ScriptedFreshMode _sfm_exec(plan.freshmode_choice);  // executor/rollout lockstep for the
                                                     // fresh-spend branch: the committed lethal's
                                                     // payment may crack the same-turn mint, so the
@@ -3988,6 +3996,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
     if (plan.combat_aura_swap_choice >= 0)
     { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; state.scripted_combat_aura_swap_in = -1; }
+    // Primeval Titan's searched attack pick -- lockstep twin of ApplyPlanDirect's write.
+    if (plan.attack_land_search_choice >= 0)
+    { state.scripted_attack_land_search = plan.attack_land_search_choice; }
 
     // Cast a spell from hand by name.
     // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's

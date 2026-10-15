@@ -832,6 +832,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.gy_return_requires_subtype  = params.value("gy_return_requires_subtype", std::string());
     p.gy_return_requires_creature = params.value("gy_return_requires_creature", false);
     p.gy_return_sacrifices_source = params.value("gy_return_sacrifices_source", true);
+    p.gy_return_at_random         = params.value("gy_return_at_random", false);   // Haunted Fengraf
     p.upkeep_creates_tokens          = params.value("upkeep_creates_tokens", 0);
     p.upkeep_token_power             = params.value("upkeep_token_power", 0);
     p.upkeep_token_toughness         = params.value("upkeep_token_toughness", 0);
@@ -1181,6 +1182,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.ritual_float_gy_self_bonus= params.value("ritual_float_gy_self_bonus", false);
     p.splice_onto_arcane        = params.value("splice_onto_arcane", false);
     p.suspend_time_counters     = params.value("suspend_time_counters", 0);
+    if (params.contains("suspend_cost"))   // Search for Tomorrow "Suspend 2--{G}"; absent = {0}
+        p.suspend_cost = ManaCostFromString(params["suspend_cost"].get<std::string>());
     p.sac_for_mana_amount       = params.value("sac_for_mana_amount", 0);
     p.sac_for_mana_color        = params.value("sac_for_mana_color", std::string());
     p.impulse_exile             = params.value("impulse_exile", 0);
@@ -1259,6 +1262,23 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.upkeep_sac_tutor_creatures    = params.value("upkeep_sac_tutor_creatures", 0);
     p.upkeep_sac_tutor_opp_min      = params.value("upkeep_sac_tutor_opp_min", 0);
     p.tutor_land_to_battlefield     = params.value("tutor_land_to_battlefield", false);
+    // LAND SEARCH (src/core/LandSearch.h). An empty "land_search_activation_cost" string parses to an
+    // all-zero ManaCost ({T}-only / counters-only abilities), never nullopt -- the activation tables
+    // are keyed on has_value() (the Wellwisher precedent).
+    p.land_search_count               = params.value("land_search_count", 0);
+    p.land_search_basic_only          = params.value("land_search_basic_only", false);
+    p.land_search_share_land_type     = params.value("land_search_share_land_type", false);
+    p.land_search_to_hand             = params.value("land_search_to_hand", 0);
+    p.land_search_tapped              = params.value("land_search_tapped", false);
+    p.land_search_optional            = params.value("land_search_optional", false);
+    p.land_search_on_resolve          = params.value("land_search_on_resolve", false);
+    p.land_search_on_enter_or_attack  = params.value("land_search_on_enter_or_attack", false);
+    if (params.contains("land_search_activation_cost"))
+        p.land_search_activation_cost =
+            ManaCostFromString(params["land_search_activation_cost"].get<std::string>());
+    p.land_search_activation_taps           = params.value("land_search_activation_taps", false);
+    p.land_search_activation_remove_quest   = params.value("land_search_activation_remove_quest", 0);
+    p.land_search_activation_sacrifice_self = params.value("land_search_activation_sacrifice_self", false);
 
     p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);

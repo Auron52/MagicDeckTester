@@ -259,6 +259,23 @@ enum class PermAbilityMode
     // second activation is reached through the put-in-hand breakpoint re-solve, one at a time.
     // Resolution shares PerformEtbDig's body (PerformLookTakeDig). Appended LAST.
     ActivatedDig,
+    // [{cost}, ]{T}, Sacrifice this: Search your library for <land search>, put it/them onto the
+    // battlefield [tapped], then shuffle  (Evolving Wilds, Terramorphic Expanse -- cost "" -- and
+    // Myriad Landscape, "{2}"; CardParams::land_search_activation_* + the land_search_* search spec).
+    // A {T} mode (summoning sickness applies to a land too only through CanTapNow -- lands are never
+    // sick), once per source: the source is SACRIFICED as part of the cost, so it never gets a K
+    // block. The {T} is paid BEFORE the mana half (SetPermTapped, CR 602.2a), so Myriad can never tap
+    // itself for its own {2}. Resolution: ApplyLandSearchActivation (src/core/LandSearch.h) ->
+    // PerformLandSearch with the in-plan land-search pin. Appended LAST.
+    SacLandSearch,
+    // Remove N quest counters from this and sacrifice it: Search your library for <land search>...
+    // (Khalni Heart Expedition, N = 3; CardParams::land_search_activation_remove_quest). NO {T}: the
+    // cost is COUNTERS plus the sacrifice, so it is legal the turn the Expedition enters and while
+    // tapped -- listed in PermAbilityTaps' exclusion list. Once per source (sacrificed). Its emission
+    // is a counter-gated block beside the spore outlet's (not the ModeSpec mana tables), with an
+    // out-of-band ActKey slot so a mid-plan landfall that brings it to N opens breakpoint site 9.
+    // Appended LAST.
+    QuestSacLandSearch,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -277,7 +294,9 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::PayToken
         && m != PermAbilityMode::FadeSaproling
         && m != PermAbilityMode::PingAll
-        && m != PermAbilityMode::ActivatedDig;   // Recruitment Officer: "{3}{W}:" -- no {T}
+        && m != PermAbilityMode::ActivatedDig         // Recruitment Officer: "{3}{W}:" -- no {T}
+        && m != PermAbilityMode::QuestSacLandSearch;  // Khalni Heart Expedition: counters + sac, no {T}
+    // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding
     // either would make its ability repeatable within a turn and legal on an already-tapped (or

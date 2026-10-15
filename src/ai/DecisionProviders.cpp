@@ -1475,6 +1475,61 @@ void DecisionProvider::LandfallCounterTargetOrder(const GameState& s, int contro
                      [&](int a, int b) { return key(a) > key(b); });
 }
 
+void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                           std::vector<std::vector<std::string>>& picks) const
+{
+    (void)count; (void)to_hand;
+    if (picks.size() < 2) { return; }
+    // Colours we NEED (a coloured pip on a nonland card in hand) and HAVE (a permanent we control
+    // produces it). Read off definitions -- hand cards are name-only placeholders.
+    bool need[5] = { false, false, false, false, false };
+    bool have[5] = { false, false, false, false, false };
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (mc.white > 0) { need[0] = true; }
+        if (mc.blue  > 0) { need[1] = true; }
+        if (mc.black > 0) { need[2] = true; }
+        if (mc.red   > 0) { need[3] = true; }
+        if (mc.green > 0) { need[4] = true; }
+    }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        for (Color c : d->params.produces)
+        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have[ci] = true; } }
+    }
+    auto score = [&](const std::vector<std::string>& pick)
+    {
+        bool got[5] = { false, false, false, false, false };
+        for (const std::string& nm : pick)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            if (d == nullptr) { continue; }
+            for (Color c : d->params.produces)
+            { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { got[ci] = true; } }
+        }
+        int cover = 0;
+        for (int i = 0; i < 5; ++i) { if (need[i] && !have[i] && got[i]) { ++cover; } }
+        return cover * 16 + static_cast<int>(pick.size());
+    };
+    std::vector<int> keys(picks.size());
+    for (std::size_t i = 0; i < picks.size(); ++i) { keys[i] = score(picks[i]); }
+    std::vector<std::size_t> order(picks.size());
+    for (std::size_t i = 0; i < order.size(); ++i) { order[i] = i; }
+    std::stable_sort(order.begin(), order.end(),
+                     [&](std::size_t a, std::size_t b) { return keys[a] > keys[b]; });
+    std::vector<std::vector<std::string>> out;
+    out.reserve(picks.size());
+    for (std::size_t i : order) { out.push_back(std::move(picks[i])); }
+    picks = std::move(out);
+}
+
 // ---- Base rules for the remaining ported built-ins -------------------------------------------
 // Each reproduces the historical inline pick at index 0, so every port is byte-identical. See the
 // hook declarations in DecisionProvider.h for what each rule says and where it looks weak.

@@ -1,0 +1,63 @@
+{
+  "_comment": [
+    "Land search 2026-10-15: Evolving Wilds is a REAL land with no mana ability whose '{T}, Sacrifice: search a",
+    "basic, onto the battlefield tapped' is a searched trailing activation (PermAbilityMode::SacLandSearch) -- NOT",
+    "the fetchland collapse. Board: Rampaging Baloths (can attack), an untapped Evolving Wilds, six Forests; a",
+    "Forest in hand. Land drop (a landfall -> a 4/4 Beast, summoning sick) then crack Wilds (a second landfall)",
+    "-- neither Beast can attack this turn, so the only damage is Baloths' 6: the opponent at 6 dies on turn 6,",
+    "and the two Beasts (8 power) are on the board for turn 7. Pins that the Wilds crack is offered and that it",
+    "is never tapped for mana (template custom, produces nothing): Baloths' T7 swing of 6 + 4 + 4 = 14 needs BOTH",
+    "Beasts, so opponent life 20 -- 6 on T6 = 14 left -- is lethal on turn 7 only if the crack happened."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Evolving Wilds"
+    },
+    {
+      "name": "Rampaging Baloths"
+    }
+  ],
+  "hand": [
+    "Forest"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Forest",
+    "Forest"
+  ],
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 7,
+  "expect_win_turn": 7
+}

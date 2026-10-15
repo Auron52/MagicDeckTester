@@ -267,6 +267,8 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_bruna_gather = -1;   // searched Bruna gather subset is per-turn (same lockstep)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
+    state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
+    // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;
@@ -703,6 +705,14 @@ void GameEngine::CombatPhase(GameState& state)
     // the top two and play one"). Same CR 508.4 position as the two calls above. The MODE is the
     // searched Plan::tectonic_mode_choice pin. Mirrors TurnSolver::SimulateCombat.
     ApplyAttackModalTriggers(state, state.active_player_index, atk_idx);
+
+    // Primeval Titan's attack trigger ("whenever this creature enters or attacks, you may search
+    // your library for up to two land cards, put them onto the battlefield tapped"): same CR 508.4
+    // position (declared attackers only), BEFORE anything reads power, so the fetched lands'
+    // landfall payloads pump attacking Plants this combat. Pick = the searched
+    // Plan::attack_land_search_choice pin. Repairs atk_idx (a fetched Karoo's bounce erases a slot).
+    // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
+    FireAttackLandSearch(state, state.active_player_index, atk_idx);
 
     const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at

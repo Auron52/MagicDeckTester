@@ -17,6 +17,7 @@ struct ContPinScope
     std::optional<ScriptedEtbCounter> etbcounter;
     std::optional<ScriptedTutor>      tutor;
     std::optional<ScriptedSacLand>    sac;
+    std::optional<ScriptedLandSearch> land_search;
 
     explicit ContPinScope(const ContPins* p)
     {
@@ -27,6 +28,7 @@ struct ContPinScope
         if (p->etbcounter >= 0) { etbcounter.emplace(p->etbcounter); }
         if (p->tutor      >= 0) { tutor.emplace(p->tutor); }
         if (!p->sac.empty())    { sac.emplace(p->sac); }
+        if (!p->land_search.empty()) { land_search.emplace(p->land_search); }
     }
     ContPinScope(const ContPinScope&) = delete;
     ContPinScope& operator=(const ContPinScope&) = delete;
@@ -44,5 +46,6 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.scry       = p.scry_choice;
     c.bounce     = p.bounce_choice;
     c.sac        = p.sac_pins;
+    c.land_search = p.land_search_pins;
     return c;
 }

@@ -1,0 +1,84 @@
+{
+  "_comment": [
+    "Land search 2026-10-15: Khalni Heart Expedition holds ONE quest counter. Playing the Forest (counter 2) and",
+    "casting Rampant Growth (counter 3) fill it MID-PLAN; the crack ('remove three quest counters and sacrifice it:",
+    "two basics onto the battlefield tapped', PermAbilityMode::QuestSacLandSearch) is then reachable in the SAME",
+    "main phase only through breakpoint site 9 (its out-of-band activation key, kActQuestLandSearch) -- activations",
+    "are enumerated against the plan-START board. Avenger of Zendikar and three 0/1 Plants can attack: four",
+    "landfalls make each Plant 4/5 -> 5 + 12 = 17 = the opponent's life; without the crack it is 5 + 6 = 11."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 17,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Khalni Heart Expedition",
+      "quest_counters": 1
+    },
+    {
+      "name": "Avenger of Zendikar"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Rampant Growth"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Forest",
+    "Forest",
+    "Forest",
+    "Mountain"
+  ],
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 6,
+  "expect_win_turn": 6
+}

@@ -1828,6 +1828,94 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// ---- LAND SEARCH: the pin + the forward declarations (bodies in src/core/LandSearch.h) ----------
+// Declared this early because the fire sites are spread through this header -- the instant/sorcery
+// resolution (EffectHandler / apply_one), the own-ETB cascade (Primeval Titan), the off-suspend cast
+// (Search for Tomorrow), the permanent-ability resolver (Evolving Wilds / Myriad Landscape / Khalni
+// Heart Expedition) and the declare-attackers trigger (Titan again). See LandSearch.h for the design.
+struct LandSearchSpec
+{
+    int  count           = 0;      // "up to N" (0 = not a land search)
+    bool basic_only      = false;  // "basic land card(s)" -- IsBasicLandCard on the definition
+    bool share_land_type = false;  // the picks share at least one land subtype (Myriad Landscape)
+    int  to_hand         = 0;      // how many picks go to HAND (the rest: battlefield)
+    bool tapped          = false;  // battlefield entries forced tapped
+    bool optional        = false;  // "you MAY search" -- human-only decline
+};
+inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
+{
+    LandSearchSpec s;
+    s.count           = p.land_search_count;
+    s.basic_only      = p.land_search_basic_only;
+    s.share_land_type = p.land_search_share_land_type;
+    s.to_hand         = p.land_search_to_hand;
+    s.tapped          = p.land_search_tapped;
+    s.optional        = p.land_search_optional;
+    return s;
+}
+
+// SEARCHED land-search pick (Plan::land_search_pins): a per-ORDINAL pin LIST, the sac_pins shape
+// exactly -- one plan can resolve several land searches (Rampant Growth + Cultivate, a Titan's ETB
+// + a Wilds crack), and the winning deviation can be any of them. Each resolution consumes the next
+// entry in canonical apply order; entry k >= 0 takes LandSearchPicks(...)[min(k, size-1)] computed
+// AT RESOLUTION (duplicate-not-whiff clamp), -1 (or past the list's end) takes the provider's front.
+// The list rides a POINTER to the Plan's own vector (the Plan outlives the apply).
+inline thread_local const std::vector<int>* g_scripted_land_search_pins   = nullptr;
+inline thread_local int                     g_scripted_land_search_cursor = 0;
+struct ScriptedLandSearch
+{
+    explicit ScriptedLandSearch(const std::vector<int>& pins)
+        : saved(g_scripted_land_search_pins), saved_cursor(g_scripted_land_search_cursor)
+    {
+        g_scripted_land_search_pins   = pins.empty() ? nullptr : &pins;
+        g_scripted_land_search_cursor = 0;
+    }
+    ~ScriptedLandSearch()
+    { g_scripted_land_search_pins = saved; g_scripted_land_search_cursor = saved_cursor; }
+    ScriptedLandSearch(const ScriptedLandSearch&) = delete;
+    ScriptedLandSearch& operator=(const ScriptedLandSearch&) = delete;
+    const std::vector<int>* saved;
+    int saved_cursor;
+};
+// The ONE consumption rule, shared by every in-plan land-search site (spell resolution, Titan ETB,
+// the two activations). Consumed UNCONDITIONALLY, even by a search that finds nothing, so the plan's
+// j-th entry always steers the plan's j-th land search.
+inline int ConsumeScriptedLandSearchPin()
+{
+    if (g_scripted_land_search_pins != nullptr
+        && g_scripted_land_search_cursor < static_cast<int>(g_scripted_land_search_pins->size()))
+    {
+        const int pin = (*g_scripted_land_search_pins)[static_cast<std::size_t>(g_scripted_land_search_cursor)];
+        ++g_scripted_land_search_cursor;
+        return pin;
+    }
+    return -1;
+}
+// PACKED per-trigger pins for the two land searches decided in a main phase but resolved LATER --
+// Primeval Titan's ATTACK trigger (GameState::scripted_attack_land_search, consumed at
+// declare-attackers) and Search for Tomorrow's off-suspend cast (GameState::
+// scripted_upkeep_land_search, consumed at the NEXT upkeep). A GameState int rather than a scoped
+// guard because the apply has returned by then (the tectonic / Vial-charge state-pin route). Packed
+// kLandSearchPinBits bits per trigger ordinal, low bits first; -1 = unpinned (every trigger takes
+// the front). A consumed ordinal is shifted out, and an all-zero remainder (every later trigger at
+// rank 0 == the front) collapses back to -1, so an exhausted pin never splits a state key.
+constexpr int kLandSearchPinBits = 6;
+constexpr int kLandSearchPinMask = (1 << kLandSearchPinBits) - 1;
+constexpr int kLandSearchPinOrdinals = 5;   // 30 bits
+inline int ConsumePackedLandSearchPin(int& packed)
+{
+    if (packed < 0) { return -1; }
+    const int k = packed & kLandSearchPinMask;
+    packed >>= kLandSearchPinBits;
+    if (packed == 0) { packed = -1; }
+    return k;
+}
+inline void PerformLandSearch(GameState& state, int controller, const LandSearchSpec& spec,
+                              const std::string& source, int pin);          // LandSearch.h
+inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
+                                      const CardDefinition& def);           // LandSearch.h
+inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx);
+
 // ---- Progenitus: "If ~ would be put into a graveyard from anywhere, reveal it and shuffle it
 // into its owner's library instead." (CardParams::graveyard_replace_shuffle_library, CR 614 self-
 // replacement.) Called at the graveyard-push sites reachable for a hand card in this engine (the
@@ -9048,6 +9136,30 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         }
     }
 
+    // PRIMEVAL TITAN's ENTER half ("Whenever this creature enters or attacks, you may search your
+    // library for up to two land cards, put them onto the battlefield tapped, then shuffle";
+    // land_search_on_enter_or_attack -- the attack half is FireAttackLandSearch). This cascade is the
+    // universal own-ETB site, so a cast, a Genesis Wave put and any other put all reach it, in every
+    // world. The pick is the in-plan land-search pin (the ordinal this resolution holds in the plan's
+    // canonical apply order; a put with no plan takes the provider's front). The search APPENDS lands
+    // and a fetched Karoo's bounce may ERASE one, so this creature's slot is re-found by number before
+    // anything below reads it. Param-gated -> byte-identical for every other deck.
+    if (p.land_search_on_enter_or_attack && p.land_search_count > 0)
+    {
+        const int self_num = state.battlefield[entered_index].card.m_number;
+        const int self_ctl = state.battlefield[entered_index].controller_index;
+        PerformLandSearch(state, controller, LandSearchSpecOf(p), def->card.m_name.str(),
+                          ConsumeScriptedLandSearchPin());
+        entered_index = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == self_num
+                && state.battlefield[static_cast<std::size_t>(i)].controller_index == self_ctl)
+            { entered_index = i; break; }
+        }
+        if (entered_index < 0) { return; }
+    }
+
     // Felidar Guardian: "When this creature enters, you may exile another target permanent you
     // control, then return that card to the battlefield under its owner's control." On a CAST
     // the target rode the searched chosen_x axis (etb_kx carries the target's m_number; 0 =
@@ -10878,6 +10990,42 @@ inline bool GyReturnHasFuel(const GameState& state, int controller, const CardDe
     return false;
 }
 
+// Haunted Fengraf (gy_return_at_random): the sentinel a random-return action carries in
+// tutor_target -- there is no card to name, because the player never chooses one.
+inline const char* const kGyReturnRandom = "@random";
+
+// THE RANDOM DRAW for an at-random graveyard return: an index into `elig` (graveyard indices of the
+// legal cards). Deterministic, so both worlds and every replay draw the same card -- the engine has
+// no chance nodes; every random event is a seeded value the clairvoyant search reads exactly as it
+// reads the library (the Gamble discard precedent). Two deliberate differences from Gamble's key:
+//   * NO search_count: for an ACTIVATION that would be a function of WHEN in the turn the search
+//     activates it (before or after a Cultivate's shuffle) -- a free lever to re-roll the draw.
+//     (game_seed, turn, eligible count) leaves only the levers a real player also pulls blind.
+//   * CANONICAL order (card number, then name) rather than graveyard STORAGE order, so the draw is
+//     a function of the eligible card multiset alone -- a rollout/executor layout difference cannot
+//     re-deal it (the Gamble lockstep lesson), and the end-of-turn fold sees exactly what decides it.
+// Salted like every mid-game random event (shuffle_salt / the search-only shuffle_salt_search).
+inline int GyReturnRandomPick(const GameState& state, const std::vector<Card>& gy, std::vector<int> elig)
+{
+    if (elig.empty()) { return -1; }
+    std::sort(elig.begin(), elig.end(), [&gy](int a, int b)
+    {
+        const Card& x = gy[static_cast<std::size_t>(a)];
+        const Card& y = gy[static_cast<std::size_t>(b)];
+        if (x.m_number != y.m_number) { return x.m_number < y.m_number; }
+        return x.m_name.str() < y.m_name.str();
+    });
+    uint64_t mix = static_cast<uint64_t>(state.game_seed) * 0x9E3779B97F4A7C15ull
+                 + (static_cast<uint64_t>(state.turn_number) + 1) * 0xD1B54A32D192ED03ull
+                 + static_cast<uint64_t>(elig.size()) * 0xCA5A826395121157ull
+                 + 0x46E9C4AFull;   // domain tag: a stream distinct from Gamble's
+    mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
+    mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
+    mix ^= mix >> 31;
+    mix = SaltSeed(mix, g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt);
+    return elig[static_cast<std::size_t>(mix % elig.size())];
+}
+
 // Pay the {T} + Sacrifice half of the cost (the mana half is paid by the caller, like every other
 // activated ability here) and return the chosen graveyard card to hand. `target_name` is the
 // searched/human pick; an empty or now-illegal name resolves to the first legal target so a
@@ -10900,6 +11048,53 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
         break;
     }
     if (src < 0 || !d) { return; }
+
+    // HAUNTED FENGRAF: "Return a creature card AT RANDOM from your graveyard to your hand." Not
+    // targeted and not chosen, so `target_name` is ignored (it is kGyReturnRandom). The costs are
+    // paid first ({T} + sacrifice, CR 601.2h/602.1; a sacrifice cost IS a sacrifice, CR 701.17 --
+    // FireSacrificeWatchers), then the card is drawn from the eligible set as it stands AFTER the
+    // costs (GyReturnRandomPick). No eligible card at resolution: the costs stay paid and nothing
+    // returns (no target, so nothing to fizzle). The enumeration offers the activation only with
+    // fuel, so that end is a stale-plan guard.
+    if (d->params.gy_return_at_random)
+    {
+        if (!GyReturnHasFuel(state, controller, *d)) { return; }   // stale plan: never activated
+        const Card sacrificed = state.battlefield[static_cast<std::size_t>(src)].card;
+        const std::string src_label = sacrificed.m_name.str();
+        if (d->params.gy_return_sacrifices_source)
+        {
+            state.battlefield.erase(state.battlefield.begin() + src);
+            for (Permanent& o : state.battlefield)   // CR 301.5c, parity with every leave path
+            {
+                if (o.equipped_to      == sacrificed.m_number) { o.equipped_to      = 0; }
+                if (o.aura_attached_to == sacrificed.m_number) { o.aura_attached_to = 0; }
+            }
+            state.players[controller].graveyard.push_back(sacrificed);
+            FireSacrificeWatchers(state, controller);
+        }
+        else
+        {
+            state.battlefield[static_cast<std::size_t>(src)].tapped = true;
+        }
+        std::vector<Card>& gyr = state.players[controller].graveyard;
+        std::vector<int> elig;
+        for (int i = 0; i < static_cast<int>(gyr.size()); ++i)
+        { if (GyReturnTargetLegal(*d, ZoneCard(gyr[static_cast<std::size_t>(i)]))) { elig.push_back(i); } }
+        const int pick_r = GyReturnRandomPick(state, gyr, elig);
+        if (pick_r < 0) { return; }
+        const Card returned = gyr[static_cast<std::size_t>(pick_r)];
+        gyr.erase(gyr.begin() + pick_r);
+        TRACE("gyrandom", "T%d seed=%llu eligible=%zu -> %s", state.turn_number,
+              static_cast<unsigned long long>(state.game_seed), elig.size(), returned.m_name.str().c_str());
+        EnterHand(state, controller, returned, HandEntryReason::Recur);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          src_label + ": returned " + returned.m_name.str()
+                          + " from the graveyard to hand (at random)");
+        }
+        return;
+    }
 
     std::vector<Card>& gy = state.players[controller].graveyard;
     int pick = -1;
@@ -15460,6 +15655,31 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
     // do not come through here. Byte-identical for every deck that never suspends (this path never runs).
     ++state.spells_cast_this_turn;
     state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+    // A suspended INSTANT or SORCERY (Search for Tomorrow, 2026-10-15) is cast, RESOLVES, and goes to
+    // its owner's graveyard -- it never becomes a permanent (CR 702.62e / 608.2n). Only the land
+    // search is modelled for a suspended spell today (no other suspend sorcery is in the pool); its
+    // pick is the packed UPKEEP pin (Plan::upkeep_land_search_choice -> GameState::
+    // scripted_upkeep_land_search, one ordinal per arrival), the Aether Vial next-upkeep route.
+    // "You MAY cast it" is collapsed to CAST: declining leaves the card in exile with no time
+    // counters, gaining nothing; the only thing that differs is the search's shuffle, which is
+    // neutral in real-information terms (PROVISIONAL -- disclosed in the card's bracket note).
+    // FireEtbWatchers does NOT run (nothing entered). Every permanent suspend card (Lotus Bloom)
+    // takes the branch below unchanged -> byte-identical.
+    if (!def->card.IsPermanentCard())
+    {
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "suspend",
+                          "\xE2\x8C\x9B " + card.m_name.str() + " -- cast off suspend");
+        }
+        if (def->params.land_search_on_resolve && def->params.land_search_count > 0)
+        {
+            PerformLandSearch(state, controller, LandSearchSpecOf(def->params), card.m_name.str(),
+                              ConsumePackedLandSearchPin(state.scripted_upkeep_land_search));
+        }
+        state.players[static_cast<std::size_t>(controller)].graveyard.push_back(card);
+        return;
+    }
     Permanent perm;
     perm.card              = def->card;
     perm.card.m_number     = card.m_number;   // preserve the per-copy id for logging/state key
@@ -15479,6 +15699,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
 // arrive_turn = turn + its suspend_time_counters. Shared by the rollout (ApplyPlanDirect) and the
 // executor (AIEngine::TakeTurn) so the two worlds exile the card identically (lockstep). No-op if the
 // card isn't in hand / isn't suspendable.
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);   // TurnSolver
 inline void ApplySuspend(GameState& state, int controller, const std::string& name)
 {
     Player& pl = state.players[controller];
@@ -15487,6 +15708,14 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
         if (it->m_name != name) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
         if (!d || d->params.suspend_time_counters <= 0) { continue; }
+        // THE SUSPEND COST (Search for Tomorrow's "Suspend 2--{G}"), paid HERE so every apply site --
+        // the rollout's two and the executor's five -- pays it identically through the shared payer
+        // (the ApplyPermAbility Clue-fusion precedent for a shared-code payment). Stranded -> the card
+        // stays in hand (no suspend). A {0} suspend (Lotus Bloom: suspend_cost unset) pays nothing and
+        // takes the exact old path -> byte-identical.
+        if (d->params.suspend_cost.has_value() && d->params.suspend_cost->ManaValue() > 0
+            && !TapForCostDirect(state, d->params.suspend_cost.value(), /*for_creature=*/false))
+        { return; }
         SuspendedCard sc;
         sc.card        = *it;
         sc.arrive_turn = state.turn_number + d->params.suspend_time_counters;
@@ -15721,6 +15950,14 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
 inline void ProcessSuspendArrivals(GameState& state, int controller)
 {
     Player& pl = state.players[controller];
+    // The searched off-suspend land-search pin (Search for Tomorrow) is meant for THIS upkeep only;
+    // whatever the arrivals below do not consume dies here, so a stale pin can never split a later
+    // state key. -1 in every deck without the card -> byte-identical.
+    struct UpkeepPinExpiry
+    {
+        GameState& st;
+        ~UpkeepPinExpiry() { st.scripted_upkeep_land_search = -1; }
+    } _upkeep_pin_expiry{ state };
     if (pl.suspended_cards.empty()) { return; }
     std::vector<SuspendedCard> remaining;
     remaining.reserve(pl.suspended_cards.size());
@@ -20545,6 +20782,16 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             if (ld == nullptr || state.players[controller].life < ld->params.activate_min_life)
             { return false; }
         }
+        // Khalni Heart Expedition: "Remove three quest counters" is part of the COST, so the
+        // activation is impossible without them (CR 602.2b / 601.2h) -- checked before anything is
+        // paid, exactly like the life gate above. A stale plan (the counters were spent) is a no-op.
+        if (mode == PermAbilityMode::QuestSacLandSearch)
+        {
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(p.card);
+            if (qd == nullptr || qd->params.land_search_activation_remove_quest <= 0
+                || p.quest_counters < qd->params.land_search_activation_remove_quest)
+            { return false; }
+        }
         // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
         // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
         // an untappable source would have stopped a just-wished Essence Depleter from draining on
@@ -20658,6 +20905,9 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
                                               return "sacrifice it: gain 2 life for each creature you control";
         case PermAbilityMode::TapLifegain:    return "gain 1 life for each Elf on the battlefield";
         case PermAbilityMode::ActivatedDig:   return "look at the top four; put a creature (MV 3 or less) into hand";
+        case PermAbilityMode::SacLandSearch:  return "sacrifice it: search for land(s), put them onto the battlefield";
+        case PermAbilityMode::QuestSacLandSearch:
+                                              return "remove quest counters, sacrifice it: search for two basic lands";
         default:                              return "activate";
     }
 }
@@ -21260,6 +21510,13 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             }
             break;
         }
+        case PermAbilityMode::SacLandSearch:
+        case PermAbilityMode::QuestSacLandSearch:
+            // Evolving Wilds / Terramorphic Expanse / Myriad Landscape ({T} and any mana already
+            // paid by the caller) and Khalni Heart Expedition (no {T}, no mana). The rest of the cost
+            // -- quest counters, the sacrifice -- and the search: core/LandSearch.h.
+            ApplyLandSearchActivation(state, controller, idx, *d);
+            break;
         case PermAbilityMode::TapLifegain:
         {
             // Wellwisher: "{T}: You gain 1 life for each Elf on the battlefield." The {T} is already
@@ -29185,10 +29442,20 @@ inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& de
 // effect PUTS onto the battlefield reaches the landfall watchers here, after its own ETBs.
 // `fire_landfall = false` is for exactly one shape: a SIMULTANEOUS multi-put that fires the batch's
 // landfall itself after its enter triggers (PerformGenesisWave), so the land is not counted twice.
+//
+// `entry_tap` (LAND SEARCH, 2026-10-15): ForcedTapped is "put it onto the battlefield TAPPED" (Rampant
+// Growth, Cultivate, Evolving Wilds, Myriad Landscape, Khalni Heart Expedition, Primeval Titan). The
+// land's own enters-tapped rule is then NOT consulted at all -- LandEntersTapped also PAYS a shock
+// land's 2 life as a side effect, which a forced-tapped put must not do (there is nothing to decide:
+// the land enters tapped either way). A strongly-typed enum rather than a bool so a positional call
+// can never be confused with resolve_full_etb / fire_landfall. Natural (the default) keeps every
+// existing caller byte-identical.
+enum class LandEntryTap : std::uint8_t { Natural, ForcedTapped };
 inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
-                      bool resolve_full_etb = false, bool fire_landfall = true)
+                      bool resolve_full_etb = false, bool fire_landfall = true,
+                      LandEntryTap entry_tap = LandEntryTap::Natural)
 {
-    bool tapped = LandEntersTapped(state, def);
+    bool tapped = entry_tap == LandEntryTap::ForcedTapped ? true : LandEntersTapped(state, def);
     Permanent perm;
     perm.card              = def.card;
     if (card_number >= 0) { perm.card.m_number = card_number; }
@@ -29506,6 +29773,13 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     // MTG_NO_SEARCH_SHUFFLE).
     ShuffleAfterSearch(state, controller_index);
 }
+
+// The land-search cluster (Rampant Growth, Search for Tomorrow, Cultivate, Evolving Wilds,
+// Terramorphic Expanse, Myriad Landscape, Khalni Heart Expedition, Primeval Titan): the pick
+// generator, the shared resolution helper and the activation / attack-trigger resolvers. Included
+// HERE because every primitive it builds on (EnterLand, ResolveLandEnterEtbExtras,
+// ShuffleAfterSearch, FireSacrificeWatchers) is defined above this point.
+#include "LandSearch.h"
 
 // Removes one depletion counter from a land tapped for mana (e.g. Saprazzan Skerry,
 // Sandstone Needle). Call right after marking the source tapped. A counter at 0 is

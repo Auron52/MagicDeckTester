@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "Land search 2026-10-15: Cultivate puts one basic onto the battlefield tapped and the other into HAND",
+    "(EnterHand(Tutor)); with the land drop unused, the put-in-hand breakpoint (site 10) lets the continuation",
+    "PLAY that basic the same turn -- a second landfall. Avenger of Zendikar and two 0/1 Plants can attack;",
+    "no land in hand, a dead-draw library holding three basics. Two landfalls: 5 + 2x2 = 9 = the opponent's life;",
+    "the fetched land alone would be 5 + 2x1 = 7."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 9,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Avenger of Zendikar"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [
+    "Cultivate"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Forest",
+    "Forest",
+    "Mountain"
+  ],
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 6,
+  "expect_win_turn": 6
+}

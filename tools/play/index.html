@@ -1671,10 +1671,12 @@ function queueActivation(src, opt){
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
     : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
     : opt.verb==='gyexile' ? `${src}: tapping to exile ${opt.mode===2?'a creature card from a graveyard and gain 2 life':'an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
+    : (opt.verb==='gyreturn' && opt.name==='@random') ? `${src}: tapping and sacrificing it to return a creature card AT RANDOM from your graveyard to your hand (the card is not chosen). Commit the phase to resolve it.`
     : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
     : opt.verb==='animate' ? `${src}: animating it — it becomes a creature and can attack this turn. Commit the phase to resolve it.`
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
     : opt.verb==='taplife' ? `${src}: tapping it to gain 1 life for each Elf on the battlefield. Commit the phase to resolve it.`
+    : opt.verb==='landsearch' ? `${src}: sacrificing it to search for land(s). Commit the phase to resolve it — you pick WHICH lands as it resolves.`
     : opt.verb==='pod' ? `${src}: tapping it and sacrificing a creature to fetch ${opt.name}. You pick the victim when committing.`
     : opt.verb==='ooze' ? `${src}: paying {G} to exile ${opt.name} from a graveyard. Commit the phase to resolve it.`
     // Repeatable (no {T}, no sacrifice): say it STACKS, since that is the whole point of the flag
@@ -2587,10 +2589,11 @@ function renderPlanbar() {
               : p.kind==='eternalize' ? ' ⟳ eternalize (from graveyard)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
-              : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + p.name
+              : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + (p.name==='@random' ? 'a creature at random' : p.name)
               : p.verb==='animate'   ? ' ⟳ animate'
               : p.verb==='taptoken'  ? ' ⟳ make a token'
               : p.verb==='taplife'   ? ' ⟳ gain life per Elf'
+              : p.verb==='landsearch' ? ' ⟳ sac → search for lands'
               : p.verb==='equip'     ? ' ⟳ equip'
               : p.verb==='attachall' ? ' ⟳ attach all'
               // The HOST is the chip's `name` for this one (the engine's action names the host too),
@@ -4012,10 +4015,12 @@ function activationPickerHtml(pick){
                    : o.verb==='jittemode' ? jitteModeLabel(o.mode)
                    : o.verb==='gyexile'   ? (o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'
                                                         : 'Exile an instant/sorcery from a graveyard — each opponent loses 2 life')
+                   : (o.verb==='gyreturn' && o.name==='@random') ? `Sacrifice — return a creature card AT RANDOM from your graveyard to your hand`
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
                    : o.verb==='animate'   ? `Animate ${o.name} — it becomes a creature and can attack`
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
                    : o.verb==='taplife'   ? `Tap ${o.name} — gain 1 life for each Elf on the battlefield`
+                   : o.verb==='landsearch' ? `${o.name} — sacrifice it: search for land(s) (you pick them as it resolves)`
                    // Always the single activation now: the go-off count is filtered out of the click
                    // path (clickActivationOptions) and lives on the COMBO OFF panel button instead,
                    // so this picker only ever offers real, one-at-a-time plays. Click it again to

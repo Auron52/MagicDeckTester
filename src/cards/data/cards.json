@@ -11697,10 +11697,192 @@
    "keywords": [
     "Landfall"
    ],
-   "oracle_text": "Landfall — Whenever a land you control enters, you may put a quest counter on this enchantment.\nRemove three quest counters from this enchantment and sacrifice it: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. [PENDING: activation being integrated -- 'Remove three quest counters from this enchantment and sacrifice it: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle' is NOT modelled by this entry yet (designed in logs/landfall_drafts/Khalni_Heart_Expedition.json: an ActivatePermAbility mode whose cost is three quest counters plus sacrificing the source, no {T}, resolving each basic -- picked through IsBasicLandCard -- through EnterLand so each put land fires landfall); the integrator removes this marker. LANDFALL: landfall_quest_counters 1 through PutQuestCounters (Doubling Season doubles it), once per land played or put (OnLandEntered). The 'you may' is resolved YES by DOMINANCE: a quest counter is only ever SPENT by the optional activation, so one more never removes an option -- no cap, no threshold that punishes, the passive opponent never interacts -- the Beastmaster Ascension precedent.]",
+   "oracle_text": "Landfall — Whenever a land you control enters, you may put a quest counter on this enchantment.\nRemove three quest counters from this enchantment and sacrifice it: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. [LANDFALL: landfall_quest_counters 1 through PutQuestCounters (Doubling Season doubles it), once per land played or put (OnLandEntered). The 'you may' is resolved YES by DOMINANCE: a quest counter is only ever SPENT by the optional activation, so one more never removes an option -- no cap, no threshold that punishes, the passive opponent never interacts -- the Beastmaster Ascension precedent. ACTIVATION: PermAbilityMode::QuestSacLandSearch -- remove three quest counters and sacrifice it (land_search_activation_remove_quest 3 + land_search_activation_sacrifice_self; NO {T}, so it is usable the turn it enters and while tapped), then PerformLandSearch puts up to two basic land cards onto the battlefield tapped (each a landfall event through EnterLand) and shuffles once. A searched optional trailing activation of a main phase (holding it for a landfall payoff is a real line); a mid-plan landfall that brings it to three opens the site-9 breakpoint (its own activation key), so the crack is reachable the same main phase. WHICH basics = the in-plan land-search pin; the human picks each at resolution (`tutor_etb`; board verb landsearch=). 'Up to two' collapsed for the search to as many as the library allows (PROVISIONAL dominance). KNOWN GAP (PROVISIONAL, user sign-off needed): an Expedition filled DURING COMBAT (Primeval Titan's attack trigger) cannot be cracked before combat damage -- no in-combat activation window exists for it yet -- so the two extra landfalls on attacking Plants are not reachable that combat.]",
    "template": "custom",
    "parameters": {
-    "landfall_quest_counters": 1
+    "landfall_quest_counters": 1,
+    "land_search_activation_cost": "",
+    "land_search_activation_remove_quest": 3,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_count": 2,
+    "land_search_basic_only": true,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Rampant Growth",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle. [land_search_on_resolve: the shared PerformLandSearch (src/core/LandSearch.h). One basic land card -- the Basic SUPERTYPE read off the definition (IsBasicLandCard), never the basic_land template -- onto the battlefield TAPPED through EnterLand(LandEntryTap::ForcedTapped), the shared land-entry chokepoint, so landfall fires and no shock life is paid; then ONE ShuffleAfterSearch, also on a fail-to-find. Not a land drop. WHICH basic is SEARCHED: the in-plan land-search pin (Plan::land_search_pins) indexes the provider-ordered LandSearchPicks list computed at resolution; copies of one basic are one choice (identity fold). The human picks at resolution (the `tutor_etb` prompt; -1 = find nothing). 'May fail to find' is not offered to the search: a free tapped basic is never worse than none against a passive opponent, and the per-card shuffle key leaves every other card's order unchanged, so the only effect of the find is one land now and one card removed from an otherwise identical future (PROVISIONAL collapse, human keeps the decline).]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 1,
+    "land_search_basic_only": true,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Search for Tomorrow",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Suspend"
+   ],
+   "oracle_text": "Search your library for a basic land card, put it onto the battlefield, then shuffle.\nSuspend 2—{G} (Rather than cast this card from your hand, you may pay {G} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.) [land_search_on_resolve: PerformLandSearch -- one basic land card onto the battlefield UNTAPPED (the basic's own entry) through EnterLand, so landfall fires; one ShuffleAfterSearch. WHICH basic = the in-plan land-search pin (hard cast). SUSPEND: suspend_time_counters 2 + suspend_cost {G} -> an Action::Kind::Suspend plan action (the suspend= viewer verb) sharing the hand slot with the hard cast (mutually exclusive), the {G} paid by the shared ApplySuspend at every apply site (stranded -> no suspend); arrive_turn = turn+2 (suspend T1 -> cast T3 upkeep, BEFORE the draw step, so the arrival's shuffle precedes the draw). The off-suspend arrival is a CAST (storm count) routed through CastOffSuspend's non-permanent branch: it resolves the search and goes to the graveyard; its basic is the searched UPKEEP pin (Plan::upkeep_land_search_choice -> GameState::scripted_upkeep_land_search, the Aether Vial next-upkeep route). 'You may cast it' is collapsed to CAST, for the search and the human alike: declining leaves the card exiled with no time counters and gains nothing; only the shuffle differs, which is neutral in real-information terms (PROVISIONAL). KNOWN GAP (disclosed): a HARD-CAST Search for Tomorrow's untapped basic is not credited to the same plan's later casts by the enumerator's subset mana math (the Crop Rotation precedent) -- 'Search for Tomorrow, then a spell paid with the fetched land' in one main phase is not enumerated; the land's mana is available to the plan's trailing activations and from the next turn.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 1,
+    "land_search_basic_only": true,
+    "suspend_time_counters": 2,
+    "suspend_cost": "{G}"
+   }
+  },
+  {
+   "name": "Cultivate",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle. [land_search_on_resolve + land_search_count 2 + land_search_to_hand 1: PerformLandSearch takes an ORDERED pick (battlefield basic, hand basic) from the provider-ordered LandSearchPicks -- every (battlefield, hand) split of every maximal pair of basics, identity-folded over copies; the battlefield one enters TAPPED through EnterLand (landfall), the hand one through EnterHand(Tutor), which opens the put-in-hand breakpoint (site 10) so the fetched basic can still be the turn's land drop; a lone find goes to the battlefield (ruling 2010-08-15). ONE shuffle. The reveal is public information (logged in the viewer history). 'Up to two' is collapsed for the search to as many as the library allows (dominance: one card removed from an otherwise identical future; the hand basic can at worst be the cleanup discard, which is our choice -- PROVISIONAL); the human picks each land at resolution (two `tutor_etb` prompts) and may stop early.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 2,
+    "land_search_basic_only": true,
+    "land_search_to_hand": 1,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Evolving Wilds",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. [A REAL battlefield land with NO mana ability: template custom, so no mana-source site counts it (a basic_land template with empty produces would tap for a phantom {C}). It ENTERS (its own landfall) and '{T}, Sacrifice: search' is a SEARCHED activation (PermAbilityMode::SacLandSearch, armed by land_search_activation_cost '' + land_search_activation_taps + land_search_activation_sacrifice_self): the {T} is paid first, the land is sacrificed as part of the cost (graveyard, the sacrifice watchers -- not a creature dying), then PerformLandSearch puts one basic onto the battlefield TAPPED through EnterLand (a second landfall) and shuffles once. WHEN to crack (now vs holding it for a landfall payoff) is the search's: the activation is an optional trailing action of the plan, and an activation with nothing left to find is a dominated self-sacrifice that is not offered autonomously. WHICH basic = the in-plan land-search pin; the human picks at resolution (`tutor_etb`; the board verb is landsearch=). NOT the fetchland collapse (fetch_land_types / PerformFetch), which never lets the land enter, pays 1 life, ignores 'tapped' and filters by subtype. PROVISIONAL: the instant-speed timing is collapsed to the trailing pass of our main phase -- against a passive opponent a crack in combat or on the opponent's turn gives the same board (the basic enters tapped either way; landfall counters placed in main 1 are on the attackers at damage). KNOWN GAP (disclosed): the trailing pass runs AFTER the plan's casts, so 'crack, THEN cast Avenger of Zendikar / Phylath' in one main phase is not one plan.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_count": 1,
+    "land_search_basic_only": true,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Terramorphic Expanse",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. [A REAL battlefield land with NO mana ability: template custom, so no mana-source site counts it (a basic_land template with empty produces would tap for a phantom {C}). It ENTERS (its own landfall) and '{T}, Sacrifice: search' is a SEARCHED activation (PermAbilityMode::SacLandSearch, armed by land_search_activation_cost '' + land_search_activation_taps + land_search_activation_sacrifice_self): the {T} is paid first, the land is sacrificed as part of the cost (graveyard, the sacrifice watchers -- not a creature dying), then PerformLandSearch puts one basic onto the battlefield TAPPED through EnterLand (a second landfall) and shuffles once. WHEN to crack (now vs holding it for a landfall payoff) is the search's: the activation is an optional trailing action of the plan, and an activation with nothing left to find is a dominated self-sacrifice that is not offered autonomously. WHICH basic = the in-plan land-search pin; the human picks at resolution (`tutor_etb`; the board verb is landsearch=). NOT the fetchland collapse (fetch_land_types / PerformFetch), which never lets the land enter, pays 1 life, ignores 'tapped' and filters by subtype. PROVISIONAL: the instant-speed timing is collapsed to the trailing pass of our main phase -- against a passive opponent a crack in combat or on the opponent's turn gives the same board (the basic enters tapped either way; landfall counters placed in main 1 are on the attackers at damage). KNOWN GAP (disclosed): the trailing pass runs AFTER the plan's casts, so 'crack, THEN cast Avenger of Zendikar / Phylath' in one main phase is not one plan.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_count": 1,
+    "land_search_basic_only": true,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Myriad Landscape",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle. [Enters tapped (enters_tapped); taps for {C} (produces [C]). '{2}, {T}, Sacrifice this land' is the searched SacLandSearch activation (land_search_activation_cost {2}): the {T} is paid BEFORE the mana half, so it can never pay its own {2}, and the activation-line hold keeps an earlier cast in the same plan from tapping it for mana. Puts up to two basic land cards SHARING A LAND TYPE (two Forests or two Mountains here) onto the battlefield tapped: PerformLandSearch places both, then resolves their own enter triggers, then shuffles ONCE; each is a landfall event through EnterLand. WHICH land type = the in-plan land-search pin over the maximal picks; the human picks each land at resolution (`tutor_etb`; the second prompt offers only basics sharing a type with the first; -1 stops at one). 'Up to two' collapsed for the search to as many as the library allows (dominance; ruling 2018-03-16 lets you take one -- PROVISIONAL). Instant-speed timing collapsed to our main phase's trailing pass (PROVISIONAL, inert vs the passive opponent: see Evolving Wilds).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "enters_tapped": true,
+    "land_search_activation_cost": "{2}",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_count": 2,
+    "land_search_basic_only": true,
+    "land_search_share_land_type": true,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Primeval Titan",
+   "mana_cost": "{4}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Giant"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Trample\nWhenever this creature enters or attacks, you may search your library for up to two land cards, put them onto the battlefield tapped, then shuffle. [land_search_on_enter_or_attack: ONE printed trigger, two fire sites (the Inferno Titan precedent). ENTERS: FireOwnEtbTriggers (the universal own-ETB cascade, every world, Genesis Wave puts included) -> PerformLandSearch, up to two LAND cards of any kind (ruling 2017-11-17) onto the battlefield TAPPED: both placed through EnterLand (each a landfall event), THEN their own enter triggers (Gruul Turf's mandatory bounce -- which may return a land fetched beside it -- and Radiant Fountain's 2 life), then ONE shuffle. ATTACKS: FireAttackLandSearch at the declare-attackers trigger point in both worlds (declared attackers only, CR 508.4), BEFORE damage, so the fetched lands' landfall pumps reach attacking Plants this combat -- priced by PendingAttackDamage's copy-and-diff addend (CountAttackLandSearchPump); attacker indices are repaired by number after a Karoo bounce. WHICH lands is SEARCHED over the FULL identity-folded pick list (no provider width): the in-plan land-search pin for the ETB, Plan::attack_land_search_choice (GameState::scripted_attack_land_search, packed per attacking Titan) for the attack. 'You may search' and 'up to two' collapsed for the search by dominance (PROVISIONAL); the human may decline (-1 on the first prompt, no shuffle) or stop at one. Trample is inert vs a non-blocking opponent. KNOWN GAP: a fetched Gruul Turf's bounce target takes the provider's front pick (the searched bounce axis fans only for a Karoo land drop).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "land_search_on_enter_or_attack": true,
+    "land_search_count": 2,
+    "land_search_tapped": true,
+    "land_search_optional": true
+   }
+  },
+  {
+   "name": "Radiant Fountain",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this land enters, you gain 2 life.\n{T}: Add {C}. [Untapped colourless utility land; both clauses modelled, nothing deferred. (1) 'You gain 2 life' -> etb_lifegain 2, fired by the land drop (PlayLandFromHand) and, for a land PUT onto the battlefield by an effect, by ResolveLandEnterEtbExtras (Genesis Wave's second pass, PerformLandSearch's second pass -- Primeval Titan) -- through the shared GainLife, so it is a real life-gain EVENT (CR 119.10). (2) '{T}: Add {C}' -> produces [C]: pays generic pips only. NOT a basic land (bare 'Land' type line): no 'basic land' search or count sees it. Its entry is a landfall event like any land's. The life total itself is near-inert against the passive goldfish opponent.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "etb_lifegain": 2
+   }
+  },
+  {
+   "name": "Haunted Fengraf",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{3}, {T}, Sacrifice this land: Return a creature card at random from your graveyard to your hand. [The {C} mana ability via produces [C]. The second ability is Haven of the Spirit Dragon's activated graveyard return (Action::Kind::GraveyardReturnAbility, gy_return_cost {3}, gy_return_requires_creature, sacrifice-as-cost: tapped and sacrificed BEFORE the return resolves) with ONE difference that is the whole card: the card is chosen AT RANDOM, never by the player -- gy_return_at_random. So the enumeration offers ONE activation per source (whether and when to activate is searched; WHICH card is not a decision at all) and resolution draws uniformly over the graveyard's creature cards in canonical (card-number) order off a deterministic hash of (game seed, turn, eligible count), salted like every mid-game random event. Like Gamble's random discard and every reshuffle, the clairvoyant search reads that deterministic outcome -- the engine-wide known-library simplification; keying it on the turn and the eligible set only (not the search count, not the source) leaves no intra-turn lever to steer the draw. The viewer never offers a pick (gyreturn=@random). Not targeted: with no creature card in the graveyard the activation only pays {3} and a land, so it is not offered. The end-of-turn dominance fold compares graveyard CREATURE names for a deck holding a graveyard-return ability (GyR_CreatureNames). PROVISIONAL deferral pending user sign-off: the instant-speed timing is collapsed to our main phase's trailing pass (inert vs the passive opponent -- the returned creature cannot be cast before our next main either way).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "gy_return_cost": "{3}",
+    "gy_return_requires_creature": true,
+    "gy_return_at_random": true
    }
   }
  ]

@@ -435,6 +435,16 @@ MANIFEST = {
     # ResolveLandfallTargetCounters, over EVERY legal Plant; the engine's searched pick
     # (Plan::landfall_target_choice) is preselected. A single legal Plant is forced (not prompted).
     "landfall_target_counters": ("target",            positive),
+    # ---- the land-search cluster (2026-10-15; core/LandSearch.h) ----
+    # WHICH land(s) every land search finds is asked at RESOLUTION through the shared `tutor_etb`
+    # chooser, one sequential prompt per land (PerformLandSearch -- the shared resolution helper, so it
+    # fires on ApplyPlan, at the upkeep and in combat). The three FIRE-SITE params arm it: a spell's
+    # resolution (Rampant Growth / Search for Tomorrow / Cultivate), Primeval Titan's ETB + attack
+    # trigger, and the activated searches (Evolving Wilds / Myriad Landscape / Khalni Heart Expedition,
+    # whose activation itself is the landsearch= board verb -- BOARD_ACTIVATIONS).
+    "land_search_on_resolve":          ("tutor_etb",  truthy),
+    "land_search_on_enter_or_attack":  ("tutor_etb",  truthy),
+    "land_search_activation_cost":     ("tutor_etb",  truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -519,6 +529,10 @@ BOARD_ACTIVATIONS = {
     # hand (the Deathrite `gyexile=` case), and the board_acts affordability probe cannot separate
     # them either because it only picks up costs with a positive mana value. cost_from None = free.
     "tap_lifegain_per_subtype":                  ("verb:taplife",   truthy,   None),
+    # Evolving Wilds / Terramorphic Expanse ({T}, Sacrifice -- cost ""), Myriad Landscape ({2}, {T},
+    # Sacrifice) and Khalni Heart Expedition (three quest counters + sacrifice): the landsearch= verb
+    # (a land is never cast; a Khalni may also sit in hand).
+    "land_search_activation_cost":               ("verb:landsearch", truthy,  "land_search_activation_cost"),
     "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
@@ -578,6 +592,16 @@ INERT_PARAMS = {
     "landfall_counters_each_subtype": "landfall each-<subtype> counter filter (rides landfall_counters_each)",
     "landfall_target_subtype": "landfall target filter (rides landfall_target_counters, which IS surfaced)",
     "landfall_lifegain": "automatic landfall lifegain (Courser of Kruphix), through GainLife -- no target, no choice",
+    "land_search_count": "how many lands the search may find ('up to N') -- the pick itself rides the land-search fire-site param -> tutor_etb; 'up to' is collapsed for the search to the maximal picks by dominance (PROVISIONAL), the human may stop early with -1",
+    "land_search_basic_only": "search FILTER ('basic land card', the Basic supertype) -- legality, not a choice; the pick rides tutor_etb",
+    "land_search_share_land_type": "search FILTER (Myriad Landscape: the picks share a land type) -- legality, not a choice; the second tutor_etb prompt offers only matching basics",
+    "land_search_to_hand": "DESTINATION split (Cultivate: one to the battlefield, one to hand) -- the human's prompt order IS the split (prompt 1 = battlefield, prompt 2 = hand); the search fans every ordered split",
+    "land_search_tapped": "static entry state of the found land(s) ('onto the battlefield tapped') -- not a choice",
+    "land_search_optional": "'you MAY search' (Primeval Titan) -- the human declines with -1 on the first tutor_etb prompt; the search collapses it to searching by dominance (PROVISIONAL, disclosed 6a)",
+    "land_search_activation_taps": "COST detail ({T} in the activation cost) -- rides land_search_activation_cost -> verb:landsearch",
+    "land_search_activation_remove_quest": "COST detail (Khalni: remove three quest counters) -- rides land_search_activation_cost -> verb:landsearch",
+    "land_search_activation_sacrifice_self": "COST detail ('Sacrifice this') -- rides land_search_activation_cost -> verb:landsearch",
+    "gy_return_at_random": "Haunted Fengraf: WHICH creature returns is RANDOM (a seeded draw at resolution), never a player choice -- the viewer must not offer a pick; the activation itself is verb:gyreturn (value @random)",
     "landfall_quest_counters": "Khalni Heart Expedition's 'you MAY put a quest counter' -- resolved YES by dominance (a quest counter only feeds the optional activation; one more never removes an option), the quest_counter_per_attacker precedent -- DISCLOSED 6a, PROVISIONAL",
     "etb_tokens_per_land": "automatic ETB token count per land you control (Avenger of Zendikar / Phylath), no choice",
     "etb_tokens_per_land_basic_only": "ETB per-land count filter -- BASIC lands only (Phylath), via IsBasicLandCard",
@@ -1265,6 +1289,7 @@ MAINPHASE_PARAMS = {
     # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
     "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
+    "suspend_cost": "Search for Tomorrow's Suspend 2--{G}: the suspend is a main_phase plan action (the suspend= verb, the hand's suspend badge); the cost only prices it",
     # Unearth ("Return target creature card with mana value 3 or less from your graveyard to the
     # battlefield"). The CAST is an ordinary main_phase plan. WHICH graveyard creature comes back is
     # AUTO-RESOLVED (highest mana value within the cap, ties by lowest per-copy number) -- a disclosed
@@ -1500,6 +1525,9 @@ def modeled_tokens(card):
     if p.get("etb_destroy_nonartifact_nonblack") or p.get("etb_destroy_artifact_enchantment_land"):
         t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
+        t.add("search")
+    # The land-search cluster: every "search your library for ... land" is the tutor_etb prompts.
+    if p.get("land_search_count", 0) > 0:
         t.add("search")
     # Rick, Steadfast Leader's "choose two abilities from among ..." IS the choose_abilities
     # decision (verified end-to-end 2026-10-04). Brutal Cathar's "exile target creature an

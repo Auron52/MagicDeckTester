@@ -2467,6 +2467,24 @@ public:
         const GameState& s, int controller, int self_index,
         const std::vector<int>& legal) const;
 
+    // LandSearchPickOrder -- the LAND-SEARCH pick list (core/LandSearch.h LandSearchPicks: Rampant
+    // Growth, Cultivate, Search for Tomorrow, Evolving Wilds, Myriad Landscape, Khalni Heart
+    // Expedition, Primeval Titan). Each entry is ONE complete pick -- class-representative land names,
+    // the battlefield entries first, then the `to_hand` hand entries -- already identity-folded and
+    // collapsed to the maximal picks (both sound; see that header). The provider ORDERS the list in
+    // place: entry 0 is the default for every path with no searched pin (the d0 runner, rollout leaves
+    // beyond the horizon, the human's preselection), and the SEARCH branches over every entry
+    // (Plan::land_search_pins / attack_land_search_choice / upkeep_land_search_choice are ranks into
+    // this order). ORDER ONLY -- a provider must never drop or add an entry here (no width is
+    // adopted; a narrowing would need its own named, A/B-measured hook).
+    //
+    // Base rule (out-of-line, deterministic): the picks that supply the most colours we NEED and LACK
+    // first -- "need" = the coloured pips of the nonland cards in hand, "lack" = no permanent we
+    // control produces that colour -- then the picks with more lands, then the generator's own
+    // (name) order. A disclosed heuristic for the DEFAULT only; it decides nothing the search sees.
+    virtual void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                     std::vector<std::vector<std::string>>& picks) const;
+
     // BounceSearchCandidates -- the SEARCHED Karoo bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice):
     // the subset of BounceLandCandidates the search branches over, in THAT order, so element 0 is
     // always its front (the d0 / beyond-horizon pick and the human prompt's default). Evaluated on

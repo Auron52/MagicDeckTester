@@ -43,10 +43,11 @@ struct ContPins
     int scry       = -1;   // Plan::scry_choice (the continuation's own land drop)
     int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
+    std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
     bool Any() const
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
-            || scry >= 0 || bounce >= 1 || !sac.empty();
+            || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty();
     }
 };
 
@@ -1119,6 +1120,26 @@ public:
         // spawn land survives -- the cg30 unrecoverable-regression class.
         // See docs/design/searched-choice-audit.md.
         std::vector<int> sac_pins;
+
+        // SEARCHED LAND-SEARCH PICKS (core/LandSearch.h). Which complete pick of the provider-ordered
+        // LandSearchPicks list -- computed AT RESOLUTION -- each land search takes:
+        //   land_search_pins -- the in-plan resolutions (Rampant Growth / Search for Tomorrow /
+        //     Cultivate resolving, Primeval Titan's ETB, an Evolving Wilds / Myriad Landscape / Khalni
+        //     Heart Expedition activation), ONE ENTRY PER LAND-SEARCH ORDINAL in canonical apply order:
+        //     the sac_pins shape exactly (ScriptedLandSearch list + cursor; ConsumeScriptedLandSearchPin
+        //     takes one entry per resolution; -1 / past the end = the provider's front; k >= 0 =
+        //     picks[min(k, size-1)]). Empty == every search takes the front, byte-identical to no axis.
+        //   attack_land_search_choice -- Primeval Titan's ATTACK trigger, PACKED per attacking Titan
+        //     (kLandSearchPinBits bits each, low first; -1 = unpinned). Decided in main, consumed at
+        //     declare-attackers, so it rides GameState::scripted_attack_land_search (the bruna_gather
+        //     route).
+        //   upkeep_land_search_choice -- Search for Tomorrow cast off suspend at the NEXT upkeep, PACKED
+        //     per arrival; rides GameState::scripted_upkeep_land_search (the saga_target / Vial route).
+        // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key and
+        // (live) the sim / dedup keys.
+        std::vector<int> land_search_pins;
+        int attack_land_search_choice = -1;
+        int upkeep_land_search_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);
@@ -2281,6 +2302,14 @@ public:
         //
         // EMPTY keeps the legacy card-name-in-casts matching, so no saved reference moves.
         std::vector<std::string> tap_lifes;
+        // "landsearch=<source name>": an ACTIVATED land search (PermAbilityMode::SacLandSearch /
+        // QuestSacLandSearch -- Evolving Wilds, Terramorphic Expanse, Myriad Landscape, Khalni Heart
+        // Expedition; core/LandSearch.h), naming the SOURCE. Its own verb for the taplife reason: a
+        // land is never cast, so `cast=Evolving Wilds` reads as nonsense, and Khalni Heart Expedition
+        // may have a second copy in HAND, so `cast=Khalni Heart Expedition` cannot say whether the
+        // human meant the crack or a hard cast. WHICH lands it finds is asked at resolution (the
+        // `tutor_etb` prompts), never on the line. EMPTY keeps the legacy name-in-casts matching.
+        std::vector<std::string> land_searches;
         // "auraswap=<Aura brought in>": Arcanum Wings' main-phase Aura swap (Action::Kind::AuraSwap),
         // naming the hand Aura it puts onto the Wings' host. ALWAYS its own verb (no legacy split --
         // the kind is new): `cast=Colossification` and swapping Colossification in are different

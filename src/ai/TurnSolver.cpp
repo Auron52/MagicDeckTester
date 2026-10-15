@@ -834,7 +834,10 @@ static bool CombatPinFoldOn()
     return heurarm::Flag(heurarm::COMBAT_PIN_FOLD, env);
 }
 static bool PlanHasCombatPin(const TurnSolver::Plan& p)
-{ return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0; }
+{
+    return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+        || p.attack_land_search_choice >= 0;   // Primeval Titan's attack pick: read in THIS combat only
+}
 // Firing counters (printed with the rollout stats): pin variants NOT emitted for a post-combat list,
 // and pinned candidates folded after combat (la_cand loop / FSLineWin).
 static std::atomic<long long> g_combat_pin_m2_skipped{0};
@@ -1418,6 +1421,9 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("fresh", first.freshmode_choice != dup.freshmode_choice);
     pl("gather", first.bruna_gather_choice != dup.bruna_gather_choice);
     pl("cswap", first.combat_aura_swap_choice != dup.combat_aura_swap_choice);
+    pl("lsearch", first.land_search_pins != dup.land_search_pins
+                  || first.attack_land_search_choice != dup.attack_land_search_choice
+                  || first.upkeep_land_search_choice != dup.upkeep_land_search_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     if (!cls.empty()) { cls += "] "; }
@@ -4477,6 +4483,12 @@ static bool BpCondemnNewOptionEnabled()
 // abilities "identical card" would not establish "same ability" -- the site could have been the other
 // one. Exactly one engaged mode makes the inference exact, and every card this can fire on today
 // (Scrying Sheets, Frost Augur) has exactly one.
+// The "no such ability" cost for a ModeSpec row whose mode is armed by something other than the
+// cost's presence alone: SacLandSearch is armed by land_search_activation_cost AND
+// land_search_activation_taps (Khalni Heart Expedition carries the same cost field, all-zero, but its
+// ability has no {T} and is the counter-gated QuestSacLandSearch block instead).
+static const std::optional<ManaCost> kNoLandSearchCost;
+
 static bool BpActivationAbilityUnambiguous(const CardParams& p)
 {
     int n = 0;
@@ -4494,6 +4506,7 @@ static bool BpActivationAbilityUnambiguous(const CardParams& p)
     // MTG_BP_CONDEMN_ACTIVATION is default OFF -- this is correctness-for-later, not a live path.)
     if (p.sac_lifegain_per_creature_cost) { ++n; }
     if (p.tap_lifegain_cost)              { ++n; }
+    if (p.land_search_activation_cost)    { ++n; }   // Evolving Wilds / Myriad / Khalni (one each)
     return n == 1;
 }
 
@@ -4835,6 +4848,11 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::SacLifePerCreature, &sd.params.sac_lifegain_per_creature_cost },
         { PermAbilityMode::TapLifegain,        &sd.params.tap_lifegain_cost              },
         { PermAbilityMode::ActivatedDig,       &sd.params.activated_dig_cost             },   // appended LAST (Recruitment Officer)
+        // Evolving Wilds / Terramorphic Expanse / Myriad Landscape -- appended LAST, same order in all
+        // three tables. Armed only when the activation TAPS (land_search_activation_taps); Khalni's
+        // counter-costed twin is the out-of-band clause below.
+        { PermAbilityMode::SacLandSearch,
+          sd.params.land_search_activation_taps ? &sd.params.land_search_activation_cost : &kNoLandSearchCost },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -4878,6 +4896,11 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
     }
     if (sd.params.spore_saproling_cost > 0 && src.spore_counters >= sd.params.spore_saproling_cost)
     { bits |= 1u << static_cast<int>(PermAbilityMode::SporeSaproling); }
+    // Khalni Heart Expedition: the counter-costed land search (no {T}, no mana) -- the spore clause's
+    // shape. Mirrors the enumerator's block (see CollectActions, "QuestSacLandSearch").
+    if (sd.params.land_search_activation_remove_quest > 0 && sd.params.land_search_count > 0
+        && src.quest_counters >= sd.params.land_search_activation_remove_quest)
+    { bits |= 1u << static_cast<int>(PermAbilityMode::QuestSacLandSearch); }
     return bits;
 }
 
@@ -8401,6 +8424,51 @@ static int CountAttackGatherPump(const GameState& state, int active,
     return after - before;
 }
 
+// Projection twin of Primeval Titan's ATTACK trigger (FireAttackLandSearch): the lands it fetches
+// enter at declare-attackers, before damage, so their LANDFALL payloads (Avenger of Zendikar's +1/+1
+// on every Plant, Phylath's +4 on one) grow the attacking Plants THIS combat. The very same helper
+// runs on a COPY with the same packed pin (GameState::scripted_attack_land_search) and the attackers'
+// combat power is summed after minus before (doubled for double strike) -- the CountAttackGatherPump
+// shape, so the search cannot credit a pump the combat will not perform, and is not blind to the one
+// it will (the Dwalin lesson: an unpriced attack trigger under-rates the attack and fd-diverges).
+// Free unless an attacker carries land_search_on_enter_or_attack.
+static int CountAttackLandSearchPump(const GameState& state, int active,
+                                     const std::vector<const Permanent*>& attackers)
+{
+    if (!state.deck_has_land_search) { return 0; }   // deck stamp: no Titan can exist
+    bool live = false;
+    for (const Permanent* p : attackers)
+    {
+        if (p->def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p->card);
+        if (d != nullptr && d->params.land_search_on_enter_or_attack && d->params.land_search_count > 0)
+        { live = true; break; }
+    }
+    if (!live) { return 0; }
+    std::vector<int> atk_idx;
+    std::vector<int> nums;
+    int before = 0;
+    for (const Permanent* p : attackers)
+    {
+        atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
+        nums.push_back(p->card.m_number);
+        before += std::max(0, CombatPowerOf(*p, state)) * (CreatureHasDoubleStrike(*p, state) ? 2 : 1);
+    }
+    GameState t = state;
+    FireAttackLandSearch(t, active, atk_idx);
+    int after = 0;
+    for (int num : nums)
+    {
+        for (const Permanent& q : t.battlefield)
+        {
+            if (q.card.m_number != num) { continue; }
+            after += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
+            break;
+        }
+    }
+    return after - before;
+}
+
 static int PendingAttackDamageImpl(const GameState& state);
 
 // Ardenn, Intrepid Archaeologist (begin_combat_attach_all): the realised combat re-attaches the
@@ -8487,6 +8555,8 @@ static int PendingAttackDamageImpl(const GameState& state)
     dmg += CountAttackHonePump(state, active, attackers);
     // Bruna's gather + Arcanum Wings' in-combat swap: the Auras land on attackers THIS combat.
     dmg += CountAttackGatherPump(state, active, attackers);
+    // Primeval Titan's attack trigger: the fetched lands' landfall pumps land on attackers THIS combat.
+    dmg += CountAttackLandSearchPump(state, active, attackers);
     // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
     // resolved through the same ResolveAttackModalMode the combat uses, so the projection cannot
     // credit damage a mode-B trigger will not deal (the overshoot/fd-diverge class).
@@ -16738,6 +16808,17 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // deck without either card keeps its exact signature value.
     if (p.bruna_gather_choice != -1) { fold(static_cast<uint64_t>(p.bruna_gather_choice + 2) * 79); }
     if (p.combat_aura_swap_choice != -1) { fold(static_cast<uint64_t>(p.combat_aura_swap_choice + 2) * 83); }
+    // LAND-SEARCH picks (core/LandSearch.h) -- same must-fold rule; value-gated so every deck without
+    // a land-search card keeps its exact signature value.
+    if (!p.land_search_pins.empty())
+    {
+        fold(0x1A5C0000ull + static_cast<uint64_t>(p.land_search_pins.size()));
+        for (int v : p.land_search_pins) { fold(static_cast<uint64_t>(v + 2) * 89); }
+    }
+    if (p.attack_land_search_choice != -1)
+    { fold(0x1A5D0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_land_search_choice + 2))); }
+    if (p.upkeep_land_search_choice != -1)
+    { fold(0x1A5E0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.upkeep_land_search_choice + 2))); }
     return h;
 }
 // DIAGNOSTIC ONLY (MTG_DEDUP_CENSUS). Names every Action field on which two candidates that share an
@@ -16999,6 +17080,8 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
+        && p.land_search_pins.empty() && p.attack_land_search_choice == -1
+        && p.upkeep_land_search_choice == -1
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
@@ -17025,7 +17108,13 @@ static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
         || p.bounce_choice >= 1
         // A landfall-target rank that turned out inert (one class at resolution, or no targeted
         // trigger fired) lands on its base plan's state: one apply, not a rollout.
-        || p.landfall_target_choice >= 0;
+        || p.landfall_target_choice >= 0
+        // Land-search picks: every variant is a clone of its base plan differing only in a pick, and
+        // the clamp at resolution makes a too-wide rank a duplicate of the last pick -- exactly the
+        // inert-duplicate shape this skip exists for. Safe because the two STATE pins are folded
+        // into BuildDedupKey's pending pins (a post-apply state still carrying one is distinct).
+        || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
+        || p.upkeep_land_search_choice >= 0;
 }
 // SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above).
 static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p); }
@@ -17571,7 +17660,9 @@ enum : uint64_t {
     kActLoyalty = 1, kActSpore, kActBlink, kActTeamPump, kActPod, kActSacOutlet,
     kActModeBase,                    // PermAbilityMode i -> kActModeBase + i
     // Out-of-band slot (NOT kActModeBase-relative, so no existing key moves): Arcanum Wings' swap.
-    kActAuraSwap = 200
+    kActAuraSwap = 200,
+    // ...and Khalni Heart Expedition's counter-costed land search (QuestSacLandSearch).
+    kActQuestLandSearch = 201
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -17632,6 +17723,8 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::SacLifePerCreature, &pp.sac_lifegain_per_creature_cost },     // appended LAST
         { PermAbilityMode::TapLifegain,        &pp.tap_lifegain_cost              },     // appended LAST
         { PermAbilityMode::ActivatedDig,       &pp.activated_dig_cost             },     // appended LAST (Recruitment Officer)
+        { PermAbilityMode::SacLandSearch,                                                         // appended LAST (Wilds / Myriad)
+          pp.land_search_activation_taps ? &pp.land_search_activation_cost : &kNoLandSearchCost },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -17648,6 +17741,13 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     // already correct when the sac-outlet one below was not.
     if (pp.spore_saproling_cost > 0 && p.spore_counters >= pp.spore_saproling_cost)
     { out.push_back(ActKey(num, kActSpore)); }
+    // Khalni Heart Expedition (QuestSacLandSearch): the same counter-gated shape as the spore clause.
+    // A mid-plan landfall that brings the Expedition to its count makes the crack newly activatable,
+    // and without this key the site-9 breakpoint never opens for it -- the crack would wait a turn
+    // (activations are enumerated against the plan-START battlefield). OUT-OF-BAND slot.
+    if (pp.land_search_activation_remove_quest > 0 && pp.land_search_count > 0
+        && p.quest_counters >= pp.land_search_activation_remove_quest)
+    { out.push_back(ActKey(num, kActQuestLandSearch)); }
 
     if (ActAffordable(state, ctrl, p.card, pp.blink_cost, total_cache))
     { out.push_back(ActKey(num, kActBlink)); }
@@ -21554,7 +21654,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Suspend-only cards (Lotus Bloom, mana_cost "") have NO normal cost -- they can ONLY be
         // suspended, never hard-cast from hand. Skip the cast enumeration; the {0} Suspend action is
         // emitted in its own block below. Gated on suspend_time_counters -> other decks byte-identical.
-        if (def.params.suspend_time_counters > 0) { continue; }
+        // A suspend card WITH a mana cost (Search for Tomorrow, {2}{G}) is ALSO hard-castable: the
+        // cast and the Suspend action share the hand slot (hand_index), so the subset picks at most
+        // one. Only a card with NO mana cost (CR 202.1b) is suspend-only.
+        if (def.params.suspend_time_counters > 0 && def.card.m_mana_cost.ManaValue() == 0
+            && !def.card.m_mana_cost.has_x) { continue; }
         // Sorceries/non-flash spells require an empty stack and a main phase.
         bool timing_ok = def.card.IsInstant()
                       || def.card.HasKeyword(Keyword::Flash)
@@ -24375,7 +24479,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         a.kind           = Action::Kind::Suspend;
         a.card_name      = ap.hand[i].m_name;
         a.hand_index     = i;
-        a.cost           = ManaCost{};      // {0}
+        // The suspend cost (Search for Tomorrow: {G}; Lotus Bloom: {0}, unset). On the subset's books
+        // like any cost; ApplySuspend pays it (shared by every apply site).
+        a.cost           = sdef->params.suspend_cost.value_or(ManaCost{});
         a.eval           = 0;
         a.is_noncreature = true;
         actions.push_back(std::move(a));
@@ -26258,6 +26364,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || !pd->params.gy_return_cost.has_value()) { continue; }
             if (!CanTapNow(p, state.battlefield, haste())) { continue; }
+            // HAUNTED FENGRAF (gy_return_at_random): the returned card is RANDOM, never chosen, so
+            // the per-NAME fan above would let the clairvoyant search pick it -- a rules error.
+            // ONE activation per source, emitted only with fuel (with none it pays {3} and a land
+            // for nothing: dominated), carrying the kGyReturnRandom sentinel. Whether and when to
+            // activate is the search's; which card returns is ApplyGraveyardReturnAbility's draw.
+            if (pd->params.gy_return_at_random)
+            {
+                if (!GyReturnHasFuel(state, state.active_player_index, *pd)) { continue; }
+                Action a;
+                a.kind           = Action::Kind::GraveyardReturnAbility;
+                a.card_name      = p.card.m_name;
+                a.hand_index     = -1;
+                a.cost           = pd->params.gy_return_cost.value();
+                a.sac_source_id  = p.card.m_number;
+                a.tutor_target   = kGyReturnRandom;
+                a.eval           = 2;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+                continue;
+            }
             const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
             std::vector<std::string> seen;
             for (const Card& gc : gy)
@@ -26941,6 +27067,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // Recruitment Officer's activated dig -- appended LAST, same order as the other
                     // two tables (CollectActivationKeys slots are kActModeBase + table INDEX).
                     { Action::AbilityMode::ActivatedDig,   &sd->params.activated_dig_cost   },
+                    // Evolving Wilds / Terramorphic Expanse / Myriad Landscape ("[{2}, ]{T}, Sacrifice
+                    // this land: search ..."), appended LAST in all three tables. Armed only for a
+                    // TAPPING land search; Khalni's counter cost has its own block below.
+                    { Action::AbilityMode::SacLandSearch,
+                      sd->params.land_search_activation_taps ? &sd->params.land_search_activation_cost
+                                                             : &kNoLandSearchCost },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -27145,6 +27277,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // SHARED CountOwnCreatures so the clamp and the resolver's payload cannot drift.
                     if (m.mode == Action::AbilityMode::SacLifePerCreature
                         && CountOwnCreatures(state, state.active_player_index) <= 0) { continue; }
+                    // SacLandSearch (Evolving Wilds / Myriad Landscape) with NOTHING legal left to
+                    // find: the crack would sacrifice a land (one fewer land for an Avenger's count,
+                    // Myriad's {C} gone) to put nothing onto the battlefield -- strictly dominated by
+                    // holding it, and the clairvoyant search knows the library. A LOSSLESS
+                    // dominated-action removal (the Recruitment Officer whiff gate's shape);
+                    // autonomous only -- a human cannot see the library and keeps the offer.
+                    if (m.mode == Action::AbilityMode::SacLandSearch && !HumanPlayActive()
+                        && LandSearchPicks(state, state.active_player_index,
+                                           LandSearchSpecOf(sd->params)).empty()) { continue; }
                     // HUMAN PLAY: never offer a CREATURE-source activation the real payment cannot
                     // make (Soldiers, 2026-10-04 -- King Darien's {3}{G}{W} / Recruitment Officer's
                     // {3}{W}). The pool above is colour-blind about Cavern of Souls / Unclaimed
@@ -27202,6 +27343,41 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         actions.push_back(std::move(a));
                     }
                 }
+            }
+
+            // ---- Khalni Heart Expedition: "Remove three quest counters from this enchantment and
+            // sacrifice it: Search your library for up to two basic land cards, put them onto the
+            // battlefield tapped, then shuffle." (PermAbilityMode::QuestSacLandSearch; core/LandSearch.h)
+            // NOT in the ModeSpec table: the cost is COUNTERS plus the sacrifice, no {T} and no mana --
+            // legal the turn the Expedition enters and while it is tapped (CR 302.6 restricts only {T}
+            // abilities). ONE emission per Expedition holding enough counters (it sacrifices itself, so
+            // never a K block). WHICH basics is the in-plan land-search pin. Holding it (a crack after a
+            // landfall payoff lands is worth more landfall) is the empty choice of the subset. The
+            // interchangeable-source fold goes through the same ActivationEquivTag as every mode, which
+            // mixes in quest_counters, so two Expeditions at different counts never fold. A crack with
+            // nothing legal to find is a dominated self-sacrifice -- dropped autonomously, as above.
+            if (sd->params.land_search_activation_remove_quest > 0 && sd->params.land_search_count > 0
+                && src.quest_counters >= sd->params.land_search_activation_remove_quest
+                && (HumanPlayActive()
+                    || !LandSearchPicks(state, state.active_player_index,
+                                        LandSearchSpecOf(sd->params)).empty()))
+            {
+                const ManaCost qcost = sd->params.land_search_activation_cost.value_or(ManaCost{});
+                Action a;
+                a.kind           = Action::Kind::ActivatePermAbility;
+                a.card_name      = src.card.m_name;
+                a.def            = sd;
+                a.hand_index     = -1;
+                a.sac_source_id  = src.card.m_number;
+                a.ability_mode   = Action::AbilityMode::QuestSacLandSearch;
+                a.chosen_x       = 1;
+                a.equiv_tag      = ActivationEquivTag(
+                    state, src, static_cast<const std::string&>(src.card.m_name),
+                    static_cast<int>(Action::AbilityMode::QuestSacLandSearch), qcost, 1);
+                a.cost           = qcost;
+                a.eval           = 1;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
             }
 
             // ---- Spore outlet: "Remove three spore counters: create a 1/1 green Saproling" --------
@@ -32968,6 +33144,9 @@ namespace solvememo
             || a.rad_mode != b.rad_mode || a.etbdig_choice != b.etbdig_choice
             || a.bounce_choice != b.bounce_choice
             || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
+            || a.land_search_pins != b.land_search_pins
+            || a.attack_land_search_choice != b.attack_land_search_choice
+            || a.upkeep_land_search_choice != b.upkeep_land_search_choice
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
             || a.etbcounter_choice != b.etbcounter_choice || a.sweep_choice != b.sweep_choice
@@ -37589,6 +37768,7 @@ struct BpPrefixSnap
     int  pin_sac_cursor = 0;         // sac-pin consumption point (the LIST is the plan's own
                                      // sac_pins, re-installed by the resumed apply's entry guard;
                                      // only the cursor is prefix state)
+    int  pin_land_search_cursor = 0; // the same for Plan::land_search_pins (core/LandSearch.h)
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
 };
@@ -38008,6 +38188,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedSacLand _ssac(plan.sac_pins);      // searched sac-land picks, one per sac ordinal,
                                                // resolved at the true mid-plan state (MTG_SAC_AXIS);
                                                // empty inert
+    ScriptedLandSearch _sls(plan.land_search_pins);   // searched land-search picks, one per land-search
+                                                      // ordinal (core/LandSearch.h); empty inert
     // Searched hold-vs-tap of the mana creatures. Scoped like the pins above, but NOT consumed by
     // its first reader: every payment in the apply -- the whole-turn prepay and any post-draw
     // re-solve -- must see the same mode, or one plan would be scored under two payment policies.
@@ -38049,6 +38231,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Searched Saga chapter target: same write-when->=0 state pin, read at the NEXT turn's draw
     // step by AdvanceSagas (see GameState::scripted_saga_target).
     if (plan.saga_target_choice >= 0) { state.scripted_saga_target = plan.saga_target_choice; }
+    // Searched land-search picks consumed AFTER this apply returns: Primeval Titan's attack trigger
+    // (this turn's declare-attackers) and Search for Tomorrow off suspend (NEXT upkeep). The same
+    // write-when-set state-pin rule as the pins above. Executor twins: AIEngine::TakeTurn.
+    if (plan.attack_land_search_choice >= 0)
+    { state.scripted_attack_land_search = plan.attack_land_search_choice; }
+    if (plan.upkeep_land_search_choice >= 0)
+    { state.scripted_upkeep_land_search = plan.upkeep_land_search_choice; }
 
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
@@ -41238,6 +41427,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // reads life_gained_this_turn. Executor twin: EffectHandler::ResolveImpl.
         ApplyCastLifegain(state, state.active_player_index, def);
 
+        // LAND SEARCH as an instant/sorcery's resolution (Rampant Growth, Search for Tomorrow,
+        // Cultivate; core/LandSearch.h). Before the zone move below, and before the put-in-hand
+        // arming at the end of this lambda, so Cultivate's hand basic opens site 10. The pick is
+        // this resolution's in-plan land-search pin (Plan::land_search_pins). Executor twin:
+        // EffectHandler::ResolveImpl -- the same helper, the same pin consumer.
+        if (def.params.land_search_on_resolve && def.params.land_search_count > 0
+            && (def.card.IsInstant() || def.card.IsSorcery()))
+        {
+            PerformLandSearch(state, state.active_player_index, LandSearchSpecOf(def.params),
+                              def.card.m_name.str(), ConsumeScriptedLandSearchPin());
+        }
+
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
         // graveyard faithful; nothing reads the graveyard for decks without retrace.
@@ -42708,6 +42909,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
         g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
+        g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
         if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
     }
     else
@@ -43042,6 +43244,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
+            bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
         }
@@ -43073,6 +43276,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
+            bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
             return;
@@ -43497,6 +43701,10 @@ static void SimulateCombat(GameState& state)
     // Tectonic Giant's modal attack trigger. Mirrors GameEngine::CombatPhase (lockstep).
     ApplyAttackModalTriggers(state, active, atk_idx);
 
+    // Primeval Titan's attack trigger (land search, before damage; repairs atk_idx). Mirrors
+    // GameEngine::CombatPhase (lockstep, ONE shared helper). Param-gated inert.
+    FireAttackLandSearch(state, active, atk_idx);
+
     const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
@@ -43810,6 +44018,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_bruna_gather   = -1;            // searched Bruna gather subset (same lockstep)
     state.scripted_combat_aura_swap = -1;          // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
+    state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
+    // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
@@ -49242,6 +49452,11 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // Pyrohemia: {R} with no {T}, so a copy cast this main can ping in the same phase (see
     // PostEntryPingAllClauseOn above for why this clause was missing and what it cost).
     if (pp.ping_all_cost.has_value() && PostEntryPingAllClauseOn()) { return true; }
+    // Khalni Heart Expedition (2026-10-15): a copy CAST this plan enters with no counters, but the
+    // plan's own land entries fill it (landfall) and the crack has no {T} -- CollectActivationKeys
+    // carries its counter-gated key. A superset, as this predicate's contract requires.
+    if (pp.land_search_activation_cost.has_value() && pp.land_search_activation_remove_quest > 0)
+    { return true; }
     return false;
 }
 
@@ -49772,6 +49987,38 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             }
         }
         if (source && (!p.actions.empty() || p.land_from_top)) { mask |= 1 << 10; }
+    }
+    // Site 9, the COUNTER-FILLED activation (Khalni Heart Expedition, 2026-10-15). The clause above
+    // keys on a CAST that lands an activatable permanent; an Expedition ALREADY on the battlefield
+    // below its count becomes activatable when this plan's own lands enter (each landfall adds a
+    // quest counter) -- a ramp spell, a Primeval Titan, a Genesis Wave, an Evolving Wilds crack --
+    // and the crack is then reachable this main phase ONLY through site 9 (its out-of-band key,
+    // kActQuestLandSearch). State-keyed like the watcher pre-scans above, and conservative in the
+    // same direction: a marked plan whose lands do not reach the count yields variants that collapse
+    // onto the base plan. Param-gated (deck_has_land_search) -> byte-identical for every other deck.
+    if (state.deck_has_land_search && (mask & (1 << 9)) == 0 && TurnSolver::PostEntryBreakpointClassOn())
+    {
+        bool fillable = false;
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index || perm.def_absent) { continue; }
+            const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+            if (w == nullptr || w->params.land_search_activation_remove_quest <= 0
+                || w->params.landfall_quest_counters <= 0) { continue; }
+            if (perm.quest_counters < w->params.land_search_activation_remove_quest) { fillable = true; break; }
+        }
+        if (fillable)
+        {
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d == nullptr) { continue; }
+                const bool puts_land = d->params.land_search_count > 0 || d->params.reveal_x_put_permanents;
+                if (puts_land && (a.kind == Action::Kind::CastFromHand
+                                  || a.kind == Action::Kind::ActivatePermAbility))
+                { mask |= 1 << 9; break; }
+            }
+        }
     }
     return mask;
 }
@@ -52813,6 +53060,198 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // ---- SEARCHED LAND-SEARCH PICKS (core/LandSearch.h; 2026-10-15) -----------------------------
+    // Rampant Growth / Search for Tomorrow / Cultivate resolving, Primeval Titan's ETB and attack
+    // trigger, Evolving Wilds / Terramorphic / Myriad Landscape / Khalni Heart Expedition cracks, and
+    // Search for Tomorrow arriving off suspend: WHICH complete pick (LandSearchPicks, provider-ordered,
+    // identity-folded, maximal) each takes is a SEARCHED choice (the no-greedy rule) bound by INDEX
+    // and resolved at the true state -- the sac-land / tutor-resolve axis shape. No provider width is
+    // applied: every pick the generator emits is a variant (the Titan's ~25 any-land pairs included).
+    // Human play never fans: the human answers the resolution-time prompts.
+    //
+    // THE IN-PLAN PINS (land_search_pins) are a DURING-CAST axis -- a breakpoint continuation carries
+    // its own (ContPins::land_search) -- so they fan inside a continuation derivation too. Each plan's
+    // land-search ORDINALS are its land-search casts (in canonical cast order) followed by its
+    // land-search activations (the trailing pass). The cast order among several land-search casts is
+    // the canonical bucketing's, which this fan does not reproduce, so every cast ordinal is sized at
+    // the WIDEST cast source and every activation ordinal at the widest activation source; a rank past
+    // a narrower source's list clamps at resolution to its last pick (a duplicate the post-apply dedup
+    // skips -- PlanIsAxisVariant). Widths are sized off the turn-start library; resolution clamps any
+    // drift. The variants form the full PRODUCT across ordinals while it stays within
+    // kLandSearchProductCap (every two-search turn of this deck's pool: 2x2, 2x4, 3x2, 4x4 ...), and
+    // fall back to the ADDITIVE one-hot fan (the sac-pin shape) past it -- a disclosed representation
+    // limit: a plan whose Titan ETB AND a second land search both deviate from the front is then
+    // reachable only through the breakpoint machinery, not as one variant.
+    //
+    // THE STATE PINS (attack / upkeep) are decided here and consumed after the apply, so they fan on
+    // a pre-combat list of the OUTER plan only (never inside a continuation derivation): the attack
+    // pin while a Titan that can attack this turn is on the battlefield (one packed ordinal per such
+    // Titan), the upkeep pin while a suspended land-search card arrives at the NEXT upkeep (one per
+    // arrival). Additive per ordinal.
+    if (!HumanPlayActive() && state.deck_has_land_search)
+    {
+        constexpr std::size_t kLandSearchProductCap = 64;
+        const int me = state.active_player_index;
+        auto base_plan = [](const TurnSolver::Plan& p)
+        {
+            return !PlanIsAxisVariant(p) && p.sac_pins.empty() && p.rad_mode == -1
+                && p.saga_target_choice == -1 && p.saga_ch1_choice == -1
+                && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
+                && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
+                && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
+                && p.freshmode_choice == 0 && p.tapmode_choice == 0 && p.dig_choice == -1
+                && !p.soulbond_decline && p.land_search_pins.empty()
+                && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1;
+        };
+        std::map<const CardDefinition*, std::size_t> width_cache;
+        auto width_of = [&](const CardDefinition* d) -> std::size_t
+        {
+            auto it = width_cache.find(d);
+            if (it != width_cache.end()) { return it->second; }
+            const std::size_t w = LandSearchPicks(state, me, LandSearchSpecOf(d->params)).size();
+            width_cache.emplace(d, w);
+            return w;
+        };
+        // (1) In-plan pins.
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (!base_plan(p)) { continue; }
+                int n_cast = 0, n_act = 0;
+                std::size_t w_cast = 1, w_act = 1;
+                for (const Action& a : p.actions)
+                {
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+                    if (d == nullptr || d->params.land_search_count <= 0) { continue; }
+                    if (a.kind == Action::Kind::CastFromHand
+                        && ((d->params.land_search_on_resolve && (d->card.IsInstant() || d->card.IsSorcery()))
+                            || (d->params.land_search_on_enter_or_attack && d->card.IsCreature())))
+                    { ++n_cast; w_cast = std::max(w_cast, width_of(d)); }
+                    else if (a.kind == Action::Kind::ActivatePermAbility
+                             && (a.ability_mode == Action::AbilityMode::SacLandSearch
+                                 || a.ability_mode == Action::AbilityMode::QuestSacLandSearch))
+                    { ++n_act; w_act = std::max(w_act, width_of(d)); }
+                }
+                const int n = n_cast + n_act;
+                if (n == 0) { continue; }
+                std::vector<std::size_t> w(static_cast<std::size_t>(n));
+                for (int i = 0; i < n; ++i) { w[static_cast<std::size_t>(i)] = i < n_cast ? w_cast : w_act; }
+                std::size_t product = 1;
+                for (std::size_t wi : w) { product = std::min<std::size_t>(product * std::max<std::size_t>(wi, 1), 1u << 20); }
+                if (product <= 1) { continue; }
+                if (product <= kLandSearchProductCap)
+                {
+                    // Full product, minus the all-front combination (== the base plan).
+                    std::vector<int> digit(static_cast<std::size_t>(n), 0);
+                    for (;;)
+                    {
+                        int i = 0;
+                        while (i < n)
+                        {
+                            if (++digit[static_cast<std::size_t>(i)] < static_cast<int>(w[static_cast<std::size_t>(i)])) { break; }
+                            digit[static_cast<std::size_t>(i)] = 0;
+                            ++i;
+                        }
+                        if (i == n) { break; }
+                        TurnSolver::Plan v = p;
+                        v.land_search_pins.assign(digit.begin(), digit.end());
+                        extra.push_back(std::move(v));
+                    }
+                }
+                else
+                {
+                    for (int j = 0; j < n; ++j)
+                    {
+                        for (std::size_t c = 1; c < w[static_cast<std::size_t>(j)]; ++c)
+                        {
+                            TurnSolver::Plan v = p;
+                            v.land_search_pins.assign(static_cast<std::size_t>(n), -1);
+                            v.land_search_pins[static_cast<std::size_t>(j)] = static_cast<int>(c);
+                            extra.push_back(std::move(v));
+                        }
+                    }
+                }
+            }
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+        // (2) Primeval Titan's attack pin (packed per attacking Titan, battlefield order -- the order
+        //     DeclareAttackerIndices / DeclareAttackers list them in).
+        if (!cont_axes_only && is_pre_combat)
+        {
+            std::vector<std::size_t> tw;   // width per attacking-Titan ordinal
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != me || q.def_absent || q.tapped) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+                if (d == nullptr || !d->params.land_search_on_enter_or_attack
+                    || d->params.land_search_count <= 0 || !d->card.IsCreature()) { continue; }
+                if (!CanAttackFull(q, state.battlefield, me)) { continue; }
+                if (static_cast<int>(tw.size()) >= kLandSearchPinOrdinals) { break; }
+                tw.push_back(std::min<std::size_t>(width_of(d), kLandSearchPinMask + 1));
+            }
+            if (!tw.empty())
+            {
+                std::vector<TurnSolver::Plan> extra;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    if (!base_plan(p)) { continue; }
+                    for (std::size_t j = 0; j < tw.size(); ++j)
+                    {
+                        for (std::size_t c = 1; c < tw[j]; ++c)
+                        {
+                            TurnSolver::Plan v = p;
+                            v.attack_land_search_choice =
+                                static_cast<int>(c) << (kLandSearchPinBits * static_cast<int>(j));
+                            extra.push_back(std::move(v));
+                        }
+                    }
+                }
+                all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                      std::make_move_iterator(extra.end()));
+            }
+        }
+        // (3) Search for Tomorrow's off-suspend pin (packed per arrival at the NEXT upkeep, in the
+        //     order ProcessSuspendArrivals casts them -- suspension order).
+        if (!cont_axes_only && is_pre_combat)
+        {
+            std::vector<std::size_t> uw;
+            for (const SuspendedCard& sc : state.players[static_cast<std::size_t>(me)].suspended_cards)
+            {
+                if (sc.arrive_turn > state.turn_number + 1) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
+                if (d == nullptr || d->card.IsPermanentCard()) { continue; }
+                // Only a land-search arrival consumes an ordinal (CastOffSuspend), so only it counts.
+                if (!d->params.land_search_on_resolve || d->params.land_search_count <= 0) { continue; }
+                if (static_cast<int>(uw.size()) >= kLandSearchPinOrdinals) { break; }
+                uw.push_back(std::min<std::size_t>(width_of(d), kLandSearchPinMask + 1));
+            }
+            bool any = false;
+            for (std::size_t x : uw) { if (x > 1) { any = true; } }
+            if (any)
+            {
+                std::vector<TurnSolver::Plan> extra;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    if (!base_plan(p)) { continue; }
+                    for (std::size_t j = 0; j < uw.size(); ++j)
+                    {
+                        for (std::size_t c = 1; c < uw[j]; ++c)
+                        {
+                            TurnSolver::Plan v = p;
+                            v.upkeep_land_search_choice =
+                                static_cast<int>(c) << (kLandSearchPinBits * static_cast<int>(j));
+                            extra.push_back(std::move(v));
+                        }
+                    }
+                }
+                all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                      std::make_move_iterator(extra.end()));
+            }
+        }
+    }
+
     // Axis-variant attribution (MTG_BRANCH_STATS; see branchstats::RecordAxis). Classified by
     // the choice tag -- the fans above set exactly one per variant ("one axis at a time").
     if (branchstats::Enabled())
@@ -52943,7 +53382,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte)
+static constexpr std::size_t kPlanDomAssertedSize = 440;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -53095,6 +53534,9 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
             add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
             for (int s : pl.sac_pins)             { add(s); }
+            x += "|ls";
+            for (int s : pl.land_search_pins)     { add(s); }
+            add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
             x += "|bpacts";
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
@@ -53332,7 +53774,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                                                   // Cid taps instead of sacrificing; without
                                                   // this two sources differing ONLY in that
                                                   // flag fold to one signature.
-                                                  + (pp.gy_return_sacrifices_source ? "" : "t"); }
+                                                  + (pp.gy_return_sacrifices_source ? "" : "t")
+                                                  // Haunted Fengraf: the random return is a
+                                                  // different ability from Haven's chosen one.
+                                                  + (pp.gy_return_at_random ? "r" : ""); }
         // Board-scaled mana land (Three Tree City): yield scales with a subtype count.
         if (!pp.mana_per_creature_subtype.empty())
         { s += "sc" + pp.mana_per_creature_subtype
@@ -54224,6 +54669,7 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     b += p.would_drop.capacity() * sizeof(std::string);
     for (const std::string& s : p.would_drop) { b += s.capacity(); }
     b += p.sac_pins.capacity() * sizeof(int);
+    b += p.land_search_pins.capacity() * sizeof(int);
     b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
     return b;
 }
@@ -55237,6 +55683,26 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // sacrifice engine makes the graveyard the fastest-growing zone on the board. This is the
         // `deck-inert check scanning the board` shape, which has already paid once on this deck.
         const bool gy_stamped          = (pi == 0);   // the only player deck_gy_readers describes
+        // GRAVEYARD-RETURN readers (GyR_CreatureNames; Haven of the Spirit Dragon, Haunted Fengraf):
+        // which creature cards sit in OUR graveyard decides what a rebuy can name and what the
+        // Fengraf's random draw returns, and a graveyard can change within one decision (a legend-rule
+        // death, a Genesis Wave mill). The header's "the rollout reads it only via Retrace" predates
+        // both, so two states differing only there shared a memo / TT entry. Folded order-insensitively
+        // (count + commutative name sum), gated on the deck's own stamp -> every deck without a
+        // graveyard-return ability keeps its exact key.
+        if (gy_stamped && (state.deck_gy_readers & GyR_CreatureNames) != 0)
+        {
+            uint64_t cr_acc = 0;
+            int      cr_n   = 0;
+            for (const Card& c : p.graveyard)
+            { if (ZoneCard(c).IsCreature()) { cr_acc += c.m_name_hash; ++cr_n; } }
+            if (cr_n > 0)
+            {
+                Fold(k, 0x67C7);
+                Fold(k, static_cast<uint64_t>(cr_n));
+                Fold(k, cr_acc);
+            }
+        }
         const bool gy_retrace_possible = !gy_stamped
                                       || (state.deck_gy_readers & GyR_RetraceNames) != 0;
         const bool gy_fuel_possible    = !gy_stamped
@@ -56526,6 +56992,18 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
             if (cpins[i] != -1)
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
+        }
+    }
+    // ...and the two LAND-SEARCH state pins (Primeval Titan's attack pick, Search for Tomorrow's
+    // off-suspend pick): pending and future-determining like every pin above, and a land-search
+    // variant IS skippable on this key (PlanIsAxisVariant). Value-gated, own slots.
+    {
+        const int lpins[] = { state.scripted_attack_land_search, state.scripted_upkeep_land_search };
+        for (int i = 0; i < 2; ++i)
+        {
+            if (lpins[i] != -1)
+            { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 48) << 40)
+                         ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(lpins[i]))); }
         }
     }
     return k;
@@ -67383,6 +67861,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 const int   sv_tapmode = g_scripted_tapmode;
                 const int   sv_fresh   = g_scripted_freshmode;
                 const int   sv_saccur  = g_scripted_sac_cursor;
+                const int   sv_lscur   = g_scripted_land_search_cursor;
                 GameState copy = state;
                 ApplyPlanDirect(copy, plans[cand], is_pre_combat);
                 g_scripted_top_choice     = sv_top;
@@ -67393,6 +67872,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 g_scripted_tapmode        = sv_tapmode;
                 g_scripted_freshmode      = sv_fresh;
                 g_scripted_sac_cursor     = sv_saccur;
+                g_scripted_land_search_cursor = sv_lscur;
                 {
                     static const bool s_hg_dbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
                     if (s_hg_dbg)
@@ -67747,6 +68227,20 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // card never installs one, so its key is unchanged.
     if (const int lf_pin = LandfallTargetPinFor(state); lf_pin >= 0)
     { Fold(k, 0x1A4DFA11ull); Fold(k, static_cast<uint64_t>(lf_pin)); }
+    // LAND-SEARCH pins (Plan::land_search_pins): the sac-pin rule exactly -- live only while
+    // unconsumed entries remain, and then the whole remaining SUFFIX folds (a -1 entry is inert but
+    // decides which later ordinal a pinned entry lands on). Its own gate, so every key without a
+    // live land-search list is byte-identical.
+    if (g_scripted_land_search_pins != nullptr
+        && g_scripted_land_search_cursor < static_cast<int>(g_scripted_land_search_pins->size()))
+    {
+        Fold(k, 0x1A5C);
+        Fold(k, static_cast<uint64_t>(g_scripted_land_search_pins->size()
+                                      - static_cast<std::size_t>(g_scripted_land_search_cursor)));
+        for (std::size_t i = static_cast<std::size_t>(g_scripted_land_search_cursor);
+             i < g_scripted_land_search_pins->size(); ++i)
+        { Fold(k, static_cast<uint64_t>((*g_scripted_land_search_pins)[i] + 2)); }
+    }
     // Archangel free-cast bank (added 2026-08-20, caught by MTG_ENUM_MEMO_VERIFY: cached 9
     // plans vs fresh 4 at t8 m2 = the free-variant emission): a this-turn post-combat counter,
     // so two same-board same-life states can carry different banks (damage split across turns
@@ -69731,6 +70225,19 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         { return "'" + name + "' has no tap-for-lifegain activated ability"; }
     }
 
+    // --- landsearch= : an activated land search (Evolving Wilds / Myriad Landscape / Khalni Heart
+    // Expedition). Source presence and the ability existing on that card. Khalni's quest-counter
+    // count and Wilds' {T} are NOT asserted (an earlier cast in the same line can add the counters;
+    // a sick or tapped source is the search's LegalNotEnumerated grade, as taplife= explains).
+    for (const std::string& name : spec.land_searches)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to activate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && (!d->params.land_search_activation_cost.has_value() || d->params.land_search_count <= 0))
+        { return "'" + name + "' has no activated land search"; }
+    }
+
     // --- blink= : Emiel's "{3}:" / Eldrazi Displacer's "{2}{C}:" exile-and-return. Source presence,
     // the ability existing on that card, and -- when the line PINNED a target -- that the target is a
     // creature we could legally blink. A "another target creature" ability cannot take the outlet
@@ -69888,17 +70395,34 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
     // graveyard must actually hold the named card as a legal target.
     if (!spec.gy_returns.empty())
     {
+        // `gyreturn=@random` is Haunted Fengraf's (gy_return_at_random) -- the source lookup must
+        // find a RANDOM-return source for it and a chosen-return source (Haven) otherwise, or a deck
+        // holding both would validate one against the other.
+        const bool any_random = std::find(spec.gy_returns.begin(), spec.gy_returns.end(),
+                                          std::string(kGyReturnRandom)) != spec.gy_returns.end();
         const CardDefinition* src = nullptr;
+        const CardDefinition* rnd = nullptr;
         for (const Permanent& p : s.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && d->params.gy_return_cost.has_value()) { src = d; break; }
+            if (!d || !d->params.gy_return_cost.has_value()) { continue; }
+            if (d->params.gy_return_at_random) { if (!rnd) { rnd = d; } }
+            else if (!src) { src = d; }
         }
-        if (!src)
+        if (any_random)
+        {
+            if (!rnd)
+            { return "you control no untapped permanent that returns a creature card at random"; }
+            if (!GyReturnHasFuel(s, active, *rnd))
+            { return "no creature card in your graveyard to return"; }
+        }
+        if (!src && std::any_of(spec.gy_returns.begin(), spec.gy_returns.end(),
+                                [](const std::string& w) { return w != kGyReturnRandom; }))
         { return "you control no untapped permanent with a graveyard-return ability"; }
         for (const std::string& want : spec.gy_returns)
         {
+            if (want == kGyReturnRandom) { continue; }
             bool found = false;
             for (const Card& c : s.players[active].graveyard)
             {
@@ -70271,7 +70795,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       // ONLY of it silently grades `accept / plan_index -1 / "pass / cast nothing"`
                       // -- an ACCEPT for a line the engine then does not play, which is strictly
                       // worse than a reject because the human sees no error at all.
-                      spec.tap_lifes.empty() && spec.aura_swaps.empty()))
+                      spec.tap_lifes.empty() && spec.aura_swaps.empty()
+                      && spec.land_searches.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -70393,6 +70918,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     std::vector<std::string> sortedTapLifes = spec.tap_lifes;
     std::sort(sortedTapLifes.begin(), sortedTapLifes.end());
     const bool taplife_declared   = !spec.tap_lifes.empty();
+    // landsearch= (Wilds / Myriad / Khalni), the same declared-vs-legacy split.
+    std::vector<std::string> sortedLandSearches = spec.land_searches;
+    std::sort(sortedLandSearches.begin(), sortedLandSearches.end());
+    const bool landsearch_declared = !spec.land_searches.empty();
     // pod= / ooze= (Birthing Pod / Scavenging Ooze activations), the same declared-vs-legacy
     // split every verb above uses -- an undeclared line keeps matching the action's card name in
     // the ordinary cast multiset, so saved references are unaffected.
@@ -70467,6 +70996,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         std::vector<LineSpec::EquipSpec> equipActs;
         std::vector<std::string> animateNames, tapTokenNames, gyReturnNames, gyPlayNames;
         std::vector<std::string> tapLifeNames;
+        std::vector<std::string> landSearchNames;
         std::vector<int> jitteModes, gyExileModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
@@ -70536,6 +71066,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             if (taplife_declared && a.kind == Action::Kind::ActivatePermAbility
                 && a.ability_mode == Action::AbilityMode::TapLifegain)
             { tapLifeNames.push_back(a.card_name); continue; }
+            if (landsearch_declared && a.kind == Action::Kind::ActivatePermAbility
+                && (a.ability_mode == Action::AbilityMode::SacLandSearch
+                    || a.ability_mode == Action::AbilityMode::QuestSacLandSearch))
+            { landSearchNames.push_back(a.card_name); continue; }
             if (pod_declared && a.kind == Action::Kind::ActivatePod)
             { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
             if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
@@ -70691,6 +71225,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = tapLifeNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedTapLifes) { continue; }
+        }
+        if (landsearch_declared)
+        {
+            std::vector<std::string> v2 = landSearchNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedLandSearches) { continue; }
         }
         if (pod_declared && !PodsMatch(spec.pods, podActs)) { continue; }
         if (ooze_declared)
@@ -73070,7 +73610,8 @@ static const char* PlanDumpModeName(PermAbilityMode m)
     static const char* kNames[] = {
         "None", "TapDamage", "TapInvestigate", "TapDraw", "SacDraw", "Drain", "ExileTop",
         "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
-        "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig"
+        "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
+        "SacLandSearch", "QuestSacLandSearch"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

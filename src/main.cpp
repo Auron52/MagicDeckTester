@@ -493,8 +493,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                                                           : ": exile creature (gain 2)");
                 break;
             case Action::Kind::GraveyardReturnAbility:
-                // One plan variant per legal target, so the label must name WHICH card comes back.
-                tag = a.card_name + ": sacrifice \xE2\x86\x92 return " + a.tutor_target + " to hand";
+                // One plan variant per legal target, so the label must name WHICH card comes back --
+                // except Haunted Fengraf's AT-RANDOM return, which has no target to name (kGyReturnRandom).
+                if (a.tutor_target.str() == kGyReturnRandom)
+                { tag = a.card_name + ": sacrifice \xE2\x86\x92 return a creature card at random"; }
+                else
+                { tag = a.card_name + ": sacrifice \xE2\x86\x92 return " + a.tutor_target + " to hand"; }
                 break;
             case Action::Kind::GraveyardPlayAbility:
                 // One plan variant per legal target: the label names WHICH card is played.
@@ -2094,6 +2098,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 {
                     os << ", \"verb\": \"gyreturn\", \"gyreturn_target\": ";
                     JsonStr(os, ac.tutor_target);
+                    // Haunted Fengraf: "@random" is not a card -- the GUI must say "a creature card
+                    // at random" and never offer a pick.
+                    if (ac.tutor_target.str() == kGyReturnRandom) { os << ", \"gyreturn_random\": true"; }
                 }
                 // Kaldring: names the SOURCE artifact, carries the PLAYED card -- same shape as
                 // gyreturn, or two gy-play variants of one Kaldring would be indistinguishable.
@@ -2114,6 +2121,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && ac.ability_mode == Action::AbilityMode::TapLifegain)
                 { os << ", \"verb\": \"taplife\""; }
+                // Evolving Wilds / Terramorphic Expanse / Myriad Landscape / Khalni Heart Expedition:
+                // an activated land search names its SOURCE (a land is never cast; a Khalni may also
+                // sit in hand). The basics it finds are asked at resolution (`tutor_etb`).
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && (ac.ability_mode == Action::AbilityMode::SacLandSearch
+                             || ac.ability_mode == Action::AbilityMode::QuestSacLandSearch))
+                { os << ", \"verb\": \"landsearch\""; }
                 // Birthing Pod: names the SOURCE artifact (never castable), carries the fetch on
                 // tutor_target (already serialised) + the victim id, so the GUI writes
                 // `pod=<fetch>#<victim>` instead of an ambiguous `cast=Birthing Pod`.
@@ -3918,6 +3932,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
         else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"
         else if (key == "taplife")   { ls.tap_lifes.push_back(val); }     // Wellwisher "{T}: gain 1 per Elf"
+        else if (key == "landsearch"){ ls.land_searches.push_back(val); } // Wilds / Myriad / Khalni crack
         // "pod=<fetch>[#<victim num>]": Birthing Pod activation (fetch name + optional victim id).
         else if (key == "pod")
         {

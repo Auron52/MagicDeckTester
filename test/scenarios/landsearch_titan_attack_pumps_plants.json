@@ -1,0 +1,96 @@
+{
+  "_comment": [
+    "Land search 2026-10-15: Primeval Titan's ATTACK trigger ('whenever this creature enters OR ATTACKS, you may",
+    "search for up to two land cards, put them onto the battlefield tapped') resolves at declare-attackers,",
+    "BEFORE damage (FireAttackLandSearch, both worlds), so Avenger of Zendikar's landfall counters land on the",
+    "ATTACKING Plants this combat. Board: Titan, Avenger and four 0/1 Plants, all able to attack; no land in hand",
+    "and a dead-draw library holding two Forests. Swing: Titan 6 + Avenger 5 + four Plants at 0+2 = 19, exactly",
+    "the opponent's life -- reachable ONLY if the trigger's two landfalls pump the Plants before damage (without",
+    "them it is 11). The search must also attack (PendingAttackDamage prices the pump: CountAttackLandSearchPump)."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 19,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Primeval Titan"
+    },
+    {
+      "name": "Avenger of Zendikar"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Forest",
+    "Forest"
+  ],
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 6,
+  "expect_win_turn": 6
+}

@@ -248,6 +248,8 @@ opened when one source offers several distinct activations) is for.
 | `animate=<land>` | Mutavault's `{1}: becomes a 2/2` | a land is played, not cast, so `cast=<land>` is meaningless; several copies must stay distinguishable |
 | `taptoken=<land>` | Sliver Hive's `{5},{T}: create a Sliver` | same |
 | `taplife=<source>` (2026-09-30) | Wellwisher's `{T}: You gain 1 life for each Elf on the battlefield` | the `gyexile=` case exactly: the action names the SOURCE and SelesnyaLifegain runs **two** copies, so `cast=Wellwisher` cannot say whether you meant the board activation or hard-casting the copy in hand — both plans produce `orderNames == {"Wellwisher"}` and `CheckLine` matches whichever sorts first. The `board_acts` affordability probe cannot separate them either: it only picks up activations whose cost has a **positive mana value**, and this cost is `{T}` alone. **The first verb keyed on an `ability_mode` rather than an `Action::Kind`** — the whole `PermAbilityMode` family shares `ActivatePermAbility`, and only this mode needs a verb, so every other mode keeps the legacy verbless `cast=<source>` matching |
+| `landsearch=<source>` (2026-10-15) | Evolving Wilds / Terramorphic Expanse (`{T}, Sacrifice`), Myriad Landscape (`{2}, {T}, Sacrifice`), Khalni Heart Expedition (`Remove three quest counters and sacrifice it`) — `PermAbilityMode::SacLandSearch` / `QuestSacLandSearch` | the `taplife=` shape (keyed on the two `ability_mode`s): a land is never cast, so `cast=Evolving Wilds` is meaningless, and a Khalni may have a second copy in HAND, so `cast=Khalni Heart Expedition` cannot say crack-vs-hard-cast. The value is the SOURCE; WHICH lands it finds is never on the line — it is asked at resolution through the shared `tutor_etb` prompts (below) |
+| `gyreturn=@random` (2026-10-15) | Haunted Fengraf's `{3}, {T}, Sacrifice: return a creature card AT RANDOM` | the `gyreturn=` verb with the sentinel value `@random` (`kGyReturnRandom`, plus `"gyreturn_random": true` on the plan action): there is no card to name because the player never chooses one. The engine emits ONE activation per source and draws the card at resolution from a seeded hash (the Gamble model); the viewer must never offer a pick |
 | `channel=<card>` | Twinshot Sniper's `{1}{R}, Discard this card: 2 damage` | a from-HAND ability, not a board activation and not a cast — `cast=<name>` cannot say which of the two ways you are playing the card |
 | `channel=<card>` (reuse, 2026-09-27) | Dimir House Guard's Transmute `{1}{B}{B}, Discard this card: search for a card with the same mana value` | the same from-HAND shape, so it rides Channel's kind and verb; the plan JSON adds `"transmute": true` only to relabel the hand badge. The found card is asked at resolution (human play) |
 | `eternalize=<card>` (2026-09-27) | Timeless Witness's `Eternalize {5}{G}{G}` (exile it from the GRAVEYARD: a 4/4 black Zombie token copy) | activated from the GRAVEYARD: no board source to click and not a cast. The state JSON lists `eternalize_gy`; the GUI makes those graveyard thumbs clickable (`eternalizeCard`) |
@@ -504,6 +506,18 @@ more cast variant whose `tutor_target` is the sentinel `(decline search)` (`kTut
 `PerformTutor` resolves as a decline on both the executor and rollout paths. A tutor SPELL needs none (its
 resolution `tutor_etb` frame already takes -1), and a Vial/put-route ETB tutor asks `tutor_etb` with -1 =
 decline. Autonomous enumeration never emits it (the search's decline is the `tutor_choice` index axis).
+**Land searches reuse `tutor_etb` as SEQUENTIAL per-land prompts** (2026-10-15; core/LandSearch.h
+`PerformLandSearch`, the SHARED resolution helper, so the frames fire on `ApplyPlan`, at the upkeep (Search
+for Tomorrow cast off suspend) and in combat (Primeval Titan's attack trigger) alike). Rampant Growth,
+Search for Tomorrow, Cultivate, Evolving Wilds, Terramorphic Expanse, Myriad Landscape, Khalni Heart
+Expedition and Primeval Titan ask ONE `tutor_etb` frame per land, in destination order, each over the live
+legal NAMES given the earlier picks (copies left; Myriad's second prompt offers only basics sharing a land
+type with the first), sorted by name so the list never leaks the library order. The `source` label says
+where the land goes ("Cultivate -- basic land onto the battlefield tapped (1 of up to 2)" / "... into your
+hand (2 of up to 2)"). `-1` on the FIRST prompt of an optional search (Primeval Titan's "you may") declines
+it (no shuffle); any other `-1` stops early (a search for a card with a stated quality may fail to find).
+The default is the autonomous pick. The plan menu carries ONE target-less cast / activation -- the search's
+`land_search_pins` / attack / upkeep axes are never fanned under human play, so nothing is asked twice.
 **Vial-put ORDER is NOT a decision** (USER 2026-10-06: "I should not be asked for an order. The order
 is apparent."). A put is sequenced like a cast of its creature: the human's queued order is applied as-is
 (the put is a `--cast-order` slot under its creature's name), and the search uses the deck's cast order.

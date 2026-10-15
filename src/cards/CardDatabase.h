@@ -371,6 +371,12 @@ struct CardParams
     std::string             gy_return_requires_subtype;
     bool                    gy_return_requires_creature = false;
     bool                    gy_return_sacrifices_source = true;
+    // Haunted Fengraf: "Return a creature card AT RANDOM from your graveyard to your hand." The card is
+    // NOT targeted and NOT chosen: the enumeration emits ONE activation per source (tutor_target =
+    // kGyReturnRandom) and ApplyGraveyardReturnAbility draws the card from a deterministic hash of
+    // (game_seed, turn, eligible count) over the eligible set in canonical (m_number) order -- the
+    // Gamble model, minus the search_count term so the search has no intra-turn lever on the draw.
+    bool                    gy_return_at_random = false;
 
     // restricted. Modelled as produces = [C, <colors>] + this flag: at payment time a non-creature
     // spell may take only {C} from the source (ProducesForPayment strips the colours), a creature
@@ -1855,6 +1861,10 @@ struct CardParams
     // counter is removed and the card is cast off suspend into play). 0 = not suspendable -> every
     // other deck is byte-identical.
     int suspend_time_counters = 0;
+    // The SUSPEND COST ("Suspend 2--{G}": Search for Tomorrow). nullopt = {0} (Lotus Bloom), so every
+    // existing suspend card is byte-identical: the Suspend action's cost is suspend_cost.value_or({})
+    // and the apply sites pay it only when its mana value is > 0 (stranded -> no suspend).
+    std::optional<ManaCost> suspend_cost;
     // Sac-for-mana: "{T}, Sacrifice this artifact: Add N mana of any one color." N (3 for Lotus). > 0
     // gates a battlefield-activated ability enumerated as an Action::Kind::SacForMana (one variant per
     // candidate colour): it taps + SACRIFICES the permanent and floats N mana of a SEARCH-CHOSEN single
@@ -2240,6 +2250,43 @@ struct CardParams
     // shock/enters-tapped choice; a fetched Forbidden Orchard spawns its Spirit on entry,
     // mirroring the on-play hook). Target = the searched tutor axis (tutor_types [Land]).
     bool tutor_land_to_battlefield = false;
+
+    // ---- LAND SEARCH (the land-search cluster, 2026-10-15; src/core/LandSearch.h) -----------------
+    // "Search your library for up to N [basic] land card(s) [that share a land type], put them onto
+    // the battlefield [tapped] [and/or into your hand], then shuffle." ONE resolution helper
+    // (PerformLandSearch) and ONE pick generator (LandSearchPicks) serve every source; the params
+    // below only describe the SEARCH, and the three `*_on_*` / activation fields say WHERE it fires.
+    // Every field is inert at its default, so every card without them is byte-identical.
+    //   count            "up to N" lands (0 = no land search at all -- the master gate).
+    //   basic_only       "basic land card(s)": the Basic SUPERTYPE off the DEFINITION
+    //                    (IsBasicLandCard), never the basic_land template.
+    //   share_land_type  every pick shares at least one land subtype (Myriad Landscape).
+    //   to_hand          how many of the picks go to HAND; the rest go to the battlefield, and a lone
+    //                    find goes to the battlefield (Cultivate's ruling).
+    //   tapped           battlefield entries are FORCED tapped (EnterLand's LandEntryTap::ForcedTapped:
+    //                    the land's own enters-tapped / shock rule is not consulted -- no life is paid).
+    //   optional         "you MAY search" (Primeval Titan): only the HUMAN is offered the decline.
+    int  land_search_count            = 0;
+    bool land_search_basic_only       = false;
+    bool land_search_share_land_type  = false;
+    int  land_search_to_hand          = 0;
+    bool land_search_tapped           = false;
+    bool land_search_optional         = false;
+    // WHERE it fires. on_resolve: an instant/sorcery's resolution (Rampant Growth, Search for
+    // Tomorrow -- also off suspend -- Cultivate). on_enter_or_attack: ONE printed trigger with two
+    // fire sites (Primeval Titan): FireOwnEtbTriggers and FireAttackLandSearch (declare-attackers,
+    // before damage, both worlds).
+    bool land_search_on_resolve          = false;
+    bool land_search_on_enter_or_attack  = false;
+    // An ACTIVATED land search on a permanent (Evolving Wilds, Terramorphic Expanse, Myriad Landscape,
+    // Khalni Heart Expedition). The cost arms it: "" = an all-zero ManaCost (the Wellwisher {T}-only
+    // precedent), "{2}" = Myriad. taps -> PermAbilityMode::SacLandSearch ({T} in the cost);
+    // remove_quest > 0 -> PermAbilityMode::QuestSacLandSearch (remove N quest counters, no {T}).
+    // sacrifice_self: "Sacrifice this" is part of the cost (paid before the search, CR 602.2).
+    std::optional<ManaCost> land_search_activation_cost;
+    bool land_search_activation_taps             = false;
+    int  land_search_activation_remove_quest     = 0;
+    bool land_search_activation_sacrifice_self   = false;
 
     // Expressive Iteration: "look at the top 3; 1 to hand, 1 to bottom, 1 exiled & playable THIS
     // turn." Resolved by ResolveExpressiveIteration (NOT the normal draw/scry path). A DrawSpell so

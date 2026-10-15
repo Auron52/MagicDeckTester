@@ -414,7 +414,12 @@ static_assert(sizeof(Player) == 200,
 // dispatch walk (OnLandEntered) that provably finds no watcher -- identical across every pair of
 // states Build() compares, nothing to fold. (The landfall-target policy pin is THREAD-LOCAL, not
 // GameState, and is folded into the solve memo key while live -- TurnSolver's ACTIVE SCRIPTED PINS.)
-static_assert(sizeof(GameState) == 1080,
+// +8 bytes (2026-10-15, the land-search cluster): `scripted_attack_land_search` (Primeval Titan's
+// searched attack pick, consumed at THIS turn's declare-attackers) and `scripted_upkeep_land_search`
+// (Search for Tomorrow's searched off-suspend pick, consumed at the NEXT upkeep). Classification: both
+// FUTURE-DETERMINING (the Tectonic / Vial-charge pin classes) and FOLDED in Build(), value-gated, so
+// every deck without either card keeps its exact key.
+static_assert(sizeof(GameState) == 1088,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -745,6 +750,15 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // keeps a pinned rank 0 distinguishable from "no pin".
     if (s.scripted_saga_target >= 0)
     { fold(static_cast<std::uint64_t>(s.scripted_saga_target) + 1u); }
+    // LAND SEARCH pins (core/LandSearch.h): Primeval Titan's attack-trigger pick (consumed at this
+    // turn's declare-attackers) and Search for Tomorrow's off-suspend pick (consumed at the NEXT
+    // upkeep -- live across exactly this boundary, the scripted_vial_charge class). Both
+    // FUTURE-DETERMINING; folded VALUE-GATED (-1 in every deck without either card), with distinct
+    // domain tags so the two can never alias each other or a sibling pin.
+    if (s.scripted_attack_land_search >= 0)
+    { fold(0x1A5D0000000ull + static_cast<std::uint64_t>(s.scripted_attack_land_search)); }
+    if (s.scripted_upkeep_land_search >= 0)
+    { fold(0x1A5E0000000ull + static_cast<std::uint64_t>(s.scripted_upkeep_land_search)); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP
@@ -989,7 +1003,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                          || ((gy_bits & GyR_SelfCopyNames) && (gp.gy_self_power_bonus > 0
                                                             || gp.ritual_float_gy_self_bonus))
                          || ((gy_bits & GyR_LandsEdgeNames) && gp.discard_land_damage > 0)
-                         || ((gy_bits & GyR_MulticolorNames) && zc.IsMulticolored());
+                         || ((gy_bits & GyR_MulticolorNames) && zc.IsMulticolored())
+                         // Haven / Haunted Fengraf: every creature card is a possible return.
+                         || ((gy_bits & GyR_CreatureNames) && zc.IsCreature());
                 }
                 else if (!named && !gd)
                 {

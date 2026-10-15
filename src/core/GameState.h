@@ -97,6 +97,15 @@ enum GyReader : std::uint32_t
     // different number of tokens, so they reach different boards. Correct for Fungus TODAY, because
     // it sets no bit at all and has no descend reader; wrong the moment one is on the battlefield.
     GyR_DescendCount    = 1u << 7,
+    // GRAVEYARD-RETURN abilities (gy_return_cost: Haven of the Spirit Dragon -- "return target Dragon
+    // creature card" -- and Haunted Fengraf -- "return a creature card AT RANDOM"). Both read WHICH
+    // creature cards sit in the graveyard: Haven offers one activation per legal name, Fengraf's
+    // draw is a function of the eligible creature multiset. Before 2026-10-15 these set NO bit, so
+    // two end-of-turn states differing only in which creatures a Genesis Wave milled compared EQUAL
+    // and the dominance prune could discard exactly the line the ability exists for. Folds the
+    // CREATURE card names (a superset of Haven's Dragon targets -- coarser would be unsound, finer
+    // only declines a fold).
+    GyR_CreatureNames   = 1u << 8,
 };
 
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
@@ -640,6 +649,13 @@ struct GameState
     // walk finds nothing (dead-code elimination, no lever). DEFAULT TRUE == walk, so an unstamped
     // GameState (the scenario harness, a unit test) can never silently lose a Courser. Only ever err true.
     bool                     deck_has_top_land_play          = true;  // Courser of Kruphix
+    // ...and the LAND-SEARCH cluster (core/LandSearch.h; Rampant Growth, Cultivate, Search for
+    // Tomorrow, Evolving Wilds, Myriad Landscape, Khalni Heart Expedition, Primeval Titan): stamped
+    // from `land_search_count > 0`, the master gate every land-search param hangs off, so a clear bit
+    // PROVES no land-search source exists -- the per-node axis fan, the attack-trigger walk and its
+    // projection are skipped (dead-code elimination, byte-identical). Garth holds it open. DEFAULT
+    // TRUE == walk, the same only-err-true rule as above.
+    bool                     deck_has_land_search            = true;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later
@@ -919,6 +935,20 @@ struct GameState
     // later turn. A rank rather than a permanent identity because a turn elapses in between: see
     // FireSagaChapter for why naming a permanent a turn early goes stale.
     int                      scripted_saga_target    = -1;
+    // LAND SEARCH state pins (core/LandSearch.h), PACKED per trigger ordinal (kLandSearchPinBits bits
+    // each, low first; -1 = unpinned = every trigger takes the provider's front pick). Both are decided
+    // in a main phase and consumed after the plan apply has returned, so they ride the STATE:
+    //   * scripted_attack_land_search -- Primeval Titan's ATTACK trigger (Plan::
+    //     attack_land_search_choice), consumed at THIS turn's declare-attackers, one ordinal per
+    //     attacking Titan. Per-turn: cleared with the other combat pins at both turn starts.
+    //   * scripted_upkeep_land_search -- Search for Tomorrow cast off suspend (Plan::
+    //     upkeep_land_search_choice), consumed at the NEXT upkeep, one ordinal per arrival. The
+    //     scripted_vial_charge lifetime: it must SURVIVE the turn boundary (never cleared with the
+    //     combat pins -- SimulateEndAndStartNextTurn's reset runs BEFORE the upkeep that reads it), and
+    //     its consumer clears it as the ordinals run out.
+    // Both are FUTURE-DETERMINING and folded value-gated into the dominance key and the sim keys.
+    int                      scripted_attack_land_search = -1;
+    int                      scripted_upkeep_land_search = -1;
     // Maelstrom Archangel free-cast BANK (user-approved 2026-08-06): each copy that deals combat
     // damage to the player increments this (Combat.cpp ResolveCombatDamage, the shared combat
     // core), and the post-combat main may cast that many hand spells without paying mana (a
