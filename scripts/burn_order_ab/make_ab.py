@@ -23,6 +23,7 @@ BURN_PROF = "decks/burn/burn.profile.json"
 O, M2, CR, NA = "MTG_BURN_ORDER", "MTG_BURN_M2_RULE", "MTG_SPECTACLE_PLAN_CREDIT", "MTG_BURN_M2_NARROW"
 BF = "MTG_BURN_BLOOD_FIRST"   # the PROPOSED amendment (Searing Blood before Searing Blaze), a USER question
 SO = "MTG_SPECTACLE_CREDIT_SEARCH_ONLY"   # the credit in the search's enumeration only (not Solve)
+KT = "MTG_KILL_TRIGGER_COMBO"             # Searing Blood's combined-kill trigger in the wins projection
 ARMS = [
     ("off",   {O: False, M2: False, CR: False, NA: False, BF: False, SO: False}),   # new binary, every lever off == base?
     ("o1",    {O: True,  M2: False, CR: False, NA: False, BF: False, SO: False}),
@@ -34,6 +35,18 @@ ARMS = [
     ("o123b", {O: True,  M2: True,  CR: True,  NA: False, BF: True,  SO: False}),
     ("o123s", {O: True,  M2: True,  CR: True,  NA: False, BF: False, SO: True}),    # credit search-only
 ]
+# The follow-up batch (mtg.new2, 1ddb862e: MTG_BURN_BLOOD_FIRST is CONDITIONAL there).
+ARMS2 = [
+    ("o1c",    {O: True,  M2: False, CR: False, NA: False, BF: True,  SO: False, KT: False}),
+    ("o12c",   {O: True,  M2: True,  CR: False, NA: False, BF: True,  SO: False, KT: False}),
+    ("o13c",   {O: True,  M2: False, CR: True,  NA: False, BF: True,  SO: False, KT: False}),
+    ("o123c",  {O: True,  M2: True,  CR: True,  NA: False, BF: True,  SO: False, KT: False}),
+    ("o123sc", {O: True,  M2: True,  CR: True,  NA: False, BF: True,  SO: True,  KT: False}),
+    ("o12ck",  {O: True,  M2: True,  CR: False, NA: False, BF: True,  SO: False, KT: True}),
+    ("o123ck", {O: True,  M2: True,  CR: True,  NA: False, BF: True,  SO: False, KT: True}),
+    ("o1ck",   {O: True,  M2: False, CR: False, NA: False, BF: True,  SO: False, KT: True}),
+]
+ARMS_ALL = ARMS + ARMS2
 ALL_ON = {O: True, M2: True, CR: True, NA: False, BF: True, SO: False}
 
 # Disjoint blocks inside 11600001..11699999 (the walk's allocation for burn). Sized above the brief's
@@ -79,7 +92,7 @@ def job(name, deck, prof, cell, games, seed, gi, flags=None, extra=None):
 
 def build(a):
     jobs = []
-    arms = [("old", None)] if a.which == "base" else ARMS
+    arms = [("old", None)] if a.which == "base" else (ARMS2 if a.which == "new2" else ARMS)
     for (deck, cell), n0 in SIZES.items():
         n = int(n0 * a.scale)
         # --floor: the searched cells at the brief's floor (half these sizes) so a 9-arm NEW batch fits the
@@ -97,13 +110,17 @@ def build(a):
                     continue
                 jobs.append(job("%s.%s.%s.c%d" % (deck, cell, arm, c), BURN_DECK, BURN_PROF, cell,
                                 min(ch, n - c), SEEDS[(deck, cell)] + c, c, fl, extra))
-    if not a.no_identity:
+    if a.recovery_from:
+        jobs.extend(recovery_jobs(a.recovery_from, a.recovery_arms.split(",")))
+    if not a.no_identity and a.which != "new2":
         for key, v in sorted(suite_decks().items()):
             for cell, g in ID_GAMES.items():
                 jobs.append(job("id.%s.%s" % (key, cell), v["DECK_FILE"], v["DECK_PROF"], cell, g,
                                 ID_SEED, 0, ALL_ON if a.which == "new" else None))
     def cost(j):
         p = j["name"].split(".")
+        if p[0] == "rec":
+            return 50.0                                            # one searched game at d6-d8
         return COST[p[2]] * 10 if p[0] == "id" else COST[p[1]]   # identity decks can be far dearer
     jobs.sort(key=lambda j: -cost(j))   # stable: expensive cells first
     os.makedirs(a.out, exist_ok=True)
@@ -161,7 +178,7 @@ def analyse(dbase, dnew):
     for deck in ("burn", "burn2hg"):
         for cell in ("ship", "d3", "d0"):
             base = wb.get((deck, cell, "old"), {})
-            for arm, _ in ARMS:
+            for arm, _ in ARMS_ALL:
                 w = wn.get((deck, cell, arm), {})
                 gis = sorted(set(w) & set(base))
                 if not gis:
@@ -220,11 +237,70 @@ def analyse(dbase, dnew):
     json.dump([list(s) for s in slower], open(os.path.join(dnew, "slower.json"), "w"))
 
 
-def recovery(dbase, dnew, out):
+def recovery_jobs(dnew, arms=None):
     """One job per slower game: stage 1 (depth W = max(6, old win turn), budget 100) and stage 2
     (depth 8, budget 0), both under the arm's flags, both ignore_play_profile (the depth is pinned)."""
     slower = json.load(open(os.path.join(dnew, "slower.json")))
-    flags = dict(ARMS)
+    flags = dict(ARMS_ALL)
+    jobs = []
+    for deck, cell, arm, g, ob, nw in slower:
+        if arms and arm not in arms:
+            continue
+        extra = dict(TWO_HG) if deck == "burn2hg" else {}
+        w = max(6, ob if ob < 9 else 6)
+        for stage, depth, bud in (("s1", w, 100), ("s2", 8, 0)):
+            j = {"name": "rec.%s.%s.%s.g%d.%s" % (deck, cell, arm, g, stage),
+                 "deck": os.path.join(ROOT, BURN_DECK), "profile": os.path.join(ROOT, BURN_PROF),
+                 "games": 1, "seed": SEEDS[(deck, cell)] + g, "game_index": g,
+                 "depth": depth, "budget_ms": bud, "ignore_play_profile": True, "flags": dict(flags[arm])}
+            j.update(extra)
+            jobs.append(j)
+    return jobs
+
+
+def rec_report(dslow, drec):
+    """Per slower game: stage-1 / stage-2 win turn vs the OLD win turn (recovered = <= old)."""
+    slower = json.load(open(os.path.join(dslow, "slower.json")))
+    got = {}
+    for line in open(os.path.join(drec, "batch.err"), errors="ignore"):
+        m = WIN.search(line)
+        if m and m.group(1).startswith("rec."):
+            wt = int(m.group(3))
+            got[m.group(1)] = 9 if wt < 0 else wt
+    rows, tally = [], defaultdict(lambda: [0, 0, 0, 0])   # (deck,cell,arm) -> [n, s1, s2, none]
+    for deck, cell, arm, g, ob, nw in slower:
+        k1 = "rec.%s.%s.%s.g%d.s1" % (deck, cell, arm, g)
+        k2 = "rec.%s.%s.%s.g%d.s2" % (deck, cell, arm, g)
+        if k1 not in got and k2 not in got:
+            continue
+        s1, s2 = got.get(k1, 99), got.get(k2, 99)
+        t = tally[(deck, cell, arm)]
+        t[0] += 1
+        if s1 <= ob:
+            t[1] += 1; st = "stage1"
+        elif s2 <= ob:
+            t[2] += 1; st = "stage2"
+        else:
+            t[3] += 1; st = "NOT RECOVERED"
+        rows.append("  %-8s %-5s %-6s gi=%-6d seed=%d old=%d new=%d s1=%s s2=%s  %s" % (
+            deck, cell, arm, g, SEEDS[(deck, cell)] + g, ob, nw, s1, s2, st))
+    out = ["recovery (stage 1 = depth max(6, old wt) b100; stage 2 = d8 b0)",
+           "%-8s %-5s %-6s %6s %6s %6s %6s" % ("deck", "cell", "arm", "slower", "s1", "s2", "none")]
+    for k in sorted(tally):
+        t = tally[k]
+        out.append("%-8s %-5s %-6s %6d %6d %6d %6d" % (k[0], k[1], k[2], t[0], t[1], t[2], t[3]))
+    out.append("\n== not recovered ==")
+    out += [r for r in rows if r.endswith("NOT RECOVERED")]
+    out.append("\n== all ==")
+    out += rows
+    text = "\n".join(out)
+    print("\n".join(out[:60]))
+    open(os.path.join(drec, "recovery.txt"), "w").write(text + "\n")
+
+
+def recovery(dbase, dnew, out):
+    slower = json.load(open(os.path.join(dnew, "slower.json")))
+    flags = dict(ARMS_ALL)
     jobs = []
     for deck, cell, arm, g, ob, nw in slower:
         extra = dict(TWO_HG) if deck == "burn2hg" else {}
@@ -244,14 +320,19 @@ def recovery(dbase, dnew, out):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--out")
-    ap.add_argument("--which", choices=["base", "new"])
+    ap.add_argument("--which", choices=["base", "new", "new2"])
+    ap.add_argument("--recovery-from", default="", help="append recovery jobs for this dir's slower.json")
+    ap.add_argument("--recovery-arms", default="", help="comma list of arms to recover (default all)")
+    ap.add_argument("--rec-report", nargs=2, metavar=("DIR_WITH_SLOWER", "DIR_WITH_REC"))
     ap.add_argument("--scale", type=float, default=1.0)
     ap.add_argument("--no-identity", action="store_true")
     ap.add_argument("--floor", action="store_true", help="searched cells at the brief's floor sizes")
     ap.add_argument("--analyse", nargs=2)
     ap.add_argument("--recovery", nargs=2)
     a = ap.parse_args()
-    if a.analyse:
+    if a.rec_report:
+        rec_report(*a.rec_report)
+    elif a.analyse:
         analyse(*a.analyse)
     elif a.recovery:
         recovery(a.recovery[0], a.recovery[1], a.out)

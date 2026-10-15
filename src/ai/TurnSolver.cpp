@@ -34728,6 +34728,56 @@ static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a)
     return false;
 }
 
+// ---- THE KILL-TRIGGER COMBO CREDIT (MTG_KILL_TRIGGER_COMBO; EngineFlags.h has the charter) ----------
+// Face damage the plan's kill-trigger burn (Searing Blood) deals when the plan's OWN creature damage kills
+// the opponent's only creature, in the realised order (CastOrderLess -- the comparator both apply worlds
+// sort by): each kill-trigger cast made while the creature was still alive and NOT already credited by
+// CollectActions (its direct_damage is 0 because it cannot kill alone) adds its death_trigger_damage once
+// the running creature damage reaches the toughness. A creature-damage cast after the death has no target
+// and stops the walk. Read by the "wins this turn" projection only; one opposing creature only (every
+// creature-damage spell then hits it), else 0.
+static int KillTriggerComboCredit(const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel)
+{
+    if (!KillTriggerComboOn()) { return 0; }
+    int target = -1, n = 0;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index == state.active_player_index || !p.card.IsCreature()) { continue; }
+        target = i;
+        if (++n > 1) { return 0; }
+    }
+    if (n != 1) { return 0; }
+    thread_local std::vector<int> ord;
+    ord.clear();
+    bool any_trigger = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        const CardDefinition& d = *a.def;
+        if (d.tmpl != CardTemplate::DirectDamage) { continue; }
+        if (d.params.targeting != Targeting::Creature && d.params.targeting != Targeting::Multi) { continue; }
+        ord.push_back(j);
+        if (d.params.death_trigger_damage > 0 && a.direct_damage <= 0) { any_trigger = true; }
+    }
+    if (!any_trigger) { return 0; }
+    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+    { return CastOrderLess(state, cands[static_cast<std::size_t>(x)], cands[static_cast<std::size_t>(y)]); });
+    const int tough = state.battlefield[static_cast<std::size_t>(target)].EffectiveToughness();
+    int dealt = 0, pending = 0;
+    for (int j : ord)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        const CardDefinition& d = *a.def;
+        if (d.params.death_trigger_damage > 0 && a.direct_damage <= 0) { pending += d.params.death_trigger_damage; }
+        dealt += CreatureBurnDamage(d, state);
+        if (dealt >= tough) { return pending; }
+    }
+    return 0;
+}
+
 // ---- THE SPECTACLE PLAN CREDIT (MTG_SPECTACLE_PLAN_CREDIT; EngineFlags.h has the charter) ----------
 // Both subset evaluators (Solve::consider, EnumeratePlans::eval_and_push) price each cast at the cost
 // the PRE-plan state gives it, so a spectacle spell (Light Up the Stage, {2}{R} / spectacle {R}) read
@@ -36073,7 +36123,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
         // The spell a connecting free-caster frees (MTG_ATTACK_FREECAST_DAMAGE; 0 unless one attacks).
         const int freecast_dmg = FreeCastDamage(freecast_ctx, cands, sel);
-        bool wins = (projected_atk + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg)
+        // Searing Blood finished by the plan's own creature damage (MTG_KILL_TRIGGER_COMBO; 0 off).
+        const int kill_combo_dmg = KillTriggerComboCredit(state, cands, sel);
+        bool wins = (projected_atk + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
         // has_extra_lethal gate, so a deck with no such model never calls it and stays
@@ -48648,7 +48700,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
         // The spell a connecting free-caster frees (MTG_ATTACK_FREECAST_DAMAGE) -- twin of Solve's.
         const int freecast_dmg = FreeCastDamage(freecast_ctx, cands, sel);
-        bool wins = (projected_atk + direct_dmg + cannons_dmg + freecast_dmg) >= state.Opponent().life;
+        // Searing Blood finished by the plan's own creature damage (MTG_KILL_TRIGGER_COMBO) -- twin of Solve's.
+        const int kill_combo_dmg = KillTriggerComboCredit(state, cands, sel);
+        bool wins = (projected_atk + direct_dmg + cannons_dmg + freecast_dmg + kill_combo_dmg) >= state.Opponent().life;
         // A NON-DAMAGE win this turn (a deck-out). Board-level, so it needs no `casting` list and
         // costs one virtual call behind the has_extra_lethal gate; false for every deck without an
         // alternate-win model -> byte-identical. NOTE this site deliberately does NOT add

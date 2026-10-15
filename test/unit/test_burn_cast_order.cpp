@@ -371,6 +371,34 @@ TEST_CASE("spectacle plan credit: seed 9295 gi 294's turn-3 line {Swiftspear, Sh
     }
 }
 
+TEST_CASE("kill-trigger combo credit: two Searing Bloods kill a 4/4 -- the Volley that finishes is lethal, not held")
+{
+    // Five Mountains (drop made), hand Searing Blood x2 + Shard Volley, the opponent at 9 with ONE 4/4.
+    // Blood + Blood = 4 kills it, so both death triggers fire (6) and Volley's 3 is the kill. Neither
+    // Blood kills alone, so CollectActions credits each with 0 face damage; without the credit the plan
+    // reads 3 of 9, and the Volley hold (exception (a) is "the plan wins this turn") drops it.
+    Pin o(heurarm::BURN_ORDER, true);
+    auto the_kill = [](const TurnSolver::Plan& p)
+    {
+        int bloods = 0;
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == kBlood) { ++bloods; } }
+        return bloods == 2 && PlanCasts(p, kVolley);
+    };
+    for (int on = 0; on <= 1; ++on)
+    {
+        Pin k(heurarm::KILL_TRIGGER_COMBO, on != 0);
+        GameState s = BurnState({ kBlood, kBlood, kVolley }, 5, {}, 9, 5, 50 + on, true);
+        PutB(s, "Atsushi, the Blazing Sky", 91);
+        s.battlefield.back().controller_index = 1;
+        s.battlefield.back().owner_index = 1;
+        bool found_win = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        { if (the_kill(p) && p.wins_this_turn) { found_win = true; } }
+        CHECK(found_win == (on != 0));
+    }
+}
+
 TEST_CASE("spectacle plan credit, search-only arm: the search still finds the 9295 line, the greedy walk does not credit")
 {
     Pin o(heurarm::BURN_ORDER, true);

@@ -470,6 +470,7 @@ enum Slot : int
     BURN_M2_NARROW,           // MTG_BURN_M2_NARROW        ...the narrower "played off" reading: only the cards a main-2 Light Up EXILED (the default, broader reading also admits hand spells cast after it). Default OFF (USER question)
     BURN_BLOOD_FIRST,         // MTG_BURN_BLOOD_FIRST      PROPOSED amendment to the USER's burn order, NOT adopted (USER question): Searing Blood BEFORE Searing Blaze (the USER's list has Blaze first, by name). Blood's 3 to the face fires only when its creature DIES this turn, and Blaze is what finishes a creature Blood alone cannot kill -- cast Blaze first and it kills the opponent's only creature, so Blood has no target (shipped probe seed 9027 gi 26: T4 -> T5). Default OFF
     SPECTACLE_PLAN_CREDIT,    // MTG_SPECTACLE_PLAN_CREDIT both subset evaluators price a spectacle spell (Light Up the Stage) at its spectacle cost when the same plan casts a face-damage spell the realised order puts BEFORE it (CR 702.137a: an opponent lost life this turn) -- the Swiftspear -> burn -> Light Up {R} line becomes enumerable
+    KILL_TRIGGER_COMBO,       // MTG_KILL_TRIGGER_COMBO    the "wins this turn" projection credits Searing Blood's death trigger when the plan's creature damage, in cast order, kills the opponent's only creature (a Blood that cannot kill alone, finished by a Blaze or a second Blood) -- the Volley hold's lethal exception then sees the kill. Default OFF until measured
     SPECTACLE_CREDIT_SEARCH_ONLY, // MTG_SPECTACLE_CREDIT_SEARCH_ONLY ...in the search's enumeration only, not the greedy walk (Solve: d0 + rollout leaves), which there admitted {Shard Volley, Light Up {R}} under the Volley hold's exception (b) and sacrificed early lands. Default OFF (a measured alternative)
     COUNT
 };
@@ -895,6 +896,7 @@ inline const char* Name(int slot)
         "MTG_BURN_M2_NARROW",
         "MTG_BURN_BLOOD_FIRST",
         "MTG_SPECTACLE_PLAN_CREDIT",
+        "MTG_KILL_TRIGGER_COMBO",
         "MTG_SPECTACLE_CREDIT_SEARCH_ONLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
