@@ -45,6 +45,11 @@ ARMS2 = [
     ("o12ck",  {O: True,  M2: True,  CR: False, NA: False, BF: True,  SO: False, KT: True}),
     ("o123ck", {O: True,  M2: True,  CR: True,  NA: False, BF: True,  SO: False, KT: True}),
     ("o1ck",   {O: True,  M2: False, CR: False, NA: False, BF: True,  SO: False, KT: True}),
+    # the USER's LITERAL list (Blaze before Blood, no amendment) with the kill-trigger fix: the option if
+    # the USER declines the conditional Blood-first amendment
+    ("o12k",   {O: True,  M2: True,  CR: False, NA: False, BF: False, SO: False, KT: True}),
+    ("o123k",  {O: True,  M2: True,  CR: True,  NA: False, BF: False, SO: False, KT: True}),
+    ("o13ck",  {O: True,  M2: False, CR: True,  NA: False, BF: True,  SO: False, KT: True}),
 ]
 ARMS_ALL = ARMS + ARMS2
 ALL_ON = {O: True, M2: True, CR: True, NA: False, BF: True, SO: False}
