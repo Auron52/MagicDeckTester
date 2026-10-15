@@ -1224,6 +1224,36 @@ phase_measure() {
             h_job "$key-live_s$s"   "$(deck_file "$vroot/$key/live" "$stem")"   "$vroot/$key/live/$stem.profile.json"   "$AB_GAMES" "$s"
             h_job "$key-staged_s$s" "$(deck_file "$vroot/$key/staged" "$stem")" "$vroot/$key/staged/$stem.profile.json" "$AB_GAMES" "$s"
         done
+        # SEARCH-SHAPE ARMS (USER 2026-10-14: "Do we have a no-leaf screen in the pipeline anywhere? I think
+        # we probably should."). The model is only worth its cost if it beats the LEAFLESS shapes on the
+        # menu (docs/design/per-deck-search-shape.md), so they are measured beside it:
+        #   nlesc = #2, escalation with a leafless probe    {ladder: escalation, leaf: none, alpha: relaxed}
+        #   nlfit = #3, the final-depth single pass         {ladder: single,     leaf: none, alpha: relaxed}
+        # Built on the SIDECAR ROUTE -- the live sidecar plus the shape keys, i.e. exactly the file E.5 would
+        # install -- never the value_profile "noleaf" stand-in, which discards a tuned value_play block and
+        # inverted Creature Giving's verdict (that doc's finding 12). Same seeds and games as live/staged, so
+        # every arm is paired with both. A shape the live sidecar already ships is skipped: it IS the live arm.
+        # Measured at the deck's PLAY settings only, like the leaf itself; the shape doc's stricter rule (no
+        # worse at every configuration the deck is played at) is not applied here.
+        for sh in nlesc nlfit; do
+            rm -f "$VLQ/$stem.value.${sh^^}.json"
+            python3 - "$dir/$stem.value.json" "$VLQ/$stem.value.${sh^^}.json" "$sh" <<'PY' || continue
+import json, os, sys
+live, out, sh = sys.argv[1:4]
+v = json.load(open(live)) if os.path.exists(live) and os.path.getsize(live) else {}
+want = {"nlesc": ("escalation", "none"), "nlfit": ("single", "none")}[sh]
+vp = v.get("value_play") or {}
+if ((vp.get("ladder") or "escalation"), (vp.get("leaf") or "model")) == want and vp.get("alpha") == "relaxed":
+    sys.exit(1)
+vp = v.setdefault("value_play", {})
+vp["ladder"], vp["leaf"], vp["alpha"] = want[0], want[1], "relaxed"
+json.dump(v, open(out, "w"), indent=1)
+PY
+            make_variant_deck "$vroot/$key/$sh" "$dir" "$stem" "$VLQ/$stem.value.${sh^^}.json"
+            for s in $AB_SEEDS; do
+                h_job "$key-${sh}_s$s" "$(deck_file "$vroot/$key/$sh" "$stem")" "$vroot/$key/$sh/$stem.profile.json" "$AB_GAMES" "$s"
+            done
+        done
         # LEAF-RULE A/B (see leafrule_counterfactual): the worst-case OFF settings on the A/B seeds, paired
         # against the staged arm above, which IS the ON product -- so it costs one arm, not two.
         if [ -s "$VLQ/$stem.value.LEAFOFF.json" ]; then
@@ -1320,6 +1350,13 @@ PY
         echo "=== $key: regenerated value-leaf vs live ===" | tee -a "$VLQ/driver.log"
         grep -E "^(live|staged)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_ab.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_ab.log" live 2>&1 | tee -a "$VLQ/driver.log"
+        if grep -qE "^(nlesc|nlfit)_s" "$VLQ/m_$key.log"; then
+            echo "=== $key: search shapes -- the staged model and the leafless menu shapes, all vs live ===" | tee -a "$VLQ/driver.log"
+            grep -E "^(live|staged|nlesc|nlfit)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_shape.log"
+            python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_shape.log" live 2>&1 | tee -a "$VLQ/driver.log"
+        else
+            rm -f "$VLQ/m_${key}_shape.log"
+        fi
         echo "=== $key: play-profile target_depth sweep (baseline $bl = shipped) ===" | tee -a "$VLQ/driver.log"
         grep -E "^(d[0-9]+|dflt)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_play.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "$bl" 2>&1 | tee -a "$VLQ/driver.log"
@@ -1384,36 +1421,52 @@ PY
 # left exactly as it was and the run carries on; a first model stays staged and F skips it. Either way
 # the verdict line, with its reason and cost ratio, goes to $DECISIONS. This is adoption IN THIS TREE: nothing is committed;
 # committing it with the deck's smoke+regression GT re-accepted (the leaf changes play) is the next step.
+# THE CANDIDATES (USER 2026-10-14, the no-leaf screen): not only the staged model but also phase E's leafless
+# menu shapes (nlesc, nlfit), each judged against live by the same rule; scripts/vlq_adopt_pick.py picks among
+# the ones that pass (the cheapest, unless another is notably better than it) and says why.
 phase_adopt() {
     done_p E_adopt && return 0
     log "PHASE E.5: adopt a better leaf (phase E A/B verdict)"
-    local row key dir stem mkey base games staged v rc
+    local row key dir stem mkey base games staged v rc alog pick src what
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         staged="logs/eval/$stem.value.STAGED.json"
         [ -s "$staged" ] || continue
-        [ -s "$VLQ/m_${key}_ab.log" ] || { log "  $stem: no A/B log -- left as is"; continue; }
-        v=$(python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_ab.log" live --verdict staged --tol "$TRUST_TOL" \
-              | grep '^VERDICT'; exit "${PIPESTATUS[0]}")
+        # The shape log (live, staged and the leafless menu shapes) when phase E measured shapes; otherwise
+        # the plain live-vs-staged log, so a queue measured before the shape arms existed still decides.
+        alog="$VLQ/m_${key}_shape.log"; [ -s "$alog" ] || alog="$VLQ/m_${key}_ab.log"
+        [ -s "$alog" ] || { log "  $stem: no A/B log -- left as is"; continue; }
+        v=$(python3 scripts/vlq_adopt_pick.py "$alog" --tol "$TRUST_TOL"; exit $?)
         rc=$?
+        pick=$(printf '%s\n' "$v" | sed -n 's/^PICK arm=\([^ ]*\).*/\1/p')
+        case "$pick" in
+          staged) src=$staged;                         what="the staged value leaf" ;;
+          nlesc)  src=$VLQ/$stem.value.NLESC.json;     what="shape #2, escalation with a leafless probe" ;;
+          nlfit)  src=$VLQ/$stem.value.NLFIT.json;     what="shape #3, the final-depth single pass (leafless)" ;;
+          *)      src=""; what="" ;;
+        esac
         case "$rc" in
-          0) [ -e "$dir/$stem.value.json" ] && cp -f "$dir/$stem.value.json" "$VLQ/$stem.value.PREV.json"
-             cp -f "$staged" "$dir/$stem.value.json" || { log "  $stem: install FAILED"; return 1; }
-             log "  ADOPTED $stem: cheaper, quality not notably worse -> $dir/$stem.value.json (this tree, NOT committed)"
-             log "    $v"
-             { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E.5: ADOPTED $stem (installed in this tree, NOT committed)"
-               echo "    $v"
-               [ -e "$VLQ/$stem.value.PREV.json" ] && echo "    previous live model kept as $VLQ/$stem.value.PREV.json"
-               echo "    next: commit it with the deck's smoke+regression GT re-accepted (the leaf changes play)."
+          0) [ -s "$src" ] || { log "  $stem: picked $pick but $src is missing -- install FAILED"; return 1; }
+             [ -e "$dir/$stem.value.json" ] && cp -f "$dir/$stem.value.json" "$VLQ/$stem.value.PREV.json"
+             cp -f "$src" "$dir/$stem.value.json" || { log "  $stem: install FAILED"; return 1; }
+             log "  ADOPTED $stem: $what -> $dir/$stem.value.json (this tree, NOT committed)"
+             printf '%s\n' "$v" | while IFS= read -r l; do log "    $l"; done
+             { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E.5: ADOPTED $stem -- $what (installed in this tree, NOT committed)"
+               printf '%s\n' "$v" | sed 's/^/    /'
+               [ "$pick" != staged ] && echo "    the staged model was NOT installed; it stays at $staged"
+               [ -e "$VLQ/$stem.value.PREV.json" ] && echo "    previous live sidecar kept as $VLQ/$stem.value.PREV.json"
+               echo "    next: commit it with the deck's smoke+regression GT re-accepted (it changes play)."
                echo; } >> "$DECISIONS" ;;
           2) log "  NOT adopted $stem -- live state left as is; CONTINUING (the reason is the user's to rule on)"
-             log "    $v"
-             { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E.5: NOT ADOPTED $stem -- USER's call (reason in VERDICT)"
-               echo "    $v"
-               echo "    the staged model stays at $staged; nothing in $dir changed. To adopt it anyway:"
-               echo "    cp '$staged' '$dir/$stem.value.json' and re-run (F then fills the generation contract)."
+             printf '%s\n' "$v" | while IFS= read -r l; do log "    $l"; done
+             { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE E.5: NOT ADOPTED $stem -- USER's call (reasons in the VERDICTs)"
+               printf '%s\n' "$v" | sed 's/^/    /'
+               echo "    the staged model stays at $staged; nothing in $dir changed. To adopt a candidate anyway:"
+               echo "    cp '$staged' '$dir/$stem.value.json' (or $VLQ/$stem.value.NLESC.json / .NLFIT.json for a"
+               echo "    leafless shape), delete the E6_skipcal and F_mullgen markers, and re-run."
                echo; } >> "$DECISIONS" ;;
-          *) log "  $stem: verdict FAILED (rc=$rc) -- see $VLQ/m_${key}_ab.log"; return 1 ;;
+          *) log "  $stem: verdict FAILED (rc=$rc) -- see $alog"; printf '%s\n' "$v" | while IFS= read -r l; do log "    $l"; done
+             return 1 ;;
         esac
     done
     mark E_adopt

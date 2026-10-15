@@ -283,6 +283,23 @@ skipped by F without failing; if the user later adopts it, `cp` the staged file 
 (finished phases skip, F fills in). Soldiers 2026-10-08 (`docs/design/analysis-soldiers.md`) is the
 hand-run precedent; Prevent Damage 2026-10-11 is the trade case (-0.036 t at 1.21x core-s).
 
+**Phase E also screens the leafless shapes, and E.5 can adopt one instead of the model** (USER 2026-10-14:
+*"Do we have a no-leaf screen in the pipeline anywhere? I think we probably should."*).
+* **Why:** a model is only worth its cost if it beats the no-leaf menu shapes
+  (`docs/design/per-deck-search-shape.md`). Snow's first leaf measured -0.004 t at 1.33x against plain
+  rollouts, a shape that menu had already dropped as dominated on every deck it measured.
+* **The arms:** phase E plays `nlesc` (#2, `{ladder: escalation, leaf: none, alpha: relaxed}`) and `nlfit`
+  (#3, `{ladder: single, leaf: none, alpha: relaxed}`) beside `live` and `staged`, on the same seeds.
+  * Each is built on the sidecar route: the live sidecar plus the shape keys, which is exactly the file
+    that would be installed. It is never the `noleaf` stand-in; see that doc's finding 12.
+  * A shape that live already ships is skipped.
+* **The pick:** `scripts/vlq_adopt_pick.py` judges each candidate against live by the rule above.
+  * Among the candidates that pass, it takes the cheapest, unless another passing one is notably better
+    than it.
+  * It records every verdict and the pick in DECISIONS.txt.
+  * The shape sidecars are kept as `<queue>/<stem>.value.NLESC.json` / `.NLFIT.json`.
+* **Coverage:** the shapes are measured at play settings only.
+
 **Phase E.6 decides the deck's escalation-skip allowance** (`escalation_skip_r`, USER 2026-10-13).
 It runs between E.5 and F: the allowance is a measurement of the leaf now live, and it can change play,
 which F and the mulligan stage are fitted to. `scripts/esc_skip_stage.py` does it in three pooled batches.

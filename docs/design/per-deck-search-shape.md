@@ -545,6 +545,20 @@ adopted shape off. Two designs:
 * **(b)** a separate `shape_min_depth` key, default off, set only where a depth split is measured. More
   explicit, cannot surprise a third deck.
 
+## IN THE PIPELINE (2026-10-14): every value-leaf run screens shapes #2 and #3
+
+USER: *"Do we have a no-leaf screen in the pipeline anywhere? I think we probably should."*
+
+* **What runs:** `scripts/valueleaf.sh` phase E plays `nlesc` (#2) and `nlfit` (#3) beside the live sidecar
+  and the staged model, on the A/B seeds, built on the sidecar route.
+* **What decides:** phase E.5 adopts whichever candidate passes the adoption rule against live: cheaper, and
+  quality not notably worse. `scripts/vlq_adopt_pick.py` picks among the passing candidates: the cheapest,
+  unless another one is notably better than it.
+* **Before this,** the screen existed only as the standalone `shape_probe.py` and the one-off 09-11 fleet
+  batch. A deck like Snow could ship the dropped rollout ladder for weeks without ever being compared with
+  the leafless shapes.
+* **Gap:** this measures play settings only, not every configuration the adoption rule above names.
+
 ## Next measurements, in priority order
 
 1. Re-screen `emul` on the current binary, ON-POLICY, Melira and Fluctuator included -- the only shape family
