@@ -1431,6 +1431,9 @@ Questions (Stage 2's list above still stands; these are new):
 A. **Adopt `MTG_SOLDIERS_ORDER`?** (cast-order-rankings.md "Soldiers"). Default taken: OFF. Measured
    -0.003 t/game at play settings, 0 slower games at d3/d5, and it repairs the generic order's hard
    prune (~3/1000 games unreachable at d8 b0). Thalia-after-Vial is part of it.
+   **ANSWERED 2026-10-14** (USER: "Soldiers' order also looks good."), amended with Thalia's Lieutenant at
+   4th; ADOPTED default ON 2026-10-15 after a held-out A/B with no slower game
+   (`docs/design/soldiers-breaching-cast-order-2026-10-15.md`).
 B. **Discard buckets** (`docs/design/soldiers-discard-policy-proposal.md`): approve/amend? Default
    taken: ON (the brief's contract). Measured bound = 0, so this is doctrine, not a measurable win.
 C. **Fleet: re-run `--discard-analysis`** for Pirates / CritterLifegain / BreachingDragonstorm /

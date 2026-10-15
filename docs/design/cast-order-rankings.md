@@ -127,6 +127,49 @@ computed from the correct flag.
   20     -   m1    1  3  Armadillo Cloak
 ```
 
+## BreachingDragonstorm -- USER-APPROVED total order (2026-10-14), ADOPTED default ON (`MTG_BREACH_ORDER`)
+
+USER 2026-10-14: *"I'm not too worried about Breaching Dragonstorm's order, since it literally dumps most of the
+creatures in the deck on the field. I don't think we can fail to kill with essentially any order so your order
+is fine."* Main 1 for every card. `BreachingDragonstormProvider` opts into `OrderOpaqueCastsByRank` (every
+nonland card is order-opaque, so before this the rank was never read and hand order decided), ranks by params,
+and breaks a rank tie by name (`CastOrderTotalByName`). `=0` restores plan (= hand) order byte-for-byte.
+Implementation and measurement: `docs/design/soldiers-breaching-cast-order-2026-10-15.md` (45,000 paired
+held-out games: no win turn moved -- searched games win by ~T3, a two-cast main needs turn 6+).
+
+```
+# Cast order -- decks/BreachingDragonstorm/BreachingDragonstorm.cod
+# provider: BreachingDragonstorm   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [10] ETB WALK (Breaching Dragonstorm): first -- a later Protege can enter as a copy of it
+  10     -   m1    4  5  Breaching Dragonstorm
+#
+# [26] CASCADE CREATURE: an entrant, narrowest walk first (20 + cascade mv)
+  26     -   m1    4  6  Boarding Party
+#
+# [27] CASCADE CREATURE: an entrant, narrowest walk first (20 + cascade mv)
+  27     -   m2    4  7  Annoyed Altisaur
+#
+# [28] CASCADE CREATURE: an entrant, narrowest walk first (20 + cascade mv)
+  28     -   m1    4  8  Maelstrom Wanderer
+#
+# [40] SHUFFLE-REVEAL FREE CAST (Creative Technique): a sorcery, after the entrants
+  40     -   m1    4  5  Creative Technique
+#
+# [50] COUNTS THIS TURN'S CASTS (Call Forth the Tempest): after the casts it counts
+  50     -   m1    1  8  Call Forth the Tempest
+#
+# [60] ENTER AS A COPY OF AN ENTRANT (Sakashima's Protege): LAST -- every earlier cast is a copy target
+  60     -   m1    2  6  Sakashima's Protege
+```
+
 ## Creature Giving
 
 **REVIEW HELD AND ADOPTED (USER, 2026-08-19) — `MTG_CG_ORDER` is DEFAULT ON (`=0` reverts),
@@ -1205,7 +1248,85 @@ d8 b0 (`docs/design/combined-gt-2026-10-04.md`). Implemented in `EquipmentProvid
 generic creature class (7). Equip / Jitte activations are unchanged -- still the trailing pass, i.e. after
 Dwalin's cast, so a just-honed Equipment is equipped afterwards.
 
-## Soldiers -- PROPOSED total order (USER QUESTION, 2026-10-04; `MTG_SOLDIERS_ORDER`, default OFF)
+## Soldiers -- USER-APPROVED 2026-10-14 (amended), ADOPTED default ON (`MTG_SOLDIERS_ORDER`)
+
+USER 2026-10-14: *"Soldiers' order also looks good."* The 10-04 order below, AGENT-AUTHORED (it was never a user
+proposal), with ONE amendment: **Thalia's Lieutenant moves from LAST (17) to 4th** -- after Champion of the
+Parish (Champion before Lieutenant is +2, not +1) and after the two tutors (a fetched Champion still precedes
+it); against any other Human the pair totals +1 either way. Role slots by params; the order-free block
+(approved slots 7-17) cheapest first by mana value, the 10-04 sequence within a mana value; any card the deck
+does not hold after every card it does, then by NAME (`CastOrderTotalByName`). `=0` restores the generic tiers.
+Measured 2026-10-15 (`docs/design/soldiers-breaching-cast-order-2026-10-15.md`), 59,000 paired held-out games:
+**no slower game in any cell**; net -19 / -32 / -295 turns (shipped / d3 b10 / d0, soldiers) and -28 / -57 /
+-186 (soldiers2hg); units 0.9865 / 0.9966 (soldiers2hg 0.9588 / 0.9872).
+
+What plays now:
+
+```
+# Cast order -- decks/Soldiers/soldiers.cod
+# provider: Soldiers   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [1] HUMAN-ENTERS WATCHER (Champion): first -- every later Human this turn is a counter
+  1     -   m1    4  1  Champion of the Parish
+#
+# [2] CREATURE TUTOR (toughness<=2): early, the fetched card joins at its own slot
+  2     -   m1    1  3  Recruiter of the Guard
+#
+# [3] CREATURE TUTOR (mv<=1): early, after Champion
+  3     -   m1    1  3  Ranger-Captain of Eos
+#
+# [4] ETB-COUNTERS-EACH-OTHER-HUMAN (Lieutenant): after Champion and the tutors (USER amendment)
+  4     -   m1    4  2  Thalia's Lieutenant
+#
+# [5] AETHER VIAL: the only noncreature spell -- before Thalia taxes it
+  5     -   m1    4  1  Aether Vial
+#
+# [6] ACTIVATED-DIG BODY (Officer): cheap, its {3}{W} dig is a trailing activation
+  6     -   m1    2  1  Recruitment Officer
+#
+# [111] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  111     -   m2    4  1  Esper Sentinel
+#
+# [120] THALIA (noncreature tax): after Aether Vial; leads the mana-value-2 bodies
+  120     -   m2    2  2  Thalia, Guardian of Thraben
+#
+# [121] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  121     -   m1    4  2  Coppercoat Vanguard
+#
+# [122] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  122     -   m2    1  2  Cathar Commando
+#
+# [123] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  123     -   m1    1  2  Jirina, Dauntless General
+#
+# [124] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  124     -   m1    2  2  Harbin, Vanguard Aviator
+#
+# [131] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  131     -   m1    1  3  Brutal Cathar
+#
+# [132] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  132     -   m1    4  3  Field Marshal
+#
+# [133] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  133     -   m1    2  3  General Kudro of Drannith
+#
+# [134] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  134     -   m1    1  3  King Darien XLVIII
+#
+# [141] ORDER-FREE BODY: cheapest first (100 + 10*mv), the 10-04 sequence within a mana value
+  141     -   m1    2  4  Rick, Steadfast Leader
+```
+
+### The 10-04 proposal and its measurement (history)
+
 
 **Question for the user: adopt this total cast order for Soldiers (land first; Thalia after the
 noncreature spell)?** It is implemented in `SoldiersProvider::CastOrderRank` behind
