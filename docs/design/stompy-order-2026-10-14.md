@@ -100,7 +100,49 @@ Two consequences for the breakpoint-options audit (not fixed here, per instructi
   Reached only when a depth > 0 executor has no committed line (a committed line replays its recorded
   script), so it did not show in the probe.
 
-## 3. The measurement (PARTIAL)
+## 3. The measurement
+
+### 3.1 v4 (2026-10-15): the order with the payment fix -- the adoption measurement
+
+ONE pooled batch on the fix binary (`85621796`, order and fix both default OFF, every arm a per-job flag)
+beside the base binary (`3e3c44a1`) in the same box-lock slot; seeds 10900001+gi, loss = 9, paired per game
+against the new binary's OFF arm. **Identity:** the OFF arm equals the base binary game for game on every
+suite deck x 3 cells x 150 games plus a StompySurprise prefix per cell -- **18,900 games, 0 differences**.
+
+Arms: `fix` = `MTG_HOLD_RELEASE_YIELD=1` alone; `ofix` = the order (with its searched slots and the TOP_RESOLVE
+opt-in, as built) + the fix; `onotop` = the order + the fix WITHOUT the TOP_RESOLVE opt-in.
+
+| deck | cell | games | arm | faster | slower | net | units |
+|---|---|---|---|---|---|---|---|
+| stompy | shipped | 4,000 | fix | 5 | 0 | **-5** | 0.988x |
+| | | | ofix | 19 | 2 | **-17** | 1.904x |
+| | | | onotop | 14 | 0 | **-14** | 1.017x |
+| stompy | d3 b10 | 6,000 | fix | 11 | 0 | **-11** | 0.998x |
+| | | | ofix | 53 | 8 | **-45** | 1.219x |
+| | | | onotop | 42 | 0 | **-42** | 1.008x |
+| stompy | d0 | 20,000 | fix | 309 | 2 | **-309** | - |
+| | | | ofix | 1,043 | 304 | **-774** | - |
+| | | | onotop | 917 | 289 | **-658** | - |
+| stompy2hg | shipped | 2,000 | fix | 6 | 0 | **-6** | 0.993x |
+| | | | ofix | 32 | 6 | **-26** | 1.564x |
+| | | | onotop | 19 | 2 | **-17** | 1.009x |
+| stompy2hg | d3 b10 | 3,000 | fix | 12 | 0 | **-12** | 0.996x |
+| | | | ofix | 53 | 8 | **-45** | 1.206x |
+| | | | onotop | 39 | 4 | **-35** | 1.012x |
+| stompy2hg | d0 | 10,000 | fix | 134 | 3 | **-134** | - |
+| | | | ofix | 496 | 188 | **-330** | - |
+| | | | onotop | 456 | 158 | **-319** | - |
+
+**What TOP_RESOLVE buys** (ofix vs onotop): shipped -17 vs -14 (StompySurprise) and -26 vs -17 (2HG); d3 -45
+vs -42 and -45 vs -35; d0 -774 vs -658 and -330 vs -319 -- for **1.90x / 1.56x the work units at the shipped
+settings** (1.22x / 1.21x at d3), the BP_NEW_ONLY interaction of §2.
+
+**The fix on every other suite deck** (150 games per cell, fix vs off): byte-identical everywhere except
+SelesnyaLifegain (shipped 1 faster, d3 1 faster, d0 1 SLOWER -- gi36 6->7), FiveColour (d0 1 faster, two
+shipped and two d3 games digest-only) and Bruna (one digest-only game per cell). Those three are re-measured
+at a larger sample in v5 (§3.2), with every slower game's recovery.
+
+### 3.0 The first A/B, without the fix (2026-10-14, superseded)
 
 Pre-flight (seed 1001, the smoke seeds): the new binary with `MTG_STOMPY_ORDER=0` reproduces the committed
 smoke GT exactly (d3 4.0333/c2ed3b5261a829ef, d0 4.9000/f4267685b45f6f99), as does the base binary. Order ON:
