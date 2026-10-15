@@ -479,3 +479,43 @@ TEST_CASE("CritterLifegain order: every cast is a main-1 cast; every rank has a 
     CHECK(ProvCo().CastOrderRankLatest(s, DefCo(kHeliod)) < ProvCo().CastOrderRank(s, DefCo(kAjani)));
     CHECK(ProvCo().CastOrderRankLatest(s, DefCo(kOcelot)) == ProvCo().CastOrderRank(s, DefCo(kOcelot)));
 }
+
+TEST_CASE("CritterLifegain order: the proposed MTG_CRITTER_HELIOD_FIRST amendment -- a dominated after-the-creatures becomes FIRST")
+{
+    CoArm arm(true);
+    struct HfArm
+    {
+        explicit HfArm(bool on) { heurarm::t_arm[heurarm::CRITTER_HELIOD_FIRST] = on ? 1 : 0; }
+        ~HfArm() { heurarm::t_arm[heurarm::CRITTER_HELIOD_FIRST] = -1; }
+    };
+    {
+        // Empty board, Warden + Heliod + Ocelot: devotion 4 even after Ocelot -- a non-creature either way.
+        const GameState s = BoardCo(5, {}, { kWarden, kHeliod, kOcelot });
+        const std::vector<Action> acts = { CastCo(s, kOcelot), CastCo(s, kHeliod), CastCo(s, kWarden) };
+        {
+            HfArm hf(false);
+            CHECK(RealisedNamesCo(s, acts) == std::vector<std::string>{ kWarden, kOcelot, kHeliod });
+        }
+        HfArm hf(true);
+        CHECK(RealisedNamesCo(s, acts) == std::vector<std::string>{ kHeliod, kWarden, kOcelot });
+        std::vector<std::vector<int>> out;
+        CHECK(ProvCo().CastOrderingCandidates(s, acts, acts, out));
+        CHECK(out.empty());   // nothing left to search
+        // ...and at apply level the dominated order loses Heliod's counters: first gets Ocelot's gain event.
+        const GameState t = ApplyCo(s, { kOcelot, kHeliod, kWarden });
+        int heliod_counters = 0;
+        for (const Permanent& p : t.battlefield) { heliod_counters += PlusCo(p); }
+        CHECK(heliod_counters == 1);
+    }
+    {
+        // Devotion 1 + Ocelot + Serra + Ranger ({W}{W}): after the creatures Heliod IS a creature -- a real
+        // trade, so the searched two-way stays (canonical after the creatures first).
+        HfArm hf(true);
+        const GameState s = BoardCo(8, { kWarden }, { kHeliod, kOcelot, kSerra, kRanger });
+        const std::vector<Action> acts = { CastCo(s, kRanger), CastCo(s, kHeliod), CastCo(s, kSerra), CastCo(s, kOcelot) };
+        CHECK(RealisedNamesCo(s, acts) == std::vector<std::string>{ kOcelot, kSerra, kRanger, kHeliod });
+        std::vector<std::vector<int>> out;
+        CHECK(ProvCo().CastOrderingCandidates(s, acts, acts, out));
+        CHECK(out.size() == 2);
+    }
+}

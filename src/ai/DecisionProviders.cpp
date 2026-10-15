@@ -19576,7 +19576,15 @@ const CardDefinition* CritDefOf(const Action& a)
 // enter-watcher gate, so a god entering at devotion >= N enters as a creature and the watchers fire).
 // Only the FIRST devotion god of a list is placed; a second copy (the legend rule keeps one) stays at its
 // rank. Never moves the god earlier than its static slot except to FIRST in the searched alternative.
-enum class CritHeliodCase { None, AtSlot, Walked1, Walked2, TwoWay };
+enum class CritHeliodCase { None, AtSlot, Walked1, Walked2, TwoWay, TwoWayFirst };
+
+// MTG_CRITTER_HELIOD_FIRST (heurarm CRITTER_HELIOD_FIRST): the PROPOSED amendment in CritPlaceHeliod's
+// two-way branch. DEFAULT OFF (an amendment to a USER-owned order); =1 on.
+bool CritterHeliodFirstOn()
+{
+    static const bool on = EnvOn("MTG_CRITTER_HELIOD_FIRST");
+    return heurarm::Flag(heurarm::CRITTER_HELIOD_FIRST, on);
+}
 struct CritHeliodPlacement
 {
     CritHeliodCase       kind = CritHeliodCase::None;
@@ -19651,6 +19659,31 @@ CritHeliodPlacement CritPlaceHeliod(const GameState& s, const std::vector<Action
     for (int k = 0; k < static_cast<int>(order.size()); ++k)
     {
         if (k != g) { out.first.push_back(order[static_cast<std::size_t>(k)]); }
+    }
+    // PROPOSED AMENDMENT (MTG_CRITTER_HELIOD_FIRST, default OFF -- the USER decides): when Heliod would not be
+    // a creature even after the last creature, FIRST dominates "after the creatures". Both places it as a
+    // non-creature enchantment (FIRST has less devotion still), so no watcher fires on its entry in either,
+    // and FIRST is on the battlefield for every gain event of the turn where after-the-creatures sees none of
+    // the creatures' entries -- the same counters plus more, nothing else in the deck reads its position.
+    // So the canonical order becomes FIRST and there is nothing left to search. The A/B's six d0 slower games
+    // (critter d0 gi 269 / 1239 / 4871 / 5562 / 13045 / 15923: [body, Heliod] where the old plan order cast
+    // Heliod first) are exactly this case: the d0 runner takes the canonical order, so it played the dominated
+    // one. When after-the-creatures DOES make it a creature (a 3rd+ creature), the trade is real (its own entry's
+    // watcher events against the earlier ones it misses) and the searched two-way stays as the USER set it.
+    if (CritterHeliodFirstOn() && out.first != out.after)
+    {
+        int dev_after = DevotionTo(s, s.active_player_index, colour);
+        for (int i : out.after)
+        {
+            if (i == order[static_cast<std::size_t>(g)]) { break; }
+            const CardDefinition* d = CritDefOf(acts[static_cast<std::size_t>(i)]);
+            if (d != nullptr && d->card.IsPermanentCard()) { dev_after += CritPips(d->card.m_mana_cost, colour); }
+        }
+        if (dev_after + own < need)
+        {
+            out.kind  = CritHeliodCase::TwoWayFirst;
+            out.after = out.first;
+        }
     }
     return out;
 }
@@ -19737,7 +19770,7 @@ void CritterLifegainProvider::ArrangeCastOrder(const GameState& s, const std::ve
     CritTotalSort(s, *this, acts, order);
     CritHeliodPlacement hp = CritPlaceHeliod(s, acts, order);
     if (hp.kind == CritHeliodCase::Walked1 || hp.kind == CritHeliodCase::Walked2
-        || hp.kind == CritHeliodCase::TwoWay)
+        || hp.kind == CritHeliodCase::TwoWay || hp.kind == CritHeliodCase::TwoWayFirst)
     { order = std::move(hp.after); }
 }
 
@@ -19787,6 +19820,7 @@ std::string CritterLifegainProvider::CastOrderTraceNote(const GameState& s, cons
         case CritHeliodCase::AtSlot:  note = "heliod=at_slot"; break;
         case CritHeliodCase::Walked1: note = "heliod=walked1"; break;
         case CritHeliodCase::Walked2: note = "heliod=walked2"; break;
+        case CritHeliodCase::TwoWayFirst: note = "heliod=twoway_dominated_first"; break;
         case CritHeliodCase::TwoWay:
             if (hp.first == hp.after)  { note = "heliod=twoway_single"; }
             else { note = is_god(order.front()) && !is_god(hp.after.front()) ? "heliod=twoway_first"
