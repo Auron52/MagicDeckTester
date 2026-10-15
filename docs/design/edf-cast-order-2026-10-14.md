@@ -132,7 +132,72 @@ the EDF provider.
 
 ## Measurement
 
-IN FLIGHT (see RESUME).
+One pooled `mtg --batch` per slice, every arm in it (box lock, `--threads 20`), paired on held-out seeds:
+shipped (d5/b20, EDF has no value_play) 11300001 + gi, d3/b10 11310001 + gi, d0 11320001 + gi; loss = 9
+(max_turns 8); `MTG_DUMP_WINS=1`. Arms: `old` = all five parts OFF (identity-checked against the base
+binary), `new` = defaults, `noK` = part K OFF. Sizes (the USER has the question; this is the default the
+coordinator confirmed): old/new 1000 shipped / 1500 d3 / 10000 d0; part-OFF arms on the same seeds' prefix,
+300 / 500 / 10000. Three slices of a third each. Analysis `logs/edf-order/analyze_ab.py`; per-game
+attribution `logs/edf-order/attrib.sh` (each changed game re-played with each part OFF, single-threaded).
+
+### Slice 1 (binary `mtg.new` = commit f6b9263c's src; 2026-10-15 17:06-18:34 UTC, 26,332 games)
+
+| cell | n | old | new | faster | slower | net | units new/old |
+|---|---|---|---|---|---|---|---|
+| shipped | 333 | 4.2432 | 4.2492 | 1 | 3 | **+2** | 1.043 |
+| d3/b10 | 500 | 4.3080 | 4.3060 | 5 | 4 | -1 | 1.019 |
+| d0 | 3333 | 5.5869 | 5.5236 | 240 | 69 | **-211** | (no search) |
+
+Part marginals (part K OFF vs new; + = the part helps), slice 1: d0 (3333 each) part 1 **-10**, part 2
+**+197**, part 3 +2, part 4 +11, part 5 +7; d3 prefix (167) part 2 -2, part 3 -1, the rest 0; shipped
+prefix (100) all 0. Every one of the 76 slower games was re-played with each part OFF:
+
+| slower games | restored by part 1 OFF | part 2 OFF | part 3 OFF | part 4 OFF | both 2 and 3 / 2 and 4 / 1 and 2 |
+|---|---|---|---|---|---|
+| shipped 3 | | 240, 318 | | 163 | |
+| d3 4 | | 60, 201 | | | 4 (2 or 3), 488 (1 or 2) |
+| d0 69 | 11 | 51 | 3 | 3 | 1 (2 and 4) |
+
+### Root causes (slice 1) and the amendments built (commit 305cab78)
+
+* **Part 2 (the range), searched cells.** The range makes {untapper, ranged Aura} findable where the Aura
+  alone was payable but the untapper was not after it: shipped gi 240 / 318, d3 gi 4 / 201 cast Cloud of
+  Faeries a turn early (T2 / T3, "Cloud; Fertile Ground" or "Cloud; Trace"), its ETB untap paying for an Aura
+  the old line cast alone, and the next turn's go-off -- which needed Cloud's untap -- comes a turn late.
+  The line is legal and the USER's rule admits it ("moved behind the untappers only when the turn is otherwise
+  unpayable"); the search ranks it above the old line at the shipped and d3 budgets. Stage 1 (d5/b100)
+  recovers gi 240, not 163 or 318 (stage 2 pending). At d0 the same capability is part 2's +197. Split for
+  attribution: part 2b `MTG_EDF_AURA_RANGE_SOLVE` (Solve's rescue: the d0 runner and the horizon playouts)
+  vs the in-window range.
+* **Part 3 (same-land stack), d0 gi 1199 / 2003 / 2173.** The legal stack (Overgrowth then Trace) is not
+  always payable: Overgrowth's {G}{G} cannot pay Trace's {R/W} (the USER's own reason for Trace first), so
+  where Overgrowth's cost took the only {R}/{W} source the stack cast Overgrowth alone; the old order cast
+  both (Overgrowth silently re-homed). **Amendment 3b `MTG_EDF_SHROUD_STACK_PAYS` (default ON): the move is
+  taken only when the moved order pays the way the apply worlds pay it (the whole-turn prepay, or cast by
+  cast); otherwise the order stays as given -- what played before part 3.**
+* **Part 4 (route Aura order), shipped gi 163, d0 gi 1010 / 1780 / 2333.** In the USER's order the route
+  casts Wild Growth first: it takes the best host and Yavimaya Coast pays for it, Overgrowth then has to
+  go on the Hub, and the Coast -- the only blue land the untap set refreshes -- is spent: the Drake finds
+  no {U}. Overgrowth first (the hand order the old route happened to use) lands on the Coast and the loop
+  runs (reconstructed T3 board `logs/edf-order/ship163_t3.json`: part 4 ON no T3 kill, OFF T3 kill).
+  **Amendment 4b `MTG_EDF_ROUTE_AURA_PERMS` (default ON): when the deploy in the USER's Aura order kills
+  nothing, the route tries the other orders of the distinct Auras in hand -- the USER's always first, each
+  other order only after every earlier attempt failed to kill and only when it changes the deploy -- so it
+  can add a kill and never displace one.** Unit test on the gi 163 board.
+* **Part 1 (total order), d0, two mechanisms.** (a) The tutors: the draft called Living Wish vs Eladamri's
+  Call payment-only, but at d0 the second tutor's fetch is chosen after the first resolves, so Wish-first
+  spends the only route to the sideboard finishers on the piece the Call could fetch from the library
+  (gi 12: Wish -> Displacer, Call -> Cloud, no finisher, T6; old Call -> Displacer, Wish -> Infiltrator, T5;
+  likewise gi 1024 / 2295). **Proposed, default OFF (it reverses the USER's approved pair, so it is the USER's
+  call): `MTG_EDF_TUTOR_LIBRARY_FIRST` -- the Call before the Wish.** (b) Cloud before Drake makes {Cloud,
+  Drake} payable on smaller boards (the t4 probe's fix), and the d0 runner then sometimes casts the Drake
+  instead of the outlet (gi 220 / 993 / 1022 / 1283 / 1308 / 1899 / 3038 / 3282). That is the greedy's choice
+  with the capability the USER asked for; no amendment.
+
+### Slices 2 and 3 (binary `mtg.new2` = commit 305cab78; arms v2 = the seven above plus `no3b`, `no4b`,
+### `no2b` and `tutor` = MTG_EDF_TUTOR_LIBRARY_FIRST=1) and `s1p` (slice 1's seeds, `new` only, on mtg.new2)
+
+IN FLIGHT.
 
 ## RESUME (2026-10-14 night stop, coordinator: the box goes to a value-leaf generation)
 
