@@ -489,6 +489,7 @@ enum Slot : int
     HINATA_PP_SEARCHED,       // MTG_HINATA_PP_SEARCHED (under MTG_HINATA_ORDER_FULL) PROPOSED second fan, NOT adopted: the Preordain / Ponder relation searched the same way -- a plan holding both is also offered with every Ponder moved before its first Preordain (combined with MTG_HINATA_GAMBLE_SEARCHED: at most four candidate orders, deduplicated). Root-caused on hinata shipped gi 82 (seed 11100083): the T5 kill plays the Soulfire exile Ponder (shuffle), Spasm, Ponder, Spasm, Preordain, Ponder, Crackle; the bound order casts Preordain first and the game is T6 even at d8 b0, T5 with the reverse tie-break. Default OFF (the USER decides); =1 -> the fan
     STOMPY_ORDER_SEARCH,      // MTG_STOMPY_ORDER_SEARCH (under MTG_STOMPY_ORDER) the four "either location" cards of the USER's StompySurprise order -- Worldly Tutor mid / late, Turntimber before / after the tutor, Natural Order early / late, World War Hulk early / late -- are SEARCHED two-way choices: the plan's slot (StompyProvider::ArrangeCastOrder) is the canonical first try and each such card present at its OTHER slot is one more candidate ordering (StompyProvider::CastOrderingCandidates; WantsCastOrderingSearch). USER: "can choose to cast either location". Search window only: the rollouts beyond the horizon and the d0 runner keep the canonical order. Default ON; =0 -> the canonical order alone
     STOMPY_TOP_RESOLVE,       // MTG_STOMPY_TOP_RESOLVE (under MTG_STOMPY_ORDER) StompySurprise's opt-in to the tutor-to-TOP reset (MTG_TOP_RESOLVE; DecisionProvider::TopResolveOptIn, read through TopResolveActive): the USER's "Worldly Tutor resets Call of the Wild Activations and Turntimber" ships with the order, the global lever stays OFF for the other tutor_to_top decks. Default ON; =0 -> the order without the reset
+    HOLD_RELEASE_YIELD,       // MTG_HOLD_RELEASE_YIELD the whole-turn prepay's creature hold ladder (TurnSolver::BatchPrepayMainCasts) is battlefield-position-free and prices a body's mana: equal-power bodies release biggest yield first (Priest of Titania before a 1/1 elf), the single-attacker rung holds the lowest-yield strongest mana attacker, and a creature the line sacrifices as a cost is never held; remaining ties by name, then card number. StompySurprise gi1526: the T3 kill was found iff Priest was not entered after both 1-drop elves. Default OFF until measured; =1 enables
     COUNT
 };
 
@@ -933,6 +934,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_PP_SEARCHED",
         "MTG_STOMPY_ORDER_SEARCH",
         "MTG_STOMPY_TOP_RESOLVE",
+        "MTG_HOLD_RELEASE_YIELD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
