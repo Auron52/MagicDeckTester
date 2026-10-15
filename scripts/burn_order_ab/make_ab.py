@@ -112,7 +112,8 @@ def build(a):
                 jobs.append(job("%s.%s.%s.c%d" % (deck, cell, arm, c), BURN_DECK, BURN_PROF, cell,
                                 min(ch, n - c), SEEDS[(deck, cell)] + c, c, fl, extra))
     if a.recovery_from:
-        jobs.extend(recovery_jobs(a.recovery_from, a.recovery_arms.split(",")))
+        pred = dict(kv.split("=") for kv in a.predict_map.split(",") if kv) if a.predict_map else None
+        jobs.extend(recovery_jobs(a.recovery_from, a.recovery_arms.split(","), pred))
     if not a.no_identity:
         idflags = {"base": None, "new": ALL_ON, "new2": ALL_ON2}[a.which]
         for key, v in sorted(suite_decks().items()):
@@ -239,15 +240,27 @@ def analyse(dbase, dnew):
     json.dump([list(s) for s in slower], open(os.path.join(dnew, "slower.json"), "w"))
 
 
-def recovery_jobs(dnew, arms=None):
+def recovery_jobs(dnew, arms=None, predict=None):
     """One job per slower game: stage 1 (depth W = max(6, old win turn), budget 100) and stage 2
-    (depth 8, budget 0), both under the arm's flags, both ignore_play_profile (the depth is pinned)."""
+    (depth 8, budget 0), both under the arm's flags, both ignore_play_profile (the depth is pinned).
+    predict = {new_arm: counterpart_arm}: ALSO emit the jobs for new_arm on the counterpart's slower games
+    (the follow-up's arms differ from the first A/B's only by a lever or two, so most of their slower games
+    are the counterpart's -- recovering them in the same batch saves a queue round)."""
     slower = json.load(open(os.path.join(dnew, "slower.json")))
     flags = dict(ARMS_ALL)
     jobs = []
+    seen = set()
+    todo = []
     for deck, cell, arm, g, ob, nw in slower:
-        if arms and arm not in arms:
+        if not arms or arm in arms:
+            todo.append((deck, cell, arm, g, ob))
+        for na, ca in (predict or {}).items():
+            if ca == arm:
+                todo.append((deck, cell, na, g, ob))
+    for deck, cell, arm, g, ob in todo:
+        if (deck, cell, arm, g) in seen:
             continue
+        seen.add((deck, cell, arm, g))
         extra = dict(TWO_HG) if deck == "burn2hg" else {}
         w = max(6, ob if ob < 9 else 6)
         for stage, depth, bud in (("s1", w, 100), ("s2", 8, 0)):
@@ -325,6 +338,7 @@ if __name__ == "__main__":
     ap.add_argument("--which", choices=["base", "new", "new2"])
     ap.add_argument("--recovery-from", default="", help="append recovery jobs for this dir's slower.json")
     ap.add_argument("--recovery-arms", default="", help="comma list of arms to recover (default all)")
+    ap.add_argument("--predict-map", default="", help="new=counterpart,...: recover new arms on the counterpart's slower games")
     ap.add_argument("--rec-report", nargs=2, metavar=("DIR_WITH_SLOWER", "DIR_WITH_REC"))
     ap.add_argument("--scale", type=float, default=1.0)
     ap.add_argument("--no-identity", action="store_true")
