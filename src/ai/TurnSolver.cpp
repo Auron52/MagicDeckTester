@@ -4143,9 +4143,13 @@ static bool BpPlanMadeACast()
 // This also explains why the filter measured harmful. It was only ever measured under the GENERIC
 // order, which ranks creatures (10) ahead of "other noncreature" (20) and therefore deploys Kor
 // Duelist BEFORE the Equipment whose ETB does the drawing -- backwards from the information-first
-// rule. The deck's own reviewed order (MTG_KE_ORDER) puts Equipment at 8 ahead of the hosts at 10
+// rule. The deck's own reviewed order (MTG_KE_ORDER) put Equipment at 8 ahead of the hosts at 10
 // for precisely this reason. So the soundness of condemnation is CONDITIONAL on the deck's cast
 // order encoding draws-before-deploys, which is why it is a per-deck hook and not a global.
+// (Historical: that was the 2026-08-25 order. The USER's 10-04 / 10-15 rulings put the hosts back
+// ahead of the Equipment -- "The creatures going after equipment is not all that important" -- which
+// costs no line now that the Puresteel draws are deferred past every cast of the plan; see
+// DecisionProviders.cpp, "KittyEquipment".)
 //
 // Clairvoyance is what makes the rule exact rather than a heuristic: the search already knows what
 // the trigger will draw, so "new information arrived" is never a reason to re-offer a card. Only
@@ -4487,7 +4491,18 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     // g_bp_site_activated is recorded where the breakpoint fires, because a permanent can be cast
     // AND activated in the same turn and its params cannot tell you which one opened this site.
     if (g_bp_site_activated) { return false; }
-    return prov.CastOrderRankLatest(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
+    const int cand_rank = prov.CastOrderRankLatest(state, *cd);
+    const int site_rank = prov.CastOrderRank(state, *g_bp_site_def);
+    // A TOTAL deck order (CastOrderTotalByName) breaks a rank tie by NAME in the comparator that
+    // realises the plan, so the peer test must read the same order: a different card tied on rank
+    // but earlier by name WAS reached before the site and declined (USER 2026-08-26: "The order not
+    // mattering within a class has never prevented us from choosing an order to make condemnation a
+    // real tool."). Copies of the site's own card stay peers, as before. False for every deck that
+    // does not opt in -- their test is the plain `>=` below, unchanged. The same byte-wise name compare
+    // and the same legacy hatch as CastOrderNameTieLess (ManaPayment.cpp), so the two cannot disagree.
+    if (cand_rank == site_rank && !LegacyCastTierOrder() && prov.CastOrderTotalByName())
+    { return !(cd->card.m_name.str() < g_bp_site_def->card.m_name.str()); }
+    return cand_rank >= site_rank;
 }
 
 // Was this card already in hand when the current breakpoint's cantrip was cast? True outside a
