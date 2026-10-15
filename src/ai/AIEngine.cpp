@@ -4714,6 +4714,52 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Site 8 on a COMMITTED line: the found card, or empty when this call is not site 8 / the plan is
     // not committed. See the COMMITTED SITE-8 MIRROR in resolve_draw_breakpoint.
     std::string rdb_site8_committed_found;
+    // A RE-DERIVED BREAKPOINT CONTINUATION'S POSITIONED LAND (its Plan::land_slot != 0) -- the executor
+    // twin of ApplyPlanDirect's cont_land, for the continuation paths that apply a candidate here
+    // rather than replay the committed record (resolve_draw_breakpoint, the pod chain, site 9; the
+    // record path needs nothing -- replay_recorded walks the PlayLand where the rollout recorded it).
+    // The land is NOT played first: exec_cont_land_defer holds it, exec_cont_land_hook plays it right
+    // after the continuation's k-th landfall-watcher cast, exec_cont_land_finish after its casts. Same
+    // land options each site used for a land-first play (front scry pin, rad -1). While one is held the
+    // drop is RESERVED for it (exec_cont_lands_held): a nested continuation's land stands down, as the
+    // rollout's bp_play_searched_land does. Inert for every continuation without a position.
+    struct ExecContLand
+    {
+        bool        pending = false;
+        int         slot = 0, seen = 0, scry = -1;
+        std::string name, fetch, face;
+        bool        top = false;
+    };
+    int exec_cont_lands_held = 0;
+    auto exec_cont_land_defer = [&](ExecContLand& L, const TurnSolver::Plan& extra) -> bool
+    {
+        if (extra.land_slot == 0 || !extra.land_decided || extra.land_to_play.empty()) { return false; }
+        L         = ExecContLand{};
+        L.pending = true;
+        L.slot    = extra.land_slot;
+        L.scry    = extra.scry_choice;
+        L.name    = extra.land_to_play;
+        L.fetch   = extra.fetch_target;
+        L.face    = extra.land_face;
+        L.top     = extra.land_from_top;
+        ++exec_cont_lands_held;
+        return true;
+    };
+    auto exec_cont_land_finish = [&](ExecContLand& L)
+    {
+        if (!L.pending) { return; }
+        const ExecContLand l = L;
+        L = ExecContLand{};
+        --exec_cont_lands_held;
+        std::optional<ScriptedTopChoice> stc;
+        if (l.scry >= 0) { stc.emplace(l.scry); }
+        TryPlaySpecificLand(state, l.name, l.fetch, l.face, -1, l.top);
+    };
+    auto exec_cont_land_hook = [&](ExecContLand& L, const Action& a)
+    {
+        if (!L.pending || L.slot <= 0 || !TurnSolver::PutsLandfallWatcher(a)) { return; }
+        if (++L.seen == L.slot) { exec_cont_land_finish(L); }
+    };
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         // Consumed on entry: a nested breakpoint inside this continuation re-enters here and is NOT
@@ -4758,6 +4804,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Inert when bp_choice < 0, i.e. for every plan under MTG_BP_SEARCH=0.
         TurnSolver::Plan extra;
         bool bp_searched_here = false;
+        // This continuation's own positioned land, if it carries one (see ExecContLand). The guard
+        // releases the drop's reservation on any exit that never reached its slot or the finish.
+        ExecContLand rdb_land;
+        struct RdbLandGuard
+        {
+            ExecContLand& l; int& held;
+            ~RdbLandGuard() { if (l.pending) { l.pending = false; --held; } }
+        } _rdb_land_guard{ rdb_land, exec_cont_lands_held };
         const int bp_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
         // bp_all -> candidate k at EVERY breakpoint (Plan::bp_all). The search scored the turn
         // that way, so the executor must realise it that way or the committed line is not the
@@ -4801,10 +4855,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // rollout/executor divergence (the class the HoldDeferredDrop mirrors prevent).
                 static const bool s_karoo_lockstep = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
                 if (extra.land_decided && !extra.land_to_play.empty()
-                    && !(s_karoo_lockstep && karoo_deferred))
-                { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
-                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
+                    && !(s_karoo_lockstep && karoo_deferred)
+                    && exec_cont_lands_held == 0)
+                {
+                    // A POSITIONED continuation land (Plan::land_slot) waits for its slot (ExecContLand).
+                    if (!exec_cont_land_defer(rdb_land, extra))
+                    { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                      if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                      TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
+                }
             }
         }
         // COMMITTED-LINE MIRROR (USER 2026-10-03: "We should not search again"). On a VERIFIED committed
@@ -4838,7 +4897,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             static const bool s_karoo_lockstep3 = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
             if (extra.land_decided && !extra.land_to_play.empty()
-                && !(s_karoo_lockstep3 && karoo_deferred))
+                && !(s_karoo_lockstep3 && karoo_deferred) && exec_cont_lands_held == 0
+                && !exec_cont_land_defer(rdb_land, extra))   // a positioned land waits for its slot
             { std::optional<ScriptedTopChoice> _cstc;
               if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
               TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
@@ -4890,10 +4950,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 static const bool s_karoo_lockstep2 = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
                 if (extra.land_decided && !extra.land_to_play.empty()
-                    && !(s_karoo_lockstep2 && karoo_deferred))
-                { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
-                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
+                    && !(s_karoo_lockstep2 && karoo_deferred)
+                    && exec_cont_lands_held == 0)
+                {
+                    // A POSITIONED continuation land (Plan::land_slot) waits for its slot (ExecContLand).
+                    if (!exec_cont_land_defer(rdb_land, extra))
+                    { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                      if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                      TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
+                }
             }
         }
         // The chosen continuation's during-cast pins (ContPins) for its casts below -- the twin of
@@ -4982,6 +5047,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
                     (is_ena ? ena : rest).push_back(i);
                 }
+                // A positioned continuation land's tied-rank watchers first (lockstep with the
+                // rollout's slot_order on the same section, before the rank sort).
+                if (rdb_land.pending && rdb_land.slot > 0)
+                { TurnSolver::LandSlotWatchersFirst(extra.actions, rest); }
                 std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
                 {
                     const CardDefinition* dx = CardDatabase::Instance().Lookup(extra.actions[x].card_name);
@@ -5007,6 +5076,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             else
             {
+                if (rdb_land.pending && rdb_land.slot > 0)
+                { TurnSolver::LandSlotWatchersFirst(extra.actions, cont_order); }   // land position: ties
                 std::stable_sort(cont_order.begin(), cont_order.end(), [&](int x, int y)
                 { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
                 ApplyPayableCastOrder(state, extra.actions, cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER
@@ -5016,7 +5087,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             const Action& a = extra.actions[ci];
             if (a.kind == Action::Kind::ActivateVial)
-            { deploy_via_vial(a.card_name); resolve_now(); cont_unlock->Fire(&cont_unlock_fired); continue; }
+            { deploy_via_vial(a.card_name); resolve_now(); cont_unlock->Fire(&cont_unlock_fired);
+              exec_cont_land_hook(rdb_land, a); continue; }
             {
                 m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
                 const bool put_armed_c = put_in_hand_armed(a.card_name);
@@ -5038,17 +5110,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
             }
             cont_unlock->Fire(&cont_unlock_fired);
+            exec_cont_land_hook(rdb_land, a);   // a positioned continuation land after its watcher
         }
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a); }
+            { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
+              exec_cont_land_hook(rdb_land, a); }
         }
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
-            { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+            { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); exec_cont_land_hook(rdb_land, a); }
         }
+        // ...and a positioned land whose watcher never came: after the continuation's casts, as the
+        // rollout's apply_continuation_plan plays it.
+        exec_cont_land_finish(rdb_land);
         cont_unlock.reset();   // the cast section ends here, as the rollout's apply_plan_actions does
         // An unbranched-canon continuation dispatches no activations below, so the Equips its cast
         // section fired would leave no log line; every other route logs them in the trailing pass.
@@ -5286,6 +5363,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 {
                     TurnSolver::Plan extra;
                     bool pod_bp_searched = false;
+                    // The continuation's positioned land, if any (ExecContLand; guarded likewise).
+                    ExecContLand pod_land;
+                    struct PodLandGuard
+                    {
+                        ExecContLand& l; int& held;
+                        ~PodLandGuard() { if (l.pending) { l.pending = false; --held; } }
+                    } _pod_land_guard{ pod_land, exec_cont_lands_held };
                     const int pod_bp_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
                     if (pod_bp_idx == plan.bp_at)
                     {
@@ -5307,7 +5391,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             // The continuation's land is part of the searched decision
                             // (mirrors bp_play_searched_land; no Karoo reservation can be live
                             // this deep in the trailing pass -- it was consumed after the casts).
-                            if (extra.land_decided && !extra.land_to_play.empty())
+                            if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
+                                && !exec_cont_land_defer(pod_land, extra))   // a positioned land waits
                             { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
@@ -5324,7 +5409,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                            /*class_on=*/true, extra))
                         { extra = TurnSolver::Plan{}; extra.land_decided = true; }
                         pod_bp_searched = true;
-                        if (extra.land_decided && !extra.land_to_play.empty())
+                        if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
+                            && !exec_cont_land_defer(pod_land, extra))   // a positioned land waits
                         { std::optional<ScriptedTopChoice> _cstc;
                           if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
                           TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
@@ -5355,7 +5441,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         }
                         // The re-solve's LAND DROP -- twin of the main site (MTG_BP_RESOLVE_LAND).
                         if (BpResolveLandEnabled() && extra.land_decided
-                            && !extra.land_to_play.empty())
+                            && !extra.land_to_play.empty() && exec_cont_lands_held == 0
+                            && !exec_cont_land_defer(pod_land, extra))   // a positioned land waits
                         { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
@@ -5393,6 +5480,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                     if (!extra.searched_order && pod_cont_order.size() > 1)
                     {
+                        if (pod_land.pending && pod_land.slot > 0)
+                        { TurnSolver::LandSlotWatchersFirst(extra.actions, pod_cont_order); }   // land position: ties
                         std::stable_sort(pod_cont_order.begin(), pod_cont_order.end(),
                             [&](int x, int y)
                             { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
@@ -5408,6 +5497,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                      ca.convoke_other, ca.phyrexian_life, ca.evoke);
                         resolve_now();
                         pod_unlock->Fire();
+                        exec_cont_land_hook(pod_land, ca);   // a positioned continuation land after its watcher
                     }
                     for (const Action& ca : extra.actions)
                     {
@@ -5419,8 +5509,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                          ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
                                          ca.convoke_other, ca.phyrexian_life, ca.evoke);
                             resolve_now();
+                            exec_cont_land_hook(pod_land, ca);
                         }
                     }
+                    exec_cont_land_finish(pod_land);   // a positioned land whose watcher never came
                     pod_unlock.reset();   // the cast section ends before the trailing activations
                     exec_trailing_activations(extra.actions);
                 }
@@ -6636,6 +6728,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         TurnSolver::Plan extra;
         bool pe_searched = false;
+        // The continuation's positioned land, if any (ExecContLand; guard as in resolve_draw_breakpoint).
+        ExecContLand pe_land;
+        struct PeLandGuard
+        {
+            ExecContLand& l; int& held;
+            ~PeLandGuard() { if (l.pending) { l.pending = false; --held; } }
+        } _pe_land_guard{ pe_land, exec_cont_lands_held };
         const int pe_idx = bp_seen_exec++;
         if (pe_idx >= 0 && (plan.bp_all || pe_idx == plan.bp_at))
         {
@@ -6646,7 +6745,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 extra       = cands[plan.bp_choice];
                 pe_searched = true;
-                if (extra.land_decided && !extra.land_to_play.empty())
+                if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
+                    && !exec_cont_land_defer(pe_land, extra))   // a positioned land waits for its slot
                 { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
@@ -6683,6 +6783,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             if (!extra.searched_order && pe_cont_order.size() > 1)
             {
+                if (pe_land.pending && pe_land.slot > 0)
+                { TurnSolver::LandSlotWatchersFirst(extra.actions, pe_cont_order); }   // land position: ties
                 std::stable_sort(pe_cont_order.begin(), pe_cont_order.end(),
                     [&](int x, int y)
                     { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
@@ -6698,9 +6800,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 resolve_now();
                 walker_cast_activation(ca);
             };
-            for (int ci : pe_cont_order) { pe_cast(extra.actions[ci]); pe_unlock->Fire(); }
+            for (int ci : pe_cont_order)
+            { pe_cast(extra.actions[ci]); pe_unlock->Fire(); exec_cont_land_hook(pe_land, extra.actions[ci]); }
             for (const Action& ca : extra.actions)
-            { if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land) { pe_cast(ca); } }
+            { if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land) { pe_cast(ca); exec_cont_land_hook(pe_land, ca); } }
+            exec_cont_land_finish(pe_land);   // a positioned land whose watcher never came
             pe_unlock.reset();   // the cast section ends before the trailing activations
             exec_trailing_activations(extra.actions);
         }

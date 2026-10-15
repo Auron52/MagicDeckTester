@@ -127,9 +127,17 @@ record of what was built.
 
 ## 4. Deferred (not built)
 
-1. ~~**A land in the MIDDLE of the cast order.**~~ BUILT 2026-10-15 as `Plan::land_slot` (section 3).
-   Still open at that point: the position axis is not emitted inside a breakpoint-continuation
-   derivation (`g_bp_enum_depth > 0`), because a continuation's land is played before its casts.
+1. ~~**A land in the MIDDLE of the cast order.**~~ BUILT 2026-10-15 as `Plan::land_slot` (section 3),
+   inside breakpoint continuations too: the position clones are emitted in a continuation
+   derivation (`g_bp_enum_depth > 0`) as well, `bp_play_searched_land` HOLDS a positioned
+   continuation land (ApplyPlanDirect's `cont_land`, owned by the continuation plan object and
+   armed by `apply_continuation_plan` for exactly that continuation's cast section), the same slot
+   hook plays it after the section's k-th watcher cast or after its casts, and it is RECORDED when
+   played -- so the executor's commit-the-line replay (`replay_recorded` walks the record in order)
+   plays it at the same point. The executor's re-derived continuation paths (resolve_draw_breakpoint,
+   the pod chain, site 9) hold it the same way (`ExecContLand` / `exec_cont_land_*`). While a
+   continuation's land is held the drop is RESERVED (a nested continuation's land stands down in
+   both worlds, the Karoo reservation's rule). Fixture: `landfall_position_in_continuation`.
 2. **Fold boundary of the timing axis.** It is emitted only when a cast puts a landfall watcher. For
    the current pool that is sound; a future NON-watcher cast that makes a landfall payload's target
    subtype (a non-landfall Plant maker), or a "whenever you gain life" watcher cast beside Courser of

@@ -56,9 +56,28 @@ Drafts: `logs/landfall_drafts/` (gitignored).
 | Omnath, Locus of Rage | 3 | landfall 5/5 R/G Elemental (multi-colour tokens added); Elemental-dies 3 damage via `dies_watch_subtype` (Pashalik Mons shape); legend-rule deaths count. | "any target" always the opponent's face, human not asked (Pashalik precedent) — PROVISIONAL |
 | Phylath, World Sculptor | 3 | Plants per BASIC land (`IsBasicLandCard`); landfall four counters on TARGET Plant — searched rank over identity-folded, provider-ordered classes; human picks on board (`target`); CR 603.3d under a simultaneous Wave. | — |
 | Courser of Kruphix | 3 | landfall lifegain (078acb9e); play lands from the library top (`Plan::land_from_top`, branched vs hand lands, site-10 re-solve on a new top, greedy-site awareness, viewer `library_top` + `landtop=`); reveal display-only. | Titan-attack-shuffle main-2 drop not built (KNOWN GAP, user Q4) |
-| Khalni Heart Expedition | 3 | landfall quest counter done (078acb9e); activation in progress (land-search integrator). | "you may" counter always taken (only feeds an optional activation) — PROVISIONAL |
+| Khalni Heart Expedition | 3 | landfall quest counter (078acb9e); activation: see the row below (landfall-search). | "you may" counter always taken (only feeds an optional activation) — PROVISIONAL |
+| Rampant Growth | 3 | first user of the shared `src/core/LandSearch.h` helper: one basic, tapped, via EnterLand (landfall fires); one shuffle even on fail-to-find. | fail-to-find / "up to" collapse — PROVISIONAL |
+| Search for Tomorrow | 3 | basic UNTAPPED; Suspend 2—{G} as a plan action (`ApplySuspend` pays {G}); off suspend cast at the next upkeep before the draw, to graveyard, counts for storm. | "you may cast it" off suspend collapsed to cast (human too) — PROVISIONAL. Gap: a hard-cast's untapped land is not counted for later casts in the same plan. Suspend was never chosen in 24 sample games — to investigate. |
+| Cultivate | 2 | ordered (battlefield, hand) basic pair; the hand basic can be the same turn's land drop via the put-in-hand breakpoint. | "up to two" collapsed to two — PROVISIONAL |
+| Evolving Wilds / Terramorphic Expanse | 3 / 1 | real lands with no mana ability (`template: custom`); searched `SacLandSearch` activation; folded as one card for Titan picks. | instant-speed window collapsed to main phase — PROVISIONAL |
+| Myriad Landscape | 2 | {2},{T}, sac: two basics sharing a land type; its {T} is paid first so it can't pay its own {2}. | "up to two" collapsed; instant window collapsed — PROVISIONAL |
+| Khalni Heart Expedition (activation) | 3 | `QuestSacLandSearch` (no {T}); a crack made possible mid-plan is reachable the same main (new breakpoint fan-out clause); IN-COMBAT crack after Titan's attack trigger (follow-up a). | post-combat windows collapsed (in-combat crack weakly dominates) — PROVISIONAL |
+| Primeval Titan | 3 | ETB + attack trigger, the attack resolved before damage in both worlds; attacker indices repaired after a Turf bounce; the attack projection prices the Plant counters. | Titan's "you may search" collapsed to the fullest pick — PROVISIONAL |
+| Radiant Fountain | 1 | `produces C`, `etb_lifegain 2` (fires when put too). | — |
+| Haunted Fengraf | 2 | one activation per source; seeded draw over graveyard creatures in a fixed order; viewer `gyreturn=@random`. | random = deterministic seeded value the search sees (Gamble model) — PROVISIONAL |
+| (fold fix) Haven of the Spirit Dragon / Fengraf | — | the end-of-turn dominance fold + solve key now distinguish graveyard creature names; Dragons byte-identical. | — |
 | Genesis Wave (existing) | — | landfall in pass 2; CR 603.3b dominance trigger order (landfall decks only); left-land still fires; duplicate legend now PUT. | — |
 | Mountain / Island (existing) | — | Basic supertype added; `audit_card_fields.py` hard-checks Basic. | — |
+
+Land-search branch `landfall-search` (563b1e25, c793dd25, d9101f93; 2026-10-15 ~17:00):
+- tests: unit 633/633 (17 new), scenarios 174/174 (9 new `landsearch_*`), smoke `play-changed=0`, ALL PASS;
+- land picks: every legal complete pick, provider-ordered, no narrowing; per-ordinal pins (full product
+  <= 64, one-hot beyond); state pins for Titan's attack trigger and Search for Tomorrow's arrival;
+- viewer: `tutor_etb` per land, a `landsearch=` verb, `dig` for the in-combat crack, `suspend=`;
+- design + gaps: `docs/design/land-search-cluster.md`;
+- cost warning: 24 games at d3/50 ms ran 5m17s on 12 threads (contended) — Titan's ~25-wide pick axis
+  is the prime suspect for the 5f performance gate.
 
 Commit `078acb9e` (2026-10-15 ~15:00): unit 616/616, scenarios 165/165, viewer linebuild 0 fail over
 467 refs, smoke `play-changed=0` at every depth, ALL PASS. Contract + deferred items:
@@ -67,7 +86,9 @@ Commit `078acb9e` (2026-10-15 ~15:00): unit 616/616, scenarios 165/165, viewer l
 
 Remaining land-timing gaps (handed to the Courser integrator, 2026-10-15 ~15:05): a land in the MIDDLE
 of the cast order (cast Khalni, play the land, cast Rampant Growth with its mana) and land-timing
-inside breakpoint continuations.
+inside breakpoint continuations. CLOSED 2026-10-15 by `Plan::land_slot` (the land's position after the
+k-th landfall-watcher cast, in the main plan and inside continuations) -- see
+`docs/design/landfall-trigger-infrastructure.md` section 3 and deferred item 1.
 
 ### Research verdicts
 - **Courser of Kruphix** (agent C, 2026-10-15): live Oracle (all 9 printings) is "Play with the top card

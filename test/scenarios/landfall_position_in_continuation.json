@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "Landfall 2026-10-15: the land POSITION inside a BREAKPOINT CONTINUATION (Task 3). Seven Forests, a",
+    "Mountain and one old 0/1 Plant; hand Expedite + Forest; Rampaging Baloths on top; opponent at 10.",
+    "T5: Expedite (the Mountain, on the Plant) draws Baloths -- a site-5 breakpoint whose continuation",
+    "casts Baloths off six Forests and THEN plays the Forest: a 4/4 Beast this turn. T6: Baloths 6 +",
+    "Beast 4 = exact lethal. Every other T5 line makes no Beast (the outer plan's Expedite is not a",
+    "landfall card, so the outer plan has no land-after position; a continuation that plays its land",
+    "first has Baloths enter after it), and T6 then deals 6: win T7. So the T6 win needs the position",
+    "axis generated INSIDE the continuation list and applied by the continuation's own cast section",
+    "(ApplyPlanDirect's cont_land), with the PlayLand recorded where it was played for the executor."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [
+    "Expedite",
+    "Forest"
+  ],
+  "library_top": [
+    "Rampaging Baloths"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "expect_win_turn": 6
+}

@@ -38294,6 +38294,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     int         deferred_land_slot      = 0;
     int         deferred_watchers_seen  = 0;
     bool        land_slot_top_armed     = false;
+    // A BREAKPOINT CONTINUATION'S positioned land (its Plan::land_slot != 0; 2026-10-15). Registered by
+    // bp_play_searched_land instead of playing it first, owned by the continuation's OWN cast section
+    // (apply_continuation_plan arms it for exactly that apply_plan_actions call -- `owner` is the
+    // continuation plan object both calls receive), played by the same slot hook right after the
+    // section's k-th landfall-watcher cast, or after the section's casts (-1 / an unreached k). While
+    // it is pending the drop is RESERVED: a nested continuation's bp_play_searched_land stands down,
+    // exactly as for the outer plan's deferred land (karoo_deferred). Recorded into the continuation's
+    // sink WHEN played, so the executor's commit-the-line replay (replay_recorded walks the records in
+    // order) plays it at the same point. Inert for every continuation without a position.
+    struct ContSectionLand
+    {
+        bool                      pending = false, armed = false;
+        int                       slot = 0, seen = 0;
+        std::string               name, fetch, face;
+        int                       rad = -1, scry = -1, bounce = -1;
+        bool                      top = false;
+        std::vector<Action>*      sink  = nullptr;
+        const TurnSolver::Plan*   owner = nullptr;
+    } cont_land;
     // ...and the deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix), for the Karoo
     // and the land-after drop alike: a deferred TOP land is played from the top at the deferred
     // point, and if a cast changed the top in between, PlayLandByName refuses it -- in both worlds
@@ -38492,6 +38511,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Forward-declared so apply_one's draw breakpoints can re-apply a freshly solved
     // sub-plan (newly drawn castables) through the same canonical-order dispatch.
     std::function<void(const std::vector<Action>&, bool)> apply_plan_actions;
+    // Forward-declared for the same reason: apply_continuation_plan (below) finishes a positioned
+    // continuation land through it, and its body needs bp_play_and_record_land (defined further down).
+    std::function<void()> play_cont_land;
     // Forward-declared (assigned far below, next to the trailing pass it drives) so the ordered
     // cast loop can dispatch a BOARD ACTIVATION at its declared position -- the human-order
     // interleave, see human_seq_inline. Nothing calls it before it is assigned: the top-level
@@ -38574,7 +38596,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         PlanSoulbondDeclineScope _sbd(cp.soulbond_decline);   // Plan::soulbond_decline, lockstep w/ executor
         const bool saved_canon = cont_canon_cast_section;
         cont_canon_cast_section = cp.cont_canon;
+        // This continuation's own positioned land (registered by bp_play_searched_land for THIS
+        // plan object): armed for exactly the section below, played after its casts if its slot never
+        // came. Executor twin: exec_cont_land_* in AIEngine::TakeTurn's continuation loops.
+        const bool owns_land = cont_land.pending && cont_land.owner == &cp;
+        if (owns_land) { cont_land.armed = true; }
         apply_plan_actions(cp.actions, cp.searched_order);
+        if (owns_land && cont_land.pending && cont_land.owner == &cp) { play_cont_land(); }
         cont_canon_cast_section = saved_canon;
     };
     // DIAGNOSTIC (MTG_LINE_ORDER_TRACE, default OFF, zero cost when off): one line per action the
@@ -39074,36 +39102,70 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     };
     // Play a continuation's SEARCHED land drop and record it for commit-the-line replay. Inert for
     // a greedy continuation (Solve never sets land_decided), so the greedy path is unchanged.
-    auto bp_play_searched_land = [&](const TurnSolver::Plan& sp, std::vector<Action>* sink)
+    // Play a continuation land with its whole searched choice and RECORD it for the replay. Shared by
+    // the land-first play below and a positioned continuation land's deferred play (play_cont_land).
+    auto bp_play_and_record_land = [&](const std::string& name, const std::string& fetch,
+                                       const std::string& face, int rad, bool top, int scry, int bounce,
+                                       std::vector<Action>* sink)
     {
-        if (!sp.land_decided || sp.land_to_play.empty()) { return; }
-        if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
         // The continuation's OWN land scry/surveil pin (Plan::scry_choice), exactly as the outer
         // plan's land play installs its own -- a continuation land used to scry by heuristic.
         std::optional<ScriptedTopChoice> stc;
-        if (sp.scry_choice >= 0) { stc.emplace(sp.scry_choice); }
+        if (scry >= 0) { stc.emplace(scry); }
         // ...and its own searched Karoo bounce (Plan::bounce_choice), replayed by the executor from
         // the continuation's ContPins exactly like the scry pin.
-        ScriptedBounceChoice sbc(sp.bounce_choice);
-        if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face, sp.rad_mode,
-                            sp.land_from_top))
-        { return; }
+        ScriptedBounceChoice sbc(bounce);
+        if (!PlayLandByName(state, name, fetch, true, face, rad, top)) { return; }
         if (out_breakpoint != nullptr && sink != nullptr)
         {
             Action la;
             la.kind      = Action::Kind::PlayLand;
-            la.card_name = sp.land_to_play;
+            la.card_name = name;
             // Record the SAME triple we just played with. Recording only the name made the
             // replayed land a different land from the searched one whenever any of these was
             // non-default -- an MDFC back face, a fetchland target, a rad mode. See the field
             // comments on Action (auras gi20: back-face {W} searched, front-face {G} replayed,
             // stranding the recorded Hyena Umbra and losing a committed T4 kill).
-            la.land_face         = sp.land_face;
-            la.land_fetch_target = sp.fetch_target;
-            la.land_rad_mode     = sp.rad_mode;
-            la.land_from_top     = sp.land_from_top;   // ...and its source zone (Courser)
+            la.land_face         = face;
+            la.land_fetch_target = fetch;
+            la.land_rad_mode     = rad;
+            la.land_from_top     = top;   // ...and its source zone (Courser)
             sink->push_back(la);
         }
+    };
+    auto bp_play_searched_land = [&](const TurnSolver::Plan& sp, std::vector<Action>* sink)
+    {
+        if (!sp.land_decided || sp.land_to_play.empty()) { return; }
+        if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
+        if (cont_land.pending) { return; }   // ...or for an outer continuation's positioned land
+        // A POSITIONED continuation land (Plan::land_slot != 0, Task-3 of the landfall position axis):
+        // NOT played first. Registered for the continuation's own cast section, which plays it right
+        // after its k-th landfall-watcher cast or after its casts (see cont_land).
+        if (sp.land_slot != 0)
+        {
+            cont_land         = ContSectionLand{};
+            cont_land.pending = true;
+            cont_land.slot    = sp.land_slot;
+            cont_land.name    = sp.land_to_play;
+            cont_land.fetch   = sp.fetch_target;
+            cont_land.face    = sp.land_face;
+            cont_land.rad     = sp.rad_mode;
+            cont_land.top     = sp.land_from_top;
+            cont_land.scry    = sp.scry_choice;
+            cont_land.bounce  = sp.bounce_choice;
+            cont_land.sink    = sink;
+            cont_land.owner   = &sp;
+            return;
+        }
+        bp_play_and_record_land(sp.land_to_play, sp.fetch_target, sp.land_face, sp.rad_mode,
+                                sp.land_from_top, sp.scry_choice, sp.bounce_choice, sink);
+    };
+    // Play a pending positioned continuation land NOW (its slot came, or its section ended).
+    play_cont_land = [&]()
+    {
+        const ContSectionLand l = cont_land;
+        cont_land = ContSectionLand{};   // cleared first: the land's own ETBs may re-enter the apply
+        bp_play_and_record_land(l.name, l.fetch, l.face, l.rad, l.top, l.scry, l.bounce, l.sink);
     };
     // Apply (and RECORD) a continuation's SacForMana / Suspend actions BEFORE its casts, exactly as
     // the top-level ApplyPlanDirect / TakeTurn pre-pass does. apply_plan_actions handles only
@@ -41298,15 +41360,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan without a position, i.e. every plan of every deck without a landfall card.
         const bool slot_top = land_slot_top_armed;
         land_slot_top_armed = false;
+        // ...and the same hook for a BREAKPOINT CONTINUATION's own positioned land (cont_land), armed
+        // by apply_continuation_plan for exactly that continuation's section, consumed here likewise.
+        const bool slot_cont = cont_land.armed;
+        cont_land.armed = false;
         auto slot_hook = [&](const Action& a, bool truncated_before)
         {
-            if (!slot_top || truncated_before) { return; }
-            if (!land_after_deferred || deferred_land_slot <= 0) { return; }
+            if (!(slot_top || slot_cont) || truncated_before) { return; }
             if (!TurnSolver::PutsLandfallWatcher(a)) { return; }
-            if (++deferred_watchers_seen == deferred_land_slot) { play_deferred_land(); }
+            if (slot_top && land_after_deferred && deferred_land_slot > 0
+                && ++deferred_watchers_seen == deferred_land_slot) { play_deferred_land(); }
+            if (slot_cont && cont_land.pending && cont_land.slot > 0
+                && ++cont_land.seen == cont_land.slot) { play_cont_land(); }
         };
         // ...and a position plan's tied-rank watchers go first (TurnSolver::LandSlotWatchersFirst).
-        const bool slot_order = slot_top && land_after_deferred && deferred_land_slot > 0;
+        const bool slot_order = (slot_top && land_after_deferred && deferred_land_slot > 0)
+                             || (slot_cont && cont_land.pending && cont_land.slot > 0);
         // Indices of sac-land casts already applied by the Spectacle hoist (opaque branch); the
         // trailing sac loop skips them so they are not double-cast. Empty for every plan without a
         // hoisted Spectacle enabler.
@@ -53819,10 +53888,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // option); a k variant keeps its base plan's whole land choice. The scry / rad / bounce sub-axes
     // fan over both later exactly as over a land-first plan. Human play gets the same variants (the
     // viewer never narrows) through `landafter=` and the `landat=<k>` modifier.
-    // NOT inside a breakpoint-continuation derivation (g_bp_enum_depth > 0) yet: a continuation's land
-    // is played by bp_play_searched_land BEFORE its casts in both worlds, so a positioned continuation
-    // would only duplicate its land-first sibling under a false label.
-    if (g_bp_enum_depth == 0 && state.deck_has_landfall)
+    // INSIDE A BREAKPOINT CONTINUATION TOO (g_bp_enum_depth > 0): "a draw found Rampaging Baloths --
+    // cast it, THEN play the land" is a continuation line exactly as it is a turn-start line. The
+    // continuation's land is then held by bp_play_searched_land and played by the continuation's own
+    // cast section at its position (ApplyPlanDirect's cont_land; the executor's exec_cont_land_* in
+    // every re-derived continuation loop, and its commit-the-line replay walks the record, which holds
+    // the PlayLand where it was played). Breakpoint candidate lists only grow for a deck with a
+    // landfall card, so every other deck's bp_choice numbering is byte-identical.
+    if (state.deck_has_landfall)
     {
         const auto watchers_in = [](const TurnSolver::Plan& p)
         {
