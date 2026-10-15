@@ -731,7 +731,19 @@ static std::uint64_t LineSpareSourceMask(const GameState& state, int active, boo
             supply[ci] += y;
         }
     }
-    for (int c = 0; c < 5; ++c) { if (later[c] > supply[c]) { short_line = true; break; } }
+    // MTG_LINE_SPARE_TIGHT (default OFF): the boundary case is SHORT too. `supply` already holds every unit
+    // this generic pip could take (the payment's own float included), so when the rest of the line owes
+    // EXACTLY that much of a colour, spending one of those units here strands a later pip -- while the
+    // spare tap can never cost the line anything (the argument above). Angels, the USER's order: Righteous
+    // Valkyrie {2}{W} ahead of Lightstall Inquisitor {W} off Remote Farm ({W}{W}) + Sol Ring ({C}{C}) --
+    // the Farm's second {W} paid Righteous's generic, Sol Ring's {C} floated, and Lightstall was dropped
+    // (strict `>` read owed 1 vs supply 1 as not short).
+    const bool tight = LineSpareTightOn();
+    for (int c = 0; c < 5; ++c)
+    {
+        if (later[c] > supply[c] || (tight && later[c] > 0 && later[c] == supply[c]))
+        { short_line = true; break; }
+    }
     return spare;
 }
 
