@@ -58,10 +58,34 @@ ROOT = "/workspaces/MagicDeckTester"
 PROF = "logs/deckcmp/Fungus/aliased_at/Fungus.profile.json"
 SEED = 1400000          # disjoint from every screen block (1180000-1329999) and census (1230000+)
 SEASON, BURST = "Doubling Season", "Saproling Burst"
+PLIVES = "Parallel Lives"
+# BOTH DOUBLERS ARE TRACKED, because the USER's case for Parallel Lives is a CASTABILITY case and the
+# only way to settle it is the landing-turn distribution (USER 2026-10-15: *"it might be worth losing
+# the counter doubling for the additional castability, especially when we have 7 5-drops. For example
+# T2 is much easier for Parallel Lives and that would be a notable improvement."*).
+#
+# THE 7 FIVE-DROPS ARE REAL: Saproling Burst is {4}{G} and Doubling Season is {4}{G}, so at Season 3
+# the deck holds 4 + 3 = 7 five-drops in 36 spells. Parallel Lives is {3}{G}.
+#
+# WHY T2 IS EASIER, PRECISELY -- and it is NOT "two Ancient Tombs", which is the trap: Ancient Tomb
+# produces {C} only and EVERY spell in this deck needs exactly one GREEN pip, so Tomb+Tomb is four
+# colourless mana that casts neither doubler. The real T2 lines that reach 4-with-green but not
+# 5-with-green are:
+#     T1 Forest + Wild Growth on it, T2 Ancient Tomb  -> {G}{G}{C}{C} = 4   PLives yes, Season no
+#     T1 Forest + Sol Ring,          T2 Forest        -> {G}{G}+{C}{C} = 4   PLives yes, Season no
+# Both routes run through cards the screen only just added (3 Wild Growth in round 32, 4 Ancient Tomb
+# in round 34), so ADOPTING ANCIENT TOMB RAISED PARALLEL LIVES' RELATIVE VALUE: Tomb's colourless
+# mana reaches 4-with-one-green far more often than it reaches 5-with-one-green.
+DOUBLERS = (SEASON, PLIVES)
 TURNS = (4, 5, 6, 7, 8)
 
 GAMES = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
-TAGS = (sys.argv[2] if len(sys.argv) > 2 else "s_ref,s_s3").split(",")
+# The default pairs the Season-2 reference with the USER-ruled Season 3 (USER 2026-10-15: *"I think I
+# will choose the 3rd season and go from there. We can leave out the 4th to reduce duplicates."*).
+# `s_s3_thal` is the donor step the round-34 interaction is measured on; pass tags explicitly to
+# census a different donor. A tag must be a round-34 arm directory that deck_compare has MATERIALISED
+# -- this script reads the decklist off disk and does not build one.
+TAGS = (sys.argv[2] if len(sys.argv) > 2 else "s_ref,s_s3_thal").split(",")
 
 
 def run(tag):
@@ -92,7 +116,9 @@ def analyse(tag, d):
     bodies = {t: [] for t in TURNS}             # non-land permanents we control, by turn
     bodies_armed = {t: [] for t in TURNS}       # ...in games that armed by that turn
     bodies_unarmed = {t: [] for t in TURNS}
-    first_season = collections.Counter()    # the TURN a Season first hit the battlefield
+    first_dbl = {c: collections.Counter() for c in DOUBLERS}   # TURN each doubler first landed
+    first_any = collections.Counter()       # ...and the turn ANY doubler first landed, which is the
+                                            # number the castability argument actually turns on
     first_burst = collections.Counter()     # ...and a Burst, so the USER's "Season T3, Burst T4"
     # *** THE DECISIVE CONDITIONAL ***  USER: "if Season lands T3 and Saproling Burst T4 the
     # opponent can no longer attack without evasion ... And the turn after you can finish them off."
@@ -101,17 +127,39 @@ def analyse(tag, d):
     # weak, and the remedy is more acceleration rather than fewer Seasons. Splitting win turn by
     # whether the plan actually armed is what tells those two apart.
     win_armed, win_unarmed = [], []
-    season_seen = burst_seen = 0
-    season_drawn = 0          # Season reached HAND at any point -- the denominator for the cast rate
+    burst_seen = 0
+    seen = {c: 0 for c in DOUBLERS}    # reached the BATTLEFIELD
+    drawn = {c: 0 for c in DOUBLERS}   # reached HAND or board -- the denominator for the cast rate
+    any_seen = any_drawn = 0
     life = []
     for fn in sorted(os.listdir(d)):
         if not fn.endswith(".json"):
             continue
         g = json.load(open(os.path.join(d, fn)))
         n += 1
-        saw_s = saw_b = drew_s = False
+        saw_b = False
+        saw = {c: False for c in DOUBLERS}
+        drew = {c: False for c in DOUBLERS}
+        saw_any = False
         armed_by = {}
         is_armed = False
+        last_life = None
+        # THE HAND IS LOGGED AS CARD INDICES, NOT OBJECTS. `boardAfter.battlefield` entries are dicts
+        # carrying `cardName`, but `boardAfter.hand` is a bare list of ints (e.g. [49, 31, 14, 34])
+        # keyed into the game's own `cardNumbering` map (name -> [indices]). Reading `.get("cardName")`
+        # off a hand entry therefore raises AttributeError on the first game, which is exactly how this
+        # script failed the first time it was ever run. Indices are PER GAME because deck_compare
+        # rewrites numbering.json per arm, so the map must be rebuilt per file and never cached across
+        # tags. Dict entries are still tolerated so a future log format change degrades rather than
+        # crashes.
+        idx2name = {i: name for name, idxs in (g.get("cardNumbering") or {}).items() for i in idxs}
+
+        def hand_has(b, want):
+            for c in (b.get("hand") or []):
+                nm = c.get("cardName") if isinstance(c, dict) else idx2name.get(c)
+                if nm == want:
+                    return True
+            return False
         for t in g.get("turns", []):
             b = t.get("boardAfter") or {}
             bf = b.get("battlefield") or []
@@ -123,15 +171,21 @@ def analyse(tag, d):
             # width is worth nothing against an opponent that never blocks. If the refusal is still
             # there, an extra copy is a near-dead card in this apparatus for that reason alone, and
             # the arming rate below is a measure of the blind spot rather than of the decklist.
-            drew_s = drew_s or any(c.get("cardName") == SEASON
-                                   for c in (b.get("hand") or []))
-            if SEASON in names and not saw_s:
-                first_season[t.get("turn")] += 1
+            for c in DOUBLERS:
+                drew[c] = drew[c] or hand_has(b, c)
+                if c in names and not saw[c]:
+                    first_dbl[c][t.get("turn")] += 1
+                saw[c] = saw[c] or c in names
+            dbl_out = any(saw[c] for c in DOUBLERS)
+            if dbl_out and not saw_any:
+                first_any[t.get("turn")] += 1
+            saw_any = saw_any or dbl_out
             if BURST in names and not saw_b:
                 first_burst[t.get("turn")] += 1
-            saw_s = saw_s or SEASON in names
             saw_b = saw_b or BURST in names
-            if SEASON in names and BURST in names:
+            # ARMED = ANY doubler plus a Burst. Generalised from Season-only so the Parallel Lives
+            # arms are measured on the same condition rather than reading 0% by construction.
+            if any(c in names for c in DOUBLERS) and BURST in names:
                 if not is_armed:
                     is_armed = True
                     first_arm[t.get("turn")] += 1
@@ -143,29 +197,49 @@ def analyse(tag, d):
                 (bodies_armed if is_armed else bodies_unarmed)[turn].append(k)
             if "playerLife" in b:
                 last_life = b["playerLife"]
-        res = g.get("result") or {}
-        wt = res.get("winTurn", res.get("turn")) if isinstance(res, dict) else None
+        # THE RESULT RECORD IS {"turn": N, "winner": "player"} -- there is no `won` and no `winTurn`
+        # key. Asking for `won` returns None, and `None is False` is False, so the original read scored
+        # an UNWON game as its own last turn instead of as a loss: a silent optimistic bias landing
+        # entirely on the arms that fail to win, which is the opposite of what this census is for.
+        # Censoring is small here (0.10% std / 0.25% 2hg unwon by turn 8) but a bias that small is
+        # still a bias pointed the wrong way.
+        res = g.get("result") if isinstance(g.get("result"), dict) else {}
+        wt = res.get("winTurn", res.get("turn"))
+        won = (res.get("won") if "won" in res else
+               (res.get("winner") == "player") if "winner" in res else None)
         if wt is None:
             wt = (g["turns"][-1].get("turn") if g.get("turns") else None)
-        won = (res.get("won") if isinstance(res, dict) else None)
-        if wt is not None:
-            # unwon games are scored max_turns+1 = 9, the repo's primary objective (deck_compare's
-            # score(): "Unwon prints wt=-1 and is scored max_turns+1")
-            v = 9 if won is False else wt
-            (win_armed if is_armed else win_unarmed).append(v)
-        season_drawn += (drew_s or saw_s)
-        season_seen += saw_s
+        # unwon games are scored max_turns+1 = 9, the repo's primary objective (deck_compare's
+        # score(): "Unwon prints wt=-1 and is scored max_turns+1"). wt < 0 is the engine's own
+        # unwon marker and must be caught even if `winner` is ever absent.
+        if won is False or (wt is not None and wt < 0):
+            (win_armed if is_armed else win_unarmed).append(9)
+        elif wt is not None:
+            (win_armed if is_armed else win_unarmed).append(wt)
+        for c in DOUBLERS:
+            drawn[c] += (drew[c] or saw[c])
+            seen[c] += saw[c]
+        any_drawn += any(drew[c] or saw[c] for c in DOUBLERS)
+        any_seen += saw_any
         burst_seen += saw_b
         armed += is_armed
-        life.append(last_life)
+        if last_life is not None:
+            life.append(last_life)
     mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
     print(f"\n=== {tag}   ({n} games, seed {SEED}, d7/b1000) ===")
-    print(f"  Doubling Season was DRAWN (hand or board)    {season_drawn:>6}  "
-          f"({season_drawn / max(1, n):6.2%})")
-    print(f"  Doubling Season reached the BATTLEFIELD       {season_seen:>6}  "
-          f"({season_seen / max(1, n):6.2%})"
-          + (f"   -> CAST RATE {season_seen / season_drawn:6.1%} of games that drew it"
-             if season_drawn else ""))
+    for c in DOUBLERS:
+        if not drawn[c] and not seen[c]:
+            continue        # the arm does not play this doubler at all
+        print(f"  {c} was DRAWN (hand or board)".ljust(46)
+              + f"{drawn[c]:>6}  ({drawn[c] / max(1, n):6.2%})")
+        print(f"  {c} reached the BATTLEFIELD".ljust(46)
+              + f"{seen[c]:>6}  ({seen[c] / max(1, n):6.2%})"
+              + (f"   -> CAST RATE {seen[c] / drawn[c]:6.1%} of games that drew it"
+                 if drawn[c] else ""))
+    if sum(1 for c in DOUBLERS if drawn[c] or seen[c]) > 1:
+        print(f"  ANY doubler reached the BATTLEFIELD".ljust(46)
+              + f"{any_seen:>6}  ({any_seen / max(1, n):6.2%})"
+              + (f"   -> CAST RATE {any_seen / any_drawn:6.1%}" if any_drawn else ""))
     print(f"  Saproling Burst reached the battlefield      {burst_seen:>6}  "
           f"({burst_seen / max(1, n):6.2%})")
     print(f"  *** BOTH AT ONCE (the arming condition)      {armed:>6}  "
@@ -179,7 +253,13 @@ def analyse(tag, d):
         if tot:
             print(f"  {'   ...mean landing turn, when it lands':<44}"
                   f"{sum(k*c[k] for k in ks)/tot:.2f}")
-    dist("turn a Doubling Season first LANDED", first_season, max(1, n))
+    for c in DOUBLERS:
+        dist(f"turn a {c} first LANDED", first_dbl[c], max(1, n))
+    # *** THE CASTABILITY NUMBER ***  This is the line the USER's Parallel Lives case rests on: a
+    # 4-mana doubler should land EARLIER than a 5-mana one against 7 five-drops. Compare the mean
+    # ANY-doubler landing turn across the p_s3 and p_pl arms, not the per-card lines, because the
+    # arms hold different cards and the per-card means have different denominators.
+    dist("turn ANY doubler LANDED <-- CASTABILITY", first_any, max(1, n))
     dist("turn a Saproling Burst first LANDED", first_burst, max(1, n))
     if first_arm:
         print("  first turn both were out: "
@@ -194,14 +274,28 @@ def analyse(tag, d):
     print(f"      armed     {mean(win_armed):6.4f}   (n={len(win_armed)})")
     print(f"      not armed {mean(win_unarmed):6.4f}   (n={len(win_unarmed)})")
     if win_armed and win_unarmed:
-        print(f"      ARMED IS FASTER BY {mean(win_unarmed) - mean(win_armed):+.4f} turns"
-              "   <- Season+Burst's value INSIDE the metric")
+        gap = mean(win_unarmed) - mean(win_armed)
+        print(f"      armed games are {'FASTER' if gap > 0 else 'SLOWER'} by "
+              f"{abs(gap):.4f} turns")
+        # THE CONFOUND RUNS THE OPPOSITE WAY FROM THE ONE I FIRST NAMED, and it is the stronger of
+        # the two. I had called this selection-confounded because a game that arms "drew both pieces
+        # with mana to spare". The real and much larger effect is SURVIVORSHIP: arming needs a
+        # FIVE-mana enchantment plus a Burst on the battlefield at once, so a game that kills on turn
+        # 4 can never appear in the armed bucket. Conditioning on arming therefore conditions on NOT
+        # having already won, which drags the armed mean up by construction. So a negative gap here
+        # is NOT evidence that Season is bad, and a positive one would NOT be evidence that it is
+        # good. THE CAUSAL ESTIMATE IS THE SCREEN'S ARM-LEVEL DELTA; the number this census actually
+        # contributes is the ARMING RATE above -- how often the plan happens at all.
+        print("      ^ SURVIVORSHIP-CONFOUNDED, not causal: arming requires the game to last long")
+        print("        enough to deploy a 5-drop, so fast wins cannot enter the armed bucket.")
     print(f"  mean final life (for the Ancient Tomb comparison): {mean(life):.2f}")
     return {"games": n, "armed": armed / max(1, n),
-            "drawn": season_drawn / max(1, n),
-            "cast_rate": (season_seen / season_drawn) if season_drawn else float("nan"),
-            "season_turn": (sum(k*v for k, v in first_season.items() if k is not None)
-                            / max(1, sum(v for k, v in first_season.items() if k is not None))),
+            "drawn": any_drawn / max(1, n),
+            "cast_rate": (any_seen / any_drawn) if any_drawn else float("nan"),
+            # the ANY-doubler landing turn, so a Parallel Lives arm and a Season arm are compared on
+            # the same quantity rather than on two cards' separate means
+            "season_turn": (sum(k*v for k, v in first_any.items() if k is not None)
+                            / max(1, sum(v for k, v in first_any.items() if k is not None))),
             "bodies": {t: mean(bodies[t]) for t in TURNS},
             "life": mean(life),
             "win_armed": mean(win_armed), "win_unarmed": mean(win_unarmed),
@@ -220,7 +314,7 @@ if __name__ == "__main__":
             print(f"  {tag:<16} drawn {(out[tag]['drawn']-out[base]['drawn'])*100:+6.2f} pts  "
                   f"cast-rate {out[tag]['cast_rate']:6.1%}  "
                   f"arming {da:+6.2f} pts  "
-                  f"Season lands T{out[tag]['season_turn']:.2f} "
+                  f"doubler lands T{out[tag]['season_turn']:.2f} "
                   f"({out[tag]['season_turn']-out[base]['season_turn']:+.2f})   "
                   + "  ".join(f"T{t} bodies {out[tag]['bodies'][t] - out[base]['bodies'][t]:+5.2f}"
                               for t in TURNS)
