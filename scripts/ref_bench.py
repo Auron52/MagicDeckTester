@@ -36,7 +36,9 @@ import argparse, glob, json, os, re, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deck_registry
 
-MTG = "build/Release/mtg"
+# MTG_BIN overrides (the regression harness's snapshot convention, as in viewer_protocol_check), so an
+# old-vs-new reference comparison runs both arms through this one script.
+MTG = os.environ.get("MTG_BIN", "build/Release/mtg")
 
 
 def ref_dirs(root):
