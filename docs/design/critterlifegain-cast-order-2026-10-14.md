@@ -181,7 +181,32 @@ day 1's ~2,000-game census, every other cell from the resumed batch's new arm):
 * **What changes.** The canonical order becomes FIRST, and there is nothing left to search. The two-way case where
   after-the-creatures DOES make it a creature (a 3rd+ creature) keeps the USER's searched choice.
 * **Built** in 116810b5, with a unit case.
-* **Measurement:** see 8a.
+
+### 8a. Measured
+
+The amendment's own pooled batch (`make_ab3.py` / `run_ab3.sh`): both arms on the amendment build, same cells and
+seeds as section 5. `new` = the settled order; `hf` = `MTG_CRITTER_HELIOD_FIRST=1`.
+
+| deck | cell | games | new | hf | hf - new | t | faster | slower | net | units hf/new |
+|---|---|---|---|---|---|---|---|---|---|---|
+| critter | shipped | 4000 | 4.3645 | 4.3645 | 0 | - | 0 | 0 | 0 | 0.988 |
+| critter | d3 b10 | 6000 | 4.3735 | 4.3735 | 0 | - | 0 | 0 | 0 | 0.998 |
+| critter | d0 | 20000 | 4.6044 | 4.6035 | -0.00085 | -4.12 | 17 | 0 | **-17** | - |
+| critter2hg | shipped | 2000 | 4.6635 | 4.6635 | 0 | - | 0 | 0 | 0 | 0.991 |
+| critter2hg | d3 b10 | 3000 | 4.6817 | 4.6817 | 0 | - | 0 | 0 | 0 | 0.998 |
+| critter2hg | d0 | 10000 | 4.8096 | 4.8093 | -0.00030 | -1.73 | 3 | 0 | **-3** | - |
+
+* **0 slower games.** It recovers all six two-way d0 slower games of section 6 (gi 269, 4871, 5562: 5 -> 4; gi
+  1239, 13045, 15923: 6 -> 5). The flip game (gi 2384) is untouched.
+* At the searched cells every win turn is identical. Work FALLS 0.2-1.2%: a dominated ordering is no longer
+  expanded.
+* With the lever off, the amendment build plays exactly af7434cc: 820 / 820 chunk digests.
+* **Case counts with it on** (new + hf arms' notes together):
+  * twoway_dominated_first 209: the case it rewrites;
+  * twoway_after 176 / twoway_first 33: the real trade, still searched;
+  * twoway_single 2.
+* **Recommendation:** adopt. It is a sound dominance, with no cost anywhere and 20 games faster.
+* **Shipped default:** OFF, because it amends a USER-owned order.
 
 ## 9. Defaults as shipped and questions for the USER
 
@@ -190,7 +215,8 @@ day 1's ~2,000-game census, every other cell from the resumed batch's new arm):
   hatch restores ff3e205b exactly, and work is flat.
 * **`MTG_CRITTER_HELIOD_FIRST` ships default OFF** until the USER rules (section 8).
 * **Questions:**
-  1. Adopt `MTG_CRITTER_HELIOD_FIRST`? It is a dominance, and it is aimed at exactly the six d0 slower games.
+  1. Adopt `MTG_CRITTER_HELIOD_FIRST`? It is a dominance, and it is aimed at exactly the six d0 slower games
+     (measured: 20 faster / 0 slower, searched cells identical, work down; section 8a). **Recommended: yes.**
   2. The flip moves the whole payoff block, Ajani -2 included, so the token stays "right after Pridemate". Kept.
   3. Two-way FIRST = position 0, before every watcher.
   4. The walk's counter cost: on the walk-past-2 probe board, Heliod after Ocelot and Serra gets 2 counters where
