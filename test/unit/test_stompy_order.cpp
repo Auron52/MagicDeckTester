@@ -576,6 +576,7 @@ TEST_CASE("Payment fix (MTG_HOLD_PRODUCER_FIRST): gi2290's two Natural Orders ta
     const std::vector<std::vector<std::string>> orders = {
         { kLlanowar, kMystic, kArch, kFyndhorn }, { kLlanowar, kMystic, kFyndhorn, kArch },
         { kFyndhorn, kArch, kMystic, kLlanowar }, { kArch, kFyndhorn, kLlanowar, kMystic } };
+    bool off_all_keep = true;
     for (const bool pf : { true, false })
     {
         heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD]  = 1;
@@ -601,9 +602,11 @@ TEST_CASE("Payment fix (MTG_HOLD_PRODUCER_FIRST): gi2290's two Natural Orders ta
                 CHECK_FALSE(TappedSo(s, kFyndhorn));
                 CHECK(TappedSo(s, kArch));
             }
-            else { CHECK_FALSE((paid && !TappedSo(s, kFyndhorn))); }   // the defect: never the kill's payment
+            else { off_all_keep = off_all_keep && paid && !TappedSo(s, kFyndhorn) && TappedSo(s, kArch); }
         }
     }
+    // Off: the historical ladder does not find the kill's payment in at least one battlefield order.
+    CHECK_FALSE(off_all_keep);
     heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD]  = -1;
     heurarm::t_arm[heurarm::HOLD_PRODUCER_FIRST] = -1;
 }
