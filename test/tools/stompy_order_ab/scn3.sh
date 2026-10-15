@@ -13,7 +13,7 @@ for arm in ofix onotop fix off; do
     fix)    E="MTG_STOMPY_ORDER=0 MTG_HOLD_RELEASE_YIELD=1" ;;
     off)    E="MTG_STOMPY_ORDER=0 MTG_HOLD_RELEASE_YIELD=0" ;;
   esac
-  env "$@" $E MTG_BATCH_HEARTBEAT="$OUT/hb.txt" MTG_USER_ORDER_TRACE=1 MTG_FD_TRACE=1 nice -n 10 "$SC/bin/mtg.fix2" \
+  env "$@" $E MTG_BATCH_HEARTBEAT="$OUT/hb.txt" MTG_USER_ORDER_TRACE=1 MTG_FD_TRACE=1 nice -n 10 "${SCN_BIN:-$SC/bin/mtg.fix2}" \
       --scenario "$F" --cards-json "$WT/src/cards/data/cards.json" > "$OUT/$arm.out" 2> "$OUT/$arm.err"
   echo "== $arm: $(grep '^scenario: win_turn' "$OUT/$arm.out")"
   grep -E "^\[fd\] T[0-9] LINE" "$OUT/$arm.err" | head -2 | cut -c1-400

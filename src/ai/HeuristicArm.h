@@ -464,6 +464,8 @@ enum Slot : int
     STOMPY_ORDER_SEARCH,      // MTG_STOMPY_ORDER_SEARCH (under MTG_STOMPY_ORDER) the four "either location" cards of the USER's StompySurprise order -- Worldly Tutor mid / late, Turntimber before / after the tutor, Natural Order early / late, World War Hulk early / late -- are SEARCHED two-way choices: the plan's slot (StompyProvider::ArrangeCastOrder) is the canonical first try and each such card present at its OTHER slot is one more candidate ordering (StompyProvider::CastOrderingCandidates; WantsCastOrderingSearch). USER: "can choose to cast either location". Search window only: the rollouts beyond the horizon and the d0 runner keep the canonical order. Default ON; =0 -> the canonical order alone
     STOMPY_TOP_RESOLVE,       // MTG_STOMPY_TOP_RESOLVE (under MTG_STOMPY_ORDER) StompySurprise's opt-in to the tutor-to-TOP reset (MTG_TOP_RESOLVE; DecisionProvider::TopResolveOptIn, read through TopResolveActive): the USER's "Worldly Tutor resets Call of the Wild Activations and Turntimber" ships with the order, the global lever stays OFF for the other tutor_to_top decks. Default ON; =0 -> the order without the reset
     HOLD_RELEASE_YIELD,       // MTG_HOLD_RELEASE_YIELD the whole-turn prepay's creature hold ladder (TurnSolver::BatchPrepayMainCasts) is battlefield-position-free and prices a body's mana: equal-power bodies release biggest yield first (Priest of Titania before a 1/1 elf), the single-attacker rung holds the lowest-yield strongest mana attacker, and a creature the line sacrifices as a cost is never held; remaining ties by name, then card number. StompySurprise gi1526: the T3 kill was found iff Priest was not entered after both 1-drop elves. Default OFF until measured; =1 enables
+    STOMPY_NO_TARGET_RANK,    // MTG_STOMPY_NO_TARGET_RANK (under MTG_STOMPY_ORDER) two Natural Order copies with different targets resolve in the order of their TARGETS' own slots (Ghalta 1700 before Craterhoof 2100), not by target name: the name key put NO->Craterhoof first, so the Craterhoof Ghalta frees from hand counted one body fewer and stompy2hg gi160 fell one short (29 of 30). Default OFF until measured; =1 enables
+    SAC_VICTIM_SAME_NAME,     // MTG_SAC_VICTIM_SAME_NAME a Natural Order sacrifice victim is searched by NAME (one variant per distinct name, the pre-plan board's most-expendable copy pinned by card number), so a second Natural Order in the same plan pins the copy the first one already ate. With the lever the stale pin means "another copy of that name": the remaining same-name creature (tapped first, then lowest card number) is sacrificed and is the one the payment spends first, in the executor and the rollout alike. Without it the stale pin fell back to the most-expendable creature by power then BATTLEFIELD POSITION -- stompy2hg gi160: with Fyndhorn Elves entered between the two Priests, the second Natural Order ate the held Fyndhorn attacker instead of the tapped Priest and the T4 kill was unfindable. Default OFF until measured; =1 enables
     COUNT
 };
 
@@ -883,6 +885,8 @@ inline const char* Name(int slot)
         "MTG_STOMPY_ORDER_SEARCH",
         "MTG_STOMPY_TOP_RESOLVE",
         "MTG_HOLD_RELEASE_YIELD",
+        "MTG_STOMPY_NO_TARGET_RANK",
+        "MTG_SAC_VICTIM_SAME_NAME",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -1,4 +1,4 @@
-// Unit cover for the USER's StompySurprise cast order (MTG_STOMPY_ORDER, default ON since 2026-10-14;
+// Unit cover for the USER's StompySurprise cast order (MTG_STOMPY_ORDER; default OFF since 2026-10-15 pending the bar;
 // docs/design/stompy-order-2026-10-14.md, docs/design/cast-order-rankings.md §StompySurprise).
 //
 // USER 2026-10-14: "Let's try out your stompy suggestion. It seems pretty close to what I was looking for
@@ -14,7 +14,10 @@
 //   4. the searched two-way candidates: the canonical order first, one variant per dual card, deduplicated,
 //      none for a set with no dual card;
 //   5. the TOP_RESOLVE opt-in is the deck's own and leaves the global lever (and other decks) alone;
-//   6. the shared comparator's fixed key: by name for this deck, plan order for the others.
+//   6. the shared comparator's fixed key: by name for this deck, plan order for the others;
+//   7. MTG_STOMPY_NO_TARGET_RANK: Natural Order copies resolve in their targets' slot order;
+//   8. MTG_HOLD_RELEASE_YIELD: the prepay's hold ladder is battlefield-position-free (gi1526, gi287);
+//   9. MTG_SAC_VICTIM_SAME_NAME: a stale Natural Order victim pin moves to another copy of its name (gi160).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -26,6 +29,7 @@
 #include "core/GameSetup.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
 
 #include <algorithm>
 #include <string>
@@ -236,6 +240,38 @@ TEST_CASE("Stompy order: the realised order is TOTAL -- every permutation of the
     ApplyDeckCastArrangement(s, a2, o2);
     CHECK(a1[o1[0]].tutor_target.str() == a2[o2[0]].tutor_target.str());
     CHECK(a1[o1[0]].tutor_target.str() == std::string(kHoof));   // "Craterhoof..." < "Worldspine..."
+}
+
+TEST_CASE("Stompy order (MTG_STOMPY_NO_TARGET_RANK): Natural Order copies resolve in their TARGETS' slot order")
+{
+    // stompy2hg gi160: Natural Order -> Ghalta must resolve before Natural Order -> Craterhoof, so the
+    // Craterhoof Ghalta frees from hand counts the extra body. By target NAME ("Craterhoof" < "Ghalta") it
+    // was the other way round, 29 trample against 30.
+    SoArms arms(true);
+    const GameState s = BoardSo({ kNO, kNO, kWT, kWT });
+    auto first_target = [&](const std::vector<Action>& acts)
+    {
+        std::vector<int> o = { 0, 1 };
+        std::stable_sort(o.begin(), o.end(), [&](int x, int y) { return CastOrderLess(s, acts[x], acts[y]); });
+        ApplyDeckCastArrangement(s, acts, o);
+        return acts[static_cast<std::size_t>(o[0])].tutor_target.str();
+    };
+    const std::vector<Action> no1 = { CastSo(s, kNO, kHoof), CastSo(s, kNO, kGhalta) };
+    const std::vector<Action> no2 = { no1[1], no1[0] };
+    const std::vector<Action> wt1 = { CastSo(s, kWT, kSpine), CastSo(s, kWT, kHoof) };
+    const std::vector<Action> wt2 = { wt1[1], wt1[0] };
+    for (int lever = 0; lever <= 1; ++lever)
+    {
+        heurarm::t_arm[heurarm::STOMPY_NO_TARGET_RANK] = lever;
+        CAPTURE(lever);
+        const std::string want = lever ? kGhalta : kHoof;   // slot 1700 < 2100 ; else by name
+        CHECK(first_target(no1) == want);
+        CHECK(first_target(no2) == want);
+        // Worldly Tutor copies are not Natural Order: by target name either way.
+        CHECK(first_target(wt1) == std::string(kHoof));
+        CHECK(first_target(wt2) == std::string(kHoof));
+    }
+    heurarm::t_arm[heurarm::STOMPY_NO_TARGET_RANK] = -1;
 }
 
 TEST_CASE("Stompy order: the dual slots read the PLAN, not the hand")
@@ -483,4 +519,49 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): gi287's 6-mana turn holds BOTH 
         CHECK(TappedSo(s, kPriest));
         heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
     }
+}
+
+TEST_CASE("Sacrifice victim (MTG_SAC_VICTIM_SAME_NAME): a stale pin eats another copy of its name, wherever it sits")
+{
+    // stompy2hg gi160, T4: two Natural Orders each pin "Priest of Titania" -- the SAME copy (#3, the
+    // pre-plan board's most-expendable Priest). The first ate it; the second's pin is stale. The kill
+    // needs the second to eat the other (tapped) Priest and keep Fyndhorn Elves up to attack.
+    EnsureCardsSo();
+    for (int lever = 0; lever <= 1; ++lever)
+    {
+        CAPTURE(lever);
+        heurarm::t_arm[heurarm::SAC_VICTIM_SAME_NAME] = lever;
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 4;
+        s.players[0].life = s.players[1].life = 30;
+        s.m_provider = &ProvSo();
+        auto put = [&](const char* n, int num, bool tapped)
+        {
+            Permanent p;
+            p.card             = CardSo(n, num);
+            p.controller_index = 0;
+            p.owner_index      = 0;
+            p.tapped           = tapped;
+            s.battlefield.push_back(p);
+        };
+        put("Forest", 1, true);
+        put(kFyndhorn, 5, false);   // BEFORE the remaining Priest on the battlefield
+        put(kPriest, 4, true);
+        s.players[0].graveyard.push_back(CardSo(kPriest, 3));   // the first Natural Order's victim
+        CHECK(ResolveSacVictimId(s, "G", 4) == 4);                // a live pin is untouched
+        CHECK(ResolveSacVictimId(s, "G", 0) == 0);
+        CHECK(ResolveSacVictimId(s, "G", 3) == (lever ? 4 : 3));
+        PerformSacrificeCreatureCost(s, kNO, "G", 3);
+        bool fyndhorn = false, priest = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_name.str() == kFyndhorn) { fyndhorn = true; }
+            if (p.card.m_name.str() == kPriest)   { priest = true; }
+        }
+        // Lever off: the stale pin falls to power then battlefield position -- Fyndhorn (the defect).
+        CHECK(fyndhorn == (lever == 1));
+        CHECK(priest == (lever == 0));
+    }
+    heurarm::t_arm[heurarm::SAC_VICTIM_SAME_NAME] = -1;
 }

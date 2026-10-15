@@ -26133,6 +26133,20 @@ static bool StompyTopResolveEnabled()
     return heurarm::Flag(heurarm::STOMPY_TOP_RESOLVE, on);
 }
 
+// MTG_STOMPY_NO_TARGET_RANK -- two Natural Order copies in one cast set carry different targets, and the
+// order they resolve in is a real choice: Natural Order -> Ghalta first lets Ghalta free the Craterhoof in
+// hand with one more body on the battlefield than Natural Order -> Craterhoof first would. The fixed key
+// ordered such copies by target NAME ("Craterhoof Behemoth" < "Ghalta, Stampede Tyrant"), which is exactly
+// the wrong way round (stompy2hg gi160: 29 trample against 30). With the lever the copies resolve in the
+// order of their TARGETS' own slots -- the USER's order applied to what Natural Order puts (Vaultborn,
+// Ghalta, the fatties, Terastodon, Craterhoof last) -- then by name. Live only with the order. DEFAULT OFF
+// until measured; =1 enables.
+static bool StompyNoTargetRankEnabled()
+{
+    static const bool on = EnvOn("MTG_STOMPY_NO_TARGET_RANK");   // DEFAULT OFF; =1 enables
+    return heurarm::Flag(heurarm::STOMPY_NO_TARGET_RANK, on);
+}
+
 bool TopResolveActive(const GameState& s)
 {
     return TopResolveEnabled() || ResolveProvider(s).TopResolveOptIn();
@@ -26196,6 +26210,23 @@ bool StompyFixedKeyLess(const GameState& s, const Action& a, const Action& b)
     if (CastOrderNameTieLess(s, b, a)) { return false; }
     const std::string& ta = a.tutor_target.str();
     const std::string& tb = b.tutor_target.str();
+    if (ta != tb && StompyNoTargetRankEnabled() && !ta.empty() && !tb.empty())
+    {
+        // Natural Order copies (MTG_STOMPY_NO_TARGET_RANK): the targets' own slots first.
+        const CardDefinition* da = StompyDefOf(a);
+        if (da != nullptr && da->params.tutor_to_battlefield_single)
+        {
+            const CardDefinition* xa = CardDatabase::Instance().Lookup(ta);
+            const CardDefinition* xb = CardDatabase::Instance().Lookup(tb);
+            if (xa != nullptr && xb != nullptr)
+            {
+                const DecisionProvider& prov = ResolveProvider(s);
+                const int ra = prov.CastOrderRank(s, *xa);
+                const int rb = prov.CastOrderRank(s, *xb);
+                if (ra != rb) { return ra < rb; }
+            }
+        }
+    }
     if (ta != tb) { return ta < tb; }
     if (a.soulfire_own_targets != b.soulfire_own_targets) { return a.soulfire_own_targets < b.soulfire_own_targets; }
     return a.chosen_x < b.chosen_x;
