@@ -17,7 +17,7 @@ direction check at the top of the range. d3 was dropped at the user's direction.
 
 ## The result
 
-100,000 games, 80 jobs, one pooled batch (`logs/kittyv3_integrate/v2_vs_v3.py`). Each arm ran its
+100,000 games, 80 jobs, one pooled batch (`test/tools/kitty_ab/gen_v2_vs_v3_manifest.py`). Each arm ran its
 OWN shipped artifacts — its own keep table and value sidecar — because this is a comparison of two
 shipping configurations, not a card screen. (That is why `deck_compare.py` is the wrong tool here:
 its Rule 0 shares ONE apparatus across arms, and the differing apparatus is half the point.)
@@ -48,7 +48,7 @@ hours earlier, so it was checked rather than quoted:
   batch job's per-game seed is `seed_base + game_index`, so consecutive bases replayed one game set
   sixteen times (verified: `s20001[gi+1] == s20002[gi]` for 1199 of 1199). Per-cell delta sd was
   0.0017 against ~0.057 predicted, the distinct sample was ~1,215/arm rather than 19,200, and t was
-  inflated ~4x. `v2_vs_v3.py` now asserts stride > game count and that no two ranges overlap.
+  inflated ~4x. `gen_v2_vs_v3_manifest.py` now asserts stride > game count and that no two ranges overlap.
 * **This run's cause is correlated ARMS.** Seeds are structurally disjoint (asserted), and
   `corr(v2 cell mean, v3 cell mean) = +0.761` at d5. The arms share 56 of 60 main-deck cards and the
   same seed bases, so a base opens similar games on both. Positive covariance SHRINKS the delta's
