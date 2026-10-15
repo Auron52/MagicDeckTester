@@ -1,0 +1,4 @@
+fivecolour.d0.fix-s1.g1040: played=1 avg=6.0000
+fivecolour.d0.fix-s2.g1040: played=1 avg=6.0000
+selesnya.d3.fix-s1.g964: played=1 avg=6.0000
+selesnya.d3.fix-s2.g964: played=1 avg=6.0000
