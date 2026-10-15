@@ -1,0 +1,83 @@
+{
+  "card_scores": {
+    "Avenger of Zendikar": [
+      0.10678210678210664
+    ],
+    "Courser of Kruphix": [
+      -0.23050655717098856
+    ],
+    "Cultivate": [
+      0.08783497671042273
+    ],
+    "Evolving Wilds": [
+      0.05108591573816135
+    ],
+    "Forest": [
+      0.43289503513942407,
+      -0.03576584853655351,
+      -0.07894736842105221
+    ],
+    "Genesis Wave": [
+      -0.17340798986611716
+    ],
+    "Gruul Turf": [
+      0.01136981466820508
+    ],
+    "Haunted Fengraf": [
+      -0.10453539823008828
+    ],
+    "Khalni Heart Expedition": [
+      -0.04325358851674643,
+      -0.1742105263157887
+    ],
+    "Mountain": [
+      -0.00543255432554357
+    ],
+    "Myriad Landscape": [
+      0.18074179595965845,
+      -0.08828076685219521
+    ],
+    "Omnath, Locus of Rage": [
+      -0.14627825502711556
+    ],
+    "Phylath, World Sculptor": [
+      0.09674004452139506,
+      -0.20545799323934322
+    ],
+    "Primeval Titan": [
+      -0.20266384521145753
+    ],
+    "Radiant Fountain": [
+      -0.049150662541590506
+    ],
+    "Rampaging Baloths": [
+      -0.19711826347305372
+    ],
+    "Rampant Growth": [
+      0.12211227411540015,
+      0.08447125256673438
+    ],
+    "Search for Tomorrow": [
+      0.1683372208926377,
+      -0.09587513935340031
+    ],
+    "Terastodon": [
+      0.07769157783111069
+    ],
+    "Terramorphic Expanse": [
+      -9.393640505361844e-05
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

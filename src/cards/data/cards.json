@@ -78,7 +78,7 @@
     "Mountain"
    ],
    "keywords": [],
-   "oracle_text": "{T}: Add {R}.",
+   "oracle_text": "({T}: Add {R}.)",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -9222,13 +9222,13 @@
   },
   {
    "name": "Primal Vigor",
-   "mana_cost": "{4}{G}{G}",
+   "mana_cost": "{4}{G}",
    "types": [
     "Enchantment"
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "If one or more tokens would be created under your control, twice that many of those tokens are created instead. If one or more counters would be put on a permanent you control, twice that many of those counters are put on it instead. Each other player may also benefit from this effect. [FULLY MODELLED FOR OUR SIDE, JSON ONLY -- doubles_tokens + doubles_counters, i.e. Doubling Season's exact parameter pair, so this is a FIFTH Doubling Season joining BOTH exponents: 4x where a token-only doubler is 2x on the two counter-to-token chains (Mycoloth's devour counters feeding its upkeep clause, and Saproling Burst's fade counters), and it halves Beastmaster Ascension's attacker requirement again. Six mana is the whole objection, in a deck trying to win on turn six. [PARTIAL, AND IT RUNS AGAINST THE REST OF THE CENSUS -- this is the one card the goldfish OVER-rates: the real card's last line is symmetric ('each other player may also benefit'), which is a genuine drawback in a real game and is worth exactly ZERO here, because the passive opponent creates no tokens and no counters. So where every other arm in this census is biased AGAINST its card, this one is biased FOR it. Do not adopt it on a thin margin.]]",
+   "oracle_text": "If one or more tokens would be created under your control, twice that many of those tokens are created instead. If one or more counters would be put on a permanent you control, twice that many of those counters are put on it instead. Each other player may also benefit from this effect. [FULLY MODELLED FOR OUR SIDE, JSON ONLY -- doubles_tokens + doubles_counters, i.e. Doubling Season's exact parameter pair, so this is a FIFTH Doubling Season joining BOTH exponents: 4x where a token-only doubler is 2x on the two counter-to-token chains (Mycoloth's devour counters feeding its upkeep clause, and Saproling Burst's fade counters), and it halves Beastmaster Ascension's attacker requirement again. Five mana is the whole objection, in a deck trying to win on turn six. [PARTIAL, AND IT RUNS AGAINST THE REST OF THE CENSUS -- this is the one card the goldfish OVER-rates: the real card's last line is symmetric ('each other player may also benefit'), which is a genuine drawback in a real game and is worth exactly ZERO here, because the passive opponent creates no tokens and no counters. So where every other arm in this census is biased AGAINST its card, this one is biased FOR it. Do not adopt it on a thin margin.]]",
    "template": "custom",
    "parameters": {
     "doubles_tokens": true,
