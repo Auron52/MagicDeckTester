@@ -1,11 +1,6 @@
 # Hinata's full cast order (MTG_HINATA_ORDER_FULL)
 
-**Status (2026-10-15): the order is SETTLED by the USER, BUILT (514975c9) and MEASURED (section 0.4): it does NOT
-meet the adoption bar, so `MTG_HINATA_ORDER_FULL` stays default OFF.** It is net <= 0 on five of six cells but +13
-on hinata shipped (1,000 games), and four slower games do not recover even at d8 b0. The largest mechanism is
-Gamble's position relative to the cantrips inside a bound cantrip plan (the agent's tie-break); no measured fixed
-position fixes it, and the proposal is to leave that one relation searched. The Irencrag second-last rule is not the
-cost (near-inert against the scalar 18).
+**Status (2026-10-15, second round): the order is SETTLED by the USER and BUILT; as built it misses the bar (section 0.4). The AMENDED order -- Gamble's slot relative to the cantrips SEARCHED (`MTG_HINATA_GAMBLE_SEARCHED`, section 0.6) -- is net <= 0 on all six cells and recovers 1,331 of 1,335 slower games at +2-7% work; the two that do not recover trace to the Preordain-before-Ponder tie-break and to the USER's Soulfire-above-Opus ruling. Both flags stay default OFF pending the USER's call (recommendation in 0.6).**
 Self-contained. Everything needed to resume is here or in git. Sections 1-8 below are the HISTORY (the 08-26
 order, its 08-28 revision and the August measurements, which predate the 09-01 Irencrag waste gate, the 09-02
 breakpoint node and the 10-10 restrictor / Crackle fixes); section 0 is the order as it is now.
@@ -218,11 +213,115 @@ binding off is the USER's Q2 reversed and costs +57 at d0; the Irencrag placemen
 | `MTG_HINATA_SPASM_LATE` | OFF | PROPOSED Reality Spasm latest-payable placement; measured worse (+16 shipped), not adopted |
 | `MTG_HINATA_PP_STRICT` | OFF | the REVERSE Preordain/Ponder tie-break (Ponder first) |
 | `MTG_HINATA_GAMBLE_LATE` | OFF | Gamble after the cantrips (13); measured above |
+| `MTG_HINATA_GAMBLE_SEARCHED` | OFF (recommended ON with the order) | Gamble before AND after the cantrips, searched (0.6) |
+| `MTG_HINATA_PP_SEARCHED` | OFF | the same fan for Preordain / Ponder; measured worse (0.6) |
 
 Re-measure: `test/tools/hinata_order/gen_ab.py` (seeds above; `--arm NAME=FLAG=0/1` adds an arm, `--deck-dir` runs off
 a copy of the deck folder on the build volume), `run_batch_lock2.sh` (one pooled batch through the box lock,
 nothing on 9p), `analyze_ab.py`, `gen_recovery.py` / `stage_serial.py` / `recovery_verdict.py` for the two stages,
 `probe_pair_cell.sh` for old-vs-new single-game diffs.
+
+### 0.6 The amended order: Gamble's slot SEARCHED (2026-10-15)
+
+The coordinator's ruling on 0.4: "Gamble before the cantrips" and "Preordain before Ponder" were the
+coordinator's tie-breaks, not the USER's, so changing Gamble's slot stays inside the approved design; and the
+fix should search the relation, not fix a third slot.
+
+**Built** (`MTG_HINATA_GAMBLE_SEARCHED`, `ee149b33`): inside a bound plan, a set holding Gamble and a Preordain /
+Ponder / Expressive Iteration ranked after it is offered in TWO orders -- the arranged order first (Gamble before
+them), then Gamble moved to just after the last of them. Nothing else moves; Irencrag keeps its second-last slot in
+both. It reuses the StompySurprise dual-slot shape (`e1f1bba1`): the engine's cast-ordering search
+(`WantsCastOrderingSearch` + `CastOrderingCandidates`), canonical first, variants deduplicated, an empty list for a
+set with nothing to search. Each candidate is the full realised order, and `Plan::searched_order` makes the
+executor and the rollout replay it in vector order (lockstep). Search window only: the rollouts and the d0 runner
+keep the arranged order, so the d0 cells are byte-identical to the order without the fan (30,000 games, 0 differ).
+One engine fix came with it: the Irencrag tests (`RestrictorPrePayable`, the waste gate) were scoped OFF for any
+ordering-search deck; they now stay ON when the deck places its restrictor set-level (`RestrictorTestsInScope`),
+Dragonstorm unchanged.
+
+Two more arms were measured beside it, because the remaining non-recovering game gi 82 turned on the other
+tie-break (Preordain before Ponder): the same fan for Preordain / Ponder (`MTG_HINATA_PP_SEARCHED`, `4b8d204f`,
+default OFF) and the fixed reverse (`MTG_HINATA_PP_STRICT`, Ponder first). The name tie-break was switched to the
+canonical `CastOrderTotalByName` + `CastOrderNameTieLess` (integration `2ac8db0b`, `c498e1f4`); the rebuilt binary
+plays the order byte-identically to the one measured in 0.4 (34,500 shared games, 0 differ).
+
+**Held-out A/B** (one pooled batch through the box lock, 145,500 games; hinata shipped now 2,000 paired games and
+2HG shipped 1,000 -- the 0.4 seeds plus new ones from the same ranges; loss = 9):
+
+| arm (the order + ...) | hinata ship (2,000) | hinata d3 (2,000) | hinata d0 (20,000) | 2HG ship (1,000) | 2HG d3 (1,000) | 2HG d0 (10,000) |
+|---|---|---|---|---|---|---|
+| as built (`n7`) | +3 (52 / 51) | -6 (42 / 32) | -20 | -3 (20 / 15) | 0 (15 / 14) | -29 |
+| **Gamble searched** (`MTG_HINATA_GAMBLE_SEARCHED`) | **-3** (44 / 40) | **-6** (39 / 32) | **-20** | **0** (15 / 14) | **-5** (13 / 9) | **-29** |
+| Gamble searched + Preordain/Ponder searched | -13 (51 / 40) | -6 (39 / 32) | -20 | +3 (16 / 17) | -4 (14 / 11) | -29 |
+| Gamble searched + Ponder first (`MTG_HINATA_PP_STRICT`) | -13 (46 / 37) | -10 (43 / 32) | -6 | +5 (13 / 16) | -4 (15 / 11) | -78 |
+
+(net game-turns vs the generic order, loss = 9; faster / slower in brackets; d0 counts as in 0.4.)
+
+**Work units, new / old** (the cost of the fan, the USER's concern):
+
+| arm | hinata ship | hinata d3 | 2HG ship | 2HG d3 |
+|---|---|---|---|---|
+| as built | 0.993 | 0.995 | 0.971 | 0.955 |
+| Gamble searched | 1.024 | 1.067 | 1.014 | 1.018 |
+| + Preordain/Ponder searched | 1.056 | 1.121 | 1.052 | 1.076 |
+| + Ponder first | 1.004 | 1.033 | 1.010 | 1.005 |
+
+So the Gamble fan costs about +3% / +7% work at shipped / d3 against the order without it (+2% / +7% against the
+generic order). The d0 cells carry no search, and the fans are inert there (byte-identical to the order without
+them).
+
+With 2,000 shipped games the order AS BUILT is +3 on hinata shipped (the first 1,000 were +13, the next 1,000 -10):
+still not <= 0, and the earlier verdict stands. **Gamble searched is net <= 0 on all six cells** (-3, -6, -20, 0,
+-5, -29); both Preordain/Ponder variants buy more on hinata shipped (-13) but lose 2HG shipped (+3 / +5), and the
+searched one costs +6-12% work.
+
+**Recovery, Gamble searched** (every slower game, the arm's own flags; stage 1 `--depth max(5, old) --budget-ms
+100`, stage 2 `--depth 8 --budget-ms 0`):
+
+| cell | slower | stage 1 | stage 2 | do NOT recover |
+|---|---|---|---|---|
+| hinata shipped | 40 | 22 | 17 | 1 -- gi 82 |
+| hinata d3 b10 | 32 | 23 | 7 | 2 -- gi 1538; gi 1632 (old arm's luck) |
+| hinata d0 | 839 | 830 | 8 | 1 -- gi 2029 (old arm's luck) |
+| 2HG shipped | 14 | 10 | 4 | 0 |
+| 2HG d3 b10 | 9 | 7 | 2 | 0 |
+| 2HG d0 | 401 | 397 | 4 | 0 |
+
+The fan recovers the two games 0.4 traced to Gamble's slot (2HG gi 98 is T4 at its own shipped settings, d3 gi 253
+recovers at d8 b0) and introduces no new non-recovering game: of 1,335 slower games, 1,331 recover. The four that do
+not are exactly 0.4's leftovers. gi 1632 and gi 2029 are the OLD arm's luck: it does no better at d8 b0. That
+leaves two real ones:
+
+* **hinata shipped gi 82** (seed 11100083, T5 -> T6): the OTHER coordinator tie-break, Preordain before Ponder. Its
+  T5 kill plays the Soulfire exile as Ponder (shuffle) -> Reality Spasm -> Ponder -> Spasm -> Preordain -> Ponder ->
+  Crackle; with Ponder ranked first (`MTG_HINATA_PP_STRICT`) it is T5 at the shipped settings and at d8 b0. The
+  SEARCHED Preordain / Ponder fan does not recover it (T6 at d8 b0): the line runs through breakpoint continuations,
+  which a plan-level ordering candidate does not reach.
+* **hinata d3 gi 1538** (seed 11111539, T5 -> T6): the payoff block's order. Only tying the payoffs
+  (`MTG_HINATA_PAY_TIE`) recovers it -- the T3 choice (Ponder first, then the drawn Mystic Monastery for T4's Hinata)
+  turns on how the payoffs after it sequence. Soulfire above Opus is the USER's own ruling ("Soulfire is typically
+  better than Opus ... I would still put Soulfire higher"), so nothing is proposed against it.
+
+For comparison, the order **as built** on the same 34,500 + 1,500 new shipped seeds: 0.4's six non-recovering games
+plus two more on the new 2HG shipped seeds (gi 767 and gi 907: T5 -> T6 at d8 b0) -- eight, of which the Gamble
+fan recovers four (gi 98, 253, 767, 907 are not slower under it or recover) and leaves gi 82 and gi 1538.
+
+The two Preordain / Ponder arms, stage 1: Gamble searched + Preordain/Ponder searched -- 1,298 of 1,340 slower
+games recover; Gamble searched + Ponder first -- 1,308 of 1,356. Their stage 2 (90 games, manifest
+`build/scratch/hinata-order/ab9/m.json`) is queued in the box FIFO at the time of writing (they are not the recommended arms; stage 1 already rules both out on the aggregate, 2HG shipped +3 / +5).
+
+**Verdict.** The amended order (the settled order + `MTG_HINATA_GAMBLE_SEARCHED`) is net <= 0 on all six cells and
+recovers 1,331 of its 1,335 slower games, at +2-7% work. It does NOT strictly meet the bar: two slower games do not
+recover even at d8 b0, one from the coordinator's Preordain-before-Ponder tie-break (gi 82) and one from the USER's
+Soulfire-above-Opus ruling (gi 1538). So both flags stay **default OFF** and the call is the USER's:
+
+1. **Recommended:** ship the order ON with the Gamble fan ON, accepting gi 82 and gi 1538 as the two known losses
+   (both trace to a ranking decision, not to the engine, and neither fan nor fix inside the USER's slots recovers
+   them without losing a cell elsewhere).
+2. **Alternative:** additionally flip the Preordain / Ponder tie-break to Ponder first (`MTG_HINATA_PP_STRICT`):
+   recovers gi 82 and is the best hinata cell (-13 shipped, -10 d3), but loses 2HG shipped (+5 of 1,000).
+3. Not recommended: the searched Preordain / Ponder fan -- +6-12% work, loses 2HG shipped (+3), and does not reach
+   gi 82.
 
 ---
 
