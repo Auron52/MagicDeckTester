@@ -247,6 +247,43 @@ d3 s2002 18,512.
 - Rows and GT are NOT committed yet: GT is accepted once the two gap fixes (Search for Tomorrow mana,
   fetched-Karoo bounce) land, so the deck enters with the play it will keep.
 
+## Claude-play sweep
+- commit: `223cbba4` (frozen checkout `.claude/worktrees/landfall-sweep`, binary copied before any later
+  rebuild), benchmark d5 b20 with the shipped profile (search_leaf_depth 0)
+- seeds: 31000+gi, game-index gi, gi 0..15 (disjoint from the suite) games: 16 — one Opus player per game
+  (CLAUDE.md: model on judgement, not price); per-game table `logs/sweep_tally/results.md` (gitignored)
+- win turns: 15 ties, 1 Claude-earlier (gi6: Claude T5 vs AI T6). gi6 root-caused by its player as BUDGET
+  STARVATION on the T1 decision (5c): at b20 the search cracked Terramorphic instead of suspending Search
+  for Tomorrow; the same seed at b200 plays the suspend line and wins T5, and Claude's T1 handed to the
+  shipped 20 ms search (`--choices-then-auto`) also wins T5. Not a capability gap. (gi15: the AI's own
+  line double-suspended SfT — suspend IS chosen by the search.)
+- every state transition the players checked was correct (Plant counts per basic, landfall counters,
+  quest counters, Genesis Wave simultaneous landfall/ETB counting, Titan ETB/attack fetch lists, the
+  in-combat Khalni crack, Fountain life on put and play, Myriad's shared-type rule, suspend timing).
+- flags (deduplicated; the counts are games that reported them):
+  1. **land_slot k with an UNPAYABLE prefix** (13/16, two players filed it as a bug): a "land after the
+     k-th watcher" clone is offered when the casts before the land need that land's mana; picking it
+     drops the cast (`dropped_casts`) — and in gi10 the rest of the plan still ran (Phylath dropped, the
+     4-counter Khalni still cracked: the shown line silently became a different one). TurnSolver's clone
+     site documents it as "does less, scored as one". Illegal human menu entry + wasted search. FIX
+     queued (prune, sound: such a plan is a land-first plan with fewer casts).
+  2. **land_slot k duplicates land_after_casts** when the k-th watcher is the last cast (7/16):
+     byte-identical states, different dedup signatures (`|at-1` vs `|at<k>`). FIX queued (identity fold).
+  3. **Terastodon's destroy victims are never offered to the HUMAN** (gi12): the menu fans K only;
+     `DefaultEtbDestroyVictimClass` (the user's Forests-first rule) picks silently although Myriad /
+     Mountain / Turf were legal and not fungible with a Forest. FIX queued (viewer surfacing; the
+     search-side rule stays the user's, open Review Q2).
+  4. Terastodon plan summaries omit K (gi5, cosmetic). FIX queued.
+  5. Khalni in-combat crack prompt: `heuristic_default` 0 ("crack now", labelled the AI's pick) while the
+     AI held it, and generic dig wording (gi10, cosmetic). FIX queued.
+  6. DISMISSED (disclosed): a multi-land search fires each land's landfall as it enters rather than after
+     the whole ability (10/16 noticed). `LandSearch.h`'s LANDFALL contract: every landfall payload in the
+     pool commutes and none creates a permanent another landfall trigger could target, so the outcome is
+     identical; the "one simultaneous event" comment refers to the lands' OWN enter triggers.
+  7. KNOWN gaps met: (1) SfT hard-cast mana (gi4, gi15) — fix in flight; (2) Titan-put Turf bounce — the
+     HUMAN side was verified correct (gi1, gi12, gi15); the gap is autonomous-only, fix in flight.
+- flags: 5 unresolved
+
 ## Stage 5i — discard BUCKET policy (AUTHORED, NOT ADOPTED — presented to the user)
 Evidence first: the deck sheds at cleanup ~once per 44 games and every observed shed was a tie, so the
 measurable prize is ~0; the policy is doctrine quality plus rollout fidelity. Proposed shape (USER
