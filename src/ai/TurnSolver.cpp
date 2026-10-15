@@ -37954,6 +37954,7 @@ struct BpPrefixSnap
                                      // sac_pins, re-installed by the resumed apply's entry guard;
                                      // only the cursor is prefix state)
     int  pin_land_search_cursor = 0; // the same for Plan::land_search_pins (core/LandSearch.h)
+    int  pin_bounce = -1;            // the put-Karoo bounce pin (ScriptedPutBounce) as the prefix left it
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
 };
@@ -38375,6 +38376,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                // empty inert
     ScriptedLandSearch _sls(plan.land_search_pins);   // searched land-search picks, one per land-search
                                                       // ordinal (core/LandSearch.h); empty inert
+    // The put-Karoo bounce pin (Plan::bounce_choice on a plan whose drop is not a Karoo: Genesis Wave's
+    // put Karoo; land-search gap 3). ALWAYS installed, -1 included, so a nested apply never inherits
+    // an outer plan's unconsumed pin. Executor twin: AIEngine::TakeTurn.
+    const int put_bounce_pin = PutBouncePinOf(plan.bounce_choice, plan.land_decided, plan.land_to_play);
+    ScriptedPutBounce _spb(put_bounce_pin);
     // Searched hold-vs-tap of the mana creatures. Scoped like the pins above, but NOT consumed by
     // its first reader: every payment in the apply -- the whole-turn prepay and any post-draw
     // re-solve -- must see the same mode, or one plan would be scored under two payment policies.
@@ -43137,6 +43143,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
         g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
+        // ...and the put-Karoo bounce pin (re-installed by _spb; a prefix that spent it stays spent).
+        if (put_bounce_pin >= 1) { g_scripted_bounce_choice = bp_resume->pin_bounce; }
         if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
     }
     else
@@ -43487,6 +43495,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_bounce   = g_scripted_bounce_choice;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
         }
@@ -43519,6 +43528,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_bounce   = g_scripted_bounce_choice;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
             return;
@@ -51517,6 +51527,125 @@ static const bool s_legacy_land_sig    = !s_complete_land_sig;
 // Land-priority knobs: shared readers in EngineFlags.h -- greedy_land_name below reimplements
 // TryPlayLand's passes as the search's last-resort tiebreak, and the two must stay in lockstep.
 
+// ---- THE PUT-KAROO BOUNCE WIDTH BOUND (land-search gap 3, 2026-10-15) ----------------------------
+// A Karoo PUT by an effect (Primeval Titan's ETB / attack trigger, Genesis Wave) returns a land as it
+// lands, and the bounce is searched (DecisionProvider::BounceSearchCandidates on the state AT THE
+// BOUNCE; the land-search pin's extended pick list, Plan::bounce_choice for the Wave). The fan sizes
+// it here: an UPPER BOUND on the narrowed width -- never below the truth (so no candidate is lost:
+// above it, the clamped variant lands on a sibling's state and the post-apply dedup drops it), as
+// tight as the board proves cheaply. The rules mirrored, from BounceSearchCandidates:
+//   * the Karoo itself, another Karoo and an enchanted land are excluded while anything else is
+//     returnable; identical names fold -- so the distinct returnable names bound it (+ one per
+//     depletion-land name, whose counter count splits a name);
+//   * a TAPPED land that re-enters UNTAPPED dominates every untapped land: the candidates are then
+//     the tapped clean lands (+ a refreshing depletion land), folded to ONE re-entry class when no
+//     other land is in hand. `co_put` (the lands entering beside the Karoo) proves such a land is
+//     there when they enter TAPPED and certainly re-enter clean (Titan's forced-tapped partner), and
+//     `spend_witness` when the caller proved a certainly-clean board land had to pay.
+// `hand_land_possible` is the caller's superset of "a land may be in hand at the bounce".
+static bool BounceCertainlyClean(const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    const CardParams& q = d->params;
+    return !q.etb_bounce_land && !q.enters_tapped && q.enters_tapped_with_depletion <= 0
+        && q.etb_pay_life_to_untap <= 0 && q.etb_untap_reveal_subtypes.empty()
+        && q.etb_untap_control_subtypes.empty() && q.fastland_max_other_lands < 0
+        && q.checkland_subtypes.empty();
+}
+static bool BouncePossiblyClean(const CardDefinition* d)
+{
+    if (d == nullptr) { return true; }
+    const CardParams& q = d->params;
+    return !q.etb_bounce_land && !q.enters_tapped && q.enters_tapped_with_depletion <= 0;
+}
+static int PutKarooBounceBound(const GameState& state, int me,
+                               const std::vector<const CardDefinition*>& co_put, bool co_put_tapped,
+                               bool hand_land_possible, bool spend_witness)
+{
+    const int cap = static_cast<int>(DecisionProvider::kBounceSearchWidth);
+    if (!KarooBounceSearchOn()) { return 1; }
+    if (DecisionUnpruned(UnprunedGate::KarooBounce)) { return cap; }   // the pin stride's own cap
+    std::vector<std::string> all, plain, clean, dep;
+    auto add_u = [](std::vector<std::string>& v, const std::string& n)
+    { if (std::find(v.begin(), v.end(), n) == v.end()) { v.push_back(n); } };
+    bool witness = spend_witness;
+    for (const Permanent& bp : state.battlefield)
+    {
+        if (bp.controller_index != me || !bp.card.IsLand()) { continue; }
+        const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+        const std::string nm = bp.card.m_name.str();
+        add_u(all, nm);
+        bool aura = false;
+        for (const Permanent& q : state.battlefield)
+        { if (q.aura_attached_to != 0 && q.aura_attached_to == bp.card.m_number) { aura = true; break; } }
+        if ((bd != nullptr && bd->params.etb_bounce_land) || aura) { continue; }
+        add_u(plain, nm);
+        if (bd != nullptr && bd->params.enters_tapped_with_depletion > 0) { add_u(dep, nm); }
+        if (BouncePossiblyClean(bd)) { add_u(clean, nm); }
+    }
+    for (const CardDefinition* d : co_put)
+    {
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        const std::string nm = d->card.m_name.str();
+        add_u(all, nm);
+        if (d->params.etb_bounce_land) { continue; }
+        add_u(plain, nm);
+        if (co_put_tapped && BouncePossiblyClean(d)) { add_u(clean, nm); }
+        if (co_put_tapped && BounceCertainlyClean(d)) { witness = true; }
+    }
+    const int d_all = static_cast<int>((plain.empty() ? all : plain).size() + dep.size());
+    int w = std::max(1, d_all);
+    if (witness)
+    {
+        w = (hand_land_possible ? std::max<int>(static_cast<int>(clean.size()), 1) : 1)
+          + static_cast<int>(dep.size());
+    }
+    return std::max(1, std::min({ w, std::max(1, d_all), cap }));
+}
+// A superset of "a land may be in hand when this plan's put Karoo bounces": a land in hand the plan
+// does not play first, or anything in the plan (or on the board) that can put a card into hand.
+// `own_searches` = how many of the plan's put-Karoo sources (Genesis Waves, non-basic land-search casts)
+// ARE the put being sized (1 for a cast Titan's own ETB or the Wave's own put, 0 for the attack
+// trigger): any OTHER one may put and bounce a Karoo first.
+static bool PlanMayHoldLandAtBounce(const GameState& state, const TurnSolver::Plan& p, int own_searches)
+{
+    const int me = state.active_player_index;
+    int lands = 0;
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr ? d->card.IsLand() : c.IsLand()) { ++lands; }
+    }
+    const CardDefinition* land_def = (p.land_decided && !p.land_to_play.empty())
+                                   ? CardDatabase::Instance().Lookup(p.land_to_play) : nullptr;
+    if (land_def != nullptr && land_def->params.etb_bounce_land) { return true; }   // its bounce returns one
+    if (land_def != nullptr && !p.land_from_top && p.land_slot == 0 && lands > 0) { --lands; }
+    if (lands > 0 || !p.breakpoint_actions.empty()) { return true; }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && (qd->params.own_creature_enters_draw > 0 || qd->params.draw_on_aura_cast
+                              || qd->params.draw_on_equipment_etb))
+        { return true; }
+    }
+    int put_searches = 0;
+    for (const Action& a : p.actions)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+        if (d == nullptr) { return true; }
+        const CardParams& q = d->params;
+        if (q.cast_draw > 0 || q.etb_self_draw > 0 || q.tutor_to_hand || q.tutor_to_top
+            || q.land_search_to_hand > 0 || q.etb_return_gy_to_hand)
+        { return true; }
+        // ...and an EARLIER put Karoo of the same plan (a Genesis Wave; a non-basic land search that
+        // can fetch one -- Primeval Titan's ETB ahead of an attack): its bounce returns a land.
+        if (q.reveal_x_put_permanents || (q.land_search_count > 0 && !q.land_search_basic_only))
+        { ++put_searches; }
+    }
+    return put_searches > own_searches;
+}
+
 // ---- Post-dedup sub-decision axis fan-out (factored out of the m1 host, 2026-09-06) --------
 // This whole block used to live inline at the tail of EnumeratePlansWithLandUncached's full body,
 // which made every axis M1-HOST-ONLY: the second-main enumerations (EnumeratePlansM2Memoized, and
@@ -53313,6 +53442,98 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 extra.push_back(std::move(v));
             }
         }
+        // ...AND A KAROO A GENESIS WAVE PUTS (land-search gap 3, 2026-10-15). The Wave's reveal puts
+        // every land (GenesisWavePutPicks), and a Karoo among them returns a land in the Wave's own
+        // trigger pass -- a searched decision that took BounceSearchCandidates' front (in-window
+        // greedy). The same pin carries it: on a plan whose land drop is NOT a Karoo (so the drop
+        // never consumes it), Plan::bounce_choice is the first non-search put Karoo's bounce
+        // (ScriptedPutBounce, installed for the whole apply in both worlds; ContPins::put_bounce in a
+        // continuation). One axis: base plans only, the drop's own Karoo keeps the pin when it has one.
+        // Sized by PutKarooBounceBound off the reveal it will see (a shuffle earlier in the plan can
+        // change the top X: generous or short by a clamp, the Titan-via-Wave ordinal's caveat). No
+        // bounce_group -- the bounce FOLD probes the drop's bounce only, so these rely on the
+        // post-apply dedup.
+        for (std::size_t i = 0; i < n_before_axes; ++i)
+        {
+            const TurnSolver::Plan& p = all[i];
+            if (p.bounce_choice >= 0 || p.bp_choice >= 0) { continue; }
+            if (p.land_decided && !p.land_to_play.empty())
+            {
+                const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
+                if (ld != nullptr && ld->params.etb_bounce_land) { continue; }   // the drop owns the pin
+            }
+            const Action* wave = nullptr;
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+                if (a.kind == Action::Kind::CastFromHand && d != nullptr && d->params.reveal_x_put_permanents
+                    && a.chosen_x > 0) { wave = &a; break; }
+            }
+            if (wave == nullptr) { continue; }
+            const Player& lp = state.players[static_cast<std::size_t>(me)];
+            const std::size_t top = std::min<std::size_t>(static_cast<std::size_t>(wave->chosen_x),
+                                                          lp.library.size());
+            bool karoo = false, top_draws = false, top_untaps = false;
+            std::vector<const CardDefinition*> co_put;
+            for (std::size_t li = 0; li < top; ++li)
+            {
+                const CardDefinition* rd = CardDatabase::Instance().LookupCached(lp.library[li]);
+                if (rd == nullptr) { continue; }
+                const CardParams& q = rd->params;
+                if (q.etb_self_draw > 0 || q.tutor_to_hand || q.etb_return_gy_to_hand
+                    || (q.land_search_count > 0 && q.land_search_to_hand > 0)
+                    || (q.land_search_count > 0 && !q.land_search_basic_only))
+                { top_draws = true; }
+                if (q.etb_untap_lands > 0) { top_untaps = true; }
+                if (!rd->card.IsLand()) { continue; }
+                if (q.etb_bounce_land && !karoo) { karoo = true; continue; }   // the pinned Karoo
+                co_put.push_back(rd);
+            }
+            if (!karoo) { continue; }
+            // A certainly-clean board land must have paid the Wave itself when its cost exceeds what
+            // every other source can make (no producer in the plan, no uncertain sac source, and no
+            // revealed card untaps lands before the bounce) -- the drop sizing's spend witness.
+            bool spend_witness = false;
+            if (!top_untaps)
+            {
+                bool producer = false;
+                for (const Action& a : p.actions)
+                {
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+                    if (a.ritual_float > 0 || a.rock_mana.Total() > 0 || a.kind == Action::Kind::SacForMana
+                        || d == nullptr || d->params.creates_treasures > 0 || d->params.etb_creates_treasures > 0
+                        || d->params.mana_rock || d->params.etb_untap_lands > 0)
+                    { producer = true; break; }
+                }
+                int clean_mana = 0;
+                bool uncertain = false;
+                for (const Permanent& bp : state.battlefield)
+                {
+                    if (bp.controller_index != me) { continue; }
+                    const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                    if (bd != nullptr && IsPaySacSource(*bd)) { uncertain = true; }
+                    if (bp.tapped || !bp.card.IsLand() || !BounceCertainlyClean(bd)
+                        || bd == nullptr || bd->params.produces.empty()) { continue; }
+                    bool enchanted = false;   // an enchanted land is never a candidate: not a witness
+                    for (const Permanent& q : state.battlefield)
+                    { if (q.aura_attached_to != 0 && q.aura_attached_to == bp.card.m_number) { enchanted = true; break; } }
+                    if (enchanted) { continue; }
+                    clean_mana += (bd != nullptr && bd->params.produces_amount > 0) ? bd->params.produces_amount : 1;
+                }
+                const int nonclean = AvailableManaPool(state).Total() - clean_mana;
+                spend_witness = !producer && !uncertain && wave->cost.ManaValue() > nonclean;
+            }
+            const bool hand_land = top_draws || PlanMayHoldLandAtBounce(state, p, /*own_searches=*/1);
+            const int width = PutKarooBounceBound(state, me, co_put, /*co_put_tapped=*/false, hand_land,
+                                                  spend_witness);
+            if (bouncestats::Enabled()) { bouncestats::RecordEmit(static_cast<std::size_t>(width)); }
+            for (int k = 1; k < width; ++k)
+            {
+                TurnSolver::Plan v = all[i];
+                v.bounce_choice = k;
+                extra.push_back(std::move(v));
+            }
+        }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
     }
@@ -53370,31 +53591,67 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             width_cache.emplace(d, w);
             return w;
         };
-        // THE PIN VALUES one land-search source offers (land-search gap 2), ascending, 0 (the
-        // provider's front) first: every pick of the list, or for a CREDITED land-put cast only its
-        // restricted list (its other picks are its sibling credit variants' -- LAND-PUT CREDIT).
-        // Without a credit, exactly 0 .. width-1.
-        struct PinValsKey { const CardDefinition* d; ManaPool credit; };
+        // THE PIN VALUES one land-search source offers (land-search gaps 2-3), ascending, 0 (the
+        // provider's front) first: every pick of the list; for a CREDITED land-put cast only its
+        // restricted list (its other picks are its sibling credit variants' -- LAND-PUT CREDIT); and
+        // for a list holding a Karoo, each Karoo pick's bounce sub-choices b = 1 .. bound-1 (the
+        // extended pick list, LandSearchBouncePinValue), the bound by PutKarooBounceBound with the
+        // pick's other battlefield lands as the co-put. With neither, exactly 0 .. width-1.
+        struct PinValsKey { const CardDefinition* d; bool hand_land; ManaPool credit; };
         std::vector<std::pair<PinValsKey, std::vector<int>>> vals_cache;
-        auto values_of = [&](const CardDefinition* d, const Action* a) -> std::vector<int>
+        auto values_of = [&](const CardDefinition* d, const Action* a, auto&& hand_land_fn) -> std::vector<int>
         {
             ManaPool credit{};
             if (a != nullptr && a->rock_mana.Total() > 0 && LandSearchPutsUntapped(*d)) { credit = a->rock_mana; }
-            for (const auto& e : vals_cache)
-            { if (e.first.d == d && e.first.credit == credit) { return e.second; } }
-            std::vector<int> v;
             const LandSearchSpec spec = LandSearchSpecOf(d->params);
+            // Whether a land may be in hand matters only to a list holding a Karoo pick: asked lazily.
+            bool hand_land = false;
+            if (credit.Total() <= 0 && !LandSearchMemoSlot(state, me, spec).karoo_picks.empty())
+            { hand_land = hand_land_fn(); }
+            for (const auto& e : vals_cache)
+            {
+                if (e.first.d == d && e.first.hand_land == hand_land && e.first.credit == credit)
+                { return e.second; }
+            }
+            std::vector<int> v;
             const landsearchmemo::Slot& ms = LandSearchMemoSlot(state, me, spec);
-            int n = std::max<int>(1, static_cast<int>(ms.picks.size()));
+            const int w = static_cast<int>(ms.picks.size());
             if (credit.Total() > 0)
             {
                 std::vector<int> idx;
                 LandSearchCreditFilter(state, spec, ms, credit, idx);
-                n = std::max<int>(1, static_cast<int>(idx.size()));
+                const int n = std::max<int>(1, static_cast<int>(idx.size()));
+                for (int i = 0; i < n; ++i) { v.push_back(i); }
             }
-            for (int i = 0; i < n; ++i) { v.push_back(i); }
-            vals_cache.push_back({ PinValsKey{ d, credit }, v });
-            return v;
+            else
+            {
+                for (int i = 0; i < std::max(w, 1); ++i) { v.push_back(i); }
+                // Copied out of the memo slot before anything else runs (its reference is transient).
+                std::vector<std::vector<const CardDefinition*>> partners;
+                for (int r : ms.karoo_picks)
+                {
+                    const std::vector<const CardDefinition*>& pd = ms.pick_defs[static_cast<std::size_t>(r)];
+                    const int bf = LandSearchBattlefieldCount(spec, static_cast<int>(pd.size()));
+                    std::vector<const CardDefinition*> co;
+                    bool skipped_karoo = false;
+                    for (int j = 0; j < bf; ++j)
+                    {
+                        const CardDefinition* ld = pd[static_cast<std::size_t>(j)];
+                        if (!skipped_karoo && ld != nullptr && ld->params.etb_bounce_land)
+                        { skipped_karoo = true; continue; }   // the bouncing Karoo itself
+                        co.push_back(ld);
+                    }
+                    partners.push_back(std::move(co));
+                }
+                for (int r = 0; r < static_cast<int>(partners.size()); ++r)
+                {
+                    const int ub = PutKarooBounceBound(state, me, partners[static_cast<std::size_t>(r)],
+                                                       spec.tapped, hand_land, /*spend_witness=*/false);
+                    for (int b = 1; b < ub; ++b) { v.push_back(LandSearchBouncePinValue(w, r, b)); }
+                }
+            }
+            vals_cache.push_back({ PinValsKey{ d, hand_land, credit }, std::move(v) });
+            return vals_cache.back().second;
         };
         auto union_into = [](std::vector<int>& dst, const std::vector<int>& src)
         {
@@ -53456,8 +53713,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::make_move_iterator(twins.end()));
         }
         // (1) In-plan pins. Per ordinal a LIST of pin values (values_of), so a credited land-put cast
-        //     fans only its restricted picks; without one, every list is exactly 0 .. width-1 and the
-        //     variants are the old width fan's.
+        //     fans only its restricted picks and a Karoo pick its bounce sub-choices; with neither,
+        //     every list is exactly 0 .. width-1 and the variants are the old width fan's.
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
@@ -53465,6 +53722,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (!base_plan(p)) { continue; }
                 int n_cast = 0, n_act = 0;
                 std::vector<int> v_cast{ 0 }, v_act{ 0 };
+                bool hl_known = false, hl = false;
+                auto hand_land = [&]() -> bool
+                {
+                    if (!hl_known) { hl = PlanMayHoldLandAtBounce(state, p, /*own_searches=*/1); hl_known = true; }
+                    return hl;
+                };
                 for (const Action& a : p.actions)
                 {
                     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
@@ -53485,7 +53748,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                             if (rd != nullptr && rd->params.land_search_on_enter_or_attack
                                 && rd->params.land_search_count > 0 && rd->card.IsCreature()
                                 && rd->card.m_mana_cost.ManaValue() <= a.chosen_x)
-                            { ++n_cast; union_into(v_cast, values_of(rd, nullptr)); }
+                            { ++n_cast; union_into(v_cast, values_of(rd, nullptr, hand_land)); }
                         }
                         continue;
                     }
@@ -53493,11 +53756,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (a.kind == Action::Kind::CastFromHand
                         && ((d->params.land_search_on_resolve && (d->card.IsInstant() || d->card.IsSorcery()))
                             || (d->params.land_search_on_enter_or_attack && d->card.IsCreature())))
-                    { ++n_cast; union_into(v_cast, values_of(d, &a)); }
+                    { ++n_cast; union_into(v_cast, values_of(d, &a, hand_land)); }
                     else if (a.kind == Action::Kind::ActivatePermAbility
                              && (a.ability_mode == Action::AbilityMode::SacLandSearch
                                  || a.ability_mode == Action::AbilityMode::QuestSacLandSearch))
-                    { ++n_act; union_into(v_act, values_of(d, nullptr)); }
+                    { ++n_act; union_into(v_act, values_of(d, nullptr, hand_land)); }
                 }
                 const int n = n_cast + n_act;
                 if (n == 0) { continue; }
@@ -53567,7 +53830,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         //     DeclareAttackerIndices / DeclareAttackers list them in).
         if (!cont_axes_only && is_pre_combat)
         {
-            std::vector<std::size_t> tw;   // width per attacking-Titan ordinal
+            std::vector<std::size_t> tw;            // width per attacking-Titan ordinal (the crack fan's offset)
+            std::vector<const CardDefinition*> tdef;   // ...and its definition (the pin values, per plan)
             for (const Permanent& q : state.battlefield)
             {
                 if (q.controller_index != me || q.def_absent || q.tapped) { continue; }
@@ -53577,6 +53841,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (!CanAttackFull(q, state.battlefield, me)) { continue; }
                 if (static_cast<int>(tw.size()) >= kLandSearchPinOrdinals) { break; }
                 tw.push_back(std::min<std::size_t>(width_of(d), kLandSearchPinMask + 1));
+                tdef.push_back(d);
             }
             if (!tw.empty())
             {
@@ -53584,13 +53849,23 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const TurnSolver::Plan& p : all)
                 {
                     if (!base_plan(p)) { continue; }
+                    // A put Karoo's bounce sub-choices ride the same packed ordinal (the extended pick
+                    // list, values_of); a value past the 6-bit slot is the disclosed packed-pin cap.
+                    bool hl_known = false, hl = false;
+                    auto hand_land = [&]() -> bool
+                    {
+                        if (!hl_known) { hl = PlanMayHoldLandAtBounce(state, p, /*own_searches=*/0); hl_known = true; }
+                        return hl;
+                    };
                     for (std::size_t j = 0; j < tw.size(); ++j)
                     {
-                        for (std::size_t c = 1; c < tw[j]; ++c)
+                        const std::vector<int> vals = values_of(tdef[j], nullptr, hand_land);
+                        for (std::size_t ci = 1; ci < vals.size(); ++ci)
                         {
+                            const int c = vals[ci];
+                            if (c > kLandSearchPinMask) { break; }
                             TurnSolver::Plan v = p;
-                            v.attack_land_search_choice =
-                                static_cast<int>(c) << (kLandSearchPinBits * static_cast<int>(j));
+                            v.attack_land_search_choice = c << (kLandSearchPinBits * static_cast<int>(j));
                             extra.push_back(std::move(v));
                         }
                     }

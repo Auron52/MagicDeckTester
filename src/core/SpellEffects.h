@@ -28977,6 +28977,33 @@ struct ScriptedBounceChoice
     int  saved;
     bool saved_site;
 };
+// THE PUT-KAROO BOUNCE PIN for a whole apply (land-search gap 3, 2026-10-15). On a plan whose land drop
+// is NOT a Karoo, Plan::bounce_choice is the bounce of the first Karoo a NON-SEARCH put brings in
+// (Genesis Wave's reveal -- AppendSubdecisionAxes fans it); BounceKarooLand consumes it exactly as it
+// consumes the drop's. Both worlds install it for the WHOLE apply, ALWAYS (-1 included: a nested apply
+// must never inherit an outer plan's unconsumed pin) -- ApplyPlanDirect and AIEngine::TakeTurn, and a
+// continuation through ContPinScope (ContPins::put_bounce). A land SEARCH's put shields itself with
+// this scope too (its own sub-choice, or -1), so the plan pin is never spent on a fetched Karoo.
+// Unlike ScriptedBounceChoice it leaves g_bounce_searched_site alone (that census counts drops).
+struct ScriptedPutBounce
+{
+    explicit ScriptedPutBounce(int k) : saved(g_scripted_bounce_choice) { g_scripted_bounce_choice = k; }
+    ~ScriptedPutBounce() { g_scripted_bounce_choice = saved; }
+    ScriptedPutBounce(const ScriptedPutBounce&) = delete;
+    ScriptedPutBounce& operator=(const ScriptedPutBounce&) = delete;
+    int saved;
+};
+// The put pin a plan carries: its bounce_choice when its own land drop cannot consume it.
+inline int PutBouncePinOf(int bounce_choice, bool land_decided, const std::string& land_to_play)
+{
+    if (bounce_choice < 1) { return -1; }
+    if (land_decided && !land_to_play.empty())
+    {
+        const CardDefinition* ld = CardDatabase::Instance().Lookup(land_to_play);
+        if (ld != nullptr && ld->params.etb_bounce_land) { return -1; }   // the drop's own pin
+    }
+    return bounce_choice;
+}
 
 // BOUNCE-FOLD PROBE (MTG_BOUNCE_FOLD, EngineFlags.h). A candidate loop ARMS it for one top-level apply
 // (armed_depth = the ApplyPlanDirect nesting level that apply runs at); that apply's deferred Karoo play

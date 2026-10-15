@@ -3979,6 +3979,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedLandSearch _sls_exec(plan.land_search_pins);   // executor/rollout lockstep for the
                                                     // searched land-search picks (core/LandSearch.h:
                                                     // one entry per land-search ordinal); empty inert
+    // ...and the put-Karoo bounce pin (Genesis Wave's put Karoo; ApplyPlanDirect's twin). Always
+    // installed, -1 included.
+    ScriptedPutBounce _spb_exec(PutBouncePinOf(plan.bounce_choice, plan.land_decided, plan.land_to_play));
     ScriptedFreshMode _sfm_exec(plan.freshmode_choice);  // executor/rollout lockstep for the
                                                     // fresh-spend branch: the committed lethal's
                                                     // payment may crack the same-turn mint, so the

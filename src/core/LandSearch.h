@@ -293,15 +293,28 @@ struct Slot
     // once per miss): the resolution takes its lands by definition pointer instead of copying and
     // string-comparing the names (TakeLandFromLibraryDef).
     std::vector<std::vector<const CardDefinition*>> pick_defs;
-    void Fill(std::vector<std::vector<std::string>>&& p)
+    // The picks whose BATTLEFIELD part holds a Karoo (etb_bounce_land), in list order -- the picks a
+    // put-Karoo bounce sub-choice extends (LandSearchPinDecode, the "extended pick list"). A function
+    // of the same key as `picks` (the battlefield count is spec.count - spec.to_hand), filled with it.
+    std::vector<int> karoo_picks;
+    void Fill(std::vector<std::vector<std::string>>&& p, const LandSearchSpec& spec)
     {
         picks = std::move(p);
         pick_defs.resize(picks.size());
+        karoo_picks.clear();
         for (std::size_t i = 0; i < picks.size(); ++i)
         {
             pick_defs[i].resize(picks[i].size());
             for (std::size_t j = 0; j < picks[i].size(); ++j)
             { pick_defs[i][j] = CardDatabase::Instance().Lookup(picks[i][j]); }
+            const int bf = std::min(static_cast<int>(pick_defs[i].size()),
+                                    std::max(0, spec.count - spec.to_hand));
+            for (int j = 0; j < bf; ++j)
+            {
+                const CardDefinition* d = pick_defs[i][static_cast<std::size_t>(j)];
+                if (d != nullptr && d->params.etb_bounce_land)
+                { karoo_picks.push_back(static_cast<int>(i)); break; }
+            }
         }
     }
 };
@@ -347,7 +360,7 @@ inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ct
     if (!ok)
     {
         ++landsearchmemo::t_bypass;
-        t_bypass_out.Fill(LandSearchPicksUncached(s, ctrl, spec));
+        t_bypass_out.Fill(LandSearchPicksUncached(s, ctrl, spec), spec);
         return t_bypass_out;
     }
     k.prov_type = typeid(prov).hash_code();
@@ -364,7 +377,7 @@ inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ct
     landsearchmemo::Slot& slot = landsearchmemo::t_slots[k.Hash() % landsearchmemo::kSlots];
     if (slot.valid && slot.key == k) { ++landsearchmemo::t_hits; return slot; }
     ++landsearchmemo::t_misses;
-    slot.Fill(LandSearchPicksUncached(s, ctrl, spec));
+    slot.Fill(LandSearchPicksUncached(s, ctrl, spec), spec);
     slot.key   = k;
     slot.valid = true;
     return slot;
@@ -451,6 +464,43 @@ inline void LandSearchCreditFilter(const GameState& s, const LandSearchSpec& spe
     ManaPool c;
     for (std::size_t i = 0; i < ms.pick_defs.size(); ++i)
     { if (LandSearchPickCredit(s, spec, ms.pick_defs[i], c) && c == credit) { out.push_back(static_cast<int>(i)); } }
+}
+
+// ---- THE EXTENDED PICK LIST: a PUT Karoo's bounce (land-search gap 3, 2026-10-15) ------------------
+// Gruul Turf put by Primeval Titan's ETB or attack trigger returns a land the moment it lands, and
+// WHICH land is a searched decision (Plan::bounce_choice searches it for a Karoo DROP); a put took
+// BounceSearchCandidates' front -- an in-window greedy pick. The bounce exists only for a pick holding
+// the Karoo, so it is a SUB-CHOICE of the pick, and it rides the pick's own pin: after the list's W
+// picks come kLandSearchBounceStride extra entries per Karoo-bearing pick (Slot::karoo_picks, in list
+// order) -- entry W + r*S + (b-1) is "the r-th Karoo pick, and its first Karoo returns candidate b of
+// BounceSearchCandidates on the state AT THE BOUNCE" (clamped there, like the drop's pin). Every pin
+// value below W means exactly what it always did, and with no Karoo in the list the extended list IS
+// the list, so a deck without a fetchable Karoo is byte-identical. One axis, not two: a bounce variant
+// is a pick variant (the in-plan pins, Titan's packed attack stream), so every plan identity, key and
+// combat-pin share already carries it. Sized at the fan by PutKarooBounceBound (TurnSolver.cpp).
+constexpr int kLandSearchBounceStride = static_cast<int>(DecisionProvider::kBounceSearchWidth) - 1;
+struct LandSearchPinPick { int pick = 0; int bounce = -1; };
+inline int LandSearchExtendedWidth(const landsearchmemo::Slot& ms)
+{
+    return static_cast<int>(ms.picks.size())
+         + static_cast<int>(ms.karoo_picks.size()) * kLandSearchBounceStride;
+}
+// The pin value of "the r-th Karoo pick, bounce candidate b (>= 1)" in a list of `w` picks.
+inline int LandSearchBouncePinValue(int w, int karoo_rank, int b)
+{
+    return w + karoo_rank * kLandSearchBounceStride + (b - 1);
+}
+inline LandSearchPinPick LandSearchPinDecode(const landsearchmemo::Slot& ms, int pin)
+{
+    LandSearchPinPick out;
+    if (pin < 0 || ms.picks.empty()) { return out; }
+    const int w = static_cast<int>(ms.picks.size());
+    const int p = std::min(pin, LandSearchExtendedWidth(ms) - 1);   // duplicate-not-whiff clamp
+    if (p < w) { out.pick = p; return out; }
+    const int e = p - w;
+    out.pick   = ms.karoo_picks[static_cast<std::size_t>(e / kLandSearchBounceStride)];
+    out.bounce = e % kLandSearchBounceStride + 1;
+    return out;
 }
 
 // The HUMAN's k-th prompt: every legal NAME still available given the earlier picks (copies left;
@@ -568,6 +618,8 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     const bool credited = put_credit != nullptr && put_credit->Total() > 0;
     thread_local std::vector<int> t_credit_idx;
     t_credit_idx.clear();
+    // The put Karoo's searched bounce (land-search gap 3, the extended pick list); -1 = the front.
+    int bounce_pin = -1;
     // The source's display label ("Primeval Titan (attack)"), built only where something shows it --
     // the human prompt and the play-event line -- never on the autonomous path.
     auto label = [&]() { return source_suffix != nullptr ? source + source_suffix : source; };
@@ -643,8 +695,9 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
             }
             else
             {
-                k = pin < 0 ? 0
-                  : std::min<std::size_t>(static_cast<std::size_t>(pin), ms.picks.size() - 1);
+                const LandSearchPinPick pp = LandSearchPinDecode(ms, pin);
+                k          = static_cast<std::size_t>(pp.pick);
+                bounce_pin = pp.bounce;
             }
             // Copied at once: the memo reference is valid only until its next call.
             const std::vector<const CardDefinition*>& pd = ms.pick_defs[k];
@@ -704,7 +757,22 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                 && state.battlefield[static_cast<std::size_t>(j)].controller_index == controller)
             { slot = j; break; }
         }
-        if (slot >= 0) { ResolveLandEnterEtbExtras(state, *bf_defs[i], slot); }
+        if (slot >= 0 && bounce_pin >= 1 && bf_defs[i]->params.etb_bounce_land)
+        {
+            // The searched bounce sub-choice binds the pick's FIRST Karoo (a second Karoo of the same
+            // pick takes the front: one sub-choice per pick, disclosed in land-search-cluster.md).
+            ScriptedBounceChoice _sbc(bounce_pin);
+            bounce_pin = -1;
+            ResolveLandEnterEtbExtras(state, *bf_defs[i], slot);
+        }
+        else if (slot >= 0 && bf_defs[i]->params.etb_bounce_land)
+        {
+            // An unpinned fetched Karoo takes the front -- and never spends the PLAN's put pin
+            // (ScriptedPutBounce: that one belongs to a non-search put, Genesis Wave's).
+            ScriptedPutBounce _spb(-1);
+            ResolveLandEnterEtbExtras(state, *bf_defs[i], slot);
+        }
+        else if (slot >= 0) { ResolveLandEnterEtbExtras(state, *bf_defs[i], slot); }
         else if (bf_defs[i]->params.etb_lifegain > 0)
         { GainLife(state, state.active_player_index, bf_defs[i]->params.etb_lifegain); }
     }

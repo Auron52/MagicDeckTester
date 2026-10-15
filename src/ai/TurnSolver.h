@@ -44,10 +44,12 @@ struct ContPins
     int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
+    int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
+                           // casts; PutBouncePinOf -- -1 when its own drop is the Karoo)
     bool Any() const
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
-            || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty();
+            || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1;
     }
 };
 

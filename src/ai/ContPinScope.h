@@ -18,6 +18,7 @@ struct ContPinScope
     std::optional<ScriptedTutor>      tutor;
     std::optional<ScriptedSacLand>    sac;
     std::optional<ScriptedLandSearch> land_search;
+    std::optional<ScriptedPutBounce>  put_bounce;   // the continuation's Genesis Wave put Karoo
 
     explicit ContPinScope(const ContPins* p)
     {
@@ -29,6 +30,7 @@ struct ContPinScope
         if (p->tutor      >= 0) { tutor.emplace(p->tutor); }
         if (!p->sac.empty())    { sac.emplace(p->sac); }
         if (!p->land_search.empty()) { land_search.emplace(p->land_search); }
+        if (p->put_bounce >= 1)      { put_bounce.emplace(p->put_bounce); }
     }
     ContPinScope(const ContPinScope&) = delete;
     ContPinScope& operator=(const ContPinScope&) = delete;
@@ -47,5 +49,6 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.bounce     = p.bounce_choice;
     c.sac        = p.sac_pins;
     c.land_search = p.land_search_pins;
+    c.put_bounce  = PutBouncePinOf(p.bounce_choice, p.land_decided, p.land_to_play);
     return c;
 }
