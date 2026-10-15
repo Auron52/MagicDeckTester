@@ -871,9 +871,13 @@ open item below.
 **2026-10-14: the USER APPROVED the amended order** (*"Let's try out your stompy suggestion. It seems pretty
 close to what I was looking for and we can fix any issues that show up."*) and asked for it TOTAL (*"Let's
 fully order the cards in each list inasmuch as possible."*). Implemented (`e1f1bba1`: total ranks, the four
-dual slots read off the plan and searched two-way, the Stompy TOP_RESOLVE opt-in); measurement IN
-PROGRESS (partial: shipped 2,750 games, 10 faster / 3 slower, net -7). The implemented order, every
-tie-break and the measurement: **docs/design/stompy-order-2026-10-14.md**. The text below is the history.
+dual slots read off the plan and searched two-way, the Stompy TOP_RESOLVE opt-in). **2026-10-15:** three
+shipped games lost a turn and recovered at no budget; the cause was a PAYMENT tie-break (the prepay's hold
+ladder chose which equal-power elf to keep by battlefield position, and the order always lands the 1-drops
+before Priest of Titania), fixed behind `MTG_HOLD_RELEASE_YIELD`. `MTG_STOMPY_ORDER` is default OFF until the
+order + fix clears the bar; v4 (order + fix vs today): shipped -17, d3 -45, d0 -774 on StompySurprise and
+-26 / -45 / -330 on 2HG. The implemented order, every tie-break and the measurement:
+**docs/design/stompy-order-2026-10-14.md**. The text below is the history.
 
 **PROPOSED (USER, 2026-08-21) — implemented behind `MTG_STOMPY_ORDER` (default OFF), measured,
 awaiting the USER's adoption call.** `StompyProvider::CastOrderRank` + `CastOrderTierName` deliver
