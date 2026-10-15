@@ -1430,8 +1430,72 @@ Realised orders (pinned by `test/unit/test_kitty_cast_order.cpp`, hand-permutati
 | v2-puresteel-hammer | Sigarda's Aid > Puresteel Paladin > Sram, Senior Edificer > Cid, Freeflier Pilot > Accorder's Shield > Bone Saw > Cathar's Shield > Kite Shield > Spidersilk Net > Colossus Hammer > Deconstruction Hammer > Dragonfire Blade > Golem-Skin Gauntlets > Shadowspear > Skateboard > Dwalin, Weaponmaster | the {0}s were Spidersilk, Cathar's, Kite, Bone Saw, Accorder's; the {1}s were Gauntlets, Skateboard, Shadowspear, Dragonfire, Deconstruction, Colossus; Sram m2 -> m1 |
 | v3-adelbert-gauntlets | Sigarda's Aid > Puresteel Paladin > Sram, Senior Edificer > Adelbert Steiner > (the same eleven Equipment as v2, same order) > Dwalin, Weaponmaster | the same Equipment re-sequencing as v2; Sram m2 -> m1 |
 
-**Measurement:** pending -- the held-out paired A/B (old = `a39ec088`, new = this order) is queued; its table
-lands here.
+**Measurement (2026-10-15).** One pooled `mtg --batch` per binary, back to back in one hold of the box lock
+(`--threads 20`): old = `a39ec088` (the hash order), new = `86ad6396` (src tree identical to this commit's).
+Held-out seeds from 11,800,001, loss = turn 9, paired per game. Cells: shipped (the deck's play settings -- d5
+b20 -- keep table + value leaf in place), d3 b10, d0.
+
+| deck | cell | games | faster | slower | net | per game | t | play changed | units new/old |
+|---|---|---|---|---|---|---|---|---|---|
+| kitty (v1) | shipped | 4000 | 0 | 0 | 0 | 0 | - | 196 | 1.0008 |
+| kitty (v1) | d3 b10 | 6000 | 0 | 1 | +1 | +0.00017 | +1.00 | 311 | 0.9998 |
+| kitty (v1) | d0 | 20000 | 1 | 0 | -1 | -0.00005 | -1.00 | 1016 | - |
+| kittyv2 | shipped | 2000 | 0 | 0 | 0 | 0 | - | 1014 | 0.9993 |
+| kittyv2 | d3 b10 | 3000 | 3 | 0 | -3 | -0.00100 | -1.73 | 1557 | 1.0025 |
+| kittyv2 | d0 | 10000 | 1 | 5 | +4 | +0.00040 | +1.63 | 5120 | - |
+| kittyv3 | shipped | 2000 | 0 | 1 | +1 | +0.00050 | +1.00 | 1364 | 0.9996 |
+| kittyv3 | d3 b10 | 3000 | 2 | 3 | +2 | +0.00067 | +0.71 | 2060 | 0.9971 |
+| kittyv3 | d0 | 10000 | 1 | 5 | +4 | +0.00040 | +1.63 | 6876 | - |
+| kitty2hg | shipped | 2000 | 0 | 1 | +1 | +0.00050 | +1.00 | 97 | 1.0011 |
+| kitty2hg | d3 b10 | 3000 | 0 | 0 | 0 | 0 | - | 160 | 1.0003 |
+| kitty2hg | d0 | 10000 | 0 | 0 | 0 | 0 | - | 581 | - |
+
+Units over every searched cell: 475,365,161 -> 475,280,289 (**0.9998**). Over 75,000 paired games: 8 faster, 16
+slower, net +8 turns (+0.0001 per game). Searched cells alone: 5 faster, 6 slower, net +1 over 25,000 games.
+
+**Every one of the 16 slower games recovers** (`--depth W --budget-ms 100`, then `--depth 8 --budget-ms 0`):
+
+- **Searched, 6 games -- all recover at stage 1.** kitty d3 gi618 (5 -> 6; stage 1: 5), kittyv3 shipped gi1849
+  (6 -> 7; 6), kitty2hg shipped gi601 (5 -> 6; 5), kittyv3 d3 gi1097 (6 -> 7; 5), gi1996 (5 -> 6; 5), gi2140
+  (7 -> unwon; 7). THREE OF THEM ARE NOT EVEN REAL: replayed alone at their own cell settings in a fresh process,
+  kitty d3 gi618 and kitty2hg gi601 play BYTE-IDENTICAL old vs new (same digest, T5 both), and kittyv3 gi1849 is
+  T7 on BOTH binaries -- the OLD binary's batch T6 does not reproduce either. So the pooled batch result for a
+  game is not always its fresh-process result (see the finding below). The three that do reproduce (kittyv3 d3)
+  are budget allocation: the realised order puts the same permanents on the battlefield in a different sequence,
+  which reorders the enumeration a 10-unit budget walks (gi2140: a creature-less T4 now deploys Accorder's Shield +
+  Shadowspear instead of holding them for Sram's T6 cast draws).
+- **d0, 10 games -- all recover at stage 2** (d8 b0: 3/5/3/4/3 against the old 5/5/4/6/4 on kittyv2; 4/3/7/6/4
+  against 5/4/7/7/6 on kittyv3). ROOT-CAUSED, and it is not the order's quality: in every one traced, turn 1 casts
+  the SAME set of {0} Equipment in name order instead of hash order, and on the kill turn the equip-route
+  certificate (`EquipRouteTrial`'s MostCasts playout; at d0 its Search rung is skipped, "no decision root to
+  charge") answers LETHAL on the old battlefield order and "no win" on the new one -- identical cards, identical
+  counts, only the sequence of the permanents differs (kittyv2 gi3990 T4: old "LETHAL after 4 links", new "no win:
+  3 links"; kittyv3 gi6070 T7 likewise). The playout breaks its plan ties by enumeration position, which follows
+  battlefield order, so which same-cost Equipment entered first decides which link it chains. The 1 faster d0 game
+  per list is the same mechanism the other way.
+
+**Verdict against the bar:** every slower game recovers, but per cell the net is > 0 on six cells -- kitty d3,
+kittyv3 shipped and kitty2hg shipped (+1 each, each a single game that does not reproduce outside the batch),
+kittyv3 d3 (+2, t = 0.71, budget allocation, all recovered at stage 1) and kittyv2 / kittyv3 d0 (+4 each, t = 1.63,
+the route certificate's battlefield-order sensitivity). Near-neutral, as expected: the Equipment casts do not
+interact, and nothing measured is the order choosing a worse line. **Proposed amendment that keeps the USER's
+order** (not built): make the equip-route certificate's plan tie-break canonical -- independent of the order of
+identical-content permanents -- so a cast-order change can no longer flip a d0 go-off. It needs its own A/B.
+
+**Finding outside the order: a pooled batch result is not always the fresh-process result.** Same binary, same
+game, same settings: `mtg.base` kittyv3 shipped gi1849 is T6 in the 20-thread batch and T7 as a one-game job (seed
+= base + gi, game_index = gi -- a recipe that reproduces other games exactly, digests included). Worker state that
+outlives a game is the suspect; the breakpoint enum cache is documented as never epoch- or game-cleared
+(TurnSolver.cpp, `BpEnumEpochScoped`). Rare -- the 3,600 `=0`-hatch games and 1,800 identity games below match
+game for game across two batches whose schedules differ -- but it puts a floor under any paired Kitty A/B.
+
+- **`=0` hatch:** the new binary with `MTG_KE_ORDER` off equals the old binary with it off, game for game (turn
+  AND digest), on 300 games of every cell of all four Kitty rows (3,600 games).
+- **Identity:** every other suite deck (30) at shipped / d3 b10 / d0, 20 games each (90 jobs): every per-game turn
+  and digest, and every job digest, identical.
+- **Single-game check that the order is what plays:** kittyv2 s11900002 gi1 T1 casts Kite Shield then Accorder's
+  Shield on the base binary, Accorder's Shield then Kite Shield on the new one; a 12-game v1 d3 probe is
+  byte-identical (v1's only realised move, Colossus Hammer among the {1}s, rarely matters).
 
 ## Soldiers -- USER-APPROVED 2026-10-14 (amended), ADOPTED default ON (`MTG_SOLDIERS_ORDER`)
 
