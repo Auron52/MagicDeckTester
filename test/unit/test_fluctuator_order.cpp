@@ -162,6 +162,7 @@ TEST_CASE("Fluct order: the USER's total order, invariant under every permutatio
         ++perms;
     } while (std::next_permutation(set.begin(), set.end()));
     CHECK(perms == 360);   // 6! / 2! (two Fluctuators)
+    CHECK(FProv().CastOrderTotalByName());   // the canonical name tie-break is on with the order
 }
 
 TEST_CASE("Fluct order: a Fluctuator already on the battlefield makes the cast one the SECOND (after Hollow One)")
@@ -189,6 +190,7 @@ TEST_CASE("Fluct order: MTG_FLUCT_ORDER=0 restores the generic tiers (creatures 
     // put Unearth first.
     CHECK(got.front() == kS);
     CHECK(FProv().MainPhaseOverride(s, *CardDatabase::Instance().Lookup(kS)) == std::nullopt);
+    CHECK_FALSE(FProv().CastOrderTotalByName());
 }
 
 TEST_CASE("Fluct order funded: an UNPAYABLE set keeps the engine and wincon; a payable set keeps the USER's order")

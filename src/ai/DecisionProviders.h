@@ -2186,6 +2186,8 @@ public:
     int         CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     const char* CastOrderTierName(int rank) const override;
     bool        OrderOpaqueCastsByRank() const override;
+    // The canonical name tie-break (DecisionProvider::CastOrderTotalByName) under the same flag.
+    bool        CastOrderTotalByName() const override;
     void        ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
                                  std::vector<int>& order) const override;
     // Single main (uses_second_main=no): every cast is Main1, so the report's column matches play.
