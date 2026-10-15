@@ -36,8 +36,12 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
 * `Plan::land_search_act_slot` -- WHERE in the cast sequence the land-search activations run, in
   `Plan::land_slot`'s encoding: -1 the trailing pass (default), 0 before every cast, k after the k-th
   landfall-watcher cast (see gap 1).
+* A Karoo-bearing pick's BOUNCE (gap 3): extended pick-list values on the same pins; a Genesis Wave's
+  put Karoo: `Plan::bounce_choice` as the plan's put pin.
+* Search for Tomorrow hard-cast: one cast variant per land-put CREDIT class (gap 2), each restricting
+  its own pick.
 * Human play: sequential `tutor_etb` prompts per land (DECISIONS.md), the `landsearch=` verb for the
-  activations, the `dig` prompt for the in-combat crack.
+  activations, the `dig` prompt for the in-combat crack, the ordinary `bounce` prompt for a put Karoo.
 
 ## Collapses that are PROVISIONAL (need user sign-off)
 
@@ -80,19 +84,77 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
    SECTION window in both worlds. Remaining boundary: no position twin inside a breakpoint
    continuation, and none for a plan without a land-counting ETB (an ordinary landfall watcher already
    prefers cast-then-crack, the default). Human play orders freely (`human_action_order`).
-2. **Search for Tomorrow hard-cast mana.** The untapped basic a HARD-CAST Search for Tomorrow puts is
-   not credited to the same plan's later casts by the subset mana math (the Crop Rotation precedent,
-   `Deliberately NOT modelled` in TurnSolver), so "Search for Tomorrow, then a spell paid with the
-   fetched land" in one main phase is not enumerated. Fix shape: a producer credit
-   (`Action::rock_mana`-style, gated on a basic remaining in the library) plus the pending-producer
-   hook in `SubsetPayableSequential` and the funding-order hoist in both apply worlds.
-3. **A fetched Gruul Turf's bounce target** takes `BounceSearchCandidates`' front: the searched
-   bounce axis (`Plan::bounce_choice`) fans only for a Karoo LAND DROP. Fix: fan it for a plan whose
-   land search can put a Karoo (Titan's ETB/attack, Genesis Wave).
+2. *(Closed 2026-10-15, branch `landfall-gaps`.)* **Search for Tomorrow hard-cast mana.** The untapped
+   basic a HARD-CAST Search for Tomorrow puts was not credited to the same plan's later casts, so
+   "Search for Tomorrow, then Rampant Growth / Khalni Heart Expedition paid with the fetched Forest" was
+   unenumerable. Now (generic on the params: `LandSearchPutsUntapped` -- an instant/sorcery
+   `land_search_on_resolve` search that puts at least one land untapped):
+   * **The credit rides `Action::rock_mana`** (CollectActions' LAND-PUT CREDIT post-pass), so every
+     producer consumer already prices it: "a rock never funds its own cost", the odometer gain terms,
+     the colour-presence widening, `FirstUnpayablePos`. Both real-payment walks
+     (`SubsetPayableWithFilters`, `SubsetPayableSequential`) put the basic itself on their scratch board
+     after the cast paid (`PutLandPutCreditOnScratch`); the funding-order hoist treats the cast as a
+     producer in both apply worlds (`IsFundingProducerCast` in `ApplyEtbTreasureFundingOrder` /
+     `PayableCastOrderCore`); the whole-turn prepay folds its cost without crediting it (the
+     ETB-Treasure route), so a line the board pays alone is untouched and a line that needs the basic
+     declines to the per-cast payer, fed SfT-first.
+   * **The pick and the credit are one decision.** The cast is emitted once per distinct CREDIT CLASS
+     of its legal picks (`LandSearchCreditGroups`: a Forest class credits {G}, a Mountain class {R}),
+     front class first, and each variant's resolution is RESTRICTED to the picks earning its credit
+     (`LandSearchCreditFilter`, read by `PerformLandSearch` through `apply_one`'s `cast_land_put` in the
+     rollout and `StackEntry::land_put_credit` in the executor). The variants partition the picks, so
+     no pick is lost and no colour is promised that the chosen basic cannot make; the in-plan pin then
+     indexes the restricted list. `plan_signature` (`#LP`) and `BpCandFingerprint` key the class.
+   * **Fail toward not crediting.** A pick is creditable only when every battlefield land of it is a
+     basic with no enters-tapped rule; one uncreditable pick, or no legal pick (no basic left), and the
+     cast carries no credit at all.
+   * **Scope.** Decision space (searched collect, executor) emits every class; a rollout leaf keeps the
+     front class only (the phyrexian precedent), which resolves the provider-front pick the playout
+     always took. Human play carries no credit: the basic is the human's prompt (its default is the
+     credited pick), and the segment re-prompt casts off the fetched land.
+   * **Residual (disclosed).** The classes are read off the enumeration-time library: two land
+     searches in one plan racing for the LAST copy of a class can leave the second one's restriction
+     empty, which then falls back to the unrestricted pick (never a whiff) and the enumerated credit was
+     optimistic for that plan (the apply is exact: the cast it funded strands). Crop Rotation
+     (`tutor_land_to_battlefield`, Creature Giving) does NOT share the mechanism: its target is a
+     separate, still-inert pin (below); the right fix there is to route it through `PerformLandSearch`
+     (a 1-land any-land untapped spec), which would inherit the pick axis, this credit and gap 3's
+     bounce at once -- its own item with its own rebaseline.
+3. *(Closed 2026-10-15, branch `landfall-gaps`.)* **A put Karoo's bounce target** took
+   `BounceSearchCandidates`' front for every Karoo an effect PUT (Primeval Titan's ETB / attack, Genesis
+   Wave) -- an in-window greedy pick. Now searched, the provider still narrowing:
+   * **Land-search puts: the extended pick list** (`LandSearchPinDecode`). After a list's W picks come
+     `kLandSearchBounceStride` (= kBounceSearchWidth - 1) entries per Karoo-bearing pick
+     (`Slot::karoo_picks`): value `W + r*S + (b-1)` is "the r-th Karoo pick, whose first Karoo returns
+     candidate b of `BounceSearchCandidates` at the bounce" (clamped there). Every value below W means
+     what it always did, and a list with no Karoo IS the plain list. The sub-choice rides the pick's
+     own pin -- the in-plan `land_search_pins` (Titan cast or put by a Wave) and the packed attack pin --
+     so it is ONE axis with the pick (no cross product), and every plan identity, state key and the
+     combat-pin share already carry it. `PerformLandSearch` installs the bounce around the Karoo's pass-2
+     extras; an unpinned fetched Karoo shields the plan's own put pin (`ScriptedPutBounce(-1)`).
+   * **Genesis Wave: `Plan::bounce_choice` as the put pin.** On a plan whose land drop is NOT a Karoo,
+     `bounce_choice` is the first non-search put Karoo's bounce (`PutBouncePinOf`), installed for the
+     whole apply in both worlds (`ScriptedPutBounce` in `ApplyPlanDirect` / `AIEngine::TakeTurn`,
+     ALWAYS, -1 included, so a nested apply never inherits it; `ContPins::put_bounce` in a continuation;
+     the breakpoint prefix snapshot carries its consumption). Fanned in the bounce block of
+     `AppendSubdecisionAxes` (base plans, one axis).
+   * **Sizing** (`PutKarooBounceBound`): an upper bound on the narrowed width that mirrors
+     `BounceSearchCandidates` -- distinct returnable names (+ depletion names), tightened to "one per
+     tapped clean name, or ONE with no land in hand" when a tapped land that certainly re-enters
+     untapped is proved present (Titan's forced-tapped partner; for the Wave, a cost no non-clean
+     source can cover). `PlanMayHoldLandAtBounce` is the "land may be in hand" superset.
+   * **Human play** was already right: every Karoo bounce, put or played, reaches the ordinary `bounce`
+     chooser (`BounceKarooLand`), in main phase and in combat; unit-pinned for a Titan put.
+   * **Residual (disclosed).** One sub-choice per pick (a pick holding two Karoos returns the second's
+     front); one Wave put pin per plan (a second non-search put Karoo, or a Wave beside a Karoo DROP,
+     takes the front); sizing reads the enumeration-time library / top X (the Titan-via-Wave caveat);
+     the packed attack slot's 6-bit cap (gap 6) now also bounds the extended values; the unpruned audit
+     reaches at most `kBounceSearchWidth` candidates of a put Karoo (the stride).
 4. **Additive across axes.** The land-search axes follow the engine's one-axis-at-a-time convention:
-   a land-search pick variant never also carries another axis's deviation (a scry, a bounce, a
+   a land-search pick variant never also carries another axis's deviation (a scry, a DROP bounce, a
    Phylath target rank), and an in-combat crack variant keeps the Titan's own attack pick at the
-   front. Past 64 product combinations the in-plan pins are one-hot per ordinal.
+   front. Past 64 product combinations the in-plan pins are one-hot per ordinal. (A PUT Karoo's bounce
+   is not another axis: it is a sub-choice of the pick, gap 3.)
 5. **Cast ordinals are sized at the widest cast source** (the canonical cast bucketing is not
    reproduced at fan time); a narrower source clamps to its last pick at resolution (a duplicate the
    post-apply dedup skips).
