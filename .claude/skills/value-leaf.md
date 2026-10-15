@@ -268,7 +268,8 @@ user as long as you do not stop."*; *"Is it better is primarily a performance me
 wait for a user response if the quality is notably worse"*; *"that just means we do not adopt and
 continue with any other work that remains"*). Phase E.5 reads phase E's A/B (`vlq_ab_report.py
 --verdict`): the staged leaf is installed as the live `decks/<Deck>/<stem>.value.json` **in the run's
-checkout** iff it is **cheaper** (core-s ratio < 1) and its quality is **not notably worse** (not: delta >
+checkout** iff it is **cheaper** (work-units ratio < 1; never core-s, which is wall-clock and moves with host
+contention -- USER 2026-10-14: *"do not make decisions based on wall-clock"*) and its quality is **not notably worse** (not: delta >
 0.002 turns at paired t > +2). Otherwise it stays staged -- a dearer-but-better leaf is a TRADE for the
 user -- and the run carries on. Every such decision, and any default the C.5 risk gate takes instead of
 stopping, is appended to `<queue>/DECISIONS.txt`, which `status` and the COMPLETE line print until a
