@@ -201,6 +201,24 @@ profiles the heavy games and ships only sound collapses.
 - OPEN: whether a T1 suspend ever yields an earlier win is the 5g earliest-win miner's question
   (MTG_DUMP_EWINS inclusion rule for "Search for Tomorrow (suspend)") — queued for when the box is free.
 
+## Stage 2d-bis — cost / field audits (2026-10-15 ~18:50)
+- `audit_card_costs.py` (run alone): 307 of 427 costed cards compared before Scryfall 429'd the rest. ALL
+  20 Landfall cards fell in the uncompared tail (newest entries sit last), so the script result is a
+  DID-NOT-RUN for this deck. Verified BY HAND instead (curl, 0.6 s spacing): all 20 deck cards match live
+  Scryfall on mana_cost, P/T, supertypes+types and keywords; oracle text (before the bracket note)
+  matches on 19. Mountain's oracle lacks the reminder parentheses — cosmetic, fixed in the next data
+  commit.
+- One cost MISMATCH, pre-existing and not in any shipping or archived list: Primal Vigor ({4}{G}{G} vs
+  Scryfall {4}{G}; a Fungus screening candidate from 85f6cd4a) — fixed (zero play impact).
+- `audit_card_fields.py` (offline): 3 HARD mismatches, all pre-existing and none in this deck: Primal
+  Vigor (above), Saproling Migration (keywords lack kicker), Kíli the Resourceful (keywords lack
+  storied; KittyEquipment). The last two need keyword-enum support and Kíli is in a suite deck —
+  surfaced, not fixed. "oracle_text diverges" advisories on this deck's cards are the long bracket notes.
+
+## CI (2026-10-15 18:40, branch `landfall-analysis` @ 5bd2c45e)
+Run 38787489105: build (windows-latest) success, build (ubuntu-latest) success, Linux/Windows
+determinism parity success.
+
 ## Open questions for the user (collected; work continues on the stated default)
 - **(Courser integrator Q1 — CAST ORDER, USER-OWNED)** In a positioned-land plan, landfall-watcher casts
   go before other spells of the SAME cast-order rank. Only the arbitrary hand-order tie-break moves;
