@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Colossus Hammer"/>
+        <card number="4" name="Puresteel Paladin"/>
+        <card number="4" name="Kor Duelist"/>
+        <card number="2" name="Balan, Wandering Knight"/>
+        <card number="4" name="Armored Skyhunter"/>
+        <card number="4" name="Bonesplitter"/>
+        <card number="1" name="Loxodon Warhammer"/>
+        <card number="2" name="Unexpectedly Absent"/>
+        <card number="1" name="Swords to Plowshares"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="22" name="Plains"/>
+        <card number="2" name="Shadowspear"/>
+        <card number="2" name="Kemba, Kha Regent"/>
+        <card number="1" name="Boros Garrison"/>
+        <card number="1" name="Grafted Wargear"/>
+        <card number="1" name="O-Naginata"/>
+        <card number="1" name="Lightning Greaves"/>
+        <card number="2" name="Umezawa's Jitte"/>
+        <card number="1" name="Stoneforge Mystic"/>
+    </zone>
+</cockatrice_deck>

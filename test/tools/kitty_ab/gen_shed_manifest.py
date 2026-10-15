@@ -27,8 +27,8 @@ Kitty discard heuristic" is no, with a number behind it.
 import json
 import sys
 
-DECK = "decks/KittyEquipment/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/KittyEquipment.profile.json"
+DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
+PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
 
 ARMS = {
     "base":  {},                          # shipped ranking (index 0)

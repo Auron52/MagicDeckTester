@@ -36,7 +36,7 @@ ARM_ORDER=(base node d56 node0 d560)
 # the rest are controls that must come back byte-identical between `node` and `d56`.
 DECKS=(
  "mirrorwing|decks/Mirrorwing Dragon/Mirrorwing Dragon.cod|decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
- "kitty|decks/KittyEquipment/KittyEquipment.cod|decks/KittyEquipment/KittyEquipment.profile.json"
+ "kitty|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
  "hinata|decks/Hinata2/Hinata2.cod|decks/Hinata2/Hinata2.profile.json"
  "th|decks/treasure_hunt/treasure_hunt.txt|decks/treasure_hunt/treasure_hunt.profile.json"
  "auras|decks/Auras/Auras.cod|decks/Auras/Auras.profile.json"

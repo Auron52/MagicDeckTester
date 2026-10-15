@@ -44,7 +44,7 @@ DRG=(decks/Dragonstorm/Dragonstorm.cod --profile decks/Dragonstorm/Dragonstorm.p
 MIR=(decks/"Mirrorwing Dragon"/"Mirrorwing Dragon".cod
      --profile decks/"Mirrorwing Dragon"/"Mirrorwing Dragon".profile.json
      --games ${MGAMES:-200} --seed 6600001 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)
-KIT=(decks/KittyEquipment/KittyEquipment.cod --profile decks/KittyEquipment/KittyEquipment.profile.json
+KIT=(decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod --profile decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json
      --games ${KGAMES:-200} --seed 6600001 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)
 
 # arm -> env assignments (empty = shipped defaults). "recipe" is the LOSSY greedy-free form

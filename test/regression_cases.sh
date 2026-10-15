@@ -46,9 +46,12 @@ declare -A DECK_FILE=(
   [fivecolour]=decks/FiveColour/FiveColour.cod
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
-  [kitty]=decks/KittyEquipment/KittyEquipment.cod
-  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod
-  [kittyv3]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.cod
+  # kittyv3 IS the shipped KittyEquipment list (promoted 2026-10-14). The KEY keeps its `v3`
+  # suffix on purpose: it was measured on this decklist and ONE KEY PER DECKLIST means a key never
+  # moves to a different list. Renaming it to `kitty` would have had to reuse the names v1's GT
+  # already occupies -- exactly the repoint that made a stale baseline read as +2.2620. v1 and v2
+  # are archived with NO suite rows, per the mirrorwing/angels/critter convention.
+  [kittyv3]=decks/KittyEquipment/KittyEquipment.cod
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [critter]=decks/CritterLifegain/CritterLifegain.cod
@@ -81,9 +84,7 @@ declare -A DECK_PROF=(
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
-  [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
-  [kittyv2]=decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json
-  [kittyv3]=decks/KittyEquipment/v3-adelbert-gauntlets/KittyEquipment.profile.json
+  [kittyv3]=decks/KittyEquipment/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [critter]=decks/CritterLifegain/CritterLifegain.profile.json
@@ -226,78 +227,40 @@ SMOKE_CASES=(
   "minotaur 0 1001 1000 0"
   "minotaur 3 1001  250 10"
   "minotaur 5 1001  150 20"
-  # kitty: KittyEquipment -- mono-white equipment aggro (Kor Duelist/Balan double-strike + stacked
-  # equipment; wins ~T4.3-5.2). Pooled-probe 2026-08-29 vs minotaur as in-batch anchor: d0
-  # ~0.0006 s/game, d3 b10 ~0.46 s/game, d5 b20 ~0.50 s/game -- 0.21x/0.13x minotaur, the
-  # CHEAPEST searched deck in the suite. Ships an adopted exhaustive keep model + a value leaf.
-  "kitty 0 1001 1000 0"
-  "kitty 3 1001  250 10"
-  "kitty 5 1001  150 20"
-  # kittyv2: the CANDIDATE list (Puresteel Paladin / Sram / Colossus Hammer / Sigarda's Aid / Dwalin
-  # + 0-cost shields), carried as a SECOND kitty deck until it is adopted, at which point it takes
-  # `kitty`'s rows and v1's are dropped (user, 2026-10-02: "a second Kitty deck until adoption when
-  # we drop the old one").
+  # kittyv3: KittyEquipment -- THE SHIPPED LIST since 2026-10-14 (Puresteel Paladin / Sram /
+  # Colossus Hammer / Sigarda's Aid / Dwalin + 0-cost shields). Ships an adopted exhaustive keep
+  # table (a9a17e64) and a value leaf. Wins ~T3.8 searched.
   #
-  # *** THE 2026-10-08 REPOINT OF THIS KEY TO v3 WAS REVERTED 2026-10-11, AT THE USER'S DIRECTION:
-  # "It should not be repointed to v3 yet. Unless we want to have both in there." BOTH IS WHAT WE
-  # HAVE: `kittyv2` means v2-puresteel-hammer (as it always did) and v3 has its OWN key, `kittyv3`.
+  # IT REPLACED v1 ON MEASUREMENT, NOT PREFERENCE. v3 vs v2-puresteel-hammer, 100,000 games on
+  # fresh seeds (logs/kittyv3_integrate/v2_vs_v3.py), d5 b40 as the decision cell at the user's
+  # direction ("the higher depth is the number that matters"): 48,000 games/arm, v2 3.8820 ->
+  # v3 3.8265, delta -0.0555, 95% CI [-0.0705, -0.0405], t=-7.27 unpaired. The arms correlate at
+  # +0.761 (56 of 60 main-deck cards shared, same seed bases), so the unpaired se is CONSERVATIVE;
+  # clustering on the 32 cells gives t=-14.85. d7 b1000 as a direction check at the top of the
+  # range agreed in sign at -0.0680. v3 is also 1.82x cheaper per game at d5 (719 vs 1312 ms) and
+  # 2.11x at d7, with the unwon rate 1.44% -> 1.25%. The pre-registered bar was t <= -2.
   #
-  # WHY THE REPOINT WAS WRONG, concretely, because the old comment argued it was free ("renaming it
-  # would churn every GT key for no gain"). The churn it avoided was cosmetic; the cost it created
-  # was that A CASE KEY SILENTLY CHANGED WHICH DECK IT MEASURES. GT's kittyv2 rows were last
-  # measured 2026-10-03 (8d165350) on v2-puresteel-hammer, five days BEFORE the repoint, so from
-  # 2026-10-08 every rebaseline compared v3's play against v2-puresteel's baseline. On 2026-10-11
-  # that read as a +2.2620 aggregate "regression" on an equip change -- an engine bug that did not
-  # exist -- and the only thing that distinguished it from a real one was a deterministic paired
-  # A/B (flags ON vs all five =0, --threads 1) showing IDENTICAL averages on every cell. A key
-  # whose meaning changes under a stable name cannot be rebaselined, only re-derived.
+  # THE 2HG ROW MOVED WITH THE LIST. `kitty2hg` resolved to the v1 key (regression.sh:326 strips
+  # the suffix: base=${deck%2hg}), so dropping v1 would have deleted the archetype's ONLY 2HG
+  # coverage -- and std and 2hg are CO-EQUAL. It is now `kittyv32hg`, baselined fresh.
   #
-  # So: one key per decklist, always. A list is never promoted by inheriting another list's key;
-  # when v3 is adopted it takes `kitty`'s ROWS by having its own key's counts raised, and the
-  # dropped list's key and GT rows are deleted in the same commit that drops it.
+  # ONE KEY PER DECKLIST is why this key keeps a `v3` suffix while being the shipped list. The
+  # 2026-10-08 repoint of `kittyv2` to v3 is the lesson: GT's kittyv2 rows had been measured on
+  # v2-puresteel-hammer, so from that day every rebaseline compared v3's play against v2's
+  # baseline, and on 2026-10-11 it read as a +2.2620 aggregate "regression" on an equip change --
+  # an engine bug that did not exist. A key whose meaning changes under a stable name cannot be
+  # rebaselined, only re-derived. Renaming kittyv3 -> kitty here would have had to reuse the very
+  # names v1's GT occupied, so the key stays and v1's rows were deleted outright.
   #
-  # v3 is the SETTLED list -- four changes from v2 (Golem-Skin
-  # Gauntlets 3->4, Skateboard 2->1, Cid out, Adelbert Steiner in), decided by the user on 2026-10-08.
-  # The 10th-creature slot was NOT settled on speed: `g4_cid` was faster at both std and 2hg
-  # (+0.0064 / +0.0096 against this list), and the user took Adelbert for removal resilience the
-  # goldfish cannot represent -- Adelbert's +1/+1 counts EQUIPMENT YOU CONTROL, not Equipment
-  # attached, so he is a 2+N/1+N lifelinker with zero equips in exactly the board state that beats
-  # this deck. See the commit for the full rationale.
+  # v1 (v1-kemba-balan: 2 Kemba + 2 Balan, 4 Kor Duelist, 22 Plains) and v2 (v2-puresteel-hammer)
+  # are ARCHIVED with no suite rows, per the mirrorwing/angels/critter convention. Their
+  # hand-played references are retained and still replayed -- test/viewer_protocol_check.py globs
+  # references/** recursively and resolves a versioned folder to its versioned list, so an
+  # archived list keeps its bench without carrying GT rows (user: "The only games we will continue
+  # to play from the old lists should be the references. We'll hold on to those.").
   #
-  # WHY THE PROMOTION IS NOT DONE YET (it is the user's standing ruling above, deliberately deferred,
-  # not forgotten): v1 is the CHEAPEST searched deck in the suite only because it ships an exhaustive
-  # keep model AND a value leaf. v3 ships NEITHER yet, so taking v1's full counts (1000/250/150)
-  # today would multiply this row's cost by ~2.7x while the artifacts are still being generated.
-  # Order: generate v3's mulligan + value leaf, re-measure, THEN promote and drop v1.
-  #
-  # SIZING, and why the counts are a fifth of v1's. This list costs ~10x v1 per game at the gate
-  # cells (measured 2026-10-02: 2.0 s/game d3 b10, 2.46 s/game d5 b20 vs v1's 0.17-0.22) and the
-  # reason is ARTIFACTS, not play: v1 ships an exhaustive keep model AND a value leaf; v2 ships
-  # neither, because both generators are gated BEHIND suite membership. With no keep table every
-  # mulligan decision falls back to lookahead bottoming, which plays a complete trial game per
-  # legal removal subset -- the per-decision census put 82.4% of v2's gate-settings work inside
-  # those trial games (probe=1 rows), against 17.6% for the game actually being played. The
-  # profile therefore ships `bottom_eval_units: 600` to bound the trial games (see the profile and
-  # docs/design/free-equip-dominance-collapse.md SS8); that is 0.58x core-ms for +0.006 avg turns
-  # on 500 held-out games, and it goes INERT the moment a keep table lands, since the table
-  # replaces lookahead bottoming outright.
-  #
-  # Gated metric (worst searched REGRESSION case, d5 b20) = 2458 ms/game against the 3100 ms/game
-  # budget (3x fivecolour) => 0.79x, so the 3x rule passes with margin. Counts are a fifth of
-  # v1's so the TOTAL this adds (~630 core-s regression, ~325 smoke) stays in selesnya's class;
-  # the avg/digest fingerprint does not get weaker with fewer games, only the avg's resolution.
-  # No kittyv22hg row: v1's 2HG case covers the archetype's heads/life reads and this list is a
-  # temporary second entry.
-  "kittyv2 0 1001 1000 0"
-  "kittyv2 3 1001  100 10"
-  "kittyv2 5 1001   50 20"
-  # kittyv3: the SETTLED list (see the kittyv2 block above for the full rationale and for why it has
-  # its own key). Same counts as kittyv2 -- it is the same archetype at the same artifact maturity
-  # (v3 ships a value leaf but NOT yet a keep table), and it must be a suite case before its
-  # mulligan profile can be generated at all (CLAUDE.md: suite membership gates generation).
-  # 3x RULE, measured fresh on 2026-10-11 under PGO on the current engine rather than inherited:
-  # worst searched cell d5 b20 = 75,690 ms / 50 games = 1,514 ms/game against the 3,100 ms/game
-  # budget (3x fivecolour) => 0.49x, so it passes with more margin than v2-puresteel did (0.79x).
+  # 3x RULE, measured 2026-10-11 under PGO: worst searched cell d5 b20 = 1,514 ms/game against the
+  # 3,100 ms/game budget (3x fivecolour) => 0.49x, passing with more margin than v2 did (0.79x).
   "kittyv3 0 1001 1000 0"
   "kittyv3 3 1001  100 10"
   "kittyv3 5 1001   50 20"
@@ -402,7 +365,7 @@ SMOKE_CASES=(
   "creature_giving2hg 3 1001 50 10"
   "mirrorwing2hg      3 1001 50 10"
   "stompy2hg          3 1001 50 10"
-  "kitty2hg           3 1001 50 10"
+  "kittyv32hg         3 1001 50 10"
   "dragons2hg         3 1001 50 10"
   "breaching2hg       3 1001 50 10"
   "critter2hg         3 1001 50 10"
@@ -639,21 +602,9 @@ REGRESSION_CASES=(
   "minotaur 3 3003  300 10"
   "minotaur 5 2002  250 20"
   "minotaur 5 3003  250 20"
-  # kitty: minotaur-shaped two-seed sweep. At 0.21x/0.13x minotaur's per-game cost this is the
-  # cheapest block in the tier (~9 min ST added, vs minotaur's ~9 min for 5x the work).
-  "kitty 0 2002 1000 0"
-  "kitty 3 2002  300 10"
-  "kitty 3 3003  300 10"
-  "kitty 5 2002  250 20"
-  "kitty 5 3003  250 20"
-  # kittyv2: see the SMOKE block. These are the GATED cells (worst searched case d5 b20 = 2458
-  # ms/game, 0.79x the 3100 budget). Measured at exactly these counts 2026-10-02.
-  "kittyv2 0 2002 1000 0"
-  "kittyv2 3 2002  100 10"
-  "kittyv2 3 3003  100 10"
-  "kittyv2 5 2002   50 20"
-  "kittyv2 5 3003   50 20"
-  # kittyv3: see the SMOKE block. The GATED cells, same shape as kittyv2.
+  # kittyv3: see the SMOKE block. The GATED cells (worst searched case d5 b20 = 1,514 ms/game,
+  # 0.49x the 3,100 budget). v1 and v2 had blocks here until 2026-10-14; both were dropped when v3
+  # was promoted to the shipped list.
   "kittyv3 0 2002 1000 0"
   "kittyv3 3 2002  100 10"
   "kittyv3 3 3003  100 10"
@@ -1021,39 +972,9 @@ OVERNIGHT_CASES=(
   "minotaur 5 5005  500 40"
   "minotaur 5 6006  500 40"
   "minotaur 5 7007  500 40"
-  # kitty: minotaur-shaped 4-seed deep sweep at 2x gate budgets. Probed at the ACTUAL overnight
-  # budgets 2026-08-29: d3 b20 ~0.83 s/game, d5 b40 ~1.65 s/game (0.32x/0.21x minotaur)
-  # => ~1.8 core-hours added.
-  "kitty 0  4004 2000 0"
-  "kitty 0  6006 2000 0"
-  "kitty 0  8008 2000 0"
-  "kitty 0 10010 2000 0"
-  "kitty 3 4004 1000 20"
-  "kitty 3 5005 1000 20"
-  "kitty 3 6006 1000 20"
-  "kitty 3 7007 1000 20"
-  "kitty 5 4004  500 40"
-  "kitty 5 5005  500 40"
-  "kitty 5 6006  500 40"
-  "kitty 5 7007  500 40"
-  # kittyv2: see the SMOKE block. The standard 4-seed shape at a QUARTER of v1's counts, because
-  # the overnight budgets are 2x the gate's: at ~4.0 s/game d3 b20 and ~4.9 s/game d5 b40 (2x the
-  # measured gate rates) the full shape would add ~7.2 core-hours to a tier that runs ~9.6, which
-  # is not a trim-later amount. A quarter puts this at ~1.8 core-hours -- exactly v1's own add.
-  "kittyv2 0  4004 2000 0"
-  "kittyv2 0  6006 2000 0"
-  "kittyv2 0  8008 2000 0"
-  "kittyv2 0 10010 2000 0"
-  "kittyv2 3 4004  250 20"
-  "kittyv2 3 5005  250 20"
-  "kittyv2 3 6006  250 20"
-  "kittyv2 3 7007  250 20"
-  "kittyv2 5 4004  125 40"
-  "kittyv2 5 5005  125 40"
-  "kittyv2 5 6006  125 40"
-  "kittyv2 5 7007  125 40"
   # kittyv3: see the SMOKE block. EXPANDED at the keep-table adoption, 2026-10-14 -- the ENTRY-style
-  # quarter shape above (shared with kittyv2) existed because a deck WITHOUT a keep table is at its
+  # quarter shape it used to carry (shared with the since-dropped kittyv2) existed because a deck
+  # WITHOUT a keep table is at its
   # most expensive: every mulliganed game plays out each candidate bottom as a full game. v3's
   # exhaustive table (a9a17e64) replaces that with a lookup and MEASURED 2.90x (d3) / 2.99x (d5)
   # fewer search units per game, so the saving buys sample instead of being banked.
@@ -1069,12 +990,13 @@ OVERNIGHT_CASES=(
   # yesterday (same rows, table absent), so the expansion is a net cost REDUCTION that still
   # doubles the sample.
   #
-  # v1 (6,000 searched, 7.6%) and kittyv2 (1,500, 3.4%) are both due to be dropped once v3 is
-  # finished and shown to beat v2 (USER 2026-10-14), keeping their references: *"The only games we
-  # will continue to play from the old lists should be the references. We'll hold on to those."*
-  # That drop is INDEPENDENT of this file -- test/viewer_protocol_check.py derives
-  # references/<dir> -> decks/<name>/<name>.{cod,txt} FROM THE FOLDER LAYOUT and never reads
-  # regression_cases.sh, so removing cases cannot stop a reference being replayed.
+  # v1 (6,000 searched, 7.6% of the tier) and kittyv2 (1,500, 3.4%) WERE DROPPED on 2026-10-14,
+  # once v3 was shown to beat v2 at d5 (see the SMOKE block for the numbers), freeing ~11% of the
+  # tier. Their references are kept and still replayed: *"The only games we will continue to play
+  # from the old lists should be the references. We'll hold on to those."* That is safe because
+  # test/viewer_protocol_check.py derives references/<dir> -> decks/... FROM THE FOLDER LAYOUT,
+  # globbing references/** recursively, and never reads regression_cases.sh -- so removing a case
+  # cannot stop a reference being replayed, and an archived list keeps its bench either way.
   "kittyv3 0  4004 2000 0"
   "kittyv3 0  6006 2000 0"
   "kittyv3 0  8008 2000 0"

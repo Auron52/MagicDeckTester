@@ -11,8 +11,8 @@ play difference, not a deck-order difference.
 import json
 import sys
 
-DECK = "decks/KittyEquipment/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/KittyEquipment.profile.json"
+DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
+PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
 
 # name -> per-job flag overrides (see src/ai/HeuristicArm.h). {} == HEAD as shipped:
 # searched second main (the live per-deck flip), all three package levers OFF.

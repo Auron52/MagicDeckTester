@@ -27,8 +27,8 @@ MAX_TURNS = 8
 DECKS = {
     "al":    ("decks/Anti-Lifegain/Anti-Lifegain.cod",
               "decks/Anti-Lifegain/Anti-Lifegain.profile.json", 5),
-    "kitty": ("decks/KittyEquipment/KittyEquipment.cod",
-              "decks/KittyEquipment/KittyEquipment.profile.json", 5),
+    "kitty": ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+              "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json", 5),
     "5c":    ("decks/FiveColour/FiveColour.cod",
               "decks/FiveColour/FiveColour.profile.json", 6),
 }

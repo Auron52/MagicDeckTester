@@ -18,8 +18,8 @@ it doubles as a check that the interim log-reporter fix really was inert.
 import json
 import sys
 
-DECK = "decks/KittyEquipment/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/KittyEquipment.profile.json"
+DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
+PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
 
 MC = "MTG_METALCRAFT_CREDIT"
 BP = "MTG_EQUIP_DRAW_BP"

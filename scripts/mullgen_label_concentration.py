@@ -5,7 +5,7 @@
 shipped play policy clears a floor. That floor is an AVERAGE over random openers, and an average is
 exactly the statistic that cannot see a large error confined to a small subclass -- the same dilution
 that made Colossus Hammer and O-Naginata measure 0.01 apart over 400 probes while their conditional
-effects differ by 0.7 turns (decks/KittyEquipment/KittyEquipment.buckets.json).
+effects differ by 0.7 turns (decks/KittyEquipment/v1-kemba-balan/KittyEquipment.buckets.json).
 
 The subclass that matters for a gen labeller is the deck's MULTI-STEP line: hands whose value only
 exists if the search is deep enough to find the sequence. On KittyEquipment that is Colossus Hammer
@@ -14,7 +14,7 @@ would price those hands as if the Hammer were a brick -- and it would still scor
 because such hands are a small slice of random openers.
 
 Usage:
-  scripts/mullgen_label_concentration.py decks/KittyEquipment/KittyEquipment.cod \
+  scripts/mullgen_label_concentration.py decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod \
       --arms 1:3,2:3,3:3 --ref 5:20 --hands 120 -R 24 \
       --group "Colossus Hammer" --group "Colossus Hammer+Puresteel Paladin,Balan, Wandering Knight"
 

@@ -65,7 +65,7 @@ DECKS = {
     "fivecolour":      ("decks/FiveColour/FiveColour.cod", "decks/FiveColour/FiveColour.profile.json"),
     "stompy":          ("decks/StompySurprise/StompySurprise.cod", "decks/StompySurprise/StompySurprise.profile.json"),
     "minotaur":        ("decks/Minotaur/Minotaur.cod", "decks/Minotaur/Minotaur.profile.json"),
-    "kitty":           ("decks/KittyEquipment/KittyEquipment.cod", "decks/KittyEquipment/KittyEquipment.profile.json"),
+    "kitty":           ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod", "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"),
 }
 
 COND     = {"MTG_BP_CLASSIFY": True, "MTG_BP_CONDEMN_ORDER_AWARE": True}

@@ -150,7 +150,7 @@ TEST_CASE("bucket policy: the shipped KittyEquipment ruling loads and keeps the 
 {
     // The real file, not a fixture -- so an edit that breaks the format fails the suite rather than
     // a generation hours later.
-    const std::filesystem::path deck = "decks/KittyEquipment/KittyEquipment.cod";
+    const std::filesystem::path deck = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod";
     if (!std::filesystem::exists(deck)) { return; }   // running outside the repo root
     const BucketPolicy pol = LoadBucketPolicy(deck);
     REQUIRE_FALSE(pol.Empty());

@@ -1,6 +1,6 @@
 {
  "_comment": "NEGATIVE control for the Jitte's +N/+N mode: a CHARGED but UNATTACHED Jitte. Mode 3 pumps 'equipped creature', which is not a target and does not exist here, so the activation is illegal -- it must grade `illegal` with an actionable reason ('equip it first'), not `legal_not_enumerated`. Pre-fix it graded legal_not_enumerated, i.e. it looked exactly like the REAL Jitte gap closed earlier the same day (enumerated-but-unplayable-activations.md section 2), which is what made that alarm untrustworthy. Note the enumerator already declines to emit mode 3 for an unattached Jitte for the same reason (a guaranteed no-op must never appear in a plan menu); this fixture pins that CheckLine agrees, and says so in words a player can act on.",
- "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
  "turn": 4,
  "on_the_play": true,
  "max_turns": 4,

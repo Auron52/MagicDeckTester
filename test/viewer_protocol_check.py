@@ -151,9 +151,17 @@ def capped(args):
 #
 # This is the SAME defect scripts/ref_bench.py documents and already fixed on its own side: "when a
 # deck's shipping list is replaced, its folder keeps accumulating references for the NEW list beside
-# the old ones, and no single folder->deck binding can describe a mixture." The variant games live
-# in references/Mirrorwing_Dragon/<variant>/ and are out of scope here anyway -- the glob below is
-# deliberately ONE LEVEL, covering references/<deck>/claude_*.json only.
+# the old ones, and no single folder->deck binding can describe a mixture." The remedy is that a
+# promotion MOVES the old list's references down into references/<Deck>/v<N>-<slug>/ beside it, so
+# each folder describes exactly one list again and the mixture never forms.
+#
+# THE GLOB IS RECURSIVE (references/**/claude_s*_gi*.json), so those versioned folders ARE in scope
+# and resolve via _deck_for()'s <deck>/<version> shape -- see USER 2026-10-02 below. A comment here
+# used to claim the glob was "deliberately ONE LEVEL, covering references/<deck>/claude_*.json
+# only"; that was true before 2026-10-02 and outlived the change by twelve days, in the one file
+# whose own lesson is that "a hand-written override outlived the fact it described". It mattered on
+# 2026-10-14: the KittyEquipment v3 promotion turned on whether an ARCHIVED list keeps being
+# replayed, and the stale comment said it would not.
 #
 # The lesson is not "check this row" but "a hand-written override outlived the fact it described".
 # Derivation cannot go stale that way, so there is nothing here to maintain.

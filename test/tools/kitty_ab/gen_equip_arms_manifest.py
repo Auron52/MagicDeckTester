@@ -31,8 +31,8 @@ that holds at 8,000 games per arm, and what the host rule costs or buys on top.
 import json
 import sys
 
-DECK = "decks/KittyEquipment/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/KittyEquipment.profile.json"
+DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
+PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
 GAMES = 500
 BASE = 700000
 

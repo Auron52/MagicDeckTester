@@ -1,0 +1,75 @@
+{
+  "card_scores": {
+    "Armored Skyhunter": [
+      -0.05654387541180039,
+      -0.043773584905660634
+    ],
+    "Balan, Wandering Knight": [
+      -0.0837703871524953
+    ],
+    "Bonesplitter": [
+      0.19317716358813275,
+      -0.2076435364564988
+    ],
+    "Boros Garrison": [
+      -0.2806398382281401
+    ],
+    "Colossus Hammer": [
+      0.0014857026559482733,
+      -0.027598566308244088
+    ],
+    "Grafted Wargear": [
+      -0.0507705907221645
+    ],
+    "Kemba, Kha Regent": [
+      -0.10226998574405055
+    ],
+    "Kor Duelist": [
+      0.5510018446340466,
+      0.04201289636375716
+    ],
+    "Lightning Greaves": [
+      0.24708866597486434
+    ],
+    "Loxodon Warhammer": [
+      -0.08186557700436836
+    ],
+    "O-Naginata": [
+      -0.11000480370321863
+    ],
+    "Puresteel Paladin": [
+      0.34956810631229285,
+      -0.2976397515527953
+    ],
+    "Shadowspear": [
+      -0.14782454899186437
+    ],
+    "Sol Ring": [
+      0.5892614538023313
+    ],
+    "Stoneforge Mystic": [
+      0.21661840411840494
+    ],
+    "Swords to Plowshares": [
+      -0.5015595757953832
+    ],
+    "Umezawa's Jitte": [
+      0.05007201665503036
+    ],
+    "Unexpectedly Absent": [
+      -0.17963683956558185
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

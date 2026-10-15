@@ -1,6 +1,6 @@
 {
  "_comment": "Equipping an Equipment ALREADY IN PLAY must be expressible as a viewer LINE (2026-08-23, user-reported: 'Equipment seems to be missing a way to equip in the viewer'). Two things had to exist for that: the plan action must be tagged as a board activation so the GUI makes the Equipment clickable, and Equip needs its OWN verb -- with it matched inside the ordinary cast= multiset (the legacy behaviour), 'equip the Bonesplitter in play' and 'cast the Bonesplitter in hand' encode identically and the viewer cannot ask for the first. WHICH creature it attaches to is NOT in the line: that is the `equip` sub-decision, so a two-host board grades `choose`, which is what this fixture pins.",
- "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
  "turn": 4,
  "on_the_play": true,
  "max_turns": 4,

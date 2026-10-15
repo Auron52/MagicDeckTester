@@ -32,8 +32,8 @@ DECKS = {
     "dragonstorm": ("decks/Dragonstorm/Dragonstorm.cod", "decks/Dragonstorm/Dragonstorm.profile.json"),
     "mirrorwing": ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
                    "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"),
-    "kitty": ("decks/KittyEquipment/KittyEquipment.cod",
-              "decks/KittyEquipment/KittyEquipment.profile.json"),
+    "kitty": ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+              "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"),
 }
 
 RECIPE = {"MTG_BP_SITE3": True, "MTG_BP_SITE3_DEFER": True, "MTG_BP_NODE": True,

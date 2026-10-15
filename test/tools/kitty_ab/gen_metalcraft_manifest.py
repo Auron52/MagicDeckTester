@@ -15,8 +15,8 @@ Arms are PAIRED on seed: job i of every arm is the same shuffle, so a difference
 import json
 import sys
 
-DECK = "decks/KittyEquipment/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/KittyEquipment.profile.json"
+DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
+PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
 
 ARMS = {"mc_off": {}, "mc_on": {"MTG_METALCRAFT_CREDIT": True}}
 
