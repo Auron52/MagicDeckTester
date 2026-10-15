@@ -52322,6 +52322,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             for (const auto& cm : class_memo) { if (cm.first == sub) { return cm.second; } }
             std::vector<std::uint64_t> keys;
+            std::vector<int> linked;   // the board's attachment links, walked once (same test)
+            LandfallTargetLinks(state, linked);
             int singles = 0;
             for (const Permanent& q : state.battlefield)
             {
@@ -52329,7 +52331,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
                 if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
                 std::uint64_t k = 0;
-                if (!LandfallTargetFoldKey(state, q, k)) { ++singles; continue; }
+                if (!LandfallTargetFoldKey(state, q, k, &linked)) { ++singles; continue; }
                 if (std::find(keys.begin(), keys.end(), k) == keys.end()) { keys.push_back(k); }
             }
             const int n = static_cast<int>(keys.size()) + singles;

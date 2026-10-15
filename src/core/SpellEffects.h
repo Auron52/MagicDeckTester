@@ -1911,7 +1911,8 @@ inline int ConsumePackedLandSearchPin(int& packed)
     return k;
 }
 inline void PerformLandSearch(GameState& state, int controller, const LandSearchSpec& spec,
-                              const std::string& source, int pin);          // LandSearch.h
+                              const std::string& source, int pin,
+                              const char* source_suffix = nullptr);         // LandSearch.h
 inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
                                       const CardDefinition& def);           // LandSearch.h
 inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx);
@@ -7023,7 +7024,8 @@ inline int LandfallTargetPinFor(const GameState& state)
 // boards that differ only in WHICH per-copy number holds them -- a relabelling no rule can observe.
 // Anything this does not recognise as plain returns false and stays a singleton, so a refusal costs
 // branching, never a line.
-inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, std::uint64_t& key)
+inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, std::uint64_t& key,
+                                  const std::vector<int>* linked = nullptr)
 {
     if (p.damage != 0 || p.pending_death_trigger != 0 || p.marked_for_destruction) { return false; }
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
@@ -7042,10 +7044,20 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty())           { return false; }
     // ...and nothing attached TO it / paired WITH it: that link lives on the OTHER permanent.
-    for (const Permanent& q : state.battlefield)
+    // `linked` (when given) is exactly the set of numbers some permanent's aura_attached_to /
+    // equipped_to / paired_with names -- the same test, the board walked once per resolution
+    // instead of once per candidate (LandfallTargetLinks).
+    if (linked != nullptr)
     {
-        if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number
-            || q.paired_with == p.card.m_number) { return false; }
+        if (std::find(linked->begin(), linked->end(), p.card.m_number) != linked->end()) { return false; }
+    }
+    else
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number
+                || q.paired_with == p.card.m_number) { return false; }
+        }
     }
     std::uint64_t h = 0x6C616E64ull;   // "land"
     auto mix = [&h](std::uint64_t v)
@@ -7061,7 +7073,11 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     mix(p.card.m_keyword_mask);
     mix(static_cast<std::uint64_t>(p.card.m_power.value_or(-99) + 1000));
     mix(static_cast<std::uint64_t>(p.card.m_toughness.value_or(-99) + 1000));
-    for (const std::string& s : p.card.m_subtypes) { mix(std::hash<std::string>{}(s)); }
+    // Subtypes by INTERNED ID (SubtypeSet stores ids; one id per name, process-wide): the key is only
+    // ever compared for equality within one resolution / one enumeration, so hashing the id instead
+    // of the name string folds exactly the same classes, without a string hash per subtype.
+    for (std::size_t si = 0; si < p.card.m_subtypes.size(); ++si)
+    { mix(0x5B000000ull + p.card.m_subtypes.IdAt(si)); }
     mix((p.is_token ? 1u : 0u) | (p.def_absent ? 2u : 0u) | (p.tapped ? 4u : 0u)
         | (p.entered_this_turn ? 8u : 0u) | (p.gained_control_this_turn ? 16u : 0u)
         | (p.fresh_hold_exempt ? 32u : 0u) | (p.pay_sac_eaten ? 64u : 0u));
@@ -7072,6 +7088,19 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     { mix((static_cast<std::uint64_t>(c.type) << 32) ^ static_cast<std::uint64_t>(c.count)); }
     key = h;
     return true;
+}
+
+// The numbers some permanent is attached to / paired with (LandfallTargetFoldKey's `linked`). A
+// number appears once per link; 0 (no link) is never recorded, and no card is numbered 0.
+inline void LandfallTargetLinks(const GameState& state, std::vector<int>& out)
+{
+    out.clear();
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.aura_attached_to != 0) { out.push_back(q.aura_attached_to); }
+        if (q.equipped_to != 0)      { out.push_back(q.equipped_to); }
+        if (q.paired_with != 0)      { out.push_back(q.paired_with); }
+    }
 }
 
 // "put N +1/+1 counters on target <subtype> you control" (Phylath, World Sculptor). Resolved where
@@ -7093,13 +7122,27 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
                                           const CardParams& wp, const std::vector<int>* target_snapshot)
 {
     const std::string& sub = wp.landfall_target_subtype;
+    // The subtype by INTERNED ID (CardHasSubtypeId: a card's subtypes are interned at load, so a name
+    // the registry does not know is on no card -- kNone matches nothing, as the string test would).
+    const uint16_t sub_id = SubtypeRegistry::Instance().Id(sub);
+    // CreatureHasShroud, walked ONCE: the creatures OUR shroud-granting Equipment is attached to (the
+    // predicate's own test, an equipment of the creature's controller -- here `controller` -- with
+    // equip_grants_shroud). It was a full board walk per candidate.
+    std::vector<int> shrouded;
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.controller_index != controller || a.equipped_to == 0) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (ad && ad->params.is_equipment && ad->params.equip_grants_shroud) { shrouded.push_back(a.equipped_to); }
+    }
     std::vector<int> legal;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
         if (q.controller_index != controller) { continue; }
-        if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
-        if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+        if (!(sub_id != SubtypeRegistry::kNone && CardHasSubtypeId(q.card, sub_id)) && !q.AnimatedAllTypes()) { continue; }
+        if ((q.card.IsCreature() || q.is_animated)
+            && std::find(shrouded.begin(), shrouded.end(), q.card.m_number) != shrouded.end()) { continue; }
         if (target_snapshot != nullptr
             && std::find(target_snapshot->begin(), target_snapshot->end(), q.card.m_number)
                    == target_snapshot->end()) { continue; }
@@ -7110,11 +7153,13 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
     // Sound identity fold: one representative (the oldest, i.e. battlefield order) per class.
     std::vector<int>           reps;
     std::vector<std::uint64_t> seen;
+    std::vector<int>           linked;
     reps.reserve(legal.size());
+    LandfallTargetLinks(state, linked);
     for (int i : legal)
     {
         std::uint64_t k = 0;
-        if (LandfallTargetFoldKey(state, state.battlefield[static_cast<std::size_t>(i)], k))
+        if (LandfallTargetFoldKey(state, state.battlefield[static_cast<std::size_t>(i)], k, &linked))
         {
             if (std::find(seen.begin(), seen.end(), k) != seen.end()) { continue; }
             seen.push_back(k);
@@ -7196,7 +7241,7 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(wi)].card);
         if (wd == nullptr) { continue; }
         const CardParams& wp = wd->params;
-        const std::string wname = wd->card.m_name.str();
+        const std::string& wname = wd->card.m_name.str();   // the name registry's string: stable
 
         // Tokens (Rampaging Baloths' 4/4 Beast, Omnath's 5/5 Elemental). MANDATORY in the current
         // Oracle text of both. One event of N tokens through the token chokepoint (Doubling Season,
@@ -7233,13 +7278,15 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
         if (wp.landfall_counters_each > 0 && !wp.landfall_counters_each_subtype.empty())
         {
             const std::string& sub = wp.landfall_counters_each_subtype;
+            const uint16_t sub_id = SubtypeRegistry::Instance().Id(sub);   // interned: see the target resolver
             const int sh = DoublerShift(state, controller, /*for_tokens=*/false);
             int hit = 0;
             for (Permanent& q : state.battlefield)
             {
                 if (q.controller_index != controller) { continue; }
                 if (!q.card.IsCreature() && !q.is_animated) { continue; }   // "<subtype> CREATURE"
-                if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
+                if (!(sub_id != SubtypeRegistry::kNone && CardHasSubtypeId(q.card, sub_id))
+                    && !q.AnimatedAllTypes()) { continue; }
                 AddPlusCounters(q, wp.landfall_counters_each << sh);
                 AnnihilateCounters(q);
                 ++hit;

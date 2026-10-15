@@ -1471,8 +1471,17 @@ void DecisionProvider::LandfallCounterTargetOrder(const GameState& s, int contro
         const bool swings_now = !q.tapped && CanAttackFull(q, s.battlefield, controller);
         return (swings_now ? 1000 : 0) + q.EffectivePower();
     };
-    std::stable_sort(class_reps.begin(), class_reps.end(),
-                     [&](int a, int b) { return key(a) > key(b); });
+    // Keys computed ONCE per class (they read only the board): the comparator used to recompute both
+    // sides per comparison, an O(n log n) x CanAttackFull cost on every Phylath landfall of a wide
+    // Plant board (perf 2026-10-15). Same keys, same stable order.
+    if (class_reps.size() < 2) { return; }
+    std::vector<std::pair<int, int>> keyed;
+    keyed.reserve(class_reps.size());
+    for (int idx : class_reps) { keyed.emplace_back(key(idx), idx); }
+    std::stable_sort(keyed.begin(), keyed.end(),
+                     [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                     { return a.first > b.first; });
+    for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].second; }
 }
 
 // The colours we NEED and LACK, as a 5-bit WUBRG mask: NEED = a coloured pip on a nonland card in
@@ -1494,13 +1503,28 @@ static unsigned LandSearchLackMask(const GameState& s, int controller)
         if (mc.red   > 0) { need[3] = true; }
         if (mc.green > 0) { need[4] = true; }
     }
-    for (const Permanent& q : s.battlefield)
+    // The result is need & ~have, so once every NEEDED colour is had nothing below can change it:
+    // the walk stops there (and never starts when nothing is needed). Same mask, fewer reads.
+    auto all_needed_had = [&]()
     {
-        if (q.controller_index != controller || q.def_absent) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
-        if (d == nullptr) { continue; }
-        for (Color c : d->params.produces)
-        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have[ci] = true; } }
+        for (int i = 0; i < 5; ++i) { if (need[i] && !have[i]) { return false; } }
+        return true;
+    };
+    if (!all_needed_had())
+    {
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index != controller || q.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d == nullptr) { continue; }
+            bool grew = false;
+            for (Color c : d->params.produces)
+            {
+                const int ci = static_cast<int>(c);
+                if (ci >= 0 && ci < 5 && !have[ci]) { have[ci] = true; grew = true; }
+            }
+            if (grew && all_needed_had()) { break; }
+        }
     }
     unsigned lack = 0;
     for (int i = 0; i < 5; ++i) { if (need[i] && !have[i]) { lack |= 1u << i; } }
@@ -1963,10 +1987,20 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
         if (spare_aura && carries_aura(p)) { v -= 500; }   // the Aura would die with the bounce
         return v;
     };
-    std::vector<int> out = legal;
     // The original scan kept a strict `>` winner, so the LOWEST index wins ties -- stable_sort on a
-    // descending score over an ascending input reproduces that.
-    std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return score(a) > score(b); });
+    // descending score over an ascending input reproduces that. Each candidate's score is computed
+    // ONCE (it reads only the board, never the order): the comparator used to recompute both sides
+    // on every comparison -- an O(n log n) x board-width aura scan per bounce, and a fetched Gruul
+    // Turf bounces inside every Landfall rollout (perf 2026-10-15). Same keys, same stable order.
+    std::vector<std::pair<long, int>> keyed;
+    keyed.reserve(legal.size());
+    for (int i : legal) { keyed.emplace_back(score(i), i); }
+    std::stable_sort(keyed.begin(), keyed.end(),
+                     [](const std::pair<long, int>& a, const std::pair<long, int>& b)
+                     { return a.first > b.first; });
+    std::vector<int> out;
+    out.reserve(keyed.size());
+    for (const auto& kv : keyed) { out.push_back(kv.second); }
     // THE USER'S DEFAULT (MTG_BOUNCE_USER_RULE): a tapped land that re-enters untapped and makes no
     // colour another kept land does not is THE pick -- the front, so the d0 runner, the playout beyond
     // the horizon, the base plan and the prompt's default all take it (BounceSearchCandidates offers

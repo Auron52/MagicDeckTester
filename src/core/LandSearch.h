@@ -286,23 +286,38 @@ struct Key
 };
 struct Slot
 {
-    bool                                  valid = false;
-    Key                                   key;
-    std::vector<std::vector<std::string>> picks;
+    bool                                            valid = false;
+    Key                                             key;
+    std::vector<std::vector<std::string>>           picks;
+    // The DEFINITION of every entry of `picks`, same shape (CardDatabase::Lookup of the name, filled
+    // once per miss): the resolution takes its lands by definition pointer instead of copying and
+    // string-comparing the names (TakeLandFromLibraryDef).
+    std::vector<std::vector<const CardDefinition*>> pick_defs;
+    void Fill(std::vector<std::vector<std::string>>&& p)
+    {
+        picks = std::move(p);
+        pick_defs.resize(picks.size());
+        for (std::size_t i = 0; i < picks.size(); ++i)
+        {
+            pick_defs[i].resize(picks[i].size());
+            for (std::size_t j = 0; j < picks[i].size(); ++j)
+            { pick_defs[i][j] = CardDatabase::Instance().Lookup(picks[i][j]); }
+        }
+    }
 };
-constexpr std::size_t kSlots = 64;   // direct-mapped, per thread
+constexpr std::size_t kSlots = 1024;   // direct-mapped, per thread
 inline thread_local Slot t_slots[kSlots];
 // Diagnostic counters (thread-local; read by nothing that plays).
 inline thread_local unsigned long long t_hits = 0, t_misses = 0, t_bypass = 0;
 }   // namespace landsearchmemo
 
-// The provider-ordered pick list, MEMOIZED (see the block above). Returns a reference into a
-// per-thread slot: it is valid only until the NEXT LandSearchPicksMemo call on this thread, so read
-// what you need from it at once (every caller copies one pick, or reads size()/empty()).
-inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const GameState& s, int ctrl,
-                                                                        const LandSearchSpec& spec)
+// The provider-ordered pick list, MEMOIZED (see the block above), as the whole slot (names + defs).
+// Returns a reference into a per-thread slot: it is valid only until the NEXT memo call on this
+// thread, so read what you need from it at once (every caller copies one pick, or reads size()).
+inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ctrl,
+                                                      const LandSearchSpec& spec)
 {
-    static thread_local std::vector<std::vector<std::string>> t_bypass_out;
+    static thread_local landsearchmemo::Slot t_bypass_out;
     landsearchmemo::Key k;
     k.count      = spec.count;
     k.to_hand    = spec.to_hand;
@@ -332,7 +347,7 @@ inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const Ga
     if (!ok)
     {
         ++landsearchmemo::t_bypass;
-        t_bypass_out = LandSearchPicksUncached(s, ctrl, spec);
+        t_bypass_out.Fill(LandSearchPicksUncached(s, ctrl, spec));
         return t_bypass_out;
     }
     k.prov_type = typeid(prov).hash_code();
@@ -347,12 +362,17 @@ inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const Ga
         k.defs[b + 1] = dv; k.copies[b + 1] = cv;
     }
     landsearchmemo::Slot& slot = landsearchmemo::t_slots[k.Hash() % landsearchmemo::kSlots];
-    if (slot.valid && slot.key == k) { ++landsearchmemo::t_hits; return slot.picks; }
+    if (slot.valid && slot.key == k) { ++landsearchmemo::t_hits; return slot; }
     ++landsearchmemo::t_misses;
-    slot.picks = LandSearchPicksUncached(s, ctrl, spec);
+    slot.Fill(LandSearchPicksUncached(s, ctrl, spec));
     slot.key   = k;
     slot.valid = true;
-    return slot.picks;
+    return slot;
+}
+inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const GameState& s, int ctrl,
+                                                                        const LandSearchSpec& spec)
+{
+    return LandSearchMemoSlot(s, ctrl, spec).picks;
 }
 
 // By value (tests, the human prompt's default, anything that keeps the list): a copy of the memo.
@@ -426,6 +446,36 @@ inline bool TakeLandFromLibrary(Player& pl, const std::string& name, Card& out)
     return false;
 }
 
+// TakeLandFromLibrary by DEFINITION: the same two passes, matched on the cached definition pointer
+// instead of the name string (a library card's definition IS its name's entry, so `LookupCached(c) ==
+// want` holds exactly when `c.m_name == want's name`). Reads the library through operator[] in the
+// same order, so the index-carry recorder sees the same accesses.
+inline bool TakeLandFromLibraryDef(Player& pl, const CardDefinition* want, Card& out)
+{
+    if (want == nullptr) { return false; }
+    for (std::size_t i = 0; i < pl.library.size(); ++i)
+    {
+        if (CardDatabase::Instance().LookupCached(pl.library[i]) == want)
+        {
+            out = pl.library[i];
+            pl.library.erase(pl.library.begin() + static_cast<std::ptrdiff_t>(i));
+            return true;
+        }
+    }
+    if (want->behaviour_identity == 0) { return false; }
+    for (std::size_t i = 0; i < pl.library.size(); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.library[i]);
+        if (d != nullptr && d->behaviour_identity == want->behaviour_identity)
+        {
+            out = pl.library[i];
+            pl.library.erase(pl.library.begin() + static_cast<std::ptrdiff_t>(i));
+            return true;
+        }
+    }
+    return false;
+}
+
 // THE land-search resolution. `pin` = the searched pick index (-1 = the provider's front). Shared by
 // every world: the executor (EffectHandler / AIEngine via ApplyPermAbility / GameEngine combat and
 // upkeep), the rollout (apply_one / SimulateCombat / SimulateEndAndStartNextTurn) and human play.
@@ -436,11 +486,24 @@ inline bool TakeLandFromLibrary(Player& pl, const std::string& name, Card& out)
 // DECLINES it (no shuffle -- nothing was searched), any other -1 stops early (a search for cards with
 // a stated quality may fail to find, CR 701.19b). The default is the autonomous pick.
 inline void PerformLandSearch(GameState& state, int controller, const LandSearchSpec& spec,
-                              const std::string& source, int pin)
+                              const std::string& source, int pin, const char* source_suffix)
 {
     if (spec.count <= 0) { return; }
     Player& pl = state.players[static_cast<std::size_t>(controller)];
-    std::vector<std::string> chosen;   // battlefield entries first, then hand entries
+    // The source's display label ("Primeval Titan (attack)"), built only where something shows it --
+    // the human prompt and the play-event line -- never on the autonomous path.
+    auto label = [&]() { return source_suffix != nullptr ? source + source_suffix : source; };
+    // The chosen lands' DEFINITIONS, battlefield entries first, then hand entries. A small inline
+    // buffer: the autonomous path resolves millions of these, and every pool pick holds <= 2 lands.
+    constexpr int kInline = 8;
+    const CardDefinition* chosen_buf[kInline] = {};
+    std::vector<const CardDefinition*> chosen_big;
+    const CardDefinition** chosen = chosen_buf;
+    int n_chosen = 0;
+    auto reserve_chosen = [&](std::size_t n)
+    {
+        if (n > static_cast<std::size_t>(kInline)) { chosen_big.assign(n, nullptr); chosen = chosen_big.data(); }
+    };
     int bf_n = 0;
     if (g_play_tutor_chooser)
     {
@@ -448,10 +511,11 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
         const std::vector<std::string> def_pick = picks.empty() ? std::vector<std::string>{}
                                                                 : picks.front();
         const int bf_slots = std::max(0, spec.count - spec.to_hand);
+        std::vector<std::string> names;
         for (int k = 0; k < spec.count; ++k)
         {
             const std::vector<std::string> cands =
-                LandSearchHumanCandidates(state, controller, spec, chosen);
+                LandSearchHumanCandidates(state, controller, spec, names);
             if (cands.empty()) { break; }
             int def_idx = 0;
             if (k < static_cast<int>(def_pick.size()))
@@ -459,42 +523,62 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                 auto it = std::find(cands.begin(), cands.end(), def_pick[static_cast<std::size_t>(k)]);
                 if (it != cands.end()) { def_idx = static_cast<int>(it - cands.begin()); }
             }
-            std::string label = source + " -- " + (spec.basic_only ? "basic land" : "land");
-            if (k < bf_slots) { label += spec.tapped ? " onto the battlefield tapped" : " onto the battlefield"; }
-            else              { label += " into your hand"; }
+            std::string lbl = label() + " -- " + (spec.basic_only ? "basic land" : "land");
+            if (k < bf_slots) { lbl += spec.tapped ? " onto the battlefield tapped" : " onto the battlefield"; }
+            else              { lbl += " into your hand"; }
             if (spec.count > 1)
-            { label += " (" + std::to_string(k + 1) + " of up to " + std::to_string(spec.count) + ")"; }
-            const int got = (*g_play_tutor_chooser)(state, controller, label, cands, def_idx, {});
+            { lbl += " (" + std::to_string(k + 1) + " of up to " + std::to_string(spec.count) + ")"; }
+            const int got = (*g_play_tutor_chooser)(state, controller, lbl, cands, def_idx, {});
             if (got < 0 || got >= static_cast<int>(cands.size()))
             {
                 if (k == 0 && spec.optional) { return; }   // declined "you may search": no shuffle
                 break;                                     // stop early ("up to" / fail to find)
             }
-            chosen.push_back(cands[static_cast<std::size_t>(got)]);
+            names.push_back(cands[static_cast<std::size_t>(got)]);
         }
-        bf_n = LandSearchBattlefieldCount(spec, static_cast<int>(chosen.size()));
+        reserve_chosen(names.size());
+        for (const std::string& nm : names) { chosen[n_chosen++] = CardDatabase::Instance().Lookup(nm); }
+        bf_n = LandSearchBattlefieldCount(spec, n_chosen);
     }
     else
     {
-        const std::vector<std::vector<std::string>>& picks = LandSearchPicksMemo(state, controller, spec);
-        if (!picks.empty())
+        const landsearchmemo::Slot& ms = LandSearchMemoSlot(state, controller, spec);
+        if (!ms.picks.empty())
         {
             const std::size_t k = pin < 0 ? 0
-                : std::min<std::size_t>(static_cast<std::size_t>(pin), picks.size() - 1);
-            chosen = picks[k];   // copied at once: the memo reference is valid until its next call
+                : std::min<std::size_t>(static_cast<std::size_t>(pin), ms.picks.size() - 1);
+            // Copied at once: the memo reference is valid only until its next call.
+            const std::vector<const CardDefinition*>& pd = ms.pick_defs[k];
+            reserve_chosen(pd.size());
+            for (const CardDefinition* d : pd) { chosen[n_chosen++] = d; }
         }
-        bf_n = LandSearchBattlefieldCount(spec, static_cast<int>(chosen.size()));
+        bf_n = LandSearchBattlefieldCount(spec, n_chosen);
     }
 
+    // The play-event text is assembled only when an event sink exists (human play / logged games);
+    // the line itself is emitted under the same test as before, at the end.
+    const bool texts = g_play_event_sink != nullptr;
     // PASS 1 -- every battlefield land enters (one simultaneous event, CR 603.6a). EnterLand without
     // the extras: the land's own enter triggers wait for pass 2.
-    std::vector<int>                   bf_nums;
-    std::vector<const CardDefinition*> bf_defs;
+    int                   bf_nums_buf[kInline];
+    const CardDefinition* bf_defs_buf[kInline];
+    std::vector<int>                   bf_nums_big;
+    std::vector<const CardDefinition*> bf_defs_big;
+    int*                   bf_nums = bf_nums_buf;
+    const CardDefinition** bf_defs = bf_defs_buf;
+    if (bf_n > kInline)
+    {
+        bf_nums_big.assign(static_cast<std::size_t>(bf_n), 0);
+        bf_defs_big.assign(static_cast<std::size_t>(bf_n), nullptr);
+        bf_nums = bf_nums_big.data();
+        bf_defs = bf_defs_big.data();
+    }
+    int n_bf = 0;
     std::string bf_text, hand_text;
     for (int i = 0; i < bf_n; ++i)
     {
         Card lc;
-        if (!TakeLandFromLibrary(pl, chosen[static_cast<std::size_t>(i)], lc)) { continue; }
+        if (!TakeLandFromLibraryDef(pl, chosen[i], lc)) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
         if (d == nullptr) { continue; }   // unreachable: legality read the definition
         EnterLand(state, *d, lc.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/true,
@@ -503,15 +587,16 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
         // entry (it models "tapped for mana this turn"); a forced-tapped Orchard taps next turn and
         // the turn-start spawn covers it. Unreachable for every basic-only search.
         if (!spec.tapped && IsForbiddenOrchard(d)) { SpawnOpponentSpirit(state); }
-        bf_nums.push_back(lc.m_number);
-        bf_defs.push_back(d);
-        bf_text += (bf_text.empty() ? "" : ", ") + lc.m_name.str();
+        bf_nums[n_bf] = lc.m_number;
+        bf_defs[n_bf] = d;
+        ++n_bf;
+        if (texts) { bf_text += (bf_text.empty() ? "" : ", ") + lc.m_name.str(); }
     }
     // PASS 2 -- the put lands' own enter triggers (Karoo bounce, land lifegain), after all of them are
     // on the battlefield. A trigger still resolves for a land that has already left (an earlier
     // Karoo returned it): the lifegain does, the bounce (which needs its own source on the
     // battlefield to pick "a land you control" sensibly) is skipped -- no pool card can reach that.
-    for (std::size_t i = 0; i < bf_nums.size(); ++i)
+    for (int i = 0; i < n_bf; ++i)
     {
         int slot = -1;
         for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
@@ -526,16 +611,16 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     }
     // Hand entries (Cultivate). EnterHand(Tutor) arms the put-in-hand breakpoint (site 10), so the
     // fetched basic can still be the turn's land drop.
-    for (std::size_t i = static_cast<std::size_t>(bf_n); i < chosen.size(); ++i)
+    for (int i = bf_n; i < n_chosen; ++i)
     {
         Card lc;
-        if (!TakeLandFromLibrary(pl, chosen[i], lc)) { continue; }
-        hand_text += (hand_text.empty() ? "" : ", ") + lc.m_name.str();
+        if (!TakeLandFromLibraryDef(pl, chosen[i], lc)) { continue; }
+        if (texts) { hand_text += (hand_text.empty() ? "" : ", ") + lc.m_name.str(); }
         EnterHand(state, controller, std::move(lc), HandEntryReason::Tutor);
     }
     if (g_play_event_sink && !g_tap_speculating)
     {
-        std::string t = "\xF0\x9F\x94\x8E " + source + ": ";
+        std::string t = "\xF0\x9F\x94\x8E " + label() + ": ";
         if (bf_text.empty() && hand_text.empty()) { t += "found nothing"; }
         if (!bf_text.empty())
         { t += bf_text + (spec.tapped ? " onto the battlefield tapped" : " onto the battlefield"); }
@@ -559,7 +644,8 @@ inline void ApplyLandSearchActivationPinned(GameState& state, int controller, in
 {
     const CardParams& p = def.params;
     if (src_idx < 0 || src_idx >= static_cast<int>(state.battlefield.size())) { return; }
-    const std::string src_name = state.battlefield[static_cast<std::size_t>(src_idx)].card.m_name.str();
+    // A reference into the name registry (InternedName::str), stable after the source is sacrificed.
+    const std::string& src_name = state.battlefield[static_cast<std::size_t>(src_idx)].card.m_name.str();
     if (p.land_search_activation_remove_quest > 0)
     {
         Permanent& q = state.battlefield[static_cast<std::size_t>(src_idx)];
@@ -653,7 +739,7 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
         { continue; }
         const int pin = ConsumePackedLandSearchPin(state.scripted_attack_land_search);
         PerformLandSearch(state, controller, LandSearchSpecOf(d->params),
-                          d->card.m_name.str() + " (attack)", pin);
+                          d->card.m_name.str(), pin, " (attack)");
     }
     // Repair the attacker indices (a Karoo bounce erased a slot; appended lands shifted nothing
     // before them, but the erase may have).

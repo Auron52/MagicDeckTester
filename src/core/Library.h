@@ -229,10 +229,9 @@ public:
         // yields the same order as stable_sort would -- and avoids stable_sort's per-call merge-buffer
         // heap allocation (that temp buffer was the dominant shuffle cost in the rollout profile).
         // thread_local scratch avoids a per-call heap alloc (ShuffleByKey is hot in rollouts); no nested
-        // ShuffleByKey exists, so the buffers are never clobbered mid-use.
+        // ShuffleByKey exists, so the buffer is never clobbered mid-use.
         struct Deco { std::uint64_t key; std::int32_t number; std::uint32_t off; };
         static thread_local std::vector<Deco> deco;
-        static thread_local std::vector<Card> tmp;
         deco.clear(); deco.reserve(n);
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -241,9 +240,29 @@ public:
         }
         std::sort(deco.begin(), deco.end(), [](const Deco& a, const Deco& b)
         { return a.key != b.key ? a.key < b.key : a.number < b.number; });
-        tmp.clear(); tmp.reserve(n);
-        for (const Deco& d : deco) { tmp.push_back(std::move(m_cards[m_top + d.off])); }
-        std::move(tmp.begin(), tmp.end(), m_cards.begin() + static_cast<std::ptrdiff_t>(m_top));
+        // Apply the permutation IN PLACE by following its cycles: destination j takes the card that sat
+        // at deco[j].off. One Card move per element plus one per cycle, against two per element through
+        // a scratch vector before (perf, Landfall 2026-10-15: every land search shuffles, and the Card
+        // traffic was most of this function's self time). Same permutation -> byte-identical order.
+        // A visited destination is marked by overwriting its `off` with kDone once its source is read.
+        constexpr std::uint32_t kDone = 0xFFFFFFFFu;
+        Card* const base = m_cards.data() + m_top;
+        for (std::size_t j = 0; j < n; ++j)
+        {
+            const std::uint32_t first = deco[j].off;
+            if (first == kDone) { continue; }                       // already placed by an earlier cycle
+            if (first == j) { deco[j].off = kDone; continue; }      // fixed point: the card stays
+            Card hold = std::move(base[j]);
+            std::size_t k = j;
+            for (;;)
+            {
+                const std::uint32_t src = deco[k].off;
+                deco[k].off = kDone;
+                if (src == j) { base[k] = std::move(hold); break; }
+                base[k] = std::move(base[src]);
+                k = src;
+            }
+        }
     }
 
 private:
