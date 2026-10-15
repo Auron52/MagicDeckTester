@@ -195,6 +195,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     const int at = static_cast<int>(from);
     if (from == ResumeAt::NewTurn)
     {
+        AIEngine::LandDrawCensusBeginTurn();   // MTG_LANDDRAW_CENSUS (diagnostic only; no-op unless set)
         ++state.turn_number;
         UntapStep(state);
         UpkeepStep(state);   // includes UpkeepTail

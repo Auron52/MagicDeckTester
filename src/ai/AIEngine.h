@@ -275,6 +275,7 @@ public:
     // and whether a drawn land would have paid for a held card at some dig of the turn
     // (TurnSolver::DropOpenLandEnablesCast). Per-cell totals come from summing the lines by job.
     static void LandDrawCensusEndTurn(const GameState& state);
+    static void LandDrawCensusBeginTurn();   // ...and its reset at every new turn
 
 private:
     // Unit-test seam (backlog C2): test/unit drives the private payment path (TapForCost)

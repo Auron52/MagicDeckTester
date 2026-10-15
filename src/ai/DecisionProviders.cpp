@@ -23984,7 +23984,8 @@ int FluctuatorProvider::CastOrderRank(const GameState& s, const CardDefinition& 
 const char* FluctuatorProvider::CastOrderTierName(int rank) const
 {
     if (!FluctOrderEnabled()) { return GenericProvider::CastOrderTierName(rank); }
-    if (rank >= kFluctUnrankedBase) { return "UNRANKED: generic tier, after the USER's six slots (by name)"; }
+    if (rank >= kFluctUnrankedBase)
+    { return "UNRANKED: generic tier after the USER's six slots, by name (goldfish_inert = never cast)"; }
     switch (rank / 64)
     {
         case 1:  return "1 Unearth -- one coloured pip, no generic";

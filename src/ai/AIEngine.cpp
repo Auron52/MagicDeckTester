@@ -7585,6 +7585,14 @@ void AIEngine::LandDrawCensusAfterDig(const GameState& state, bool drew_land, in
     ldcensus::CheckEnabling(state);
 }
 
+void AIEngine::LandDrawCensusBeginTurn()
+{
+    // A game that ended mid-turn (a main-phase win) never reaches the end step, so its turn's record
+    // would otherwise survive into the next game this thread plays -- and in a paired batch that game
+    // can be the SAME seed (another arm) reaching the same turn.
+    if (ldcensus::On() && g_real_resolution) { ldcensus::t_turn = ldcensus::Turn{}; }
+}
+
 void AIEngine::LandDrawCensusEndTurn(const GameState& state)
 {
     if (!ldcensus::On() || !g_real_resolution) { return; }
