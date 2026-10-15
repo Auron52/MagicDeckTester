@@ -269,6 +269,43 @@ opening hand on both sides, so this is not a draw divergence.
 that keeps the USER's order is arm (b), the USER's own fetch rule. It is built, measured (§5), and fixes all 11; it is
 OFF pending Q20. Arms (b) and (a+b) have slower games of their own: 54 and 67. Their recovery check is in §6b.
 
+### 6b. Arm (b)'s slower games: 54, of which 13 do not recover -- and the narrower reading (b2) that targets them
+
+The same serial two-stage check on arm (b) (`logs/auras-order/recover_serial.py`, on the shipped build):
+* **41 of 54 recover at stage 1.**
+* **13 do not.** In every one of them stage 2 is still one turn later, and the old binary at stage 2 keeps its
+  faster win.
+  * auras d3 b10: gi 511, 5471.
+  * auras2hg shipped: gi 135, 878, 1357.
+  * auras2hg d0: gi 4097, 7032, 8633.
+  * auras2hg d3 b10: gi 1643, 1666, 1761, 1863, 2727.
+* **None of the 13 is slower under the order alone.** Arm (b) is what slows them.
+
+**Root cause, read off the diffs (identical opening hands):**
+* **The board:** T3, Light-Paws out, ONE Aura cast this turn: Spirit Mantle, Ancestral Mask or All That Glitters.
+  The hand holds more Auras castable NEXT turn.
+* **Old (mode 4):** "another Aura castable this turn or next" says this is not the last fetch, so the flat Aura wins on
+  realized power: Daybreak Coronet, +3.
+* **Arm (b)** reads "last fetch IN THE PLAN" as this turn only.
+  * With this turn's mana spent, it calls the fetch last-chance and takes the scaler: Glitters or Armor, +2 at that
+    board.
+  * The T3 attack is 1 short (e.g. 25 vs 24 on the 2HG board), and the kill slips a turn.
+  * Where the plan differs too (1357, 1643, 1666, 1863, 2727), the search re-planned the turn around the different
+    fetch.
+
+So the literal reading over-applies the scaler preference on the last fetch of a turn whose NEXT turn still casts Auras.
+The order's 11 games show the opposite defect: an MV-1 Aura in hand counted as a later fetch for an MV-2 scaler.
+
+**(b2) `MTG_LP_FETCH_MV_AWARE`, the narrow reading, built as a third default-OFF report arm.**
+* Mode 4 is kept as it is, including its "this turn or next" horizon and its same-name clause.
+* The one change: an Aura in hand counts as a later fetch for a candidate only if its mana value reaches the
+  candidate's. A 1-drop's fetch can never take All That Glitters.
+* By the hands in the logs, it should fix the order's two non-recovering games, because no 2-drop+ is in hand there.
+* It should leave arm (b)'s 13 as old. In the 7 hands read (511, 5471, 135, 878, 4097, 8633, 1761), each still holds an
+  Aura castable next turn whose mana value reaches the scaler arm (b) took: Gryff's Boon for an Armor, or Alpha
+  Authority / Coronet / Lion Umbra / a second Mask / Glitters for a Glitters or Armor.
+* Measured in §5c.
+
 ## 7. RESUME (wrapped 2026-10-14 ~13:10Z for the night at the coordinator's request: the box is needed)
 
 * **Base:** `ff3e205b` (work/integ-2026-10-14).

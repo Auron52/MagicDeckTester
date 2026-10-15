@@ -426,3 +426,56 @@ TEST_CASE("Light-Paws fetch, MTG_LP_FETCH_USER_RULE: the last fetch IN THE LINE,
         }
     }
 }
+
+TEST_CASE("Light-Paws fetch, MTG_LP_FETCH_MV_AWARE: a 1-drop in hand is not a later fetch for a 2-drop scaler")
+{
+    // The Auras order's slower-game shape (docs/design/auras-cast-order-2026-10-14.md section 6): Light-Paws out,
+    // a 2-drop's fetch resolving, a Spider Umbra (1-drop) still in hand. Mode 4 calls it "not the last fetch"
+    // and takes the flat Audacity; a 1-drop's fetch can never take All That Glitters, so the MV-aware reading
+    // lets the scaler lead.
+    {
+        BoardAco b;
+        b.Put("Light-Paws, Emperor's Voice");
+        b.Put("Brushland");
+        b.Put("Brushland");
+        b.Hand("Spider Umbra");
+        b.Lib("Audacity");
+        b.Lib("All That Glitters");
+        const Permanent& lp = b.s.battlefield.front();
+        std::vector<int> legal = { 0, 1 };
+        auto pick = [&](int arm)
+        {
+            ArmScope a(heurarm::LP_FETCH_MV_AWARE, arm);
+            const std::vector<int> r = AurasProvAco().LightPawsAuraCandidates(b.s, 0, lp, legal);
+            REQUIRE(!r.empty());
+            return b.s.players[0].library[static_cast<std::size_t>(r.front())].m_name.str();
+        };
+        CHECK(pick(0) == "Audacity");
+        CHECK(pick(1) == "All That Glitters");
+    }
+    // ...but a 2-drop Aura castable this turn or next DOES still reach it, so the flat Aura is taken with or without
+    // the arm -- unlike MTG_LP_FETCH_USER_RULE, which reads this turn's remaining mana only and takes the scaler.
+    {
+        BoardAco b;
+        b.Put("Light-Paws, Emperor's Voice");
+        b.Put("Brushland");
+        b.Put("Brushland");
+        for (Permanent& p : b.s.battlefield) { if (p.card.IsLand()) { p.tapped = true; } }
+        b.Hand("Alpha Authority");
+        b.Lib("Audacity");
+        b.Lib("All That Glitters");
+        const Permanent& lp = b.s.battlefield.front();
+        std::vector<int> legal = { 0, 1 };
+        for (int arm : { 0, 1 })
+        {
+            ArmScope a(heurarm::LP_FETCH_MV_AWARE, arm);
+            const std::vector<int> r = AurasProvAco().LightPawsAuraCandidates(b.s, 0, lp, legal);
+            REQUIRE(!r.empty());
+            CHECK(b.s.players[0].library[static_cast<std::size_t>(r.front())].m_name.str() == "Audacity");
+        }
+        ArmScope u(heurarm::LP_FETCH_USER_RULE, 1);
+        const std::vector<int> r = AurasProvAco().LightPawsAuraCandidates(b.s, 0, lp, legal);
+        REQUIRE(!r.empty());
+        CHECK(b.s.players[0].library[static_cast<std::size_t>(r.front())].m_name.str() == "All That Glitters");
+    }
+}

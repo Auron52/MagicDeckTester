@@ -1925,8 +1925,36 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
     };
     // Under mode 4 a scaling candidate keeps its head start only when this is the last fetch, or when
     // that very Aura would otherwise arrive from hand first.
+    // MTG_LP_FETCH_MV_AWARE (heurarm LP_FETCH_MV_AWARE, DEFAULT OFF -- the NARROW reading of Q20). Found
+    // root-causing the Auras order's slower games (docs/design/auras-cast-order-2026-10-14.md section 6): the
+    // approved order casts a 2-drop plain Aura before the 1-drops, and the "another Aura castable this turn or
+    // next" test then calls its fetch not-last because a 1-drop is still in hand -- although a 1-drop's fetch
+    // (mana value <= 1) can never take All That Glitters. This arm keeps mode 4's horizon and its same-name
+    // clause and changes only that: an Aura in hand counts as a later fetch for a candidate iff its own mana
+    // value reaches the candidate's. (The broader MTG_LP_FETCH_USER_RULE also drops "or next turn", which the
+    // measurement found takes a growing scaler over a bigger flat Aura on the last fetch of a turn whose next
+    // turn still casts Auras -- same section.)
+    static const bool s_lp_mv_aware_env = EnvOn("MTG_LP_FETCH_MV_AWARE");   // DEFAULT OFF (measurement arm)
+    const bool lp_mv_aware = s_rank_mode == 4 && !lp_user_rule
+                          && heurarm::Flag(heurarm::LP_FETCH_MV_AWARE, s_lp_mv_aware_env);
+    auto later_fetch_reaches = [&](int i) -> bool {
+        int lands = 0;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == controller && p.card.IsLand()) { ++lands; } }
+        const int reach = lands + 1;
+        const int need  = mv(i);
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || !d->params.is_aura) { continue; }
+            const int hmv = d->card.m_mana_cost.ManaValue();
+            if (hmv <= reach && hmv >= need) { return true; }
+        }
+        return false;
+    };
     auto mode4_scale_first = [&](int i) -> bool {
         if (lp_user_rule) { return scales(i) && last_chance(i); }
+        if (lp_mv_aware)  { return scales(i) && (!later_fetch_reaches(i) || in_hand_by_name(i)); }
         return scales(i) && (!more_fetches_coming || in_hand_by_name(i));
     };
     const bool scale_first_now = (s_rank_mode == 1)
