@@ -226,6 +226,25 @@ inline bool DrawHeldDropReplayOn()
     return heurarm::Flag(heurarm::DRAW_HELD_DROP_REPLAY, env_on);
 }
 
+// MTG_SPECTACLE_PLAN_CREDIT -- the SPECTACLE PLAN CREDIT (docs/design/burn-cast-order-2026-10-15.md,
+// part 3). Light Up the Stage is {2}{R} until an opponent has lost life this turn and {R} after
+// (CR 702.137a: spectacle is an alternative cost, chosen at 601.2b and legal iff an opponent lost
+// life this turn). Both subset evaluators (Solve::consider -- the d0 runner and every rollout leaf --
+// and EnumeratePlans::eval_and_push, the search) priced it at the cost of the state BEFORE the plan,
+// so {Swiftspear, a burn spell, Light Up} read as five mana on three lands and was never a plan
+// (burn seed 9295 gi 294: a turn-3 kill missed at every budget). With this on, the plan's spectacle
+// cast is priced at its spectacle cost when the same plan casts a FACE-DAMAGE spell that the realised
+// order puts before it (OpaqueCastOrderActive + CastOrderLess, or a sac-land burn the apply casts
+// first), and the odometer's scalar mana bound is loosened by the same amount. A faithful rules credit
+// (affordability), not a heuristic: the apply really does cast the burn first and pays {R}. Read by
+// the two evaluators only (TurnSolver.cpp); the executor's own payment recomputes the live cost.
+// Only a deck holding a spectacle card can move (Light Up the Stage: burn alone). Per-job heurarm slot.
+inline bool SpectaclePlanCreditOn()
+{
+    static const bool env_on = EnvOn("MTG_SPECTACLE_PLAN_CREDIT");   // DEFAULT OFF until measured; =1 enables
+    return heurarm::Flag(heurarm::SPECTACLE_PLAN_CREDIT, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.

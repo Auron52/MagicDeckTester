@@ -380,6 +380,10 @@ private:
     // idiom in the rollout twin. -1 = not a devour cast.
     int m_pending_devour_count = -1;
     int m_pending_twobrid = 0;   // Beseech twobrid variant (Action::twobrid_colored); consume-once in CastSpellFromHand
+    // The main phase TakeTurn is playing (scoped there, restored on exit): true in the POST-combat main.
+    // Read by CastSpellFromHand's main-2 stager stamp (NoteMain2StagerCast), the executor twin of
+    // TurnSolver's apply_one, which knows its phase from ApplyPlanDirect's is_pre_combat.
+    bool m_exec_post_combat = false;
     int m_discard_choice_pin = -1;
 
     // Searched AETHER VIAL CHARGE (Plan::vial_charge_choice, MTG_VIAL_AXIS): 0 = hold, 1 = charge,

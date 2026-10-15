@@ -992,6 +992,29 @@ public:
     // The bucket arm is not prefix-stable (a shed can move the Blaze land, the Volley land count or
     // the lethal walk), so a multi-card cleanup is re-ranked per shed; =0 keeps the default true.
     bool CleanupDiscardShedStable() const override;
+    // THE USER'S CAST ORDER (2026-10-14, MTG_BURN_ORDER; docs/design/burn-cast-order-2026-10-15.md):
+    // land > Goblin Guide > Monastery Swiftspear > Lightning Bolt > Shard Volley > Searing Blaze >
+    // Searing Blood > Skullcrack > Light Up the Stage > Eidolon of the Great Revel. Ranks come from
+    // PARAMS (haste creature / burn by mana value / spectacle / on-cast self-damage); ArrangeCastOrder
+    // breaks an equal rank by NAME, so the order is total and never falls to hand order. Shard Volley
+    // joins the burn (SacLandCastsInOrder); sets holding Light Up sort by rank (OrderOpaqueCastsByRank).
+    // The land drop's two exceptions are LandPlanTieKey (the search) and LandDropAfterDrawEngine (d0).
+    int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    const char* CastOrderTierName(int rank) const override;
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
+    bool OrderOpaqueCastsByRank() const override;
+    bool SacLandCastsInOrder() const override;
+    int  LandPlanTieKey(const GameState& s, const std::vector<Action>& acts, bool plays_land,
+                        bool provider_hold) const override;
+    bool LandDropAfterDrawEngine(const GameState& s, int controller) const override;
+    bool HeldDropOpensDrawContinuation() const override;
+    // THE USER'S MAIN-2 RULE (2026-10-14, MTG_BURN_M2_RULE): main 2 casts only Light Up the Stage,
+    // Eidolon, and Searing Blaze while no land has entered this turn -- plus what is played off a
+    // main-2 Light Up (MTG_BURN_M2_NARROW picks the narrower reading). A provider restriction of the
+    // post-combat options; main 1 stays fully searched.
+    bool RestrictsMain2Casts() const override;
+    bool Main2CastAllowed(const GameState& s, const Action& a) const override;
 };
 
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by

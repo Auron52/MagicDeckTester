@@ -2216,6 +2216,14 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
+    // Which main this pass plays (m_exec_post_combat; the main-2 stager stamp reads it). Scoped, so a
+    // nested TakeTurn (a rollout's own executor) cannot leave the outer pass reading its phase.
+    struct ExecPhaseScope
+    {
+        bool& f; const bool saved;
+        ExecPhaseScope(bool& f_, bool v) : f(f_), saved(f_) { f = v; }
+        ~ExecPhaseScope() { f = saved; }
+    } _exec_phase(m_exec_post_combat, !is_pre_combat_main);
     m_le_fire_pin = -1;   // a phase whose plan pins nothing fires the provider's count
     // UNBUDGETED-PLAY LATCH (EngineFlags.h). THE one frame that holds the real play budget, so it
     // is the only honest place to decide "is this decision unbudgeted". Everything the latch arms
@@ -4867,6 +4875,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else
             {
                 execgreedy::Record(-1, m_in_rollout);
+                // A drop the provider HELD for this draw engine (LandDropAfterDrawEngine) whose rule is
+                // "the land goes right AFTER the draw engine" (DecisionProvider::
+                // HeldDropOpensDrawContinuation; burn's "after Light Up the Stage") is played HERE,
+                // before the continuation is solved, so its mana funds the exiled cards -- the
+                // staged copy of the greedy pick first (TryPlaySpecificLand), which keeps the hand
+                // land. Depth 0 only (the searched continuation carries its own land). Every other
+                // deck answers false -> byte-identical.
+                if (m_draw_deferred_drop && is_pre_combat_main
+                    && ResolveProvider(state).HeldDropOpensDrawContinuation())
+                {
+                    m_draw_deferred_drop = false;
+                    const int pick = GreedyLandChoiceIndex(state);
+                    if (pick >= 0)
+                    {
+                        const std::string land = state.ActivePlayer().hand[static_cast<std::size_t>(pick)].m_name;
+                        TryPlaySpecificLand(state, land, std::string{}, std::string{});
+                    }
+                }
                 extra = TurnSolver::Solve(state, is_pre_combat_main,
                                      TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
             }
@@ -4953,12 +4979,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             && ResolveProvider(state).MergesBreakpointLeftovers(*my_lo_site))
         { my_lo_taken = MergeBreakpointLeftovers(state, extra.actions, extra.searched_order, my_leftovers); }
         std::vector<int> cont_order;
+        // SacLandCastsInOrder: the continuation's sac-land casts join its sequence at their rank, as
+        // apply_plan_actions sequences them in the rollout (lockstep); the trailing sac loop skips them.
+        const bool cont_sac_in_order = SacLandCastsInOrder(state);
         for (int i = 0; i < static_cast<int>(extra.actions.size()); ++i)
         {
             const Action& a = extra.actions[i];
             // Vial puts ride the cast sequence (sequenced like casts of their card, USER 2026-10-06;
             // lockstep with ApplyPlanDirect's apply_plan_actions).
-            if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            if ((a.kind == Action::Kind::CastFromHand && (!a.sacrifice_land || cont_sac_in_order))
                 || a.kind == Action::Kind::ActivateVial) { cont_order.push_back(i); }
         }
         if (!extra.searched_order && cont_order.size() > 1)
@@ -5057,7 +5086,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         for (const Action& a : extra.actions)
         {
-            if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
+            // Under SacLandCastsInOrder every sac-land cast was sequenced (and cast) above.
+            if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && !cont_sac_in_order)
             { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a); }
         }
         for (const Action& a : extra.actions)
@@ -6334,7 +6364,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // such sac-land damage enablers here so Light Up unlocks its reduced cost. Only the 2-card
     // {burn, Light Up} spectacle plans pair a sac-land burn with Light Up, so this touches no
     // other line. Inert unless a Spectacle spell is present -> non-burn byte-identical.
-    bool spec_needed = !state.opponent_lost_life_this_turn;
+    // No hoist for a deck that sequences its sac-land casts at their rank (SacLandCastsInOrder): the
+    // rank already puts the burn before the spectacle spell (ApplyPlanDirect twin -- lockstep).
+    const bool sac_in_order = SacLandCastsInOrder(state);
+    bool spec_needed = !sac_in_order && !state.opponent_lost_life_this_turn;
     if (spec_needed)
     {
         bool has_spec = false;
@@ -6367,8 +6400,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { ord.push_back(i); continue; }
         if (is_put(a)) { ord.push_back(i); continue; }
         if (a.kind != Action::Kind::CastFromHand) { continue; }
-        if (!a.alt_cost && (a.sacrifice_land
-                            || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
+        // A sac-land cast joins the sequence at its rank under SacLandCastsInOrder (ApplyPlanDirect twin).
+        if (!a.alt_cost && ((a.sacrifice_land && !sac_in_order)
+                            || (!a.sacrifice_land && ResolveProvider(state).CastEnablerFirst(state, a.card_name))))
         { continue; }
         if (is_hoisted_minter(a)) { continue; }   // already cast in the hoist (MTG_MINT_CREDIT_EXACT)
         ord.push_back(i);
@@ -6410,9 +6444,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             cast_alt(a.card_name, a.alt_lifegain); resolve_now();
         }
-        else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
-                 && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+        else if (a.kind == Action::Kind::CastFromHand
+                 && ((a.sacrifice_land && sac_in_order)
+                     || (!a.sacrifice_land && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))))
         {
+            // At its rank (SacLandCastsInOrder): the trailing sac loop below skips it.
+            if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }
             m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
@@ -6464,10 +6501,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // branch (the shared CastOrderLess in ManaPayment.cpp) so the executor realises the same line
     // the rollout scored. No draw engine here, so no breakpoint handling is needed.
     std::vector<int> order;
+    // SacLandCastsInOrder: a sac-land cast joins the sequence at its rank (ApplyPlanDirect twin); the
+    // trailing sac loop below skips each one cast here.
+    const bool sac_in_order_clean = SacLandCastsInOrder(state);
     for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
     {
         const Action& a = plan.actions[i];
-        if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        if ((a.kind == Action::Kind::CastFromHand && (!a.sacrifice_land || sac_in_order_clean))
             || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate) || is_put(a))
         { order.push_back(i); }
     }
@@ -6506,6 +6546,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             continue;
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
+        if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }   // at its rank (SacLandCastsInOrder)
         m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
         const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
@@ -7839,6 +7880,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // resolution + folded into no state key -> byte-identical for every non-storm deck.
     ++state.spells_cast_this_turn;
     state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+    // The main-2 stager stamp (GameState::m2_stage_turn; a no-op unless a stages_cards cast in the
+    // post-combat main of a deck whose provider restricts main 2). Lockstep twin: TurnSolver's
+    // apply_one, at the same per-cast site.
+    if (m_exec_post_combat) { NoteMain2StagerCast(state, *def); }
 
     // Maintain the "one more spell" budget in lockstep with TurnSolver::apply_one (same per-cast site):
     // a non-restrictor spends one (when a budget is active); the restrictor (Irencrag) installs its own

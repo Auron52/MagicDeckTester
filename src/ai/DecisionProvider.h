@@ -926,6 +926,18 @@ public:
     // adopts. Default false -> byte-identical.
     virtual bool OrderOpaqueCastsByRank() const { return false; }
 
+    // SacLandCastsInOrder -- per-deck opt-in: a SACRIFICE-A-LAND cast (Shard Volley) joins the ordered
+    // cast sequence at its own CastOrderRank instead of running in the trailing pass after every other
+    // cast (and, with it, the Spectacle hoist that cast such a burn spell ahead of EVERYTHING when a
+    // spectacle spell was pending -- the rank already puts it before the spectacle spell). Read at every
+    // site that sequences a plan's casts, in both apply worlds (ApplyPlanDirect's apply_plan_actions,
+    // AIEngine::TakeTurn's main and continuation loops, and PlanCastOrder's projection) -- lockstep.
+    // The additional cost is paid from a tapped land first (PerformSacrificeLandCost), so the position
+    // costs no mana. The explicit (searched / human-queued) order is untouched. Default false ->
+    // byte-identical. BurnProvider opts in under MTG_BURN_ORDER (USER 2026-10-14: "Shard Volley JOINS
+    // the burn").
+    virtual bool SacLandCastsInOrder() const { return false; }
+
     // ---- The deck's FULL cast order beyond a scalar rank (docs/design/dragonstorm-user-cast-order.md)
     // A per-card CastOrderRank cannot say everything a USER-specified order says. Three hooks carry
     // the rest; all three default to "nothing", so a deck that overrides none is byte-identical.
@@ -1472,6 +1484,26 @@ public:
     // so it lives in the deck's provider -- moved out of AIEngine::TakeTurn 2026-10-14 (USER).
     virtual bool LandDropAfterDrawEngine(const GameState& s, int controller) const
     { (void)s; (void)controller; return false; }
+
+    // HeldDropOpensDrawContinuation -- where a drop LandDropAfterDrawEngine held is played at depth 0:
+    // false (the default, treasure_hunt's rule) = the draw engine's second TakeTurn pass, after the
+    // continuation's casts; true = at the START of the draw engine's own continuation (AIEngine's
+    // resolve_draw_breakpoint, depth-0 branch), so the land's mana funds what the draw found. Burn
+    // (MTG_BURN_ORDER): "after Light Up the Stage" means right after it, before the exiled cards.
+    virtual bool HeldDropOpensDrawContinuation() const { return false; }
+
+    // LandPlanTieKey -- the deck's own ORDER for the land drop among EQUAL plans (EnumeratePlansWithLand's
+    // final sort: same wins_this_turn, same value). Lower sorts first; SolveWithLookahead keeps the FIRST
+    // of equally-scored candidates, so this decides genuine search indifference only -- a strictly
+    // better plan still wins. `plays_land` = the plan plays the drop up front; `provider_hold` is
+    // PreferHoldLandDrop's answer for this enumeration. -1 = no opinion (the generic develop-first /
+    // provider-hold rule runs); a provider that answers must answer for EVERY plan of the enumeration
+    // (one key per plan, so the comparison is a strict weak order). Default -1 -> byte-identical.
+    // BurnProvider (MTG_BURN_ORDER): "LAND first, two exceptions: before Searing Blaze whenever Blaze is
+    // cast and a land is in hand; after Light Up the Stage when the turn pays for Light Up without it".
+    virtual int LandPlanTieKey(const GameState& s, const std::vector<Action>& acts, bool plays_land,
+                               bool provider_hold) const
+    { (void)s; (void)acts; (void)plays_land; (void)provider_hold; return -1; }
 
     // PostDrawKeepLandName -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
@@ -2036,6 +2068,19 @@ public:
     virtual std::optional<MainPhase> MainPhaseOverride(const GameState& s,
                                                        const CardDefinition& def) const
     { (void)s; (void)def; return std::nullopt; }
+
+    // RestrictsMain2Casts / Main2CastAllowed -- a provider RESTRICTION of the POST-combat main's cast
+    // options (allowed: a provider may restrict or order options; the pre-combat main is untouched).
+    // Unlike the classifier filter above it needs no ClassifiesMainPhases opt-in and keeps every MAIN-1
+    // option: CollectActions(is_pre_combat=false) drops each CastFromHand the provider disallows, in
+    // the search, the rollout and the executor alike (they all collect through it -> lockstep), human
+    // play excepted (the viewer is never narrowed). RestrictsMain2Casts is the cheap gate (one virtual
+    // call per main-2 collect), and it also arms the main-2 stager marker (GameState::m2_stage_turn,
+    // stamped at the cast by NoteMain2StagerCast) that "played off a main-2 Light Up" reads. Defaults:
+    // false / true -> byte-identical. BurnProvider: the USER's main-2 rule (MTG_BURN_M2_RULE).
+    virtual bool RestrictsMain2Casts() const { return false; }
+    virtual bool Main2CastAllowed(const GameState& s, const Action& a) const
+    { (void)s; (void)a; return true; }
 
     // FetchSearchCandidates -- the fetch targets the SEARCH actually branches on. The provider
     // returns a list of VARYING SIZE and the engine fans over exactly what comes back -- no

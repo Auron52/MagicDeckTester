@@ -79,6 +79,25 @@ bool OrderingOpaque(const std::string& name);
 void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>& actions,
                               std::vector<int>& order);
 
+// Does this deck sequence its SACRIFICE-A-LAND casts (Shard Volley) inside the ordered cast sequence
+// (DecisionProvider::SacLandCastsInOrder)? The one shared read for every site that builds a cast order
+// -- both apply worlds and the projections -- so they cannot disagree. False for every deck but burn
+// under MTG_BURN_ORDER.
+bool SacLandCastsInOrder(const GameState& state);
+
+// The spectacle-live cost of a spectacle card (CR 702.137a, an alternative cost, which still takes cost
+// increases -- CR 118.9d): EffectiveSpellCost's own spectacle branch, without the "has an opponent lost
+// life" test. Shared by the SPECTACLE PLAN CREDIT (MTG_SPECTACLE_PLAN_CREDIT, EngineFlags.h), so the
+// two subset evaluators price the credited cast exactly as the payment will. Precondition: the card has
+// a spectacle cost.
+ManaCost SpectacleLiveCost(const CardDefinition& def, const GameState& state);
+
+// The MAIN-2 STAGER stamp (GameState::m2_stage_turn): call at the CAST of a spell in the post-combat
+// main, in both worlds (TurnSolver's apply_one, AIEngine::CastSpellFromHand). Records the first
+// stages_cards cast of this turn's main 2 and the deck cards already staged at that moment, ONLY when
+// the provider restricts main 2 (RestrictsMain2Casts) -- a no-op for every other deck and card.
+void NoteMain2StagerCast(GameState& state, const CardDefinition& def);
+
 // The same comparator with the two SORT KEYS supplied by the caller. CastOrderLess is this
 // function with the keys read from the provider; the ladder below passes an EFFECTIVE key instead,
 // so a spell walked down its range sorts at its new position without a second comparator to keep

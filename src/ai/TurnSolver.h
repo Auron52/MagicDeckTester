@@ -808,6 +808,10 @@ public:
         // Land's Edge discards), applied by ApplyPlanDirect / AIEngine::TakeTurn.
         std::vector<Action> actions;
         int  value          = -1;   // -1 = nothing castable
+        // EnumeratePlansWithLand scratch: the provider's land-drop key among equal plans
+        // (DecisionProvider::LandPlanTieKey), stamped just before that function's final sort and read
+        // only by it. -1 = no provider opinion. Never part of any signature or key.
+        int  land_tie_key   = -1;
         bool wins_this_turn = false;
 
         // COMBO OFF (human menu only): this plan is the standalone go-off whose TRIAL APPLY was
@@ -1819,6 +1823,9 @@ public:
     // already mirrors) -- see the note on the definition for why reporting the canonical sort for
     // an ordering-searched plan is a lie the viewer cannot see through.
     static std::vector<std::string> RealisedNonSacCastOrder(const GameState& state, const Plan& plan);
+    // The realised order of EVERY hand cast of a canonical (not searched-order) plan, sac-land casts
+    // included at the position the apply worlds cast them (PlanCastOrder). Tests and diagnostics.
+    static std::vector<std::string> PlanCastOrderNames(const GameState& state, const Plan& plan);
     // Cheap "is the realised order already the canonical one?" test -- std::is_sorted under the
     // shared comparator, so no allocation and at most k-1 comparisons. Used by the viewer's
     // display cap to pick which ordering of a cast set represents it in the menu.

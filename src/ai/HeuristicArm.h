@@ -464,6 +464,12 @@ enum Slot : int
     REPLICATE_PENDING,        // MTG_REPLICATE_PENDING the replicate count fan also covers a Sliver cast AFTER a SAME-PLAN Hatchery Sliver (a granter in hand, cast or Vial-put earlier in the plan): pinned k = 0..kmax beside the unpinned cast, and a subset that pins a count with no granter in it is rejected (its pin could never be granted: an exact duplicate of the unpinned cast). Without it that cast had only the unpinned variant, i.e. resolution's greedy max -- a greedy pick inside the search window that also decided WHICH post-Hatchery Sliver got the copies (resolution order). Search window only; human play and the greedy picker unchanged. Default ON; =0 -> byte-identical
     DRAW_HELD_DROP_REPLAY,    // MTG_DRAW_HELD_DROP_REPLAY the depth-0 executor PLAYS a land drop its provider held for a draw engine (DecisionProvider::LandDropAfterDrawEngine: treasure_hunt's "Treasure Hunt before the land drop") after this main's casts when the main cast no draw engine -- the only route that replayed it was the draw engine's second TakeTurn pass, so a main that cast Land's Edge alone lost the drop (cast-order probe A2: no land on T4, won T5; d3/d5/d8 win T4). A held drop the provider still holds as marginal Land's Edge ammo (HoldDeferredDropForLethal) stays held; a played one requests the second pass, which re-solves with its mana. Default ON; =0 -> the drop is lost, byte-identical to before (docs/design/treasure-hunt-land-rule-provider.md)
     FREECAST_X_ZERO,          // MTG_FREECAST_X_ZERO  DEFECT FIX (CR 107.3b: an {X} spell cast without paying its mana cost has X = 0) to the post-combat free-cast bank (Maelstrom Archangel): its X = 0 check read the copied candidate's Action::def, which CollectActions fills only in its closing resolve pass BELOW the bank, so it never fired and every X > 0 variant got a free twin that paid nothing and resolved at its X. The fix resolves the def the way the closing pass does (CollectedActionDef) and gives an {X} spell free variants only from its X = 0 candidates. Only FiveColour banks a charge and its list holds no {X} spell, so it is inert on every shipped deck. docs/design/precollect-def-dead-reads.md. Default ON; =0 -> the dead read, byte-identical to 77e094a2
+    // The USER's burn ruling (2026-10-14, docs/design/burn-cast-order-2026-10-15.md).
+    BURN_ORDER,               // MTG_BURN_ORDER            burn: the USER's TOTAL cast order (land > Goblin Guide > Swiftspear > Bolt > Shard Volley > Searing Blaze > Searing Blood > Skullcrack > Light Up the Stage > Eidolon) -- param tiers, name tie-break; Shard Volley joins the burn (SacLandCastsInOrder); land before Blaze / after a self-paid Light Up
+    BURN_M2_RULE,             // MTG_BURN_M2_RULE          burn: the USER's main-2 rule -- only Light Up the Stage, Eidolon, and Searing Blaze while no land has entered are cast in main 2, plus whatever is played off a main-2 Light Up (a provider RESTRICTION of the main-2 options)
+    BURN_M2_NARROW,           // MTG_BURN_M2_NARROW        ...the narrower "played off" reading: only the cards a main-2 Light Up EXILED (the default, broader reading also admits hand spells cast after it). Default OFF (USER question)
+    BURN_BLOOD_FIRST,         // MTG_BURN_BLOOD_FIRST      PROPOSED amendment to the USER's burn order, NOT adopted (USER question): Searing Blood BEFORE Searing Blaze (the USER's list has Blaze first, by name). Blood's 3 to the face fires only when its creature DIES this turn, and Blaze is what finishes a creature Blood alone cannot kill -- cast Blaze first and it kills the opponent's only creature, so Blood has no target (shipped probe seed 9027 gi 26: T4 -> T5). Default OFF
+    SPECTACLE_PLAN_CREDIT,    // MTG_SPECTACLE_PLAN_CREDIT both subset evaluators price a spectacle spell (Light Up the Stage) at its spectacle cost when the same plan casts a face-damage spell the realised order puts BEFORE it (CR 702.137a: an opponent lost life this turn) -- the Swiftspear -> burn -> Light Up {R} line becomes enumerable
     COUNT
 };
 
@@ -883,6 +889,11 @@ inline const char* Name(int slot)
         "MTG_REPLICATE_PENDING",
         "MTG_DRAW_HELD_DROP_REPLAY",
         "MTG_FREECAST_X_ZERO",
+        "MTG_BURN_ORDER",
+        "MTG_BURN_M2_RULE",
+        "MTG_BURN_M2_NARROW",
+        "MTG_BURN_BLOOD_FIRST",
+        "MTG_SPECTACLE_PLAN_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
