@@ -7671,9 +7671,15 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                 std::fprintf(stderr, "\n"); }
     const DecisionProvider& prov = ResolveProvider(state);
     // CastOrderActionRank: identity unless the provider moves a concrete cast (a spliced Desperate).
+    // A TOTAL deck order (CastOrderTotalByName) breaks a rank tie by name here too, as the apply
+    // worlds' comparator does -- false for every other deck, so their sort is unchanged.
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    { return prov.CastOrderActionRank(state, cands[x], prov.CastOrderRank(state, *cands[x].def))
-           < prov.CastOrderActionRank(state, cands[y], prov.CastOrderRank(state, *cands[y].def)); });
+    {
+        const int rx = prov.CastOrderActionRank(state, cands[x], prov.CastOrderRank(state, *cands[x].def));
+        const int ry = prov.CastOrderActionRank(state, cands[y], prov.CastOrderRank(state, *cands[y].def));
+        if (rx != ry) { return rx < ry; }
+        return CastOrderNameTieLess(state, cands[x], cands[y]);
+    });
     // The deck's set-level arrangement, as both apply worlds take it (no-op unless the deck arranges:
     // Dragonstorm's earliest-payable Medallion slot, MTG_DRAGONSTORM_USER_ORDER).
     ApplyDeckCastArrangement(state, cands, order);
