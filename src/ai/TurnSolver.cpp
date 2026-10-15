@@ -38412,23 +38412,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     }
 
-    // THE DEFERRED (non-Karoo) LAND DROP -- played at its searched position (Plan::land_slot): right
-    // after the k-th landfall-watcher cast (the slot hook in apply_plan_actions) or after all the
-    // casts (below). Carries the rest of the land choice -- face, rad mode, source zone, and the
-    // searched ETB look (scry_choice) / Karoo bounce pin -- exactly as the land-first play does, and
-    // OnLandEntered fires inside the shared land body, so a watcher cast before it sees it enter.
-    // Lockstep with AIEngine::TakeTurn's exec_play_deferred_land.
-    auto play_deferred_land = [&]()
-    {
-        karoo_deferred      = false;
-        land_after_deferred = false;
-        deferred_land_slot  = 0;
-        ScriptedTopChoice    _stc(plan.scry_choice);
-        ScriptedBounceChoice _sbc(plan.bounce_choice);
-        PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode,
-                       karoo_from_top);
-    };
-
     // Deploy creatures via Aether Vial before casting spells so lord effects are live.
     auto apply_vial = [&](const std::string& name)
     {
@@ -41337,6 +41320,37 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // (enabler-first, prowess creatures before noncreature spells, on-cast self-damage
     // sources last); see the canonical branch below. Byte-identical for a deck whose ranks
     // don't reorder its casts.
+    // THE DEFERRED (non-Karoo) LAND DROP -- played at its searched position (Plan::land_slot): right
+    // after the k-th landfall-watcher cast (the slot hook in apply_plan_actions) or after all the
+    // casts (below). Carries the rest of the land choice -- face, rad mode, source zone, and the
+    // searched ETB look (scry_choice) / Karoo bounce pin -- exactly as the land-first play does, and
+    // OnLandEntered fires inside the shared land body, so a watcher cast before it sees it enter.
+    // Then any land Aura the plan cast onto THIS land while it was still in hand (apply_one holds a
+    // land Aura whose host is not on the battlefield while a drop is deferred -- karoo_host_auras)
+    // is cast on it, exactly as the Karoo block does: a positioned plan cloned from a land-first plan
+    // can carry "enchant the land being played". Defined after apply_one (which it calls) and before
+    // apply_plan_actions (whose slot hook calls it). Lockstep with AIEngine::TakeTurn's
+    // exec_play_deferred_land.
+    auto play_deferred_land = [&]()
+    {
+        karoo_deferred      = false;
+        land_after_deferred = false;
+        deferred_land_slot  = 0;
+        {
+            ScriptedTopChoice    _stc(plan.scry_choice);
+            ScriptedBounceChoice _sbc(plan.bounce_choice);
+            PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode,
+                           karoo_from_top);
+        }
+        std::vector<std::pair<std::string, int>> held;
+        held.swap(karoo_host_auras);
+        for (const std::pair<std::string, int>& ha : held)
+        {
+            apply_one(ha.first, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
+                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false);
+        }
+    };
+
     apply_plan_actions = [&](const std::vector<Action>& acts, bool explicit_order)
     {
         // PARTITION TRUNCATION scope (see bp_truncate): each apply_plan_actions call is ONE section

@@ -561,3 +561,41 @@ TEST_CASE("Land position: one variant per watcher cast, none for a plan casting 
     }
     CHECK(max_slot == 2);                                // Khalni + Courser in one plan -> positions 1, 2
 }
+
+TEST_CASE("Land position: a land Aura cast onto the positioned land is held until the land is played, then cast")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    for (int i = 0; i < 7; ++i) { PutLf(s, "Forest", 10 + i); }
+    s.players[0].hand.push_back(HandLf(kBaloths, 1));
+    s.players[0].hand.push_back(HandLf("Mountain", 2));
+    s.players[0].hand.push_back(HandLf("Wild Growth", 3));
+    // "Baloths (six Forests), THEN the Mountain (a Beast), THEN Wild Growth on that Mountain (the
+    // seventh Forest)". The autonomous host ranking aims the Aura at a Forest, but the human (the
+    // viewer offers every host) can aim it at the land being played: re-aim the enumerated
+    // position-1 plan's Aura at the Mountain (enchant_target = its number) and apply it. The Aura
+    // has no host until the land is played, so the apply HOLDS it and must cast it right after the
+    // positioned land (play_deferred_land), not drop it.
+    TurnSolver::Plan mid;
+    bool found = false;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool baloths = false, growth = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() == kBaloths)      { baloths = true; }
+            if (a.card_name.str() == "Wild Growth") { growth  = true; }
+        }
+        if (baloths && growth && p.land_to_play == "Mountain" && p.land_slot == 1) { mid = p; found = true; break; }
+    }
+    REQUIRE(found);
+    for (Action& a : mid.actions) { if (a.card_name.str() == "Wild Growth") { a.enchant_target = 2; } }
+    GameState t = s;
+    TurnSolver::ApplyPlan(t, mid, true);
+    CHECK(CountNamed(t, "4/4 Beast Token") == 1);
+    const Permanent* wg = nullptr;
+    for (const Permanent& p : t.battlefield) { if (p.card.m_name.str() == "Wild Growth") { wg = &p; } }
+    REQUIRE(wg != nullptr);                              // released after the land, not dropped
+    CHECK(wg->aura_attached_to == 2);
+}

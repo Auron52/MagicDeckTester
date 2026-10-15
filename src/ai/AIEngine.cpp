@@ -6234,10 +6234,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         karoo_deferred      = false;
         land_after_deferred = false;
         deferred_land_slot  = 0;
-        ScriptedTopChoice    _stc(plan.scry_choice);
-        ScriptedBounceChoice _sbc(plan.bounce_choice);
-        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, deferred_land_face, deferred_rad_mode,
-                            karoo_from_top);
+        {
+            ScriptedTopChoice    _stc(plan.scry_choice);
+            ScriptedBounceChoice _sbc(plan.bounce_choice);
+            TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, deferred_land_face, deferred_rad_mode,
+                                karoo_from_top);
+        }
+        // ...then the land Auras cast_by_name held for this land (the Karoo block's release, twin of
+        // ApplyPlanDirect's play_deferred_land).
+        std::vector<std::pair<std::string, int>> held;
+        held.swap(karoo_host_auras);
+        for (const std::pair<std::string, int>& ha : held)
+        {
+            cast_by_name(ha.first, "", 0, 0, -1, -1, 0, "", ha.second);
+            resolve_now();
+        }
     };
     auto exec_slot_hook = [&](const Action& a)
     {
