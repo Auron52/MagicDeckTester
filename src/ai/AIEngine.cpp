@@ -7535,8 +7535,73 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
     bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
     if (m_logger) { m_logger->LogDraw(drawn.m_number, drawn.m_name); }
+    const int drawn_num = drawn.m_number;
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::Draw);
+    LandDrawCensusAfterDig(state, drew_land, drawn_num);   // MTG_LANDDRAW_CENSUS (diagnostic only)
     return drew_land;
+}
+
+// ---- MTG_LANDDRAW_CENSUS (diagnostic only; see AIEngine::LandDrawCensusEndTurn) ------------------
+// Per REAL turn (g_real_resolution): the lands the dig drew while the land drop was open, and whether
+// at any dig of the turn one of them -- still in hand, drop still open -- would have paid for a held
+// nonland that was not castable without it. Read-only: nothing here can reach play.
+namespace ldcensus
+{
+    inline bool On()
+    {
+        static const bool on = EnvOn("MTG_LANDDRAW_CENSUS");
+        return on;
+    }
+    struct Turn
+    {
+        unsigned long long seed = 0;
+        int                turn = -1;
+        std::vector<int>   lands;          // copy numbers drawn by a dig with the drop open
+        bool               enabling = false;
+    };
+    inline thread_local Turn t_turn;
+    inline void CheckEnabling(const GameState& state)
+    {
+        if (t_turn.enabling || t_turn.lands.empty()) { return; }
+        const Player& ap = state.ActivePlayer();
+        for (const Card& c : ap.hand)
+        {
+            if (std::find(t_turn.lands.begin(), t_turn.lands.end(), c.m_number) == t_turn.lands.end())
+            { continue; }
+            const std::string nm = c.m_name.str();
+            if (TurnSolver::DropOpenLandEnablesCast(state, &nm)) { t_turn.enabling = true; return; }
+        }
+    }
+}
+
+void AIEngine::LandDrawCensusAfterDig(const GameState& state, bool drew_land, int drawn_num)
+{
+    if (!ldcensus::On() || !g_real_resolution) { return; }
+    const Player& ap = state.ActivePlayer();
+    ldcensus::Turn& t = ldcensus::t_turn;
+    if (t.seed != state.game_seed || t.turn != state.turn_number)
+    { t = ldcensus::Turn{}; t.seed = state.game_seed; t.turn = state.turn_number; }
+    if (drew_land && ap.lands_played_this_turn < ap.LandDropsAvailable()) { t.lands.push_back(drawn_num); }
+    ldcensus::CheckEnabling(state);
+}
+
+void AIEngine::LandDrawCensusEndTurn(const GameState& state)
+{
+    if (!ldcensus::On() || !g_real_resolution) { return; }
+    ldcensus::Turn& t = ldcensus::t_turn;
+    if (t.seed != state.game_seed || t.turn != state.turn_number || t.lands.empty()) { return; }
+    ldcensus::CheckEnabling(state);   // the turn's last state, after combat (no mana is spent there)
+    const Player& ap = state.ActivePlayer();
+    const bool lost = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    bool held = false;
+    for (const Card& c : ap.hand)
+    {
+        if (std::find(t.lands.begin(), t.lands.end(), c.m_number) != t.lands.end()) { held = true; break; }
+    }
+    std::fprintf(stderr, "[ldcensus] job=%s seed=%llu T=%d drawn=%zu lost=%d held_at_end=%d enabling=%d\n",
+                 heurarm::t_job_name ? heurarm::t_job_name : "-", t.seed, t.turn, t.lands.size(),
+                 lost ? 1 : 0, held ? 1 : 0, t.enabling ? 1 : 0);
+    t = ldcensus::Turn{};
 }
 
 // ---- Firebreathing (Scourge / Lathliss) ----

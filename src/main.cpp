@@ -8100,6 +8100,35 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
                   << "  " << r.mv << "  " << r.name
                   << (r.note.empty() ? "" : "   -- " + r.note) << "\n";
     }
+    // THE DIG IS PART OF THE ORDER TOO, and it is always LAST (USER 2026-10-14, Fluctuator: "cycling
+    // always goes at the end. (that should also be placed)"). Like the land drop it is not a cast and
+    // has no rank, so a report built out of ranks never showed it. Print where it happens: the dig
+    // loop runs after every cast of its window, in the rollout, the executor's recorded replay and
+    // the reactive depth-0 dig alike; a cast after N cycles is a re-solve -- a NEW window whose own
+    // casts again precede the next cycle.
+    {
+        int cyclers = 0, sac_draw = 0;
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d) { continue; }
+            if (d->params.cycling_cost.has_value())        { ++cyclers; }
+            if (d->params.sacrifice_draw_cost.has_value()) { ++sac_draw; }
+        }
+        if (cyclers + sac_draw > 0)
+        {
+            std::cout << "#\n# [LAST] DIG (cycling " << cyclers << ", sacrifice-to-draw " << sac_draw
+                      << "): after every cast of its window -- never ranked, structurally last\n"
+                      << "  dig     -   "
+                      << (state.uses_second_main ? "m1/m2" : "m1   ")
+                      << " -  -   (cycle / sac-draw; a land it draws "
+                      << (prov.DigUsesDrawnLandDrop(state) ? "CAN be the drop at a searched re-solve"
+                                                           : "is not offered as the drop")
+                      << ")\n";
+        }
+    }
+    if (!state.uses_second_main)
+    { std::cout << "#\n# (main column: inert -- this deck plays a single main phase)\n"; }
     return 0;
 }
 

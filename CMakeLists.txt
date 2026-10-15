@@ -354,6 +354,7 @@ add_executable(mtg-test
     test/unit/test_giants_discard.cpp
     test/unit/test_antilife_tutor.cpp
     test/unit/test_fluctuator_discard.cpp
+    test/unit/test_fluctuator_order.cpp
     test/unit/test_melira_pod_discard.cpp
     test/unit/test_auras_discard.cpp
     test/unit/test_auras_cast_order.cpp

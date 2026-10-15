@@ -1,0 +1,41 @@
+{
+  "deck": "decks/Fluctuator/Fluctuator.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Fluctuator",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Polluted Mire",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Blasted Landscape",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Forsake the Worldly",
+    "Forsake the Worldly",
+    "Forsake the Worldly"
+  ],
+  "library_top": [
+    "Drannith Stinger",
+    "Capital City"
+  ],
+  "library_filler": "Polluted Mire",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 10,
+  "max_turns": 3,
+  "expect_win_turn": 3,
+  "comment": "Twin of fluctuator_drawn_land_casts_stinger.json with the draw order reversed: the chain draws Drannith Stinger FIRST (uncastable: no red, the drop not yet useful) and Capital City SECOND. Only the LAND draw can open the re-solve here -- MTG_FLUCT_DRAWN_LAND's land-draw trigger (the drawn untapped land makes a held card castable through the open drop). T3 kill."
+}

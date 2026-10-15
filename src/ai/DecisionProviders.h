@@ -2174,6 +2174,23 @@ public:
     // graveyard, whatever the next draw is -- every pingless draw before the Unearth resolves is
     // a card the kill will not have. See DecisionProvider::DigResolveEvenOnLand.
     bool        DigResolveEvenOnLand(const GameState& s) const override;
+    // A land the chain DRAWS can be the drop (USER 2026-10-14). MTG_FLUCT_DRAWN_LAND (default ON;
+    // =0 -> byte-identical to 16dfb7e4). See DecisionProvider::DigUsesDrawnLandDrop.
+    bool        DigUsesDrawnLandDrop(const GameState& s) const override;
+    // THE USER'S TOTAL ORDER (2026-10-14): land > Unearth > Enlightened Tutor > Drannith Stinger >
+    // Fluctuator > Hollow One > a SECOND Fluctuator > CYCLING. Ranked by params; a second
+    // Fluctuator on the battlefield ranks after Hollow One here, and one earlier in the SAME cast
+    // set is moved there by ArrangeCastOrder, which also makes the card NAME the final tie-break so
+    // no two different cards ever fall to plan/hand order. Cycling is not a rank: every dig runs
+    // after every cast of its window (see the .cpp table). MTG_FLUCT_ORDER=0 -> generic wholesale.
+    int         CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        OrderOpaqueCastsByRank() const override;
+    void        ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                                 std::vector<int>& order) const override;
+    // Single main (uses_second_main=no): every cast is Main1, so the report's column matches play.
+    // Inert in play -- this deck opts into no phase classification.
+    std::optional<MainPhase> MainPhaseOverride(const GameState& s, const CardDefinition& def) const override;
     // The combo turn is ONE long chain, so neither Treasure-Hunt stopping condition applies: the
     // 16-dig guard caps a single-Stinger kill at 16 damage vs 20 life (a T3 win is arithmetically
     // impossible under it), and the post-re-solve `break` ends the turn at the first payoff the

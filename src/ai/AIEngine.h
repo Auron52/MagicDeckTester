@@ -269,6 +269,13 @@ public:
     bool ReferenceKeep(const std::vector<Card>& hand, int mulligan_count, bool on_the_play) const
     { return KeepHand(hand, mulligan_count, on_the_play); }
 
+    // MTG_LANDDRAW_CENSUS (DIAGNOSTIC ONLY, default off; never read by play). Called by GameEngine
+    // at the start of every END STEP: if this REAL turn's dig chain drew a land while the land drop
+    // was open, print one `[ldcensus]` line -- the job, seed, turn, whether the drop went UNUSED,
+    // and whether a drawn land would have paid for a held card at some dig of the turn
+    // (TurnSolver::DropOpenLandEnablesCast). Per-cell totals come from summing the lines by job.
+    static void LandDrawCensusEndTurn(const GameState& state);
+
 private:
     // Unit-test seam (backlog C2): test/unit drives the private payment path (TapForCost)
     // directly against the rollout's TapForCostDirect in the twin-equivalence tests. Friend
@@ -510,6 +517,8 @@ private:
     // performed. The post-draw casts on a committed line are replayed separately by the
     // caller (the DigDraw's nested breakpoint_casts).
     bool PerformDig(GameState& state, const std::string& source, bool is_sacrifice);
+    // MTG_LANDDRAW_CENSUS's per-dig half (diagnostic only; see LandDrawCensusEndTurn).
+    static void LandDrawCensusAfterDig(const GameState& state, bool drew_land, int drawn_num);
 
     // Tap permanents to pay the cost, updating the available pool in place.
     // for_creature: if false, skip creature-only mana sources (e.g. Ancient Ziggurat).

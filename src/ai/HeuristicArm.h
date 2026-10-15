@@ -501,6 +501,9 @@ enum Slot : int
     SPECTACLE_PLAN_CREDIT,    // MTG_SPECTACLE_PLAN_CREDIT both subset evaluators price a spectacle spell (Light Up the Stage) at its spectacle cost when the same plan casts a face-damage spell the realised order puts BEFORE it (CR 702.137a: an opponent lost life this turn) -- the Swiftspear -> burn -> Light Up {R} line becomes enumerable
     KILL_TRIGGER_COMBO,       // MTG_KILL_TRIGGER_COMBO    the "wins this turn" projection credits Searing Blood's death trigger when the plan's creature damage, in cast order, kills the opponent's only creature (a Blood that cannot kill alone, finished by a Blaze or a second Blood) -- the Volley hold's lethal exception then sees the kill. Default OFF until measured
     SPECTACLE_CREDIT_SEARCH_ONLY, // MTG_SPECTACLE_CREDIT_SEARCH_ONLY ...in the search's enumeration only, not the greedy walk (Solve: d0 + rollout leaves), which there admitted {Shard Volley, Light Up {R}} under the Volley hold's exception (b) and sacrificed early lands. Default OFF (a measured alternative)
+    FLUCT_ORDER,              // MTG_FLUCT_ORDER          Fluctuator: the USER's TOTAL cast order (2026-10-14): land > Unearth > Enlightened Tutor > Drannith Stinger > Fluctuator > Hollow One > a SECOND Fluctuator (one on the battlefield or earlier in the same cast set) > cycling; names as the final tie-break, never plan/hand order. Default ON; =0 -> GenericProvider::CastOrderRank (the A/B hatch). docs/design/fluctuator-cast-order-2026-10-14.md
+    FLUCT_DRAWN_LAND,         // MTG_FLUCT_DRAWN_LAND     Fluctuator: a land DRAWN by the dig chain is considerable as the turn's land drop (USER 2026-10-14: "Why can't we use a land drawn by cycling?"): the dig loop re-solves (searched, site 4) when the drop is open and a land in hand makes a held card castable, and once at the chain's end when a drawn land could still be the drop. Completeness fix. Default ON; =0 -> the drop is unreachable after a land draw, byte-identical to 16dfb7e4
+    FLUCT_KEEP_UNTAPPED,      // MTG_FLUCT_KEEP_UNTAPPED  Fluctuator: the USER's "occasionally an untapped land" cycling protection (ledger §7.5) -- while the land drop is open and no Stinger is on the battlefield, ONE untapped-entering land in hand is cycled LAST (an order, never a refusal). Default ON; =0 -> every land is rank-3 fodder, byte-identical to 16dfb7e4
     COUNT
 };
 
@@ -956,6 +959,9 @@ inline const char* Name(int slot)
         "MTG_SPECTACLE_PLAN_CREDIT",
         "MTG_KILL_TRIGGER_COMBO",
         "MTG_SPECTACLE_CREDIT_SEARCH_ONLY",
+        "MTG_FLUCT_ORDER",
+        "MTG_FLUCT_DRAWN_LAND",
+        "MTG_FLUCT_KEEP_UNTAPPED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
