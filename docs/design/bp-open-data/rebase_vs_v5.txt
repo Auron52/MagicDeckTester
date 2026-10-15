@@ -1,0 +1,45 @@
+== arm off: r2 (16dfb7e4 + levers) vs v5 (77e094a2 + levers), same seeds
+th               ship n= 200  differ=  0  net(new-old)=+0  
+hinata           ship n= 175  differ=  0  net(new-old)=+0  
+hinata           d3   n= 250  differ=  0  net(new-old)=+0  
+creature_giving  ship n= 200  differ=  0  net(new-old)=+0  
+creature_giving  d3   n= 300  differ=  0  net(new-old)=+0  
+mirrorwing       ship n= 200  differ=  0  net(new-old)=+0  
+melira           ship n= 200  differ=  0  net(new-old)=+0  
+melira           d3   n= 249  differ=  0  net(new-old)=+0  
+fluctuator       ship n= 200  differ=  0  net(new-old)=+0  
+fluctuator       d3   n= 300  differ=  0  net(new-old)=+0  
+pirates          ship n= 200  differ=  0  net(new-old)=+0  
+pd               ship n= 200  differ=  0  net(new-old)=+0  
+bruna            ship n=  50  differ=  0  net(new-old)=+0  
+bruna            d3   n= 100  differ=  0  net(new-old)=+0  
+== arm nodemote: r2 (16dfb7e4 + levers) vs v5 (77e094a2 + levers), same seeds
+th               ship n= 200  differ=  0  net(new-old)=+0  
+hinata           ship n= 175  differ=  0  net(new-old)=+0  
+hinata           d3   n= 250  differ=  0  net(new-old)=+0  
+creature_giving  ship n= 200  differ=  0  net(new-old)=+0  
+creature_giving  d3   n= 300  differ=  0  net(new-old)=+0  
+mirrorwing       ship n= 200  differ=  0  net(new-old)=+0  
+melira           ship n= 200  differ=  0  net(new-old)=+0  
+melira           d3   n= 249  differ=  0  net(new-old)=+0  
+fluctuator       ship n= 200  differ=  0  net(new-old)=+0  
+fluctuator       d3   n= 300  differ=  0  net(new-old)=+0  
+pirates          ship n= 200  differ=  0  net(new-old)=+0  
+pd               ship n= 200  differ=  0  net(new-old)=+0  
+bruna            ship n=  50  differ=  0  net(new-old)=+0  
+bruna            d3   n= 100  differ=  0  net(new-old)=+0  
+== arm on: r2 (16dfb7e4 + levers) vs v5 (77e094a2 + levers), same seeds
+th               ship n= 200  differ=  0  net(new-old)=+0  
+hinata           ship n= 175  differ=  0  net(new-old)=+0  
+hinata           d3   n= 250  differ=  0  net(new-old)=+0  
+creature_giving  ship n= 200  differ=  0  net(new-old)=+0  
+creature_giving  d3   n= 300  differ=  0  net(new-old)=+0  
+mirrorwing       ship n= 200  differ=  0  net(new-old)=+0  
+melira           ship n= 200  differ=  0  net(new-old)=+0  
+melira           d3   n= 256  differ=  0  net(new-old)=+0  
+fluctuator       ship n= 200  differ=  0  net(new-old)=+0  
+fluctuator       d3   n= 300  differ=  0  net(new-old)=+0  
+pirates          ship n= 200  differ=  0  net(new-old)=+0  
+pd               ship n= 200  differ=  0  net(new-old)=+0  
+bruna            ship n=  50  differ=  0  net(new-old)=+0  
+bruna            d3   n= 100  differ=  0  net(new-old)=+0  

@@ -61,7 +61,7 @@ budget, only to order or price.
 | 20 | executor (`AIEngine` resolve_draw_breakpoint, pod twin, site-9 twin) | replays what was scored; an unverified commit re-solves searched | not a search closure | -- | demoted sentinel mirrored at all three |
 | 21 | escalation beam (near-leaf, escalation passes only) | caps plans per node | a general, counted truncation, not breakpoint-specific | -- | unchanged |
 
-## 3. The fix: five levers, each a later wave, each default ON
+## 3. The fix: five levers, each a later wave; F1-F4 default ON, F5 default OFF (USER decision)
 
 All five are completeness fixes. Each orders its new options LAST, so a finite budget spends first on
 exactly what it spent on before (the budget doctrine's GOOD shape: inert as a gate, a price only), and an
@@ -84,7 +84,9 @@ only (outside a playout and a derivation): inside a playout EMPTY already is the
   new sentinel `kBpDemotedChoice + j` mirrored in the executor. Nothing the filtered list feeds changes:
   the canon's `cands.front()`, wave 0, ArmNew's empty-list test, NSKIP's length, the node's children.
   A demoted entry whose sibling DOES realise its order lands on the sibling's state and dies in the
-  post-apply dedup for one apply.
+  post-apply dedup for one apply. **Ships OFF (2026-10-15) until the USER rules** -- it modifies
+  `MTG_BP_NEW_ONLY`, a rule the USER adopted, and it is the only lever with a deck net above 0 on the
+  A/B (section 4). The two Mirrorwing scenarios pin it on in their `env`.
 
 `MTG_BP_BASE_CANON` is now a first-in-order choice, not an only choice: at every breakpoint a base
 plan resolves by the canon, wave 0, the walker (ranks, EMPTY, demoted) or the node offer every
