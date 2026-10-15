@@ -23,7 +23,9 @@ Every part is its own heurarm lever, so one pooled batch carries every arm:
 | `MTG_BURN_M2_RULE` | part 2, the main-2 rule (broad "played off" reading) | see "Defaults" |
 | `MTG_BURN_M2_NARROW` | part 2's narrower "played off" reading (exiled cards only) | OFF (USER question) |
 | `MTG_SPECTACLE_PLAN_CREDIT` | part 3, the engine fix | see "Defaults" |
-| `MTG_BURN_BLOOD_FIRST` | PROPOSED amendment: Searing Blood before Searing Blaze | OFF (USER question) |
+| `MTG_BURN_BLOOD_FIRST` | PROPOSED amendment: Searing Blood before Searing Blaze when Blood cannot kill alone | see "Defaults" (USER question) |
+| `MTG_KILL_TRIGGER_COMBO` | engine fix the measurement found: the wins projection credits a Searing Blood finished by the plan's own creature damage | see "Defaults" |
+| `MTG_SPECTACLE_CREDIT_SEARCH_ONLY` | part 3's credit in the search's enumeration only (not the greedy walk) | OFF (measured alternative) |
 
 ## Part 1 -- the order (`MTG_BURN_ORDER`)
 
@@ -156,6 +158,35 @@ hand Mountain + Swiftspear + Shard Volley + Light Up: land, Swiftspear, Volley (
 1 + 3: **T3 at the shipped settings (d6 b20) and at d8 b0**; scenario
 `test/scenarios/burn_spectacle_swiftspear_volley_lightup.json` pins it (fails on the base binary).
 
+### Found by the measurement: the kill-trigger combo credit (`MTG_KILL_TRIGGER_COMBO`, EngineFlags.h)
+
+The main-2 rule exposed a projection gap. Searing Blood is credited as face damage by `CollectActions`
+only when it kills its creature ALONE (`direct_damage = 3` then; `0` against a 3/3 or a 4/4). A plan that
+casts Blood on a 4/4 and finishes it with a second Blood or a Searing Blaze really does deal Blood's 3 to
+the face (the death trigger), but the "wins this turn" projection did not see it, so the plan read as
+short of lethal -- and the Shard Volley hold's exception (a) ("the plan wins this turn") then pruned the
+Volley that was the kill. Without the main-2 rule the same Volley was cast in MAIN 2, after the triggers
+had resolved and the board showed the opponent at Volley range; the rule moves it to main 1, where only
+the projection can see it. burn2hg seeds 11671958 gi 1957 and 11671187 gi 1186: one turn slower under
+parts 1 + 2, NOT recovered at d8 b0 (a structural miss, not a budget one).
+
+`KillTriggerComboCredit` (TurnSolver.cpp, read by both subset evaluators): with exactly ONE opposing
+creature (every creature-damage spell then hits it), walk the plan's creature-damage casts in the realised
+order (`CastOrderLess`); each kill-trigger cast made while the creature is still alive and not already
+credited adds its `death_trigger_damage` once the running creature damage reaches the toughness. A
+projection-accuracy fix -- the apply already resolves the trigger -- and 0 (byte-identical) for every
+plan without such a cast, i.e. every other deck. Measured as the `...k` arms.
+
+### A measured alternative: the credit in the search only (`MTG_SPECTACLE_CREDIT_SEARCH_ONLY`)
+
+At depth 0 the credit newly admits {Shard Volley, Light Up {R}} in main 1 of the GREEDY walk, and the
+Volley hold's exception (b) ("it turns Spectacle on for a spell in the same plan", `shard-volley-hold.md`)
+lets the greedy sacrifice a land on T2-T3 for it, where it used to keep Volley and cast Light Up for {R}
+in main 2 off combat damage. The search prices that land; the greedy does not. This lever keeps the credit
+in `EnumeratePlans` only (the asymmetry Plan B always had) and leaves `Solve` (the d0 runner and every
+rollout leaf) at the pre-plan cost; BurnProvider's d0 land hold reads it too, so the hold never banks a
+drop for a line Solve cannot find. Measured as the `...s` arms; default OFF.
+
 ## Rules review (`.claude/skills/mtg-rules.md`)
 
 * Spectacle is an alternative cost (CR 702.137a), chosen while casting (601.2b) and legal iff an opponent
@@ -163,7 +194,10 @@ hand Mountain + Swiftspear + Shard Volley + Light Up: land, Swiftspear, Volley (
 * Damage dealt to a player is life loss (120.3a); each burn spell resolves before the next is cast
   (sorcery-speed Light Up needs an empty stack), so its damage precedes Light Up's cost determination.
   Searing Blood's face damage is a delayed trigger on its creature's death -- it resolves before Light Up
-  can be cast too. Eidolon's ping hits US, not an opponent: never a trigger.
+  can be cast too. It fires whichever spell's damage kills the creature this turn ("When that creature
+  dies this turn"), so a Blood followed by a Blaze or a second Blood that finishes the creature deals its
+  3 -- the kill-trigger combo credit. A second Blood on a creature already dead has no target (it is not
+  cast), which is why the walk stops at the death. Eidolon's ping hits US, not an opponent: never a trigger.
 * Shard Volley's land sacrifice is an additional cost (601.2h), payable with a land already tapped for
   mana -- the slot costs no mana.
 * Light Up's exiled land is a land PLAY (305.2) in either main, so the main-2 rule never touches lands.
