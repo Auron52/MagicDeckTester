@@ -9887,30 +9887,12 @@ const char* BurnProvider::CastOrderTierName(int rank) const
 }
 
 // TOTAL ORDER (USER cross-deck ruling 2026-10-14: "Let's fully order the cards in each list inasmuch as
-// possible. I don't like the randomness of choosing the order."). The comparator ranks; this re-sorts
-// within an equal rank by NAME, so two different cards never fall back to plan / hand order (Goblin
-// Guide before Monastery Swiftspear; Bolt before Shard Volley; Searing Blaze before Searing Blood before
-// Skullcrack). Copies of one card keep their order (they are the same card). Reached at every site that
-// sorts a cast order, both worlds (ApplyDeckCastArrangement).
-void BurnProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
-                                    std::vector<int>& order) const
-{
-    if (!BurnOrderEnabled() || order.size() < 2) { return; }
-    auto rank_of = [&](const Action& a) -> int
-    {
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        return d ? CastOrderActionRank(s, a, CastOrderRank(s, *d)) : 1000;
-    };
-    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    {
-        const Action& a = actions[static_cast<std::size_t>(x)];
-        const Action& b = actions[static_cast<std::size_t>(y)];
-        const int ra = rank_of(a), rb = rank_of(b);
-        if (ra != rb) { return ra < rb; }
-        return a.card_name.str() < b.card_name.str();
-    });
-}
-
+// possible. I don't like the randomness of choosing the order."): an equal rank breaks by NAME in the
+// shared comparator (DecisionProvider::CastOrderTotalByName / CastOrderNameTieLess), so two different
+// cards never fall back to plan / hand order (Goblin Guide before Monastery Swiftspear; Bolt before
+// Shard Volley; Searing Blaze before Searing Blood before Skullcrack). Copies of one card keep their order
+// (they are the same card). Both apply worlds and the enumeration's sequential walk read it.
+bool BurnProvider::CastOrderTotalByName() const   { return BurnOrderEnabled(); }
 bool BurnProvider::OrderOpaqueCastsByRank() const { return BurnOrderEnabled(); }
 bool BurnProvider::SacLandCastsInOrder() const    { return BurnOrderEnabled(); }
 

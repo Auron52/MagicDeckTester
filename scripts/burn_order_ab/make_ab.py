@@ -82,10 +82,19 @@ def build(a):
     arms = [("old", None)] if a.which == "base" else ARMS
     for (deck, cell), n0 in SIZES.items():
         n = int(n0 * a.scale)
+        # --floor: the searched cells at the brief's floor (half these sizes) so a 9-arm NEW batch fits the
+        # fleet's ~3 h per-batch limit; d0 stays full (it is nearly free). The base ran the full sizes --
+        # the analysis pairs only the games both sides played.
+        if a.floor and cell != "d0":
+            n //= 2
         ch = CHUNK[cell]
         extra = TWO_HG if deck == "burn2hg" else None
         for c in range(0, n, ch):
             for arm, fl in arms:
+                # The "off" arm is the identity check (new binary, every lever off == base): a quarter of
+                # the searched chunks is plenty for a digest comparison.
+                if arm == "off" and cell != "d0" and (c // ch) % 4 != 0:
+                    continue
                 jobs.append(job("%s.%s.%s.c%d" % (deck, cell, arm, c), BURN_DECK, BURN_PROF, cell,
                                 min(ch, n - c), SEEDS[(deck, cell)] + c, c, fl, extra))
     if not a.no_identity:
@@ -231,6 +240,7 @@ if __name__ == "__main__":
     ap.add_argument("--which", choices=["base", "new"])
     ap.add_argument("--scale", type=float, default=1.0)
     ap.add_argument("--no-identity", action="store_true")
+    ap.add_argument("--floor", action="store_true", help="searched cells at the brief's floor sizes")
     ap.add_argument("--analyse", nargs=2)
     ap.add_argument("--recovery", nargs=2)
     a = ap.parse_args()
