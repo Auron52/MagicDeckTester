@@ -1,8 +1,11 @@
 # Hinata's full cast order (MTG_HINATA_ORDER_FULL)
 
-**Status (2026-10-14): the order is SETTLED by the USER and BUILT (commit 514975c9), default OFF; the held-out
-A/B is IN PROGRESS (paused for the night -- PARTIAL numbers and the resume recipe are in
-`hinata-cast-order-RESUME.md`). Do not flip the default before that A/B meets the bar.**
+**Status (2026-10-15): the order is SETTLED by the USER, BUILT (514975c9) and MEASURED (section 0.4): it does NOT
+meet the adoption bar, so `MTG_HINATA_ORDER_FULL` stays default OFF.** It is net <= 0 on five of six cells but +13
+on hinata shipped (1,000 games), and four slower games do not recover even at d8 b0. The largest mechanism is
+Gamble's position relative to the cantrips inside a bound cantrip plan (the agent's tie-break); no measured fixed
+position fixes it, and the proposal is to leave that one relation searched. The Irencrag second-last rule is not the
+cost (near-inert against the scalar 18).
 Self-contained. Everything needed to resume is here or in git. Sections 1-8 below are the HISTORY (the 08-26
 order, its 08-28 revision and the August measurements, which predate the 09-01 Irencrag waste gate, the 09-02
 breakpoint node and the 10-10 restrictor / Crackle fixes); section 0 is the order as it is now.
@@ -93,6 +96,133 @@ count. Unit-pinned on a searched {Ponder, Irencrag, Crackle} plan whose own orde
   "TOP-OF-LIBRARY CANTRIPS", the cantrips "MANA DORK" and Sol Ring unlabelled).
 * The false rank comment "a cantrip cast before her ... paid full price" is fixed: her discount is per target,
   and Ponder, Preordain, Gamble and EI have none.
+
+### 0.4 Measurement (2026-10-14/15)
+
+Held-out seeds from 11100001 (hinata shipped 11100001, d3 11110001, d0 11120001; hinata2hg 11150001 / 11160001 /
+11170001), paired per game, loss = turn 9, `MTG_DUMP_WINS=1`. One binary per batch with the arms as per-job heurarm
+flags: old = `MTG_HINATA_ORDER_FULL` off (byte-identical to the `ff3e205b` binary, below), new = on. Shipped =
+the profile's play settings (d5 b30, value leaf + keep table); d3 b10 and d0 pin the depth. Scripts:
+`test/tools/hinata_order/`.
+
+**Identity.** Every other suite deck at d0 50 / d3 b10 20 / shipped 20 games (Dragonstorm and Dragonstorm 2HG,
+the other Irencrag deck, at 200 / 50 / 50), the new binary with the order ON, plus hinata and hinata2hg with the
+order OFF on both sides (d0 400 / d3 40 / shipped 20): **104 of 105 jobs, 4,290 games, every game byte-identical
+to `ff3e205b`** (win turn and per-game play digest). The 105th job, `kittyv3_ship`, holds a KittyEquipment v3
+game (gi 14) that ran over 18 minutes on BOTH binaries and was not waited for.
+
+**gi 664 (seed 6600665, the draft's case).** Generic T5; the 08-28 order (Irencrag at 22) unwon; the settled
+order T5 at shipped and at d3 b10, playing the generic order's exact game.
+
+**The settled order as built (Gamble before the cantrips, Preordain before Ponder)** -- 34,500 paired games:
+
+| cell | games | old avg | new avg | faster | slower | net | units new/old |
+|---|---|---|---|---|---|---|---|
+| hinata shipped | 1,000 | 5.6240 | 5.6370 | 22 | 27 | **+13** | 1.011 |
+| hinata d3 b10 | 2,000 | 5.5870 | 5.5840 | 42 | 32 | -6 | 0.995 |
+| hinata d0 | 20,000 | 6.7572 | 6.7562 | 846 | 839 | -20 | -- |
+| hinata2hg shipped | 500 | 5.4220 | 5.4180 | 7 | 6 | -2 | 0.969 |
+| hinata2hg d3 b10 | 1,000 | 5.4920 | 5.4920 | 15 | 14 | 0 | 0.955 |
+| hinata2hg d0 | 10,000 | 6.6376 | 6.6347 | 430 | 401 | -29 | -- |
+
+**It misses the bar on one cell: hinata shipped, net +13.** Every other cell is net <= 0.
+
+**Root cause of the shipped-cell loss: the agent's "Gamble before the cantrips" tie-break, once the order binds
+inside cantrip plans.** Read single-game, old vs new, on nine slower games (hinata shipped gi 13, 153, 184, 390,
+414, 726; 2HG shipped gi 98, 290, 440). In six of them (gi 13, 184, 390, 726; 2HG 98, 440) the turning point is a
+turn where the new arm casts Gamble AHEAD of a cantrip in the same main phase, where the old arm cast the cantrip
+first and Gamble later or not at all:
+
+* gi 13 T3: old Ponder, Ponder, land, Gamble; new Gamble (fetches Hinata; the random discard throws that Hinata
+  away), Ponder, Ponder -- T5 -> T7.
+* gi 726 T3: old Preordain, land, Gamble (discards Sol Ring); new Gamble (fetches Hinata, discards Hinata),
+  Preordain, Preordain -- T6 -> T8.
+* gi 390 T3: old Ponder, Gamble; new Gamble, Ponder (a different fetch) -- T6 -> T8. gi 184 T3: Gamble, its
+  discard hits the Crackle, Ponder -- T5 -> T8.
+
+Two things go wrong together: Gamble fetches BEFORE the cantrips show what is missing (TutorCandidates reads the
+state at resolution), and its random discard lands on a different card. With the binding, a plan holding Gamble
+and a cantrip always realises Gamble first, so the cantrip-then-Gamble line survives only through a breakpoint
+continuation. The decisive single-game check is 2HG gi 98 (T4 -> T5): still T5 at **d8 b0** with the order as
+built, but **T4 at d8 b0 with Gamble after the cantrips (`MTG_HINATA_GAMBLE_LATE`) or with the binding off
+(`MTG_HINATA_ORDER_BINDING=0`)** -- and still T5 with only the proposed Reality Spasm placement
+(`MTG_HINATA_SPASM_LATE`). So the line the order loses there is the agent's tie-break, not a USER slot. (gi 414
+and 153 moved for other reasons: a T1 Ponder keep-vs-shuffle choice and an early cantrip choice changed on
+different evaluations; no order inversion is involved.)
+
+**Recovery of the 2HG shipped slower games (single-game, new arm):** stage 1 (d5 b100): gi 349, 425, 484 recover;
+gi 98, 290, 440 do not. Stage 2 (d8 b0): gi 290 (T5) and gi 440 (T4) recover -- gi 440 by casting Ornithopter in
+main 1 and Gamble in main 2, so the discard lands on Distorting Wake as in the old line; it is a recovering game,
+not a clairvoyant loss. **gi 98 does not recover (T5 at d8 b0)** -- root-caused above.
+
+**Recovery of every slower game (new arm):** stage 1 = `--depth max(5, old win turn) --budget-ms 100`, stage 2 =
+`--depth 8 --budget-ms 0`.
+
+| cell | slower | recover at stage 1 | recover at stage 2 | do NOT recover |
+|---|---|---|---|---|
+| hinata shipped | 27 | 19 | 7 | 1 (gi 82) |
+| hinata d3 b10 | 32 | 22 | 7 | 3 (gi 253, 1538, 1632) |
+| hinata d0 | 839 | 829 | 9 | 1 (gi 2029) |
+| hinata2hg shipped | 6 | 3 | 2 (gi 290, 440) | 1 (gi 98) |
+| hinata2hg d3 b10 | 14 | 11 | 3 | 0 |
+| hinata2hg d0 | 401 | 399 | 2 | 0 |
+
+The six games that do not recover, each root-caused single-game against the arms below (all at d8 b0):
+
+| game | old -> new (d8 b0) | recovers with | mechanism |
+|---|---|---|---|
+| 2HG shipped gi 98 | T4 -> T5 | Gamble after the cantrips (T4); binding off (T4) | main 2 casts Gamble ahead of the staged Ponder; the old kill needed Ponder first |
+| hinata d3 gi 253 | T6 -> T7 | Gamble after the cantrips (T6); binding off (T6) | T3 Gamble ahead of Preordain, its discard takes the Preordain |
+| hinata shipped gi 82 | T5 -> T6 | binding off (T5); NOT Gamble-late | a cantrip plan realised in rank order instead of the partition's |
+| hinata d3 gi 1538 | T5 -> T6 | payoffs tied (`MTG_HINATA_PAY_TIE`, T5); not Gamble-late / binding / Irencrag / PP | the T3 choice (Ponder first, then the drawn Mystic Monastery for T4's Hinata) changes with the payoff block's order |
+| hinata d3 gi 1632 | T4 -> T5 | -- | **not an order loss**: the OLD arm is T5 at d8 b0 too; its d3 T4 was budget luck |
+| hinata d0 gi 2029 | T7 -> T8 | -- | **not an order loss**: the OLD arm is T8 at d8 b0 too; its d0 T7 was the greedy line's luck |
+
+**Decomposition and amendment arms** (same seeds, same batch shape; each arm = the order + one change; `chk`, the
+order re-run on the rebuilt binary, is byte-identical to `new` on 5,750 games):
+
+| arm | hinata ship | hinata d3 | hinata d0 | 2HG ship | 2HG d3 | 2HG d0 |
+|---|---|---|---|---|---|---|
+| **as built** (`new`) | **+13** | -6 | -20 | -2 | 0 | -29 |
+| Gamble after the cantrips (`MTG_HINATA_GAMBLE_LATE`) | +9 | +2 | **+71** | -2 | -6 | -13 |
+| binding off (`MTG_HINATA_ORDER_BINDING=0`) | +3 | +10 | +57 | +1 | +7 | -7 |
+| Irencrag scalar 18 only (`MTG_HINATA_IREN_SECOND_LAST=0`) | +13 | -6 | -14 | -2 | 0 | -32 |
+| Reality Spasm latest-payable (`MTG_HINATA_SPASM_LATE`, proposed) | +16 | +2 | -21 | +1 | +5 | -25 |
+
+(net game-turns, loss = 9; units new/old 0.95-1.07 throughout, the order as built 0.95-1.01.)
+
+**Verdict: the settled order does NOT meet the bar, so `MTG_HINATA_ORDER_FULL` stays default OFF.** It misses on
+one cell (hinata shipped, net +13 of 1,000 games, 22 faster / 27 slower -- about 1.3 standard errors) and on four
+slower games that do not recover even at d8 b0 (two more, gi 1632 and gi 2029, are the old arm's own luck: it does
+no better at d8 b0). 26 of the shipped cell's 27 slower games DO recover at stage 1 or 2, so most of that cell's
+deficit is the shipped budget (d5 b30) not reaching lines the order still allows. No single
+measured change fixes it: Gamble-after-the-cantrips repairs gi 98 / 253 and the 2HG cells but costs +71 at d0;
+binding off is the USER's Q2 reversed and costs +57 at d0; the Irencrag placement is near-inert against the scalar 18
+(2 games differ); the proposed Spasm placement makes the shipped cell worse (+16) and stays OFF.
+* The Irencrag rule is NOT the cost: `sc` and `new` differ on two games only, and gi 664 is the line it was built for.
+* The largest single mechanism is Gamble's position relative to the cantrips inside a BOUND cantrip plan. Neither
+  fixed position wins: before the cantrips loses gi 98 / 253 (and it is the turning point in six of the nine slower
+  games read single-game), after them loses heavily at depth 0. That is the shape of a decision the ORDER should not settle at all: the
+  amendment to propose is to make Gamble's slot relative to the cantrips SEARCHED (both orders offered as
+  candidate orderings of a bound cantrip plan, the rank order first), not a third fixed slot. Not built: it is a
+  change to the deck's cast-ordering machinery, not a slot, and it is the USER's call whether the order should leave
+  that one relation open.
+
+### 0.5 Flags, defaults as shipped, and how to re-measure
+
+| flag | default | meaning |
+|---|---|---|
+| `MTG_HINATA_ORDER_FULL` | **OFF** | the settled order (ranks, totality, binding, Irencrag placement); =1 to measure |
+| `MTG_HINATA_IREN_SECOND_LAST` | ON (under the order) | Irencrag set-level second last; =0 -> the scalar 18 |
+| `MTG_HINATA_ORDER_BINDING` | ON (under the order) | the `OrderOpaqueCastsByRank` opt-in; =0 -> clean sets only (decomposition arm) |
+| `MTG_HINATA_SPASM_LATE` | OFF | PROPOSED Reality Spasm latest-payable placement; measured worse (+16 shipped), not adopted |
+| `MTG_HINATA_PP_STRICT` | OFF | the REVERSE Preordain/Ponder tie-break (Ponder first) |
+| `MTG_HINATA_GAMBLE_LATE` | OFF | Gamble after the cantrips (13); measured above |
+
+Re-measure: `test/tools/hinata_order/gen_ab.py` (seeds above; `--arm NAME=FLAG=0/1` adds an arm, `--deck-dir` runs off
+a copy of the deck folder on the build volume), `run_batch_lock2.sh` (one pooled batch through the box lock,
+nothing on 9p), `analyze_ab.py`, `gen_recovery.py` / `stage_serial.py` / `recovery_verdict.py` for the two stages,
+`probe_pair_cell.sh` for old-vs-new single-game diffs.
 
 ---
 
