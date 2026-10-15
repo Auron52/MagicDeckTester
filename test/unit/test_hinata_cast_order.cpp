@@ -70,6 +70,7 @@ struct HoArms
     {
         Set(heurarm::HINATA_ORDER_FULL, order);
         Set(heurarm::HINATA_IREN_SECOND_LAST, second_last);
+        Set(heurarm::HINATA_GAMBLE_SEARCHED, false);   // default ON since integration; each fan test sets its own
     }
     ~HoArms() { for (auto it = saved.rbegin(); it != saved.rend(); ++it) { heurarm::t_arm[it->first] = it->second; } }
 };
