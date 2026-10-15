@@ -547,6 +547,9 @@ Pre-review baseline report:
 
 ## KittyEquipment
 
+**HISTORY ONLY -- what plays now is "KittyEquipment -- USER ruling 2026-10-15" near the end of this file**
+(the 10-04 ruling put the hosts back ahead of the Equipment; 10-15 split the Equipment by mana value, then name).
+
 **(Superseded 2026-08-25: measured and ADOPTED default-ON, d0547999 — "2 better : 0 worse, and
 CHEAPER".)** Original note: **REVIEW HELD (USER, 2026-08-19). Built behind `MTG_KE_ORDER`
 (default OFF, byte-identical off); NOT YET MEASURED — the adoption A/B is still owed.** The ruling, verbatim:
@@ -1247,6 +1250,51 @@ d8 b0 (`docs/design/combined-gt-2026-10-04.md`). Implemented in `EquipmentProvid
 (now 10), keyed on the `hone_counters_on_enter_or_attack` parameter, not the name, and tested before the
 generic creature class (7). Equip / Jitte activations are unchanged -- still the trailing pass, i.e. after
 Dwalin's cast, so a just-honed Equipment is equipped afterwards.
+
+(Superseded in part 2026-10-15 -- the name-hash tie-break and the agent-filled `MTG_KE_ORDER_FULL` are gone; see
+the next section.)
+
+## KittyEquipment -- USER ruling 2026-10-15: the Equipment split (cheapest, then name), Sram main 1 (`MTG_KE_ORDER`, default ON)
+
+USER, verbatim (`cast-order-review-2026-10-14.md`, "KittyEquipment -- SETTLED"): *"I guess v1s order is okay
+except thatwe should split the equipment. The creatures going after equipment is not all that important."* and
+*"Sram should be main 1 like Puresteel."*
+
+What it means, as built (`EquipmentProvider`, all under `MTG_KE_ORDER`; `=0` restores the generic order):
+
+- **One order for v1 / v2-puresteel-hammer / v3-adelbert-gauntlets** (the 10-04 ruling), every cast in main 1:
+  land > Sol Ring > Sigarda's Aid > Puresteel Paladin > Sram > Cid > Stoneforge Mystic > the hosts > the
+  Equipment > Dwalin > anything else. Classes are keyed on card PARAMS (`mana_rock`, `attach_equipment_on_etb`,
+  `draw_on_equipment_etb`/metalcraft, `draw_on_cast_subtypes`, `reduces_spell_subtype`, the Stoneforge tutor/put,
+  `hone_counters_on_enter_or_attack`, creature, `is_equipment`).
+- **"Split the equipment": every Equipment its own slot** -- cheapest mana value first (with a Paladin out each
+  Equipment that enters draws, so cheapest first is the most draws per mana), then by card NAME. The key is
+  `class*4096 + mv*256`, with no name bits; a class + mana value tie between two different cards goes to the
+  NAME through `CastOrderTotalByName` (the USER's cross-deck total-order rule), never to hand order. This
+  replaces the 10-04 implementation's 8-bit name HASH, which nobody could review and which a future list could
+  collide on.
+- **The condemnation peer test reads the same order** (`BpSlotIsAfterSite`): a different card tied with the
+  breakpoint site on rank but earlier by name was reached before the site and declined, exactly as an earlier
+  hash was. Without this, removing the hash would have made every same-cost Equipment a peer and quietly
+  weakened the USER-adopted condemnation. Gated on `CastOrderTotalByName`; no other condemning deck opts in.
+- **Hosts before the Equipment stays** (10-04); the 2026-08-25 Kor Duelist note is superseded (USER: "not all
+  that important"). It costs no line: the Puresteel draws are deferred past every cast of the plan.
+- **Sram (and Puresteel) pinned Main1** (`MainPhaseOverride`). Inert in play: no Kitty list classifies or
+  condemns by main phase, and v2/v3 play no second main; the report's main column now reads m1 for Sram.
+- Agent defaults taken with it: `MTG_KE_ORDER_FULL` (off since 10-04) deleted; the report decodes the class from
+  the composite key (no more "(unclassified)" rows); the stale "default OFF" / "Equipment in front of the
+  hosts" code comments fixed. Removal stays never cast (`NeverCast`).
+
+Realised orders (pinned by `test/unit/test_kitty_cast_order.cpp`, hand-permutation invariant):
+
+| list | realised cast order (main 1, after the land drop) | change from a39ec088 (the hash order) |
+|---|---|---|
+| v1 (shipping) | Sol Ring > Puresteel Paladin > Stoneforge Mystic > Kor Duelist > Kemba, Kha Regent > Armored Skyhunter > Balan, Wandering Knight > Bonesplitter > Colossus Hammer > O-Naginata > Shadowspear > Lightning Greaves > Umezawa's Jitte > Grafted Wargear > Loxodon Warhammer | Colossus Hammer 4th -> 2nd among the {1}s; nothing else |
+| v2-puresteel-hammer | Sigarda's Aid > Puresteel Paladin > Sram, Senior Edificer > Cid, Freeflier Pilot > Accorder's Shield > Bone Saw > Cathar's Shield > Kite Shield > Spidersilk Net > Colossus Hammer > Deconstruction Hammer > Dragonfire Blade > Golem-Skin Gauntlets > Shadowspear > Skateboard > Dwalin, Weaponmaster | the {0}s were Spidersilk, Cathar's, Kite, Bone Saw, Accorder's; the {1}s were Gauntlets, Skateboard, Shadowspear, Dragonfire, Deconstruction, Colossus; Sram m2 -> m1 |
+| v3-adelbert-gauntlets | Sigarda's Aid > Puresteel Paladin > Sram, Senior Edificer > Adelbert Steiner > (the same eleven Equipment as v2, same order) > Dwalin, Weaponmaster | the same Equipment re-sequencing as v2; Sram m2 -> m1 |
+
+**Measurement:** pending -- the held-out paired A/B (old = `a39ec088`, new = this order) is queued; its table
+lands here.
 
 ## Soldiers -- USER-APPROVED 2026-10-14 (amended), ADOPTED default ON (`MTG_SOLDIERS_ORDER`)
 
