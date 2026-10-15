@@ -90,6 +90,18 @@ inside breakpoint continuations. CLOSED 2026-10-15 by `Plan::land_slot` (the lan
 k-th landfall-watcher cast, in the main plan and inside continuations) -- see
 `docs/design/landfall-trigger-infrastructure.md` section 3 and deferred item 1.
 
+Courser + land-position commits on `landfall-analysis` (2026-10-15, ~17:35):
+- 24754d72: Courser play-from-top (`Plan::land_from_top`).
+- 8bfdafbc: `Plan::land_slot` — 0 first, -1 after all casts, k after the k-th landfall-watcher cast;
+  the `landat=<k>` verb.
+- 17a5525f: land positions inside breakpoint continuations (held continuation land, lockstep).
+- 43f6082b: a land Aura aimed at a deferred land is now cast once the land is played (it was silently
+  dropped before).
+- Tests: unit 630/630, scenarios 175/175, viewer linebuild 0 FAIL over 467 refs + 2 new checks; smoke
+  `play-changed=0`, ALL PASS after every commit.
+- Indicative cost on the partial tree (no land-search cards): +9.9% units, +6.5% wall vs 078acb9e;
+  position variants were 11.7% of enumerated plans.
+
 ### Research verdicts
 - **Courser of Kruphix** (agent C, 2026-10-15): live Oracle (all 9 printings) is "Play with the top card
   of your library revealed." — goldfish-equivalent to "look at". Design in
@@ -149,6 +161,12 @@ k-th landfall-watcher cast, in the main plan and inside continuations) -- see
   through `EnterLand` and is rebased onto `landfall-analysis` once agent A's work is committed.
 
 ## Open questions for the user (collected; work continues on the stated default)
+- **(Courser integrator Q1 — CAST ORDER, USER-OWNED)** In a positioned-land plan, landfall-watcher casts
+  go before other spells of the SAME cast-order rank. Only the arbitrary hand-order tie-break moves;
+  no rank changes, and the canonical plans are untouched. This is what makes "Khalni, land, Rampant
+  Growth" reachable whichever card the hand lists first. Taken as the default; the user decides.
+- (Courser integrator) `landat=<k>` requires cast k to be a landfall card; widening it for the viewer
+  is the user's call.
 - (Land-search Q1) Second main for Titan's attack trigger: default NOT enabled; build the in-combat
   Khalni pin instead.
 - (Land-search Q2) Dominance collapses (Titan "you may search", "up to two" on Cultivate/Myriad/Khalni/

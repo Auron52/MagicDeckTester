@@ -11665,6 +11665,7 @@ namespace
     const FungusProvider         g_fungus;
     const CritterLifegainProvider g_critter;
     const SelesnyaLifegainProvider g_selesnya_lifegain;
+    const LandfallProvider       g_landfall;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -13625,12 +13626,26 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // -- see SelesnyaLifegainProvider's declaration for the two signatures it had to clear and why
     // the terms below deliberately exclude the Elf-ramp and Craterhoof params this deck also carries.
     bool selesnya = false;
+    // LANDFALL (ramp into landfall payoffs). MUST return ABOVE `selesnya`: Genesis Wave's
+    // reveal_x_put_permanents alone sets that signature. Signature = the landfall-PAYOFF params,
+    // OR'd across FIVE different cards (Rampaging Baloths / Omnath: landfall_creates_tokens; Avenger
+    // of Zendikar: landfall_counters_each; Phylath: landfall_target_counters; Khalni Heart
+    // Expedition: landfall_quest_counters), all new in the 2026-10-15 onboarding and carried by no
+    // other card in cards.json. Deliberately EXCLUDES the land-search params (Rampant Growth /
+    // Search for Tomorrow / Cultivate -- generic green ramp: Hydras runs Search for Tomorrow),
+    // play_lands_from_library_top and landfall_lifegain (Courser of Kruphix is a green value
+    // staple any ramp list may add), and Searing Blaze's landfall_damage (Burn).
+    bool landfall = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
         if (p.attack_gather_auras) { bruna = true; }
+
+        if (p.landfall_creates_tokens > 0 || p.landfall_counters_each > 0
+            || p.landfall_target_counters > 0 || p.landfall_quest_counters > 0)
+        { landfall = true; }
 
         if (p.noncreature_damage_lifegain || p.land_tap_damage_each_player > 0
             || p.lifegain_target_opp_loses_that_much || p.lifegain_each_opp_loses > 0)
@@ -14078,6 +14093,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // measurably riding StompyProvider before this branch existed (Craterhoof's team pump and Elvish
     // Archdruid's scaled Elf mana each set `stompy` alone). Placed this high because the signature
     // is carried by no other deck, so the position is free.
+    // Landfall ABOVE selesnya (Genesis Wave capture -- see the flag). Its signature is carried by no
+    // other deck, so the position is free.
+    if (landfall)    { return g_landfall; }
     if (selesnya)    { return g_selesnya_lifegain; }
     if (angels)      { return g_angels; }
     // Soldiers: ABOVE goblin and anti -- see the flag. SoldiersProvider (Stage 4a, 2026-10-04) is an

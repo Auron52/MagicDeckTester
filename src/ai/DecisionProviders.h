@@ -2367,6 +2367,28 @@ public:
     const char* Name() const override { return "SelesnyaLifegain"; }
 };
 
+// Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval
+// Titan, Rampaging Baloths, Omnath, Phylath, Khalni Heart Expedition, Courser of Kruphix, Genesis
+// Wave; onboarded 2026-10-15). Its OWN provider from day one (Stage 4a). Without it the deck is the
+// ELEVENTH instance of the archetype-neutral misroute class: Genesis Wave's reveal_x_put_permanents
+// alone sets the SelesnyaLifegain signature, which was "carried by NO other card" until this list
+// ran two Waves. SelesnyaLifegainProvider is an EMPTY DeckProvider derivation, so this one is too --
+// play-neutral by construction (every judgement hook is the Generic one); what it adds is a place
+// for a certificate and a name in scripts/provider_audit.py.
+class LandfallProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage reaches the opponent through combat AND "
+               "off the battlefield: Omnath, Locus of Rage deals 3 when an Elemental we control dies "
+               "(the legend rule bins a second Phylath / Omnath mid-main), and Primeval Titan's ATTACK "
+               "trigger puts lands mid-combat, so landfall pumps already-attacking Plants (Avenger) "
+               "and fills a Khalni Heart Expedition that can be cracked before damage. A "
+               "winless-this-turn bound must price those, plus the land drop played AFTER a payoff "
+               "(Plan::land_slot) and from the library top (Courser of Kruphix)." }; }
+    const char* Name() const override { return "Landfall"; }
+};
+
 // Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
 // cleanup-discard bucket policy; everything else inherits Generic. The deck routed to
 // GenericProvider from the 2026-08-21 misroute fix (Slaughter-Priest's sac_creature_outlet had it
