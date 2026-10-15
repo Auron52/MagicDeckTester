@@ -433,3 +433,38 @@ TEST_CASE("Hinata settled order: the opt-in binds the order inside cantrip plans
     HoArms off(false);
     CHECK_FALSE(OpaqueCastOrderActive(s));
 }
+
+TEST_CASE("Hinata PROPOSED MTG_HINATA_SPASM_LATE: Reality Spasm at its latest payable slot before the payoff")
+{
+    // Two Islands + three Mountains: Gamble ({R}), Reality Spasm ({U}{U} at X = 0 here) and the Crackle ({R}{R})
+    // all come off the board, so a Spasm cast AFTER Gamble refunds the Gamble's land too. Off: the scalar slot
+    // (Spasm 7 before Gamble 8). On: Spasm moves to just before the payoff.
+    const GameState s = BoardHo({ "Island", "Island", "Mountain", "Mountain", "Mountain" }, {}, 20, 11);
+    std::vector<Action> acts = CastsHo(s, { kCrk, kGam, kSpasm });
+    {
+        HoArms arms(true);
+        CHECK(NamesHo(acts, RealisedHo(s, acts)) == std::vector<std::string>{ kSpasm, kGam, kCrk });
+    }
+    {
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_SPASM_LATE, true);
+        CHECK(NamesHo(acts, RealisedHo(s, acts)) == std::vector<std::string>{ kGam, kSpasm, kCrk });
+        // ...and never past Irencrag: it stays ahead of the terminal, so Irencrag's follower is unchanged.
+        std::vector<Action> a2 = CastsHo(s, { kCrk, kGam, kSpasm, kIren });
+        const std::vector<std::string> got = NamesHo(a2, RealisedHo(s, a2));
+        REQUIRE(got.size() == 4);
+        CHECK(got[2] == kIren);
+        CHECK(got[3] == kCrk);
+    }
+    {
+        // FUNDING: on two Islands alone the Gamble's {R} exists only as the Spasm's output (credited here as
+        // three red), so no later slot pays the line and the Spasm keeps its place ahead of the Gamble.
+        const GameState s2 = BoardHo({ "Island", "Island" }, {}, 20, 12);
+        std::vector<Action> a3 = CastsHo(s2, { kCrk, kGam, kSpasm });
+        for (Action& a : a3)
+        { if (a.card_name.str() == kSpasm) { a.ritual_float = 3; a.chosen_float_color = std::string("R"); } }
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_SPASM_LATE, true);
+        CHECK(NamesHo(a3, RealisedHo(s2, a3)) == std::vector<std::string>{ kSpasm, kGam, kCrk });
+    }
+}
