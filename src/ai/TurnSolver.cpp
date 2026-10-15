@@ -57198,7 +57198,13 @@ struct FSLineEntry
 };
 
 // See the forward declaration's comment (order-exact key for dedup sites / plan-carrying memos).
-static TranspositionTable::Key BuildDedupKey(const GameState& state)
+// BuildDedupKey in two halves, so a caller holding a state that differs from an already-keyed one
+// ONLY in the land-search state pins can finish the key from the shared prefix (the COMBAT-PIN
+// MAIN-PHASE SHARE in SolveWithLookahead). BuildDedupKey == FoldLandSearchStatePins(
+// BuildDedupKeyBeforeLandSearchPins(s), s) -- the same folds in the same order. The prefix reads
+// none of the three land-search pins (they are folded nowhere else).
+static void FoldLandSearchStatePins(TranspositionTable::Key& k, const GameState& state);
+static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState& state)
 {
     TranspositionTable::Key k = BuildSimKey(state, 0, 0, false);
     if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
@@ -57235,19 +57241,28 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
         }
     }
-    // ...and the two LAND-SEARCH state pins (Primeval Titan's attack pick, Search for Tomorrow's
-    // off-suspend pick): pending and future-determining like every pin above, and a land-search
-    // variant IS skippable on this key (PlanIsAxisVariant). Value-gated, own slots.
+    return k;
+}
+// ...and the LAND-SEARCH state pins (Primeval Titan's attack pick, Search for Tomorrow's off-suspend
+// pick, the in-combat Khalni crack): pending and future-determining like every pin above, and a
+// land-search variant IS skippable on this key (PlanIsAxisVariant). Value-gated, own slots. LAST, so
+// the prefix above is shareable (see BuildDedupKeyBeforeLandSearchPins).
+static void FoldLandSearchStatePins(TranspositionTable::Key& k, const GameState& state)
+{
+    ++combatpin::t_reads;   // reads the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
+    const int lpins[] = { state.scripted_attack_land_search, state.scripted_upkeep_land_search,
+                          state.scripted_combat_land_search_crack };
+    for (int i = 0; i < 3; ++i)
     {
-        const int lpins[] = { state.scripted_attack_land_search, state.scripted_upkeep_land_search,
-                              state.scripted_combat_land_search_crack };
-        for (int i = 0; i < 3; ++i)
-        {
-            if (lpins[i] != -1)
-            { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 48) << 40)
-                         ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(lpins[i]))); }
-        }
+        if (lpins[i] != -1)
+        { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 48) << 40)
+                     ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(lpins[i]))); }
     }
+}
+static TranspositionTable::Key BuildDedupKey(const GameState& state)
+{
+    TranspositionTable::Key k = BuildDedupKeyBeforeLandSearchPins(state);
+    FoldLandSearchStatePins(k, state);
     return k;
 }
 
@@ -66384,6 +66399,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         long long remaining_at_start = budget ? budget->Remaining() : LLONG_MAX;
         // The combat-pin share's per-pass cache: a base candidate's post-apply state, by index.
         std::unordered_map<int, GameState> cp_cache;
+        // ...and that base's post-apply dedup-key PREFIX (BuildDedupKeyBeforeLandSearchPins), filled
+        // the first time the base's own key is built: a sharing variant's state differs from the base's
+        // only in the land-search pins, so its key is the prefix plus FoldLandSearchStatePins.
+        std::unordered_map<int, TranspositionTable::Key> cp_prefix;
 
         // --- Start gate: skip a pass we estimate won't fit (commit pass k-1) ---
         if (gate && sub_depth > 0)
@@ -67233,8 +67252,32 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // would defeat its own purpose. (Same reasoning as the dominance prune below.)
                 if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
                 { ++candidates_done; continue; }
+                // The post-apply key, through the combat-pin share's prefix cache when it can be: a
+                // cached base banks its prefix, a sharing variant finishes the base's prefix with its
+                // own pins (EXACT -- see BuildDedupKeyBeforeLandSearchPins). Anything else: the full key.
+                auto post_apply_key = [&]() -> TranspositionTable::Key
+                {
+                    if (cp_shared != nullptr)
+                    {
+                        const auto it = cp_prefix.find(cp_base_of[cp_i]);
+                        if (it != cp_prefix.end())
+                        {
+                            TranspositionTable::Key k = it->second;
+                            FoldLandSearchStatePins(k, copy);
+                            return k;
+                        }
+                    }
+                    else if (!cp_cache.empty() && cp_cache.count(static_cast<int>(cp_i)) != 0)
+                    {
+                        TranspositionTable::Key k = BuildDedupKeyBeforeLandSearchPins(copy);
+                        cp_prefix.emplace(static_cast<int>(cp_i), k);
+                        FoldLandSearchStatePins(k, copy);
+                        return k;
+                    }
+                    return BuildDedupKey(copy);
+                };
                 if (bp_variants_here
-                    && !bp_seen_states.insert(BuildDedupKey(copy)).second
+                    && !bp_seen_states.insert(post_apply_key()).second
                     && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
