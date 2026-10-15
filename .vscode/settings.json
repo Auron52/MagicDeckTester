@@ -1,0 +1,33 @@
+{
+  // The checkout is a 9p bind of the Windows drive inside the devcontainer: one shared
+  // connection that dies under load and never reconnects (CLAUDE.md, "IRREPLACEABLE DATA
+  // STAYS ON THE HOST DRIVE"). Keep VS Code's watcher, search and C++ indexer off the
+  // bulk trees -- hundreds of thousands of gitignored scratch files and 60+ worktree
+  // copies of src/ -- so the editor does not crawl them over that connection.
+  "files.watcherExclude": {
+    "**/logs/**": true,
+    "**/test/logs/**": true,
+    "**/.claude/worktrees/**": true,
+    "**/build/**": true,
+    "**/build.*/**": true,
+    "**/*.journal*": true
+  },
+  "search.exclude": {
+    "**/logs": true,
+    "**/test/logs": true,
+    "**/.claude/worktrees": true,
+    "**/build": true,
+    "**/build.*": true
+  },
+  "files.exclude": {
+    "**/.claude/worktrees": true
+  },
+  "C_Cpp.files.exclude": {
+    "**/logs": true,
+    "**/test/logs": true,
+    "**/.claude/worktrees": true,
+    "**/build": true,
+    "**/build.*": true
+  },
+  "git.detectWorktrees": false
+}
