@@ -1907,8 +1907,8 @@ public:
     // "Order everything, not have search own the order" -- the same opaque-set adoption Mirrorwing
     // took, on the same lever.
     bool OrderOpaqueCastsByRank() const override;
-    // Swords / Unexpectedly Absent are "essentially unused in goldfish" (USER): last, and in the
-    // later phase.
+    // Draw watchers (Sram, Puresteel) Main1 (USER 2026-10-15: "Sram should be main 1 like
+    // Puresteel."); Swords / Unexpectedly Absent, never cast, Main2.
     std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
     // Review-artifact labels: the class decoded from the composite rank (class * 4096 + mv * 256).
     const char* CastOrderTierName(int rank) const override;
