@@ -27332,8 +27332,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // dominated-action removal (the Recruitment Officer whiff gate's shape);
                     // autonomous only -- a human cannot see the library and keeps the offer.
                     if (m.mode == Action::AbilityMode::SacLandSearch && !HumanPlayActive()
-                        && LandSearchPicks(state, state.active_player_index,
-                                           LandSearchSpecOf(sd->params)).empty()) { continue; }
+                        && LandSearchPicksMemo(state, state.active_player_index,
+                                               LandSearchSpecOf(sd->params)).empty()) { continue; }
                     // HUMAN PLAY: never offer a CREATURE-source activation the real payment cannot
                     // make (Soldiers, 2026-10-04 -- King Darien's {3}{G}{W} / Recruitment Officer's
                     // {3}{W}). The pool above is colour-blind about Cavern of Souls / Unclaimed
@@ -27407,8 +27407,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (sd->params.land_search_activation_remove_quest > 0 && sd->params.land_search_count > 0
                 && src.quest_counters >= sd->params.land_search_activation_remove_quest
                 && (HumanPlayActive()
-                    || !LandSearchPicks(state, state.active_player_index,
-                                        LandSearchSpecOf(sd->params)).empty()))
+                    || !LandSearchPicksMemo(state, state.active_player_index,
+                                            LandSearchSpecOf(sd->params)).empty()))
             {
                 const ManaCost qcost = sd->params.land_search_activation_cost.value_or(ManaCost{});
                 Action a;
@@ -53199,7 +53199,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             auto it = width_cache.find(d);
             if (it != width_cache.end()) { return it->second; }
-            const std::size_t w = LandSearchPicks(state, me, LandSearchSpecOf(d->params)).size();
+            const std::size_t w = LandSearchPicksMemo(state, me, LandSearchSpecOf(d->params)).size();
             width_cache.emplace(d, w);
             return w;
         };

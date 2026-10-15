@@ -1475,13 +1475,11 @@ void DecisionProvider::LandfallCounterTargetOrder(const GameState& s, int contro
                      [&](int a, int b) { return key(a) > key(b); });
 }
 
-void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
-                                           std::vector<std::vector<std::string>>& picks) const
+// The colours we NEED and LACK, as a 5-bit WUBRG mask: NEED = a coloured pip on a nonland card in
+// hand, LACK = no permanent we control produces it. Read off definitions -- hand cards are name-only
+// placeholders. The ONE reader for both LandSearchPickOrder and its memo key, so they cannot drift.
+static unsigned LandSearchLackMask(const GameState& s, int controller)
 {
-    (void)count; (void)to_hand;
-    if (picks.size() < 2) { return; }
-    // Colours we NEED (a coloured pip on a nonland card in hand) and HAVE (a permanent we control
-    // produces it). Read off definitions -- hand cards are name-only placeholders.
     bool need[5] = { false, false, false, false, false };
     bool have[5] = { false, false, false, false, false };
     const Player& pl = s.players[static_cast<std::size_t>(controller)];
@@ -1504,6 +1502,25 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
         for (Color c : d->params.produces)
         { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have[ci] = true; } }
     }
+    unsigned lack = 0;
+    for (int i = 0; i < 5; ++i) { if (need[i] && !have[i]) { lack |= 1u << i; } }
+    return lack;
+}
+
+bool DecisionProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
+{
+    key = LandSearchLackMask(s, controller);
+    return true;
+}
+
+void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                           std::vector<std::vector<std::string>>& picks) const
+{
+    (void)count; (void)to_hand;
+    if (picks.size() < 2) { return; }
+    // Colours we NEED (a coloured pip on a nonland card in hand) and LACK (no permanent we control
+    // produces it) -- LandSearchLackMask, shared with the memo key above.
+    const unsigned lack = LandSearchLackMask(s, controller);
     auto score = [&](const std::vector<std::string>& pick)
     {
         bool got[5] = { false, false, false, false, false };
@@ -1515,7 +1532,7 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
             { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { got[ci] = true; } }
         }
         int cover = 0;
-        for (int i = 0; i < 5; ++i) { if (need[i] && !have[i] && got[i]) { ++cover; } }
+        for (int i = 0; i < 5; ++i) { if (((lack >> i) & 1u) && got[i]) { ++cover; } }
         return cover * 16 + static_cast<int>(pick.size());
     };
     std::vector<int> keys(picks.size());

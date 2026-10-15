@@ -55,7 +55,10 @@
 // =================================================================================================
 
 #include <algorithm>
+#include <cstdint>
+#include <functional>
 #include <string>
+#include <typeinfo>
 #include <vector>
 
 // One identity class of legal library lands for a search. `rep` = the lexicographically smallest
@@ -137,8 +140,9 @@ inline int LandSearchBattlefieldCount(const LandSearchSpec& spec, int picked)
 // Every legal COMPLETE pick, provider-ordered. Each entry is a list of class-representative names:
 // the battlefield entries first (sorted), then the hand entries (sorted). See the header for the two
 // sound folds. Never empty unless nothing legal exists (then the search simply finds nothing).
-inline std::vector<std::vector<std::string>> LandSearchPicks(const GameState& s, int ctrl,
-                                                             const LandSearchSpec& spec)
+// The UNMEMOIZED generator -- callers want LandSearchPicksMemo / LandSearchPicks below.
+inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameState& s, int ctrl,
+                                                                     const LandSearchSpec& spec)
 {
     std::vector<std::vector<std::string>> out;
     if (spec.count <= 0) { return out; }
@@ -221,6 +225,141 @@ inline std::vector<std::vector<std::string>> LandSearchPicks(const GameState& s,
     }
     ResolveProvider(s).LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, out);
     return out;
+}
+
+// ---- THE PICK-LIST MEMO (perf, 2026-10-15) -------------------------------------------------------
+// LandSearchPicks ran IN FULL at every resolution -- the class scan, the maximal-multiset walk, the
+// string-built pick list and the provider's sort -- and a Primeval Titan attack trigger resolves one
+// per attacking Titan per combat in every rollout. perf on a heavy Landfall game (seed 788, d3 b20):
+// LandSearchPicks 20.2% of the game's samples (inclusive), PerformLandSearch 37.3%.
+//
+// EXACT, so play is BYTE-IDENTICAL. The result is a pure function of
+//   (a) spec.count / basic_only / share_land_type / to_hand (tapped / optional never enter it);
+//   (b) the MULTISET of DEFINITIONS of the legal land cards in ctrl's library -- the classes, their
+//       representatives, copy counts and the shared-type test are all functions of it; library ORDER
+//       never enters (LandSearchClasses sorts by representative name);
+//   (c) the provider's order inputs: its dynamic type and DecisionProvider::LandSearchPickOrderKey
+//       (a provider that cannot key its order returns false and is never memoized).
+// The key stores (a)-(c) EXACTLY (no hash-only match): a slot is reused only on full equality.
+// The library scan below reads every card through Library::operator[], exactly as the generator
+// does, so the index-carry recorder (IndexCarry.h) sees the same accesses on a hit as on a miss.
+namespace landsearchmemo
+{
+constexpr int kMaxDefs = 24;   // distinct legal land definitions in the library; more -> no memo
+struct Key
+{
+    std::size_t           prov_type = 0;
+    std::uint64_t         prov_key  = 0;
+    int                   count = 0, to_hand = 0;
+    bool                  basic_only = false, share = false;
+    int                   n = 0;
+    const CardDefinition* defs[kMaxDefs] = {};
+    int                   copies[kMaxDefs] = {};
+    bool operator==(const Key& o) const
+    {
+        if (prov_type != o.prov_type || prov_key != o.prov_key || count != o.count
+            || to_hand != o.to_hand || basic_only != o.basic_only || share != o.share || n != o.n)
+        { return false; }
+        for (int i = 0; i < n; ++i)
+        { if (defs[i] != o.defs[i] || copies[i] != o.copies[i]) { return false; } }
+        return true;
+    }
+    std::uint64_t Hash() const
+    {
+        std::uint64_t h = 0x4C534D454D4Full;   // "LSMEMO"
+        auto mix = [&h](std::uint64_t v)
+        {
+            h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2);
+            h *= 0xBF58476D1CE4E5B9ull;
+            h ^= h >> 31;
+        };
+        mix(prov_type); mix(prov_key);
+        mix(static_cast<std::uint64_t>(count) | (static_cast<std::uint64_t>(to_hand) << 8)
+            | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull));
+        for (int i = 0; i < n; ++i)
+        {
+            mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(defs[i])));
+            mix(static_cast<std::uint64_t>(copies[i]));
+        }
+        return h;
+    }
+};
+struct Slot
+{
+    bool                                  valid = false;
+    Key                                   key;
+    std::vector<std::vector<std::string>> picks;
+};
+constexpr std::size_t kSlots = 64;   // direct-mapped, per thread
+inline thread_local Slot t_slots[kSlots];
+// Diagnostic counters (thread-local; read by nothing that plays).
+inline thread_local unsigned long long t_hits = 0, t_misses = 0, t_bypass = 0;
+}   // namespace landsearchmemo
+
+// The provider-ordered pick list, MEMOIZED (see the block above). Returns a reference into a
+// per-thread slot: it is valid only until the NEXT LandSearchPicksMemo call on this thread, so read
+// what you need from it at once (every caller copies one pick, or reads size()/empty()).
+inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const GameState& s, int ctrl,
+                                                                        const LandSearchSpec& spec)
+{
+    static thread_local std::vector<std::vector<std::string>> t_bypass_out;
+    landsearchmemo::Key k;
+    k.count      = spec.count;
+    k.to_hand    = spec.to_hand;
+    k.basic_only = spec.basic_only;
+    k.share      = spec.share_land_type;
+    bool ok = true;
+    if (spec.count > 0)
+    {
+        const Player& pl = s.players[static_cast<std::size_t>(ctrl)];
+        for (std::size_t i = 0; i < pl.library.size(); ++i)
+        {
+            const Card& c = pl.library[i];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!LandSearchLegal(d, spec)) { continue; }
+            int j = 0;
+            while (j < k.n && k.defs[j] != d) { ++j; }
+            if (j == k.n)
+            {
+                if (k.n == landsearchmemo::kMaxDefs) { ok = false; break; }
+                k.defs[j] = d; k.copies[j] = 0; ++k.n;
+            }
+            ++k.copies[j];
+        }
+    }
+    const DecisionProvider& prov = ResolveProvider(s);
+    if (ok) { ok = prov.LandSearchPickOrderKey(s, ctrl, k.prov_key); }
+    if (!ok)
+    {
+        ++landsearchmemo::t_bypass;
+        t_bypass_out = LandSearchPicksUncached(s, ctrl, spec);
+        return t_bypass_out;
+    }
+    k.prov_type = typeid(prov).hash_code();
+    // Canonical order for the exact key (pointer order: used for EQUALITY only, never for output).
+    for (int a = 1; a < k.n; ++a)
+    {
+        const CardDefinition* dv = k.defs[a];
+        const int             cv = k.copies[a];
+        int b = a - 1;
+        while (b >= 0 && std::less<const CardDefinition*>()(dv, k.defs[b]))
+        { k.defs[b + 1] = k.defs[b]; k.copies[b + 1] = k.copies[b]; --b; }
+        k.defs[b + 1] = dv; k.copies[b + 1] = cv;
+    }
+    landsearchmemo::Slot& slot = landsearchmemo::t_slots[k.Hash() % landsearchmemo::kSlots];
+    if (slot.valid && slot.key == k) { ++landsearchmemo::t_hits; return slot.picks; }
+    ++landsearchmemo::t_misses;
+    slot.picks = LandSearchPicksUncached(s, ctrl, spec);
+    slot.key   = k;
+    slot.valid = true;
+    return slot.picks;
+}
+
+// By value (tests, the human prompt's default, anything that keeps the list): a copy of the memo.
+inline std::vector<std::vector<std::string>> LandSearchPicks(const GameState& s, int ctrl,
+                                                             const LandSearchSpec& spec)
+{
+    return LandSearchPicksMemo(s, ctrl, spec);
 }
 
 // The HUMAN's k-th prompt: every legal NAME still available given the earlier picks (copies left;
@@ -337,12 +476,12 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     }
     else
     {
-        const std::vector<std::vector<std::string>> picks = LandSearchPicks(state, controller, spec);
+        const std::vector<std::vector<std::string>>& picks = LandSearchPicksMemo(state, controller, spec);
         if (!picks.empty())
         {
             const std::size_t k = pin < 0 ? 0
                 : std::min<std::size_t>(static_cast<std::size_t>(pin), picks.size() - 1);
-            chosen = picks[k];
+            chosen = picks[k];   // copied at once: the memo reference is valid until its next call
         }
         bf_n = LandSearchBattlefieldCount(spec, static_cast<int>(chosen.size()));
     }

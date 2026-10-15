@@ -2484,6 +2484,16 @@ public:
     // (name) order. A disclosed heuristic for the DEFAULT only; it decides nothing the search sees.
     virtual void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
                                      std::vector<std::vector<std::string>>& picks) const;
+    // LandSearchPickOrderKey -- EVERYTHING LandSearchPickOrder reads from the STATE (beyond the pick
+    // list it is handed), folded into one 64-bit key, so core/LandSearch.h can MEMOIZE the ordered list
+    // (LandSearchPicksMemo). Every land search re-ran the generator and this order at resolution; on a
+    // heavy Landfall game that was ~20% of the whole game's time (perf, seed 788). The memo is EXACT:
+    // a hit returns precisely the list a fresh call would build, so play is byte-identical.
+    // CONTRACT: a provider that overrides LandSearchPickOrder MUST override this too, folding in every
+    // state input its order reads -- or return false, which disables the memo for that provider. The
+    // memo key also carries the provider's dynamic type, so two providers never share an entry.
+    // Base rule: the order reads only the colours we NEED and LACK (see LandSearchPickOrder).
+    virtual bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const;
 
     // BounceSearchCandidates -- the SEARCHED Karoo bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice):
     // the subset of BounceLandCandidates the search branches over, in THAT order, so element 0 is
