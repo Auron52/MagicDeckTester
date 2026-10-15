@@ -340,6 +340,7 @@ add_executable(mtg-test
     test/unit/test_soldiers_cathar.cpp
     test/unit/test_soldiers_vial_order.cpp
     test/unit/test_soldiers_breach_cast_order.cpp
+    test/unit/test_kitty_cast_order.cpp
     test/unit/test_dork_growth_x.cpp
     test/unit/test_snow_scry.cpp
     test/unit/test_bruna.cpp
