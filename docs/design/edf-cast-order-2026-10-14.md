@@ -98,15 +98,16 @@ Auras are offered the same two hosts and the shared-host plan exists to be reali
 
 Base (`ff3e205b`, `build/scratch/edf-order/bin/mtg.base`), `logs/edf-order/probes.py <bin> <tag>`:
 
-| probe | base |
-|---|---|
-| t4_cloud_first (hand [Cloud, Drake]) | T4 win |
-| t4_drake_first (hand [Drake, Cloud]) | no win (the defect part 1 fixes) |
-| aura_drake (search, max_turns 5) | casts nothing on T4 (no win either way, so the search cannot tell) |
-| aura_drake `validate_line cast=Fertile Ground;cast=Peregrine Drake` | `illegal` (the literal order cannot pay -- correct, stays so) |
-| aura_drake `validate_line cast=Peregrine Drake;cast=Fertile Ground` | `legal_not_enumerated` -- the findability target for part 2 (must become `accept`) |
+| probe | base `ff3e205b` | new (defaults) | attribution (new with one part OFF) |
+|---|---|---|---|
+| t4_cloud_first (hand [Cloud, Drake]) | T4 win (search: Cloud, Drake) | T4 win (the route, "Combo Off") | part 5 OFF: T4 win by the search's Cloud, Drake |
+| t4_drake_first (hand [Drake, Cloud]) | **no win** | **T4 win** (the route) | part 1 OFF: T4 (the route, part 5); part 5 OFF: T4 (the search, Cloud then Drake, part 1) -- either part alone fixes it |
+| aura_drake (search, max_turns 5) | casts nothing on T4 | casts nothing on T4 | no win either way, so the search has no reason to prefer the pair; findability is the CheckLine rows |
+| aura_drake `validate_line cast=Peregrine Drake;cast=Fertile Ground` | `legal_not_enumerated` | **`accept`** (one variant, Fertile Ground on Brushland) | part 2 OFF: `legal_not_enumerated` |
+| aura_drake `validate_line cast=Fertile Ground;cast=Peregrine Drake` | `illegal` (that literal order cannot pay) | `accept` -- the same enumerated plan, realised Drake-first by the range | |
 
-New: NOT RUN YET (see RESUME).
+Pinned as fixtures: `test/scenarios/edf_untappers_cheapest_first_t4.json` (expect_win_turn 4) and
+`test/scenarios/edf_aura_range_drake_first.json` (validate_line accept). Unit 1067/1067, scenarios 162/162.
 
 ## Measurement
 

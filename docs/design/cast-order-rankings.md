@@ -436,7 +436,24 @@ are the whole delivery (the Anti-Lifegain shape, no opaque hook).
 
 ## EldraziDisplacerFlicker
 
-_No implemented non-land cards -- nothing to review yet (see the analyze-deck workflow)._
+**USER-APPROVED 2026-10-14** (*"Your EDF changes look reasonable to me. You can proceed with those."*), on
+the draft `docs/design/cast-order-drafts-2026-10-14/EldraziDisplacerFlicker.md`. Implementation, levers and
+measurement: `docs/design/edf-cast-order-2026-10-14.md` (the per-part defaults as shipped are recorded
+there). Provider `EldraziFlicker`; every cast in MAIN 1 (single main, USER 2026-09-08; `MTG_EDF_M2` off).
+
+land > Wild Growth > Fertile Ground [..after the untappers] > Trace of Abundance [..after the untappers] >
+Overgrowth [..after the untappers] > Cloud of Faeries > Peregrine Drake > Training Grounds > Eldrazi
+Displacer > Emiel the Blessed > Dimensional Infiltrator > Essence Depleter > Vexing Shusher > Living Wish >
+Eladamri's Call.
+
+* The land-Aura sub-order is the USER's 2026-09-08 order (`MTG_EDF_AURA_CHEAP_FIRST`), unchanged.
+* TOTAL (`MTG_EDF_CAST_ORDER`): slots by params, the card name the last tie-break -- no two different
+  cards fall to hand order. Untappers, outlets and finishers by mana value; tutors by strict pips.
+* The bracketed ranges (`MTG_EDF_AURA_RANGE`): an Aura that costs mana net this turn moves behind the
+  untappers only when the order is otherwise unpayable. Wild Growth never moves.
+* Host rule (`MTG_EDF_SHROUD_STACK`): Trace goes behind every other land Aura on the SAME land.
+* The COMBO OFF route deploys Auras in this order (`MTG_EDF_ROUTE_AURA_ORDER`) and casts a second
+  untapper whose loop nets more (`MTG_EDF_ROUTE_LOOP_UNTAPPER`).
 
 ## FiveColour
 
