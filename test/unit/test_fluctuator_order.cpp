@@ -72,9 +72,10 @@ struct FoArms
 {
     // `funded` defaults to 0: the order tests pin the USER's order itself; the funded amendment
     // (default ON in play) has its own test case below.
-    explicit FoArms(int order = -1, int drawn = -1, int keep = -1, int funded = 0)
+    explicit FoArms(int order = -1, int drawn = -1, int keep = -1, int funded = 0, int keep_needed = -1)
     {
         heurarm::Clear();
+        if (keep_needed >= 0) { heurarm::t_arm[heurarm::FLUCT_KEEP_NEEDED] = static_cast<std::int8_t>(keep_needed); }
         if (funded >= 0) { heurarm::t_arm[heurarm::FLUCT_ORDER_FUNDED] = static_cast<std::int8_t>(funded); }
         if (order >= 0) { heurarm::t_arm[heurarm::FLUCT_ORDER]         = static_cast<std::int8_t>(order); }
         if (drawn >= 0) { heurarm::t_arm[heurarm::FLUCT_DRAWN_LAND]    = static_cast<std::int8_t>(drawn); }
@@ -290,8 +291,11 @@ TEST_CASE("Fluct keep-untapped: the ONE untapped land is cycled LAST while the d
     FoArms arms(1, 1, 1);
     const DecisionProvider& p = FProv();
     bool sac = false;
-    {   // drop open, no Stinger: a tapped Mire and Forsake go before the City
-        GameState s = FoState({ "Capital City", "Polluted Mire", "Hollow One" }, { kF, "Irrigated Farmland" }, 0);
+    // The §4.3 board: Polluted Mire + Irrigated Farmland cannot pay the Stinger's {1}{R}; the City,
+    // dropped, can (its filter turns the Mire's mana into the {R}). A Stinger is still in the library.
+    const std::vector<std::string> board43 = { kF, "Polluted Mire", "Irrigated Farmland" };
+    {   // drop open, no Stinger out: a tapped Mire and Hollow One go before the City
+        GameState s = FoState({ "Capital City", "Polluted Mire", "Hollow One" }, board43, 0, { kS });
         CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Polluted Mire");
         s.players[0].hand.erase(s.players[0].hand.begin() + 1);   // Mire cycled
         CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Hollow One");
@@ -299,17 +303,53 @@ TEST_CASE("Fluct keep-untapped: the ONE untapped land is cycled LAST while the d
         CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Capital City");   // ordered last, never refused
     }
     {   // the drop is spent: the City is ordinary land fodder again (rank 3, ahead of Hollow One)
-        GameState s = FoState({ "Capital City", "Hollow One" }, { kF, "Irrigated Farmland" }, 1);
+        GameState s = FoState({ "Capital City", "Hollow One" }, board43, 1, { kS });
         CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Capital City");
     }
     {   // a Stinger on the battlefield: "everything is still free game"
-        GameState s = FoState({ "Capital City", "Hollow One" }, { kF, kS, "Irrigated Farmland" }, 0);
+        GameState s = FoState({ "Capital City", "Hollow One" }, { kF, kS, "Polluted Mire", "Irrigated Farmland" }, 0);
         CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Capital City");
     }
     {   // =0: the old order (lands rank 3)
         FoArms off(1, 1, 0);
-        GameState s = FoState({ "Capital City", "Hollow One" }, { kF, "Irrigated Farmland" }, 0);
+        GameState s = FoState({ "Capital City", "Hollow One" }, board43, 0, { kS });
         CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Capital City");
+    }
+}
+
+TEST_CASE("Fluct keep-needed: the land is kept only while it is what pays the Stinger")
+{
+    const DecisionProvider& p = FProv();
+    bool sac = false;
+    // Canyon Slough ({R}) + Irrigated Farmland already pay {1}{R}: the City buys nothing, so it is the
+    // rank-3 fodder it was before the protection (lowest copy number first: the City is #1).
+    const std::vector<std::string> payable = { kF, "Canyon Slough", "Irrigated Farmland" };
+    const std::vector<std::string> board43 = { kF, "Polluted Mire", "Irrigated Farmland" };
+    {
+        FoArms arms(1, 1, 1);
+        GameState s = FoState({ "Capital City", "Polluted Mire" }, payable, 0, { kS });
+        CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Capital City");
+    }
+    {   // no Stinger left in hand or library: there is nothing for the land to pay
+        FoArms arms(1, 1, 1);
+        GameState s = FoState({ "Capital City", "Polluted Mire" }, board43, 0);
+        CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Capital City");
+    }
+    {   // MTG_FLUCT_KEEP_NEEDED=0 is round 4's shape: kept regardless, so the Mire goes first
+        FoArms arms(1, 1, 1, 0, 0);
+        GameState s = FoState({ "Capital City", "Polluted Mire" }, payable, 0, { kS });
+        CHECK(p.SelectDigSource(s, AvailableManaPool(s), sac) == "Polluted Mire");
+    }
+    {   // the cost test itself: unpayable now and payable with the City dropped; a tapped land never
+        // pays; an already-payable cost is never "enabled"
+        FoArms arms(1, 1, 1);
+        const CardDefinition* sd = CardDatabase::Instance().Lookup(kS);
+        REQUIRE(sd != nullptr);
+        const GameState s = FoState({ "Capital City", "Polluted Mire" }, board43, 0, { kS });
+        CHECK(TurnSolver::DropLandEnablesCost(s, "Capital City", sd->card.m_mana_cost, true));
+        CHECK_FALSE(TurnSolver::DropLandEnablesCost(s, "Polluted Mire", sd->card.m_mana_cost, true));
+        const GameState pay = FoState({ "Capital City" }, payable, 0, { kS });
+        CHECK_FALSE(TurnSolver::DropLandEnablesCost(pay, "Capital City", sd->card.m_mana_cost, true));
     }
 }
 

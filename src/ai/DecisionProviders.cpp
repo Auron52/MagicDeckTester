@@ -22513,12 +22513,44 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
         if (protect && heurarm::Flag(heurarm::FLUCT_KEEP_UNTAPPED, s_keep)
             && ap.lands_played_this_turn < ap.LandDropsAvailable())
         {
+            // MTG_FLUCT_KEEP_NEEDED (default ON): "occasionally" = only while the land is what pays
+            // the Stinger. The deck's Stinger (a cycle-trigger creature in hand, else in library)
+            // must be UNPAYABLE from the untapped battlefield and payable with this land dropped.
+            // A land kept with the Stinger already payable is not protection, it is a phantom drop:
+            // every later re-solve's list then leads with "land=<it>: ...", the canonical line plays
+            // it (spending the mana or the cycler the kill needed), and the winning line needs two
+            // breakpoint deviations -- unreachable at any budget (round 4: 5 of the 7 slower games
+            // that did not recover at d8/b0, docs/design/fluctuator-cast-order-2026-10-14.md §6.7).
+            static const bool s_needed = EnvOn("MTG_FLUCT_KEEP_NEEDED", true);
+            const bool needed_only = heurarm::Flag(heurarm::FLUCT_KEEP_NEEDED, s_needed);
+            const CardDefinition* sting_def = nullptr;
+            if (needed_only)
+            {
+                for (const Card& c : ap.hand)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d && d->params.cycle_trigger_damage_each_opponent > 0) { sting_def = d; break; }
+                }
+                if (sting_def == nullptr)
+                {
+                    for (const Card& c : ap.library)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                        if (d && d->params.cycle_trigger_damage_each_opponent > 0) { sting_def = d; break; }
+                    }
+                }
+            }
             int best_tier = -1, best_n = 0;
             for (const Card& c : ap.hand)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d || !d->card.IsLand() || c.m_impulse_no_land) { continue; }
                 if (LandWouldEnterTapped(s, *d)) { continue; }
+                if (needed_only
+                    && (sting_def == nullptr
+                        || !TurnSolver::DropLandEnablesCost(s, c.m_name.str(), sting_def->card.m_mana_cost,
+                                                            sting_def->card.IsCreature())))
+                { continue; }
                 bool colour = false;
                 for (Color col : d->params.produces) { if (col != Color::Colorless) { colour = true; break; } }
                 const int tier = colour ? 1 : 0;

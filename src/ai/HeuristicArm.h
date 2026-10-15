@@ -469,6 +469,8 @@ enum Slot : int
     FLUCT_KEEP_UNTAPPED,      // MTG_FLUCT_KEEP_UNTAPPED  Fluctuator: the USER's "occasionally an untapped land" cycling protection (ledger §7.5) -- while the land drop is open and no Stinger is on the battlefield, ONE untapped-entering land in hand is cycled LAST (an order, never a refusal). Default ON; =0 -> every land is rank-3 fodder, byte-identical to 16dfb7e4
     FLUCT_ORDER_FUNDED,       // MTG_FLUCT_ORDER_FUNDED   Fluctuator: the USER's order is kept whenever the cast set can be PAID in it; when the exact payer (a copy) cannot pay the whole set in that order, Unearth and Enlightened Tutor move after Hollow One, so the casts that survive an unpayable set are the Stinger and the Fluctuator. Root cause it answers: the pool over-credits Capital City's net-zero conversion, so the d0 greedy and the playouts pick sets like {Fluctuator, Unearth} that only one of can be paid, and the first-ranked one is the one cast (2026-10-15 A/B: the order alone was +204 net at d0; with this, -588 at d0, -1/+1/0 at shipped/d3). Default ON (adopted with the order, USER question open); =0 -> the order exactly as the USER approved it
     DIG_DRAWN_LAND_D0,        // MTG_DIG_DRAWN_LAND_D0    the depth-0 runner half of DigUsesDrawnLandDrop: after its reactive dig, play the ranker's land when the dig drew one and the drop is still open, and re-solve the main with it. MEASURED WORSE (2026-10-15, round 2, 60,000 paired d0 games: +54 net fluctuator / +39 fluctuator2hg against the order alone -- the greedy plays a cycler the chain wanted next turn: "often you don't even want to play the third land, because it costs a cycling card"). Searched cells unaffected. Default OFF
+    FLUCT_KEEP_NEEDED,        // MTG_FLUCT_KEEP_NEEDED    Fluctuator: the amendment to FLUCT_KEEP_UNTAPPED -- the kept untapped land is held only while the untapped battlefield CANNOT pay Drannith Stinger and the land, played as the drop, would (colour-exact, on copies). Root cause it answers (2026-10-15, round 4, 5 of the 7 non-recovering slower games): a land held "in case" with the Stinger already payable becomes the front ("land=Capital City: ...") of every later dig re-solve's continuation list, so the canonical line plays it as the drop -- spending a second Fluctuator's mana or a cycler -- and the winning line then needs TWO breakpoint deviations, which the one-deviation neighbourhood cannot express at any budget. Default ON; =0 -> the protection as round 4 measured it
+    DIG_HOOK_BPALL_EXEMPT,    // MTG_DIG_HOOK_BPALL_EXEMPT  a breakpoint the drawn-land hook (DigUsesDrawnLandDrop) added is exempt from the bp_all uniform policy: it takes its EMPTY default (the pre-hook line) and its land lines stay bp_at-targeted variants. Root cause it answers (round 4, 2026-10-15, gi 7885 / 5294): a hook site's list leads with LAND lines, so bp_all k=1 -- "cycle on" at every pre-hook breakpoint -- played the drawn land at the first hook site and lost the kill it expressed, at any budget. Default ON; =0 -> round 4's shape
     COUNT
 };
 
@@ -893,6 +895,8 @@ inline const char* Name(int slot)
         "MTG_FLUCT_KEEP_UNTAPPED",
         "MTG_FLUCT_ORDER_FUNDED",
         "MTG_DIG_DRAWN_LAND_D0",
+        "MTG_FLUCT_KEEP_NEEDED",
+        "MTG_DIG_HOOK_BPALL_EXEMPT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

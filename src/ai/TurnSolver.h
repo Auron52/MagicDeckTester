@@ -1543,6 +1543,11 @@ public:
     // legality as the dig loop's AnyHandCastableNow (targets, goldfish_inert, saturated reducers).
     // Read-only. Also the MTG_FLUCT_LANDDRAW_CENSUS instrument's "would it have paid" test.
     static bool DropOpenLandEnablesCast(const GameState& state, const std::string* only_land = nullptr);
+    // The same question for ONE cost that need not be in hand (the card the next draw may be): is
+    // `cost` unpayable now and payable once `land` (in hand) is played as the open drop? Colour-exact
+    // on copies, the same payer and land play as DropOpenLandEnablesCast. Read-only.
+    static bool DropLandEnablesCost(const GameState& state, const std::string& land,
+                                    const ManaCost& cost, bool for_creature);
 
     // MTG_BP_NEW_ONLY (default ON since 2026-09-22): a breakpoint emits only continuations that
     // use a card that arrived there. Public because the executor's resolve_draw_breakpoint binds
