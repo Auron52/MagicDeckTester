@@ -306,9 +306,18 @@ For comparison, the order **as built** on the same 34,500 + 1,500 new shipped se
 plus two more on the new 2HG shipped seeds (gi 767 and gi 907: T5 -> T6 at d8 b0) -- eight, of which the Gamble
 fan recovers four (gi 98, 253, 767, 907 are not slower under it or recover) and leaves gi 82 and gi 1538.
 
-The two Preordain / Ponder arms, stage 1: Gamble searched + Preordain/Ponder searched -- 1,298 of 1,340 slower
-games recover; Gamble searched + Ponder first -- 1,308 of 1,356. Their stage 2 (90 games, manifest
-`build/scratch/hinata-order/ab9/m.json`) is queued in the box FIFO at the time of writing (they are not the recommended arms; stage 1 already rules both out on the aggregate, 2HG shipped +3 / +5).
+The two Preordain / Ponder arms, both stages (the arm's own flags, same protocol):
+
+| arm | slower | stage 1 | stage 2 | do NOT recover |
+|---|---|---|---|---|
+| Gamble searched + Preordain/Ponder searched | 1,340 | 1,298 | 38 | 4 -- gi 82, gi 1538, gi 1632, gi 2029 |
+| Gamble searched + Ponder first | 1,356 | 1,308 | 45 | 3 -- gi 1538, gi 2029, **2HG shipped gi 626** |
+
+The searched Preordain / Ponder fan leaves exactly the Gamble arm's four (it does not reach gi 82, as above). Ponder
+first recovers gi 82 but introduces a new one: **2HG shipped gi 626** (seed 11150627, T5 -> T6, still T6 at d8 b0).
+Every other arm -- the generic order, the order as built, Gamble searched, and the searched fan -- wins it T5 with
+the identical game (same digest), so Ponder first trades gi 82 for its mirror image: a game whose T5 line needs
+Preordain RANKED before Ponder (inferred from the arms; not traced turn by turn). Neither fixed tie-break recovers both, and the plan-level fan reaches neither.
 
 **Verdict.** The amended order (the settled order + `MTG_HINATA_GAMBLE_SEARCHED`) is net <= 0 on all six cells and
 recovers 1,331 of its 1,335 slower games, at +2-7% work. It does NOT strictly meet the bar: two slower games do not
@@ -319,9 +328,14 @@ Soulfire-above-Opus ruling (gi 1538). So both flags stay **default OFF** and the
    (both trace to a ranking decision, not to the engine, and neither fan nor fix inside the USER's slots recovers
    them without losing a cell elsewhere).
 2. **Alternative:** additionally flip the Preordain / Ponder tie-break to Ponder first (`MTG_HINATA_PP_STRICT`):
-   recovers gi 82 and is the best hinata cell (-13 shipped, -10 d3), but loses 2HG shipped (+5 of 1,000).
+   recovers gi 82 and is the best hinata cell (-13 shipped, -10 d3), but loses 2HG shipped (+5 of 1,000) and swaps
+   gi 82 for a new non-recovering game (2HG gi 626, which wants Preordain first).
 3. Not recommended: the searched Preordain / Ponder fan -- +6-12% work, loses 2HG shipped (+3), and does not reach
-   gi 82.
+   gi 82 (same four non-recovering games as the Gamble fan alone).
+
+A Preordain / Ponder fix that recovers BOTH gi 82 and gi 626 would have to reach inside the breakpoint
+continuations (the Soulfire-exile chain), not the plan's cast order -- the place this would be built if the USER
+wants the tie-break searched rather than ruled.
 
 ---
 
