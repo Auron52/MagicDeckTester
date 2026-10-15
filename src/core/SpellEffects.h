@@ -1915,6 +1915,7 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
 inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
                                       const CardDefinition& def);           // LandSearch.h
 inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx);
+inline void FireCombatLandSearchCracks(GameState& state, int controller, std::vector<int>& atk_idx);
 
 // ---- Progenitus: "If ~ would be put into a graveyard from anywhere, reveal it and shuffle it
 // into its owner's library instead." (CardParams::graveyard_replace_shuffle_library, CR 614 self-

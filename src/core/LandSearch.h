@@ -413,11 +413,12 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
 // graveyard (a token would cease to exist), erase, detach (CR 301.5c), the sacrifice watchers (a
 // sacrificed land/enchantment is not a creature dying: no OnCreatureDies, the Blighted Steppe
 // resolver's pattern). Then the search, with the in-plan pin.
-inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
-                                      const CardDefinition& def)
+// The explicit-pin core: the in-plan activation consumes the in-plan pin list (below); the in-combat
+// Khalni crack (FireCombatLandSearchCracks) passes the next ordinal of the packed attack stream.
+inline void ApplyLandSearchActivationPinned(GameState& state, int controller, int src_idx,
+                                            const CardDefinition& def, int pin)
 {
     const CardParams& p = def.params;
-    const int pin = ConsumeScriptedLandSearchPin();   // the activation holds its ordinal regardless
     if (src_idx < 0 || src_idx >= static_cast<int>(state.battlefield.size())) { return; }
     const std::string src_name = state.battlefield[static_cast<std::size_t>(src_idx)].card.m_name.str();
     if (p.land_search_activation_remove_quest > 0)
@@ -444,6 +445,12 @@ inline void ApplyLandSearchActivation(GameState& state, int controller, int src_
         FireSacrificeWatchers(state, controller);
     }
     PerformLandSearch(state, controller, LandSearchSpecOf(p), src_name, pin);
+}
+inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
+                                      const CardDefinition& def)
+{
+    const int pin = ConsumeScriptedLandSearchPin();   // the activation holds its ordinal regardless
+    ApplyLandSearchActivationPinned(state, controller, src_idx, def, pin);
 }
 
 // Primeval Titan's ATTACK half ("whenever this creature enters OR ATTACKS"), at the CR 508.4 point
@@ -494,6 +501,118 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
     std::vector<int> fixed;
     fixed.reserve(nums.size());
     for (const int num : nums)
+    {
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            if (state.battlefield[static_cast<std::size_t>(j)].card.m_number == num)
+            { fixed.push_back(j); break; }
+        }
+    }
+    atk_idx = std::move(fixed);
+}
+
+// Is `p` a counter-costed land-search source (Khalni Heart Expedition) -- and is it crackable NOW?
+inline bool IsQuestLandSearchSource(const Permanent& p, const CardDefinition*& d_out)
+{
+    d_out = nullptr;
+    if (p.def_absent) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || d->params.land_search_activation_remove_quest <= 0 || d->params.land_search_count <= 0)
+    { return false; }
+    d_out = d;
+    return true;
+}
+
+// THE IN-COMBAT KHALNI CRACK (2026-10-15; follow-up (a) of the land-search design). Khalni Heart
+// Expedition's "Remove three quest counters ... and sacrifice it: search for two basics" has no timing
+// restriction, so after Primeval Titan's attack trigger resolves (its two lands' landfalls may have
+// filled an Expedition) the active player gets priority in the declare-attackers step and may crack it
+// BEFORE damage -- two more landfalls, whose payloads (Avenger's +1/+1 on every Plant, Phylath's +4)
+// land on the ATTACKING Plants. A main-2 crack can never reach this combat, so without this window the
+// line was unreachable at any budget.
+//
+// SEARCHED, never greedy: GameState::scripted_combat_land_search_crack (Plan::combat_crack_choice) is a
+// BITMASK over the Khalni-type permanents in battlefield order at this point; bit i cracks the i-th one
+// if it is eligible (counters at the count) when reached -- ascending, so an Expedition filled by an
+// earlier crack's landfalls in the same window is still crackable. Cracking is weakly better than a
+// main-2 crack but NOT than holding it for a later turn's payoff, so not cracking (no pin) stays a line.
+// The cracks' land picks continue the packed ATTACK stream (after the Titans' ordinals). Human play
+// asks through the shared `dig` chooser (the Arcanum Wings in-combat window's shape): the eligible
+// Expeditions, -1 = do not crack, re-asked after each crack. Called right after FireAttackLandSearch in
+// BOTH combat worlds and inside its PendingAttackDamage projection twin; repairs atk_idx by number.
+inline void FireCombatLandSearchCracks(GameState& state, int controller, std::vector<int>& atk_idx)
+{
+    if (!state.deck_has_land_search) { return; }
+    const int mask = state.scripted_combat_land_search_crack;
+    state.scripted_combat_land_search_crack = -1;   // consumed whether or not it fires
+    const bool human = g_play_dig_chooser != nullptr && !g_tap_speculating;
+    if (mask <= 0 && !human) { return; }
+    std::vector<int> atk_nums;
+    atk_nums.reserve(atk_idx.size());
+    for (int i : atk_idx)
+    {
+        atk_nums.push_back((i >= 0 && i < static_cast<int>(state.battlefield.size()))
+                               ? state.battlefield[static_cast<std::size_t>(i)].card.m_number : 0);
+    }
+    // The Khalni-type permanents in battlefield order (the mask's index space).
+    std::vector<int> order;
+    for (const Permanent& p : state.battlefield)
+    {
+        const CardDefinition* d = nullptr;
+        if (p.controller_index == controller && IsQuestLandSearchSource(p, d)) { order.push_back(p.card.m_number); }
+    }
+    if (order.empty()) { return; }
+    auto crack = [&](int num) -> bool
+    {
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(j)];
+            if (p.card.m_number != num || p.controller_index != controller) { continue; }
+            const CardDefinition* d = nullptr;
+            if (!IsQuestLandSearchSource(p, d)) { return false; }
+            if (p.quest_counters < d->params.land_search_activation_remove_quest) { return false; }
+            ApplyLandSearchActivationPinned(state, controller, j, *d,
+                                            ConsumePackedLandSearchPin(state.scripted_attack_land_search));
+            return true;
+        }
+        return false;
+    };
+    bool any = false;
+    if (!human)
+    {
+        for (int i = 0; i < static_cast<int>(order.size()) && i < 30; ++i)
+        { if ((mask >> i) & 1) { any = crack(order[static_cast<std::size_t>(i)]) || any; } }
+    }
+    else
+    {
+        for (;;)
+        {
+            std::vector<Card> examined;
+            std::vector<int>  nums;
+            for (const Permanent& p : state.battlefield)
+            {
+                const CardDefinition* d = nullptr;
+                if (p.controller_index != controller || !IsQuestLandSearchSource(p, d)) { continue; }
+                if (p.quest_counters < d->params.land_search_activation_remove_quest) { continue; }
+                examined.push_back(p.card);
+                nums.push_back(p.card.m_number);
+            }
+            if (examined.empty()) { break; }
+            std::vector<int> legal(examined.size());
+            for (std::size_t k = 0; k < legal.size(); ++k) { legal[k] = static_cast<int>(k); }
+            const int picked = (*g_play_dig_chooser)(
+                state, controller,
+                "Khalni Heart Expedition -- crack it NOW, before combat damage (-1 = keep it)",
+                examined, legal, 0);
+            if (picked < 0 || picked >= static_cast<int>(nums.size())) { break; }
+            if (!crack(nums[static_cast<std::size_t>(picked)])) { break; }
+            any = true;
+        }
+    }
+    if (!any) { return; }
+    std::vector<int> fixed;
+    fixed.reserve(atk_nums.size());
+    for (const int num : atk_nums)
     {
         for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
         {

@@ -1140,6 +1140,11 @@ public:
         std::vector<int> land_search_pins;
         int attack_land_search_choice = -1;
         int upkeep_land_search_choice = -1;
+        //   combat_crack_choice -- crack Khalni Heart Expedition(s) IN COMBAT, after Primeval Titan's
+        //     attack trigger filled them and before damage (a bitmask over the Expeditions eligible at
+        //     that point, battlefield order; -1 = no crack). Rides GameState::
+        //     scripted_combat_land_search_crack; the cracks' land picks continue the attack stream.
+        int combat_crack_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);

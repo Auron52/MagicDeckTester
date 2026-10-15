@@ -1,0 +1,88 @@
+{
+  "_comment": [
+    "Land search 2026-10-15, follow-up (a): the IN-COMBAT Khalni Heart Expedition crack. The Expedition holds",
+    "ONE quest counter; Primeval Titan's ATTACK trigger fetches two lands (two landfalls: the Expedition reaches",
+    "3, every Plant +2). Khalni's ability has no timing restriction, so it can be cracked in the declare-attackers",
+    "step, BEFORE damage (FireCombatLandSearchCracks, Plan::combat_crack_choice): two more landfalls, every Plant",
+    "+2 again. Titan 6 + Avenger 5 + three Plants at 4 = 23 = the opponent's life; without the in-combat crack it",
+    "is 17 (a main-2 crack cannot reach this combat). No land in hand and a dead draw, so nothing else can add",
+    "landfall this turn."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 23,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Primeval Titan"
+    },
+    {
+      "name": "Avenger of Zendikar"
+    },
+    {
+      "name": "Khalni Heart Expedition",
+      "quest_counters": 1
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Mountain"
+  ],
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 6,
+  "expect_win_turn": 6
+}

@@ -416,3 +416,29 @@ TEST_CASE("Graveyard readers: Haven and Haunted Fengraf both set GyR_CreatureNam
     plain.mainboard.push_back(D("Forest").card);
     CHECK((GoldFishRunner::DeckGraveyardReaders(plain) & GyR_CreatureNames) == 0);
 }
+
+TEST_CASE("Land search: the IN-COMBAT Khalni crack is pinned by a bitmask, consumes the attack stream, and repairs attackers")
+{
+    LoadCards();
+    GameState s = Fresh();
+    Put(s, "Forest", 9, true);
+    const int t = Put(s, "Primeval Titan", 10, false);
+    Put(s, "Khalni Heart Expedition", 11, false);
+    Put(s, "Khalni Heart Expedition", 12, false);
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 11) { p.quest_counters = 3; } }
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 12) { p.quest_counters = 1; } }
+    Lib(s, "Forest", 50); Lib(s, "Forest", 51); Lib(s, "Mountain", 52); Lib(s, "Mountain", 53);
+    std::vector<int> atk{ t };
+    // No pin: nothing happens (autonomous; no chooser installed).
+    FireCombatLandSearchCracks(s, 0, atk);
+    CHECK(CountIn(s.players[0].graveyard, "Khalni Heart Expedition") == 0);
+    // Bit 0 = the first Khalni in battlefield order (#11, eligible); bit 1 = #12 (1 counter: not
+    // eligible, and #11's two landfalls make it 3 -- ascending order, so it IS eligible when reached).
+    s.scripted_combat_land_search_crack = 3;
+    FireCombatLandSearchCracks(s, 0, atk);
+    CHECK(CountIn(s.players[0].graveyard, "Khalni Heart Expedition") == 2);
+    CHECK(s.scripted_combat_land_search_crack == -1);
+    REQUIRE(atk.size() == 1);
+    CHECK(s.battlefield[static_cast<std::size_t>(atk[0])].card.m_number == 10);
+    CHECK(s.players[0].library.size() == 0);   // four basics fetched across the two cracks
+}

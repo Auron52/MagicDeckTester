@@ -419,7 +419,12 @@ static_assert(sizeof(Player) == 200,
 // (Search for Tomorrow's searched off-suspend pick, consumed at the NEXT upkeep). Classification: both
 // FUTURE-DETERMINING (the Tectonic / Vial-charge pin classes) and FOLDED in Build(), value-gated, so
 // every deck without either card keeps its exact key.
-static_assert(sizeof(GameState) == 1088,
+// +8 bytes (2026-10-15, same cluster, follow-up (a)): `scripted_combat_land_search_crack` (the in-combat
+// Khalni Heart Expedition crack bitmask, consumed at THIS turn's declare-attackers) -- FUTURE-DETERMINING,
+// folded value-gated in Build() like the two above. `deck_has_land_search` (a bool, landed in existing
+// padding) is a DECK CONSTANT stamped once in StampDeckTraits that only skips provably-empty walks --
+// identical across every pair of states Build() compares, nothing to fold. Measured sizeof, not summed.
+static_assert(sizeof(GameState) == 1096,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -759,6 +764,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A5D0000000ull + static_cast<std::uint64_t>(s.scripted_attack_land_search)); }
     if (s.scripted_upkeep_land_search >= 0)
     { fold(0x1A5E0000000ull + static_cast<std::uint64_t>(s.scripted_upkeep_land_search)); }
+    if (s.scripted_combat_land_search_crack >= 0)
+    { fold(0x1A5F0000000ull + static_cast<std::uint64_t>(s.scripted_combat_land_search_crack)); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP

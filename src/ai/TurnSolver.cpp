@@ -836,7 +836,8 @@ static bool CombatPinFoldOn()
 static bool PlanHasCombatPin(const TurnSolver::Plan& p)
 {
     return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-        || p.attack_land_search_choice >= 0;   // Primeval Titan's attack pick: read in THIS combat only
+        || p.attack_land_search_choice >= 0    // Primeval Titan's attack pick: read in THIS combat only
+        || p.combat_crack_choice >= 0;         // ...and the in-combat Khalni crack
 }
 // Firing counters (printed with the rollout stats): pin variants NOT emitted for a post-combat list,
 // and pinned candidates folded after combat (la_cand loop / FSLineWin).
@@ -1423,7 +1424,8 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("cswap", first.combat_aura_swap_choice != dup.combat_aura_swap_choice);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
-                  || first.upkeep_land_search_choice != dup.upkeep_land_search_choice);
+                  || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
+                  || first.combat_crack_choice != dup.combat_crack_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     if (!cls.empty()) { cls += "] "; }
@@ -8436,6 +8438,8 @@ static int CountAttackLandSearchPump(const GameState& state, int active,
                                      const std::vector<const Permanent*>& attackers)
 {
     if (!state.deck_has_land_search) { return 0; }   // deck stamp: no Titan can exist
+    // The in-combat Khalni crack only ever follows a Titan's attack trigger, so the Titan test below
+    // gates both; the crack itself is priced by running FireCombatLandSearchCracks on the same copy.
     bool live = false;
     for (const Permanent* p : attackers)
     {
@@ -8456,6 +8460,7 @@ static int CountAttackLandSearchPump(const GameState& state, int active,
     }
     GameState t = state;
     FireAttackLandSearch(t, active, atk_idx);
+    FireCombatLandSearchCracks(t, active, atk_idx);
     int after = 0;
     for (int num : nums)
     {
@@ -16819,6 +16824,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A5D0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_land_search_choice + 2))); }
     if (p.upkeep_land_search_choice != -1)
     { fold(0x1A5E0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.upkeep_land_search_choice + 2))); }
+    if (p.combat_crack_choice != -1)
+    { fold(0x1A5F0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_crack_choice + 2))); }
     return h;
 }
 // DIAGNOSTIC ONLY (MTG_DEDUP_CENSUS). Names every Action field on which two candidates that share an
@@ -17081,7 +17088,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
-        && p.upkeep_land_search_choice == -1
+        && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
@@ -17114,7 +17121,7 @@ static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
         // inert-duplicate shape this skip exists for. Safe because the two STATE pins are folded
         // into BuildDedupKey's pending pins (a post-apply state still carrying one is distinct).
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
-        || p.upkeep_land_search_choice >= 0;
+        || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0;
 }
 // SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above).
 static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p); }
@@ -33147,6 +33154,7 @@ namespace solvememo
             || a.land_search_pins != b.land_search_pins
             || a.attack_land_search_choice != b.attack_land_search_choice
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
+            || a.combat_crack_choice != b.combat_crack_choice
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
             || a.etbcounter_choice != b.etbcounter_choice || a.sweep_choice != b.sweep_choice
@@ -38238,6 +38246,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     { state.scripted_attack_land_search = plan.attack_land_search_choice; }
     if (plan.upkeep_land_search_choice >= 0)
     { state.scripted_upkeep_land_search = plan.upkeep_land_search_choice; }
+    if (plan.combat_crack_choice >= 0)
+    { state.scripted_combat_land_search_crack = plan.combat_crack_choice; }
 
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
@@ -43704,6 +43714,7 @@ static void SimulateCombat(GameState& state)
     // Primeval Titan's attack trigger (land search, before damage; repairs atk_idx). Mirrors
     // GameEngine::CombatPhase (lockstep, ONE shared helper). Param-gated inert.
     FireAttackLandSearch(state, active, atk_idx);
+    FireCombatLandSearchCracks(state, active, atk_idx);   // the in-combat Khalni crack (lockstep)
 
     const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
@@ -44019,6 +44030,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_aura_swap = -1;          // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
+    state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
@@ -53101,7 +53113,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
                 && p.freshmode_choice == 0 && p.tapmode_choice == 0 && p.dig_choice == -1
                 && !p.soulbond_decline && p.land_search_pins.empty()
-                && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1;
+                && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
+                && p.combat_crack_choice == -1;
         };
         std::map<const CardDefinition*, std::size_t> width_cache;
         auto width_of = [&](const CardDefinition* d) -> std::size_t
@@ -53123,7 +53136,28 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const Action& a : p.actions)
                 {
                     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
-                    if (d == nullptr || d->params.land_search_count <= 0) { continue; }
+                    if (d == nullptr) { continue; }
+                    // A Genesis Wave that will PUT a land-search creature (Primeval Titan) resolves that
+                    // creature's ETB search inside this plan too -- one more cast ordinal per such card
+                    // among the top X (the search reads the library it will reveal; a shuffle earlier in
+                    // the plan can change it, which only makes the sizing generous or short by a clamp).
+                    if (a.kind == Action::Kind::CastFromHand && d->params.reveal_x_put_permanents
+                        && a.chosen_x > 0)
+                    {
+                        const Player& lp = state.players[static_cast<std::size_t>(me)];
+                        const std::size_t top = std::min<std::size_t>(static_cast<std::size_t>(a.chosen_x),
+                                                                      lp.library.size());
+                        for (std::size_t li = 0; li < top; ++li)
+                        {
+                            const CardDefinition* rd = CardDatabase::Instance().LookupCached(lp.library[li]);
+                            if (rd != nullptr && rd->params.land_search_on_enter_or_attack
+                                && rd->params.land_search_count > 0 && rd->card.IsCreature()
+                                && rd->card.m_mana_cost.ManaValue() <= a.chosen_x)
+                            { ++n_cast; w_cast = std::max(w_cast, width_of(rd)); }
+                        }
+                        continue;
+                    }
+                    if (d->params.land_search_count <= 0) { continue; }
                     if (a.kind == Action::Kind::CastFromHand
                         && ((d->params.land_search_on_resolve && (d->card.IsInstant() || d->card.IsSorcery()))
                             || (d->params.land_search_on_enter_or_attack && d->card.IsCreature())))
@@ -53208,6 +53242,60 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         }
                     }
                 }
+                // (2b) THE IN-COMBAT KHALNI CRACK (Plan::combat_crack_choice; FireCombatLandSearchCracks).
+                //      Only beside an attacking Titan -- nothing else adds landfall in combat. One
+                //      variant per non-empty subset (bitmask) of the Khalni-type permanents that can be
+                //      on the battlefield at the crack point (those on it now, then this plan's own
+                //      Khalni casts, which enter at the end of battlefield order), at most 3; each with
+                //      the cracks' land picks at the front, plus the additive per-crack pick fan on the
+                //      attack stream's ordinals AFTER the Titans' (the stream the cracks consume).
+                int e_bf = 0;
+                std::size_t w_crack = 1;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != me) { continue; }
+                    const CardDefinition* qd = nullptr;
+                    if (!IsQuestLandSearchSource(q, qd)) { continue; }
+                    ++e_bf;
+                    w_crack = std::max(w_crack, std::min<std::size_t>(width_of(qd), kLandSearchPinMask + 1));
+                }
+                std::vector<TurnSolver::Plan> crack_extra;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    if (!base_plan(p)) { continue; }
+                    int e = e_bf;
+                    std::size_t wc = w_crack;
+                    for (const Action& a : p.actions)
+                    {
+                        if (a.kind != Action::Kind::CastFromHand) { continue; }
+                        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+                        if (d != nullptr && d->params.land_search_activation_remove_quest > 0
+                            && d->params.land_search_count > 0)
+                        { ++e; wc = std::max(wc, std::min<std::size_t>(width_of(d), kLandSearchPinMask + 1)); }
+                    }
+                    e = std::min(e, 3);
+                    if (e <= 0) { continue; }
+                    const int titans = static_cast<int>(tw.size());
+                    for (int m = 1; m < (1 << e); ++m)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.combat_crack_choice = m;
+                        crack_extra.push_back(v);
+                        const int cracks = std::popcount(static_cast<unsigned>(m));
+                        for (int j = 0; j < cracks && titans + j < kLandSearchPinOrdinals; ++j)
+                        {
+                            for (std::size_t c = 1; c < wc; ++c)
+                            {
+                                TurnSolver::Plan w = v;
+                                w.attack_land_search_choice =
+                                    static_cast<int>(c) << (kLandSearchPinBits * (titans + j));
+                                crack_extra.push_back(std::move(w));
+                            }
+                        }
+                    }
+                }
+                extra.insert(extra.end(), std::make_move_iterator(crack_extra.begin()),
+                                          std::make_move_iterator(crack_extra.end()));
                 all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                       std::make_move_iterator(extra.end()));
             }
@@ -53382,7 +53470,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 440;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15)
+static constexpr std::size_t kPlanDomAssertedSize = 448;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -53537,6 +53625,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             x += "|ls";
             for (int s : pl.land_search_pins)     { add(s); }
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
+            add(pl.combat_crack_choice);
             x += "|bpacts";
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
@@ -56998,8 +57087,9 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
     // off-suspend pick): pending and future-determining like every pin above, and a land-search
     // variant IS skippable on this key (PlanIsAxisVariant). Value-gated, own slots.
     {
-        const int lpins[] = { state.scripted_attack_land_search, state.scripted_upkeep_land_search };
-        for (int i = 0; i < 2; ++i)
+        const int lpins[] = { state.scripted_attack_land_search, state.scripted_upkeep_land_search,
+                              state.scripted_combat_land_search_crack };
+        for (int i = 0; i < 3; ++i)
         {
             if (lpins[i] != -1)
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 48) << 40)

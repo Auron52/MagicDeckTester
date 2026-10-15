@@ -268,6 +268,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
+    state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
@@ -713,6 +714,10 @@ void GameEngine::CombatPhase(GameState& state)
     // Plan::attack_land_search_choice pin. Repairs atk_idx (a fetched Karoo's bounce erases a slot).
     // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
     FireAttackLandSearch(state, state.active_player_index, atk_idx);
+    // ...then the IN-COMBAT Khalni Heart Expedition crack: an Expedition the trigger's landfalls
+    // filled can be activated before damage (it has no timing restriction), so its two lands' landfall
+    // reaches the attacking Plants too. Searched (Plan::combat_crack_choice); the human is asked.
+    FireCombatLandSearchCracks(state, state.active_player_index, atk_idx);
 
     const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at

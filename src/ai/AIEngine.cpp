@@ -3999,6 +3999,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Primeval Titan's searched attack pick -- lockstep twin of ApplyPlanDirect's write.
     if (plan.attack_land_search_choice >= 0)
     { state.scripted_attack_land_search = plan.attack_land_search_choice; }
+    if (plan.combat_crack_choice >= 0)
+    { state.scripted_combat_land_search_crack = plan.combat_crack_choice; }
 
     // Cast a spell from hand by name.
     // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's

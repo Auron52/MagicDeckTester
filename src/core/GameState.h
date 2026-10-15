@@ -949,6 +949,13 @@ struct GameState
     // Both are FUTURE-DETERMINING and folded value-gated into the dominance key and the sim keys.
     int                      scripted_attack_land_search = -1;
     int                      scripted_upkeep_land_search = -1;
+    // ...and the IN-COMBAT KHALNI CRACK (Plan::combat_crack_choice; core/LandSearch.h
+    // FireCombatLandSearchCracks): a BITMASK over the Expeditions eligible at the crack point (quest
+    // counters at the activation's count, battlefield order) to crack after Primeval Titan's attack
+    // trigger and before damage; -1 / 0 = no crack. Their land picks continue the packed attack
+    // stream above (after the Titans' ordinals). Per-turn, cleared with the combat pins; folded
+    // value-gated like the two above.
+    int                      scripted_combat_land_search_crack = -1;
     // Maelstrom Archangel free-cast BANK (user-approved 2026-08-06): each copy that deals combat
     // damage to the player increments this (Combat.cpp ResolveCombatDamage, the shared combat
     // core), and the post-combat main may cast that many hand spells without paying mana (a
