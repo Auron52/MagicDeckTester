@@ -424,6 +424,59 @@ Pre-review baseline report:
   20     -   m2    2  8  Nicol Bolas, Planeswalker
 ```
 
+## Fluctuator -- USER order ADOPTED 2026-10-14 (`MTG_FLUCT_ORDER`, default ON)
+
+USER: *"I guess the Fluctuator order is okay. The order doesn't matter much in that deck, except that cycling
+always goes at the end. (that should also be placed)"* -- on the draft in
+`docs/design/cast-order-drafts-2026-10-14/Fluctuator.md`, plus the cross-deck TOTAL-order ruling. Full record,
+measurement and the drawn-land work it came with: `docs/design/fluctuator-cast-order-2026-10-14.md`.
+
+* **TOTAL:** six distinct param slots, then `ArrangeCastOrder` re-sorts every cast set by (slot, name) -- no two
+  different cards ever fall to plan/hand order (all 360 permutations of the six-card set realise one order).
+* **A SECOND Fluctuator** (one already on the battlefield, or earlier in the same cast set) ranks after Hollow One:
+  it does nothing, so a one-at-a-time payment never spends the Stinger's mana on it. The report below is generated
+  with none on the battlefield, so the slot-6 row does not appear.
+* **CYCLING is the [LAST] row** -- never a rank, structurally after every cast of its window at every site (the
+  rollout's dig loop, the executor's DigDraw replay, the reactive d0 dig, the searched dig axis, human play).
+* **Single main:** every card is m1 (`MainPhaseOverride`); the column is inert on this deck.
+
+```
+# Cast order -- decks/Fluctuator/Fluctuator.cod
+# provider: Fluctuator   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=no uses_second_main=no enabler_pull=no castpayoff_pull=no
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [64] 1 Unearth -- one coloured pip, no generic
+  64     -   m1    4  1  Unearth
+#
+# [128] 2 Enlightened Tutor -- one coloured pip; the chain's first cycle draws its card
+  128     -   m1    1  1  Enlightened Tutor
+#
+# [192] 3 Drannith Stinger -- on the battlefield before the first cycle it pings for
+  192     -   m1    4  2  Drannith Stinger
+#
+# [256] 4 Fluctuator -- generic only; cycling (its payoff) runs after every cast
+  256     -   m1    4  2  Fluctuator
+#
+# [320] 5 Hollow One -- generic only; its cost falls only with the cycles that follow
+  320     -   m1    4  5  Hollow One
+#
+# [384] 6 SECOND Fluctuator -- a copy is already out (or earlier in the set): does nothing
+#        (shown only with a Fluctuator on the battlefield)
+#
+# [468] UNRANKED: generic tier after the USER's six slots, by name (goldfish_inert = never cast)
+  468     -   m1    1  3  Forsake the Worldly
+#
+# [LAST] DIG (cycling 55, sacrifice-to-draw 0): after every cast of its window -- never ranked, structurally last
+  dig     -   m1    -  -   (cycle / sac-draw; a land it draws CAN be the drop at a searched re-solve)
+#
+# (main column: inert -- this deck plays a single main phase)
+```
+
 ## Goblins
 
 ```
