@@ -2118,6 +2118,10 @@ int DecisionProvider::BounceUserRulePick(const GameState& s, int controller, con
     drop_if_others(has_aura);
     std::vector<std::string> names;   // distinct qualifying names
     int pick = -1;
+    // Our lands' colour masks (WUBRG bits 0..4) with kIsOurLand marking "a land we control", filled on
+    // first use below -- see (3).
+    constexpr unsigned kIsOurLand = 1u << 8;
+    std::vector<unsigned> land_col;
     for (int i : order)   // the provider's order decides among several (amended: several -> the search)
     {
         if (std::find(pool.begin(), pool.end(), i) == pool.end()) { continue; }
@@ -2128,11 +2132,26 @@ int DecisionProvider::BounceUserRulePick(const GameState& s, int controller, con
         if (enchanted(i)) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || !BounceReplayEntersUntapped(s, controller, i, *d)) { continue; }   // (2)
-        unsigned kept = 0u;                                                            // (3)
-        for (int j = 0; j < static_cast<int>(s.battlefield.size()); ++j)
+        // (3) Each of our lands' colours computed ONCE per call (colours() reads only the board, so a
+        // land's mask is the same for every candidate): it was recomputed for every land, per
+        // candidate -- O(candidates x lands) EffectiveProducesFor calls on every Karoo bounce, and a
+        // Titan-fetched Gruul Turf bounces inside every Landfall rollout (perf 2026-10-15). Same masks,
+        // same OR, same answer.
+        if (land_col.empty())
         {
-            const Permanent& o = s.battlefield[static_cast<std::size_t>(j)];
-            if (j != i && o.controller_index == controller && o.card.IsLand()) { kept |= colours(o); }
+            land_col.assign(s.battlefield.size(), 0u);
+            for (int j = 0; j < static_cast<int>(s.battlefield.size()); ++j)
+            {
+                const Permanent& o = s.battlefield[static_cast<std::size_t>(j)];
+                if (o.controller_index == controller && o.card.IsLand())
+                { land_col[static_cast<std::size_t>(j)] = colours(o) | kIsOurLand; }
+            }
+        }
+        unsigned kept = 0u;
+        for (int j = 0; j < static_cast<int>(land_col.size()); ++j)
+        {
+            if (j != i && (land_col[static_cast<std::size_t>(j)] & kIsOurLand) != 0u)
+            { kept |= land_col[static_cast<std::size_t>(j)] & 31u; }
         }
         const unsigned mine = colours(p);
         if ((mine & ~kept) != 0u) { continue; }
