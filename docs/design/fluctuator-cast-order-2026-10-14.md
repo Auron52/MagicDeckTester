@@ -16,9 +16,14 @@ the randomness of choosing the order."*
 | `MTG_FLUCT_ORDER` (heurarm `FLUCT_ORDER`) | ON | the USER's TOTAL order (§2) |
 | `MTG_FLUCT_DRAWN_LAND` (heurarm `FLUCT_DRAWN_LAND`) | ON | a land the dig chain draws is considerable as the drop (§3) |
 | `MTG_FLUCT_KEEP_UNTAPPED` (heurarm `FLUCT_KEEP_UNTAPPED`) | ON | the USER's "occasionally an untapped land" protection, as an ORDER (§3.3) |
+| `MTG_FLUCT_ORDER_FUNDED` (heurarm `FLUCT_ORDER_FUNDED`) | ON | the amendment that makes the order meet the d0 bar: a set the payer cannot pay in full keeps the Stinger / Fluctuator (§6.2, §6.4). USER question |
+| `MTG_DIG_DRAWN_LAND_D0` (heurarm `DIG_DRAWN_LAND_D0`) | **OFF** | the depth-0 runner half of the drawn land: measured worse at d0 (§6.4) |
+| `MTG_FLUCT_KEEP_NEEDED` (heurarm `FLUCT_KEEP_NEEDED`) | ON | amendment to keep-untapped: the land is kept only while it is what pays the Stinger (§6.7a) |
+| `MTG_DIG_HOOK_BPALL_EXEMPT` (heurarm `DIG_HOOK_BPALL_EXEMPT`) | ON | a drawn-land hook site is exempt from the bp_all uniform policy (§6.7b); inert without the hook |
 | `MTG_LANDDRAW_CENSUS` | off | diagnostic only: per real turn, a land drawn by a dig with the drop open (§5) |
+| `DecisionProvider::CastOrderTotalByName` | Fluctuator: with the order | the canonical name tie-break (exact copy of integration `2ac8db0b`); play-neutral here |
 
-Every one of the three play levers is `=0`-hatched and byte-identical to `16dfb7e4` when off (measured, §6).
+Every play lever is `=0`-hatched and byte-identical to `16dfb7e4` when off (measured, §6).
 `DecisionProvider::DigUsesDrawnLandDrop` is a new provider hook, **base false**, so every other dig deck
 (treasure_hunt, FiveColour, Auras, Dragons, ...) is byte-identical by construction (and measured, §6).
 
@@ -118,7 +123,8 @@ in its reactive dig (`AIEngine::UseSurplusLandAbilities`), so under the same hoo
 a land and the drop is still open (and the hold-fuel land rule does not hold it), it plays the shared ranker's land --
 the same greedy drop it made at the start of the main -- and requests the second pass, so the main re-solves with
 that land's mana (the `LandDropAfterDrawEngine` replay's shape, measured on treasure_hunt). Greedy is permitted
-there: it is the d0 runner.
+there: it is the d0 runner. **Measured worse and shipped OFF** (`MTG_DIG_DRAWN_LAND_D0`, §6.4): the greedy plays every
+such land, where the searched re-solve weighs the land against next turn's cycle.
 
 ### 3.3 The USER's "occasionally an untapped land" (`MTG_FLUCT_KEEP_UNTAPPED`)
 
@@ -128,6 +134,11 @@ untapped-entering land in hand (a colour source -- Capital City's filter -- over
 the lowest copy number) is ranked LAST in `SelectDigSource`. It is an ORDER, not a refusal: when it is the only
 cyclable card it is still cycled, so no line is lost; it only stops being spent ahead of fodder that cannot be the
 drop. Off once a Stinger is out ("everything is still free game") and once the drop is spent.
+
+**Amended in round 5 (`MTG_FLUCT_KEEP_NEEDED`, §6.7a):** "occasionally" now means "while the land is what pays the
+Stinger" -- the untapped battlefield cannot pay the deck's Drannith Stinger (in hand, else in the library) and the
+land, dropped, would (colour-exact, `TurnSolver::DropLandEnablesCost`). A land kept with the Stinger already payable
+became a phantom drop at every later re-solve and cost five seeds a turn at any budget.
 
 ## 4. Part 3 -- the free Hollow Ones (seeds 5007 T2, 5009 T3, 5026 T3, 5019 T3)
 
@@ -153,7 +164,40 @@ spend it as fodder). See USER QUESTION 2.
 
 ## 5. Census (`MTG_LANDDRAW_CENSUS`) -- before / after
 
-TBD (filled from the pooled batch).
+Per REAL turn that reached the end step (a winning turn ends earlier and is not counted): **drawn** = a dig drew a
+land while the drop was open; **lost** = of those, the drop went unused; **held** = lost with a dug land still in
+hand at the end; **held live** = held and not going off (so the USER's no-fuel rule did not hold it); **enabling** =
+lost, and at some dig a dug land in hand would have made a held nonland castable that was not, not going off;
+**enabling (going off)** = the same while the hold-fuel rule applied. Round 2, same seeds as §6.
+
+| deck | cell | arm | drawn | lost | held | held live | enabling | enabling (going off) |
+|---|---|---|---|---|---|---|---|---|
+| fluctuator | shipped (8,000) | old | 936 | 918 | 215 | 215 | 33 | 9 |
+| | | p12f | 1011 | **874** | 232 | 232 | 40 | 9 |
+| | d3 (12,000) | old | 1390 | 1367 | 289 | 289 | 68 | 16 |
+| | | p12f | 1476 | **1290** | 315 | 315 | 70 | 14 |
+| | d0 (40,000) | old | 5393 | **5393** | 789 | 789 | 358 | 329 |
+| | | p12f (d0 drop ON) | 5436 | 4601 | 0 | 0 | 248 | 322 |
+| fluctuator2hg | shipped (4,000) | old | 363 | 353 | 89 | 89 | 14 | 3 |
+| | | p12f | 389 | **329** | 89 | 89 | 20 | 2 |
+| | d3 (6,000) | old | 524 | 515 | 108 | 108 | 17 | 3 |
+| | | p12f | 562 | **475** | 104 | 104 | 20 | 2 |
+| | d0 (20,000) | old | 2163 | **2163** | 371 | 371 | 158 | 100 |
+| | | p12f (d0 drop ON) | 2178 | 1789 | 0 | 0 | 110 | 91 |
+
+How to read it:
+* **Before, the drop was never taken after a dug land** at d0 (5,393 of 5,393) and almost never at searched depths
+  (918 of 936) -- causes (1)-(3) in action.
+* **After, at searched depths the drop is OFFERED, and the search takes it or declines it.** Lost drops fall (918 ->
+  874, 1367 -> 1290, 353 -> 329, 515 -> 475), and what stays "held live" is the search declining a drop it was offered:
+  the land is next turn's cycle. Sampled (shipped seed 11501201 T3): the chain drew Capital City with the drop open
+  and a {1} Hollow One in hand; the land-draw re-solve fired, offered "Capital City + Hollow One", and the search kept
+  the City (and the Farmland) as cyclers -- and killed T4 with them. `drawn` RISES because keep-untapped keeps the
+  untapped land in hand longer.
+* **"enabling" is not "should have played".** The held card is often a second Fluctuator (castable, does nothing --
+  with `MTG_NO_REDUNDANT_REDUCER` the count drops 40 -> 28 at shipped) or a {1} Hollow One.
+* At d0 the "after" rows are with the d0 runner's drop ON (round 2): held drops go to 0 -- and play gets worse (§6.4),
+  which is why that half ships OFF.
 
 ## 6. Measurement
 
@@ -226,6 +270,180 @@ over-crediting pool, so it reads the phantom set as paying at its ideal rung.) M
 
 ROUND 2 also adds the d0 runner's drawn-land drop (§3.2) -- round 1's census showed the drop is lost at d0 too.
 
+### 6.3 Identity
+
+Every other suite deck's smoke rows (d0 40 games, d3 b10 and shipped 20 games each; 2HG variants included) plus
+fluctuator / fluctuator2hg with the levers OFF (80 / 40 games per cell), seeds from 11900001, the new binary against
+the `16dfb7e4` binary, per game, win turn AND play digest: **125 / 125 jobs identical** in round 1 and again in
+round 2 (binary `9d1f20dc`). Every new hook is base-false or Fluctuator-only, so this is the expected result.
+
+### 6.4 Round 2 (binary `9d1f20dc`, same seeds and sizes): the funded amendment
+
+| deck | cell | arm | avg | faster | slower | net | play-changed | units |
+|---|---|---|---|---|---|---|---|---|
+| fluctuator | shipped | old | 3.5594 | | | | | 1.0000 |
+| | | **p1f** (order + funded) | 3.5593 | 1 | 0 | **-1** | 470 | 1.0003 |
+| | | p12 (order + drawn land + keep, no funded) | 3.5576 | 42 | 27 | -14 | 1192 | 1.1424 |
+| | | **p12f** (+ funded) | 3.5577 | 42 | 28 | **-13** | 1164 | 1.1445 |
+| | | p12f + NRR (report only) | 3.5530 | 72 | 21 | -51 | 1625 | 1.0675 |
+| | d3 b10 | old | 3.5756 | | | | | 1.0000 |
+| | | **p1f** | 3.5757 | 1 | 2 | **+1** | 707 | 1.0009 |
+| | | p12 | 3.5745 | 74 | 62 | -13 | 1739 | 1.0554 |
+| | | **p12f** | 3.5745 | 72 | 60 | **-13** | 1664 | 1.0577 |
+| | | p12f + NRR | 3.5705 | 127 | 68 | -61 | 2420 | 1.0146 |
+| | d0 | old | 5.1582 | | | | | - |
+| | | **p1f** | 5.1435 | 563 | 135 | **-588** | 6444 | - |
+| | | p12 (with the d0 runner's drop) | 5.1646 | 710 | 957 | +258 | 7831 | - |
+| | | p12f (with the d0 runner's drop) | 5.1448 | 598 | 210 | -534 | 6943 | - |
+| | | p12f + NRR | 5.1289 | 1504 | 649 | -1169 | 14237 | - |
+| fluctuator2hg | shipped | old | 3.5017 | | | | | 1.0000 |
+| | | **p1f** | 3.5017 | 0 | 0 | **0** | 249 | 0.9974 |
+| | | **p12f** | 3.5000 | 20 | 13 | **-7** | 561 | 1.1690 |
+| | | p12f + NRR | 3.4955 | 34 | 10 | -25 | 761 | 1.0944 |
+| | d3 b10 | old | 3.5260 | | | | | 1.0000 |
+| | | **p1f** | 3.5260 | 2 | 2 | **0** | 373 | 0.9993 |
+| | | **p12f** | 3.5258 | 38 | 37 | **-1** | 834 | 1.0549 |
+| | | p12f + NRR | 3.5213 | 61 | 34 | -28 | 1176 | 1.0166 |
+| | d0 | old | 5.0484 | | | | | - |
+| | | **p1f** | 5.0322 | 291 | 52 | **-325** | 2946 | - |
+| | | p12 (with the d0 runner's drop) | 5.0537 | 360 | 470 | +106 | 3667 | - |
+| | | p12f (with the d0 runner's drop) | 5.0342 | 306 | 94 | -286 | 3187 | - |
+| | | p12f + NRR | 5.0161 | 770 | 282 | -646 | 6308 | - |
+
+* **The funded amendment closes the order's d0 loss:** +204 -> **-588** (fluctuator), +67 -> **-325** (2HG), and
+  it is inert at every searched cell (p12 vs p12f: identical net within one game at shipped and d3).
+* **The d0 runner's drawn-land drop is WORSE** than the order alone at d0: p12f -534 against p1f -588, and 2HG -286
+  against -325 -- about +54 / +39 net, and round 1's p12-vs-p1 showed keep-untapped at d0 is worth about +3, so the drop
+  is the cause. The greedy plays every such land, and on this deck the land in hand is also next turn's cycle (the
+  USER: *"often you don't even want to play the third land, because it costs a cycling card"*). The searched
+  chain-end re-solve weighs exactly that trade; the d0 runner cannot. **Split into its own lever,
+  `MTG_DIG_DRAWN_LAND_D0`, default OFF** (it cannot move a searched cell: depth 0 only -- round 2's p12 at shipped and
+  d3 is play-digest identical to round 1's, which had no d0 runner at all).
+* **The order alone at d3 is +1** (p1f: 1 faster, 2 slower -- gi 1542 4->5 and gi 4129 5->6, the same two games p1
+  lost in round 1, so they are the ORDER's, not the amendment's). The shipped combination p12f is -13 there.
+* Reference bench (the shipped policy on the USER's 10 references, recorded mulligan forced): **10 / 10 equal to the
+  human** on both the old arm and the new one (3,4,4,3,4,4,4,3,3,3) -- the three §7.12 shortfalls had already closed
+  before this work.
+
+### 6.5 Round 3 (binary `e9c8b97c`): the shipped defaults at d0, and the recovery stages
+
+* **d0, the shipped defaults** (order + drawn land + keep-untapped + funded ON, the d0 runner's drop OFF): fluctuator
+  **-585** net (565 faster / 139 slower, 40,000 games), fluctuator2hg **-324** (293 / 54, 20,000). An equivalence
+  sample (1,000 games at shipped and at d3) is play-digest identical to round 2's p12f, as it must be.
+* **Recovery stages** (stage 1 `--depth W --budget-ms 100`, W = max(5, the old arm's win turn); stage 2 `--depth 8
+  --budget-ms 0`), every slower game of the candidate arms, 522 games:
+
+  | deck | cell | arm | slower | stage 1 | stage 2 | NOT recovered |
+  |---|---|---|---|---|---|---|
+  | fluctuator | d0 | final | 139 | 139 | 0 | 0 |
+  | | d0 | p1f | 135 | 135 | 0 | 0 |
+  | | d3 | p1f | 2 | 2 | 0 | 0 |
+  | | d3 | p12f | 60 | 48 | 0 | **12** |
+  | | shipped | p12f | 28 | 12 | 0 | **16** |
+  | fluctuator2hg | d0 | final | 54 | 54 | 0 | 0 |
+  | | d0 | p1f | 52 | 52 | 0 | 0 |
+  | | d3 | p1f | 2 | 2 | 0 | 0 |
+  | | d3 | p12f | 37 | 28 | 0 | **9** |
+  | | shipped | p12f | 13 | 3 | 0 | **10** |
+
+  **The order + funded (p1f) recovers every slower game; the drawn-land hook (p12f) left 47 that do not recover even
+  at depth 8 / unlimited** -- about 25 distinct seeds (441, 2732, 3695, 3857, 4917, 5172, ... appear in several cells),
+  each with the SAME result at stage 1 and stage 2: the signature of a representation limit, not budget.
+
+### 6.6 Root cause of the 47 -- and the fix (`8cc30904`)
+
+gi 3695 (old: T2 Capital City + Fluctuator, cycle, T3 kill; new: T2 Capital City + a {2} cycle, T4 kill). Attribution
+on the single game: keep-untapped OFF -> still T4; drawn land OFF -> T3; `MTG_BP_BASE_CANON=0 MTG_BP_NESTED_CANON=0` on
+both arms -> both T3. So it is the drawn-land hook's breakpoints and the CANON default that resolves them:
+
+* a breakpoint the hook ADDS (the land-draw re-solve, the nonland re-solve that only the open drop made castable, the
+  chain-end re-solve) is resolved for a base plan by `MTG_BP_BASE_CANON` -- the continuation list's FRONT, typically
+  "drop the land, cast the {1} Hollow One" -- and for a variant at a breakpoint it does not target, by the nested canon;
+* so the old line (play nothing at each of those points) needs the EMPTY choice at SEVERAL breakpoints at once, which
+  is outside the one-deviation neighbourhood (ledger §7.12): unreachable at any budget. And the evaluation of the T2
+  Fluctuator line ran through those defaults, so the search mis-valued it and chose the T4 line.
+
+**Fix:** at a hook-only site the unbranched default is **EMPTY** (`g_bp_hook_site_empty_default`, read by
+`TurnSolver::BpUnbranchedCanon`). Before the hook those breakpoints did not exist, so EMPTY is exactly the old line:
+the base plan plays byte-for-byte what it used to, and every land line is an explicit searched VARIANT. That restores
+completeness (the old line is always reachable) and keeps the new lines findable. gi 3695 / 441 / 3857 equal the old
+arm again; the two §4.3 scenarios still win T3 at d3 / b10 (as variants); the unit tests now pin "base plan = old
+line, land line = a variant iff the hook is on". Every other site and deck: false, byte-identical. Measured in
+round 4 (§6.7).
+
+### 6.7 Round 4 (binary `8cc30904`): the shipped defaults at the searched cells -- and the last 7 seeds
+
+Same seeds and sizes as rounds 1-2 (paired against the old arm = every lever off, 16dfb7e4's play):
+
+| deck | cell | games | old avg | new avg | faster | slower | net | units |
+|---|---|---|---|---|---|---|---|---|
+| fluctuator | d3 | 12,000 | 3.5756 | 3.5732 | 76 | 49 | **-28** | 1.061 |
+| fluctuator | shipped | 8,000 | 3.5594 | 3.5565 | 44 | 20 | **-23** | 1.160 |
+| fluctuator2hg | d3 | 6,000 | 3.5260 | 3.5235 | 39 | 24 | **-15** | 1.056 |
+| fluctuator2hg | shipped | 4,000 | 3.5017 | 3.4977 | 21 | 5 | **-16** | 1.184 |
+
+Identity: 125 / 125 jobs of every other deck (d0, d3, shipped) play-digest identical to 16dfb7e4. References: 566 of
+566 replay (179 ok, 387 repaired, 0 play-drift / board-diverged / enum-gap / shuffle-dead / contract-fail), every
+reference except KittyEquipment v2 (its `claude_s8_gi7` costs ~20 min PER DECISION on the 16dfb7e4 binary too --
+measured 2026-10-15, not this branch's cost -- so a full sweep would hold the box lock for hours on one core).
+
+Recovery: 98 slower games; **87 recover at stage 1, 0 more at stage 2, 11 do not** (7 distinct seeds: fluctuator
+3845, 4461, 7063, 7623 at d3 and at shipped, 4306, 5294, 7885 at shipped only; fluctuator2hg: all recover). Every one
+gives the SAME win turn at d8/b0 as at the cell -- a representation limit again. Single-game lever isolation at
+d8/b0 (each lever off alone, everything else on):
+
+| gi | old | final | order off | drawn off | keep-untapped off | funded off | BP_DEPTH 3 |
+|---|---|---|---|---|---|---|---|
+| 3845, 7623 | 3 | 4 | 4 | 4 | **3** | 4 | 4 |
+| 4461, 7063 | 4 | 5 | 5 | 5 | **4** | 5 | 5 |
+| 4306 | 7 | 8 | 8 | 8 | **7** | 8 | 8 |
+| 5294 | 4 | 5 | 5 | **4** | 5 | 5 | 5 |
+| 7885 | 5 | 6 | 6 | **5** | 6 | 6 | 6 |
+
+Two mechanisms, each traced on its game by handing the board to the search at the frame (`--choices-then-auto`) and
+printing the continuation lists (`MTG_BP_CONT_TRACE`) and the root's tails (`MTG_FS_ROOT_DUMP`):
+
+**(a) Keep-untapped kept a land the Stinger did not need (5 seeds).** gi 3845: Canyon Slough + Capital City on the
+battlefield already pay Drannith Stinger's {1}{R}, yet the chain kept the drawn second Capital City (cycled Hollow One
+in its place). Holding it put "land=Capital City: ..." at the FRONT of every later dig re-solve's list -- at the
+second-Fluctuator draw `[#0 land=Capital City: Fluctuator, #1 Fluctuator, #2 land=Capital City, #3 (nothing)]` -- so
+the canonical line dropped the City and cast the second Fluctuator, the Stinger drawn later could not be paid, and the
+chain fell back on cycling the Stinger and an Unearth rebuy, three pings short. The winning line needs the old choice
+at two breakpoints (no Fluctuator, and no City drop at the Stinger), outside the one-deviation neighbourhood.
+**Amendment (`MTG_FLUCT_KEEP_NEEDED`, default ON):** the land is kept only while the untapped battlefield CANNOT pay
+the deck's Stinger (in hand, else in the library) and the land, dropped, would -- colour-exact on copies
+(`TurnSolver::DropLandEnablesCost`). That is the §4.3 occasion exactly (Polluted Mire + Irrigated Farmland, no {R}
+without the City's filter); a land that buys nothing is fodder again, as before. All five seeds return to the old
+win turn at d8/b0 (3845 3, 4461 4, 7063 4, 7623 3, 4306 7); with the amendment off, all five stay a turn slower.
+
+**(b) The bp_all policy reached the hook sites (2 seeds).** gi 7885 T5 (and 5294 T4): without the hook the kill is the
+`bp_all` k=1 variant (Plan::bp_all: "candidate k at EVERY breakpoint" -- here, cycle on and cast nothing, including the
+free Hollow One). With the hook, the chain's Capital City draw (drop open; the City would pay Enlightened Tutor's {W})
+is a new breakpoint whose list leads with land lines, and bp_all applied its k there too: it dropped the City, and
+the kill was gone. A walk of the T5 line one cycle at a time confirms it: handed to the search after the second cycle
+(before the City draw) the final arm reads T6; after the third (City in hand, its site passed) it finds T5.
+**Fix (`MTG_DIG_HOOK_BPALL_EXEMPT`, default ON):** a hook site is exempt from the bp_all policy -- it takes its EMPTY
+default (the pre-hook line exactly) and its land lines stay bp_at-targeted variants. Every pre-hook bp_all line is
+therefore reachable again; nothing the hook added is lost. Byte-identical wherever the hook is off (the predicate
+reads the hook-site flag).
+
+Measured in round 5 (§6.8).
+
 ## 7. Defaults as shipped and open USER questions
 
-TBD.
+TBD (after round 2).
+
+### Open USER questions (surfaced, not settled; the documented default is taken meanwhile)
+
+1. **Adopt `MTG_FLUCT_ORDER_FUNDED`?** It keeps your order whenever the cast set can be paid, and only decides
+   which casts survive a set the pool over-credited. Default as coded: OFF; the measured recommendation is in §7.
+2. **Cast a free Hollow One rather than cycle it when no Stinger is out?** (§4: a turn-to-win tie the search
+   breaks toward cycling; your §7.7(c) remark -- "hollow one should not be held the vast majority of the time" --
+   reads as "cast it".) Not built. Default: unchanged (the search decides).
+3. **`MTG_NO_REDUNDANT_REDUCER` ON?** (skip a second Fluctuator entirely; report-only arm.) Default: OFF.
+4. **Fix the Capital City double count in the engine?** The pool and the colour-exact test credit a fed
+   any-colour filter's colour on top of the land that feeds it (§6.2). The real fix is in the shared payment core
+   and also touches Snow's Arcum's Astrolabe, so it needs its own measurement on both decks. Default: not built
+   (the FUNDED amendment works around it for Fluctuator only).
+5. **Open `DigUsesDrawnLandDrop` for other dig decks** (treasure_hunt, FiveColour's Triome cycling, Auras' Horizon
+   Canopy, Dragons' Mind Stone)? Default: no -- base false, each would need its own A/B.
