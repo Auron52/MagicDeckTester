@@ -949,6 +949,17 @@ public:
     virtual int CastOrderActionRank(const GameState& s, const Action& a, int rank) const
     { (void)s; (void)a; return rank; }
 
+    // CastOrderTotalByName -- the deck's cast order is TOTAL: two casts of DIFFERENT cards whose sort
+    // keys tie are ordered by card NAME, never left to plan (= hand) order, which nothing searches.
+    // USER cross-deck ruling 2026-10-14: "Let's fully order the cards in each list inasmuch as
+    // possible. I don't like the randomness of choosing the order." The deck's rank should already
+    // separate every card it knows (by params); the name is only the final deterministic tie-break, so
+    // a card the rank does not recognise still lands in one place whatever the hand order. Copies of
+    // ONE card still keep plan order between them. Read by the shared comparator (CastOrderLessRanked,
+    // ManaPayment.cpp) and by the enumeration's sequential walk, which sorts on the bare rank -- so both
+    // apply worlds and the walk agree. Default false -> byte-identical for every other deck.
+    virtual bool CastOrderTotalByName() const { return false; }
+
     // ArrangeCastOrder -- the SET-level half: `order` (indices into `actions`) arrives sorted by the
     // comparator and may be rearranged where the right position depends on the other casts or on
     // what the line can pay (Dragonstorm: the earliest payable Ruby Medallion slot, Irencrag

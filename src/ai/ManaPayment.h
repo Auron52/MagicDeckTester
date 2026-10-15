@@ -105,6 +105,11 @@ void NoteMain2StagerCast(GameState& state, const CardDefinition& def);
 bool CastOrderLessRanked(const GameState& state, const Action& a, int key_a,
                                                  const Action& b, int key_b);
 
+// The name tie-break of a TOTAL deck order (DecisionProvider::CastOrderTotalByName): a < b by the
+// name of the card each cast's order derives from. Always false unless the provider opts in, so a
+// site that sorts on the bare rank can call it as its tie-break and stay byte-identical elsewhere.
+bool CastOrderNameTieLess(const GameState& state, const Action& a, const Action& b);
+
 // THE cast sort key: the provider RANK, with the card's natural main PHASE folded in as the
 // tie-break beneath it.
 //
