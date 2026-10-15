@@ -3781,6 +3781,19 @@ static thread_local int g_bp_site_turn = -1;
 // neighbourhood -- unreachable at ANY budget: round 2 measured 47 such slower games, identical at d8/b0).
 // The new land lines are reached as explicit variants, like every other searched continuation.
 static thread_local bool g_bp_hook_site_empty_default = false;
+// ...and for the same reason a bp_all variant (Plan::bp_all: "candidate k at EVERY breakpoint") does
+// not apply its k at a hook site: a hook site's list leads with LAND lines ("land=Capital City: ...",
+// then the land-less twins), so the uniform policy that meant "cycle on, cast nothing" at every
+// pre-hook breakpoint came to mean "play the drawn land" at the first hook site, and the kill it
+// expressed was gone (round 4, 2026-10-15: gi 7885 / 5294, the bp_all k=1 line that wins T5 / T4
+// without the hook, unreachable with it at d8/b0). Exempt, a hook site takes its EMPTY default under
+// bp_all, which is the pre-hook line exactly; its land lines stay reachable as bp_at-targeted
+// variants. MTG_DIG_HOOK_BPALL_EXEMPT (default ON; =0 -> round 4's shape).
+static bool DigHookBpAllExemptOn()
+{
+    static const bool v = EnvOn("MTG_DIG_HOOK_BPALL_EXEMPT", true);
+    return heurarm::Flag(heurarm::DIG_HOOK_BPALL_EXEMPT, v);
+}
 
 // A BREAKPOINT SNAPSHOT DESCRIBES ONE TURN, AND MUST NOT OUTLIVE IT (MTG_BP_CONDEMN_SAME_TURN,
 // DEFAULT ON). Soundness guard, in the same class as BpTurnManaSettled, and like it this conjunct
@@ -38740,6 +38753,19 @@ bool TurnSolver::DropOpenLandEnablesCast(const GameState& state, const std::stri
     }
     return false;
 }
+bool TurnSolver::DropLandEnablesCost(const GameState& state, const std::string& land,
+                                     const ManaCost& cost, bool for_creature)
+{
+    const Player& ap = state.ActivePlayer();
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    {
+        GameState pay = state;
+        if (TapForCostDirect(pay, cost, for_creature)) { return false; }   // already payable
+    }
+    GameState scratch = state;
+    if (!PlayLandByName(scratch, land)) { return false; }
+    return TapForCostDirect(scratch, cost, for_creature);
+}
 
 // ---- GREEDY LAND-DROP INSTRUMENT (MTG_LANDDROP_STATS, default off, zero cost when off) --------
 //
@@ -41973,8 +41999,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // bp_all: the deviation is a POLICY for the whole apply, so every breakpoint is eligible,
         // not just the one at bp_at. See Plan::bp_all for why a uniform repeat is the slice of the
         // cross product worth buying back.
+        // A drawn-land hook site is exempt from the bp_all policy (see DigHookBpAllExemptOn).
+        const bool bp_all_here = plan.bp_all
+                              && !(g_bp_hook_site_empty_default && DigHookBpAllExemptOn());
         const bool eligible    = plan.bp_choice >= 0 && class_on
-                              && (plan.bp_all || seen_before == plan.bp_at);
+                              && (plan.bp_all ? bp_all_here : seen_before == plan.bp_at);
         dbg_bp_seen_before = seen_before; dbg_bp_eligible = eligible; dbg_bp_class_on = class_on;
         dbg_bp_cands = -1;
         // Report the running count so the wave walker can open a slot for each nested breakpoint it
