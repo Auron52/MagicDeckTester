@@ -119,33 +119,6 @@ TEST_CASE("a stillborn slot (empty list) still hands out its demoted wave; its p
     CHECK(t[1].scored);                  // scored
 }
 
-TEST_CASE("MTG_BP_WAVE_NEW_LAST moves a slot's EMPTY after EVERY slot's ranks; the hand-outs are the same")
-{
-    EnsureCardsBw();
-    GameState s;
-    const std::vector<TurnSolver::Plan> plans = { CastPlan("Ponder") };
-    auto run = [&](int new_last)
-    {
-        LeverScope on(1);
-        heurarm::t_arm[heurarm::BP_WAVE_NEW_LAST] = static_cast<std::int8_t>(new_last);
-        // seen = 2: nested discovery opens bp_at 1, whose list (3) outlasts bp_at 0's (2).
-        const auto t = TurnSolver::WaveWalkerTraceForTest(s, plans, /*list_len=*/2, /*seen=*/2, false);
-        heurarm::t_arm[heurarm::BP_WAVE_NEW_LAST] = -1;
-        return Scored(t, 0);
-    };
-    const std::vector<std::pair<int, int>> per_slot = run(0);
-    const std::vector<std::pair<int, int>> last     = run(1);
-    // Round-robin over the slots as they exist (bp_at 1 opens after bp_at 0's first apply). Per slot:
-    // bp_at 0's EMPTY follows its own last rank, ahead of bp_at 1's ranks 1 and 2.
-    const std::vector<std::pair<int, int>> want_per_slot =
-        { { 0, 0 }, { 1, 0 }, { 0, 1 }, { kE, 0 }, { 1, 1 }, { 2, 1 }, { kE, 1 } };
-    CHECK(per_slot == want_per_slot);
-    // New-last: every in-list rank first, then the EMPTYs -- the same seven hand-outs.
-    const std::vector<std::pair<int, int>> want_last =
-        { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 }, { 2, 1 }, { kE, 0 }, { kE, 1 } };
-    CHECK(last == want_last);
-}
-
 TEST_CASE("a node-hosted plan's demoted wave is handed out at the pend index, nothing else")
 {
     EnsureCardsBw();

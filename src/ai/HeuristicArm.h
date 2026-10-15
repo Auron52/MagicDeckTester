@@ -472,7 +472,6 @@ enum Slot : int
     BP_M2_WAVE_FIXPOINT,      // MTG_BP_M2_WAVE_FIXPOINT the main-2 wave walker's variants get the M2 FIXPOINT step (M2FixModeFor, Hinata's opt-in) exactly as main 2's own plan loop does: a variant whose apply fired a breakpoint is followed by the lethal kill-scan and, mode 2, the gated re-entry of the decision on the post-draw state. Without it a walker continuation (the EMPTY one above, a deep rank) went straight to end of turn. Default ON; =0 -> the walker's variants skip the step, byte-identical
     BP_NODE_NESTED_SLOTS,     // MTG_BP_NODE_NESTED_SLOTS the breakpoint NODE's nested breakpoints are reachable: when child 0 (the value-best continuation) reaches further class-on breakpoints, the wave walker opens their slots (rank 0.., then EMPTY) for the pended base plan, as nested discovery already does for every un-hosted plan. On the node's turns a breakpoint INSIDE a continuation took MTG_BP_NESTED_CANON's cands.front() with nothing scored against it. The walker also stops re-walking the pend index itself (the node already searched it in full). Default ON; =0 -> no nested slots for hosted plans, byte-identical
     BP_NEW_ONLY_DEMOTE,       // MTG_BP_NEW_ONLY_DEMOTE MTG_BP_NEW_ONLY's old-cards-only continuations are DEMOTED to the deferred walker's last wave instead of deleted: the rule's premise ("the sibling P u {X} is the same line") fails whenever the sibling's cast ORDER differs from "the plan, then X" -- a rank or a hand-order tie puts X first -- so an order-sensitive line was unfindable at every budget (Mirrorwing: Anger before Oracle's Restoration 88 vs 82, Fists before Gold Rush 50 vs 46, found only with MTG_BP_NEW_ONLY=0). The walker hands them out after a slot's ranks and EMPTY, so a finite budget spends on exactly what it did before; the canon, wave 0, the node's children and every stillborn test still see the filtered list. Default OFF while the USER decides (2026-10-15: the only lever with a deck net above 0 on the held-out A/B, all budget churn); =1 demotes, =0 -> deleted as before, byte-identical
-    BP_WAVE_NEW_LAST,         // MTG_BP_WAVE_NEW_LAST ORDERING ONLY: the wave walker hands out the options MTG_BP_WAVE_EMPTY / MTG_BP_NEW_ONLY_DEMOTE added (a slot's EMPTY, its demoted wave) only once NO slot has an in-list rank left -- one final wave across the node -- instead of right after each slot's own last rank. Identical hand-outs at an unlimited budget; under a finite one the old ranks are all spent first. The budget doctrine's churn mitigation, measured as an arm. Default OFF
     COUNT
 };
 
@@ -900,7 +899,6 @@ inline const char* Name(int slot)
         "MTG_BP_M2_WAVE_FIXPOINT",
         "MTG_BP_NODE_NESTED_SLOTS",
         "MTG_BP_NEW_ONLY_DEMOTE",
-        "MTG_BP_WAVE_NEW_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

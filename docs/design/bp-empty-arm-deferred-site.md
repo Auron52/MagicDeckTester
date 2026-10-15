@@ -110,13 +110,13 @@ analysers: `scripts/bp_open/`.
 |---|---|---|---|
 | Hinata2 gi 137 (seed 6320138), shipped b20 | T8 | **T7** | F1 alone T7, F3 alone T7 (F2 alone T8, F4 alone T8); each one OFF alone still T7 |
 | Hinata2 gi 137, `--depth 8 --budget-ms 0` | T8 | **T7** | F1 off T7, F3 off T7 |
-| Hinata2 gi 137, shipped, with `MTG_BP_WAVE_NEW_LAST=1` | -- | T7 | -- |
+| Hinata2 gi 137, shipped, with `MTG_BP_WAVE_NEW_LAST=1` (since deleted) | -- | T7 | -- |
 | `test/scenarios/mirrorwing_bp_demoted_anger_before_oracle.json` (b0) | no win (84 left) | **T4** | F5; `MTG_BP_NEW_ONLY=0` also T4 |
 | `test/scenarios/mirrorwing_bp_demoted_fists_before_goldrush.json` (b0) | no win (46 left) | **T4** | F5; `MTG_BP_NEW_ONLY=0` also T4 |
 
-Unit tests: `test/unit/test_bp_wave_empty.cpp` (9 cases: the walker contract through
+Unit tests: `test/unit/test_bp_wave_empty.cpp` (8 cases: the walker contract through
 `TurnSolver::WaveWalkerTraceForTest` -- EMPTY last in a slot, none for an empty list or a wave-0 slot,
-the node-turn mask by host, hosted nested slots, the demoted wave, `NEW_LAST` ordering); full
+the node-turn mask by host, hosted nested slots, the demoted wave); full
 `mtg-test` 1062/1062 and scenarios 162/162 (the two new ones included) on the rebased build `r2`.
 
 ### 4.2 Identity (all five `=0` vs the committed tree)
@@ -185,7 +185,8 @@ gi 196, d3 gi 298; mirrorwing shipped gi 141; bruna d3 gi 5) are every one F5's.
 per-game win turns in all 18 deck-cells, units within 0.0000-0.0025 (melira shipped 0.978 the one
 outlier), one chunk's digest differs (hinata shipped, same win turns). So ordering the new options after
 EVERY slot's ranks instead of after their own slot's does not move the churn: F5's slower games are not
-the walker handing a demoted option out early. NEW_LAST stays default OFF and is a candidate for deletion.
+the walker handing a demoted option out early. **`NEW_LAST` is DELETED** (2026-10-15, after this
+measurement: a measured-inert lever is not integrated); the `onnl` / `nl14` arms ran on r2, which still had it.
 
 **The rebase moved none of these games.** Each of `off`, `nodemote` and `on` plays per game identically on
 r2 and on yesterday's v5 (77e094a2 + the levers, primary-checkout inputs), over every deck-cell both ran
@@ -269,7 +270,7 @@ is the clean check; not run.
 * **Base:** rebased onto 16dfb7e4 (work/integ-2026-10-14). Branch `worktree-agent-a9469f45bff622cfb`.
   Conflicts in the rebase: only the two append-only lists (`HeuristicArm.h`'s enum tail + `kNames`, and
   `CMakeLists.txt`'s test list), resolved by keeping both sides, integration's entries first.
-* **Shipped default:** F1-F4 ON, F5 OFF, `NEW_LAST` OFF. The two Mirrorwing scenarios set
+* **Shipped default:** F1-F4 ON, F5 OFF (`MTG_BP_WAVE_NEW_LAST` deleted). The two Mirrorwing scenarios set
   `MTG_BP_NEW_ONLY_DEMOTE=1` in their `env` (at `=0` neither line is found: opponent at 84 / 46).
 * **Measured binary:** `r2` (= this branch's source). Full `mtg-test` 1062 / 1062, scenarios 162 / 162
   on `r2`.
