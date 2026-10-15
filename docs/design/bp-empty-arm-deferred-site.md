@@ -306,7 +306,9 @@ Both r3 and r4: `mtg-test` 1061 / 1061, scenarios 162 / 162. Rebased onto a39ec0
      unlimited budget (pure budget churn), and `NEW_LAST` does not take the churn out (4.4); a
      decision-level second pass would (4.4, proposal). It modifies
      `MTG_BP_NEW_ONLY`, a USER-adopted rule, and re-admits the "pull-order" lines the 2026-09-21 ruling
-     declined to preserve. Ships OFF until the USER rules.
+     declined to preserve. Ships OFF until the USER rules. It is the same question as the cast-order
+     walk-through's Q140 (Mirrorwing: keep an old-cards-only continuation when the rank order cannot
+     express it).
   2. **A3 (6.1),** the one-deviation-per-apply representation: a project, proposal only.
 
 ## 6. Not fixed
