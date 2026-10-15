@@ -178,16 +178,24 @@ landfall-payoff params across five cards, routed above `selesnya`; it excludes t
 `Certificate()` = NotAssessed (names what a bound must price). `provider_audit.py --check` rc 0; the
 routing pin test passes.
 
-## Stage 4 — baseline profile (in progress)
-`analyze_deck.py --no-rebuild --analyzer-seed 151015` launched 18:26 (detached; log
-`logs/landfall_profile.log`).
+## Stage 4 — baseline profile
+Launched 18:26 (detached; log `logs/landfall_profile.log`); DONE — see "Stage 4 — baseline profile
+(DONE ...)" below.
 
-## Stage 5f — performance gate (in progress)
+## Stage 5f — performance gate
 Suite gate reference: Snow 7,162 ms/game, so the new-deck budget is 21,486 ms/game (max per-game core-ms
 over the regression tier's searched cases). Early evidence (12 games d3 b20, contended): ~37 s/game
 mean, with one 257 s game (Genesis Wave: 13 -> 44 permanents). Likely OVER the 3x line, which makes
 performance the FIRST goal (CLAUDE.md). A perf agent in worktree `landfall-perf` (from be6f475d)
 profiles the heavy games and ships only sound collapses.
+
+Perf pass DONE (cherry-picked onto `landfall-analysis` as 91d01347..3aa12384; full write-up
+`docs/design/landfall-perf.md`): five byte-identical commits — land-search pick-list memo, per-node
+trims, combat-pin variants share the base plan's main-phase apply, and its dedup key, Karoo colour
+masks once per call. Callgrind Ir on three fixed games: -7.9% / -6.8% / -51.6%; pooled sample 0.64-0.68x
+core-seconds, digests and units identical; smoke ALL PASS `play-changed=0`. Then `search_leaf_depth: 0`
+ADOPTED in the profile (223cbba4; cheaper and better on held-out seeds -0.141 turns, se 0.031, 62/23
+paired; surfaced to the user for sign-off). Merged tree: unit 649/649, scenarios 184/184.
 
 ## Investigation — Search for Tomorrow suspend (2026-10-15 ~18:35)
 - Probe: 24 games, d3 b20, seed 9000 (`logs/sft_probe/`): avg 5.75, all won; SLOW-GAMEs gi 11/13/17
@@ -218,6 +226,47 @@ profiles the heavy games and ships only sound collapses.
 ## CI (2026-10-15 18:40, branch `landfall-analysis` @ 5bd2c45e)
 Run 38787489105: build (windows-latest) success, build (ubuntu-latest) success, Linux/Windows
 determinism parity success.
+
+## Stage 4 — baseline profile (DONE 2026-10-15 ~22:10, commit 5b72e5e2)
+`analyze_deck.py --no-rebuild --analyzer-seed 151015` on be6f475d: 1000-game d5 card scores; cost
+diagnostic `NO_COST_INTERACTIONS`; discard evidence (400 games d3) `STATUS_QUO_OK` — 9 cleanup sheds
+in 400 games (0.0225/game), multi-optimal rate 1.0 (every shed a tie), names offered: Baloths 7,
+Phylath 7, Titan 6, Avenger 5, Omnath 5.
+
+## Stage 5j — suite membership: cost gate PASS (2026-10-15 ~23:00, tree 223cbba4)
+Rows written in all three tiers (smoke d0 1001x1000, d3 1001x50 b10, d5 1001x25 b20; regression d0
+2002x1000, d3 2002/3003x50 b10, d5 2002/3003x25 b20; overnight ENTRY set: d0 4x2000, d3 4x400 b10,
+d5 4x300 b20). No 2HG row (no per-opponent or starting-life-relative card). `suite_gate.py --cost`
+(THREADS=12, host load ~20-25): **18,512 ms/game, worst case `landfall_regression_d3_s2002`, = 2.58x
+Snow (7,162) -> PASS** (limit 3x). Per case (ms/game): d5 s3003 5,624; d5 s2002 12,175; d3 s3003 4,514;
+d3 s2002 18,512.
+- **The worst case is ONE game.** d3 s2002 gi=38 (repro `--seed 2040 --game-index 38 --games 1 --depth 3
+  --budget-ms 10 --ignore-play-profile`) ran **606 s and 38.6M units** at a 9,000-unit decision budget
+  (the 25x overrun ceiling is 225k per decision). Without it the case is ~6.4 s/game and the deck's
+  worst case is d5 s2002 at ~1.7x. Under investigation (below): a single decision runs for minutes.
+- Rows and GT are NOT committed yet: GT is accepted once the two gap fixes (Search for Tomorrow mana,
+  fetched-Karoo bounce) land, so the deck enters with the play it will keep.
+
+## Stage 5i — discard BUCKET policy (AUTHORED, NOT ADOPTED — presented to the user)
+Evidence first: the deck sheds at cleanup ~once per 44 games and every observed shed was a tie, so the
+measurable prize is ~0; the policy is doctrine quality plus rollout fidelity. Proposed shape (USER
+doctrine 2026-08-21: quota-first, net of board, fungible upward, distance-to-playable, one index):
+
+| bucket | members | keep quota (net of board) |
+|---|---|---|
+| Mana / LANDS | every land (Forest, Mountain, Wilds, Terramorphic, Myriad, Fountain, Turf, Fengraf) | land drops: 2 while board lands + ramp < 7, else 1; a red source is kept first while neither board nor hand has one and the hand holds Phylath/Omnath |
+| Mana / RAMP | Rampant Growth, Search for Tomorrow, Cultivate, Khalni Heart Expedition | kept while board lands < 6 (the 6-drops); fungible with LANDS (parent total binds) |
+| Threats | Avenger, Primeval Titan, Rampaging Baloths, Phylath, Omnath, Terastodon, Genesis Wave, Courser | floor of 2; rank (best kept first): Avenger > Titan > Baloths > Phylath > Genesis Wave > Omnath > Terastodon > Courser |
+
+Shed order inside an over-full bucket = distance-to-playable (board+hand mana vs the card's cost, colour
+included: Omnath needs RR, Phylath R), so a 7-8 drop on a 3-land board sheds before a castable 6-drop.
+Courser ranks last among threats because it is the only one that is not a payoff (it plays lands and
+gains life); Genesis Wave sits mid-rank because its X scales with exactly the mana this deck makes.
+Doubts flagged: (1) the threat rank is my judgement from card text, not mined (the 5g miner's
+INCLUSION report is the evidence to re-rank on); (2) Khalni is filed under RAMP though it is also a
+landfall payoff — it only pays off by being cracked for lands, so RAMP is its role. NOT implemented:
+per the skill it ships only on approval, as `LandfallProvider::CleanupDiscardCandidates` behind a
+default-on `MTG_LANDFALL_BUCKET_DISCARD` flag, then held to non-inferiority on all three tiers.
 
 ## Open questions for the user (collected; work continues on the stated default)
 - **(Courser integrator Q1 — CAST ORDER, USER-OWNED)** In a positioned-land plan, landfall-watcher casts
