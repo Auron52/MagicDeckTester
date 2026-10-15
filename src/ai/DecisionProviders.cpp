@@ -9991,7 +9991,9 @@ bool BurnProvider::LandDropAfterDrawEngine(const GameState& s, int controller) c
         { face_burn = true; }
     }
     if (stager == nullptr) { return false; }
-    const bool spectacle_now = s.opponent_lost_life_this_turn || (face_burn && SpectaclePlanCreditOn());
+    // The d0 runner plans with Solve, so the credit counts only where Solve applies it.
+    const bool spectacle_now = s.opponent_lost_life_this_turn
+                            || (face_burn && SpectaclePlanCreditOn() && !SpectacleCreditSearchOnly());
     add(before, spectacle_now ? SpectacleLiveCost(*stager, s) : EffectiveSpellCost(*stager, s));
     return AvailableManaPool(s).CanPay(before);
 }

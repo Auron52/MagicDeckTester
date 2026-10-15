@@ -22,17 +22,19 @@ BURN_PROF = "decks/burn/burn.profile.json"
 
 O, M2, CR, NA = "MTG_BURN_ORDER", "MTG_BURN_M2_RULE", "MTG_SPECTACLE_PLAN_CREDIT", "MTG_BURN_M2_NARROW"
 BF = "MTG_BURN_BLOOD_FIRST"   # the PROPOSED amendment (Searing Blood before Searing Blaze), a USER question
+SO = "MTG_SPECTACLE_CREDIT_SEARCH_ONLY"   # the credit in the search's enumeration only (not Solve)
 ARMS = [
-    ("off",   {O: False, M2: False, CR: False, NA: False, BF: False}),   # new binary, every lever off == base?
-    ("o1",    {O: True,  M2: False, CR: False, NA: False, BF: False}),
-    ("o12",   {O: True,  M2: True,  CR: False, NA: False, BF: False}),
-    ("o123",  {O: True,  M2: True,  CR: True,  NA: False, BF: False}),
-    ("o13",   {O: True,  M2: False, CR: True,  NA: False, BF: False}),
-    ("o123n", {O: True,  M2: True,  CR: True,  NA: True,  BF: False}),   # the narrower "played off" reading
-    ("o1b",   {O: True,  M2: False, CR: False, NA: False, BF: True}),    # order + the Blood-first amendment
-    ("o123b", {O: True,  M2: True,  CR: True,  NA: False, BF: True}),
+    ("off",   {O: False, M2: False, CR: False, NA: False, BF: False, SO: False}),   # new binary, every lever off == base?
+    ("o1",    {O: True,  M2: False, CR: False, NA: False, BF: False, SO: False}),
+    ("o12",   {O: True,  M2: True,  CR: False, NA: False, BF: False, SO: False}),
+    ("o123",  {O: True,  M2: True,  CR: True,  NA: False, BF: False, SO: False}),
+    ("o13",   {O: True,  M2: False, CR: True,  NA: False, BF: False, SO: False}),
+    ("o123n", {O: True,  M2: True,  CR: True,  NA: True,  BF: False, SO: False}),   # the narrower "played off" reading
+    ("o1b",   {O: True,  M2: False, CR: False, NA: False, BF: True,  SO: False}),   # order + the Blood-first amendment
+    ("o123b", {O: True,  M2: True,  CR: True,  NA: False, BF: True,  SO: False}),
+    ("o123s", {O: True,  M2: True,  CR: True,  NA: False, BF: False, SO: True}),    # credit search-only
 ]
-ALL_ON = {O: True, M2: True, CR: True, NA: False, BF: True}
+ALL_ON = {O: True, M2: True, CR: True, NA: False, BF: True, SO: False}
 
 # Disjoint blocks inside 11600001..11699999 (the walk's allocation for burn). Sized above the brief's
 # floor (>= 4000 shipped / 6000 d3 / 20000 d0 for burn, half for burn2hg): every cell is cheap here.

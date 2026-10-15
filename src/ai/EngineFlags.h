@@ -256,6 +256,21 @@ inline bool SpectaclePlanCreditOn()
     return heurarm::Flag(heurarm::SPECTACLE_PLAN_CREDIT, env_on);
 }
 
+// MTG_SPECTACLE_CREDIT_SEARCH_ONLY -- the credit above in the SEARCH's enumeration only (EnumeratePlans),
+// not in the greedy walk (Solve: the d0 runner and every rollout leaf), which keeps the pre-plan cost --
+// the asymmetry Plan B always had (it is EnumeratePlans-only). Why it exists: in the greedy walk the credit
+// newly admits {Shard Volley, Light Up the Stage {R}} in main 1, and the Volley hold's exception (b) ("it
+// turns Spectacle on for a spell in the same plan", shard-volley-hold.md) lets the greedy sacrifice a land
+// on T2-T3 for it where it used to keep Volley and cast Light Up for {R} in main 2 off combat damage (d0
+// probe, 1500 games: 49 faster / 39 slower). The SEARCH prices that land; the greedy does not. A measured
+// alternative, not a fix of a rules defect (the credit is faithful either way). Default OFF.
+// Read by the evaluators and by BurnProvider's d0 land hold (which must agree with what Solve can find).
+inline bool SpectacleCreditSearchOnly()
+{
+    static const bool env_on = EnvOn("MTG_SPECTACLE_CREDIT_SEARCH_ONLY");   // DEFAULT OFF; =1 enables
+    return heurarm::Flag(heurarm::SPECTACLE_CREDIT_SEARCH_ONLY, env_on);
+}
+
 // MTG_ATTACK_BODY_TAP_ORDER. The attack-turn creature tap order: see
 // DecisionProvider::ManaSourceHoldValue. Read inside the shared payment (TapForCostSharedOnce);
 // heurarm slot so a pooled batch can carry both arms.
