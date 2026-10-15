@@ -265,6 +265,24 @@ inline bool SpectaclePlanCreditOn()
 // probe, 1500 games: 49 faster / 39 slower). The SEARCH prices that land; the greedy does not. A measured
 // alternative, not a fix of a rules defect (the credit is faithful either way). Default OFF.
 // Read by the evaluators and by BurnProvider's d0 land hold (which must agree with what Solve can find).
+// MTG_KILL_TRIGGER_COMBO -- the "wins this turn" projection of both subset evaluators credits a
+// kill-trigger burn spell's face damage (Searing Blood: "When that creature dies this turn, Searing Blood
+// deals 3 damage to the creature's controller") when the PLAN's creature damage, in the realised cast
+// order, kills the opponent's ONLY creature -- a Blood that cannot kill alone (a 3/3, a 4/4) finished by
+// a second Blood or a Searing Blaze cast after it. CollectActions credits a Blood only when it kills
+// ALONE, so such a plan read as short of lethal, and the Shard Volley hold's exception (a) ("the plan wins
+// this turn") then pruned the Volley that was the kill. It surfaced under burn's main-2 rule: the same
+// Volley cast in main 2 sees the board after the triggers resolved, but the rule moves it to main 1, where
+// only the projection can see it (burn2hg seeds 11671958 gi 1957, 11671187 gi 1186: not recovered at d8 b0
+// before this). A projection-accuracy fix, read by the two evaluators only; the apply already resolves the
+// trigger. One opposing creature only (every creature-damage spell then hits it); 0 -> byte-identical.
+// Default OFF until measured; per-job heurarm slot.
+inline bool KillTriggerComboOn()
+{
+    static const bool env_on = EnvOn("MTG_KILL_TRIGGER_COMBO");   // DEFAULT OFF until measured; =1 enables
+    return heurarm::Flag(heurarm::KILL_TRIGGER_COMBO, env_on);
+}
+
 inline bool SpectacleCreditSearchOnly()
 {
     static const bool env_on = EnvOn("MTG_SPECTACLE_CREDIT_SEARCH_ONLY");   // DEFAULT OFF; =1 enables

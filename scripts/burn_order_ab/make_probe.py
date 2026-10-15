@@ -59,6 +59,10 @@ def scan(d):
                 if main == "MAIN_2" and nm not in (None, "LAND", "Light Up the Stage",
                                                    "Eidolon of the Great Revel", "Searing Blaze"):
                     c[arm]["main-2 cast of %s" % nm] += 1
+                    # ...of which NOT played off a main-2 Light Up (none earlier in this main 2): the
+                    # main-2 rule's violations (the broad reading admits everything after one).
+                    if "Light Up the Stage" not in names[:i]:
+                        c[arm]["main-2 cast NOT off a main-2 Light Up: %s" % nm] += 1
                 if nm == "Shard Volley" and "Eidolon of the Great Revel" in names[:i]:
                     c[arm]["Volley after Eidolon (same main)"] += 1
                 if nm == "Eidolon of the Great Revel" and any(x not in ("LAND",) for x in names[i + 1:]):
