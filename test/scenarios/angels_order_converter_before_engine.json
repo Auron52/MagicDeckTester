@@ -1,11 +1,11 @@
 {
-  "_comment": "Angels cast order (USER 2026-10-14, MTG_ANGELS_ORDER), the draft's probe B2: T7, 6 Plains + a Plains drop, hand Archangel of Thune FIRST, then Bishop of Wings. Converter before the engine: Bishop, then Thune -- Thune's own entry is a 4-life event, which is a +1/+1 wave on Thune and Bishop. Life 24 (the generic hand-order line cast Thune first: life 20, no counters).",
+  "_comment": "Angels cast order (USER 2026-10-14, MTG_ANGELS_ORDER), the draft's probe B2: T7, 6 Plains + a Plains drop, hand Archangel of Thune FIRST, then Bishop of Wings, played through T9. Converter before the engine: Bishop, then Thune -- Thune's own entry is a 4-life event, a +1/+1 wave on Thune and Bishop, and every later lifelink hit is bigger. Ends at life 33. The generic tiers tied the two and cast in hand order (Thune first, no counters): life 27. A short horizon (max_turns 7) cannot pin this: with no win reachable every plan ties and the search need not cast both.",
   "deck": "decks/Angels/Angels.cod",
   "turn": 7, "on_the_play": true, "active_life": 20, "opponent_life": 20,
   "battlefield": [ { "name": "Plains" }, { "name": "Plains" }, { "name": "Plains" },
                    { "name": "Plains" }, { "name": "Plains" }, { "name": "Plains" } ],
   "hand": [ "Archangel of Thune", "Bishop of Wings", "Plains" ],
   "library_filler": "Plains", "library_size": 30,
-  "depth": 5, "budget_ms": 150, "max_turns": 7,
-  "expect_active_life": 24
+  "depth": 5, "budget_ms": 150, "max_turns": 9,
+  "expect_active_life": 33
 }
