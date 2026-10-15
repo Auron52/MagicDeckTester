@@ -1403,3 +1403,9 @@ Pridemate, Ajani -2, Heliod) moves ahead of the new watchers (slots 4-7 = ranks 
 ranks 576-639; the bodies onwards are unchanged). `MTG_CRITTER_ORDER=0`
 restores the 2026-09-08 mined order (`MTG_CRITTER_WATCHER_ORDER`: watchers 8, Pridemate / Voice 9, Generic for
 the rest), byte-identical to ff3e205b.
+
+**Measured** (held-out, paired, loss = 9; full tables in the design doc): critter shipped 4000 games 3 faster / 0
+slower (-3), d3 b10 6000 4 / 0 (-4), d0 20000 26 / 7 (-19); critter2hg shipped 2000 1 / 0 (-1), d3 3000 1 / 1 (0),
+d0 10000 12 / 0 (-12). Work units 1.001-1.009x. All 8 slower games recover at stage 1. Every other suite deck is
+byte-identical (96 / 96 jobs). **Shipped default ON.** Proposed, default OFF: `MTG_CRITTER_HELIOD_FIRST` (a
+dominated after-the-creatures becomes FIRST -- six of the seven d0 slower games).
