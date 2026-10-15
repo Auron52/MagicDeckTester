@@ -1330,7 +1330,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                        resolved=resolved,   # 'resolved' is THIS list; it fills in as the walk runs
                        frames=frames)
     ri = 0               # how many of the reference's own decisions have been consumed
-    inserted, shifted, vanished, skipped = [], [], [], []
+    inserted, shifted, vanished, skipped, reordered = [], [], [], [], []
     # (turn, source, count) triples this walk actually pinned into a committed plan. Lets the
     # deletion skip tell "the dialog moved into the plan and its answer was applied" apart from
     # "the dialog vanished and the answer was lost" -- only the first is a lossless repair.
@@ -1397,6 +1397,9 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             if skipped:
                 repairs.append(f"{len(skipped)} recorded pass-frame(s) collapsed by §2a skipped "
                                f"(e.g. {skipped[0]})")
+            if reordered:
+                repairs.append(f"{len(reordered)} sub-decision(s) answered in the plan's new cast "
+                               f"order (e.g. {reordered[0]})")
             if ri < len(kept):
                 repairs.append(f"terminated with {len(kept) - ri}/{len(kept)} recorded decisions unused")
             det = (f"replay won={res.get('won')} win_turn={res.get('win_turn')} "
@@ -1405,7 +1408,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 det += "; " + "; ".join(repairs)
             if drift:
                 return True, "play", det
-            return True, ("repaired" if (shifted or inserted or vanished or skipped) else "ok"), det
+            return True, ("repaired" if (shifted or inserted or vanished or skipped or reordered)
+                          else "ok"), det
         # rc == 70: a decision frame -- contract checks first.
         m = DEC_RE.search(out)
         if not m:
@@ -1421,6 +1425,29 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             return False, "play", f"main_phase decision after {len(resolved)} picks has no plans list"
 
         aligned = ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+        if (not aligned and ri < len(kept) and dec.get("type") != "main_phase"
+                and kept[ri]["decision"].get("type") != "main_phase"):
+            # SUB-DECISIONS OF ONE PLAN, ASKED IN A NEW ORDER (2026-10-15, burn s17 gi16). The
+            # frames a committed plan raises while it executes -- each cast's target, a Shard
+            # Volley's sacrifice -- come in the order the engine CASTS the plan's spells, and that
+            # order is a deck's cast order, which can change after a reference is saved (burn's
+            # USER order sequences Shard Volley before Skullcrack; the recording, made when the
+            # sac-land burn was hoisted to the end, asked Skullcrack's target first). Strict
+            # left-to-right alignment then reads Volley's target as an INSERTION, never consumes
+            # the recorded one, jams `ri` on it, and every later recorded pick -- the next turn's
+            # land drop included -- is answered by default: a T5 win replayed as T8 with the same
+            # human line. These frames belong to ONE plan (the run of non-main frames before the
+            # next recorded main_phase frame) and carry distinct identities (type, turn, source),
+            # so answering the frame the engine asks NOW with the recorded answer for that same
+            # identity is lossless: the human's picks are all applied, only in the engine's order.
+            g = next((k for k in range(ri, len(kept))
+                      if kept[k]["decision"].get("type") == "main_phase"), len(kept))
+            j = next((k for k in range(ri + 1, g)
+                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
+            if j is not None:
+                kept.insert(ri, kept.pop(j))
+                reordered.append(f"{frame_ident(dec)}")
+                aligned = True
         if not aligned and ri < len(kept):
             # DELETION, the mirror of the insertion case below. A frame the reference recorded may
             # simply STOP OCCURRING -- an engine fix can remove the only option a re-prompt existed
