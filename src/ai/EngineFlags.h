@@ -825,6 +825,29 @@ inline bool UntapBurstGrowthEnabled()
     return v;
 }
 
+// MTG_HOLD_RELEASE_YIELD -- the whole-turn prepay's creature HOLD LADDER (TurnSolver::
+// BatchPrepayMainCasts: the one payer the executor and the rollout both run, so it stays in lockstep
+// by construction) becomes battlefield-position-free and prices what a body's tap is worth as mana:
+//   (a) the partial hold releases equal-power bodies BIGGEST YIELD FIRST -- one tap of Priest of
+//       Titania pays what three 1/1 elves would, and each costs the attack one body -- instead of
+//       lowest battlefield index first;
+//   (b) the single-attacker rung holds, among the strongest attackers that are mana sources, the one
+//       whose tap is worth LEAST as mana (a 1/1 Llanowar rather than an equal-power Priest);
+//   (c) a creature the line SACRIFICES as a cost (Natural Order's victim, the sac-fodder pin) is never
+//       held: it cannot attack after its own cast (CR 601.2h pays the cost during casting).
+// Remaining ties go to card name, then card number -- never the battlefield index. A summoning-sick
+// dork can neither tap for mana nor attack (CR 302.6), so it is outside the hold set as before.
+// Found on StompySurprise gi1526 (docs/design/stompy-order-2026-10-14.md §4): the T3 kill (Archdruid +
+// Natural Order -> Craterhoof, 21) was found iff Priest of Titania was NOT on the battlefield after both
+// 1-drop elves (24 of 24 permutations), and the USER cast order always lands the 1-drops first.
+// Payment is the permitted greedy area; this only re-keys its tie-breaks. DEFAULT OFF until measured;
+// =1 enables.
+inline bool HoldReleaseYieldEnabled()
+{
+    static const bool v = EnvOn("MTG_HOLD_RELEASE_YIELD");
+    return heurarm::Flag(heurarm::HOLD_RELEASE_YIELD, v);
+}
+
 // MTG_GARTH_ORDERED=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
 // Garth One-Eye's tap IS the cast of its conjured copy (WotC ruling, already in the card model:
 // the copy is cast as the ability resolves -- no holding it). USER doctrine 2026-08-19: "order

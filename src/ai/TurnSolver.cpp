@@ -38243,6 +38243,23 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // combat already happened -- so skip BOTH creature hold classes (attacker + dorks) and let the
     // bodies pay. Depletion/one-shot holds stay: wasting a counter is phase-blind.
     const bool m2_release = M2ReleaseEnabled() && pt && pt->main2;
+    // MTG_HOLD_RELEASE_YIELD (EngineFlags.h): the hold ladder's tie-breaks price a body's MANA and never
+    // read the battlefield index. `hold_yield` is what one tap of the body pays (Priest of Titania: the
+    // live Elf count; a 1/1 elf: 1); `hold_tie_less` is the position-free last resort (name, then number).
+    const bool hold_yield_on = HoldReleaseYieldEnabled();
+    auto hold_yield = [&](int i) -> int
+    {
+        const Permanent& p = state.battlefield[i];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        return d ? PermanentManaYield(state, p, *d) : 0;
+    };
+    auto hold_tie_less = [&](int a, int b) -> bool
+    {
+        const Card& ca = state.battlefield[a].card;
+        const Card& cb = state.battlefield[b].card;
+        if (ca.m_name != cb.m_name) { return ca.m_name.str() < cb.m_name.str(); }
+        return ca.m_number < cb.m_number;
+    };
     if (DepletionReserveEnabled() && n <= 64)
     {
         for (int i = 0; i < n; ++i)
@@ -38260,7 +38277,30 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // hold below carries an inert bit). Same leave-out-if-you-can fallback as depletion.
     if (AttackerReserveEnabled() && !m2_release && n <= 64)
     {
-        const int best = FindBestOwnAttacker(state, active);
+        int best = FindBestOwnAttacker(state, active);
+        // MTG_HOLD_RELEASE_YIELD (b): among the attackers as strong as `best` that are untapped mana
+        // sources, hold the one whose tap is worth LEAST as mana (ties by name, then number) -- the
+        // historical pick was the lowest battlefield index, so an equal-power Priest could be the
+        // body held while the 1/1 elves paid.
+        if (hold_yield_on && best >= 0 && best < 64)
+        {
+            const int bpow = state.battlefield[best].EffectivePower();
+            const HasteSources hs = GatherHasteSources(state.battlefield, active);
+            int pick = -1;
+            for (int i = 0; i < n; ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != active || p.tapped || p.EffectivePower() != bpow) { continue; }
+                if (!CanAttackFull(p, state.battlefield, active, &hs)) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!(d && ((d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                            || d->params.mana_rock))) { continue; }
+                if (pick < 0) { pick = i; continue; }
+                const int yi = hold_yield(i), yp = hold_yield(pick);
+                if (yi < yp || (yi == yp && hold_tie_less(i, pick))) { pick = i; }
+            }
+            if (pick >= 0) { best = pick; }
+        }
         if (best >= 0 && best < 64)
         {
             const Permanent& bp = state.battlefield[best];
@@ -38291,6 +38331,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // s4345 gi341): releasing Deathrite Shaman in the T2 post-combat main burned the only
             // graveyard fetch, stranding T3's five-pip Cosmic Spider-Man -- win 5 -> 6.
             if (m2_release && !d->params.gy_land_exile_mana) { continue; }
+            // MTG_HOLD_RELEASE_YIELD (c): the line's own sacrifice victim is spent by a cost, so
+            // holding it protects no attack -- leave it payable (the sac-fodder pin taps it first).
+            if (hold_yield_on && _sac_victim != 0 && p.card.m_number == _sac_victim) { continue; }
             reserved_crea |= (1ull << i);
         }
     }
@@ -38420,7 +38463,15 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 const bool kb = state.battlefield[b].card.m_number == keep_last;
                 if (ka != kb) { return kb; }   // the kept target sorts to the back
             }
-            return state.battlefield[a].EffectivePower() < state.battlefield[b].EffectivePower();
+            const int pwa = state.battlefield[a].EffectivePower();
+            const int pwb = state.battlefield[b].EffectivePower();
+            if (pwa != pwb || !hold_yield_on) { return pwa < pwb; }
+            // MTG_HOLD_RELEASE_YIELD (a): equal power -> the bigger producer releases first (one
+            // tap of it covers what several flat bodies would, each costing one attacker), then the
+            // position-free key. Off: equal power keeps battlefield order (stable sort).
+            const int ya = hold_yield(a), yb = hold_yield(b);
+            if (ya != yb) { return ya > yb; }
+            return hold_tie_less(a, b);
         });
         std::uint64_t hold = reserved_crea;
         for (std::size_t k = 0; k + 1 < crea.size() && n_rungs < 13; ++k)
@@ -38444,6 +38495,21 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                  /*out_full_pool=*/&produced)
              && produced.wild == 0;
         if (ok) { won_hold = rungs[r]; }
+        // MTG_PREPAY_HOLD_TRACE=1 (diagnosis only, print-only): each rung tried, the creatures it
+        // held, and whether it paid -- the read that shows WHICH body a hold ladder spent.
+        static const bool s_hold_trace = EnvOn("MTG_PREPAY_HOLD_TRACE");
+        if (s_hold_trace && !g_tap_speculating)
+        {
+            std::string held;
+            for (int i = 0; i < n && i < 64; ++i)
+            {
+                if (!(rungs[r] & (1ull << i)) || !state.battlefield[i].card.IsCreature()) { continue; }
+                held += (held.empty() ? "" : ",") + state.battlefield[i].card.m_name.str();
+            }
+            std::fprintf(stderr, "[hold] T%d cost=%d victim=%d rung=%d/%d held=[%s] %s\n",
+                         state.turn_number, combined.ManaValue(), _sac_victim, r, n_rungs,
+                         held.c_str(), ok ? "PAID" : "no");
+        }
         if (!ok)   // this hold is infeasible/ambiguous -> restore for the next rung (or the plain solve)
         {
             state.battlefield                  = bf_snap;

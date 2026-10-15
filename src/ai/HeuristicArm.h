@@ -463,6 +463,7 @@ enum Slot : int
     DRAW_HELD_DROP_REPLAY,    // MTG_DRAW_HELD_DROP_REPLAY the depth-0 executor PLAYS a land drop its provider held for a draw engine (DecisionProvider::LandDropAfterDrawEngine: treasure_hunt's "Treasure Hunt before the land drop") after this main's casts when the main cast no draw engine -- the only route that replayed it was the draw engine's second TakeTurn pass, so a main that cast Land's Edge alone lost the drop (cast-order probe A2: no land on T4, won T5; d3/d5/d8 win T4). A held drop the provider still holds as marginal Land's Edge ammo (HoldDeferredDropForLethal) stays held; a played one requests the second pass, which re-solves with its mana. Default ON; =0 -> the drop is lost, byte-identical to before (docs/design/treasure-hunt-land-rule-provider.md)
     STOMPY_ORDER_SEARCH,      // MTG_STOMPY_ORDER_SEARCH (under MTG_STOMPY_ORDER) the four "either location" cards of the USER's StompySurprise order -- Worldly Tutor mid / late, Turntimber before / after the tutor, Natural Order early / late, World War Hulk early / late -- are SEARCHED two-way choices: the plan's slot (StompyProvider::ArrangeCastOrder) is the canonical first try and each such card present at its OTHER slot is one more candidate ordering (StompyProvider::CastOrderingCandidates; WantsCastOrderingSearch). USER: "can choose to cast either location". Search window only: the rollouts beyond the horizon and the d0 runner keep the canonical order. Default ON; =0 -> the canonical order alone
     STOMPY_TOP_RESOLVE,       // MTG_STOMPY_TOP_RESOLVE (under MTG_STOMPY_ORDER) StompySurprise's opt-in to the tutor-to-TOP reset (MTG_TOP_RESOLVE; DecisionProvider::TopResolveOptIn, read through TopResolveActive): the USER's "Worldly Tutor resets Call of the Wild Activations and Turntimber" ships with the order, the global lever stays OFF for the other tutor_to_top decks. Default ON; =0 -> the order without the reset
+    HOLD_RELEASE_YIELD,       // MTG_HOLD_RELEASE_YIELD the whole-turn prepay's creature hold ladder (TurnSolver::BatchPrepayMainCasts) is battlefield-position-free and prices a body's mana: equal-power bodies release biggest yield first (Priest of Titania before a 1/1 elf), the single-attacker rung holds the lowest-yield strongest mana attacker, and a creature the line sacrifices as a cost is never held; remaining ties by name, then card number. StompySurprise gi1526: the T3 kill was found iff Priest was not entered after both 1-drop elves. Default OFF until measured; =1 enables
     COUNT
 };
 
@@ -881,6 +882,7 @@ inline const char* Name(int slot)
         "MTG_DRAW_HELD_DROP_REPLAY",
         "MTG_STOMPY_ORDER_SEARCH",
         "MTG_STOMPY_TOP_RESOLVE",
+        "MTG_HOLD_RELEASE_YIELD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
