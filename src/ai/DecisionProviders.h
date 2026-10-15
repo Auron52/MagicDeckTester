@@ -1017,6 +1017,12 @@ public:
     bool RestrictorFollowsArrangement(const GameState& s) const override;
     void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
                           std::vector<int>& order) const override;
+    // Gamble's slot relative to the cantrips, SEARCHED (MTG_HINATA_GAMBLE_SEARCHED; the StompySurprise
+    // dual-slot shape): the arranged order first, then Gamble after the cantrips. See the .cpp.
+    bool WantsCastOrderingSearch() const override;
+    bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                const std::vector<Action>& reorder,
+                                std::vector<std::vector<int>>& out) const override;
     bool OpponentPlaysLands() const override { return true; }
     // M2 FIXPOINT OPT-IN, mode 2 (ADOPTED 2026-09-06; USER approved the per-deck opt-in and
     // the 18-deck sweep found hinata the only converter). Evidence, both tiers + quiet box:
