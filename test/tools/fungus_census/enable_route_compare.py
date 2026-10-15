@@ -71,6 +71,24 @@ LISTS = [
     ("Crossroads 3->0, +bodies",  "logs/fungus_screen/crossroads0_bodies_list/Fungus.txt"),
     ("Crossroads 3->1, +Forest (isolation control)",
      "logs/fungus_screen/crossroads1_forest_list/Fungus.txt"),
+    # --- USER 2026-10-15, on the Crossroads-1 + Vitaspore trade -------------------------------
+    # *"Let's not play too many concordant crossroads. It is indeed a card that has major drawbacks
+    # in a real game."* / *"I put 1 in the list and that seemed reasonable + vitaspore, but having a
+    # ton of them is suspect."*  The user has picked the right substitute and the card data says why:
+    # Concordant Crossroads grants haste to ALL creatures, both sides, and HasHasteFromLords is
+    # controller-scoped -- sound only because the goldfish's bodies never attack -- so the gift to
+    # the opponent is priced at ZERO. Vitaspore Thallid delivers the same function with no gift:
+    # sac_outlet_grants_haste sets Permanent::temp_haste on ONE chosen creature. And per its own
+    # card note the hasted body "buys a Beastmaster Ascension quest counter, which come from
+    # DECLARED attackers (CR 508.2) and apply to the SAME combat" -- i.e. Vitaspore feeds the
+    # ONE-ATTACK route, the only Beastmaster route that survives blocking, while Crossroads was
+    # measured feeding the exposed accrual route. These arms are slot-neutral (3->1 pays for 0->2).
+    ("Crossroads 1 + Vitaspore 2 (USER)",
+     "logs/fungus_screen/cr1_vita2_list/Fungus.txt"),
+    ("Crossroads 1 + Vitaspore 1",
+     "logs/fungus_screen/cr1_vita1_list/Fungus.txt"),
+    ("Crossroads 1 + Forest (haste-free isolation)",
+     "logs/fungus_screen/cr1_forest_list/Fungus.txt"),
 ]
 
 
