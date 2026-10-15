@@ -27976,12 +27976,16 @@ int StompyProvider::ExtraLethalDamage(const GameState& s,
 // "Let's try out your stompy suggestion. It seems pretty close to what I was looking for and we can fix
 // any issues that show up." Then made TOTAL (USER, same day): "Let's fully order the cards in each list
 // inasmuch as possible. I don't like the randomness of choosing the order." Measured in
-// docs/design/stompy-order-2026-10-14.md. =0 -> the generic tiers (and no Stompy TOP_RESOLVE opt-in),
+// docs/design/stompy-order-2026-10-14.md. Off -> the generic tiers (and no Stompy TOP_RESOLVE opt-in),
 // byte-identical to the tree before this order existed.
+// DEFAULT OFF for now (2026-10-15): three shipped games lose a turn and recover at no budget -- the order
+// puts the 1-drop elves on the battlefield before Priest of Titania, and the T3 kill then depends on a
+// battlefield-position tap choice (docs/design/stompy-order-2026-10-14.md §4). Back to `true` once the
+// payment fix clears the bar; =1 enables it for the A/B.
 static bool StompyOrderEnabled()
 {
     // Per-job overridable (heurarm) so both arms of an A/B run in ONE pooled batch.
-    static const bool on = EnvOn("MTG_STOMPY_ORDER", true);   // DEFAULT ON; =0 -> the generic tiers
+    static const bool on = EnvOn("MTG_STOMPY_ORDER");   // DEFAULT OFF (pending the payment fix); =1 enables
     return heurarm::Flag(heurarm::STOMPY_ORDER, on);
 }
 
