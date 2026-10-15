@@ -2,8 +2,7 @@
 
 Status (2026-10-15): **audited; fixed behind five levers -- F1-F4 default ON and through the whole
 adoption bar on the rebased build, F5 default OFF pending the USER (section 5)**; identity, targeted
-cases, the 33-deck movers check, the per-deck A/B and recovery done; the d3 b0 exactness sample is
-queued (4.5). The integrator owns smoke / regression GT. Started as the root cause of Hinata2 shipped gi 137
+cases, the 33-deck movers check, the per-deck A/B, recovery and the d3 b0 exactness sample done. The integrator owns smoke / regression GT. Started as the root cause of Hinata2 shipped gi 137
 (docs/design/final-ab-2026-10-13.md); widened to an audit of every place the breakpoint machinery
 produces or chooses a post-breakpoint continuation, because the USER's ask was general:
 
@@ -199,17 +198,17 @@ arm) and stage 2 (`--depth 8 --budget-ms 0`):**
 |---|---|---|---|---|---|
 | F1-F4 | hinata shipped gi 79 | T4 | T5 | d4 b100: **T4** | recovered |
 | F1-F4 | hinata shipped gi 85 | T6 | T7 | d6 b100: **T5** | recovered |
-| all five | hinata shipped gi 79 | T4 | T5 | queued (batch 2) | -- |
-| all five | hinata shipped gi 85 | T6 | T7 | d6 b100: T5 (v5) | recovered |
-| all five | creature_giving shipped gi 196 | T6 | T7 | d6 b100: T6 (v5) | recovered; b0 T6 |
-| all five | creature_giving d3 gi 298 | T5 | T6 | d5 b100: T5 (v5) | recovered; d3 b0 T5 |
-| all five | mirrorwing shipped gi 141 | T4 | T5 | queued (batch 2) | b0 T4 |
-| all five | bruna d3 gi 5 | T5 | T6 | d5 b100: T5 (v5) | recovered; d3 b0 T5 |
+| all five | hinata shipped gi 79 | T4 | T5 | d4 b100: T4 | recovered |
+| all five | hinata shipped gi 85 | T6 | T7 | d6 b100: T5 | recovered |
+| all five | creature_giving shipped gi 196 | T6 | T7 | d6 b100: T6 | recovered; b0 T6 |
+| all five | creature_giving d3 gi 298 | T5 | T6 | d5 b100: T5 | recovered; d3 b0 T5 |
+| all five | mirrorwing shipped gi 141 | T4 | T5 | d4 b100: T4 | recovered; b0 T4 |
+| all five | bruna d3 gi 5 | T5 | T6 | d5 b100: T5 | recovered; d3 b0 T5 |
 
 F1-F4's two (`scripts/bp_open/f14_stage1_singles.sh`, r2, single games) both recover at stage 1, so
 **F1-F4 meet the whole adoption bar**: every deck net <= 0, every slower game recovered, no stage 2
-needed. (The "(v5)" stage-1 rows ran on yesterday's binary, whose A/B games are per-game identical to
-r2's; batch 2 re-runs all six on r2.)
+needed. All six of the all-five rows ran on r2 in batch 2 (`docs/design/bp-open-data/recovery_stage1_f5_r2.txt`):
+**every slower game of either arm recovers at stage 1.**
 
 **F5's slower games at an UNLIMITED budget, their own cell's depth** (all five on, `--budget-ms 0`, one game
 each, `scripts/bp_open/f5_b0_singles.sh`): **every one plays at the off arm's turn** -- Mirrorwing shipped
@@ -234,15 +233,27 @@ default is the USER's.
 
 ### 4.5 Exactness at an unlimited budget (d3 b0)
 
-**QUEUED, not yet run** (batch 2, `build/scratch/bp_open/b2`, waiting on the box lock since 04:22 UTC;
-`bash scripts/bp_open/analyse_b2.sh` reads it into `docs/design/bp-open-data/exact_r2_vs_off.txt`). The
-cell: depth 3, `--budget-ms 0`, arms off / F1-F4 / all five; 50 games per arm on auras, critter,
-dragonstorm, fluctuator, goblins; 20 on creature_giving, mirrorwing, pirates, th; 4 on hinata (off / all
-five only: one d3 b0 Hinata2 game ran over 33 CPU-minutes unfinished in the cost probe). The test: at an
-unlimited budget the levers only ADD options, so no game may be slower than off.
+Batch 2 on r2 (`build/scratch/bp_open/b2`, read by `scripts/bp_open/analyse_b2.sh`; raw
+`docs/design/bp-open-data/exact_r2_vs_off.txt`). Depth 3, `--budget-ms 0`, same seeds per arm. The test:
+at an unlimited budget the levers only ADD options, so no game may be slower than off.
 
-What already speaks to it: Hinata2 gi 137 at d8 b0 (T8 -> T7, 4.1), both Mirrorwing order scenarios at
-b0 (no win -> T4, 4.1), and F5's four slower games each back at the off arm's turn at b0 (4.4).
+| deck | games/arm | F1-F4 vs off: fast / slow | all five vs off: fast / slow | units x at b0 (F1-F4 / all five) |
+|---|---|---|---|---|
+| auras | 50 | 0 / 0 | 0 / 0 | 1.006 / 1.071 |
+| critter | 50 | 0 / 0 | 0 / 0 | 1.015 / 1.041 |
+| dragonstorm | 50 | 0 / 0 | 0 / 0 | 1.000 / 1.000 |
+| fluctuator | 50 | 0 / 0 | 0 / 0 | 1.049 / 1.049 |
+| goblins | 50 | 0 / 0 | 0 / 0 | 1.002 / 1.005 |
+| creature_giving | 20 | 0 / 0 | 0 / 0 | 1.026 / 1.072 |
+| mirrorwing | 20 | 0 / 0 | 0 / 0 | 1.011 / 1.128 |
+| pirates | 20 | 0 / 0 | 0 / 0 | 1.032 / 1.249 |
+| th | 20 | 0 / 0 | 0 / 0 | 1.003 / 1.003 |
+| hinata | 3 | (not run) | 0 / 0 | -- / 1.230 |
+
+**No game is slower, and none faster, on any deck: 330 games per arm, plus 3 Hinata2 games for all
+five.** The fourth Hinata2 game pair (gi 0) was the batch's whole tail, 2 of 20 workers for its last
+stretch, and I stopped it rather than hold the box lock for one game; it is not in the table. Every play
+digest matches off except one Hinata2 chunk, which has the same win turns.
 
 ### 4.6 Identity detail
 
