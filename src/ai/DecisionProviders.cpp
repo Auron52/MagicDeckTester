@@ -12164,6 +12164,63 @@ bool BreachingDragonstormProvider::CleanupDiscardShedStable() const
     return !BreachBucketDiscardEnabled();
 }
 
+// ---- BreachingDragonstormProvider: the USER-APPROVED cast order (MTG_BREACH_ORDER) --------------
+//
+// USER 2026-10-14: "I'm not too worried about Breaching Dragonstorm's order, since it literally dumps most
+// of the creatures in the deck on the field. I don't think we can fail to kill with essentially any order
+// so your order is fine. Plus, there is almost no chance of casting two of these spells in one turn. The
+// cheapest is 5 mana, so that would need 10 mana." The order (main 1; draft docs/design/cast-order-drafts-
+// 2026-10-14/BreachingDragonstorm.md):
+//   land > Breaching Dragonstorm > Boarding Party > Annoyed Altisaur > Maelstrom Wanderer > Creative
+//   Technique > Call Forth the Tempest > Sakashima's Protege.
+// Every slot by PARAMS:
+//   10   etb_exile_until_nonland (Breaching Dragonstorm): a permanent that enters BEFORE its own walk, so a
+//        Protege found by this walk or a later one can enter as a copy of it and walk again.
+//   20+m a CREATURE with cascade_max_mv m (and no copy clause): an entrant, narrowest walk first --
+//        Boarding Party 26 < Annoyed Altisaur 27 < Maelstrom Wanderer 28. A cascade resolves BEFORE its
+//        creature enters (CR 702.85a), so each body is a copy target only for LATER walks.
+//   40   shuffle_reveal_freecast (Creative Technique): a sorcery, not an entrant -- after them.
+//   50   damage_opp_creatures_mv_cast (Call Forth the Tempest): after the casts its damage counts.
+//   60   enter_as_copy_of_entrant (Sakashima's Protege): LAST -- every earlier cast only adds copy targets
+//        (its own cascade hit still resolves before it enters). Tested FIRST, as it also has cascade.
+//   100 + the generic rank for a card the deck does not hold; two of those go to the NAME.
+// The land drop stays first: nothing in the 60 puts a land into the hand and the deck has no landfall.
+// THE OPT-IN IS THE ESSENTIAL PART: every nonland card is OrderingOpaque, so without
+// OrderOpaqueCastsByRank no rank is ever read and the executor, the breakpoint continuation and the
+// rollout all cast in plan (= hand) order. DEFAULT ON; =0 restores exactly that (byte-identical).
+static bool BreachOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_BREACH_ORDER", true);   // DEFAULT ON (USER-approved); =0 -> plan order
+    return heurarm::Flag(heurarm::BREACH_ORDER, on);
+}
+
+int BreachingDragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!BreachOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (p.enter_as_copy_of_entrant)                          { return 60; }   // Sakashima's Protege
+    if (p.etb_exile_until_nonland)                           { return 10; }   // Breaching Dragonstorm
+    if (def.card.IsCreature() && p.cascade_max_mv > 0)       { return 20 + std::min(p.cascade_max_mv, 19); }
+    if (p.shuffle_reveal_freecast)                           { return 40; }   // Creative Technique
+    if (p.damage_opp_creatures_mv_cast)                      { return 50; }   // Call Forth the Tempest
+    return 100 + DeckProvider::CastOrderRank(s, def);
+}
+
+const char* BreachingDragonstormProvider::CastOrderTierName(int rank) const
+{
+    if (!BreachOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
+    if (rank == 10) { return "ETB WALK (Breaching Dragonstorm): first -- a later Protege can enter as a copy of it"; }
+    if (rank > 20 && rank < 40) { return "CASCADE CREATURE: an entrant, narrowest walk first (20 + cascade mv)"; }
+    if (rank == 40) { return "SHUFFLE-REVEAL FREE CAST (Creative Technique): a sorcery, after the entrants"; }
+    if (rank == 50) { return "COUNTS THIS TURN'S CASTS (Call Forth the Tempest): after the casts it counts"; }
+    if (rank == 60) { return "ENTER AS A COPY OF AN ENTRANT (Sakashima's Protege): LAST -- every earlier cast is a copy target"; }
+    return rank >= 100 ? "UNLISTED CARD: generic rank + 100, then name" : nullptr;
+}
+
+bool BreachingDragonstormProvider::OrderOpaqueCastsByRank() const { return BreachOrderEnabled(); }
+
+bool BreachingDragonstormProvider::CastOrderTotalByName() const { return BreachOrderEnabled(); }
+
 std::vector<int> BreachingDragonstormProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
