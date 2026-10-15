@@ -9363,11 +9363,9 @@ static bool BurnBloodFirstEnabled()
 //            value -- every cost is red on an all-Mountain deck, so the mana is interchangeable, and each
 //            spell feeds prowess / Eidolon / spectacle alike. Shard Volley JOINS here
 //            (SacLandCastsInOrder): its sacrifice is paid from a tapped land, so the slot costs no mana.
-//            Under MTG_BURN_BLOOD_FIRST (the proposed amendment) a kill-trigger burn spell (Searing
-//            Blood: death_trigger_damage) takes the slot just below its mana value's (20+2*mv-1), so it
-//            precedes Searing Blaze: Blood's 3 to the face needs its creature to DIE this turn, Blaze is
-//            what finishes a creature Blood alone cannot kill, and a Blaze cast first kills the
-//            opponent's only creature and leaves Blood without a target.
+//            Under MTG_BURN_BLOOD_FIRST (the proposed amendment) a kill-trigger burn CAST (Searing Blood)
+//            moves one slot earlier (20+2*mv-1, CastOrderActionRank) WHEN BLOOD ALONE CANNOT KILL its
+//            target -- see BurnProvider::CastOrderActionRank.
 //   30       SPECTACLE (Light Up the Stage): after every burn spell (spectacle {R}, CR 702.137a) and every
 //            creature (it pumps Swiftspear), before Eidolon (it is MV 3 and would be pinged).
 //   40       ON-CAST SELF-DAMAGE (Eidolon of the Great Revel): the main's last cast -- "Whenever a player
@@ -9381,11 +9379,8 @@ static int BurnOrderRankOf(const CardDefinition& def)
     if (p.on_cast_trigger_damage > 0)                                  { return 40; }
     if (p.spectacle_cost.has_value())                                  { return 30; }
     if (def.card.IsCreature() && def.card.HasKeyword(Keyword::Haste))  { return 10 + mv; }
-    if (def.tmpl == CardTemplate::DirectDamage && !def.card.IsCreature())
-    {
-        const int r = 20 + 2 * std::min(4, mv);
-        return (p.death_trigger_damage > 0 && BurnBloodFirstEnabled()) ? r - 1 : r;
-    }
+    if (def.tmpl == CardTemplate::DirectDamage && !def.card.IsCreature()) { return 20 + 2 * std::min(4, mv); }
+    (void)p;
     return -1;
 }
 
@@ -9418,6 +9413,31 @@ const char* BurnProvider::CastOrderTierName(int rank) const
 // Shard Volley; Searing Blaze before Searing Blood before Skullcrack). Copies of one card keep their order
 // (they are the same card). Both apply worlds and the enumeration's sequential walk read it.
 bool BurnProvider::CastOrderTotalByName() const   { return BurnOrderEnabled(); }
+
+// MTG_BURN_BLOOD_FIRST -- the PROPOSED amendment (a USER question; default OFF -> the USER's list, Searing
+// Blaze before Searing Blood, verbatim). It is CONDITIONAL, because the two orders each strand a card in
+// a different board, and the measurement found both:
+//   * the opponent's creature SURVIVES Searing Blood alone (a 3/3): Blood FIRST. Blood's 3 to the face
+//     fires only when its creature dies this turn, and Blaze is what finishes it -- cast Blaze first and
+//     it kills the creature, so Blood has no opposing creature left (burn shipped probe seed 9027 gi 26,
+//     T4 -> T5; burn2hg seed 11670487 gi 486, T5 -> T6 under the main-2 rule, which no longer lets the
+//     Blaze wait for main 2);
+//   * Blood alone KILLS it (a 1/1): Blaze FIRST, the USER's list. Blood first takes the creature and
+//     leaves Blaze -- "target creature that player controls" -- with no legal target, while Blaze first
+//     still lets Blood go on our own Swiftspear for its prowess (burn2hg seed 11671355 gi 1354, T6 -> T7
+//     under the unconditional form).
+// The target test is FindBurnKillTarget's own pick (the one the apply worlds use), and no opposing
+// creature at all keeps the list's order (Blood has only our own creatures then).
+int BurnProvider::CastOrderActionRank(const GameState& s, const Action& a, int rank) const
+{
+    if (!BurnOrderEnabled() || !BurnBloodFirstEnabled() || a.kind != Action::Kind::CastFromHand) { return rank; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr || d->params.death_trigger_damage <= 0) { return rank; }
+    const int ti = FindBurnKillTarget(s, s.active_player_index, d->params.damage);
+    if (ti < 0) { return rank; }
+    const bool kills_alone = s.battlefield[static_cast<std::size_t>(ti)].EffectiveToughness() <= d->params.damage;
+    return kills_alone ? rank : rank - 1;
+}
 bool BurnProvider::OrderOpaqueCastsByRank() const { return BurnOrderEnabled(); }
 bool BurnProvider::SacLandCastsInOrder() const    { return BurnOrderEnabled(); }
 
