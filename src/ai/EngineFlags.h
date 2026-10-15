@@ -862,6 +862,27 @@ inline bool HoldReleaseYieldEnabled()
     return heurarm::Flag(heurarm::HOLD_RELEASE_YIELD, v);
 }
 
+// MTG_SAC_VICTIM_SAME_NAME=1 -- a "sacrifice a <color> creature" additional cost (Natural Order) is
+// searched by victim NAME: TurnSolver emits one cast variant per distinct name, pinning that name's
+// most-expendable copy on the PRE-PLAN board by card number (same-name victims are fungible). A second
+// Natural Order in the same plan therefore pins the copy the first one already sacrificed. With the
+// lever that stale pin means what the axis means -- ANOTHER copy of that name: ResolveSacVictimId
+// (SpellEffects.h) re-pins it to the remaining same-name creature (tapped first: its mana is already
+// spent; then lowest card number -- never the battlefield index), and both the payment's sac-victim pin
+// and the sacrifice read the re-pinned id, in the executor and the rollout alike (one helper). Without
+// it the stale pin fell to the most-expendable creature by power and then BATTLEFIELD POSITION.
+// Found on stompy2hg gi160 (docs/design/stompy-order-2026-10-14.md §4b): Natural Order -> Ghalta (+ the
+// Craterhoof in hand) and Natural Order -> Craterhoof, sacrificing both tapped Priests and attacking
+// with the held Fyndhorn Elves, is 31 against 30; with Fyndhorn entered BETWEEN the two Priests (the
+// USER order casts the 1-drop first) the second Natural Order ate Fyndhorn and the kill was
+// unfindable at any depth. Rules: any green creature is a legal victim (CR 601.2h pays the cost while
+// casting); this only names which. DEFAULT OFF until measured; =1 enables.
+inline bool SacVictimSameNameEnabled()
+{
+    static const bool v = EnvOn("MTG_SAC_VICTIM_SAME_NAME");
+    return heurarm::Flag(heurarm::SAC_VICTIM_SAME_NAME, v);
+}
+
 // MTG_GARTH_ORDERED=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
 // Garth One-Eye's tap IS the cast of its conjured copy (WotC ruling, already in the card model:
 // the copy is cast as the ability resolves -- no holding it). USER doctrine 2026-08-19: "order

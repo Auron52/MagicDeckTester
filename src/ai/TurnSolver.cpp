@@ -42406,8 +42406,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (def.params.etb_untap_lands > 0)
             { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
                                         ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost); }
-            PaySacVictimScope _psv(
-                !def.params.sac_additional_creature_color.empty() ? own_targets : 0);
+            PaySacVictimScope _psv(!def.params.sac_additional_creature_color.empty()
+                ? ResolveSacVictimId(state, def.params.sac_additional_creature_color, own_targets) : 0);
             // Phyrexian life gate (before the tap, which mutates): the payment must leave us
             // ALIVE (paying to 0 loses to the SBA). Emission gated on the same test, but life
             // can have moved since (a shockland, an earlier phyrexian payment) -- treat a

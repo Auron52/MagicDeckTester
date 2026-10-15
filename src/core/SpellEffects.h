@@ -29851,6 +29851,38 @@ inline std::vector<int> SacCreatureCandidateIndices(const GameState& state, int 
     return out;
 }
 
+// The victim id a "sacrifice a <color> creature" cost actually uses (MTG_SAC_VICTIM_SAME_NAME,
+// EngineFlags.h). The searched variant pins a card m_number standing for a NAME; when that copy is no
+// longer on the battlefield (an earlier Natural Order of the same plan ate it) and is in the
+// controller's graveyard, the pin moves to the remaining legal copy of that name -- tapped first, then
+// lowest card number. Lever off, a live pin, no copy of the name left, or a pin <= 0: unchanged (the
+// caller's most-expendable fallback). The payment's sac-victim pin and the sacrifice both read this,
+// so the copy that dies is the one that paid first.
+inline int ResolveSacVictimId(const GameState& state, const std::string& color, int victim_id)
+{
+    if (victim_id <= 0 || !SacVictimSameNameEnabled()) { return victim_id; }
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && p.card.m_number == victim_id) { return victim_id; }
+    }
+    const Card* gone = nullptr;
+    for (const Card& c : state.players[active].graveyard)
+    {
+        if (c.m_number == victim_id) { gone = &c; break; }
+    }
+    if (gone == nullptr) { return victim_id; }
+    const Permanent* best = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || !p.card.IsCreature() || p.is_token) { continue; }
+        if (p.card.m_name != gone->m_name || !CardHasColorNamed(p.card, color)) { continue; }
+        if (best == nullptr || (p.tapped != best->tapped ? p.tapped : p.card.m_number < best->card.m_number))
+        { best = &p; }
+    }
+    return best != nullptr ? best->card.m_number : victim_id;
+}
+
 // "As an additional cost to cast this spell, sacrifice a <color> creature" (Natural Order). Paid
 // at CAST time (CR 601.2h) in both worlds, BEFORE resolution -- so a sacrificed Worldspine Wurm's
 // dies-triggers (3 Wurm tokens + shuffle-into-library) resolve before the search, making the Wurm
@@ -29861,6 +29893,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
 {
     const int active = state.active_player_index;
     int idx = -1;
+    victim_id = ResolveSacVictimId(state, color, victim_id);   // MTG_SAC_VICTIM_SAME_NAME
     if (victim_id > 0)
     {
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
