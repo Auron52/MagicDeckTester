@@ -70,8 +70,7 @@ ARMS = {
     "nom2fix": {"MTG_BP_M2_WAVE_FIXPOINT": False},
     "nonested": {"MTG_BP_NODE_NESTED_SLOTS": False},
     "nodemote": {"MTG_BP_NEW_ONLY_DEMOTE": False},
-    "onnl": {"MTG_BP_WAVE_NEW_LAST": True, "MTG_BP_NEW_ONLY_DEMOTE": True},   # all five, new options after ALL ranks
-    "nl14": {"MTG_BP_WAVE_NEW_LAST": True, "MTG_BP_NEW_ONLY_DEMOTE": False},  # F1-F4, new options after ALL ranks
+    # "onnl" / "nl14" (+ MTG_BP_WAVE_NEW_LAST) ran on r2 only: the lever was measured inert and deleted.
     "demote": dict({k: False for k in LEVERS if k != "MTG_BP_NEW_ONLY_DEMOTE"}, MTG_BP_NEW_ONLY_DEMOTE=True),
 }
 CELLS = [("ship", None, 20), ("d3", 3, 10), ("d0", 0, 0), ("x3", 3, 0), ("xs", None, 0)]

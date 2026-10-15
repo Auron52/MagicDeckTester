@@ -53740,16 +53740,6 @@ namespace
         static const bool on = EnvOn("MTG_BP_WAVE_UNHOSTED_SITES", true);   // DEFAULT ON; =0 reverts
         return heurarm::Flag(heurarm::BP_WAVE_UNHOSTED_SITES, on);
     }
-    // MTG_BP_WAVE_NEW_LAST -- ORDERING ONLY, default OFF: the walker hands out the new options above
-    // (a slot's EMPTY, its demoted wave) only once no slot has an in-list rank left -- one final wave
-    // across the node rather than the end of each slot. The same hand-outs at an unlimited budget;
-    // under a finite one the old ranks are spent first in full. Built as the churn mitigation the
-    // budget doctrine names (order the new options later), measured as an arm.
-    inline bool BpWaveNewLastOn()
-    {
-        static const bool on = EnvOn("MTG_BP_WAVE_NEW_LAST");
-        return heurarm::Flag(heurarm::BP_WAVE_NEW_LAST, on);
-    }
     // MTG_BP_NODE_NESTED_SLOTS -- see BpWaveWalker::AddHostedNested.
     inline bool BpNodeNestedSlotsOn()
     {
@@ -54024,7 +54014,6 @@ public:
         const bool searched_apply = g_rollout_nest == 0 && g_bp_enum_depth == 0;
         m_empty  = searched_apply && BpWaveEmptyOn();
         m_demote = searched_apply && BpNewOnlyDemoteOn();
-        m_new_last = (m_empty || m_demote) && BpWaveNewLastOn();
         const int  sites  = (!host_pends && searched_apply && BpWaveUnhostedSitesOn())
                           ? BpSiteMask() : BpWaveSiteMask(state);
         const bool dig_bp = BpDigFanoutPending(state, sites);
@@ -54097,27 +54086,6 @@ public:
     bool Next(const std::vector<TurnSolver::Plan>& plans, TurnSolver::Plan& out)
     {
         const std::size_t n = m_slots.size();
-        // MTG_BP_WAVE_NEW_LAST (ordering only): the slots' EMPTY / demoted hand-outs wait until NO slot
-        // has an in-list rank left, instead of following each slot's own last rank. Same set of
-        // hand-outs either way; only WHEN a finite budget reaches them moves.
-        if (m_new_last)
-        {
-            for (std::size_t tried = 0; tried < n; ++tried)
-            {
-                const std::size_t here = (m_cursor + tried) % n;
-                Slot& sl = m_slots[here];
-                if (sl.done || (sl.n >= 0 && sl.k_next >= sl.n)) { continue; }
-                m_cursor       = (here + 1) % n;
-                m_last         = here;
-                m_last_k       = sl.k_next++;
-                out            = plans[sl.base];
-                out.bp_choice  = m_last_k;
-                out.bp_at      = sl.at;
-                out.bp_wave0   = false;
-                if (BpWaveProbeOn()) { BpWaveAt(sl.at); }
-                return true;
-            }
-        }
         for (std::size_t tried = 0; tried < n; ++tried)
         {
             const std::size_t here = m_cursor;
@@ -54458,7 +54426,6 @@ private:
     bool                     m_last_empty = false;    // the last hand-out was a slot's EMPTY
     bool                     m_demote = false;        // MTG_BP_NEW_ONLY_DEMOTE in force at this host
     bool                     m_last_demoted = false;  // the last hand-out was a DEMOTED entry
-    bool                     m_new_last = false;      // MTG_BP_WAVE_NEW_LAST: new options after ALL ranks
     std::unordered_set<uint64_t> m_covered;           // MTG_BP_NODE_NESTED_SLOTS: (base, at) already opened
 };
 
