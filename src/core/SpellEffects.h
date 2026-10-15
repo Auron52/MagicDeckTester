@@ -1910,9 +1910,13 @@ inline int ConsumePackedLandSearchPin(int& packed)
     if (packed == 0) { packed = -1; }
     return k;
 }
+// `put_credit` (land-search gap 2): the land-put mana credit the CAST was emitted with
+// (Action::rock_mana on a LandSearchPutsUntapped cast), which restricts the pick to the picks earning
+// exactly that credit -- see LandSearchCreditGroups. nullptr / empty = unrestricted (every other site).
 inline void PerformLandSearch(GameState& state, int controller, const LandSearchSpec& spec,
                               const std::string& source, int pin,
-                              const char* source_suffix = nullptr);         // LandSearch.h
+                              const char* source_suffix = nullptr,
+                              const ManaPool* put_credit = nullptr);        // LandSearch.h
 inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
                                       const CardDefinition& def);           // LandSearch.h
 inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx);

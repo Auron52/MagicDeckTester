@@ -382,6 +382,77 @@ inline std::vector<std::vector<std::string>> LandSearchPicks(const GameState& s,
     return LandSearchPicksMemo(s, ctrl, spec);
 }
 
+// ---- THE LAND-PUT MANA CREDIT (land-search gap 2, 2026-10-15) ----------------------------------------
+// Search for Tomorrow HARD-CAST puts its basic UNTAPPED, so the land is mana for the SAME main phase:
+// turn 4 "Search for Tomorrow, then Rampant Growth / Khalni Heart Expedition paid with the fetched
+// Forest" is a real line. The subset mana math never credited it (the Crop Rotation precedent), so the
+// line was unenumerable at any budget. The credit rides Action::rock_mana -- the shape every producer
+// consumer already agrees on ("a rock never funds its own cost", the odometer gain terms, the colour
+// presence widening, FirstUnpayablePos, the funding-order hoist) -- and both real-payment walks put the
+// land itself on their scratch board.
+//
+// THE PICK AND THE CREDIT ARE ONE DECISION. Which basic arrives is a SEARCHED pick, so a colour credit
+// is only honest if the pick is bound to it: a {G} credit that the pick then spends on a Mountain is
+// phantom mana. So the cast is emitted once per distinct CREDIT among the legal picks (one Forest
+// class -> {G}, one Mountain class -> {R}), each variant crediting exactly its own colour, and its
+// resolution RESTRICTS the pick to the picks earning that credit (LandSearchCreditFilter; the in-plan
+// pin then indexes the restricted list). The variants partition the pick space, so every pick stays
+// reachable -- the colour split simply replaces the in-plan pin's colour fan for this cast.
+//
+// FAIL TOWARD NOT CREDITING. A pick is credited only when every battlefield land of it is a BASIC with
+// no enters-tapped rule (AddSourceToPool's own credit for it); one uncreditable pick (a non-basic, a
+// tapland, nothing to find) withdraws the credit from the whole cast, so a basic-only untapped search is
+// the only shape credited today. No basic in the library -> no credit at all.
+inline bool LandSearchPutsUntapped(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    return p.land_search_on_resolve && p.land_search_count > 0 && !p.land_search_tapped
+        && p.land_search_count - p.land_search_to_hand >= 1
+        && (d.card.IsInstant() || d.card.IsSorcery());
+}
+inline bool LandSearchPickCredit(const GameState& s, const LandSearchSpec& spec,
+                                 const std::vector<const CardDefinition*>& pick, ManaPool& out)
+{
+    out.Clear();
+    if (spec.tapped) { return false; }
+    const int bf = LandSearchBattlefieldCount(spec, static_cast<int>(pick.size()));
+    if (bf <= 0) { return false; }
+    for (int i = 0; i < bf; ++i)
+    {
+        const CardDefinition* d = pick[static_cast<std::size_t>(i)];
+        if (d == nullptr || !IsBasicLandCard(*d) || d->params.enters_tapped
+            || d->params.enters_tapped_with_depletion > 0 || d->params.produces.empty())
+        { return false; }
+        AddSourceToPool(out, s, *d);
+    }
+    return out.Total() > 0;
+}
+// The distinct credits of every legal pick, in pick-list order (the provider's front pick's credit
+// first). EMPTY when any pick is uncreditable or nothing is legal (see above).
+inline std::vector<ManaPool> LandSearchCreditGroups(const GameState& s, int ctrl, const LandSearchSpec& spec)
+{
+    std::vector<ManaPool> out;
+    const landsearchmemo::Slot& ms = LandSearchMemoSlot(s, ctrl, spec);
+    ManaPool c;
+    for (const std::vector<const CardDefinition*>& pd : ms.pick_defs)
+    {
+        if (!LandSearchPickCredit(s, spec, pd, c)) { out.clear(); return out; }
+        if (std::find(out.begin(), out.end(), c) == out.end()) { out.push_back(c); }
+    }
+    return out;
+}
+// The indices of `ms`'s picks whose credit equals `credit` (the restricted list a credited cast's
+// resolution and its pin index into).
+inline void LandSearchCreditFilter(const GameState& s, const LandSearchSpec& spec,
+                                   const landsearchmemo::Slot& ms, const ManaPool& credit,
+                                   std::vector<int>& out)
+{
+    out.clear();
+    ManaPool c;
+    for (std::size_t i = 0; i < ms.pick_defs.size(); ++i)
+    { if (LandSearchPickCredit(s, spec, ms.pick_defs[i], c) && c == credit) { out.push_back(static_cast<int>(i)); } }
+}
+
 // The HUMAN's k-th prompt: every legal NAME still available given the earlier picks (copies left;
 // the shared land type with every earlier pick). Real names, never the identity fold -- a human sees
 // Evolving Wilds and Terramorphic Expanse as the two cards they are. Sorted by name so the offered
@@ -486,10 +557,17 @@ inline bool TakeLandFromLibraryDef(Player& pl, const CardDefinition* want, Card&
 // DECLINES it (no shuffle -- nothing was searched), any other -1 stops early (a search for cards with
 // a stated quality may fail to find, CR 701.19b). The default is the autonomous pick.
 inline void PerformLandSearch(GameState& state, int controller, const LandSearchSpec& spec,
-                              const std::string& source, int pin, const char* source_suffix)
+                              const std::string& source, int pin, const char* source_suffix,
+                              const ManaPool* put_credit)
 {
     if (spec.count <= 0) { return; }
     Player& pl = state.players[static_cast<std::size_t>(controller)];
+    // THE CREDITED CAST'S RESTRICTION (land-search gap 2): the picks earning exactly the credit the
+    // cast was enumerated with. Empty restriction (no credit, or nothing earns it any more -- a
+    // same-plan search took the last copy) = the whole list, so a credited cast never whiffs.
+    const bool credited = put_credit != nullptr && put_credit->Total() > 0;
+    thread_local std::vector<int> t_credit_idx;
+    t_credit_idx.clear();
     // The source's display label ("Primeval Titan (attack)"), built only where something shows it --
     // the human prompt and the play-event line -- never on the autonomous path.
     auto label = [&]() { return source_suffix != nullptr ? source + source_suffix : source; };
@@ -508,8 +586,17 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     if (g_play_tutor_chooser)
     {
         const std::vector<std::vector<std::string>> picks = LandSearchPicks(state, controller, spec);
+        // The prompt's DEFAULT is the pick the credited cast was priced with (the human may answer
+        // anything -- a human line is never restricted, it is the human's decision).
+        std::size_t def_k = 0;
+        if (credited)
+        {
+            LandSearchCreditFilter(state, spec, LandSearchMemoSlot(state, controller, spec), *put_credit,
+                                   t_credit_idx);
+            if (!t_credit_idx.empty()) { def_k = static_cast<std::size_t>(t_credit_idx.front()); }
+        }
         const std::vector<std::string> def_pick = picks.empty() ? std::vector<std::string>{}
-                                                                : picks.front();
+                                                                : picks[std::min(def_k, picks.size() - 1)];
         const int bf_slots = std::max(0, spec.count - spec.to_hand);
         std::vector<std::string> names;
         for (int k = 0; k < spec.count; ++k)
@@ -543,10 +630,22 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     else
     {
         const landsearchmemo::Slot& ms = LandSearchMemoSlot(state, controller, spec);
+        if (credited) { LandSearchCreditFilter(state, spec, ms, *put_credit, t_credit_idx); }
         if (!ms.picks.empty())
         {
-            const std::size_t k = pin < 0 ? 0
-                : std::min<std::size_t>(static_cast<std::size_t>(pin), ms.picks.size() - 1);
+            std::size_t k = 0;
+            if (!t_credit_idx.empty())
+            {
+                // A credited cast: the pin indexes the RESTRICTED list (clamped).
+                const std::size_t r = pin < 0 ? 0
+                    : std::min<std::size_t>(static_cast<std::size_t>(pin), t_credit_idx.size() - 1);
+                k = static_cast<std::size_t>(t_credit_idx[r]);
+            }
+            else
+            {
+                k = pin < 0 ? 0
+                  : std::min<std::size_t>(static_cast<std::size_t>(pin), ms.picks.size() - 1);
+            }
             // Copied at once: the memo reference is valid only until its next call.
             const std::vector<const CardDefinition*>& pd = ms.pick_defs[k];
             reserve_chosen(pd.size());

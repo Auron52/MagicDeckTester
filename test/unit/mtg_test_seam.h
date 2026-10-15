@@ -29,4 +29,9 @@ struct MtgTestSeam
         pp.plan          = p;
         e.m_committed_line.push_back(pp);
     }
+
+    // What every plan-execution site does before cast_by_name: arm the land-put credit the cast's
+    // variant carries (Action::rock_mana -- Search for Tomorrow hard-cast), consumed by the next
+    // CastSpellFromHand onto StackEntry::land_put_credit.
+    static void SetPendingLandPut(AIEngine& e, const ManaPool& credit) { e.m_pending_land_put = credit; }
 };

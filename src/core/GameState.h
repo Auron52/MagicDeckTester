@@ -176,6 +176,13 @@ struct StackEntry
                                         // Stamped from Action::bestow at the cast site; the resolver then
                                         // enters the DB's synthesized "<name> (Bestowed)" aura face instead
                                         // of the creature. false => the ordinary creature cast.
+    ManaPool            land_put_credit;            // LAND-PUT CREDIT (Search for Tomorrow hard-cast; core/
+                                        // LandSearch.h LandSearchCreditGroups): the credit this cast's
+                                        // variant was enumerated with (Action::rock_mana), stamped at the
+                                        // cast site (CastSpellFromHand, m_pending_land_put) and handed to
+                                        // PerformLandSearch at resolution, which restricts the pick to the
+                                        // picks earning it -- the rollout twin passes the same pool from
+                                        // apply_one. Empty for every other spell.
     bool                evoke          = false;     // EVOKE (Reveillark): this cast paid evoke_cost; after
                                         // the enter cascade EnterBattlefield self-sacrifices the permanent
                                         // through the shared cascade (the LTB fires as on any leave).

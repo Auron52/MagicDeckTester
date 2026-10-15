@@ -438,8 +438,12 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 // (the executor installs Plan::land_search_pins around the plan it is executing).
                 if (def.params.land_search_on_resolve && def.params.land_search_count > 0)
                 {
+                    // ...and the land-put credit the cast was enumerated with (StackEntry::
+                    // land_put_credit; empty = unrestricted), the rollout twin's same pool.
                     PerformLandSearch(state, entry.controller_index, LandSearchSpecOf(def.params),
-                                      def.card.m_name.str(), ConsumeScriptedLandSearchPin());
+                                      def.card.m_name.str(), ConsumeScriptedLandSearchPin(), nullptr,
+                                      entry.land_put_credit.Total() > 0 ? &entry.land_put_credit
+                                                                        : nullptr);
                 }
                 if (def.params.tutor_to_hand || def.params.tutor_to_top)
                 {

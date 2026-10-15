@@ -7374,6 +7374,41 @@ static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
     return rank_worse ? rank_order : plan_order;
 }
 
+// The real-payment walks' half of the LAND-PUT CREDIT (core/LandSearch.h LandSearchCreditGroups): once a
+// credited land-put cast (Search for Tomorrow hard-cast) has paid, the basic its credit names -- the
+// front of the credit-restricted pick list on THIS scratch board, the pick the base plan's resolution
+// takes -- enters untapped and leaves the scratch library (so a second credited search in the same
+// walk cannot find the same last copy). No landfall, no shuffle: the walk answers mana sequencing only.
+// A restriction nothing earns any more adds nothing (the walk then fails honestly).
+static void PutLandPutCreditOnScratch(GameState& cp, const Action& a)
+{
+    if (a.def == nullptr || a.rock_mana.Total() <= 0 || !LandSearchPutsUntapped(*a.def)) { return; }
+    const int me = cp.active_player_index;
+    const LandSearchSpec spec = LandSearchSpecOf(a.def->params);
+    thread_local std::vector<int> idx;
+    std::vector<const CardDefinition*> pick;
+    {
+        const landsearchmemo::Slot& ms = LandSearchMemoSlot(cp, me, spec);
+        LandSearchCreditFilter(cp, spec, ms, a.rock_mana, idx);
+        if (idx.empty()) { return; }
+        pick = ms.pick_defs[static_cast<std::size_t>(idx.front())];   // copied: the memo ref is transient
+    }
+    Player& pl = cp.players[static_cast<std::size_t>(me)];
+    const int bf = LandSearchBattlefieldCount(spec, static_cast<int>(pick.size()));
+    for (int i = 0; i < bf; ++i)
+    {
+        Card lc;
+        if (!TakeLandFromLibraryDef(pl, pick[static_cast<std::size_t>(i)], lc)) { continue; }
+        Permanent perm;
+        perm.card              = pick[static_cast<std::size_t>(i)]->card;
+        perm.card.m_number     = lc.m_number;
+        perm.controller_index  = me;
+        perm.owner_index       = me;
+        perm.entered_this_turn = true;
+        cp.battlefield.push_back(perm);
+    }
+}
+
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel, bool tap_sources)
 {
@@ -7470,9 +7505,14 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             // EXEMPT from the fresh-hold exactly as FireOwnEtbTriggers makes it.
             const bool is_etb_treasure = a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0
                                       && def && def->params.etb_creates_treasures > 0;
+            // A credited LAND-PUT cast (Search for Tomorrow hard-cast; CollectActions' LAND-PUT CREDIT
+            // post-pass) is a producer the same way: it pays first, and the basic its credit names
+            // joins the board untapped (PutLandPutCreditOnScratch).
+            const bool is_land_put = a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0
+                                  && def && LandSearchPutsUntapped(*def);
             const bool is_rock = (def && def->params.mana_rock && !def->card.IsCreature()
                                   && !def->params.enters_tapped)
-                              || is_etb_treasure;
+                              || is_etb_treasure || is_land_put;
             // A land AURA ("enchanted land taps for an additional {G}") is a same-turn mana PRODUCER
             // as well: it resolves before the casts it funds, so its bonus is genuine supply for the
             // rest of the subset -- but ONLY if a land survives the Aura's own cost still untapped to
@@ -7520,6 +7560,10 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             {
                 CreateTreasureTokens(cp, cp.active_player_index, def->params.etb_creates_treasures,
                                      /*fresh_hold_exempt=*/true);
+            }
+            else if (is_land_put)   // the fetched untapped basic (not the sorcery) funds later casts
+            {
+                PutLandPutCreditOnScratch(cp, a);
             }
             else if (is_rock && def)   // freshly-cast rock joins the board so its mana funds later casts
             {
@@ -8118,6 +8162,9 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             CreateTreasureTokens(cp, cp.active_player_index, def.params.etb_creates_treasures,
                                  /*fresh_hold_exempt=*/true);
         }
+        // LAND-PUT CREDIT (Search for Tomorrow hard-cast): the basic its credit names enters
+        // untapped AFTER this cast paid, so it funds a later cast and never itself.
+        if (a.rock_mana.Total() > 0 && LandSearchPutsUntapped(def)) { PutLandPutCreditOnScratch(cp, a); }
     }
     return true;
     };
@@ -16813,6 +16860,18 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
              + static_cast<uint64_t>(a.convoke_other));
         fold(static_cast<uint64_t>(a.gy_exile_mode + 2) * 11
              + static_cast<uint64_t>(a.loyalty_ability + 2));
+        // The LAND-PUT CREDIT class (Search for Tomorrow): a must-fold like devour_count -- the
+        // credit restricts the searched basic, so two classes are two different plays. Gated on the
+        // param + a stamped credit, so every other deck's fingerprint is unchanged.
+        if (a.rock_mana.Total() > 0 && a.def != nullptr && LandSearchPutsUntapped(*a.def))
+        {
+            fold(0x4C50ull);   // "LP"
+            fold(static_cast<uint64_t>(a.rock_mana.white) | (static_cast<uint64_t>(a.rock_mana.blue) << 8)
+                 | (static_cast<uint64_t>(a.rock_mana.black) << 16) | (static_cast<uint64_t>(a.rock_mana.red) << 24)
+                 | (static_cast<uint64_t>(a.rock_mana.green) << 32)
+                 | (static_cast<uint64_t>(a.rock_mana.colorless) << 40)
+                 | (static_cast<uint64_t>(a.rock_mana.snow_units) << 48));
+        }
     }
     fold(static_cast<uint64_t>(p.land_decided));
     folds(p.land_to_play);
@@ -29719,6 +29778,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // LAND-PUT CREDIT post-pass (land-search gap 2; core/LandSearch.h LandSearchCreditGroups). A hard
+    // cast whose resolution puts an UNTAPPED basic (Search for Tomorrow) is a same-turn mana producer
+    // for the casts after it, exactly as a cast mana rock is, so it carries its credit on rock_mana --
+    // and since WHICH basic arrives is the searched pick, the credit is per pick CLASS: the action takes
+    // the provider-front class's credit, and in the DECISION space (searched collect, executor) one
+    // variant per further credit class is appended beside it (same hand_index -> mutually exclusive;
+    // plan_signature's #LP keeps the dedup from folding them). Each variant's resolution is restricted
+    // to its own class (StackEntry::land_put_credit / apply_one's cast_land_put), so the variants
+    // PARTITION the picks: no pick is lost and no colour is promised that the pick cannot make. A
+    // rollout leaf (estimating -- the phyrexian precedent) keeps the front class only, which resolves
+    // exactly the provider-front pick the playout always took. Human play: no credit -- the basic is
+    // the human's prompt, and the segment re-prompt casts off it (the CheckLine Crop Rotation note).
+    // Gated on the deck stamp -> byte-identical for every deck without a land search.
+    if (state.deck_has_land_search && !HumanPlayActive())
+    {
+        const bool lp_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+        const std::size_t lp_n = actions.size();
+        for (std::size_t i = 0; i < lp_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].alt_cost) { continue; }
+            const CardDefinition* ld = actions[i].def;
+            if (ld == nullptr || !LandSearchPutsUntapped(*ld)) { continue; }
+            const std::vector<ManaPool> groups =
+                LandSearchCreditGroups(state, state.active_player_index, LandSearchSpecOf(ld->params));
+            if (groups.empty()) { continue; }   // no basic left / an uncreditable pick: no credit
+            actions[i].rock_mana = groups.front();
+            if (!lp_decision_space) { continue; }
+            for (std::size_t g = 1; g < groups.size(); ++g)
+            {
+                Action v = actions[i];           // copy BEFORE push_back (reallocation)
+                v.rock_mana = groups[g];
+                actions.push_back(std::move(v));
+            }
+        }
+    }
+
     // TIMELESS WITNESS post-pass ("When this creature enters, return target card from your
     // graveyard to your hand"; Prevent Damage sideboard). WHICH card comes back is a real decision
     // (a Living Wish is a whole sideboard; a Rolling Earthquake is a sweeper; a land is a drop), so in
@@ -36900,8 +36995,15 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // board alone (the stamp did not exist, so the joint prepay ran), and a line that NEEDS the
         // Treasure reads combined-unpayable and declines to the per-cast payer, which the funding
         // order (ApplyEtbTreasureFundingOrder) then feeds Corsair-first.
+        // A credited LAND-PUT cast (Search for Tomorrow hard-cast; its rock_mana is the untapped basic
+        // its resolution puts -- CollectActions' LAND-PUT CREDIT post-pass) takes the same route, for
+        // the same reason: before the credit existed the cast carried no stamp and the joint prepay
+        // ran, so folding its cost keeps every line the board pays alone exactly as it was, and a
+        // line that NEEDS the basic reads combined-unpayable and declines to the per-cast payer, fed
+        // SfT-first by the funding order.
         const bool etb_treasure_only = a.ritual_float == 0 && a.def != nullptr
-                                    && a.def->params.etb_creates_treasures > 0
+                                    && (a.def->params.etb_creates_treasures > 0
+                                        || LandSearchPutsUntapped(*a.def))
                                     && !a.def->params.mana_rock;
         // A PURE COLOUR CONVERTER is not a producer. An any-colour filter with no free mode
         // (Arcum's Astrolabe: "{1}, {T}: Add one mana of any color", `filter_no_free_colorless`)
@@ -38536,6 +38638,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // -1 = not a devour cast.
     int cast_devour_count = -1;
     int cast_twobrid_colored = 0;   // Beseech twobrid variant (Action::twobrid_colored), consume-once like cast_devour_count
+    // Land-put credit (Search for Tomorrow hard-cast; Action::rock_mana on a LandSearchPutsUntapped cast),
+    // consume-once like the two above; restricts the resolution's pick (executor twin: m_pending_land_put).
+    ManaPool cast_land_put{};
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
@@ -39506,6 +39611,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // the continuation has already decided everything after it, so every remaining cast of this
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
         // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
+        // The land-put credit (Search for Tomorrow): consumed FIRST, before any early return, so a
+        // skipped cast can never hand its credit to a later apply_one call that does not set it.
+        const ManaPool cast_put_credit = cast_land_put;
+        cast_land_put = ManaPool{};
         if (bp_truncate) { return; }
         // Diagnostic only (default OFF -> byte-identical), and deliberately BEFORE the karoo hold
         // below so the trace records every cast that ENTERS apply_one, including one the hold defers.
@@ -41536,8 +41645,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (def.params.land_search_on_resolve && def.params.land_search_count > 0
             && (def.card.IsInstant() || def.card.IsSorcery()))
         {
+            // ...restricted to the picks earning the credit this cast variant was enumerated with
+            // (Action::rock_mana; LandSearchCreditGroups) -- the executor's StackEntry::land_put_credit.
+            const bool put_cred = cast_put_credit.Total() > 0 && LandSearchPutsUntapped(def);
             PerformLandSearch(state, state.active_player_index, LandSearchSpecOf(def.params),
-                              def.card.m_name.str(), ConsumeScriptedLandSearchPin());
+                              def.card.m_name.str(), ConsumeScriptedLandSearchPin(), nullptr,
+                              put_cred ? &cast_put_credit : nullptr);
         }
 
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
@@ -41775,7 +41888,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     line_order_trace("cast", a);
                     prep_free(a);
                     const bool tb = bp_truncate;
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
                     slot_hook(a, tb);
                 }
@@ -41926,7 +42039,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -41950,7 +42063,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -41986,7 +42099,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const bool tb = bp_truncate;
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     const int dbg_before = dbg_count(a);
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
                     slot_hook(a, tb);
                     dbg_cast("ord", a, dbg_before);
                 }
@@ -42023,7 +42136,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const bool tb = bp_truncate;
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
                     slot_hook(a, tb);
                 }
@@ -42037,7 +42150,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 prep_free(a);
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                 slot_hook(a, tb);
             }
         }
@@ -42046,7 +42159,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                 slot_hook(a, tb);
             }
         }
@@ -48419,7 +48532,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                            ? ("#H" + std::to_string(act.enchant_target)) : "")
                         + ((cre_host_sig && act.def && act.def->params.is_aura
                             && !act.def->params.is_land_aura && act.enchant_target > 0)
-                           ? ("#A" + std::to_string(act.enchant_target)) : "")); break;
+                           ? ("#A" + std::to_string(act.enchant_target)) : "")
+                        // LAND-PUT CREDIT (Search for Tomorrow): each credit class is a DIFFERENT
+                        // pick of the searched basic -- distinct plans (the core invariant; the
+                        // LAND-PUT CREDIT post-pass in CollectActions). Gated on the param + a
+                        // stamped credit, so no other deck's signature moves.
+                        + ((act.def && act.rock_mana.Total() > 0 && LandSearchPutsUntapped(*act.def))
+                           ? ("#LP" + std::to_string(act.rock_mana.white) + "."
+                              + std::to_string(act.rock_mana.blue) + "." + std::to_string(act.rock_mana.black)
+                              + "." + std::to_string(act.rock_mana.red) + "." + std::to_string(act.rock_mana.green)
+                              + "." + std::to_string(act.rock_mana.colorless) + "."
+                              + std::to_string(act.rock_mana.snow_units)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -53247,6 +53370,37 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             width_cache.emplace(d, w);
             return w;
         };
+        // THE PIN VALUES one land-search source offers (land-search gap 2), ascending, 0 (the
+        // provider's front) first: every pick of the list, or for a CREDITED land-put cast only its
+        // restricted list (its other picks are its sibling credit variants' -- LAND-PUT CREDIT).
+        // Without a credit, exactly 0 .. width-1.
+        struct PinValsKey { const CardDefinition* d; ManaPool credit; };
+        std::vector<std::pair<PinValsKey, std::vector<int>>> vals_cache;
+        auto values_of = [&](const CardDefinition* d, const Action* a) -> std::vector<int>
+        {
+            ManaPool credit{};
+            if (a != nullptr && a->rock_mana.Total() > 0 && LandSearchPutsUntapped(*d)) { credit = a->rock_mana; }
+            for (const auto& e : vals_cache)
+            { if (e.first.d == d && e.first.credit == credit) { return e.second; } }
+            std::vector<int> v;
+            const LandSearchSpec spec = LandSearchSpecOf(d->params);
+            const landsearchmemo::Slot& ms = LandSearchMemoSlot(state, me, spec);
+            int n = std::max<int>(1, static_cast<int>(ms.picks.size()));
+            if (credit.Total() > 0)
+            {
+                std::vector<int> idx;
+                LandSearchCreditFilter(state, spec, ms, credit, idx);
+                n = std::max<int>(1, static_cast<int>(idx.size()));
+            }
+            for (int i = 0; i < n; ++i) { v.push_back(i); }
+            vals_cache.push_back({ PinValsKey{ d, credit }, v });
+            return v;
+        };
+        auto union_into = [](std::vector<int>& dst, const std::vector<int>& src)
+        {
+            for (int x : src) { if (std::find(dst.begin(), dst.end(), x) == dst.end()) { dst.push_back(x); } }
+            std::sort(dst.begin(), dst.end());
+        };
         // (0) THE ACTIVATIONS' POSITION (Plan::land_search_act_slot; follow-up (b), in Plan::land_slot's
         //     position encoding). Twins of every base plan that both ACTIVATES a land search (Evolving
         //     Wilds / Myriad Landscape / Khalni Heart Expedition) and CASTS a card whose ETB counts
@@ -53301,14 +53455,16 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             all.insert(all.end(), std::make_move_iterator(twins.begin()),
                                   std::make_move_iterator(twins.end()));
         }
-        // (1) In-plan pins.
+        // (1) In-plan pins. Per ordinal a LIST of pin values (values_of), so a credited land-put cast
+        //     fans only its restricted picks; without one, every list is exactly 0 .. width-1 and the
+        //     variants are the old width fan's.
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
             {
                 if (!base_plan(p)) { continue; }
                 int n_cast = 0, n_act = 0;
-                std::size_t w_cast = 1, w_act = 1;
+                std::vector<int> v_cast{ 0 }, v_act{ 0 };
                 for (const Action& a : p.actions)
                 {
                     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
@@ -53329,7 +53485,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                             if (rd != nullptr && rd->params.land_search_on_enter_or_attack
                                 && rd->params.land_search_count > 0 && rd->card.IsCreature()
                                 && rd->card.m_mana_cost.ManaValue() <= a.chosen_x)
-                            { ++n_cast; w_cast = std::max(w_cast, width_of(rd)); }
+                            { ++n_cast; union_into(v_cast, values_of(rd, nullptr)); }
                         }
                         continue;
                     }
@@ -53337,11 +53493,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (a.kind == Action::Kind::CastFromHand
                         && ((d->params.land_search_on_resolve && (d->card.IsInstant() || d->card.IsSorcery()))
                             || (d->params.land_search_on_enter_or_attack && d->card.IsCreature())))
-                    { ++n_cast; w_cast = std::max(w_cast, width_of(d)); }
+                    { ++n_cast; union_into(v_cast, values_of(d, &a)); }
                     else if (a.kind == Action::Kind::ActivatePermAbility
                              && (a.ability_mode == Action::AbilityMode::SacLandSearch
                                  || a.ability_mode == Action::AbilityMode::QuestSacLandSearch))
-                    { ++n_act; w_act = std::max(w_act, width_of(d)); }
+                    { ++n_act; union_into(v_act, values_of(d, nullptr)); }
                 }
                 const int n = n_cast + n_act;
                 if (n == 0) { continue; }
@@ -53350,16 +53506,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // (k >= 1), somewhere among the casts in an order the dispatch decides, so every
                 // ordinal is sized to the wider class (generous: the clamp at resolution turns an
                 // over-wide rank into a duplicate the post-apply dedup skips, never a lost pick).
-                std::vector<std::size_t> w(static_cast<std::size_t>(n));
+                std::vector<int> v_both = v_cast;
+                union_into(v_both, v_act);
+                std::vector<const std::vector<int>*> w(static_cast<std::size_t>(n));
                 for (int i = 0; i < n; ++i)
                 {
                     w[static_cast<std::size_t>(i)] =
-                        p.land_search_act_slot > 0 ? std::max(w_act, w_cast)
-                        : p.land_search_act_slot == 0 ? (i < n_act ? w_act : w_cast)
-                        : (i < n_cast ? w_cast : w_act);
+                        p.land_search_act_slot > 0 ? &v_both
+                        : p.land_search_act_slot == 0 ? (i < n_act ? &v_act : &v_cast)
+                        : (i < n_cast ? &v_cast : &v_act);
                 }
                 std::size_t product = 1;
-                for (std::size_t wi : w) { product = std::min<std::size_t>(product * std::max<std::size_t>(wi, 1), 1u << 20); }
+                for (const std::vector<int>* wi : w)
+                { product = std::min<std::size_t>(product * std::max<std::size_t>(wi->size(), 1), 1u << 20); }
                 if (product <= 1) { continue; }
                 if (product <= kLandSearchProductCap)
                 {
@@ -53370,13 +53529,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         int i = 0;
                         while (i < n)
                         {
-                            if (++digit[static_cast<std::size_t>(i)] < static_cast<int>(w[static_cast<std::size_t>(i)])) { break; }
+                            if (++digit[static_cast<std::size_t>(i)]
+                                < static_cast<int>(w[static_cast<std::size_t>(i)]->size())) { break; }
                             digit[static_cast<std::size_t>(i)] = 0;
                             ++i;
                         }
                         if (i == n) { break; }
                         TurnSolver::Plan v = p;
-                        v.land_search_pins.assign(digit.begin(), digit.end());
+                        v.land_search_pins.resize(static_cast<std::size_t>(n));
+                        for (int k = 0; k < n; ++k)
+                        {
+                            v.land_search_pins[static_cast<std::size_t>(k)] =
+                                (*w[static_cast<std::size_t>(k)])[static_cast<std::size_t>(digit[static_cast<std::size_t>(k)])];
+                        }
                         extra.push_back(std::move(v));
                     }
                 }
@@ -53384,11 +53549,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     for (int j = 0; j < n; ++j)
                     {
-                        for (std::size_t c = 1; c < w[static_cast<std::size_t>(j)]; ++c)
+                        const std::vector<int>& wj = *w[static_cast<std::size_t>(j)];
+                        for (std::size_t c = 1; c < wj.size(); ++c)
                         {
                             TurnSolver::Plan v = p;
                             v.land_search_pins.assign(static_cast<std::size_t>(n), -1);
-                            v.land_search_pins[static_cast<std::size_t>(j)] = static_cast<int>(c);
+                            v.land_search_pins[static_cast<std::size_t>(j)] = wj[c];
                             extra.push_back(std::move(v));
                         }
                     }

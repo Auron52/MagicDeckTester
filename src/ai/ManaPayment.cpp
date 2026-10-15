@@ -3001,6 +3001,19 @@ static bool IsEtbTreasureMakerCast(const Action& a)
     return d != nullptr && d->params.etb_creates_treasures > 0;
 }
 
+// A SAME-TURN PRODUCER whose output arrives only once it resolves and that the funding order must
+// therefore hoist ahead of the casts it funds: the ETB-Treasure maker above, and the land-put cast
+// (Search for Tomorrow hard-cast -- its untapped basic, credited on rock_mana by CollectActions'
+// LAND-PUT CREDIT post-pass; core/LandSearch.h). Both carry the stamp only when the enumerator
+// credited them, so every deck without either is byte-identical.
+static bool IsFundingProducerCast(const Action& a)
+{
+    if (IsEtbTreasureMakerCast(a)) { return true; }
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost || a.rock_mana.Total() <= 0) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && LandSearchPutsUntapped(*d);
+}
+
 void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Action>& acts,
                                   std::vector<int>& order)
 {
@@ -3008,10 +3021,10 @@ void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Acti
     // Hot-path exit: the stamp exists only with the lever on and only on an etb_creates_treasures
     // card, so every other deck (Mirrorwing's Gold Rush included) leaves after this one pass.
     bool any = false;
-    for (int i : order) { if (IsEtbTreasureMakerCast(acts[i])) { any = true; break; } }
+    for (int i : order) { if (IsFundingProducerCast(acts[i])) { any = true; break; } }
     if (!any) { return; }
     std::vector<int> hoisted, rest;
-    for (int i : order) { (IsEtbTreasureMakerCast(acts[i]) ? hoisted : rest).push_back(i); }
+    for (int i : order) { (IsFundingProducerCast(acts[i]) ? hoisted : rest).push_back(i); }
     if (rest.empty()) { return; }
     hoisted.insert(hoisted.end(), rest.begin(), rest.end());
     if (hoisted == order) { return; }
@@ -3094,7 +3107,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     if (order.size() < 2) { return; }
     bool any = false;
     for (int i : order)
-    { if (IsEtbTreasureMakerCast(acts[i]) || PoIsRevealCostCast(acts[i])) { any = true; break; } }
+    { if (IsFundingProducerCast(acts[i]) || PoIsRevealCostCast(acts[i])) { any = true; break; } }
     if (!any) { return; }
     g_po_stats.domain[site].fetch_add(1, std::memory_order_relaxed);
 
@@ -3149,7 +3162,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
 
     // (1) The maker hoist (ApplyEtbTreasureFundingOrder's order), judged reveal-aware.
     std::vector<int> hoisted, rest;
-    for (int i : order) { (IsEtbTreasureMakerCast(acts[i]) ? hoisted : rest).push_back(i); }
+    for (int i : order) { (IsFundingProducerCast(acts[i]) ? hoisted : rest).push_back(i); }
     const bool has_maker = !hoisted.empty() && !rest.empty();
     hoisted.insert(hoisted.end(), rest.begin(), rest.end());
     if (has_maker && hoisted != order && pays(hoisted))
@@ -3168,8 +3181,8 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         std::vector<int> anc_pos;
         if (has_maker)
         {
-            for (int p = 0; p < n; ++p) { if (IsEtbTreasureMakerCast(acts[order[p]])) { anc_pos.push_back(p); } }
-            for (int p = 0; p < n; ++p) { if (!IsEtbTreasureMakerCast(acts[order[p]])) { anc_pos.push_back(p); } }
+            for (int p = 0; p < n; ++p) { if (IsFundingProducerCast(acts[order[p]])) { anc_pos.push_back(p); } }
+            for (int p = 0; p < n; ++p) { if (!IsFundingProducerCast(acts[order[p]])) { anc_pos.push_back(p); } }
         }
         else { for (int p = 0; p < n; ++p) { anc_pos.push_back(p); } }
         for (int r = 0; r < n; ++r) { anc_rank[anc_pos[r]] = r; }
