@@ -79,5 +79,6 @@
     "required_pieces": [],
     "stop_at": 4
   },
-  "version": 1
+  "version": 1,
+  "search_leaf_depth": 0
 }
