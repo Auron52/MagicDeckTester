@@ -36,7 +36,7 @@ import argparse, glob, json, os, re, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deck_registry
 
-MTG = "build/Release/mtg"
+MTG = os.environ.get("MTG_BIN", "build/Release/mtg")   # MTG_BIN: bench a specific binary (an A/B's old arm)
 
 
 def ref_dirs(root):

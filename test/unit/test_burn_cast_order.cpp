@@ -359,3 +359,26 @@ TEST_CASE("spectacle plan credit: seed 9295 gi 294's turn-3 line {Swiftspear, Sh
         CHECK(found_win == (on != 0));
     }
 }
+
+TEST_CASE("spectacle plan credit, search-only arm: the search still finds the 9295 line, the greedy walk does not credit")
+{
+    Pin o(heurarm::BURN_ORDER, true);
+    Pin c(heurarm::SPECTACLE_PLAN_CREDIT, true);
+    Pin so(heurarm::SPECTACLE_CREDIT_SEARCH_ONLY, true);
+    const GameState s = BurnState({ kMtn, kSS, kVolley, kLuts }, 2, { kGG, kGG, kSS }, 13, 3, 40, false);
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    { if (PlanCasts(p, kSS) && PlanCasts(p, kVolley) && PlanCasts(p, kLuts)) { found = true; } }
+    CHECK(found);
+    // The greedy walk (Solve) keeps the pre-plan cost: 1 + 1 + 3 = 5 on 3 lands is never one plan.
+    GameState g = s;
+    g.players[0].lands_played_this_turn = 1;   // the drop already made: 3 lands' worth of mana
+    PutB(g, kMtn, 77);
+    g.players[0].hand.erase(g.players[0].hand.begin());   // the Mountain went down
+    const TurnSolver::Plan sp = TurnSolver::Solve(g, /*is_pre_combat=*/true,
+        TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, 0));
+    CHECK_FALSE((PlanCasts(sp, kSS) && PlanCasts(sp, kVolley) && PlanCasts(sp, kLuts)));
+    // ...and the d0 land hold agrees with what Solve can find.
+    const GameState h = BurnState({ kMtn, kLuts, kBolt }, 2, {}, 20, 3, 41, false);
+    CHECK_FALSE(ProvB().LandDropAfterDrawEngine(h, 0));
+}

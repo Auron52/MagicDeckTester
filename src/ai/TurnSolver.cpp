@@ -34758,10 +34758,13 @@ struct SpectacleCreditCtx
 };
 
 static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Action>& cands,
-                                    SpectacleCreditCtx& out)
+                                    SpectacleCreditCtx& out, bool greedy)
 {
     out = SpectacleCreditCtx{};
     if (!SpectaclePlanCreditOn() || state.opponent_lost_life_this_turn) { return; }
+    // MTG_SPECTACLE_CREDIT_SEARCH_ONLY: the greedy walk (Solve -- the d0 runner and every rollout
+    // leaf) keeps the pre-plan cost; only the search's enumeration credits (see the reader).
+    if (greedy && SpectacleCreditSearchOnly()) { return; }
     int rep = -1;
     for (int j = 0; j < static_cast<int>(cands.size()); ++j)
     {
@@ -34878,7 +34881,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // false) unless the flag is on and a creditable spectacle cast + an earlier face-damage cast exist.
     // Lockstep twin in EnumeratePlans.
     SpectacleCreditCtx spec_ctx;
-    BuildSpectacleCreditCtx(state, cands, spec_ctx);
+    BuildSpectacleCreditCtx(state, cands, spec_ctx, /*greedy=*/true);
     // Provider payoff-prune opt-in, hoisted out of consider(): it is a VIRTUAL call on a per-deck
     // provider, constant for the whole enumeration, and it used to be dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
@@ -46803,7 +46806,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // The spectacle plan credit (MTG_SPECTACLE_PLAN_CREDIT; see BuildSpectacleCreditCtx). Lockstep
     // twin of Solve's; built here, after both aura injectors, for the same reason as `pre`.
     SpectacleCreditCtx spec_ctx;
-    BuildSpectacleCreditCtx(state, cands, spec_ctx);
+    BuildSpectacleCreditCtx(state, cands, spec_ctx, /*greedy=*/false);
     // Provider payoff-prune opt-in, hoisted out of eval_and_push: a virtual call, constant for the
     // enumeration, previously dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
