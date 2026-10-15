@@ -7,7 +7,7 @@ mkdir -p "$OUT/wins"
 EXTRA=()
 if [ "${4:-}" = "trace" ]; then mkdir -p "$OUT/trace"; EXTRA=(--game-trace-dir "$OUT/trace"); fi
 cd "$WT" || exit 1
-MTG_DUMP_UNITS=1 nice -n 10 "$BIN" --batch "$M" --threads 1 --cards-json "$WT/src/cards/data/cards.json" \
+MTG_BATCH_HEARTBEAT=/workspaces/MagicDeckTester/build/scratch/stompy-order/heartbeat.txt MTG_DUMP_UNITS=1 nice -n 10 "$BIN" --batch "$M" --threads 1 --cards-json "$WT/src/cards/data/cards.json" \
     --game-log-dir "$OUT/wins" "${EXTRA[@]}" > "$OUT/batch.out" 2> "$OUT/batch.err"
 echo "exit=$?"
 grep played "$OUT/batch.out"

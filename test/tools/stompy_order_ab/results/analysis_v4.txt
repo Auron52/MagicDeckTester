@@ -1,0 +1,122 @@
+loss = 9; paired per game vs the new binary's OFF arm (no order, no fix); net = sum(arm - off)
+
+deck             cell  arm          n      off      arm  fast  slow    net  ident    units
+stompy           ship  fix       4000   4.1100   4.1087     5     0     -5   3841   0.988x  MOVES
+stompy           ship  ofix      4000   4.1100   4.1057    19     2    -17   2397   1.904x
+stompy           ship  onotop    4000   4.1100   4.1065    14     0    -14   2466   1.017x
+stompy           d3    fix       6000   4.1153   4.1135    11     0    -11   5746   0.998x  MOVES
+stompy           d3    ofix      6000   4.1153   4.1078    53     8    -45   3579   1.219x
+stompy           d3    onotop    6000   4.1153   4.1083    42     0    -42   3672   1.008x
+stompy           d0    fix      20000   4.9299   4.9145   309     2   -309  18899        -  MOVES
+stompy           d0    ofix     20000   4.9299   4.8912  1043   304   -774  11148        -
+stompy           d0    onotop   20000   4.9299   4.8970   917   289   -658  11387        -
+stompy2hg        ship  fix       2000   4.3970   4.3940     6     0     -6   1876   0.993x  MOVES
+stompy2hg        ship  ofix      2000   4.3970   4.3840    32     6    -26   1133   1.564x
+stompy2hg        ship  onotop    2000   4.3970   4.3885    19     2    -17   1182   1.009x
+stompy2hg        d3    fix       3000   4.4120   4.4080    12     0    -12   2810   0.996x  MOVES
+stompy2hg        d3    ofix      3000   4.4120   4.3970    53     8    -45   1727   1.206x
+stompy2hg        d3    onotop    3000   4.4120   4.4003    39     4    -35   1780   1.012x
+stompy2hg        d0    fix      10000   5.5196   5.5062   134     3   -134   9320        -  MOVES
+stompy2hg        d0    ofix     10000   5.5196   5.4866   496   188   -330   5258        -
+stompy2hg        d0    onotop   10000   5.5196   5.4877   456   158   -319   5371        -
+angels           ship  fix        150   4.7200   4.7200     0     0     +0    150   1.000x
+angels           d3    fix        150   4.7200   4.7200     0     0     +0    150   1.000x
+angels           d0    fix        150   5.2733   5.2733     0     0     +0    150        -
+antilife         ship  fix        150   4.2733   4.2733     0     0     +0    150   1.000x
+antilife         d3    fix        150   4.2933   4.2933     0     0     +0    150   1.000x
+antilife         d0    fix        150   4.8400   4.8400     0     0     +0    150        -
+auras            ship  fix        150   4.0400   4.0400     0     0     +0    150   1.000x
+auras            d3    fix        150   4.0400   4.0400     0     0     +0    150   1.000x
+auras            d0    fix        150   4.2467   4.2467     0     0     +0    150        -
+breaching        ship  fix        150   3.0733   3.0733     0     0     +0    150   1.000x
+breaching        d3    fix        150   3.0733   3.0733     0     0     +0    150   1.000x
+breaching        d0    fix        150   4.7533   4.7533     0     0     +0    150        -
+bruna            ship  fix        150   4.9600   4.9600     0     0     +0    149   1.000x  MOVES
+bruna            d3    fix        150   4.9933   4.9933     0     0     +0    149   1.000x  MOVES
+bruna            d0    fix        150   6.2067   6.2067     0     0     +0    148        -  MOVES
+burn             ship  fix        150   4.3867   4.3867     0     0     +0    150   1.000x
+burn             d3    fix        150   4.3867   4.3867     0     0     +0    150   1.000x
+burn             d0    fix        150   4.5400   4.5400     0     0     +0    150        -
+creature_giving  ship  fix        150   4.6800   4.6800     0     0     +0    150   1.000x
+creature_giving  d3    fix        150   4.6933   4.6933     0     0     +0    150   1.000x
+creature_giving  d0    fix        150   5.6533   5.6533     0     0     +0    150        -
+critter          ship  fix        150   4.3600   4.3600     0     0     +0    150   1.000x
+critter          d3    fix        150   4.3600   4.3600     0     0     +0    150   1.000x
+critter          d0    fix        150   4.5533   4.5533     0     0     +0    150        -
+dragons          ship  fix        150   5.6733   5.6733     0     0     +0    150   1.000x
+dragons          d3    fix        150   5.6733   5.6733     0     0     +0    150   1.000x
+dragons          d0    fix        150   5.9667   5.9667     0     0     +0    150        -
+dragonstorm      ship  fix        150   4.5200   4.5200     0     0     +0    150   1.000x
+dragonstorm      d3    fix        150   4.5267   4.5267     0     0     +0    150   1.000x
+dragonstorm      d0    fix        150   5.1467   5.1467     0     0     +0    150        -
+fivecolour       ship  fix        150   4.7333   4.7333     0     0     +0    147   0.999x  MOVES
+fivecolour       d3    fix        150   4.7667   4.7667     0     0     +0    148   0.996x  MOVES
+fivecolour       d0    fix        150   5.4933   5.4867     1     0     -1    147        -  MOVES
+fluctuator       ship  fix        150   3.6133   3.6133     0     0     +0    150   1.000x
+fluctuator       d3    fix        150   3.6267   3.6267     0     0     +0    150   1.000x
+fluctuator       d0    fix        150   5.2733   5.2733     0     0     +0    150        -
+fungus           ship  fix        150   5.4000   5.4000     0     0     +0    150   1.000x
+fungus           d3    fix        150   5.4067   5.4067     0     0     +0    150   1.000x
+fungus           d0    fix        150   5.6867   5.6867     0     0     +0    150        -
+fungusb          ship  fix        150   5.2467   5.2467     0     0     +0    150   1.000x
+fungusb          d3    fix        150   5.3067   5.3067     0     0     +0    150   1.000x
+fungusb          d0    fix        150   6.3533   6.3533     0     0     +0    150        -
+giants           ship  fix        150   5.8133   5.8133     0     0     +0    150   1.000x
+giants           d3    fix        150   5.8267   5.8267     0     0     +0    150   1.000x
+giants           d0    fix        150   6.2733   6.2733     0     0     +0    150        -
+goblins          ship  fix        150   3.7733   3.7733     0     0     +0    150   1.000x
+goblins          d3    fix        150   3.7667   3.7667     0     0     +0    150   1.000x
+goblins          d0    fix        150   4.0800   4.0800     0     0     +0    150        -
+hinata           ship  fix        150   5.6467   5.6467     0     0     +0    150   1.000x
+hinata           d3    fix        150   5.6400   5.6400     0     0     +0    150   1.000x
+hinata           d0    fix        150   6.7133   6.7133     0     0     +0    150   1.000x
+kitty            ship  fix        150   4.3200   4.3200     0     0     +0    150   1.000x
+kitty            d3    fix        150   4.3200   4.3200     0     0     +0    150   1.000x
+kitty            d0    fix        150   4.9733   4.9733     0     0     +0    150        -
+kittyv2          ship  fix        150   3.9400   3.9400     0     0     +0    150   1.006x
+kittyv2          d3    fix        150   3.9000   3.9000     0     0     +0    150   1.012x
+kittyv2          d0    fix        150   4.9533   4.9533     0     0     +0    150        -
+kittyv3          ship  fix        150   4.4200   4.4200     0     0     +0    150   0.997x
+kittyv3          d3    fix        150   4.4333   4.4333     0     0     +0    150   0.999x
+kittyv3          d0    fix        150   5.4267   5.4267     0     0     +0    150        -
+knights          ship  fix        150   4.2067   4.2067     0     0     +0    150   1.000x
+knights          d3    fix        150   4.2133   4.2133     0     0     +0    150   1.000x
+knights          d0    fix        150   4.4400   4.4400     0     0     +0    150        -
+melira           ship  fix        150   4.7133   4.7133     0     0     +0    150   1.000x
+melira           d3    fix        150   4.7400   4.7400     0     0     +0    150   1.000x
+melira           d0    fix        150   6.3867   6.3867     0     0     +0    150        -
+minotaur         ship  fix        150   4.8200   4.8200     0     0     +0    150   1.000x
+minotaur         d3    fix        150   4.8267   4.8267     0     0     +0    150   1.000x
+minotaur         d0    fix        150   5.2533   5.2533     0     0     +0    150        -
+mirrorwing       ship  fix        150   4.1667   4.1667     0     0     +0    150   1.000x
+mirrorwing       d3    fix        150   4.1667   4.1667     0     0     +0    150   1.000x
+mirrorwing       d0    fix        150   5.9067   5.9067     0     0     +0    150        -
+pd               ship  fix        150   5.4667   5.4667     0     0     +0    150   1.000x
+pd               d3    fix        150   5.4800   5.4800     0     0     +0    150   1.000x
+pd               d0    fix        150   7.2800   7.2800     0     0     +0    150        -
+pirates          ship  fix        150   4.3800   4.3800     0     0     +0    150   1.000x
+pirates          d3    fix        150   4.3800   4.3800     0     0     +0    150   1.000x
+pirates          d0    fix        150   4.6867   4.6867     0     0     +0    150        -
+selesnya         ship  fix        150   5.1400   5.1333     1     0     -1    138   0.995x  MOVES
+selesnya         d3    fix        150   5.1600   5.1533     1     0     -1    140   0.991x  MOVES
+selesnya         d0    fix        150   5.7267   5.7333     0     1     +1    139        -  MOVES
+slivers          ship  fix        150   4.1800   4.1800     0     0     +0    150   1.000x
+slivers          d3    fix        150   4.1800   4.1800     0     0     +0    150   1.000x
+slivers          d0    fix        150   4.6533   4.6533     0     0     +0    150        -
+snow             ship  fix        150   5.8800   5.8800     0     0     +0    150   1.000x
+snow             d3    fix        150   5.8933   5.8933     0     0     +0    150   1.000x
+snow             d0    fix        150   6.3333   6.3333     0     0     +0    150        -
+soldiers         ship  fix        150   4.2000   4.2000     0     0     +0    150   1.000x
+soldiers         d3    fix        150   4.2000   4.2000     0     0     +0    150   1.000x
+soldiers         d0    fix        150   4.4267   4.4267     0     0     +0    150        -
+th               ship  fix        150   3.9533   3.9533     0     0     +0    150   1.000x
+th               d3    fix        150   3.9600   3.9600     0     0     +0    150   1.000x
+th               d0    fix        150   5.3867   5.3867     0     0     +0    150        -
+whiteknights     ship  fix        150   4.1933   4.1933     0     0     +0    150   1.000x
+whiteknights     d3    fix        150   4.1933   4.1933     0     0     +0    150   1.000x
+whiteknights     d0    fix        150   4.5933   4.5933     0     0     +0    150        -
+
+== IDENTITY: base binary vs the new binary's off arm, game for game ==
+identity: 18900 games compared, 0 (deck, cell) with a difference
+
+slower lists: fix=6, ofix=516, onotop=453
