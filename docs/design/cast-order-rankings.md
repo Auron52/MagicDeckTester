@@ -1356,6 +1356,12 @@ game for game across two batches whose schedules differ -- but it puts a floor u
   AND digest), on 300 games of every cell of all four Kitty rows (3,600 games).
 - **Identity:** every other suite deck (30) at shipped / d3 b10 / d0, 20 games each (90 jobs): every per-game turn
   and digest, and every job digest, identical.
+- **References, identical old and new.** `scripts/ref_bench.py` (shipped search on each reference's forced
+  opening hand): v1 0/16 short (search 4.250 vs human 4.562, 5 faster than the human), v2 0/14 short (3.357 vs
+  3.714, 5 faster) -- the same per-game table on both binaries. `test/viewer_protocol_check.py --strict` over 29
+  of the 30 Kitty references: 10 ok, 19 repaired, 0 play-drift / enum-gap / board-diverged, byte-identical output
+  on both binaries. The 30th, v2 `claude_s8_gi7`, is the documented heavy frame (~420k plans at its T3) whose
+  replay takes tens of minutes per step on the OLD binary too; it was run separately at `--threads 1`.
 - **Single-game check that the order is what plays:** kittyv2 s11900002 gi1 T1 casts Kite Shield then Accorder's
   Shield on the base binary, Accorder's Shield then Kite Shield on the new one; a 12-game v1 d3 probe is
   byte-identical (v1's only realised move, Colossus Hammer among the {1}s, rarely matters).
