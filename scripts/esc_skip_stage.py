@@ -42,7 +42,7 @@ and DECISIONS.txt flags it. Every outcome is appended to --decisions; nothing st
 
 Exit 0 when every batch ran (whatever the verdicts), 1 when a batch failed (nothing is installed then).
 """
-import argparse, collections, datetime, json, os, re, subprocess, sys
+import argparse, collections, datetime, hashlib, json, os, re, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deck_registry                                   # noqa: E402
@@ -60,15 +60,47 @@ def now():
     return datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
 
 
+def inputs_fp(mtg, jobs):
+    """Content fingerprint of everything that changes the batch's play: the binary, every file in each job's
+    deck and profile directory (sibling models resolve directory-relative, so a new sidecar under an UNCHANGED
+    path is caught), cards.json, the heuristic defaults and the MTG_* environment. The manifest text alone
+    names paths only: a re-run with a new leaf at the same path reused the previous run's probe (2026-10-14,
+    Snow)."""
+    h = hashlib.sha256()
+
+    def add(path):
+        h.update(path.encode())
+        with open(path, 'rb') as f:
+            h.update(hashlib.sha256(f.read()).digest())
+    add(os.path.realpath(mtg))
+    dirs = {os.path.dirname(os.path.abspath(j[k])) for j in jobs for k in ('deck', 'profile') if j.get(k)}
+    for d in sorted(dirs):
+        for f in sorted(os.listdir(d)):
+            if os.path.isfile(os.path.join(d, f)):
+                add(os.path.join(d, f))
+    for f in ('src/cards/data/cards.json', 'src/ai/data/heuristic_defaults.env'):
+        if os.path.isfile(f):
+            add(f)
+    for k in sorted(os.environ):
+        if k.startswith('MTG_'):
+            h.update(f'{k}={os.environ[k]}\n'.encode())
+    return h.hexdigest()
+
+
 def run_batch(mtg, work, label, jobs):
-    """Run ONE pooled batch; reuse a finished one whose manifest is unchanged (resume)."""
+    """Run ONE pooled batch; reuse a finished one whose manifest AND input contents are unchanged (resume)."""
     man = os.path.join(work, label + '.manifest.json')
     log, err = os.path.join(work, label + '.log'), os.path.join(work, label + '.err')
+    fpf = os.path.join(work, label + '.inputs.sha256')
     text = json.dumps({'jobs': jobs}, indent=1)
+    fp = inputs_fp(mtg, jobs)
     if (os.path.exists(man) and open(man).read() == text and os.path.exists(err)
+            and os.path.exists(fpf) and open(fpf).read().strip() == fp
             and os.path.exists(log) and '=== BATCH done' in open(log, errors='replace').read()):
-        print(f"[E.6] {label}: reusing the finished batch in {work}", flush=True)
+        print(f"[E.6] {label}: reusing the finished batch in {work} (inputs fingerprint {fp[:12]} unchanged)", flush=True)
         return log, err
+    if os.path.exists(fpf):
+        os.remove(fpf)
     open(man, 'w').write(text)
     print(f"[E.6] {label}: {len(jobs)} jobs, {sum(j['games'] for j in jobs)} games ({mtg}, {kind(mtg)})", flush=True)
     env = dict(os.environ, MTG_ESC_SKIP_LOG='1')
@@ -76,6 +108,7 @@ def run_batch(mtg, work, label, jobs):
         rc = subprocess.run([mtg, '--batch', man, '--threads', '0'], stdout=lo, stderr=er, env=env).returncode
     if rc != 0 or '=== BATCH done' not in open(log, errors='replace').read():
         raise RuntimeError(f"{label} batch failed (exit {rc}; 137 = SIGKILL, think OOM) -- see {err}")
+    open(fpf, 'w').write(fp + '\n')
     return log, err
 
 
