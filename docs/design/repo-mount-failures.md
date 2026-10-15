@@ -19,6 +19,7 @@ Windows drive -- in general, or at minimum at regular intervals -- so they remai
 |---|---|
 | 2026-10-07 ~21:15 | EIO on every repo path until the container/WSL was restarted |
 | 2026-10-15 02:27:13-02:27:29 | same; a running batch (binary on the mount) died of **SIGBUS** when its text pages could not be re-read; its results were lost |
+| 2026-10-15 10:41:58-10:42:13 | same; every shell failed with `EIO posix_spawn` (its cwd was on the mount). Runs staged on the volume survived until the restart, but a regression tier and a phase F test running FROM the mount were lost |
 
 The 10-15 incident in detail, from the 15 s watchdog log (`~/.claude/mdt-watch/pd-20261010T222411Z.log`):
 - The container's kernel logged **nothing** at the moment of failure. The transport simply stopped
@@ -30,6 +31,15 @@ The 10-15 incident in detail, from the 15 s watchdog log (`~/.claude/mdt-watch/p
 - **That pressure is not sufficient on its own.** The same log holds 22 earlier >12 GB/45 s surges and
   about 500 samples with load > 70, all without a failure. It is a rare event that is more likely
   under pressure; it is not a threshold.
+- **The third incident (10-15 10:42) was under THIS container's own load.** Watchdog v4 caught the
+  transition (`fail-20261015T104213Z/`). The guest kernel again logged nothing, memory was not tight
+  (30 GB available, PSI 0), and write round-trips were normal (60-140 ms) right up to the failure. But
+  load had sat at 72-76 on 24 cores for over ten minutes, all of it ours: a regression tier on every
+  core, a 12-thread batch, a multi-threaded `mtg-analyze` and 8 parallel single-game runs. Two of three
+  incidents now coincide with load near 75, while earlier samples above 70 did not fail, so this is a
+  correlation and not a proven cause. The rule it gives costs nothing: **keep this container's total
+  worker threads at or below the core count.** Oversubscribing buys no throughput, and it is the one
+  pressure source here that we control.
 - A separate, guest-visible failure mode: on 10-14 the kernel logged two
   `page allocation failure: order:4 (GFP_NOFS)` stacks inside `p9_fcall_init` (the 64 KB 9p message
   buffer). These came from two different containers (two cpusets). Each costs one syscall an error
