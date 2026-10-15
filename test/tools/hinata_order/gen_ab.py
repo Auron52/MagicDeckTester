@@ -24,8 +24,13 @@ ap.add_argument('--chunk-d3', type=int, default=500)
 ap.add_argument('--chunk-d0', type=int, default=5000)
 ap.add_argument('--new-flag', action='append', default=[], help='NAME=0|1 extra flag on the new arm')
 ap.add_argument('--arms', default='old,new')
+ap.add_argument('--arm', action='append', default=[], help='NAME=FLAG=0|1,... extra named arm (order on)')
+ap.add_argument('--deck-dir', default=None, help='use this copy of decks/Hinata2 (e.g. on the build volume)')
 ap.add_argument('--only', default='', help='comma list of cells to keep, e.g. hinata_ship,hinata2hg_d3')
 a = ap.parse_args()
+if a.deck_dir:
+    DECK = a.deck_dir + '/Hinata2.cod'
+    PROF = a.deck_dir + '/Hinata2.profile.json'
 
 extra = {}
 for f in a.new_flag:
@@ -36,6 +41,14 @@ arms = {
     'old': {'MTG_HINATA_ORDER_FULL': False},
     'new': dict({'MTG_HINATA_ORDER_FULL': True}, **extra),
 }
+# --arm NAME=FLAG=0/1,FLAG=0/1: an extra named arm ON TOP of the order (decomposition / amendment arms).
+for spec in a.arm:
+    name, _, fl = spec.partition('=')
+    flags = {'MTG_HINATA_ORDER_FULL': True}
+    for f in [x for x in fl.split(',') if x]:
+        k, v = f.split('=')
+        flags[k] = v not in ('0', 'false')
+    arms[name] = flags
 
 # (cell, 2hg?, depth or None (shipped), budget, games, seed)
 cells = []

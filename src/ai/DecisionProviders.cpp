@@ -10450,6 +10450,14 @@ static bool HinataIrencragSecondLast()
 
 static bool HinataIrencragPlaced() { return HinataOrderFullEnabled() && HinataIrencragSecondLast(); }
 
+// MTG_HINATA_SPASM_LATE (DEFAULT OFF -- a PROPOSED amendment, the USER decides; =1 -> on, under the order).
+// See ArrangeCastOrder step (2).
+static bool HinataSpasmLate()
+{
+    static const bool on = EnvOn("MTG_HINATA_SPASM_LATE");
+    return heurarm::Flag(heurarm::HINATA_SPASM_LATE, on);
+}
+
 // The REVERSE of the agent tie-break above: Ponder (10) before Preordain (11). Kept so the USER's call on
 // that tie-break can be measured in one pooled batch. Only meaningful with the full order on.
 static bool HinataPonderPreordainStrict()
@@ -10671,7 +10679,14 @@ bool HinataProvider::CastOrderTotalByName() const { return HinataOrderFullEnable
 // ritual_float, handing the cantrip Irencrag's one allowed cast), or raw hand order at depth 0. With the
 // opt-in the executor (TakeTurn) and the rollout (ApplyPlanDirect) rank-sort the set and arrange it, which
 // is also exactly the order the subset walks count (PlanCastOrder). Draft §7 change 2, USER Q2 yes.
-bool HinataProvider::OrderOpaqueCastsByRank() const { return HinataOrderFullEnabled(); }
+// MTG_HINATA_ORDER_BINDING (DEFAULT ON under the order; =0 -> the order binds clean sets only, as before the
+// opt-in): a DECOMPOSITION arm, so the A/B can price the binding apart from the ranks and the placement.
+static bool HinataOrderBinding()
+{
+    static const bool on = EnvOn("MTG_HINATA_ORDER_BINDING", true);
+    return heurarm::Flag(heurarm::HINATA_ORDER_BINDING, on);
+}
+bool HinataProvider::OrderOpaqueCastsByRank() const { return HinataOrderFullEnabled() && HinataOrderBinding(); }
 
 // The walks count Irencrag's follower in the arranged order (see ArrangeCastOrder).
 bool HinataProvider::RestrictorFollowsArrangement(const GameState& s) const
@@ -10695,34 +10710,92 @@ bool HinataProvider::RestrictorFollowsArrangement(const GameState& s) const
 // the plan (RestrictorSubsetWasted). The Dragonstorm Irencrag-closer (MTG_DRAGONSTORM_IRENCRAG_CLOSER) is
 // the precedent. Every apply site sorts and then calls this (ApplyDeckCastArrangement), and both subset
 // walks count through the same two steps (PlanCastOrder), so legality and realisation cannot split.
+//
+// (2) PROPOSED, DEFAULT OFF (MTG_HINATA_SPASM_LATE; the USER decides): Reality Spasm at its LATEST payable
+// slot before the first terminal (Irencrag or a payoff). Its untap refunds only the sources tapped BEFORE it
+// resolves, so a Gamble / cantrip / Ornithopter cast after it pays from lands the untap no longer covers.
+// Root-caused on 2HG shipped gi 98 (seed 11150099): T4 main 2 the generic order played Spasm -> Ponder ->
+// Gamble (Crackle) -> Spasm -> Crackle X2 for exactly lethal; the settled order realises the continuation as
+// Spasm -> Gamble -> Crackle, a {R} short, and the game is unwon at T4 even at d8 b0. The USER's own words
+// point the same way: "a typical player would Reality Spasm after casting other stuff" (08-26) and "once mana
+// rocks, land and Hinata are out it is fair game" (08-28). Each Spasm moves to the latest position before the
+// terminal at which the exact order walk still pays the WHOLE line; where no later slot pays (it is funding
+// the casts after it) it keeps its slot. Irencrag is never moved by this: the Spasm stays ahead of the
+// terminal, so Irencrag's follower -- what the walks count -- is unchanged.
+static bool HinataIsRestrictorCast(const std::vector<Action>& acts, int i)
+{
+    if (acts[i].kind != Action::Kind::CastFromHand) { return false; }
+    if (acts[i].max_casts_after >= 0) { return true; }
+    const CardDefinition* d = acts[i].def ? acts[i].def : CardDatabase::Instance().Lookup(acts[i].card_name);
+    return d != nullptr && d->params.max_casts_after >= 0;
+}
+
+static void HinataPlaceSpasmsLate(const GameState& s, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    auto def_of = [&](int i) -> const CardDefinition*
+    { return acts[i].def ? acts[i].def : CardDatabase::Instance().Lookup(acts[i].card_name); };
+    auto is_spasm = [&](int i)
+    {
+        const CardDefinition* d = def_of(i);
+        return acts[i].kind == Action::Kind::CastFromHand && d != nullptr && d->params.untap_x_mana_sources;
+    };
+    bool any = false;
+    for (int i : order) { if (is_spasm(i)) { any = true; break; } }
+    if (!any) { return; }
+    const int n = static_cast<int>(order.size());
+    int term = n;   // the first terminal: Irencrag or a payoff
+    for (int k = 0; k < n; ++k)
+    {
+        const CardDefinition* d = def_of(order[k]);
+        if (HinataIsRestrictorCast(acts, order[k]) || (d != nullptr && HinataIsPayoff(*d))) { term = k; break; }
+    }
+    // Later Spasms first, so an earlier one sees the final position of the ones after it.
+    thread_local std::vector<int> trial;
+    for (int p = term - 1; p >= 0; --p)
+    {
+        if (!is_spasm(order[p])) { continue; }
+        for (int q = term - 1; q > p; --q)
+        {
+            trial = order;
+            const int idx = trial[p];
+            trial.erase(trial.begin() + p);
+            trial.insert(trial.begin() + q, idx);
+            if (ExactOrderFirstUnpayable(s, acts, trial) < 0) { order = trial; break; }
+        }
+    }
+}
+
 void HinataProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
                                       std::vector<int>& order) const
 {
-    (void)s;
-    if (order.size() < 2 || !HinataIrencragPlaced()) { return; }
-    auto def_of = [&](int i) -> const CardDefinition*
-    { return acts[i].def ? acts[i].def : CardDatabase::Instance().Lookup(acts[i].card_name); };
-    auto is_restrictor = [&](int i)
+    if (order.size() < 2 || !HinataOrderFullEnabled()) { return; }
+    // (1) Irencrag second last.
+    if (HinataIrencragPlaced())
     {
-        if (acts[i].kind != Action::Kind::CastFromHand) { return false; }
-        if (acts[i].max_casts_after >= 0) { return true; }
-        const CardDefinition* d = def_of(i);
-        return d != nullptr && d->params.max_casts_after >= 0;
-    };
-    bool any = false;
-    for (int i : order) { if (is_restrictor(i)) { any = true; break; } }
-    if (!any) { return; }   // the common case: no allocation, order untouched
-    thread_local std::vector<int> restr, rest;
-    restr.clear(); rest.clear();
-    for (int i : order) { (is_restrictor(i) ? restr : rest).push_back(i); }
-    if (rest.empty()) { return; }
-    const int last = rest.back();
-    const CardDefinition* dl = def_of(last);
-    if (acts[last].kind != Action::Kind::CastFromHand || dl == nullptr || !HinataIsPayoff(*dl)) { return; }
-    order.clear();
-    order.insert(order.end(), rest.begin(), rest.end() - 1);
-    order.insert(order.end(), restr.begin(), restr.end());
-    order.push_back(last);
+        bool any = false;
+        for (int i : order) { if (HinataIsRestrictorCast(acts, i)) { any = true; break; } }
+        if (any)
+        {
+            thread_local std::vector<int> restr, rest;
+            restr.clear(); rest.clear();
+            for (int i : order) { (HinataIsRestrictorCast(acts, i) ? restr : rest).push_back(i); }
+            if (!rest.empty())
+            {
+                const int last = rest.back();
+                const CardDefinition* dl = acts[last].def ? acts[last].def
+                                                          : CardDatabase::Instance().Lookup(acts[last].card_name);
+                if (acts[last].kind == Action::Kind::CastFromHand && dl != nullptr && HinataIsPayoff(*dl))
+                {
+                    order.clear();
+                    order.insert(order.end(), rest.begin(), rest.end() - 1);
+                    order.insert(order.end(), restr.begin(), restr.end());
+                    order.push_back(last);
+                }
+            }
+        }
+    }
+    // (2) the proposed Reality Spasm placement (see above).
+    if (HinataSpasmLate()) { HinataPlaceSpasmsLate(s, acts, order); }
 }
 
 // MTG_HINATA_RANGE -- the RANGE half of the order (USER 2026-08-30: "I don't want arbitrary
