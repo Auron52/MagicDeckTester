@@ -1,9 +1,11 @@
 # Snow H cells: four EXACT unit reductions (2026-10-14)
 
-Status: **built, default ON, unbudgeted play only** (branch `snow-units`). Every lever has an `=0`
-hatch read through `EnvOn`. None of them can change the line the search commits at an unlimited
-budget, ties included. Budgeted play cannot reach any of them (the `g_unbudgeted_play` latch plus an
-`Unlimited()` budget check), so shipped play is byte-identical by construction.
+Status: **built, default ON, at EVERY budget since 2026-10-15** (see "Budgeted" below). Every lever
+has an `=0` hatch read through `EnvOn`. None of them can change the line the search commits at an
+unlimited budget, ties included. They first shipped gated to unbudgeted play (the `g_unbudgeted_play`
+latch plus an `Unlimited()` budget check) so budgeted fingerprints stayed still. The user ruled that
+shape out (*"I don't like changes that only impact unbudgeted"*): a change the tiers never run is a
+change nobody tests.
 
 Context: Snow's value-leaf matrix stopped because ~18% of games hit the 40M-unit per-game ceiling.
 The earlier work (`snow-leaf-lookahead-cost.md` on `snow-rollout`, `snow-look-cap-and-defer-levers.md`
@@ -84,19 +86,94 @@ Pooled-batch note (pre-existing, not caused by these levers): the budgeted Snow 
 units inside a mixed pool and 1,841,101 standalone, with the same play digest -- units depend
 slightly on what a worker thread ran before. Standalone arms agree to the unit.
 
-## Budget sensitivity
+## Budgeted (2026-10-15)
 
-Budgeted play cannot reach any lever: each is gated on the `g_unbudgeted_play` latch (raised only by
-`AIEngine::TakeTurn` with a 0 ms play budget) AND on the local budget object being absent or
-unlimited. Measured: Snow d3/b10, 60 games (seed 701000), pre-change binary vs all-on vs all-`=0`:
-identical per-game digests and identical units (1,841,101) in all three.
+The latch is gone from all four sites: `FsChildCut`, the `tie_prune_here` skip/tighten in
+SolveWithLookahead's candidate loop and its two wave loops, the no-win store in `SimulateToEnd`
+(`NoWinLeafMemoArmed`), and `RolloutPreCombatSolve`. Under a budget each one RE-PRICES work: a
+decision's units fall, so the start gate admits deeper passes and the committed line can move. None
+changes a comparison. Strict `<` stays strict, the tie-break chain is evaluated in full wherever it
+can decide, and the attacking-dork "release wins ties" keeps its inclusive cut. Two exclusions stay,
+for reasons that have nothing to do with the budget: the tie prune stays off at the ENFORCING root
+(its evaluated-candidate pool feeds the escalation, which reads every score, and its overrun guard
+averages per candidate). `FsChildCut` also stays off under the value beam's score recording, and the
+tie prune under a trace. Both stay off under the dominance census/prune.
 
-If a lever were ever enabled under a budget it would RE-PRICE work (fewer units per decision, so
-the start gate admits deeper passes) at these sites: `FsChildCut` (every FSLineWin/FSLineTail child
-call), the `tie_prune_here` skip/tighten in SolveWithLookahead's candidate loop and its two wave
-loops, the no-win store in `SimulateToEnd`, and `RolloutPreCombatSolve`. None changes a comparison:
-strict `<` stays strict, the tie-break chain is evaluated in full wherever it can decide, and the
-attacking-dork "release wins ties" keeps its inclusive cut.
+**What makes a memo exact under a budget.** A memo entry must be the budget-FREE answer, or a hit
+would replay a cut as if it were a result. A budget changes an answer only by CUTTING work. The
+truncation counter (`g_fs_trunc_events`) was the watermark, and it misses three cuts that stop
+without booking one: the charged greedy walk (Snow's `MTG_SOLVE_CHARGE` weight 16) stopping on an
+exhausted budget, the equip route's per-link cut, and the enumeration-bound tranche skip in
+`EnumerateMainPlansExhaustive`. So there is now a second watermark, `budgetbind::t_binds`
+(`SearchBudget.h`). It is counted inside `SearchBudget::Exhausted()` and `Overrun()` whenever they
+return true, and at the enumeration-bound refusal, so no cut site can forget it. All three memo
+stores require it unchanged beneath the entry, along with no booked truncation and no decision-work
+exit:
+
+* the leaf no-win memo (`SimulateToEnd`);
+* the rollout main-1 memo (`RolloutPreCombatSolve`, also bypassed while the pass overrun is tripped);
+* the FS no-win cache (`FSLineWin`).
+
+The FS no-win cache has stored under a budget from the start, so the bind test also closes a hole it
+always had. An unlimited budget never binds, so unbudgeted play is unchanged.
+
+**A key hole the verifier found on the way, not budget-specific.** `BuildSimKey` folded every dedicated
+counter field except `fade_counters`, `verse_counters` and `ice_counters`. It also never saw which
+Saproling Burst a token tracks, or the token's live P/T (`RefreshFadeTokens` writes it onto the
+token's Card; the name stays "0/0 Saproling Token"). Two candidate-b Fungus boards with Bursts at
+different fade totals shared a key and rolled out to different win turns (`MTG_NOWIN_VERIFY`: 5 stale
+hits on one game, s502005 turn 6). The same key feeds the leaf table's WIN half and, through
+`BuildBreakpointKey`, the m1/m2/enum memos, so the fix also corrects existing budgeted play on that
+deck. The three counters now fold when nonzero. On a board holding a counted fade source, the
+source's copy id and each token's link and live P/T fold too. Every other board keeps its exact prior
+key.
+
+**Exactness, measured under a budget.** 715 games: every held-out job at 5 games, d3/b10 and play
+depth/b20, all suite decks. Both verifiers recompute UNBUDGETED with no table:
+
+| harness | checks | bad |
+|---|---|---|
+| `MTG_NOWIN_VERIFY`, at each hit | 286,799 | 0 |
+| `MTG_NOWIN_VERIFY`, at each store (new) | 401,911 | 0 |
+| `MTG_ROLLOUT_M1_MEMO_VERIFY` | 205,043 | 0 |
+| positive control `MTG_NOWIN_VERIFY_POISON=1` (111 games) | 33,064 | 2,234 (must light) |
+
+The store-time half and a key-hole/drift classifier were added to `MTG_NOWIN_VERIFY` to diagnose the
+fade hole. At a stale hit the classifier replays the state the entry was stored from. Still no win
+means a KEY HOLE (two states share a key); a win means DRIFT (something outside the key changed
+between store and hit).
+
+**Held-out A/B under a budget** (143 jobs, 28,915 games, the regression seeds +500000; d3/b10 and play
+depth/b20; OLD = the latched tree, NEW = this change; paired per game):
+
+| | turns (NEW-OLD) | paired t | games better / worse | units NEW/OLD |
+|---|---|---|---|---|
+| all decks | -0.0017 | -6.00 | 56 / 8 | 0.9875x |
+
+No deck's mean is worse except burn (+0.0005, one game in 2,000). All 8 slower games replay
+identically as single games and recover at a larger budget (6 at 4x, FiveColour gi2 and Hinata gi97 at
+16x). They are budget churn, not lost lines. Units fall on most decks (WhiteKnights 0.41x, Dragons
+0.57x, Snow 0.79x) and RISE on nine: Melira 1.56x, Bruna 1.46x, FiveColour 1.42x, FiveColour 2HG 1.25x,
+PD 1.20x, Giants 1.19x, Kitty 1.15x, fungusb 1.10x, burn 1.06x. Attribution on those decks:
+
+* NEW with the four cuts at `=0` vs OLD: identical play and identical units (fungusb +1.4%, the key
+  fix's extra misses). So the store guards and the key fix cost nothing measurable.
+* NEW vs NEW with the cuts at `=0`: the whole rise. Cheaper passes let the iterative-deepening start
+  gate admit a deeper pass that the old search did not begin, and that pass spends budget the old
+  search left unused.
+
+That is freed budget re-spent on depth. Per CLAUDE.md, an exact collapse is not withheld for that
+reason, and whether the depth is worth its cost is a per-deck SETTINGS question. For example, Melira
+buys no quality for its 1.56x at these seeds.
+
+GT tiers: smoke searched 21 faster / 3 slower / 79 same-score line changes; regression 58 faster / 5
+slower / 201 same-score; d0 unchanged; references 580 with 0 drift. Every slower game recovers at a
+larger budget, or (Fluctuator d3 gi7, gi21) matches OLD at unlimited budget at d3 and d8. The full
+list is in the GT notes.
+
+Before the latch was dropped, the unbudgeted-only shape was measured inert under a budget: Snow
+d3/b10, 60 games (seed 701000), pre-change binary vs all-on vs all-`=0` gave identical per-game
+digests and identical units (1,841,101) in all three.
 
 One coupling to unit COUNTS exists inside unbudgeted play and is worth knowing: the value-leaf
 hybrid's escalation predictor prices passes from measured probe costs and leaf counts

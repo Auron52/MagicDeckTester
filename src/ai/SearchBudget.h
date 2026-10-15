@@ -23,6 +23,21 @@
 // virtual-ms budget is comfortably adequate on the reference deck (the search
 // converges, matching the old 200 wall-ms result) without being wasteful — at
 // an adequate budget the exact value barely matters, which is the whole point.
+
+// BUDGET BINDS: how many times, on this thread, a budget test came back BINDING (Exhausted() or
+// Overrun() true, or an enumeration bound refused for want of budget). It is the watermark for the
+// memo stores that are armed under a budget (the leaf no-win memo, the FS no-win cache, the rollout
+// main-1 memo): an entry may only be stored when no budget bound anywhere beneath it, because a
+// result computed after a bind can be a cut rather than an answer. The truncation counter
+// (g_fs_trunc_events) misses some of those cuts -- the charged greedy walk stops on Exhausted()
+// without booking one, so does the equip route -- so this is counted AT THE TEST, where no cut site
+// can forget it. Over-counting is safe (it only declines a store). An unlimited budget never binds,
+// so unbudgeted play never moves it.
+namespace budgetbind
+{
+inline thread_local unsigned long long t_binds = 0;
+}
+
 class SearchBudget
 {
 public:
@@ -58,7 +73,12 @@ public:
     long long Used() const { return m_used; }
     long long Limit() const { return m_limit; }
 
-    bool Exhausted() const { return !Unlimited() && m_used >= m_limit; }
+    bool Exhausted() const
+    {
+        const bool b = !Unlimited() && m_used >= m_limit;
+        if (b) { ++budgetbind::t_binds; }
+        return b;
+    }
 
     // Mid-pass OVERRUN guard. The iterative-deepening start gate only decides whether to
     // BEGIN a pass (from an estimate); a pass whose real cost explodes far past the estimate
@@ -80,8 +100,10 @@ public:
         // decisionwork::Exceeded is the per-DECISION total ceiling (see DecisionWorkMeter.h):
         // tripping it makes every running pass bail through this existing rollback path and
         // iterative deepening commits the deepest COMPLETED pass. Disarmed by default.
-        return (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned()
-            || decisionwork::Exceeded();
+        const bool b = (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned()
+                    || decisionwork::Exceeded();
+        if (b) { ++budgetbind::t_binds; }
+        return b;
     }
 
     // Units left before exhaustion, clamped to >= 0 (LLONG_MAX if unlimited).

@@ -906,6 +906,17 @@ static bool NoWinVerifyOn()
 }
 static thread_local bool t_nowin_verifying = false;
 static std::atomic<long long> g_nowin_verify_checked{0}, g_nowin_verify_bad{0};
+// STORE-TIME half of the harness: every no-win is also re-derived (unbudgeted, no table) at the moment
+// it is STORED. A hit-time disproof with a clean store-time check means the fresh answer DRIFTED between
+// the two moments (some state outside the key changed); a store-time disproof means the stored run
+// itself was cut or ran in a context the fresh run does not reproduce.
+static std::atomic<long long> g_nowin_store_checked{0}, g_nowin_store_bad{0};
+// Verify mode only: the state each no-win was stored from (recent ones), so a hit-time disproof can
+// replay BOTH states and tell a KEY HOLE (the stored state still has no win: two states share a key)
+// from DRIFT (it now wins too: something outside the key changed between store and hit). This is how
+// the missing fade-counter fold in BuildSimKey was found.
+static thread_local std::unordered_map<TranspositionTable::Key, std::unique_ptr<GameState>,
+                                       TranspositionTable::KeyHash> t_nowin_stored_states;
 // MTG_NOWIN_VERIFY_POISON -- the harness's POSITIVE CONTROL, and it exists because "bad=0" is the
 // exact shape a broken checker produces. It serves a no-win entry while IGNORING its bound, which is
 // unsound by construction: the entry refutes only turns <= bound, so a query with a later cutoff can
@@ -2073,6 +2084,8 @@ namespace
             {
                 const long long ck = g_nowin_verify_checked.load();
                 const long long bd2 = g_nowin_verify_bad.load();
+                std::cerr << "[nowin-verify] store_checked=" << g_nowin_store_checked.load()
+                          << " store_bad=" << g_nowin_store_bad.load() << "\n";
                 std::cerr << "[nowin-verify] checked=" << ck << " bad=" << bd2
                           << (ck == 0 ? "   NO POWER -- no no-win hit was ever verified, so `bad=0`"
                                         " is an ABSENCE OF TESTS, not a pass.\n"
@@ -30534,6 +30547,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
             if (bound > groupwave::g_state.bound_limit)
             {
                 groupwave::g_state.bound_exceeded = true;
+                ++budgetbind::t_binds;   // a budget-derived refusal (see SearchBudget.h)
                 return;   // call_active stays false -> the enumeration emits nothing
             }
         }
@@ -54664,9 +54678,20 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     // with ANY attachment, every permanent folds its stable copy id (card.m_number) plus its
     // outgoing links, so the wiring graph is exact; attachment-free boards keep the EXACT prior key.
     bool bf_has_attachment = false;
+    // FADE WIRING (Saproling Burst). A fade source's tokens are N/N where N is THAT source's live
+    // fade-counter total (RefreshFadeTokens writes it onto each token's Card), so on a board holding
+    // a counted fade source the tokens' live P/T and which source each one tracks are future-
+    // determining: they decide this turn's combat and what every later fading upkeep or activation
+    // does to them. The name ("0/0 Saproling Token") says none of it. MTG_NOWIN_VERIFY caught the hole
+    // on candidate-b Fungus (2026-10-15): two boards with Bursts at different fade totals shared a key
+    // and rolled out to different win turns. Gated on a counted fade source being present, so every
+    // other board keeps the EXACT prior key.
+    bool bf_has_fade = false;
     for (const Permanent& perm : state.battlefield)
     {
-        if (perm.aura_attached_to != 0 || perm.equipped_to != 0) { bf_has_attachment = true; break; }
+        if (perm.aura_attached_to != 0 || perm.equipped_to != 0) { bf_has_attachment = true; }
+        if (perm.fade_counters > 0) { bf_has_fade = true; }
+        if (bf_has_attachment && bf_has_fade) { break; }
     }
     for (const Permanent& perm : state.battlefield)
     {
@@ -54678,6 +54703,26 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         Fold(tk, perm.entered_this_turn ? 1u : 0u);
         Fold(tk, perm.is_animated ? 1u : 0u);
         Fold(tk, static_cast<uint64_t>(perm.charge_counters));
+        // The three dedicated counter fields this key used to miss. Each is future-determining --
+        // fade: remaining Saproling Burst activations and every fading upkeep (and the live P/T of the
+        // source's tokens, below); verse: the damage the source deals when it fires; ice: whether the
+        // permanent untaps. Nonzero-gated, so a deck that never sets them keeps the EXACT prior key.
+        if (perm.fade_counters != 0)  { Fold(tk, 0xFADEC); Fold(tk, static_cast<uint64_t>(perm.fade_counters)); }
+        if (perm.verse_counters != 0) { Fold(tk, 0x7E55E); Fold(tk, static_cast<uint64_t>(perm.verse_counters)); }
+        if (perm.ice_counters != 0)   { Fold(tk, 0x1CE0C); Fold(tk, static_cast<uint64_t>(perm.ice_counters)); }
+        if (bf_has_fade)
+        {
+            // Fade wiring (see bf_has_fade): the source's copy id and each token's link + live P/T, so
+            // two boards whose tokens track different sources (or different totals) cannot merge.
+            if (perm.fade_counters > 0) { Fold(tk, 0xFADE5); Fold(tk, static_cast<uint64_t>(perm.card.m_number)); }
+            if (perm.created_by_number != 0)
+            {
+                Fold(tk, 0xFADE7);
+                Fold(tk, static_cast<uint64_t>(perm.created_by_number));
+                Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.card.m_power.value_or(-1))));
+                Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.card.m_toughness.value_or(-1))));
+            }
+        }
         // Cumulative-upkeep age (Varchild's War-Riders): future-determining across simulated turns
         // (a rollout's later upkeeps gift age x tokens), so two states differing only in age must
         // not share a TT entry. Folded ONLY when nonzero, so every deck without a cumulative-upkeep
@@ -54957,7 +55002,11 @@ inline bool RollHorizonSet()
 inline bool NoWinLeafMemoArmed()
 {
     if (RollHorizonSet()) { return false; }
-    return TTNoWinCacheOn() || (UnbudgetedLeafMemoOn() && g_unbudgeted_play > 0);
+    // No longer latched to unbudgeted play (USER 2026-10-15: no unbudgeted-only changes). The entry is
+    // bound-qualified and stored only from a run nothing cut -- no truncation booked, no budget bind
+    // (see the store guard in SimulateToEnd) -- so it is exact at any budget; a budget only re-spends
+    // the rollouts it saves.
+    return TTNoWinCacheOn() || UnbudgetedLeafMemoOn();
 }
 
 // M2 FIXPOINT mode-2 helpers (M2FixpointMode() == 2; EngineFlags.h). The re-solve's gate is
@@ -55546,24 +55595,57 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                     // instrument that perturbs the thing it measures.
                     const unsigned long long trunc_save = g_fs_trunc_events;
                     const unsigned long long drops_save = g_condemn_drops;
+                    const unsigned long long binds_save = budgetbind::t_binds;
                     GameState copy  = state;
                     const int  fresh = SimulateToEndImpl(copy, depth, max_turns, nullptr,
                                                          cutoff_turn, second_main, nullptr);
-                    g_fs_trunc_events = trunc_save;
-                    g_condemn_drops   = drops_save;
+                    g_fs_trunc_events  = trunc_save;
+                    g_condemn_drops    = drops_save;
+                    budgetbind::t_binds = binds_save;
                     t_nowin_verifying = false;
                     g_nowin_verify_checked.fetch_add(1, std::memory_order_relaxed);
                     if (fresh <= max_turns)
                     {
+                        // Replay the state the entry was STORED from, now: still no win => the two
+                        // states differ under one key (key hole); a win => the same state drifted.
+                        auto sit = t_nowin_stored_states.find(key);
+                        if (sit != t_nowin_stored_states.end() && sit->second)
+                        {
+                            t_nowin_verifying = true;
+                            const unsigned long long ts = g_fs_trunc_events, ds = g_condemn_drops,
+                                                     bs = budgetbind::t_binds;
+                            GameState sc = *sit->second;
+                            const int fresh_stored = SimulateToEndImpl(sc, depth, max_turns, nullptr,
+                                                                       cutoff_turn, second_main, nullptr);
+                            g_fs_trunc_events = ts; g_condemn_drops = ds; budgetbind::t_binds = bs;
+                            t_nowin_verifying = false;
+                            static std::atomic<int> s_cause_n{0};
+                            if (s_cause_n.fetch_add(1) < 2)
+                            {
+                                std::fprintf(stderr, "[nowin-verify] STALE CAUSE: stored-state replay now=%d"
+                                                     " (hit-state fresh=%d) -> %s\n  HIT    %s\n  STORED %s\n",
+                                             fresh_stored, fresh,
+                                             fresh_stored <= max_turns ? "SAME-STATE DRIFT" : "KEY HOLE",
+                                             FsSimBoardText(state).c_str(),
+                                             FsSimBoardText(*sit->second).c_str());
+                            }
+                        }
                         const long long n =
                             g_nowin_verify_bad.fetch_add(1, std::memory_order_relaxed);
                         if (n < 20)   // one is already a disproof
                         {
                             std::fprintf(stderr,
                                          "[nowin-verify] STALE NO-WIN #%lld turn=%d depth=%d"
-                                         " cutoff=%d bound=%d fresh_win=%d condemn_drops=%u\n",
+                                         " cutoff=%d bound=%d fresh_win=%d condemn_drops=%u"
+                                         " deck=%s game_seed=%llu budget=%s rollout_nest=%d"
+                                         " condemn_suppress=%d\n",
                                          n + 1, state.turn_number, depth, cutoff_turn,
-                                         e->bound, fresh, e->condemn_drops);
+                                         e->bound, fresh, e->condemn_drops,
+                                         ResolveProvider(state).Name(),
+                                         static_cast<unsigned long long>(state.game_seed),
+                                         (budget == nullptr || budget->Unlimited()) ? "none"
+                                                                                     : "finite",
+                                         g_rollout_nest, g_condemn_suppress ? 1 : 0);
                         }
                     }
                 }
@@ -55583,8 +55665,10 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
 
     // Watermark: SimulateToEndImpl returns a FALSE no-win when the budget overruns (it bumps
     // g_fs_trunc_events at that site). Such a result is "I ran out", not "there is no win", and
-    // storing it would poison the table with fabricated losses.
+    // storing it would poison the table with fabricated losses. The bind watermark covers the cuts
+    // that never book a truncation (the charged greedy walk, the equip route; see SearchBudget.h).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
+    const unsigned long long binds_at_entry = budgetbind::t_binds;
     const unsigned long long drops_at_entry = g_condemn_drops;
 
     if (g_fs_sim_trace > 0)
@@ -55594,6 +55678,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     }
     const long long probe_u0 = ttprobe::On() ? gamework::t_used : 0;
     const int state_turn_at_entry = state.turn_number;
+    std::unique_ptr<GameState> nowin_vcopy;   // MTG_NOWIN_VERIFY's store-time check only
+    if (nowin_armed && NoWinVerifyOn() && !t_nowin_verifying)
+    { nowin_vcopy = std::make_unique<GameState>(state); }
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
     if (g_fs_sim_trace > 0) { std::fprintf(stderr, "[fs-sim] << win=%d\n", result); }
     if (ttprobe::On() && tt != nullptr)
@@ -55639,13 +55726,47 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         // MTG_NOWIN_STORE_UNGRADED (default ON) admits the ungraded full run too: its natural exit
         // now publishes kInvalid, so every exit of a full run publishes deterministically.
         const bool full_run = (cutoff_turn >= max_turns);
-        if (nowin_armed && g_fs_trunc_events == trunc_at_entry
+        if (nowin_armed && g_fs_trunc_events == trunc_at_entry && budgetbind::t_binds == binds_at_entry
+            && !decisionwork::Exceeded()
             && (!full_run || NoWinStoreUngradedOn()
                 || (leafeval::GradeNoWinEnabled()
                     && (leafeval::ForceNoWin()
                         || ResolveProvider(state).GradesNoWinLeaf()))))
         {
             PROF_INC(tt_nowin_stored);
+            if (nowin_vcopy)
+            {
+                t_nowin_verifying = true;
+                const unsigned long long trunc_save = g_fs_trunc_events;
+                const unsigned long long drops_save = g_condemn_drops;
+                const unsigned long long binds_save = budgetbind::t_binds;
+                GameState vrun = *nowin_vcopy;   // nowin_vcopy stays pristine for the side map
+                const int fresh = SimulateToEndImpl(vrun, depth, max_turns, nullptr,
+                                                    cutoff_turn, second_main, nullptr);
+                g_fs_trunc_events  = trunc_save;
+                g_condemn_drops    = drops_save;
+                budgetbind::t_binds = binds_save;
+                t_nowin_verifying = false;
+                g_nowin_store_checked.fetch_add(1, std::memory_order_relaxed);
+                if (fresh <= max_turns)
+                {
+                    const long long n = g_nowin_store_bad.fetch_add(1, std::memory_order_relaxed);
+                    if (n < 20)
+                    {
+                        std::fprintf(stderr,
+                                     "[nowin-verify] STORE-TIME DISPROOF #%lld turn=%d depth=%d"
+                                     " cutoff=%d fresh_win=%d deck=%s game_seed=%llu budget=%s"
+                                     " rollout_nest=%d condemn_suppress=%d\n",
+                                     n + 1, nowin_vcopy->turn_number, depth, cutoff_turn, fresh,
+                                     ResolveProvider(*nowin_vcopy).Name(),
+                                     static_cast<unsigned long long>(nowin_vcopy->game_seed),
+                                     (budget == nullptr || budget->Unlimited()) ? "none" : "finite",
+                                     g_rollout_nest, g_condemn_suppress ? 1 : 0);
+                    }
+                }
+                if (t_nowin_stored_states.size() > 8192) { t_nowin_stored_states.clear(); }   // memory cap
+                t_nowin_stored_states[key] = std::move(nowin_vcopy);
+            }
             TranspositionTable::NoWinEntry e;
             e.bound     = std::min(cutoff_turn, max_turns + 1);
             e.leaf_tb   = full_run ? leafeval::t_tb   : leafeval::kInvalid;
@@ -57789,8 +57910,11 @@ inline Dumper g_dumper;
 // site takes min(this, tail.win_turn)). Off while the value-guided beam records children's scores
 // (they rank later passes) or the dominance census/prune reads them.
 //
-// UNBUDGETED PLAY ONLY, for the reason every unit-moving collapse here is: under a budget the
-// freed units are re-spent and play moves. Measured: docs/design/snow-exact-unit-reductions.md.
+// BUDGETED AND UNBUDGETED (USER 2026-10-15: "I don't like changes that only impact unbudgeted"). The
+// cut stores nothing and never changes a node's answer, so it is exact at any budget; under a budget the
+// units it frees are re-spent and the committed line can move, which the tiers now see and measure
+// (docs/design/snow-exact-unit-reductions.md, "Budgeted"). It was first gated to unbudgeted play only to
+// keep budgeted fingerprints still -- the pattern the user ruled out.
 inline bool FsStrictCutOn()
 {
     static const bool v = EnvOn("MTG_FS_STRICT_CUT", true);
@@ -57798,8 +57922,8 @@ inline bool FsStrictCutOn()
 }
 static inline int FsChildCut(int cutoff, int best_win, int max_turns, const SearchBudget* budget)
 {
-    if (best_win <= max_turns && FsStrictCutOn() && g_unbudgeted_play > 0
-        && (budget == nullptr || budget->Unlimited()) && !g_probe_val_recording && !DomActive())
+    (void)budget;   // no longer read: the cut is budget-independent (see above)
+    if (best_win <= max_turns && FsStrictCutOn() && !g_probe_val_recording && !DomActive())
     { return std::min(cutoff, best_win - 1); }
     return std::min(cutoff, best_win);
 }
@@ -59341,8 +59465,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
     }
 
-    // Truncation watermark for this node's own exploration (see g_fs_trunc_events).
+    // Truncation watermark for this node's own exploration (see g_fs_trunc_events), and the bind
+    // watermark for the budget cuts that never book a truncation (see SearchBudget.h).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
+    const unsigned long long binds_at_entry = budgetbind::t_binds;
     // What this node's search COSTS, in the same deterministic work units the budget is denominated
     // in. Stored beside its answer in the wave index so a permuted twin can price the re-search it
     // is deciding whether to skip -- a measured cost, not a guess at one. Subtree-inclusive, which
@@ -60909,7 +61035,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     else if (lc != nullptr)
     {
         PROF_INC(fsline_nowin_result);
-        if (FSNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry)
+        // The bind and decision-ceiling tests close a hole this store had under a budget from the
+        // start: a charged greedy walk (Snow) or the equip route stops on an exhausted budget without
+        // booking a truncation, and a rollout past the decision ceiling returns no-win the same way,
+        // so "nothing truncated" was not proof that nothing was CUT.
+        if (FSNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry
+            && budgetbind::t_binds == binds_at_entry && !decisionwork::Exceeded())
         {
             PROF_INC(fsline_nowin_stored);
             // BOUND-QUALIFIED NO-WIN. The loop ran to completion with nothing truncated anywhere
@@ -64823,8 +64954,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         const bool trace_this = trace_t1 || trace_t2 || trace_tn;
         // MTG_LA_TIE_PRUNE's gate (see LaTiePruneOn). Not under a trace (every candidate is printed
         // there) and not with the dominance census/prune armed (it records every rollout's score).
-        const bool tie_prune_here = LaTiePruneOn() && !enforce_budget && g_unbudgeted_play > 0
-                                 && (budget == nullptr || budget->Unlimited())
+        // Not at the BUDGETED ROOT (enforce_budget): its evaluated-candidate pool feeds the escalation,
+        // which needs every candidate's exact score, and its overrun guard averages per candidate.
+        // Inside a rollout (enforce_budget=false) every candidate is scored to completion whatever the
+        // budget, so the pick is budget-independent and the prune is exact at ANY budget (USER
+        // 2026-10-15: no unbudgeted-only changes); a budget only re-spends the units it frees.
+        const bool tie_prune_here = LaTiePruneOn() && !enforce_budget
                                  && !trace_this && !DomActive();
         if (trace_this)
         {
@@ -67113,11 +67248,18 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
 // same per-pass scope as the m2 memo (the key's library digest is sound only inside one decision).
 // The body's two side counters are replayed exactly as the m2 memo replays them (audit §6.1).
 //
-// UNBUDGETED PLAY ONLY (g_unbudgeted_play, the latch NoWinLeafMemoArmed uses). A hit skips the
-// solve's ConsumeAt() calls, and in budgeted play units ARE the decision procedure (start gate,
-// overrun guard), so there it would be a play change needing an A/B. Under the latch it changes the
-// work meter only -- which is the point: the depth matrix's H cells abandon on that meter.
-// MTG_ROLLOUT_M1_MEMO_VERIFY=1 recomputes every hit and counts plan mismatches (must be 0).
+// BUDGETED AND UNBUDGETED (USER 2026-10-15: no unbudgeted-only changes). A hit skips the solve's
+// ConsumeAt() calls, so under a budget the freed units are re-spent and the committed line can move --
+// a play change the tiers measure, not a reason to fence it out. This solve runs inside a rollout
+// (enforce_budget=false), so it has no start gate and scores every candidate. What CAN change its answer
+// under a budget is a cut: the pass-level OVERRUN ceiling (SimulateToEndImpl returns no-win once it
+// trips), and the cuts that stop on an exhausted budget without booking a truncation (the charged
+// greedy walk, the equip route). So under a finite budget the memo is bypassed while the overrun is
+// tripped, and a result is stored only when no truncation was booked AND no budget bound beneath it
+// (budgetbind, SearchBudget.h) -- a plan scored against fake no-wins must never be replayed as a real
+// one. A stored entry is therefore the budget-free answer.
+// MTG_ROLLOUT_M1_MEMO_VERIFY=1 recomputes every hit (unbudgeted, under a finite budget) and counts plan
+// mismatches (must be 0).
 namespace m1memo
 {
     inline bool On()     { static const bool v = EnvOn("MTG_ROLLOUT_M1_MEMO", true); return v; }
@@ -67167,8 +67309,9 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
                                               SearchBudget* budget, bool second_main,
                                               TranspositionTable* tt)
 {
-    if (depth <= 0 || !m1memo::On() || g_unbudgeted_play == 0 || HumanPlayActive()
-        || (budget != nullptr && !budget->Unlimited()) || g_cantrip_order_site != nullptr)
+    const bool finite_budget = (budget != nullptr && !budget->Unlimited());
+    if (depth <= 0 || !m1memo::On() || HumanPlayActive() || g_cantrip_order_site != nullptr
+        || (finite_budget && budget->Overrun()))
     {
         return TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/true, depth, max_turns,
                                               budget, /*enforce_budget=*/false, second_main, tt);
@@ -67194,8 +67337,11 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
         if (s_rollout_stats) { m1memo::g_hits.fetch_add(1, std::memory_order_relaxed); }
         if (m1memo::Verify())
         {
+            // The oracle under a finite budget is the UNBUDGETED solve: an entry is stored only when
+            // nothing bound beneath it, so it must equal the budget-free answer. Re-solving against
+            // the live budget would compare it to whatever a now-poorer budget can still reach.
             const TurnSolver::Plan fresh = TurnSolver::SolveWithLookahead(
-                state, /*is_pre_combat=*/true, depth, max_turns, budget,
+                state, /*is_pre_combat=*/true, depth, max_turns, finite_budget ? nullptr : budget,
                 /*enforce_budget=*/false, second_main, tt);
             m1memo::g_verified.fetch_add(1, std::memory_order_relaxed);
             if (!solvememo::SamePlan(fresh, it->second.plan))
@@ -67220,12 +67366,19 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
     if (s_rollout_stats) { m1memo::g_misses.fetch_add(1, std::memory_order_relaxed); }
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
+    const unsigned long long binds_before = budgetbind::t_binds;
     TurnSolver::Plan p = TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/true, depth,
                                                         max_turns, budget,
                                                         /*enforce_budget=*/false, second_main, tt);
     // The nested solve can itself open a new pass (a breakpoint node's FSLineWin root bumps the
     // epoch); an entry is only stored under the epoch it was computed in.
     if (m1memo::t_epoch != g_decision_epoch) { return p; }
+    // Under a finite budget, a solve that saw a truncation (overrun ceiling, decision-work ceiling) or
+    // any budget bind (a cut that books no truncation; see SearchBudget.h) may hold a cut rather than
+    // an answer: do not store it (see the header comment). Unbudgeted: unchanged.
+    if (finite_budget && (g_fs_trunc_events != trunc_before || budgetbind::t_binds != binds_before
+                          || decisionwork::Exceeded()))
+    { return p; }
     if (cache.size() >= m1memo::Cap())
     {
         cache.clear();

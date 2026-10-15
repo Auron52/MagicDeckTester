@@ -1422,9 +1422,20 @@ inline bool BpReplayCostOn()
 
 
 
-// ---- UNBUDGETED-PLAY SCOPE + the leaf memo it arms ------------------------------------------
+// ---- UNBUDGETED-PLAY SCOPE + the leaf memo it USED to arm -------------------------------------
 //
-// MTG_UNBUDGETED_LEAF_MEMO -- DEFAULT ON; =0 kill switch.
+// MTG_UNBUDGETED_LEAF_MEMO -- DEFAULT ON; =0 kill switch. (Historical name.)
+//
+// 2026-10-15: NO LONGER LATCHED. The user ruled out unbudgeted-only changes ("I don't like changes that
+// only impact unbudgeted ... the only exception is where the change structurally requires unbudgeted"),
+// and the argument below is about keeping budgeted UNITS still, not about soundness: the memo stores a
+// bound-qualified no-win only from a run that nothing CUT (TurnSolver.cpp, SimulateToEnd's store guard:
+// no truncation booked, no budget bind beneath it -- budgetbind in SearchBudget.h -- and no decision-
+// work exit), so a hit returns the budget-free answer at any budget (MTG_NOWIN_VERIFY recomputes it
+// unbudgeted).
+// NoWinLeafMemoArmed() now reads only the flags; the latch below still scopes the dedup skips that use
+// UnbudgetedWorkScopeActive() (each needs its own truncation review before it can follow). The text
+// that follows is the original rationale, kept for the record.
 //
 // WHAT IT ARMS. The leaf transposition table (SimulateToEnd's) memoizes only WINS: a no-win
 // result is discarded because it may be a branch-and-bound abort rather than a genuine no-win.
