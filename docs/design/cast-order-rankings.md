@@ -33,6 +33,63 @@ their cost-efficient rank and carry `[2..N]`, so the ladder can still walk them 
 is conditional and the ladder declines those sets rather than walking them against a cost that is
 about to change. See the worked example in the design doc.
 
+## Angels
+
+**The USER's order, approved 2026-10-14** (*"The angel's order + caveats look good."*), built as
+`AngelsProvider::CastOrderRank` / `ArrangeCastOrder` behind `MTG_ANGELS_ORDER` (heurarm `ANGELS_ORDER`).
+Draft and reasoning: `docs/design/cast-order-drafts-2026-10-14/Angels.md`; build, measurement and the
+shipped default: `docs/design/angels-cast-order-2026-10-14.md`. A TOTAL order -- every slot keyed on card
+params, a sub-key inside a slot, and the card's alphabetical name as the last key (the rank shown is
+`slot << 16 | sub << 12 | name ordinal`), so hand order never decides anything. All casts are main 1:
+the `m2` labels below are the base classifier's and are INERT (`uses_second_main=no`); the only post-combat
+main this deck can play is the narrow Giada one (`MTG_ANGELS_GIADA_M2`, see the design doc).
+
+Two set-level caveats the table cannot show (they need the cast set, so they live in `ArrangeCastOrder`):
+(a) Giada moves to right after Lightning Greaves when the line needs her Greaves-hasted `{W}` to pay for
+an Angel ranked ahead of her; (b) with no converter (Bishop of Wings, Righteous Valkyrie, Seraph
+Sanctuary) on our battlefield or in the cast set, Archangel of Thune and Lyra, Archangel of Dawn drop
+behind Giada and Youthful Valkyrie. A duplicate legend (its name already on our battlefield, or a second
+copy in the same set) is the last creature.
+
+```
+# Cast order -- decks/Angels/Angels.cod
+# provider: Angels   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+# [65977] ROCK: Sol Ring -- its mana pays the rest of the line
+  65977     -   m1    1  1  Sol Ring
+# [131352] HASTE EQUIPMENT: Lightning Greaves -- out before an Angel a hasted Giada pays for
+  131352     -   m1    1  2  Lightning Greaves
+# [196661] CONVERTER: Bishop of Wings -- every later Angel is a 4-life event
+  196661     -   m1    4  2  Bishop of Wings
+# [262526] CONVERTER: Righteous Valkyrie -- each later entrant's live toughness in life
+  262526     -   m1    4  3  Righteous Valkyrie
+# [327712] ENGINE: Archangel of Thune (behind Giada/Youthful with no converter)
+  327712     -   m1    2  5  Archangel of Thune
+# [393508] ENGINE: Lyra, Archangel of Dawn (behind Giada/Youthful with no converter)
+  393508     -   m1    4  3  Lyra, Archangel of Dawn
+# [458944] WATCHER: Giada -- later Angels enter with counters (after Greaves when her {W} pays an earlier Angel)
+  458944     -   m2    4  2  Giada, Font of Hope
+# [524821] WATCHER: Youthful Valkyrie -- a counter per later Angel
+  524821     -   m1    1  2  Youthful Valkyrie
+# [590115] LORD: Lyra Dawnbringer -- later entrants +1 toughness
+  590115     -   m1    1  5  Lyra Dawnbringer
+# [659737] BODY: Lightstall Inquisitor / other creatures (cheapest first, then name)
+  659737     -   m2    4  1  Lightstall Inquisitor
+# [721273] BODY: Resplendent Angel -- its end step reads the turn's total
+  721273     -   m1    4  3  Resplendent Angel
+# [12 << 16 ...] DUPLICATE LEGEND already on our battlefield -- entry triggers only, last creature
+# [852377] PLANESWALKER: Serra the Benevolent -- after every creature
+  852377     -   m1    2  4  Serra the Benevolent
+# [922068] REMOVAL: Swords, then Unexpectedly Absent (cheapest first)
+  922068     -   m1    2  1  Swords to Plowshares
+  926200     -   m1    3  2  Unexpectedly Absent
+```
+
 ## Anti-Lifegain
 
 **SECOND REVIEW ROUND ADOPTED (USER, 2026-08-18): `MTG_AL_ORDER` + `MTG_ORDER_RECHECK` are
