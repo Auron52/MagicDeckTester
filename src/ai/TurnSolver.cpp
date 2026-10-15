@@ -35180,6 +35180,17 @@ static bool RestrictorOrderExactOn()
     return heurarm::Flag(heurarm::RESTRICTOR_ORDER_EXACT, on);
 }
 
+// The scope of the cast-restrictor tests below (RestrictorPrePayable, the deck's RestrictorSubsetWasted): decks
+// whose play order IS the order the walks count. A deck that SEARCHES its cast order is out (Dragonstorm: the
+// waste gate measured worse there, +0.0115, t 5.66) -- unless it PLACES its restrictor set-level
+// (RestrictorFollowsArrangement): its searched candidates are built from that arranged order and keep the
+// placement (Hinata's searched Gamble slot, MTG_HINATA_GAMBLE_SEARCHED, moves only Gamble, which sits ahead of
+// Irencrag in both orders). Byte-identical for every deck that does not place its restrictor.
+static bool RestrictorTestsInScope(const GameState& state)
+{
+    return !OrderingSearchEnabled(state) || ResolveProvider(state).RestrictorFollowsArrangement(state);
+}
+
 // MTG_RESTRICTOR_TRACE -- diagnostic (default off, print-only): one line per subset the restrictor test below
 // rejects, at either walk ("solve" = Solve::consider, "enum" = EnumeratePlans), so a reject can be compared
 // game by game against the lever's =0 arm.
@@ -37146,7 +37157,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // one more cast follows it. A REJECT-ONLY test: `after` itself is left alone, so the waste gate
             // below keeps judging the rank order it was ruled on (USER 2026-09-01) and no subset it drops
             // is readmitted. Rank-ordered decks only -- the same scope as that gate.
-            if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state)
+            if (RestrictorOrderExactOn() && RestrictorTestsInScope(state)
                 && ((after + 1 > cands[j].max_casts_after
                      && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
                                               /*self_only=*/false, arranged))
@@ -37158,7 +37169,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // here 2026-10-14, USER), applied at the win projection below (a winning plan is never dropped).
             // SCOPE: asked only where the plan's PLAY order IS the rank order (not the ordering-search decks:
             // Dragonstorm measured worse under it, +0.0115, t 5.66, 2 better : 43 worse).
-            if (!OrderingSearchEnabled(state)
+            if (RestrictorTestsInScope(state)
                 && ResolveProvider(state).RestrictorSubsetWasted(state, cands, sel, j, static_cast<int>(pool.Total()),
                                                                  arranged))
             { iren_waste = true; }
@@ -50092,7 +50103,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (after > cands[j].max_casts_after) { _ct.label = "irencrag"; return; }
             // MTG_RESTRICTOR_ORDER_EXACT (lockstep twin of Solve::consider -- reject-only, `after` untouched).
-            if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state)
+            if (RestrictorOrderExactOn() && RestrictorTestsInScope(state)
                 && ((after + 1 > cands[j].max_casts_after
                      && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
                                               /*self_only=*/false, arranged))
@@ -50125,7 +50136,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     ++g_iw_followers[kd3->card.m_name];
                 }
             }
-            if (!OrderingSearchEnabled(state)   // scope: rank-ordered decks only -- see the twin's note
+            if (RestrictorTestsInScope(state)   // scope: rank-ordered decks only -- see the twin's note
                 && ResolveProvider(state).RestrictorSubsetWasted(state, cands, sel, j, static_cast<int>(pool.Total()),
                                                                  arranged))
             { iren_waste = true; }

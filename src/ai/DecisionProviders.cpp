@@ -10798,6 +10798,89 @@ void HinataProvider::ArrangeCastOrder(const GameState& s, const std::vector<Acti
     if (HinataSpasmLate()) { HinataPlaceSpasmsLate(s, acts, order); }
 }
 
+// GAMBLE'S SLOT RELATIVE TO THE CANTRIPS IS SEARCHED (MTG_HINATA_GAMBLE_SEARCHED, under the order; DEFAULT OFF
+// until measured). Neither fixed slot holds up: Gamble BEFORE the cantrips (the coordinator's tie-break, the
+// built order) costs hinata shipped +13 -- 2HG gi 98 / d3 gi 253 are unwon at their old turn even at d8 b0,
+// because a bound cantrip plan casts Gamble before Ponder / Preordain and its fetch and random discard land
+// differently -- while Gamble AFTER them (MTG_HINATA_GAMBLE_LATE) recovers both and costs hinata d0 +71. So the
+// order fixes everything else and the search picks this one relation, with exactly one fan and nothing else:
+// a plan holding Gamble and a cantrip or Expressive Iteration ranked after it is offered in two orders --
+// the arranged order first (Gamble before them), then Gamble moved to just after the last of them. Every
+// other card keeps its slot, and Gamble never moves past Ornithopter, Irencrag or a payoff, so Irencrag's
+// placement (and its follower) is the same in both. The StompySurprise dual slots (MTG_STOMPY_ORDER_SEARCH,
+// e1f1bba1) are the shape reused: the engine's cast-ordering search (WantsCastOrderingSearch +
+// CastOrderingCandidates), canonical first, variants deduplicated, an EMPTY list -- the base plan kept
+// un-searched -- for a set with nothing to search. Each candidate is the full realised order (comparator,
+// ArrangeCastOrder, then the apply's own range ladder / enabler wipe / payable-order passes), because a
+// searched_order plan is replayed in vector order by BOTH apply worlds (executor TakeTurn, rollout
+// ApplyPlanDirect): lockstep. Search window only, as for every cast-ordering deck: the rollouts and the
+// depth-0 runner (greedy Solve, not this enumeration) keep the arranged order. Completeness: both orders are
+// offered at every budget, nothing is pruned.
+static bool HinataGambleSearched()
+{
+    static const bool on = EnvOn("MTG_HINATA_GAMBLE_SEARCHED");
+    return heurarm::Flag(heurarm::HINATA_GAMBLE_SEARCHED, on);
+}
+
+bool HinataProvider::WantsCastOrderingSearch() const { return HinataOrderFullEnabled() && HinataGambleSearched(); }
+
+bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                            const std::vector<Action>& reorder,
+                                            std::vector<std::vector<int>>& out) const
+{
+    (void)plan_actions;   // Hinata's plans carry no pre-cast sacrifice / convoke to apply first
+    out.clear();
+    if (!WantsCastOrderingSearch()) { return false; }
+    const int n = static_cast<int>(reorder.size());
+    auto def_of = [&](int i) -> const CardDefinition*
+    { return reorder[i].def ? reorder[i].def : CardDatabase::Instance().Lookup(reorder[i].card_name); };
+    auto is_cast = [&](int i) { return reorder[i].kind == Action::Kind::CastFromHand && !reorder[i].sacrifice_land; };
+    auto is_gamble = [&](int i)
+    { const CardDefinition* d = def_of(i); return is_cast(i) && d != nullptr && d->params.tutor_to_hand; };
+    auto is_find = [&](int i)   // the cantrips and the dig: Preordain, Ponder, Expressive Iteration
+    {
+        const CardDefinition* d = def_of(i);
+        return is_cast(i) && d != nullptr
+            && (d->params.cast_reorder > 0 || d->params.cast_scry > 0 || d->params.expressive_iteration);
+    };
+    bool any_g = false, any_f = false;
+    for (int i = 0; i < n; ++i) { any_g = any_g || is_gamble(i); any_f = any_f || is_find(i); }
+    if (!any_g || !any_f) { return true; }   // nothing to search: keep the base plan un-searched
+    // The realised order, exactly as the apply takes it for a set it sorts itself.
+    auto finish = [&](std::vector<int>& o)
+    {
+        ApplyCastOrderRangeLadder(s, reorder, o);
+        ApplyEnablerWipeRecheck(s, reorder, o);
+        ApplyPayableCastOrder(s, reorder, o);
+    };
+    std::vector<int> canon(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) { canon[static_cast<std::size_t>(i)] = i; }
+    std::stable_sort(canon.begin(), canon.end(), [&](int x, int y) { return CastOrderLess(s, reorder[x], reorder[y]); });
+    ArrangeCastOrder(s, reorder, canon);
+    std::vector<int> late = canon;   // Gamble after the last find card that follows it (pre-finish order)
+    {
+        int gpos = -1, last_find = -1;
+        for (int k = 0; k < n; ++k)
+        {
+            if (gpos < 0 && is_gamble(late[static_cast<std::size_t>(k)])) { gpos = k; }
+            else if (gpos >= 0 && is_find(late[static_cast<std::size_t>(k)])) { last_find = k; }
+        }
+        if (gpos < 0 || last_find < 0) { return true; }   // the find cards already precede Gamble
+        const int g = late[static_cast<std::size_t>(gpos)];
+        late.erase(late.begin() + gpos);
+        late.insert(late.begin() + last_find, g);   // last_find shifted down by one: lands just after it
+    }
+    finish(canon);
+    finish(late);
+    bool same = canon.size() == late.size();
+    for (std::size_t k = 0; same && k < canon.size(); ++k)
+    { same = reorder[static_cast<std::size_t>(canon[k])].card_name == reorder[static_cast<std::size_t>(late[k])].card_name; }
+    if (same) { return true; }   // the passes folded the two together: nothing to search
+    out.push_back(std::move(canon));
+    out.push_back(std::move(late));
+    return true;
+}
+
 // MTG_HINATA_RANGE -- the RANGE half of the order (USER 2026-08-30: "I don't want arbitrary
 // exemptions. They should be handled within the order instead. (so you would have a potential
 // range of positions for a few specific spells, but most would have one spot in the order)").

@@ -468,3 +468,48 @@ TEST_CASE("Hinata PROPOSED MTG_HINATA_SPASM_LATE: Reality Spasm at its latest pa
         CHECK(NamesHo(a3, RealisedHo(s2, a3)) == std::vector<std::string>{ kSpasm, kGam, kCrk });
     }
 }
+
+TEST_CASE("Hinata MTG_HINATA_GAMBLE_SEARCHED: Gamble before AND after the cantrips, arranged order first")
+{
+    const GameState s = BoardHo(WithIsland(12), {}, 20, 13);
+    auto names_of = [&](const std::vector<Action>& acts, const std::vector<int>& o) { return NamesHo(acts, o); };
+    {
+        HoArms arms(true);   // lever off: no searched slot
+        CHECK_FALSE(HoProv().WantsCastOrderingSearch());
+        std::vector<std::vector<int>> out;
+        CHECK_FALSE(HoProv().CastOrderingCandidates(s, {}, CastsHo(s, { kCrk, kPon, kGam }), out));
+    }
+    HoArms arms(true);
+    arms.Set(heurarm::HINATA_GAMBLE_SEARCHED, true);
+    REQUIRE(HoProv().WantsCastOrderingSearch());
+    {
+        const std::vector<Action> acts = CastsHo(s, { kCrk, kPon, kGam, kSol, kPre });
+        std::vector<std::vector<int>> out;
+        REQUIRE(HoProv().CastOrderingCandidates(s, {}, acts, out));
+        REQUIRE(out.size() == 2);
+        CHECK(names_of(acts, out[0]) == std::vector<std::string>{ kSol, kGam, kPre, kPon, kCrk });   // the order
+        CHECK(names_of(acts, out[1]) == std::vector<std::string>{ kSol, kPre, kPon, kGam, kCrk });   // after them
+    }
+    {
+        // Irencrag keeps its second-last slot in both orders; Gamble never passes it.
+        const std::vector<Action> acts = CastsHo(s, { kCrk, kIren, kEI, kGam });
+        std::vector<std::vector<int>> out;
+        REQUIRE(HoProv().CastOrderingCandidates(s, {}, acts, out));
+        REQUIRE(out.size() == 2);
+        CHECK(names_of(acts, out[0]) == std::vector<std::string>{ kGam, kEI, kIren, kCrk });
+        CHECK(names_of(acts, out[1]) == std::vector<std::string>{ kEI, kGam, kIren, kCrk });
+    }
+    {
+        // Nothing to search -- no find card, or no Gamble: an EMPTY list keeps the base plan un-searched.
+        std::vector<std::vector<int>> out;
+        CHECK(HoProv().CastOrderingCandidates(s, {}, CastsHo(s, { kCrk, kGam, kSol }), out));
+        CHECK(out.empty());
+        CHECK(HoProv().CastOrderingCandidates(s, {}, CastsHo(s, { kCrk, kPon, kSol }), out));
+        CHECK(out.empty());
+    }
+    {
+        // The restrictor tests stay in scope although the deck now searches an order (the Irencrag prune holds).
+        const GameState g = BoardHo(WithIsland(7), { kIren, kPon, kOrni }, 20, 14);
+        CHECK_FALSE(OffersAnyWithHo(g, kIren));
+    }
+}
