@@ -1457,6 +1457,62 @@ inline const CardDefinition* LandFaceDefOf(const CardDefinition* def)
 }
 inline bool PlayableAsLand(const CardDefinition* def) { return LandFaceDefOf(def) != nullptr; }
 
+// ---- THE LIBRARY TOP AS A LAND-DROP SOURCE (Courser of Kruphix, 2026-10-15) --------------------
+// ONE definition of "may the active player play the top card of their library as the land drop, and
+// which card is it", read by BOTH worlds (the search's enumeration and its rollout apply, the
+// executor's drop, the greedy d0 / beyond-horizon drops, the breakpoint arming) and by the viewer.
+// Every reader goes through these three so the two worlds can never disagree about legality.
+//
+// The active player's permanent carrying play_lands_from_library_top, or nullptr. Deck-constant
+// gated first (GameState::deck_has_top_land_play), so every deck without such a card pays one bool
+// test. The permission is a static ability of a permanent we CONTROL (CR 305.1 + the card's own
+// "you may"), so an opponent's Courser does nothing for us -- and phases/timing are the caller's:
+// Courser "doesn't change when you can play lands" (2021-03-19), so the land-drop gates the callers
+// already apply (main phase, drop open) stand unchanged.
+inline const Permanent* TopLandPlayStaticSource(const GameState& s)
+{
+    if (!s.deck_has_top_land_play) { return nullptr; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.play_lands_from_library_top) { return &p; }
+    }
+    return nullptr;
+}
+// The m_number of the active player's library TOP iff it may be played as the land drop RIGHT NOW
+// as far as its SOURCE is concerned: a play-from-top permanent is out, the library is not empty, and
+// the top is a land (or a spell//land MDFC, through its land face -- PlayableAsLand, the hand rule).
+// 0 otherwise. Whether the DROP is open is the caller's question, exactly as for a hand land. Reads
+// library.front() -- an index-carry read, which is right: the card is revealed and may be played.
+// O(1) past the deck-constant gate for every other deck.
+inline int PlayableTopLandNumber(const GameState& s)
+{
+    if (TopLandPlayStaticSource(s) == nullptr) { return 0; }
+    const Player& ap = s.players[s.active_player_index];
+    if (ap.library.empty()) { return 0; }
+    const Card& top = ap.library.front();
+    if (top.m_impulse_no_land) { return 0; }
+    if (!PlayableAsLand(CardDatabase::Instance().LookupCached(top))) { return 0; }
+    return top.m_number;
+}
+// VIEWER ONLY: should the board show the active player's library top face-up? True while they
+// control a permanent that reveals it ("play with the top card of your library revealed") or lets
+// them play from it (a permission over a hidden card is meaningless -- every such card in print
+// also reveals). Not deck-constant gated on purpose: the viewer is not a hot path, and a revealer
+// that is not a land-player (a future Future Sight) must still show.
+inline bool LibraryTopVisible(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && (d->params.library_top_revealed || d->params.play_lands_from_library_top))
+        { return true; }
+    }
+    return false;
+}
+
 // THE BASIC-LAND PREDICATE (2026-10-15) -- the one definition every "basic land" reader shares:
 // Phylath, World Sculptor's "for each basic land you control" (etb_tokens_per_land_basic_only), and
 // every "search your library for a basic land card" (Rampant Growth, Cultivate, Search for Tomorrow,

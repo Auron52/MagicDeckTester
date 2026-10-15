@@ -59,6 +59,60 @@ letters), `landfall_counters_each` + `_subtype` (Avenger; the "may" resolved YES
   `DecisionProvider::LandfallCounterTargetOrder`). Turn-scoped, folded into the solve memo key while
   live.
 
+## 3b. The library top as a land-drop source (Courser of Kruphix, 2026-10-15)
+
+"Play with the top card of your library revealed. You may play lands from the top of your library."
+Design: `logs/landfall_drafts/_courser_design.md` (gitignored draft); this section is the standalone
+record of what was built.
+
+* **One definition, both worlds.** `TopLandPlayStaticSource` / `PlayableTopLandNumber` /
+  `LibraryTopVisible` (`src/core/SpellEffects.h`), gated on the deck constant
+  `GameState::deck_has_top_land_play` (stamped from `play_lands_from_library_top`, Garth holds it
+  open, default TRUE for an unstamped state). The permission is the SAME land drop (2021-03-19 ruling).
+* **One land body.** `PlayLandFromLibraryTop` (`src/ai/LandPlay.cpp`) and `PlayLandFromHand` share one
+  templated core; the top path pops the card first (a raw pop, not a draw), the hand path keeps its
+  exact erase points (byte-identical). Every land ETB and the landfall dispatch fire from the core.
+* **A source bit on every land choice.** `Plan::land_from_top`, `Action::land_from_top` (the
+  continuation record), `LineSpec::land_from_top` (`landtop=`). Every site that carries `land_face`
+  carries it: `PlayLandByName(..., from_top)` and `AIEngine::TryPlaySpecificLand(..., from_top)` refuse
+  a top that is not that land instead of substituting a hand copy; the deferred Karoo / land-after
+  drop carries `karoo_from_top`. Folded into every plan identity key (plan hash, BpCandFingerprint,
+  SamePlan, IsApplyEmptyPlan, the cast-ordering signature, the PlanDom key and census, the tutor-axis
+  cache key, the three human-menu keys in `main.cpp`), and handled by the two hand-index maps
+  (`build_hmap`, the new-only filter's `land_pick_index`): a top land never leaves the hand.
+* **Branched, never folded.** The top is its own land option in `EnumeratePlansWithLandUncached`
+  (both MDFC faces, the same fetch fan as a hand fetchland, the Karoo self-bounce prune; a top Karoo
+  stays ON TOP while the deferred plan's casts are enumerated). Top vs a same-name hand land is not an
+  identity fold (different library, different hand, different CRN reshuffle copies) and not a sound
+  dominance, so both are scored; the provider may only ORDER (`TopLandSourceFirstOnTie`, default true,
+  the comparator's last key: a top play keeps the hand copy).
+* **A new top is a new option (breakpoint site 10).** `TurnSolver::TopLandNewlyPlayable(snapshot,
+  state, drop_reserved)` -- a playable top that was not the snapshot's, drop open and not reserved --
+  is OR-ed into site 10's per-cast window (`apply_one` / `put_in_hand_armed`) and its section window
+  (outside the hand-entry sequence pre-filter), in both worlds. `PlanOpensBreakpoint` gains the
+  matching site-10 clause (drop still open after the plan's own land, a play-from-top permanent out
+  or cast by the plan, and the plan casts something or plays from the top) -- a superset, so the
+  continuation is SEARCHED, never `BpUnbranchedCanon`'s front pick. The new-only continuation filter
+  keeps a top-sourced continuation unconditionally (no pre-site top snapshot is bound; the safe
+  direction). Measured on the fixtures: `MTG_BP_CANON_AUDIT` applies no canon default.
+* **The permitted greedy sites** (`GreedyLandChoice`: the d0 runner `AIEngine::TryPlayLand` and the
+  beyond-horizon `SimulateLandPlay`, both of its branches) see the top as a candidate in the same
+  passes; with no playable top they are exactly the hand ranker. The enumeration's last-resort
+  `greedy_land_name` tie-break names a source too.
+* **Main 2.** `GameState::StampMain1Hand(top_land_number)` marks a top that was already a playable land
+  as main 1 began, so `HeldLandBarredFromMain2` bars it exactly like a held hand land.
+* **Viewer.** `me.library_top {name, number, kind, playable_land}` only while `LibraryTopVisible`;
+  the GUI renders it on the library pile and a click queues `landtop=<name>` (`linebuild.js`: the
+  land toggle keys on (name, source), the top caps at one, `stampPlanNums` stamps its number);
+  `landat=all` is the timing modifier for a top land after the casts. `land=` / `landafter=` keep
+  naming a HAND copy, so every saved reference replays unchanged.
+* **Log.** `PLAY_LAND` carries `"from": "library_top"` (and folds a `T` into the digest) only for a
+  top play; `boardAfter.libraryTop` is a non-digest per-phase snapshot while revealed.
+* **Disclosed (USER questions, defaults taken 2026-10-15).** Q2: the clairvoyant search sequences
+  "shuffle, then play the newly revealed top land" knowing the post-shuffle order (systemic, the same
+  property as fetch-then-draw). Q3: exact ties order the top first. Q5: the log records the source
+  plus the per-phase snapshot, no REVEAL line per top change.
+
 ## 4. Deferred (not built)
 
 1. **A land in the MIDDLE of the cast order.** `land_after_casts` plays the land after ALL the plan's
@@ -77,3 +131,12 @@ letters), `landfall_counters_each` + `_subtype` (Avenger; the "may" resolved YES
    `dies_trigger_damage` precedent). PROVISIONAL, user sign-off pending.
 5. **A PUT Karoo's bounce** (Genesis Wave, a ramp put) takes the provider's front pick with no plan
    pin -- found by the Landfall card review, pre-existing, not addressed here.
+6. **Courser + Primeval Titan's ATTACK shuffle -- no autonomous main-2 drop (KNOWN GAP, USER Q4).**
+   Titan's attack trigger searches and shuffles during combat; with Courser out and the drop unused in
+   main 1, the post-combat top can be a newly playable land whose landfall triggers pay off next turn.
+   The autonomous engine has no searched main 2 for this deck, so the line is unfindable there (human
+   play has it: the viewer offers the main-2 drop). Per the repo's "delete, don't lever" rule it is
+   NOT built behind a default-off lever; the shape that would close it is a restricted main 2 like
+   `DigSecondMainLive` (a deck constant + a per-turn stamp from the attack-trigger shuffle + the drop
+   open + a newly playable top), measured, and adopted only by the user. Do not add the deck to
+   `DeckUsesSecondMain` for it (a full main 2 every turn cost Snow 1.96x / Fungus 4.25x).

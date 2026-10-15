@@ -633,6 +633,13 @@ struct GameState
     // holds it open. DEFAULT TRUE == walk, so an unstamped GameState (the scenario harness, a unit
     // test) keeps every trigger. Only ever err true.
     bool                     deck_has_landfall               = true;  // Avenger / Baloths / Omnath & co.
+    // AND AN EIGHTH, 2026-10-15 -- "you may play lands from the top of your library" (Courser of
+    // Kruphix, CardParams::play_lands_from_library_top). Gates TopLandPlayStaticSource's battlefield
+    // walk, which every land enumeration, breakpoint arming site and greedy land drop now asks. Stamped
+    // from the param itself, mainboard + sideboard, Garth holding it open, so a clear bit PROVES the
+    // walk finds nothing (dead-code elimination, no lever). DEFAULT TRUE == walk, so an unstamped
+    // GameState (the scenario harness, a unit test) can never silently lose a Courser. Only ever err true.
+    bool                     deck_has_top_land_play          = true;  // Courser of Kruphix
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later
@@ -986,7 +993,12 @@ struct GameState
 
     // See m1start_hand_mask. StampMain1Hand records the active hand as main 1 begins; HeldSinceMain1 is
     // true only for a deck card that was in that hand (tokens / unnumbered cards read as NEW).
-    void StampMain1Hand()
+    // `top_land_number` (Courser of Kruphix): the library TOP's number when it was a PLAYABLE land as
+    // main 1 began (PlayableTopLandNumber, which the callers pass -- this header cannot reach the card
+    // database), 0 otherwise. Main 1 could play it exactly like a held hand land, so it is "held" too:
+    // offering it again in main 2 would re-derive a main-1 line (the same rule, the same reason). 0
+    // for every deck without a play-from-top permanent -> the mask is what it always was.
+    void StampMain1Hand(int top_land_number = 0)
     {
         m1start_hand_mask[0] = m1start_hand_mask[1] = 0;
         for (const Card& c : ActivePlayer().hand)
@@ -994,6 +1006,8 @@ struct GameState
             if (c.m_number >= 0 && c.m_number < 128)
             { m1start_hand_mask[c.m_number >> 6] |= (1ULL << (c.m_number & 63)); }
         }
+        if (top_land_number > 0 && top_land_number < 128)
+        { m1start_hand_mask[top_land_number >> 6] |= (1ULL << (top_land_number & 63)); }
         m1start_hand_turn = turn_number;
     }
     bool HeldSinceMain1(const Card& c) const

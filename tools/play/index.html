@@ -753,11 +753,12 @@ function plannedCount(name){ return LB.plannedCount(S.plan, name); }
 function leCount()         { return LB.leCount(S.plan); }
 function leMax()           { return LB.leMax(S.decision, S.plan); }
 function encodeLine()      { return LB.encodeLine(S.plan); }
-function queueCard(name, kind, target, targetName) {
+function queueCard(name, kind, target, targetName, fromTop) {
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;  // UI guard (browser-only state)
   hideVerdict();
   const before = S.plan.length;
-  S.plan = LB.queueCard(S.decision, S.plan, name, kind);
+  // fromTop: the revealed library TOP (Courser of Kruphix), not a hand copy -- see LB.queueCard.
+  S.plan = LB.queueCard(S.decision, S.plan, name, kind, fromTop);
   if (S.plan.length > before) {
     const e = S.plan[S.plan.length-1];
     // If a drag chose a specific enchant target, stamp it on the entry LB.queueCard just appended (it
@@ -2390,6 +2391,14 @@ function renderBoard() {
   const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace?' facetgt':''}${youFace&&isSelT(youFace)?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">You ${youB}</span>`+
        `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
+       // THE REVEALED LIBRARY TOP (Courser of Kruphix): shown face-up on the pile while a revealer is
+       // ours (the engine publishes me.library_top only then). A playable top land is clicked to queue
+       // it as the land drop FROM THE TOP (`landtop=`); a hand copy of the same name stays separate.
+       (me.library_top ? `<span class="life libtop${isMain&&me.library_top.playable_land?' playable':''}" `+
+         `data-libtop="${esc(me.library_top.name)}" title="Top of your library (revealed)`+
+         `${isMain&&me.library_top.playable_land?' -- click to play it as your land drop':''}">top `+
+         `<img src="${scryImg(me.library_top.name)}" alt="${esc(me.library_top.name)}" `+
+         `style="height:52px;vertical-align:middle;border-radius:3px;${isMain&&me.library_top.playable_land?'cursor:pointer;outline:2px solid #6c6;':''}"></span>` : '')+
        (isMain?`<span class="dh">▼ drop here to plan a play</span>`:'')+`</div>`;
   h += `<div class="fieldrow"><div class="zone perms"><h3>Permanents (${mePerms.length+plannedPerms.length})</h3>`+
        zoneRow(mePerms.concat(plannedPerms), plannedPerms.length?'padrow':'')+`</div>`;
@@ -2519,6 +2528,15 @@ function renderBoard() {
   // sticky commit/turn-plan footer, last so its position:sticky bottom:0 docks to the viewport.
   if (isMain) h += `<div id="planbar"></div>`;
   board.innerHTML = h;
+  // The revealed library top (Courser of Kruphix): clicking a PLAYABLE top land queues it as the land
+  // drop from the top (LB.queueCard fromTop -> `landtop=`); clicking it again takes it back.
+  if (isMain && me.library_top && me.library_top.playable_land) {
+    board.querySelectorAll('[data-libtop]').forEach(el => {
+      el.onclick = e => { e.stopPropagation(); e.preventDefault();
+        queueCard(me.library_top.name, 'land', null, null, true);
+        flashHint(`Playing ${me.library_top.name} from the top of your library. Click again to take it back.`); };
+    });
+  }
   renderBanner(); renderEffects(); if(isMain){ renderPlanbar(); renderHand(); } wireBoard();
   if (dec) { wireDecisionBoard(d, dec); renderDecisionPanel(d, dec); }
   else if (S.actPick) renderActivationPicker();   // queue-time "which ability?" (see below)

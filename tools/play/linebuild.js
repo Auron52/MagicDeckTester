@@ -431,10 +431,24 @@
   // A queued entry that is a cast/activation the land could come AFTER (not a land, pretap, LE discard).
   function isCastLike(p) { return p && p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'pretap'; }
 
+  // THE LIBRARY TOP AS A LAND SOURCE (engine Plan::land_from_top, Courser of Kruphix, 2026-10-15).
+  // The engine publishes me.library_top ONLY while a revealer is ours; `playable_land` says the top may
+  // be played as the land drop (a land under a play-from-top permanent). The cap on queueing it is 1 --
+  // it is one card -- and it is NEVER counted among the hand copies (castableCount reads the hand).
+  function topLandOffered(decision, name) {
+    const t = decision && decision.me && decision.me.library_top;
+    return !!(t && t.playable_land && (name == null || t.name === name));
+  }
+
   function encodeLine(plan) {
     // A land queued AFTER a cast on a decision that offers land-after lines is marked `after` by
     // queueCard and encodes as `landafter=` -- "cast Rampaging Baloths, then play the Forest".
-    const parts = []; const l = planLand(plan); if (l) parts.push((l.after ? 'landafter=' : 'land=') + l.name);
+    // A land queued from the library TOP (`fromTop`, Courser) encodes as `landtop=` -- `land=` keeps
+    // meaning a HAND copy, so every saved reference replays unchanged -- and its timing rides the
+    // `landat=all` modifier (`landafter=` names a hand copy only).
+    const parts = []; const l = planLand(plan);
+    if (l && l.fromTop) { parts.push('landtop=' + l.name); if (l.after) parts.push('landat=all'); }
+    else if (l) parts.push((l.after ? 'landafter=' : 'land=') + l.name);
     // Taps first: they are what the rest of the line is paid from.
     for (const p of plan) if (isPreTap(p)) parts.push(preTapToken(p));
     for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act')) parts.push(lineVerb(p) + '=' + p.name);
@@ -466,10 +480,19 @@
   // Queue (or, for a land, toggle) one card into the plan. Returns the resulting plan array (the
   // land branch reassigns it, so callers must use the return value). The GUI's own main-phase /
   // busy guard stays in index.html's wrapper; this is the pure state transition.
-  function queueCard(decision, plan, name, kind) {
+  // `fromTop` (Courser of Kruphix): the land clicked is the revealed library TOP, not a hand copy. A
+  // top Forest and a hand Forest are DIFFERENT entries (the engine branches them: different library,
+  // different hand), so the toggle below matches on (name, source), and the top's cap is the single
+  // card itself (topLandOffered), never the hand count.
+  function queueCard(decision, plan, name, kind, fromTop) {
     if (kind === 'land') {
       const lands = planLands(plan);
-      const same = lands.filter(p => p.name === name);
+      const top = !!fromTop;
+      const same = lands.filter(p => p.name === name && !!p.fromTop === top);
+      const cap = top ? (topLandOffered(decision, name) ? 1 : 0) : castableCount(decision, name);
+      // A top that is not a playable land right now (no play-from-top permanent, a spell on top, or
+      // a stale click after the top changed) queues NOTHING -- not even as a "this land instead".
+      if (top && cap === 0) return plan;
       // With a SPARE land drop (a Scale the Heights bonus) and a spare copy in hand, another land is
       // an ADDITION, not a correction -- replacing the queued one silently ate the extra drop (viewer
       // issue #7). At the ordinary one drop the old rules stand: the same land toggles off, a
@@ -478,9 +501,13 @@
       // The land's TIMING follows the click order: queued after a cast, on a decision that offers
       // land-after lines (offersLandAfter), it is played AFTER the casts (`landafter=`). A deck that
       // never offers one pushes exactly the {name, kind} entry it always did.
-      const landEntry = () => (offersLandAfter(decision) && plan.some(isCastLike))
-        ? { name, kind, after: true } : { name, kind };
-      if (lands.length < landDropsLeft(decision) && same.length < castableCount(decision, name)) {
+      const landEntry = () => {
+        const e = (offersLandAfter(decision) && plan.some(isCastLike))
+          ? { name, kind, after: true } : { name, kind };
+        if (top) e.fromTop = true;   // absent for a hand land: the entry is exactly what it always was
+        return e;
+      };
+      if (lands.length < landDropsLeft(decision) && same.length < cap) {
         plan.push(landEntry());
       } else if (same.length) {
         const cur = same[same.length - 1];
@@ -516,6 +543,13 @@
       // 'pretap' names a permanent ALREADY on the battlefield, so its `num` is a board id, not a
       // hand card's -- it is never stamped and never consumes one (it also always arrives stamped).
       if (p.num != null || p.kind === 'le' || p.kind === 'pretap') return;
+      // A library-TOP land (Courser) is the revealed top card, never a hand copy: its number is the
+      // engine's me.library_top.number, so a land Aura can still be dropped on it in the same line.
+      if (p.fromTop) {
+        const t = (((decision || {}).me || {}).library_top) || null;
+        if (t && t.name === p.name && !used.has(t.number)) { p.num = t.number; used.add(t.number); }
+        return;
+      }
       const hc = hand.find(c => c.name === p.name && !used.has(c.num));
       if (hc) { p.num = hc.num; used.add(hc.num); }
     });
@@ -620,7 +654,7 @@
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
-           offersLandAfter,
+           offersLandAfter, topLandOffered,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.

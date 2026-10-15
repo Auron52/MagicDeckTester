@@ -247,6 +247,22 @@ struct CardParams
     int                      etb_tokens_per_land            = 0;
     bool                     etb_tokens_per_land_basic_only = false;
 
+    // ---- THE LIBRARY TOP AS A ZONE YOU MAY PLAY FROM (Courser of Kruphix, 2026-10-15) -----------
+    // "Play with the top card of your library revealed." DISPLAY-ONLY in goldfish: the search is
+    // clairvoyant over the deterministic library already and the passive opponent reads nothing, so
+    // the only consumer is the viewer (WriteBoardContext's `library_top`, LibraryTopVisible). Kept
+    // separate from the play permission below so a later "look at the top card any time" card
+    // (Radha / Augur) and a "revealed" one (Future Sight / Oracle of Mul Daya) stay distinguishable
+    // when an opponent that reads public information arrives (phase 2).
+    bool                     library_top_revealed           = false;
+    // "You may play lands from the top of your library." A STATIC permission on the battlefield
+    // (TopLandPlayStaticSource, SpellEffects.h): while its controller is the active player, the
+    // library TOP is a second source for the turn's land drop -- the SAME drop, not an extra one
+    // (2021-03-19 ruling). Played through PlayLandFromLibraryTop (LandPlay.cpp), the hand drop's own
+    // body, so every land ETB and the landfall dispatch fire exactly as for a hand land. Searched as
+    // its own land option (Plan::land_from_top); never folded into a same-name hand land.
+    bool                     play_lands_from_library_top    = false;
+
     // If true, drawn cards are placed in the staged exile zone rather than the hand
     // and expire at the end of the player's next turn (e.g. Light Up the Stage).
     bool stages_cards = false;

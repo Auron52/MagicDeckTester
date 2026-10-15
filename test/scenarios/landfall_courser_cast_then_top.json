@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Courser of Kruphix 2026-10-15: CAST Courser, THEN play the land it reveals. Three Forests, NO land",
+    "in hand, Courser + Lava Spike in hand, a Mountain on top, opponent at 3. Exact lethal T5: cast",
+    "Courser (three Forests), which makes the top Mountain playable -- a NEW option while the drop is",
+    "open, so site 10 arms (TopLandNewlyPlayable) and the searched continuation (PlanOpensBreakpoint's",
+    "library-top clause) plays the top Mountain and casts Lava Spike. Without the re-solve the Mountain",
+    "is drawn T6. CONTROL: landfall_courser_top_land_only_control's shape (no Courser) wins T6."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Courser of Kruphix",
+    "Lava Spike"
+  ],
+  "library_top": [
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "expect_win_turn": 5
+}

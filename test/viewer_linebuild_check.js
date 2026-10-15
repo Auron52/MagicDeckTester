@@ -611,6 +611,62 @@ function checkBonusLandDrop() {
   return fails;
 }
 
+// THE LIBRARY TOP AS A LAND SOURCE (Courser of Kruphix, 2026-10-15; engine Plan::land_from_top). The
+// revealed top is published as me.library_top {name, number, playable_land}; clicking it queues a land
+// entry with `fromTop`, which encodes as `landtop=` (never `land=`, which names a HAND copy and is what
+// every saved reference carries). Pins: the encoding, the (name, SOURCE) toggle -- a top Forest and a
+// hand Forest are different plays -- the cap of one, the stamped number (a land Aura can host on it),
+// a non-playable top refusing, and the after-the-casts modifier on a decision that offers land-after.
+function checkLibraryTopLand() {
+  const hand = [{ name: 'Forest', num: 31 }, { name: 'Lava Spike', num: 40 }];
+  const top  = { name: 'Forest', number: 7, kind: 'land', playable_land: true };
+  const dec  = { me: { hand, land_drops_left: 1, library_top: top } };
+  const fails = [];
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  let p = [];
+  p = LB.queueCard(dec, p, 'Forest', 'land', true);
+  p = LB.queueCard(dec, p, 'Lava Spike', 'nonpermanent');
+  LB.stampPlanNums(dec, p);
+  if (LB.encodeLine(p) !== 'landtop=Forest;cast=Lava Spike') fails.push(`top land encodes ${LB.encodeLine(p)}`);
+  const tl = p.find(e => e.kind === 'land');
+  if (!tl || tl.num !== 7) fails.push(`top land stamped num ${tl && tl.num} != 7 (library_top.number)`);
+
+  // A hand Forest REPLACES the queued top Forest at one drop (different source = a different play),
+  // and clicking the top again toggles it OFF (same name, same source).
+  let q = [];
+  q = LB.queueCard(dec, q, 'Forest', 'land', true);
+  q = LB.queueCard(dec, q, 'Forest', 'land');
+  if (LB.encodeLine(q) !== 'land=Forest') fails.push(`hand Forest after top Forest -> ${LB.encodeLine(q)}`);
+  let r = [];
+  r = LB.queueCard(dec, r, 'Forest', 'land', true);
+  r = LB.queueCard(dec, r, 'Forest', 'land', true);
+  if (r.length) fails.push(`top Forest twice should toggle off -> ${JSON.stringify(r)}`);
+
+  // Two drops: the top Forest AND the hand Forest both queue (two different cards), as two segments.
+  const two = { me: { hand, land_drops_left: 2, library_top: top } };
+  let t = [];
+  t = LB.queueCard(two, t, 'Forest', 'land', true);
+  t = LB.queueCard(two, t, 'Forest', 'land');
+  if (!eq(LB.encodeSegments(t), ['landtop=Forest', 'land=Forest']))
+    fails.push(`two drops, top + hand Forest -> ${JSON.stringify(LB.encodeSegments(t))}`);
+
+  // A top that is not a playable land (no play-from-top permanent, or a spell on top) never queues.
+  const dead = { me: { hand, land_drops_left: 1, library_top: { name: 'Forest', number: 7, playable_land: false } } };
+  let u = [];
+  u = LB.queueCard(dead, u, 'Forest', 'land', true);
+  if (u.length) fails.push(`non-playable top queued -> ${JSON.stringify(u)}`);
+
+  // After a cast, on a decision that offers land-after lines: the top land carries the timing modifier.
+  const after = { me: { hand, land_drops_left: 1, library_top: top }, plans: [{ land_after_casts: true }] };
+  let v = [];
+  v = LB.queueCard(after, v, 'Lava Spike', 'nonpermanent');
+  v = LB.queueCard(after, v, 'Forest', 'land', true);
+  if (LB.encodeLine(v) !== 'landtop=Forest;landat=all;cast=Lava Spike')
+    fails.push(`top land after a cast -> ${LB.encodeLine(v)}`);
+  return fails;
+}
+
 function main() {
   const refs = collectRefs();
   if (!refs.length) { console.log('no reference games found under references/'); return 0; }
@@ -669,9 +725,13 @@ function main() {
   tapFails.forEach(m => console.log(`  FAIL  pre-tap token: ${m}`));
   console.log(`Viewer pre-tap token: ${tapFails.length ? 'WRONG' : "the land's face, plus a +<C> per any-colour Aura; absent when none"} ` +
               `(${tapFails.length} FAIL)`);
+  const topFails = checkLibraryTopLand();
+  topFails.forEach(m => console.log(`  FAIL  library-top land: ${m}`));
+  console.log(`Viewer library-top land: ${topFails.length ? 'WRONG' : 'the revealed top queues as landtop=, separate from a hand copy'} ` +
+              `(${topFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
-          + tapFails.length) ? 1 : 0;
+          + tapFails.length + topFails.length) ? 1 : 0;
 }
 
 process.exit(main());

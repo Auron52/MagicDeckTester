@@ -533,6 +533,15 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
                 and not any(v for k, v in params.items() if k.startswith("landfall_")):
             gaps.append("Landfall in oracle text but no landfall_* param set")
 
+        # Playing lands from the top of the library (Courser of Kruphix; Oracle of Mul Daya, Radha,
+        # Augur later): the source-zone permission is its own param, read by every land-drop site
+        # through TopLandPlayStaticSource. A card saying it without the param would silently play
+        # lands from hand only.
+        if "play lands from the top of your library" in oracle.lower() \
+                and not params.get("play_lands_from_library_top"):
+            gaps.append("'play lands from the top of your library' in oracle text but "
+                        "play_lands_from_library_top not set")
+
         # Staged exile
         if ("end of your next turn" in oracle or "your next turn" in oracle) \
                 and "exile" in oracle.lower() \

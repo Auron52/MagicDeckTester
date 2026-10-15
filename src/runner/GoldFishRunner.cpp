@@ -1280,6 +1280,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // The landfall dispatch (see GameState::deck_has_landfall): the same DefHasLandfallTrigger
         // disjunction the per-definition landfall_watcher byte is computed from.
         bool landfall = false;
+        // Courser of Kruphix's top-of-library land drop (see GameState::deck_has_top_land_play): the
+        // same param TopLandPlayStaticSource tests on the battlefield.
+        bool top_land = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1307,6 +1310,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (DefHasLandfallTrigger(d->params))      { landfall = true; }
+                if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.storied_permanents > 0)      { storied = true; }
                 // HasEndStepTokenTrigger, not `endstep_lifegain_tokens > 0`: The Mycotyrant's count
                 // is dynamic (endstep_tokens_equal_descend) so it leaves that field at 0, and this
@@ -1340,6 +1344,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // (the stamp and the walk's per-definition byte are one disjunction), so this is dead-code
         // elimination for every deck without a landfall card -- every suite deck at landing.
         state.deck_has_landfall          = garth || landfall;
+        // Same reasoning, no lever: a clear bit PROVES TopLandPlayStaticSource's walk finds no
+        // play-from-top permanent, so every library-top land read is dead code for that deck.
+        state.deck_has_top_land_play     = garth || top_land;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

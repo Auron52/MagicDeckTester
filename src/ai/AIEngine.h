@@ -460,15 +460,20 @@ private:
 
     // --- Turn helpers ---
 
-    // Play a land from hand if a land drop is available.
+    // Play a land from hand -- or from the library top under a play-from-top permanent (Courser of
+    // Kruphix; GreedyLandChoice) -- if a land drop is available.
     bool TryPlayLand(GameState& state);
 
     // Play a specific land (by name) from hand. Used by the land search in TakeTurn
     // to apply a chosen candidate to the real state or a search copy. fetch_target names
     // the searched fetchland target (Plan::fetch_target); empty -> heuristic top pick.
+    // from_top (Plan::land_from_top / Action::land_from_top): play the library TOP instead, which
+    // must be a playable land named `name` -- never a hand copy in its place (lockstep twin of the
+    // rollout's PlayLandByName).
     bool TryPlaySpecificLand(GameState& state, const std::string& name,
                              const std::string& fetch_target = "",
-                             const std::string& land_face = "", int rad_mode = -1);
+                             const std::string& land_face = "", int rad_mode = -1,
+                             bool from_top = false);
 
     // "Dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and sacrifice-to-draw
     // (e.g. Fiery Islet) to draw toward Treasure Hunt. Gated by ShouldConsiderDig (no draw

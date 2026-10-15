@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Courser of Kruphix 2026-10-15: the `landtop=` line verb (Plan::land_from_top). On the",
+    "top-land-only board (Courser + three Forests, a Mountain on top, NO land in hand) the human's",
+    "`landtop=Mountain;cast=Lava Spike` must be ACCEPTED -- matched to the top-sourced plan. Its twin",
+    "landfall_courser_validate_land_hand_illegal pins that `land=` still means a HAND copy (so every",
+    "saved reference keeps meaning what it meant)."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Courser of Kruphix"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Lava Spike"
+  ],
+  "library_top": [
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 5,
+  "validate_line": "landtop=Mountain;cast=Lava Spike",
+  "expect_verdict": "accept"
+}

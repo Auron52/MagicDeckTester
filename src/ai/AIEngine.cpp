@@ -2277,8 +2277,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::vector<int> exec_hand_at_section;
     uint32_t         exec_seq_at_section = g_hand_entry_seq;
     if (BpHandEntryEnabled()) { exec_hand_at_section = TurnSolver::HandCardNumbers(state); }
+    // ...and the LIBRARY-TOP half (Courser of Kruphix) -- lockstep twin of ApplyPlanDirect's
+    // top_at_section: the playable top as the pass opens, reset with the hand half.
+    int exec_top_at_section = PlayableTopLandNumber(state);
     auto exec_section_reset = [&]()
     {
+        exec_top_at_section = PlayableTopLandNumber(state);
         if (!BpHandEntryEnabled()) { return; }
         exec_hand_at_section = TurnSolver::HandCardNumbers(state);
         exec_seq_at_section  = g_hand_entry_seq;
@@ -3179,6 +3183,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     bool        land_after_deferred = false;
     std::string deferred_land_face;
     int         deferred_rad_mode   = -1;
+    // The deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix) -- lockstep twin of
+    // ApplyPlanDirect's karoo_from_top: a deferred top land is played from the top or not at all.
+    bool        karoo_from_top      = false;
     // The committed plan's landfall-target POLICY (Plan::landfall_target_choice), installed BEFORE
     // its land drop and held for the rest of the phase -- lockstep with ApplyPlanDirect's
     // ScriptedLandfallTarget. Empty (nothing installed) for a plan carrying no policy.
@@ -3823,6 +3830,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     karoo_deferred  = true;
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
+                    karoo_from_top  = plan.land_from_top;
                 }
                 else if (plan.land_after_casts)
                 {
@@ -3834,6 +3842,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     karoo_fetch         = plan.fetch_target;
                     deferred_land_face  = plan.land_face;
                     deferred_rad_mode   = plan.rad_mode;
+                    karoo_from_top      = plan.land_from_top;
                 }
                 else
                 {
@@ -3842,7 +3851,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     ScriptedTopChoice _stc(plan.scry_choice);
                     ScriptedBounceChoice _sbc(plan.bounce_choice);   // a non-deferred Karoo's searched bounce
                     TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target, plan.land_face,
-                                        plan.rad_mode);
+                                        plan.rad_mode, plan.land_from_top);
                 }
             }
         }
@@ -3981,6 +3990,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // because cast_by_name captures it. Empty is the SAFE value: every card then reads as new, so
     // both consumers stand down. See docs/design/breakpoint-phase-classification.md.
     std::vector<int> rdb_hand;
+    // The playable library top before the current cast (Courser of Kruphix) -- the twin of rdb_hand
+    // for put_in_hand_armed's TopLandNewlyPlayable (rollout twin: apply_one's top_at_cast).
+    int rdb_top = 0;
     // Name hashes of the committed plan's hand casts -- lockstep twin of ApplyPlanDirect's
     // plan_cast_names. A card the plan casts is never "declined", so the breakpoint filter keeps it.
     std::vector<std::uint64_t> rdb_plan_casts;
@@ -4099,6 +4111,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // exemption exists for. Gated on the levers that read it => ship pays nothing.
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
+        rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
         // committed line that spends the staged copy this turn -- freeing the drawn copy for a later
         // turn -- replays exactly. Mirrors the land-play fix (TryPlaySpecificLand): the burn 6225
@@ -4173,6 +4186,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // would compare against a STALE hand from an earlier cast and misread the diff.
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
+        rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
@@ -4201,6 +4215,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // would compare against a STALE hand from an earlier cast and misread the diff.
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
+        rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (git == ap.graveyard.end()) { return; }
@@ -4360,7 +4375,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // budget.
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d == nullptr || TurnSolver::ParamKeyedDrawClass(state, *d)) { return false; }
-        if (!TurnSolver::HandGainedACard(rdb_hand, state)) { return false; }
+        // A new playable land on the library TOP is the same rule's other half (Courser of Kruphix;
+        // rollout twin: the end of apply_one) -- the shared TopLandNewlyPlayable.
+        if (!TurnSolver::HandGainedACard(rdb_hand, state)
+            && !TurnSolver::TopLandNewlyPlayable(rdb_top, state, karoo_deferred)) { return false; }
         cast_draw_engine = true;
         return true;
     };
@@ -4591,7 +4609,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
               // left in hand, committed T4 kill lost). Every other land-play site in this file
               // already passes the triple; this one did not.
               TryPlaySpecificLand(state, a.card_name, a.land_fetch_target.str(),
-                                  a.land_face.str(), a.land_rad_mode); }
+                                  a.land_face.str(), a.land_rad_mode, a.land_from_top); }
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
@@ -4780,7 +4798,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     && !(s_karoo_lockstep && karoo_deferred))
                 { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
             }
         }
         // COMMITTED-LINE MIRROR (USER 2026-10-03: "We should not search again"). On a VERIFIED committed
@@ -4817,7 +4835,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 && !(s_karoo_lockstep3 && karoo_deferred))
             { std::optional<ScriptedTopChoice> _cstc;
               if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-              TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+              TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
             bp_searched_here = true;
         }
         if (!bp_searched_here)
@@ -4869,7 +4887,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     && !(s_karoo_lockstep2 && karoo_deferred))
                 { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
             }
         }
         // The chosen continuation's during-cast pins (ContPins) for its casts below -- the twin of
@@ -5286,7 +5304,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             if (extra.land_decided && !extra.land_to_play.empty())
                             { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                         }
                     }
                     // COMMITTED POD MIRROR (USER 2026-10-03: "We should not search again") -- the pod
@@ -5303,7 +5321,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         if (extra.land_decided && !extra.land_to_play.empty())
                         { std::optional<ScriptedTopChoice> _cstc;
                           if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                          TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                          TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                     }
                     if (!pod_bp_searched)
                     {
@@ -5334,7 +5352,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             && !extra.land_to_play.empty())
                         { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                     }
                     // Precasts (SacForMana / Suspend / convoke taps) exactly as
                     // resolve_draw_breakpoint's pre-pass, then the casts in the executor's clean
@@ -6592,7 +6610,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (extra.land_decided && !extra.land_to_play.empty())
                 { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
             }
         }
         if (pe_searched)
@@ -6660,8 +6678,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // through the committed script, so this must not (and does not) consume a breakpoint index.
     // Human play never auto-continues: the main-phase re-prompt is the human's own breakpoint.
     if (BpHandEntryEnabled() && !HumanPlayActive() && !cast_draw_engine
-        && g_hand_entry_seq != exec_seq_at_section
-        && TurnSolver::HandGainedACard(exec_hand_at_section, state))
+        && ((g_hand_entry_seq != exec_seq_at_section
+             && TurnSolver::HandGainedACard(exec_hand_at_section, state))
+            // the library-top half, outside the sequence pre-filter (rollout twin: the same OR)
+            || TurnSolver::TopLandNewlyPlayable(exec_top_at_section, state, karoo_deferred)))
     {
         cast_draw_engine = true;
     }
@@ -6681,7 +6701,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         land_after_deferred = false;
         ScriptedTopChoice    _stc(plan.scry_choice);
         ScriptedBounceChoice _sbc(plan.bounce_choice);
-        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, deferred_land_face, deferred_rad_mode);
+        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, deferred_land_face, deferred_rad_mode,
+                            karoo_from_top);
     }
     if (karoo_deferred)
     {
@@ -6691,7 +6712,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // ApplyPlanDirect's deferred Karoo play). -1 = the front; the human chooser, when
             // installed, still asks (human plans never carry a pin).
             ScriptedBounceChoice _sbc(plan.bounce_choice);
-            TryPlaySpecificLand(state, karoo_land_name, karoo_fetch);
+            TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, "", -1, karoo_from_top);
         }
         // ...then the land Auras that named it (Bruna sweep D), on the karoo.
         std::vector<std::pair<std::string, int>> held;
@@ -6820,10 +6841,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 // used by the land search in TakeTurn to apply the chosen candidate.
 bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
                                    const std::string& fetch_target, const std::string& land_face,
-                                   int rad_mode)
+                                   int rad_mode, bool from_top)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    // THE LIBRARY TOP (Courser of Kruphix; Plan::land_from_top) -- lockstep twin of the rollout's
+    // PlayLandByName from_top branch: the top must be a playable land of exactly this name, and a
+    // mismatch plays NOTHING (never a hand copy instead -- that silent swap is how the two worlds
+    // would come to hold different lands, the auras-gi20 class). Same options as the hand drop below.
+    if (from_top)
+    {
+        if (PlayableTopLandNumber(state) == 0 || ap.library.front().m_name != name) { return false; }
+        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(ap.library.front());
+        if (tdef == nullptr) { return false; }
+        LandPlayOptions o;
+        o.fetch_target         = fetch_target;
+        o.land_face            = land_face;
+        o.label_look_source    = true;
+        o.spawn_orchard_spirit = true;
+        o.record_touch         = true;
+        o.rad_mode             = rad_mode;
+        o.logger               = m_logger;
+        return PlayLandFromLibraryTop(state, *tdef, o);
+    }
     // Prefer an exiled/STAGED copy of `name` (Light Up the Stage -- it expires; a permanent hand copy
     // keeps), mirroring the rollout's PlayLandByName so the committed line replays EXACTLY. Without
     // this the executor played the first hand match (a drawn copy) and let the staged copy lapse,
@@ -6887,7 +6927,23 @@ bool AIEngine::TryPlayLand(GameState& state)
 
     // The RANKER lives in LandPlay.cpp (GreedyLandChoiceIndex) so the search's plan-ordering
     // tiebreak predicts exactly what this plays -- the two had silently drifted apart.
-    const int pick = GreedyLandChoiceIndex(state);
+    // GreedyLandChoice is that ranker over BOTH sources (Courser of Kruphix: the library top is one
+    // more candidate in the same passes); with no playable top it is GreedyLandChoiceIndex exactly.
+    // The depth-0 runner is a PERMITTED greedy site (no search window), and without the top here a d0
+    // game -- and every rollout that mirrors it -- would never use Courser at all.
+    const GreedyLandPick gp = GreedyLandChoice(state);
+    if (gp.from_top)
+    {
+        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(ap.library.front());
+        if (!tdef) { return false; }
+        LandPlayOptions o;
+        o.label_look_source    = true;
+        o.spawn_orchard_spirit = true;
+        o.record_touch         = true;
+        o.logger               = m_logger;
+        return PlayLandFromLibraryTop(state, *tdef, o);
+    }
+    const int pick = gp.hand_index;
     if (pick < 0) { return false; }
     auto it = ap.hand.begin() + pick;
     const CardDefinition* def = CardDatabase::Instance().Lookup(it->m_name);

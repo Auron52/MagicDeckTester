@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "CONTROL for landfall_courser_top_land_only: the same board WITHOUT Courser of Kruphix, so",
+    "the top Mountain is not playable until it is drawn (T6): win T6. Pins that the T5 win there is the",
+    "top-of-library land play and nothing else."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Lava Spike"
+  ],
+  "library_top": [
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "expect_win_turn": 6
+}

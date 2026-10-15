@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "Courser of Kruphix 2026-10-15: the NEGATIVE twin of landfall_courser_validate_landtop.",
+    "Same board (the Mountain is on the library TOP, none in hand): `land=Mountain;cast=Lava Spike` names",
+    "a HAND copy, which does not exist, so the verdict is ILLEGAL -- `land=` never silently becomes the",
+    "top card. This is what keeps every saved reference's `land=` meaning a hand land."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Courser of Kruphix"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Lava Spike"
+  ],
+  "library_top": [
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 5,
+  "validate_line": "land=Mountain;cast=Lava Spike",
+  "expect_verdict": "illegal"
+}

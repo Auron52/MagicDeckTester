@@ -57,6 +57,9 @@ struct LandPlayOptions
     bool record_touch = false;
     // Game log (executor only; null in every rollout).
     GameLogger* logger = nullptr;
+    // The land comes from the library TOP (Courser of Kruphix), not the hand. Set by
+    // PlayLandFromLibraryTop itself; read only by the log (the PLAY_LAND line names its source).
+    bool from_library_top = false;
 };
 
 // Play ap.hand[hand_index] -- which must be `def`'s card and a land -- as the active player's land
@@ -67,6 +70,16 @@ struct LandPlayOptions
 // the hand is invalidated.
 bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefinition& def,
                       const LandPlayOptions& opts);
+
+// Play the active player's library TOP as the land drop (Courser of Kruphix: "You may play lands from
+// the top of your library"). `def` must be the top card's definition. THE SAME BODY as
+// PlayLandFromHand (one templated core) -- fetch, MDFC face, enters-tapped, depletion, every land
+// ETB, the Karoo bounce and the landfall dispatch -- so a land played from the top is
+// indistinguishable from one played from hand once it is on the battlefield. The card is popped
+// from the library first (a raw pop, not a draw). Returns false only on an empty library; the CALLER
+// checks the drop and the permission (PlayableTopLandNumber, SpellEffects.h), exactly as a hand
+// caller checks the drop and picks the copy.
+bool PlayLandFromLibraryTop(GameState& state, const CardDefinition& def, const LandPlayOptions& opts);
 
 // THE greedy land ranker: the hand index of the land the greedy heuristic plays this turn, or -1
 // for none. Reliquary-Tower pre-pass (a no_max_hand_size land first when a Treasure Hunt is in hand
@@ -88,3 +101,15 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
 // skip in the four-pass -- so the search's tiebreak defaulted to a land the executor would not play.
 // Returns an INDEX, not a name, so the caller plays exactly the copy the ranker chose.
 int GreedyLandChoiceIndex(const GameState& state);
+
+// THE GREEDY LAND RANKER OVER BOTH SOURCES (Courser of Kruphix, 2026-10-15). GreedyLandChoiceIndex
+// ranks the HAND; with a play-from-top permanent out, the library top is one more candidate, judged
+// by the very same four passes (untapped before tapped, multi before single -- and the same Karoo
+// self-bounce skip), and it wins a tie WITHIN a pass when the provider says so
+// (DecisionProvider::TopLandSourceFirstOnTie, default true: a top play keeps the hand copy, so it
+// nets a card). {hand_index, false} for a hand land, {-1, true} for the top, {-1, false} for none.
+// Used ONLY at the permitted greedy sites -- the depth-0 runner (AIEngine::TryPlayLand) and the
+// beyond-horizon playout (SimulateLandPlay) -- and the enumeration's last-resort tie-break. With no
+// playable top it returns exactly GreedyLandChoiceIndex's pick, so every other deck is unchanged.
+struct GreedyLandPick { int hand_index = -1; bool from_top = false; };
+GreedyLandPick GreedyLandChoice(const GameState& state);

@@ -366,16 +366,20 @@ void GameLogger::LogOpeningHand(const std::vector<int>& card_nums,
     m_opening_hand_names = card_names;
 }
 
-void GameLogger::LogPlayLand(int card_num, const std::string& card_name)
+void GameLogger::LogPlayLand(int card_num, const std::string& card_name, bool from_library_top)
 {
     if (!m_in_phase) { return; }
     FoldStr("L"); FoldInt(card_num);
+    // The SOURCE is a decision (a top Forest and a hand Forest are different plays), so it is in
+    // the digest -- but only when it is the new one, so every hand land keeps its exact fold.
+    if (from_library_top) { FoldStr("T"); }
     if (CardSummaryOn() && card_num) { m_cast_nums.push_back(card_num); }
     if (m_digest_only) { return; }
     Action a;
     a.type      = "PLAY_LAND";
     a.card_num  = card_num;
     a.card_name = card_name;
+    a.from_library_top = from_library_top;
     m_current.actions.push_back(std::move(a));
 }
 
@@ -545,7 +549,8 @@ void GameLogger::CommitPhase(int player_life, int opp_life,
                               const std::vector<int>& hand,
                               const std::vector<PermSnapshot>& opp_battlefield,
                               const std::vector<int>& graveyard,
-                              const std::vector<int>& staged)
+                              const std::vector<int>& staged,
+                              int library_top)
 {
     if (!m_in_phase) { return; }
     // MTG_DUMP_CARDS availability, taken from the HAND SNAPSHOT rather than from draw events.
@@ -565,6 +570,7 @@ void GameLogger::CommitPhase(int player_life, int opp_life,
     m_current.hand            = hand;
     m_current.graveyard       = graveyard;
     m_current.staged          = staged;
+    m_current.library_top     = library_top;
     m_phases.push_back(std::move(m_current));
     m_in_phase = false;
 }
@@ -669,6 +675,7 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
             {
                 act["card"]     = a.card_num;
                 act["cardName"] = a.card_name;
+                if (a.type == "PLAY_LAND" && a.from_library_top) { act["from"] = "library_top"; }
                 if (a.type == "CAST_SPELL")
                 {
                     if (!a.mana_paid.empty()) { act["manaPaid"] = a.mana_paid; }
@@ -782,6 +789,7 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
         json staged = json::array();
         for (int n : pe.staged) { staged.push_back(n); }
         board["staged"] = staged;
+        if (pe.library_top != 0) { board["libraryTop"] = pe.library_top; }   // Courser: revealed top
         entry["boardAfter"] = board;
 
         turns_arr.push_back(std::move(entry));

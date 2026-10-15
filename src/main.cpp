@@ -401,6 +401,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         // every deck without a landfall card reads exactly as before -- and the two orders of one
         // land + cast set are never byte-identical menu twins (the rad_mode / land_face lesson above).
         if (plan.land_after_casts) { os << " (after the casts)"; }
+        // THE LAND'S SOURCE (Plan::land_from_top, Courser of Kruphix): the library top, not a hand
+        // copy. Annotated only when set (every other deck reads byte-identically), and the top Forest
+        // and a hand Forest are never menu twins.
+        if (plan.land_from_top) { os << " (from library top)"; }
         os << "; ";
     }
     else if (plan.land_decided)                           { os << "land=none; "; }
@@ -1007,6 +1011,22 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         if (!et.empty()) { std::sort(et.begin(), et.end()); os << ", \"eternalize_gy\": "; JsonNameArray(os, et); }
     }
     os << ", \"library_size\": " << me.library.size();
+    // THE REVEALED LIBRARY TOP (Courser of Kruphix: "Play with the top card of your library
+    // revealed"), emitted ONLY while a revealer / play-from-top permanent is ours (LibraryTopVisible)
+    // -- so every other deck's state JSON is byte-identical. A continuous reveal is board state, not
+    // an event, so it lives here rather than in the REVEAL channel. `playable_land`: the top may be
+    // played as the land drop right now as far as its source goes (PlayableTopLandNumber -- a land
+    // under a play-from-top permanent); whether a drop is left is land_drops_left, as for a hand land.
+    // RawAt, not front(): the viewer reading a revealed card is not a decision reading the library.
+    if (!me.library.empty() && LibraryTopVisible(s))
+    {
+        const Card& top = me.library.RawAt(0);
+        const CardDefinition* td = CardDatabase::Instance().LookupCached(top);
+        os << ", \"library_top\": {\"name\": "; JsonStr(os, top.m_name.str());
+        os << ", \"number\": " << top.m_number
+           << ", \"kind\": \"" << (td && td->card.IsLand() ? "land" : "spell") << "\""
+           << ", \"playable_land\": " << (PlayableTopLandNumber(s) != 0 ? "true" : "false") << "}";
+    }
     // Land drops still available this turn (1 normally; more after a Scale the Heights / Explore
     // grants one). A committed segment carries at most ONE land -- Plan::land_to_play is a single
     // land by construction -- so the viewer needs this to tell "you're changing your mind about
@@ -1412,7 +1432,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             bool has_collapse = false;
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "|"
                             + std::to_string(plans[i].rad_mode)
-                            + (plans[i].land_after_casts ? "@after" : "") + "#";
+                            + (plans[i].land_after_casts ? "@after" : "")
+                            + (plans[i].land_from_top ? "@top" : "") + "#";
             for (const Action& a : plans[i].actions)
             {
                 if (a.kind == Action::Kind::ActivatePod)
@@ -1582,7 +1603,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         {
             // The land's TIMING is identity too (Plan::land_after_casts): land-first and land-after
             // over one cast list are different lines, never menu twins.
-            std::string k = p.land_to_play + "|" + p.land_face + (p.land_after_casts ? "@after" : "") + "#";
+            // ...and its SOURCE (Plan::land_from_top, Courser): a top Forest and a hand Forest are
+            // different lines too.
+            std::string k = p.land_to_play + "|" + p.land_face + (p.land_after_casts ? "@after" : "")
+                          + (p.land_from_top ? "@top" : "") + "#";
             for (const Action& a : p.actions) { k += payload_key(a); k += ';'; }
             return k;
         };
@@ -1635,7 +1659,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         {
             if (hide_bundle[i] || taken[i]) { continue; }
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face
-                            + (plans[i].land_after_casts ? "@after" : "") + "#";
+                            + (plans[i].land_after_casts ? "@after" : "")
+                            + (plans[i].land_from_top ? "@top" : "") + "#";
             std::vector<std::string> nm;
             nm.reserve(plans[i].actions.size());
             for (const Action& a : plans[i].actions) { nm.push_back(a.card_name); }
@@ -1729,6 +1754,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // other plan serialises byte-identically. The GUI's line builder reads it to encode a land it
         // queued AFTER a cast as `landafter=` (and only when the menu offers such a line).
         if (p.land_after_casts) { os << ", \"land_after_casts\": true"; }
+        // The land's SOURCE (Plan::land_from_top, Courser of Kruphix): emitted only when set, so every
+        // other plan serialises byte-identically. The GUI encodes a top land it queued as `landtop=`.
+        if (p.land_from_top) { os << ", \"land_from_top\": true"; }
         // Casts this plan DECLARES but cannot make in its own cast order. Emitted only when
         // non-empty, so summaries and every other plan serialise byte-identically -- which is
         // deliberate: the alternative (deleting these plans) was measured to move Dragonstorm's GT
@@ -3786,6 +3814,8 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "landafter=<name>" (the land played AFTER the casts -- Plan::land_after_casts),
+// "landtop=<name>" (the land is the library TOP -- Plan::land_from_top, Courser of Kruphix),
+// "landat=all" (modifier: the line's land, hand or top, is played AFTER the casts),
 // "cast=<name>", "act=<board source name>" (a cast= that must be an ACTIVATION), "vial=<name>", "retrace=<name>", "landsedge=<n>",
 // "sacout=<outlet name>" (repeat for repeat activations),
 // "equip=<equipment name>[#<source m_number>][@<host m_number>]",
@@ -3817,6 +3847,13 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         // -- "cast Rampaging Baloths, then play the Forest". `land=` keeps meaning land-FIRST, so
         // every saved reference replays unchanged.
         else if (key == "landafter") { ls.has_land = true; ls.land = val; ls.land_after_casts = true; }
+        // "landtop=<name>": the land is the library TOP (Plan::land_from_top, Courser of Kruphix).
+        // `land=` / `landafter=` keep meaning a HAND copy, so every saved reference replays unchanged.
+        else if (key == "landtop")   { ls.has_land = true; ls.land = val; ls.land_from_top = true; }
+        // "landat=all": TIMING modifier for whichever land token the line carries -- played after the
+        // casts. `landtop=<name>;landat=all` is a top land after the casts (`landafter=` names only a
+        // hand copy, and keeps doing so).
+        else if (key == "landat" && val == "all") { ls.land_after_casts = true; }
         else if (key == "cast")      { ls.casts.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }

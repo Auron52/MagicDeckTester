@@ -1413,6 +1413,18 @@ public:
     // BurnProvider opts in, gated on lands-in-play.
     virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
 
+    // TopLandSourceFirstOnTie -- Courser of Kruphix ("You may play lands from the top of your library").
+    // When a land from the library TOP and the SAME land from hand are otherwise tied, which comes
+    // first? ORDER ONLY, never a prune: (1) in EnumeratePlansWithLand's comparator, among plans equal on
+    // every other key and naming the same land, the top-sourced plan sorts first (SolveWithLookahead
+    // still replaces its incumbent on any strictly better line, so this only decides EXACT ties); (2)
+    // in the greedy land ranker's same-pass tie (GreedyLandChoice -- the d0 runner and the
+    // beyond-horizon playout, the permitted greedy sites). DEFAULT true (USER-question Q3's default,
+    // 2026-10-15): a top play keeps the hand copy for a later turn, so it nets a card. Every deck
+    // without a play-from-top permanent never consults it.
+    virtual bool TopLandSourceFirstOnTie(const GameState& s, int controller) const
+    { (void)s; (void)controller; return true; }
+
     // OffersExertTokenActivation -- whether a "{cost}, {T}, EXERT: create a token" ability (Basri,
     // Tomorrow's Champion) is OFFERED to the autonomous search as a plan action. A PRUNE, owned here
     // because the engine is heuristic-free (USER HARD RULE 2026-09-30,

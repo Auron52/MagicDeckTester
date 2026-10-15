@@ -323,6 +323,10 @@ struct Action
     InternedName land_face;             // MDFC face the search chose ("back" = the back face)
     InternedName land_fetch_target;     // fetchland: the searched library target
     int         land_rad_mode  = -1;    // LandPlayOptions::rad_mode as the search chose it
+    // ...and the land's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix): the library TOP rather
+    // than a hand copy. Same reason as the three above -- the record must carry the WHOLE land choice,
+    // or the replay plays a hand copy the search never played.
+    bool        land_from_top  = false;
     bool        alt_cost       = false;// CastFromHand via an alternative cost (Invigorate /
                                        // Skyshroud Cutter / Reverent Silence): pay no mana and
                                        // instead make the opponent gain alt_lifegain life (-> that
@@ -987,6 +991,18 @@ public:
         // play does (and is designed to carry a land_from_top source bit the same way, see
         // logs/landfall_drafts/_courser_design.md). Human play: the `landafter=` line verb.
         bool        land_after_casts = false;
+        // (Placed after land_after_casts, in the same padding before land_to_play: no size cost --
+        // which is exactly why kPlanDomAssertedSize cannot notice it; the census key carries it by hand.)
+        // THE LAND'S SOURCE ZONE (2026-10-15, Courser of Kruphix: "You may play lands from the top of
+        // your library"). false (default) == land_to_play names a HAND copy, as always; true == it
+        // names the library TOP, which must still be that card when the drop is played (both worlds'
+        // PlayLandByName / TryPlaySpecificLand refuse a mismatch rather than substitute a hand copy --
+        // a silent swap is the auras-gi20 divergence class). EVERY site that carries land_face carries
+        // this too (record / replay / continuation / deferred play), and every plan identity key folds
+        // it: a top Forest and a hand Forest leave different libraries and hands, so they are
+        // different lines, BRANCHED and never folded. Composes with land_after_casts (a top land played
+        // after the casts) and the other land sub-decisions. Human play: the `landtop=` line verb.
+        bool        land_from_top = false;
         std::string land_to_play;
 
         // Fetchland search target (Pass 2 of the real-fetch model): when land_to_play is a
@@ -1495,6 +1511,17 @@ public:
     // ApplyPlanDirect's arming and AIEngine's draw-engine classification -- because a class one
     // world counts and the other does not shifts every later bp_at index.
     static bool HandGainedACard(const std::vector<int>& before, const GameState& state);
+    // THE LIBRARY-TOP TWIN of HandGainedACard (Courser of Kruphix, 2026-10-15): a playable top land
+    // exists NOW that was not the playable top at the snapshot (`top_snapshot` = PlayableTopLandNumber
+    // taken at the same points as the hand snapshot; 0 = none was playable), and the drop is open and
+    // not RESERVED for a deferred land (`drop_reserved` = the caller's karoo_deferred: a Karoo or a
+    // land-after-casts plan has already spent it). A shuffle, a Genesis Wave, a draw or Courser itself
+    // entering can all do this, and it is a NEW OPTION -- "which land now?" -- exactly as a card
+    // arriving in hand is, so it arms the SAME site 10 (no BpSiteMask renumbering). ONE function for
+    // both worlds (ApplyPlanDirect's per-cast and section windows, AIEngine's put_in_hand_armed and
+    // section twin), so they count the same breakpoints. Deck-constant gated: false at the first test
+    // for every deck without a play-from-top card.
+    static bool TopLandNewlyPlayable(int top_snapshot, const GameState& state, bool drop_reserved);
 
     // ...and the test that decides WHICH SITE NUMBER the resulting breakpoint gets: does an EXISTING
     // param-keyed class already claim this cast? Site 10 is the FALLBACK for what the whitelists
@@ -2079,6 +2106,10 @@ public:
         // "landafter=<name>": the land is played AFTER the line's casts (Plan::land_after_casts), so
         // a landfall permanent the line casts sees it. false == `land=`, land-first, as always.
         bool        land_after_casts = false;
+        // "landtop=<name>": the land is the library TOP (Plan::land_from_top, Courser of Kruphix).
+        // false == a hand copy, as `land=` / `landafter=` always meant, so saved references replay
+        // unchanged.
+        bool        land_from_top = false;
         std::vector<std::string> casts;      // hand spells to cast, in clicked order
         int         lands_edge = 0;          // discard this many lands to Land's Edge (0 = none)
         std::vector<std::string> vial_deploys;  // creatures put onto the battlefield via Aether

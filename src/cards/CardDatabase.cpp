@@ -800,6 +800,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.landfall_quest_counters        = params.value("landfall_quest_counters", 0);
     p.etb_tokens_per_land            = params.value("etb_tokens_per_land", 0);
     p.etb_tokens_per_land_basic_only = params.value("etb_tokens_per_land_basic_only", false);
+    // Courser of Kruphix's two static clauses (CardParams' LIBRARY TOP block).
+    p.library_top_revealed           = params.value("library_top_revealed", false);
+    p.play_lands_from_library_top    = params.value("play_lands_from_library_top", false);
     p.stages_cards           = params.value("stages_cards", false);
     p.death_trigger_damage   = params.value("death_trigger_damage", 0);
     p.scales_per_matching    = params.value("scales_per_matching", false);

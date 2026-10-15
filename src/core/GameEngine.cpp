@@ -22,6 +22,17 @@ void GameEngine::SetLogger(GameLogger* logger)
 
 // ---- Helper: collect board state for logging ----
 
+// The revealed library top for the phase snapshot (Courser of Kruphix; GameLogger::CommitPhase's
+// `library_top`): its card number while LibraryTopVisible, else 0 -- so the field is absent from every
+// other deck's log. RawAt, not front(): this is the LOG reading a card the rules already reveal, not a
+// decision reading the library, so it must not register as an index-carry read.
+static int PhaseLibraryTop(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    if (ap.library.empty() || !LibraryTopVisible(state)) { return 0; }
+    return ap.library.RawAt(0).m_number;
+}
+
 static void CollectBoardState(const GameState& state,
                                std::vector<GameLogger::PermSnapshot>& battlefield_out,
                                std::vector<int>& hand_out,
@@ -513,7 +524,7 @@ void GameEngine::DrawStep(GameState& state)
         m_logger->StartPhase(state.turn_number, "DRAW");
         m_logger->LogDraw(drawn.m_number, drawn.m_name);
         hand.push_back(drawn.m_number);
-        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::DrawStep);
     // SAGA (CR 714.2b): "after your draw step, add a lore counter" -- each Saga we control gains
@@ -528,7 +539,7 @@ void GameEngine::DrawStep(GameState& state)
 void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 {
     state.phase = is_pre_combat ? Phase::PreCombatMain : Phase::PostCombatMain;
-    if (is_pre_combat) { state.StampMain1Hand(); }   // main-2 land drop: newly arrived lands only (lockstep w/ SimulateEndAndStartNextTurn)
+    if (is_pre_combat) { state.StampMain1Hand(PlayableTopLandNumber(state)); }   // main-2 land drop: newly arrived lands only (lockstep w/ SimulateEndAndStartNextTurn)
     state.step  = Step::MainPhase;
 
     // Rad counters mill at the beginning of the PREcombat main only (see ApplyRadMill). Before the
@@ -620,7 +631,7 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
         std::vector<GameLogger::PermSnapshot> bf, obf;
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
-        m_logger->CommitPhase(state.ActivePlayer().life, state.Opponent().life, bf, hand, obf, gy, staged);
+        m_logger->CommitPhase(state.ActivePlayer().life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
 }
 
@@ -822,7 +833,7 @@ void GameEngine::CombatPhase(GameState& state)
         std::vector<GameLogger::PermSnapshot> bf, obf;
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
-        m_logger->CommitPhase(state.ActivePlayer().life, opp.life, bf, hand, obf, gy, staged);
+        m_logger->CommitPhase(state.ActivePlayer().life, opp.life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
 }
 
@@ -904,7 +915,7 @@ void GameEngine::CleanupStep(GameState& state)
         std::vector<GameLogger::PermSnapshot> bf, obf;
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
-        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
 
     // Remove all damage marks, "until end of turn" boosts, and animation effects (CR 514.2).

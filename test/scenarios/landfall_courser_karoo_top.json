@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "Courser of Kruphix 2026-10-15: a KAROO on the library top. Courser and three Forests out, no land in",
+    "hand, Lightning Bolt in hand, Gruul Turf on top, opponent at 3. T5: play Gruul Turf FROM THE TOP (a",
+    "Karoo: deferred after the casts, bounces a Forest, enters tapped) -- the enumeration leaves it on top",
+    "while the casts are enumerated. T6: Turf taps for {R}{G} -> Bolt, win T6. Without the top play Turf",
+    "is drawn T6 and enters tapped: no red until T7."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Courser of Kruphix"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Lightning Bolt"
+  ],
+  "library_top": [
+    "Gruul Turf"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "expect_win_turn": 6
+}

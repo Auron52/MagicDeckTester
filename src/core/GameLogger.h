@@ -81,7 +81,10 @@ public:
         std::vector<CounterInfo> counters;
     };
 
-    void LogPlayLand(int card_num, const std::string& card_name);
+    // from_library_top: the land was played from the library TOP (Courser of Kruphix) rather than
+    // the hand. Folds a "T" into the digest ONLY when true and adds `"from": "library_top"` to the
+    // JSON action, so every hand land -- every land of every other deck -- logs byte-identically.
+    void LogPlayLand(int card_num, const std::string& card_name, bool from_library_top = false);
     // chosen_x: the resolved X for {X} spells (Crackle / Reality Spasm); -1 if the
     // spell has no {X} in its cost (so the viewer only shows "X=N" when meaningful).
     // targets: who/what the spell points at (Crackle -> opponent face, removal -> a creature).
@@ -126,7 +129,13 @@ public:
                      const std::vector<int>& hand,
                      const std::vector<PermSnapshot>& opp_battlefield = {},
                      const std::vector<int>& graveyard = {},
-                     const std::vector<int>& staged = {});
+                     const std::vector<int>& staged = {},
+                     // The library TOP's card number while it is revealed (Courser of Kruphix --
+                     // LibraryTopVisible), else 0. A per-phase snapshot for the replay viewer, NOT
+                     // folded into the digest (like every board snapshot) and emitted only when
+                     // non-zero, so every other deck's log is byte-identical. USER-question Q5's
+                     // default (2026-10-15): the top-play source + this snapshot, no per-change REVEAL.
+                     int library_top = 0);
 
     // Returns true if a phase was started but not yet committed.
     bool InPhase() const { return m_in_phase; }
@@ -211,6 +220,8 @@ private:
         std::vector<std::string> dispositions;   // REVEAL: per-card destination label (optional)
         // ABILITY: the ability description (source recorded in card_num/card_name).
         std::string ability;
+        // PLAY_LAND: played from the library top (Courser of Kruphix), not the hand.
+        bool        from_library_top = false;
     };
 
     struct PhaseEntry
@@ -225,6 +236,7 @@ private:
         std::vector<int>          hand;
         std::vector<int>          graveyard;
         std::vector<int>          staged;   // hand cards exiled-but-playable (Light Up / Soulfire dig)
+        int                       library_top = 0;   // revealed library top (Courser), 0 = hidden
     };
 
     std::string                             m_run_id;

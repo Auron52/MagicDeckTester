@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "Courser of Kruphix 2026-10-15: the library TOP as a land-drop source (Plan::land_from_top).",
+    "Courser and three Forests on the battlefield, NO land in hand, Lava Spike in hand, a Mountain on",
+    "top, opponent at 3. Exact lethal T5: play the TOP Mountain as the land drop (PlayLandFromLibraryTop),",
+    "then Lava Spike. Without the top as a land option there is no red source until the Mountain is",
+    "drawn T6. CONTROL: landfall_courser_top_land_only_control (same board, no Courser) wins T6."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Courser of Kruphix"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Lava Spike"
+  ],
+  "library_top": [
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "expect_win_turn": 5
+}

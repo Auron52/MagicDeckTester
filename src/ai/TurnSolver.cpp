@@ -7714,6 +7714,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
     std::string land = p.land_decided ? (p.land_to_play.empty() ? "(defer)" : p.land_to_play)
                                       : "(heuristic)";
     if (!p.land_face.empty()) { land += "/" + p.land_face; }
+    if (p.land_from_top)      { land += "@top"; }        // Courser: the library top, not a hand copy
     if (p.rad_mode >= 0)      { land += p.rad_mode ? "[rad]" : "[no-rad]"; }
     if (p.bounce_choice >= 1) { land += "[bounce" + std::to_string(p.bounce_choice) + "]"; }
     if (p.scry_choice >= 0)   { land += "[scry" + std::to_string(p.scry_choice) + "]"; }
@@ -16694,6 +16695,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     folds(p.land_to_play);
     folds(p.fetch_target);
     folds(p.land_face);
+    // The land's SOURCE ZONE (Courser of Kruphix): a top Forest and a hand Forest are different plans.
+    // Folded only when set, so every plan of every other deck keeps its exact fingerprint.
+    if (p.land_from_top) { fold(0x544F504C41ull); }   // "TOPLA"
     fold(static_cast<uint64_t>(p.scry_choice + 2) * 37 + static_cast<uint64_t>(p.etbdig_choice + 2));
     fold(static_cast<uint64_t>(p.rad_mode + 2) * 41);
     fold(static_cast<uint64_t>(p.bounce_choice + 2) * 83);
@@ -16707,6 +16711,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // decision the axis exists to give the search. Gated on the non-default value, so every plan of
     // every deck without a landfall card keeps its exact prior fingerprint.
     if (p.land_after_casts)            { fold(0x4C41465445ull); }   // "LAFTE"
+    // ...and the land's SOURCE ZONE (Courser of Kruphix's top vs a hand copy): the same must-fold.
+    if (p.land_from_top)               { fold(0x4C544F50ull); }       // "LTOP"
     if (p.landfall_target_choice >= 0) { fold(static_cast<uint64_t>(p.landfall_target_choice + 2) * 89); }
     fold(static_cast<uint64_t>(p.etbcounter_choice + 2) * 67);
     fold(static_cast<uint64_t>(p.sweep_choice + 2) * 71);
@@ -16767,6 +16773,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.land_rad_mode) != static_cast<long long>(y.land_rad_mode))
     { add("land_rad_mode", std::to_string(static_cast<long long>(x.land_rad_mode)),
            std::to_string(static_cast<long long>(y.land_rad_mode))); }
+    if (x.land_from_top != y.land_from_top)
+    { add("land_from_top", x.land_from_top ? "1" : "0", y.land_from_top ? "1" : "0"); }
     if (static_cast<long long>(x.alt_cost) != static_cast<long long>(y.alt_cost))
     { add("alt_cost", std::to_string(static_cast<long long>(x.alt_cost)),
            std::to_string(static_cast<long long>(y.alt_cost))); }
@@ -16983,7 +16991,8 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
 {
     return p.actions.empty() && p.breakpoint_actions.empty()
         && p.land_decided && p.land_to_play.empty() && p.fetch_target.empty()
-        && p.land_face.empty() && !p.land_after_casts && p.landfall_target_choice == -1
+        && p.land_face.empty() && !p.land_after_casts && !p.land_from_top
+        && p.landfall_target_choice == -1
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
@@ -19419,6 +19428,15 @@ bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinitio
         // Site 6 -- state-keyed, because the draw belongs to the WATCHER (Puresteel Paladin), not
         // to the Equipment resolving here.
         || TurnSolver::EquipmentDrawBreakpoint(state, def);
+}
+
+bool TurnSolver::TopLandNewlyPlayable(int top_snapshot, const GameState& state, bool drop_reserved)
+{
+    if (!state.deck_has_top_land_play || drop_reserved) { return false; }
+    const Player& ap = state.players[state.active_player_index];
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    const int n = PlayableTopLandNumber(state);
+    return n != 0 && n != top_snapshot;
 }
 
 bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState& state)
@@ -32940,6 +32958,7 @@ namespace solvememo
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.land_after_casts != b.land_after_casts
+            || a.land_from_top != b.land_from_top
             || a.landfall_target_choice != b.landfall_target_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
             || a.bp_at != b.bp_at || a.bp_wave0 != b.bp_wave0)
@@ -33110,7 +33129,8 @@ static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a); 
 // (references/suboptimal/Bruna/claude_s3_gi2 T4: Wings on Avacyn's Pilgrim, Birds the only blue --
 // the combat swap is the T4 kill, and the all-attackers approximation calls it unpayable).
 static bool PlayLandByName(GameState& state, const std::string& name, const std::string& fetch_target,
-                           bool allow_shock_pay, const std::string& land_face, int rad_mode);
+                           bool allow_shock_pay, const std::string& land_face, int rad_mode,
+                           bool from_top);
 static std::string SimulateLandPlay(GameState& state);
 
 // THE PLAN'S OWN LAND DROP, played on a copy the way ApplyPlanDirect will play it. Both timing passes
@@ -33153,7 +33173,8 @@ static GameState WithPlanLandDrop(const GameState& state, const TurnSolver::Plan
             { allow_shock_pay = true; break; }
         }
     }
-    PlayLandByName(base, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face, plan.rad_mode);
+    PlayLandByName(base, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face, plan.rad_mode,
+                   plan.land_from_top);
     return base;
 }
 
@@ -33205,7 +33226,8 @@ static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Pla
     if (payable && !karoo_land.empty())
     {
         ScriptedBounceChoice _sbc(plan.bounce_choice);   // the plan's searched bounce (Plan::bounce_choice)
-        PlayLandByName(cs, karoo_land, plan.fetch_target, true, plan.land_face, plan.rad_mode);
+        PlayLandByName(cs, karoo_land, plan.fetch_target, true, plan.land_face, plan.rad_mode,
+                       plan.land_from_top);
     }
     return payable && TapForCostDirect(cs, sw.cost, /*for_creature=*/false);
 }
@@ -35625,7 +35647,8 @@ bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creatu
 // not search the land (depth-0 static plans).
 static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& fetch_target = "", bool allow_shock_pay = true,
-                           const std::string& land_face = "", int rad_mode = -1);
+                           const std::string& land_face = "", int rad_mode = -1,
+                           bool from_top = false);
 static std::string SimulateLandPlay(GameState& state);
 
 // ---- GREEDY LAND-DROP INSTRUMENT (MTG_LANDDROP_STATS, default off, zero cost when off) --------
@@ -38133,6 +38156,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     std::vector<int> hand_at_section;
     uint32_t         seq_at_section = g_hand_entry_seq;
     if (BpHandEntryEnabled()) { hand_at_section = TurnSolver::HandCardNumbers(state); }
+    // The LIBRARY-TOP half of the section window (Courser of Kruphix; TopLandNewlyPlayable): the
+    // playable top as the section opens, reset with the hand half at every breakpoint. Taken BEFORE
+    // the plan's own land block, so a top play that leaves another top behind for an extra drop arms
+    // too. 0 (one bool test) for every deck without a play-from-top card.
+    int top_at_section = PlayableTopLandNumber(state);
 
     // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
     // site 5 (searchable by default), a plain cantrip is site 3 (the admitted quality prune). One
@@ -38237,6 +38265,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     bool        land_after_deferred = false;
     std::string deferred_land_face;
     int         deferred_rad_mode   = -1;
+    // ...and the deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix), for the Karoo
+    // and the land-after drop alike: a deferred TOP land is played from the top at the deferred
+    // point, and if a cast changed the top in between, PlayLandByName refuses it -- in both worlds
+    // (AIEngine::TakeTurn's twin) -- so the line scores as the wasted line it is, never as a swap.
+    bool        karoo_from_top      = false;
 
     // Human-play mode (tools/play GUI): execute EXACTLY the committed plan -- suppress every
     // auto-heuristic that would play cards the human didn't choose (draw-breakpoint re-solve,
@@ -38279,6 +38312,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     karoo_deferred  = true;
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
+                    karoo_from_top  = plan.land_from_top;
                 }
                 else if (plan.land_after_casts)
                 {
@@ -38290,6 +38324,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     karoo_fetch         = plan.fetch_target;
                     deferred_land_face  = plan.land_face;
                     deferred_rad_mode   = plan.rad_mode;
+                    karoo_from_top      = plan.land_from_top;
                 }
                 else
                 {
@@ -38318,7 +38353,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // deferred (MTG_NO_KAROO_DEFER). Consumed by the first bounce; -1 is the front.
                     ScriptedBounceChoice _sbc(plan.bounce_choice);
                     PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay,
-                                   plan.land_face, plan.rad_mode);
+                                   plan.land_face, plan.rad_mode, plan.land_from_top);
                 }
             }
         }
@@ -38614,6 +38649,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             hand_at_section = TurnSolver::HandCardNumbers(state);
             seq_at_section  = g_hand_entry_seq;
         }
+        top_at_section = PlayableTopLandNumber(state);   // ...and its library-top half (Courser)
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         if (class_on) { ++g_bp_classon_last; }   // monotonic; delta-read by the uniform collapse
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
@@ -39002,7 +39038,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...and its own searched Karoo bounce (Plan::bounce_choice), replayed by the executor from
         // the continuation's ContPins exactly like the scry pin.
         ScriptedBounceChoice sbc(sp.bounce_choice);
-        if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face, sp.rad_mode))
+        if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face, sp.rad_mode,
+                            sp.land_from_top))
         { return; }
         if (out_breakpoint != nullptr && sink != nullptr)
         {
@@ -39017,6 +39054,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             la.land_face         = sp.land_face;
             la.land_fetch_target = sp.fetch_target;
             la.land_rad_mode     = sp.rad_mode;
+            la.land_from_top     = sp.land_from_top;   // ...and its source zone (Courser)
             sink->push_back(la);
         }
     };
@@ -39133,6 +39171,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         std::vector<int> hand_at_cast;
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { hand_at_cast = TurnSolver::HandCardNumbers(state); }
+        // ...and the LIBRARY-TOP twin (Courser of Kruphix): the playable top before this cast, for
+        // TopLandNewlyPlayable at the arming site below. 0 (one bool test) without a play-from-top card.
+        const int top_at_cast = PlayableTopLandNumber(state);
         // MTG_HAND_ENTRY_CENSUS only: mark the window inside which today's arming can SEE a hand
         // entry, so the census can report what happens outside it. Inert (and untouched) otherwise.
         HandEntryCastScope _hec;
@@ -41163,10 +41204,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // `sink_stack.empty()` and `!s_human_play` are the same two conditions every other deferred
         // arming site carries: a re-solve already inside a continuation re-solves inline, and human
         // play stops for the chooser instead of arming anything.
+        // THE LIBRARY TOP IS THE SAME RULE (Courser of Kruphix): a cast that leaves a NEW playable
+        // land on top while the drop is open (a shuffle, a draw, Genesis Wave, Courser itself
+        // entering) has created a new option just as a card entering hand does -- same site,
+        // same window, same shared predicate (TopLandNewlyPlayable; executor twin put_in_hand_armed).
         if (BpPutInHandEnabled() && !s_human_play && sink_stack.empty()
             && !deferred_cantrip_resolve
             && !TurnSolver::ParamKeyedDrawClass(state, def)
-            && TurnSolver::HandGainedACard(hand_at_cast, state))
+            && (TurnSolver::HandGainedACard(hand_at_cast, state)
+                || TurnSolver::TopLandNewlyPlayable(top_at_cast, state, karoo_deferred)))
         {
             deferred_cantrip_resolve = true;
             deferred_cantrip_site    = &def;
@@ -42731,7 +42777,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         land_after_deferred = false;
         ScriptedTopChoice    _stc(plan.scry_choice);
         ScriptedBounceChoice _sbc(plan.bounce_choice);
-        PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode);
+        PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode,
+                       karoo_from_top);
     }
     if (karoo_deferred)
     {
@@ -42744,7 +42791,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // The bounce-fold probe, when the candidate loop armed it for THIS apply (see BounceProbe).
             const bool probe_here = g_bounce_probe.armed_depth == g_apd_depth;
             if (probe_here) { g_bounce_probe.live = true; }
-            PlayLandByName(state, karoo_land_name, karoo_fetch);
+            PlayLandByName(state, karoo_land_name, karoo_fetch, true, "", -1, karoo_from_top);
             if (probe_here) { g_bounce_probe.live = false; }
         }
         // ...then the land Auras that named it (Bruna sweep D): cast now, on the karoo.
@@ -42789,9 +42836,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // carries: a re-solve already inside a continuation re-solves inline, and human play stops for
     // the chooser instead of arming. Sequence check first -- it is one thread-local load, and it
     // short-circuits the O(hand x snapshot) content diff on every apply that gained nothing.
+    // The library-top half (Courser of Kruphix) sits OUTSIDE the sequence pre-filter: a top change
+    // is not a hand entry, so g_hand_entry_seq says nothing about it (executor twin: the same OR).
     if (BpHandEntryEnabled() && !deferred_cantrip_resolve && !s_human_play && sink_stack.empty()
-        && g_hand_entry_seq != seq_at_section
-        && TurnSolver::HandGainedACard(hand_at_section, state))
+        && ((g_hand_entry_seq != seq_at_section
+             && TurnSolver::HandGainedACard(hand_at_section, state))
+            || TurnSolver::TopLandNewlyPlayable(top_at_section, state, karoo_deferred)))
     {
         deferred_cantrip_resolve = true;
         deferred_hand_before     = hand_at_section;
@@ -43891,7 +43941,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // No-op at 0 rad counters, i.e. everywhere but a deck holding Mariposa Military Base.
     ApplyRadMill(state, state.active_player_index);
     MergeStagedToHandEnd(state);   // main 1's head: the executor's staged merge (see the helper)
-    state.StampMain1Hand();   // main-2 land drop: newly arrived lands only (lockstep w/ GameEngine::MainPhase)
+    state.StampMain1Hand(PlayableTopLandNumber(state));   // main-2 land drop: newly arrived lands only (lockstep w/ GameEngine::MainPhase)
     return true;
 }
 
@@ -43902,10 +43952,34 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 // byte-identical placement for the same card.
 static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& fetch_target, bool allow_shock_pay,
-                           const std::string& land_face, int rad_mode)
+                           const std::string& land_face, int rad_mode, bool from_top)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+
+    // THE LIBRARY TOP (Courser of Kruphix; Plan::land_from_top). The top must be a playable land of
+    // EXACTLY this name under a play-from-top permanent (PlayableTopLandNumber, the shared predicate),
+    // and anything else plays NOTHING -- never a hand copy in its place: a silent swap would leave
+    // the two worlds holding different lands (the auras-gi20 class), and a line whose top changed
+    // under it (a cast shuffled before a deferred top drop) must score as the wasted line it is.
+    // Same options as the hand drop below. Lockstep twin: AIEngine::TryPlaySpecificLand.
+    if (from_top)
+    {
+        if (PlayableTopLandNumber(state) == 0 || ap.library.front().m_name != name) { return false; }
+        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(ap.library.front());
+        if (tdef == nullptr) { return false; }
+        LandPlayOptions o;
+        o.fetch_target        = fetch_target;
+        o.land_face           = land_face;
+        o.allow_shock_pay     = allow_shock_pay;
+        o.rad_mode            = rad_mode;
+        o.honor_entry_chooser = true;
+        static const bool s_orchard_onplay_top = !EnvOn("MTG_LEGACY_SEARCH");
+        o.spawn_orchard_spirit = s_orchard_onplay_top;
+        const bool ok = PlayLandFromLibraryTop(state, *tdef, o);
+        if (ok) { landdrop::RecordAnyLandPlay(); }
+        return ok;
+    }
 
     // Choose WHICH copy of `name` to play. Prefer an exiled/STAGED copy (Light Up the Stage --
     // playable only until its expiry turn) over a permanent hand copy: the hand copy keeps for a
@@ -44021,9 +44095,30 @@ static std::string SimulateLandPlay(GameState& state)
     // before a multi-colour one, which is the difference the loop below cannot express at all.
     // `pass` is recorded as 0/1 by whether the pick is multi-colour, so the instrument's columns
     // keep meaning the same thing across both arms.
+    // THE LIBRARY TOP (Courser of Kruphix): one more candidate for this playout drop, judged by the
+    // same rule as a hand land in whichever ranker runs -- this is the beyond-horizon playout, a
+    // PERMITTED greedy site, and without the top here every rollout would leave Courser's land unplayed
+    // and under-value it. `top_ok` is false for every deck without a play-from-top permanent (one bool
+    // test), which leaves both branches below exactly as they were.
+    const bool top_ok = PlayableTopLandNumber(state) != 0;
+    auto play_top = [&]() -> std::string
+    {
+        const std::string tname = ap.library.front().m_name;
+        PlayLandByName(state, tname, "", true, "", -1, /*from_top=*/true);
+        return tname;
+    };
     if (RolloutLandRankerEnabled())
     {
-        const int idx = GreedyLandChoiceIndex(state);
+        const GreedyLandPick gp = GreedyLandChoice(state);   // == GreedyLandChoiceIndex with no top
+        if (gp.from_top)
+        {
+            const CardDefinition* tdef = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.library.front()));
+            const int pass = (tdef && tdef->params.produces.size() > 1) ? 0 : 1;
+            const std::string tname = play_top();
+            landdrop::Record(tname, pass, alternatives);
+            return tname;
+        }
+        const int idx = gp.hand_index;
         if (idx < 0) { landdrop::Record(std::string(), 0, alternatives); return std::string(); }
         const std::string name = ap.hand[idx].m_name;
         const CardDefinition* pdef =
@@ -44034,8 +44129,23 @@ static std::string SimulateLandPlay(GameState& state)
         return name;
     }
 
+    // The top's place WITHIN each pass is the provider's tie rule (TopLandSourceFirstOnTie, default
+    // first: a top play keeps the hand copy). Only read when a top is playable.
+    const bool top_first = top_ok
+        && ResolveProvider(state).TopLandSourceFirstOnTie(state, state.active_player_index);
+    // Would this pass take the library top? The same per-card test as the hand loop below.
+    auto top_fits = [&](int pass) -> bool
+    {
+        if (!top_ok) { return false; }
+        const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.library.front()));
+        if (!def) { return false; }
+        if (def->params.etb_bounce_land && !has_other_land) { return false; }
+        return pass != 0 || def->params.produces.size() > 1;
+    };
     for (int pass = 0; pass < 2; ++pass)
     {
+        if (top_first && top_fits(pass))
+        { const std::string tname = play_top(); landdrop::Record(tname, pass, alternatives); return tname; }
         for (const Card& c : ap.hand)
         {
             if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
@@ -44056,6 +44166,8 @@ static std::string SimulateLandPlay(GameState& state)
             landdrop::Record(name, pass, alternatives);
             return name;
         }
+        if (!top_first && top_fits(pass))
+        { const std::string tname = play_top(); landdrop::Record(tname, pass, alternatives); return tname; }
     }
     landdrop::Record(std::string(), 0, 0);
     return std::string();
@@ -47145,6 +47257,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     plans.back().land_decided = true;    // decided: and the decision is "not yet"
                     plans.back().land_to_play.clear();
                     plans.back().land_face.clear();
+                    plans.back().land_from_top = false;  // no land -> no source (Courser)
                     plans.back().fetch_target.clear();
                     plans.back().rad_mode    = -1;
                     plans.back().scry_choice = -1;
@@ -48007,6 +48120,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (p.land_decided)            { sig += "|land="  + p.land_to_play; }
             if (!p.fetch_target.empty())   { sig += "|fetch=" + p.fetch_target; }
             if (!p.land_face.empty())      { sig += "|face="  + p.land_face; }
+            // The land's TIMING and SOURCE are identity too (Plan::land_after_casts / land_from_top):
+            // appended only when set, so every other plan's signature is unchanged.
+            if (p.land_after_casts)        { sig += "|after"; }
+            if (p.land_from_top)           { sig += "|top"; }
         }
         return sig;
     };
@@ -49465,6 +49582,41 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             // again in combat). Mark the route so it is fanned.
             if (a.kind == Action::Kind::AuraSwap) { mask |= 1 << 10; continue; }
         }
+    }
+    // SITE 10's LIBRARY-TOP ROUTE (Courser of Kruphix, 2026-10-15). With a play-from-top permanent
+    // out, a land arriving on TOP while the drop is still open is a NEW OPTION exactly like a land
+    // arriving in hand, and both worlds arm site 10 for it (TurnSolver::TopLandNewlyPlayable at the
+    // per-cast and section windows). "If a route is ever added, ADD IT HERE TOO": without this clause
+    // the re-solve fires but its continuation is BpUnbranchedCanon's cands.front() at any budget -- an
+    // in-window greedy pick of which land / which line follows the shuffle (MTG_BP_CANON_AUDIT reads
+    // it as unreachable).
+    //
+    // A SUPERSET, the safe direction every clause here takes (a marked plan whose top never changes
+    // yields variants that collapse onto their base plan -- wasted nodes, never a wrong answer):
+    //   * the drop is still OPEN after the plan's own land (a deferred drop, or an extra drop left
+    //     over); a land-after-casts / Karoo plan has reserved it, so nothing can arm for it;
+    //   * a play-from-top permanent is on the battlefield, or the plan CASTS one (Courser entering is
+    //     itself the most common top "change": nothing was playable, now the top is);
+    //   * and the plan DOES something that can move the top -- any cast (a shuffle, a draw, Genesis
+    //     Wave's reveal, Courser's own arrival), or its own top play exposing the next card.
+    // Gated on the deck constant: one bool test for every deck without a play-from-top card.
+    if (state.deck_has_top_land_play && BpPutInHandEnabled() && !(mask & (1 << 10)))
+    {
+        const Player& ap = state.ActivePlayer();
+        const int used = ap.lands_played_this_turn
+                       + ((p.land_decided && !p.land_to_play.empty()) ? 1 : 0);
+        const bool drop_open = used < ap.LandDropsAvailable();
+        bool source = drop_open && TopLandPlayStaticSource(state) != nullptr;
+        if (drop_open && !source)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d && d->params.play_lands_from_library_top) { source = true; break; }
+            }
+        }
+        if (source && (!p.actions.empty() || p.land_from_top)) { mask |= 1 << 10; }
     }
     return mask;
 }
@@ -50998,6 +51150,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     key += '\x1f'; key += p.land_to_play;
                     key += '\x1f'; key += p.fetch_target;
                     key += '\x1f'; key += p.land_face;
+                    // A top-played land (Courser) leaves a different library and hand from a hand
+                    // copy of the same name, so its post-land state is a different cache entry.
+                    if (p.land_from_top) { key += "\x1ftop"; }
                 }
                 std::vector<std::string>& cands = cand_cache[key];
                 if (cands.empty())
@@ -51005,7 +51160,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (axis_postland && land_before_casts)
                     {
                         GameState ls = state;
-                        PlayLandByName(ls, p.land_to_play, p.fetch_target, true, p.land_face);
+                        PlayLandByName(ls, p.land_to_play, p.fetch_target, true, p.land_face, -1,
+                                       p.land_from_top);
                         cands = RankedTutorCandidates(ResolveProvider(ls), ls, ls.active_player_index,
                                                                     d->params);
                     }
@@ -52172,8 +52328,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             int drop = -1;
             // A land-after-casts plan (Plan::land_after_casts) was enumerated on the board WITHOUT
-            // its land played, so its hand indices are the state's own: no drop to remove.
-            if (!p.land_to_play.empty() && !p.land_after_casts)
+            // its land played, so its hand indices are the state's own: no drop to remove. Nor does
+            // a library-TOP land (Plan::land_from_top, Courser) ever leave the hand.
+            if (!p.land_to_play.empty() && !p.land_after_casts && !p.land_from_top)
             {
                 for (int i = 0; i < static_cast<int>(sc_ap.hand.size()); ++i)
                 {
@@ -52630,7 +52787,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key)
+static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -52742,7 +52899,11 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
         {
             k.push_back(id_of("Pland|" + all[i].land_to_play + "|" + all[i].fetch_target + "|"
                               + all[i].land_face + "|" + std::to_string(all[i].rad_mode)
-                              + "|" + std::to_string(all[i].bounce_choice), 'P'));
+                              + "|" + std::to_string(all[i].bounce_choice)
+                              // timing + source (landfall / Courser): suffixes only when set, so
+                              // every other deck's key strings are unchanged.
+                              + (all[i].land_after_casts ? "|after" : "")
+                              + (all[i].land_from_top ? "|top" : ""), 'P'));
         }
         // EXACT-MATCH KEY for EVERY plan-level sub-decision axis, pushed unconditionally (including
         // each field's "unset" -1/0), so two plans disagreeing on any axis each hold a key the other
@@ -52774,6 +52935,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
             add(pl.land_after_casts); add(pl.landfall_target_choice);
+            add(pl.land_from_top);   // Courser: in padding, so the size pin below cannot catch it
             add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
             add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
             for (int s : pl.sac_pins)             { add(s); }
@@ -53284,11 +53446,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // hand-flooding clause in the Reliquary pre-pass, no Apex-exiled skip in that pre-pass, and no
     // Karoo self-bounce skip in the four-pass -- so the tiebreak named a land the executor would
     // not have played, which is the one thing this lambda exists to avoid.
-    const std::string greedy_land_name = [&]() -> std::string
-    {
-        const int i = GreedyLandChoiceIndex(state);
-        return i < 0 ? std::string() : std::string(ap.hand[i].m_name);
-    }();
+    // GreedyLandChoice (both sources -- Courser of Kruphix): `greedy_land_from_top` names the SOURCE
+    // of the greedy pick, so the tie-break below prefers exactly the play the d0 runner would make.
+    // With no playable top it is GreedyLandChoiceIndex exactly and the source is the hand.
+    const GreedyLandPick greedy_pick = GreedyLandChoice(state);
+    const std::string greedy_land_name = greedy_pick.from_top
+        ? std::string(ap.library.front().m_name)
+        : (greedy_pick.hand_index < 0 ? std::string() : std::string(ap.hand[greedy_pick.hand_index].m_name));
+    const bool greedy_land_from_top = greedy_pick.from_top;
 
     // Early land-choice PRUNE (provider-owned; see DecisionProvider::ForcedEarlyLandName). When the
     // provider names an early land that is actually in hand, collapse the fan-out to that one name --
@@ -53346,15 +53511,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // probe passed), Karoos excluded -- a Karoo is always played after the casts already. The
     // land-after-casts axis (after the defer plans) re-offers exactly these, so it can never invent a
     // land option the land-first enumeration did not have.
-    struct LandOption { std::string land, fetch, face; };
+    // `top` is the option's SOURCE ZONE (Plan::land_from_top): a library-top land offered here is
+    // re-offered after the casts from the top too, never as a hand copy.
+    struct LandOption { std::string land, fetch, face; bool top = false; };
     std::vector<LandOption> offered_lands;
 
+    // `from_top` (Courser of Kruphix): the land is the library TOP, not a hand copy -- its own land
+    // option, stamped on every plan it yields (Plan::land_from_top). See the TOP group below.
     auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target,
-                            const std::string& land_face = "")
+                            const std::string& land_face = "", bool from_top = false)
     {
         PROF_INC(gamestate_copies);
         GameState copy = state;
-        if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target, true, land_face)) { return; }
+        if (!land_name.empty()
+            && !PlayLandByName(copy, land_name, fetch_target, true, land_face, -1, from_top)) { return; }
         // Karoo (etb_bounce_land) DEFERRAL, mirroring ApplyPlanDirect / the executor: the apply
         // plays a Karoo AFTER the main casts, so the bounce returns a land that was already
         // TAPPED for this turn's casts. Folding the Karoo into `copy` up front bounced the land
@@ -53377,13 +53547,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             {
                 karoo_drop = true;
                 copy = state;   // the PlayLandByName above was the legality probe only
-                std::vector<Card>& h = copy.ActivePlayer().hand;
-                for (auto it = h.begin(); it != h.end(); ++it)
-                { if (it->m_name == land_name) { karoo_num = it->m_number; h.erase(it); break; } }
+                if (from_top)
+                {
+                    // A Karoo on the library TOP (Courser): the deferred apply leaves it ON TOP while
+                    // the casts resolve, so the casts are enumerated on exactly that state -- remove
+                    // nothing (the hand never held it). Its number still names the bounce host for a
+                    // land Aura. If a cast then changes the top, the deferred play refuses in BOTH
+                    // worlds (PlayLandByName / TryPlaySpecificLand): a wasted line, scored as one.
+                    karoo_num = copy.ActivePlayer().library.front().m_number;
+                }
+                else
+                {
+                    std::vector<Card>& h = copy.ActivePlayer().hand;
+                    for (auto it = h.begin(); it != h.end(); ++it)
+                    { if (it->m_name == land_name) { karoo_num = it->m_number; h.erase(it); break; } }
+                }
             }
         }
         if (state.deck_has_landfall && !land_name.empty() && !karoo_drop)
-        { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face }); }
+        { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face, from_top }); }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
         // TRANCHE re-enumeration: the idle plan touches no group, so wave 0 already emitted it.
@@ -53395,6 +53577,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             idle.land_to_play = land_name;
             idle.fetch_target = fetch_target;
             idle.land_face    = land_face;
+            idle.land_from_top = from_top;
             all.push_back(std::move(idle));
         }
 
@@ -53409,6 +53592,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             p.land_to_play = land_name;
             p.fetch_target = fetch_target;
             p.land_face    = land_face;
+            p.land_from_top = from_top;
             all.push_back(std::move(p));
         }
     };
@@ -53460,6 +53644,62 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             }
         }
         add_for_land(ln, "");   // ordinary land, or fetchland with <=1 candidate (heuristic)
+    }
+
+    // ---- THE LIBRARY TOP AS ITS OWN LAND OPTION (Courser of Kruphix, 2026-10-15) ----------------
+    // "You may play lands from the top of your library": with a play-from-top permanent out and a land
+    // on top, that land is one more land option -- its OWN group, BRANCHED, never deduped against a
+    // same-name or same-signature hand land. They are not interchangeable: playing the top keeps the
+    // hand copy and advances the library a card, so every later draw, a Genesis Wave's top-X window,
+    // the CRN reshuffle (keyed on m_number -- the two lines hold different copies) and the cleanup
+    // hand size all differ; the lines converge only on a win this turn, which the win-this-turn
+    // path already commits. So both are enumerated and the provider may only ORDER them
+    // (TopLandSourceFirstOnTie, the comparator's last key below). Not subject to land condemnation
+    // (it was never in hand, so it was never offered-and-declined at a slot). Main 2 bars it like a
+    // held hand land when it was already the playable top as main 1 began (StampMain1Hand). Same
+    // sub-decision fans as a hand land: both MDFC faces, the fetch-target set, and the Karoo
+    // self-bounce prune. Human play gets it too (the viewer never narrows): the `landtop=` verb.
+    // PlayableTopLandNumber is 0 for every deck without a play-from-top permanent (one bool test),
+    // so nothing below runs there.
+    if (const int top_num = PlayableTopLandNumber(state); top_num != 0)
+    {
+        const Card& top_card = ap.library.front();
+        const CardDefinition* tfront = CardDatabase::Instance().LookupCached(top_card);
+        const CardDefinition* tdef   = LandFaceDefOf(tfront);
+        const bool m2_barred = !is_pre_combat && HeldLandBarredFromMain2(state, top_card);
+        if (tdef != nullptr && !m2_barred && !karoo_self_bounce(tdef))
+        {
+            const std::string tn = top_card.m_name;
+            const CardDefinition* tl = CardDatabase::Instance().Lookup(tn);
+            if (tl && !tl->params.mdfc_back_name.empty())
+            {
+                if (tl->card.IsLand()) { add_for_land(tn, "", "front", true); }
+                add_for_land(tn, "", "back", true);
+            }
+            else if (tl && !tl->params.fetch_land_types.empty())
+            {
+                // The SAME fetch fan as a hand fetchland (FetchCandidates, narrowed by the provider's
+                // FetchSearchCandidates outside the unpruned audit and human play).
+                std::vector<std::string> cands =
+                    ResolveProvider(state).FetchCandidates(state, state.active_player_index, tl->params);
+                if (cands.size() > 1)
+                {
+                    if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())
+                    {
+                        cands = ResolveProvider(state).FetchSearchCandidates(
+                            state, state.active_player_index, tl->params, cands);
+                    }
+                    static const int s_fetch_fan_cap_top = EnvInt("MTG_FETCH_FAN_CAP", 0);
+                    if (s_fetch_fan_cap_top > 0 && static_cast<int>(cands.size()) > s_fetch_fan_cap_top)
+                    { cands.resize(static_cast<std::size_t>(s_fetch_fan_cap_top)); }
+                    for (const std::string& c : cands) { add_for_land(tn, c, "", true); }
+                }
+                else { add_for_land(tn, "", "", true); }
+            }
+            else { add_for_land(tn, "", "", true); }
+        }
+        TRACE("landtop", "T%d top land option %s (barred=%d)", state.turn_number,
+              top_card.m_name.c_str(), m2_barred ? 1 : 0);
     }
     // Defer: play no land pre-main. On a flood-engine turn the strict gate (ShouldCastDrawEngine,
     // MTG_TH_STRICT_FLOOD) suppresses "play land THEN cast Treasure Hunt/Throes" in the per-land
@@ -53525,6 +53765,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 v.fetch_target     = lo.fetch;
                 v.land_face        = lo.face;
                 v.land_after_casts = true;
+                v.land_from_top    = lo.top;   // a top land is played after the casts FROM THE TOP
                 after.push_back(std::move(v));
             }
         }
@@ -53659,6 +53900,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // and a correctness hazard if it ever became state-dependent.
     const bool hold_fuel =
         ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index);
+    // Resolved once, like the two above (strict weak ordering): only consulted when a top-sourced
+    // plan exists, i.e. only under a play-from-top permanent.
+    const bool top_first_on_tie = PlayableTopLandNumber(state) != 0
+        && ResolveProvider(state).TopLandSourceFirstOnTie(state, state.active_player_index);
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
@@ -53706,9 +53951,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                     if (a_tap != b_tap) { return a_tap > b_tap; }                // (2) tapped-first
                 }
             }
-            bool a_greedy = (a.land_to_play == greedy_land_name);
-            bool b_greedy = (b.land_to_play == greedy_land_name);
-            return a_greedy > b_greedy;
+            bool a_greedy = (a.land_to_play == greedy_land_name && a.land_from_top == greedy_land_from_top);
+            bool b_greedy = (b.land_to_play == greedy_land_name && b.land_from_top == greedy_land_from_top);
+            if (a_greedy != b_greedy) { return a_greedy > b_greedy; }
+            // THE LAND'S SOURCE, LAST (Courser of Kruphix; DecisionProvider::TopLandSourceFirstOnTie):
+            // among plans tied on EVERY key above and naming the same land, the top-sourced one first
+            // -- ORDER only, the search still replaces its incumbent on any strictly better line. No
+            // plan of any other deck carries land_from_top, so this never decides anything there.
+            if (top_first_on_tie && a.land_from_top != b.land_from_top && a.land_to_play == b.land_to_play)
+            { return a.land_from_top > b.land_from_top; }
+            return false;
         });
 
     // DIAGNOSTIC (MTG_FORCE_LAND="<turn>:<land name>[,<turn>:<name>...]", inert by default):
@@ -65485,6 +65737,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (q.land_decided)           { ax += " land_decided"; }
                     if (!q.land_to_play.empty())  { ax += " land=" + q.land_to_play; }
                     if (!q.land_face.empty())     { ax += " face=" + q.land_face; }
+                    if (q.land_from_top)          { ax += " top"; }
                     if (!q.fetch_target.empty())  { ax += " fetch=" + q.fetch_target; }
                     ax_i("scry",     q.scry_choice,        -1);
                     ax_i("etbdig",   q.etbdig_choice,      -1);
@@ -68535,6 +68788,8 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         auto land_pick_index = [&](const TurnSolver::Plan& p) -> int
         {
             if (!p.land_decided || p.land_to_play.empty()) { return -1; }
+            // A library-TOP land (Courser) never came out of the hand: nothing to map back.
+            if (p.land_from_top) { return -1; }
             int first = -1;
             for (std::size_t i = 0; i < ap.hand.size(); ++i)
             {
@@ -68559,6 +68814,13 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             bool uses_new = false, new_act = false, unknown = false, plan_pending = false;
             if (p.land_decided && !p.land_to_play.empty() && name_is_new(p.land_to_play))
             { uses_new = true; }
+            // A LIBRARY-TOP land (Courser of Kruphix) is never in the hand snapshot, so the by-hand
+            // rule above cannot judge it. The usual arrival here is exactly a NEW top -- a shuffle, a
+            // Genesis Wave or Courser entering is what armed the breakpoint (TopLandNewlyPlayable) --
+            // and no snapshot of the pre-site top is bound, so it is KEPT unconditionally: the safe
+            // direction (at worst a sibling's line scored twice, never a line deleted). Only plans of
+            // a deck with a play-from-top permanent carry the bit.
+            if (p.land_decided && p.land_from_top) { uses_new = true; }
             const int removed = land_pick_index(p);
             for (const Action& a : p.actions)
             {
@@ -69076,7 +69338,15 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
                                      bool swap_in_combat = false)
 {
     std::string s;
-    if (p.land_decided && !p.land_to_play.empty()) { s += "land=" + p.land_to_play + "; "; }
+    if (p.land_decided && !p.land_to_play.empty())
+    {
+        // The land's source and timing (Courser's library top; the landfall land-after axis) are
+        // part of what the human picked -- named only when set, so every other label is unchanged.
+        s += "land=" + p.land_to_play;
+        if (p.land_from_top)    { s += " (from library top)"; }
+        if (p.land_after_casts) { s += " (after the casts)"; }
+        s += "; ";
+    }
     int le_count = 0;
     std::vector<std::string> cast_names;
     for (const Action& a : p.actions)
@@ -69958,6 +70228,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // plan, `landafter=` the land-after-casts one. A deck with no landfall card has no
         // land-after plans, and its `land=` lines match exactly what they always did.
         if (!planLand.empty() && p.land_after_casts != spec.land_after_casts) { continue; }
+        // ...and its SOURCE ZONE (Plan::land_from_top, Courser of Kruphix): `landtop=` is the library
+        // top, `land=` / `landafter=` a hand copy. Every saved reference names a hand land, so it
+        // matches exactly what it always did.
+        if (!planLand.empty() && p.land_from_top != spec.land_from_top) { continue; }
         // Actions split by how the human commits them, each matched against its own verb:
         //   DiscardToLandsEdge -> a COUNT vs spec.lands_edge (card_name is "Land's Edge")
         //   ActivateVial       -> creature names vs spec.vial_deploys (free Vial deploy)
@@ -70991,6 +71265,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         const Player& lap = s.ActivePlayer();
         bool playable = lap.lands_played_this_turn < lap.LandDropsAvailable();
         bool in_hand  = false;
+        if (spec.land_from_top)
+        {
+            // A library-TOP land after the casts (Courser): the top must be that playable land NOW.
+            // (If a cast moves the top, the apply refuses the drop -- the line simply does less.)
+            in_hand = PlayableTopLandNumber(s) != 0 && lap.library.front().m_name.str() == spec.land;
+        }
+        else
         for (const Card& c : lap.hand)
         {
             if (c.m_name.str() != spec.land || c.m_impulse_no_land) { continue; }
@@ -70999,20 +71280,26 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         if (!playable || !in_hand)
         {
             out.verdict = V::Illegal;
-            out.failed_action = "landafter=" + spec.land;
+            out.failed_action = std::string(spec.land_from_top ? "landtop=" : "landafter=") + spec.land;
             out.reason = "can't play land '" + spec.land +
-                         "' after the casts (land drop unavailable, or it is not a land in hand)";
+                         (spec.land_from_top
+                              ? "' from the top of the library after the casts (land drop unavailable, "
+                                "no play-from-top permanent, or it is not the top card)"
+                              : "' after the casts (land drop unavailable, or it is not a land in hand)");
             return out;
         }
     }
     else if (spec.has_land)
     {
-        if (!PlayLandByName(s, spec.land))
+        if (!PlayLandByName(s, spec.land, "", true, "", -1, spec.land_from_top))
         {
             out.verdict = V::Illegal;
-            out.failed_action = "land=" + spec.land;
+            out.failed_action = std::string(spec.land_from_top ? "landtop=" : "land=") + spec.land;
             out.reason = "can't play land '" + spec.land +
-                         "' (land drop unavailable, or it is not a land in hand)";
+                         (spec.land_from_top
+                              ? "' from the top of the library (land drop unavailable, no play-from-top "
+                                "permanent, or it is not the top card)"
+                              : "' (land drop unavailable, or it is not a land in hand)");
             return out;
         }
     }

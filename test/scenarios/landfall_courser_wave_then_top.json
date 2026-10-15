@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "Courser of Kruphix 2026-10-15: a mid-turn TOP CHANGE re-solves the turn. Courser and four Forests out,",
+    "no land in hand, Genesis Wave + Lightning Bolt in hand; the top is Swords to Plowshares (not a",
+    "permanent) over a Mountain; opponent at 3. Exact lethal T5: Genesis Wave X=1 reveals Swords (to the",
+    "graveyard), which leaves the Mountain on top -- a new playable top land with the drop still open",
+    "(site 10, TopLandNewlyPlayable) -- and the searched continuation plays it from the top and Bolts.",
+    "Every other line has no red source this turn (T6 at best)."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Courser of Kruphix"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Genesis Wave",
+    "Lightning Bolt"
+  ],
+  "library_top": [
+    "Swords to Plowshares",
+    "Mountain"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "expect_win_turn": 5
+}

@@ -6,24 +6,33 @@
 #include "../core/RolloutTouch.h"
 #include "../core/SpellEffects.h"
 #include "EngineFlags.h"
+#include "DecisionProviders.h"
 #include <algorithm>
 
-bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefinition& def,
-                      const LandPlayOptions& opts)
+// THE BODY OF THE LAND DROP, shared by both source zones (2026-10-15, Courser of Kruphix). `card` is
+// the card being played; `leave_zone` removes it from its source zone and is called at EXACTLY the
+// points the hand drop always erased its card (before the fetchland's graveyard push; after the
+// permanent is on the battlefield), so the hand path is byte-identical to the body it was factored
+// out of. `card` must not be read after `leave_zone` runs (for the hand it is a reference into the
+// hand). The library-top path has already popped its card, so its `leave_zone` is a no-op -- and
+// popping FIRST is the rule-correct order there: the card leaves the library as it is played, so a
+// land ETB that reads the library (a scry) sees the new top, never the land itself. Templated rather
+// than std::function: this runs on every simulated land drop.
+template <class LeaveZone>
+static bool PlayLandCore(GameState& state, const Card& card, const CardDefinition& def,
+                         const LandPlayOptions& opts, LeaveZone&& leave_zone)
 {
     Player& ap = state.ActivePlayer();
-    if (hand_index >= ap.hand.size()) { return false; }
-    auto it = ap.hand.begin() + static_cast<std::ptrdiff_t>(hand_index);
 
-    if (opts.record_touch) { rollout_touch::Record(it->m_name.str()); }
-    if (opts.logger)       { opts.logger->LogPlayLand(it->m_number, it->m_name); }
+    if (opts.record_touch) { rollout_touch::Record(card.m_name.str()); }
+    if (opts.logger)       { opts.logger->LogPlayLand(card.m_number, card.m_name, opts.from_library_top); }
 
     // Fetchland: the land drop sacrifices the fetchland to search out a real land. fetch_target
     // names the searched choice; empty -> PerformFetch falls back to its own top heuristic pick.
     if (!def.params.fetch_land_types.empty())
     {
-        Card fetchland = *it;
-        ap.hand.erase(it);
+        Card fetchland = card;
+        leave_zone();
         ++ap.lands_played_this_turn;
         ap.graveyard.push_back(fetchland);
         // LANDFALL for the FETCHLAND ITSELF (route 1 of OnLandEntered's contract). The engine
@@ -103,7 +112,7 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // Preserve the per-copy ID from the hand card: BounceKarooLand returns `battlefield[i].card` to
     // hand, so an unnumbered land permanent hands the bounce an unnumbered card and any decision
     // keyed on card identity diverges (Hinata seed 4153 T3, when the rollout twin lacked this).
-    perm.card.m_number     = it->m_number;
+    perm.card.m_number     = card.m_number;
     perm.controller_index  = state.active_player_index;
     perm.owner_index       = state.active_player_index;
     perm.entered_this_turn = true;
@@ -121,7 +130,7 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     RefreshCityBlessing(state);
     RefreshStoriedLatch(state);   // storied: a land drop raises the permanent count too
 
-    ap.hand.erase(it);
+    leave_zone();
     ++ap.lands_played_this_turn;
     // Counters are gained as the land enters, so AFTER it is on the battlefield -- and before any
     // ETB below can read them.
@@ -181,6 +190,27 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // (the trigger exists from the entry). Gated per game inside -> byte-identical without landfall.
     OnLandEntered(state, state.active_player_index, perm.card.m_number);
     return true;
+}
+
+bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefinition& def,
+                      const LandPlayOptions& opts)
+{
+    Player& ap = state.ActivePlayer();
+    if (hand_index >= ap.hand.size()) { return false; }
+    auto it = ap.hand.begin() + static_cast<std::ptrdiff_t>(hand_index);
+    return PlayLandCore(state, *it, def, opts, [&ap, it]() { ap.hand.erase(it); });
+}
+
+bool PlayLandFromLibraryTop(GameState& state, const CardDefinition& def, const LandPlayOptions& opts)
+{
+    Player& ap = state.ActivePlayer();
+    if (ap.library.empty()) { return false; }
+    // A raw pop, NOT a draw: no cards_drawn_this_turn, no EnterHand, no draw watcher -- the card goes
+    // from the library straight to the battlefield, which is what playing it from the top is.
+    const Card top = ap.library.DrawTop();
+    LandPlayOptions o = opts;
+    o.from_library_top = true;   // the log records the source (GameLogger::LogPlayLand)
+    return PlayLandCore(state, top, def, o, []() {});
 }
 
 // Would the extra mana from an UNTAPPED first land sit idle this turn? See the call site in
@@ -263,7 +293,12 @@ static bool FirstDropManaWouldSitIdle(const GameState& state, bool hold_top_cons
     return untapped_net < cheapest;
 }
 
-int GreedyLandChoiceIndex(const GameState& state)
+// The ranker body behind GreedyLandChoiceIndex and GreedyLandChoice. `top` is the library top when
+// it is a playable land (Courser of Kruphix), else nullptr -- in which case this is EXACTLY the
+// hand-only ranker it was factored out of. The top is judged by the same per-card tests as a hand
+// card (it is a candidate "in the same four passes"); within a pass it is tried BEFORE the hand when
+// `top_first` (the provider's tie rule), after it otherwise.
+static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bool top_first)
 {
     const Player& ap = state.ActivePlayer();
     const int n = static_cast<int>(ap.hand.size());
@@ -288,7 +323,7 @@ int GreedyLandChoiceIndex(const GameState& state)
             if (ap.hand[i].m_impulse_no_land) { continue; }   // Apex-exiled land: never played
             const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
             if (!def || !def->card.IsLand() || !def->params.no_max_hand_size) { continue; }
-            return i;
+            return GreedyLandPick{ i, false };
         }
     }
 
@@ -378,10 +413,18 @@ int GreedyLandChoiceIndex(const GameState& state)
         for (int sub = 0; sub < 2; ++sub)
         {
         if (sub == 0 && !LandClosingWindowEnabled()) { continue; }   // rule off -> single unfiltered scan
-        for (int i = 0; i < n; ++i)
+        // The library top (Courser) is one more candidate in THIS pass: index -1 in the walk below.
+        // Visited first or last within the pass per the provider's tie rule; absent (nullptr) for
+        // every deck without a play-from-top permanent, which leaves the walk exactly as it was.
+        const int first = (top != nullptr && top_first) ? -1 : 0;
+        const int last  = (top != nullptr && !top_first) ? n : n - 1;
+        for (int k = first; k <= last; ++k)
         {
-            if (ap.hand[i].m_impulse_no_land) { continue; }
-            const CardDefinition* front = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            const bool is_top = (k < 0 || k >= n);
+            const int  i      = is_top ? -1 : k;
+            const Card& cand  = is_top ? *top : ap.hand[i];
+            if (cand.m_impulse_no_land) { continue; }
+            const CardDefinition* front = CardDatabase::Instance().LookupCached(cand);
             const CardDefinition* def   = LandFaceDefOf(front);   // spell//land plays its back face
             if (!def) { continue; }
             if (hold_top_consumer && front != nullptr
@@ -411,9 +454,23 @@ int GreedyLandChoiceIndex(const GameState& state)
             if (want_untapped && is_tapped)   { continue; }
             if (!want_untapped && !is_tapped) { continue; }
             if (want_multi && !is_multi)      { continue; }
-            return i;
+            return GreedyLandPick{ i, is_top };
         }
         }
     }
-    return -1;
+    return GreedyLandPick{};
+}
+
+int GreedyLandChoiceIndex(const GameState& state)
+{
+    return GreedyLandRank(state, nullptr, false).hand_index;
+}
+
+GreedyLandPick GreedyLandChoice(const GameState& state)
+{
+    // No playable top (every deck without a play-from-top permanent: one bool test) -> the hand ranker.
+    if (PlayableTopLandNumber(state) == 0) { return GreedyLandRank(state, nullptr, false); }
+    const Card& top = state.ActivePlayer().library.front();
+    return GreedyLandRank(state, &top,
+                          ResolveProvider(state).TopLandSourceFirstOnTie(state, state.active_player_index));
 }

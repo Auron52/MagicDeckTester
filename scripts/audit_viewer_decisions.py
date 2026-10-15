@@ -581,6 +581,8 @@ INERT_PARAMS = {
     "landfall_quest_counters": "Khalni Heart Expedition's 'you MAY put a quest counter' -- resolved YES by dominance (a quest counter only feeds the optional activation; one more never removes an option), the quest_counter_per_attacker precedent -- DISCLOSED 6a, PROVISIONAL",
     "etb_tokens_per_land": "automatic ETB token count per land you control (Avenger of Zendikar / Phylath), no choice",
     "etb_tokens_per_land_basic_only": "ETB per-land count filter -- BASIC lands only (Phylath), via IsBasicLandCard",
+    # ---- Courser of Kruphix's static clauses (2026-10-15) ----
+    "library_top_revealed": "Courser of Kruphix's 'Play with the top card of your library revealed' -- DISPLAY ONLY in goldfish (the search is clairvoyant; the passive opponent reads nothing). The viewer shows it as me.library_top while a revealer is ours; no choice",
     # ---- Giants (2026-09-22) ----
     "attack_trigger_damage_any": "Inferno Titan's attack half -- automatic 3 damage; 'divided among one, two, or three targets' collapses to the opponent's face in the goldfish (the opponent never blocks and its spawns are worth 0, so the face is strictly optimal). The etb_damage_any / dragon_ping_on_enter precedent. DISCLOSED in 6a",
     "attack_trigger_damage_each_opponent": "Tectonic Giant mode A payload -- automatic once the MODE is chosen; the mode itself is the decision and rides attack_trigger_modal -> attack_mode",
@@ -1256,6 +1258,12 @@ INERT_PARAMS = {
 # is OFFERED (unpruned) in the plan list -- verified in the sweep, not by a distinct type.
 MAINPHASE_PARAMS = {
     "discard_land_damage": "Land's Edge discard-a-land activation (board-click source, main.cpp:100)",
+    # Courser of Kruphix (2026-10-15): WHICH land and FROM WHERE (a hand copy vs the revealed library
+    # top) is a main_phase plan variant -- Plan::land_from_top, branched against every hand land
+    # (never folded), offered unpruned to the human; the viewer shows me.library_top and the line
+    # verb is `landtop=<name>` (`landtop=<name>;landat=all` for after the casts). The top land's own
+    # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
+    "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
     # Unearth ("Return target creature card with mana value 3 or less from your graveyard to the
     # battlefield"). The CAST is an ordinary main_phase plan. WHICH graveyard creature comes back is
