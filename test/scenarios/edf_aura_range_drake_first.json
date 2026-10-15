@@ -1,0 +1,30 @@
+{
+ "_comment": "MTG_EDF_AURA_RANGE (part 2 of the USER-approved EDF cast-order package, 2026-10-14; docs/design/edf-cast-order-2026-10-14.md). Five untapped lands, no outlet; hand Fertile Ground + Peregrine Drake. The pair pays only Drake-first: the Drake taps ahead, refunds five lands, then Fertile Ground ({1}{G}) pays. At its fixed slot the Aura is cast first (2 of 5, +1 bonus = 4 left) and the Drake ({4}{U}) strands, so the enumeration's sequential walk refused the pair every time and CheckLine read the Drake-first line as legal_not_enumerated (base ff3e205b). The range moves a land Aura that costs mana net this turn behind the untappers ONLY when the order is otherwise unpayable (EldraziFlickerProvider::ArrangeCastOrder) -- so the subset is admitted and both apply worlds realise it Drake-first. The probe this came from: build/scratch/castorder/probe_EldraziDisplacerFlicker/aura_drake.json.",
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 20,
+ "energy_counters": 0,
+ "opponent_library_size": 50,
+ "library_filler": "Vexing Shusher",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 5,
+ "battlefield": [
+  { "name": "Brushland", "controller": 0, "tapped": false },
+  { "name": "Yavimaya Coast", "controller": 0, "tapped": false },
+  { "name": "Kitchen", "controller": 0, "tapped": false },
+  { "name": "Adarkar Wastes", "controller": 0, "tapped": false },
+  { "name": "Mariposa Military Base", "controller": 0, "tapped": false }
+ ],
+ "hand": [
+  "Fertile Ground",
+  "Peregrine Drake"
+ ],
+ "validate_line": "cast=Peregrine Drake;cast=Fertile Ground",
+ "expect_verdict": "accept",
+ "log_out": "logs/edf/cast_order/aura_range_drake_first.log.json"
+}

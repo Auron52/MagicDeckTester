@@ -217,6 +217,55 @@ TEST_CASE("EDF order (part 3): Trace goes behind an Overgrowth on the SAME land,
     CHECK(Realised(s, { og_c, trace_c }) == std::vector<std::string>{ "Trace of Abundance", "Overgrowth" });
 }
 
+namespace
+{
+// The Auras attached to the permanent numbered `host` after an apply.
+std::vector<std::string> AurasOn(const GameState& s, int host)
+{
+    std::vector<std::string> v;
+    for (const Permanent& p : s.battlefield) { if (p.aura_attached_to == host) { v.push_back(p.card.m_name.str()); } }
+    std::sort(v.begin(), v.end());
+    return v;
+}
+GameState StackBoard(TurnSolver::Plan& plan, int& coast)
+{
+    GameState s = BaseState(4);
+    coast = PutCo(s, "Yavimaya Coast", 57);
+    PutCo(s, "Brushland", 6);
+    PutCo(s, "Brushland", 7);
+    PutCo(s, "Kitchen", 29);
+    PutCo(s, "Adarkar Wastes", 1);
+    PutCo(s, "Mariposa Military Base", 35);
+    s.players[0].lands_played_this_turn = 1;
+    // Plan (hand) order Trace first -- the rank order too: only the host rule puts Overgrowth first.
+    plan.actions.push_back(CastCo(s, "Trace of Abundance", 47, coast));
+    plan.actions.push_back(CastCo(s, "Overgrowth", 38, coast));
+    return s;
+}
+}   // namespace
+
+// End to end through the rollout apply (ApplyPlanDirect, which shares the arrangement with the executor):
+// both Auras declared on Yavimaya Coast really end on it.
+TEST_CASE("EDF order (part 3): the apply stacks Overgrowth then Trace on the ONE land both declare")
+{
+    {
+        TurnSolver::Plan plan;
+        int coast = 0;
+        GameState s = StackBoard(plan, coast);
+        TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+        CHECK(AurasOn(s, coast) == std::vector<std::string>{ "Overgrowth", "Trace of Abundance" });
+    }
+    {
+        // =0: Trace resolves first and shrouds the Coast, so the Overgrowth is re-homed elsewhere.
+        ArmGuard g(heurarm::EDF_SHROUD_STACK, 0);
+        TurnSolver::Plan plan;
+        int coast = 0;
+        GameState s = StackBoard(plan, coast);
+        TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+        CHECK(AurasOn(s, coast) == std::vector<std::string>{ "Trace of Abundance" });
+    }
+}
+
 // ---- part 2 ---------------------------------------------------------------------------------------
 
 namespace
