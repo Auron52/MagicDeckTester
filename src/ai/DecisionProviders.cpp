@@ -20186,6 +20186,55 @@ void AngelsProvider::ArrangeCastOrder(const GameState& s, const std::vector<Acti
             rekey = true;
         }
     }
+
+    // ---- PROPOSED amendment (MTG_ANGELS_GIADA_FIRST, default OFF -- the USER has not ruled) --------
+    // The A/B's three slower games that recover at no budget or depth are all Giada's +1/+1 counters lost
+    // to an Angel ranked AHEAD of her (docs/design/angels-cast-order-2026-10-14.md, "Root causes"):
+    //   (c) with NO engine (Thune / Lyra AoD) on our battlefield or in this set, Righteous Valkyrie goes
+    //       behind Giada -- Righteous first buys only the life of Giada's toughness (2 per Righteous), which
+    //       with no engine feeds nothing but the +7 threshold; Giada first puts N counters on Righteous
+    //       (N = Angels already ours, Giada included). angels d3 gi873 (USER's order: T5; Giada first: T4).
+    //   (d) with AT MOST ONE converter, Lyra, Archangel of Dawn goes behind Giada -- at k = 1 the counter
+    //       count is a tie either way (the draft's (k-1)(1+m) arithmetic), and Giada first also enters Lyra
+    //       with N counters, so the converter's entry gain off her is bigger and she hits harder.
+    //       angels2hg d3 gi1165. Thune keeps its slot: its waves also reach a non-Angel converter (Bishop).
+    // Same shape as caveat (b): a watcher whose payoff needs another piece drops behind while it is absent.
+    {
+        static const bool s_env = EnvOn("MTG_ANGELS_GIADA_FIRST", false);   // DEFAULT OFF (proposed)
+        if (heurarm::Flag(heurarm::ANGELS_GIADA_FIRST, s_env))
+        {
+            bool giada = false, engine = false;
+            int converters = 0;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != me) { continue; }
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (pd == nullptr) { continue; }
+                if (AngelsIsConverter(*pd)) { ++converters; }
+                if (pd->card.IsCreature() && pd->params.lifegain_each_own_creature_counters > 0) { engine = true; }
+            }
+            for (std::size_t k = 0; k < n; ++k)
+            {
+                if (defs[k] == nullptr) { continue; }
+                if (AngelsIsConverter(*defs[k])) { ++converters; }
+                const int slot = AngelsBaseSlot(*defs[k]);
+                if (slot == kAngTeamEngine || slot == kAngAngelEngine) { engine = true; }
+                if ((key[k] >> kAngSlotShift) == kAngEnterCounters) { giada = true; }
+            }
+            if (giada)
+            {
+                for (std::size_t k = 0; k < n; ++k)
+                {
+                    if (defs[k] == nullptr) { continue; }
+                    const int slot = key[k] >> kAngSlotShift;
+                    if (slot == kAngEnterToughLife && !engine)
+                    { key[k] = AngelsKey(kAngEnterCounters, 1, *defs[k]); rekey = true; }
+                    else if (slot == kAngAngelEngine && converters <= 1)
+                    { key[k] = AngelsKey(kAngEnterCounters, 2, *defs[k]); rekey = true; }
+                }
+            }
+        }
+    }
     if (rekey)
     {
         std::vector<std::size_t> pos(n);
