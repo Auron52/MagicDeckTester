@@ -270,7 +270,20 @@ is the clean check; not run.
 One manifest, three binaries back to back in one hold of the box lock (`scripts/bp_open/lock3.sh`): all 33
 suite decks, shipped b20 + d3 b10, 40 games per cell, every lever at its shipped default, fresh seeds
 10700001+. r2 vs r3 = the deletion (must be byte-identical); r3 vs r4 = the lockstep fix (the movers).
-**Queued, results pending.** Both r3 and r4: `mtg-test` 1061 / 1061, scenarios 162 / 162.
+Ran 12:53-13:04 UTC (2026-10-15), 132 jobs / 2,640 games per binary
+(`docs/design/bp-open-data/lock3_r2_vs_r3.txt`, `lock3_r3_vs_r4.txt`):
+
+* **The deletion is play-identical:** r2 vs r3, play digests identical in **132 / 132** jobs.
+* **The lockstep fix moves no game in the sample:** r3 vs r4, play digests identical in **132 / 132** jobs,
+  so no slower game and nothing to recover. It is a correctness fix for a path these 2,640 games did not
+  reach (Melira Pod, the one pod deck, is in the sample at 80 games); no lever.
+* **Units** differ in 13 jobs r2 vs r3 and 9 jobs r3 vs r4 -- the same jobs (all three KittyEquipment
+  lists, Snow, one Hinata2 chunk), in both directions (kittyv2 d3 c0: 204,233 -> 194,440 -> 204,180), with
+  identical play. The executor change cannot move search work at all, so this is the run-to-run job
+  history of the thread-local enumeration memo (4.6), not either change.
+
+Both r3 and r4: `mtg-test` 1061 / 1061, scenarios 162 / 162. Rebased onto a39ec088: `mtg-test`
+1077 / 1077, scenarios 163 / 163.
 
 ## 5. State (2026-10-15) and what the USER decides
 
