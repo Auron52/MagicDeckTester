@@ -20339,6 +20339,13 @@ struct FadeBoardRead
     bool haste_outlet    = false;
     int  sap_anthem_p    = 0;   // static bonus a FRESH Saproling token already gets...
     int  sap_anthem_t    = 0;   // ...the toughness half is what decides whether an X/X at 0 dies
+    // CDA CREATURES WHOSE P/T READS THE SAPROLING COUNT (The Mycotyrant: "Fungi and/or
+    // Saprolings"). Each one gains a FULL POINT OF POWER per fresh Saproling, and unlike the
+    // tokens' own size that gain does NOT decay on the fading upkeep tick -- so it is a per-BODY,
+    // size-independent term, which is exactly the shape that pulls the argmax toward WIDE
+    // activations. Zero for every board without such a creature, so every objective below is
+    // unchanged there. See docs/design/fade-k-menu-ignores-cda-power.md.
+    int  cda_per_body    = 0;
     int  quest_need      = 0;   // attackers needed in ONE combat to switch an Ascension on (0=n/a)
     int  quest_power     = 0;   // ...and the power it then grants every creature
     bool quest_present   = false;   // an Ascension on board or in hand, not yet online
@@ -20449,10 +20456,27 @@ static FadeBoardRead ReadFadeBoard(const GameState& state)
         }
         if (!p.card.IsCreature() && !p.is_animated) { continue; }
         if (CardHasSubtype(p.card, "Saproling")) { ++r.saps_alive; }
+        // A CDA CREATURE WHOSE P/T READS THE SAPROLING COUNT. Counted against the same fresh
+        // "Saproling" the sap_anthem read above is built on, which is the convention this whole
+        // read already follows. Legendary in the only case that exists, so this is 0 or 1.
+        if (d != nullptr && !d->params.pt_equals_creatures_you_control_subtypes.empty())
+        {
+            const auto& f = d->params.pt_equals_creatures_you_control_subtypes;
+            if (std::find(f.begin(), f.end(), "Saproling") != f.end()) { ++r.cda_per_body; }
+        }
         const auto [pb, tb] =
             ComputeLordBonus(p.card, state, me, p.is_animated, &p, &bs.lords, &bs.anthems);
         (void)tb;
-        const int pw = std::max(0, p.EffectivePower() + pb);
+        // A CHARACTERISTIC-DEFINING ABILITY IS NOT IN EffectivePower(), which is printed power plus
+        // +1/+1 and -1/-1 counters and nothing else. The Mycotyrant's printed P/T is */* -- modelled
+        // as 0 plus pt_equals_creatures_you_control_subtypes -- so without this term the read scored
+        // a creature its own card note calls "routinely an 8/8 or larger" as contributing ZERO to
+        // ready_power and next_power. DynamicBasePower is the engine's own answer and is already the
+        // route every combat and attack-projection site takes (Combat.cpp, and :8216/:8361 here);
+        // this was the one place it was missing. `d` is null for tokens, which have no definition
+        // and no CDA, so they keep costing nothing.
+        const int cda = (d != nullptr) ? DynamicBasePower(*d, state, me) : 0;
+        const int pw  = std::max(0, p.EffectivePower() + cda + pb);
         // NEXT turn everything we control untaps and summoning sickness has cleared, so every body
         // is an attacker -- including the 0-power ones, which still add an Ascension quest counter.
         r.next_power += pw;
@@ -20560,11 +20584,26 @@ static std::vector<int> FadeKLandmarks(const FadeBoardRead& r, int C, int cost, 
         return bk;
     };
 
+    // THE CDA TERM, and it is the one the USER asked for (2026-10-15): *"for Saproling Burst it's
+    // damage scaling should be considered in the current and future turns."* Each fresh Saproling
+    // adds a full point of power to every creature we control whose P/T reads the Saproling count,
+    // so k activations add `cda * k * n` -- PER BODY and INDEPENDENT OF BODY SIZE. That asymmetry is
+    // the whole point: the tokens' own size falls one per upkeep (size_next), which is what makes
+    // the bare k_lifetime converge on the user's hand-derived "2 or 3", while this gain holds flat
+    // for as long as the bodies live. It therefore pulls the argmax toward WIDE activations, which
+    // the size-only objective actively penalises. DEFAULT ON: it completes an arithmetic this file
+    // already claims is exact ("including the anthem, the bodies already out, and the token
+    // doubler"), and it is identically ZERO on every board with no such creature -- which is every
+    // deck in the suite, so the suite cannot validate it and a targeted measurement must.
+    static const bool s_cda_scale = EnvOn("MTG_FADE_K_CDA_SCALING", true);
+    const long long   cda         = s_cda_scale ? r.cda_per_body : 0;
+    auto cda_gain = [&](int k) { return cda * k * n; };          // this turn, from k activations
+
     // MAX SWING IN ONE COMBAT -- next turn, or this turn if the bodies can be hasted.
     const int k_pow_next = argmax([&](int k)
-                           { return 1LL * bodies(k) * std::max(0, size_next(k)); });
+                           { return 1LL * bodies(k) * std::max(0, size_next(k)) + cda_gain(k); });
     const int k_pow_now  = argmax([&](int k)
-                           { return 1LL * bodies(k) * std::max(0, size_now(k)); });
+                           { return 1LL * bodies(k) * std::max(0, size_now(k)) + cda_gain(k); });
     // MAX DAMAGE OVER THE BURST'S WHOLE LIFE, which is the objective the user worked out by hand
     // and it is NOT the same argmax. Off a Fading 7: k=2 leaves five counters, so two bodies swing
     // 8, 6, 4, 2 = 20 before they hit 0/0, while k=3 swings 9, 6, 3 = 18. The single-combat peak
@@ -20580,7 +20619,10 @@ static std::vector<int> FadeKLandmarks(const FadeBoardRead& r, int C, int cost, 
         // tick), and are destroyed with the Burst when it runs out.
         long long stream = 1LL * (R - 1) * R / 2 + 1LL * A_p * (R - 1);
         if (r.haste_all) { stream += std::max(0, size_now(k)); }   // ...and once more, right now
-        return 1LL * bodies(k) * stream;
+        // ...and the CDA creature swings its gain on each of those same (R-1) turns. It is already
+        // on the battlefield, so it needs no haste; only the FUTURE turns are credited here, which
+        // keeps this strictly the conservative half of the term.
+        return 1LL * bodies(k) * stream + cda_gain(k) * (R - 1);
     });
     // Largest k whose bodies survive the fading tick and can therefore ATTACK next turn.
     const int k_presence = (C + A_t - 2) / c;
