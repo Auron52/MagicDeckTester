@@ -33,7 +33,9 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
   in-combat Khalni cracks continue the same packed stream.
 * `Plan::upkeep_land_search_choice` -- Search for Tomorrow off suspend, packed per arrival.
 * `Plan::combat_crack_choice` -- the in-combat Khalni crack (bitmask over Khalni-type permanents).
-* `Plan::land_search_acts_first` -- the land-search activations before the casts (see gap 1).
+* `Plan::land_search_act_slot` -- WHERE in the cast sequence the land-search activations run, in
+  `Plan::land_slot`'s encoding: -1 the trailing pass (default), 0 before every cast, k after the k-th
+  landfall-watcher cast (see gap 1).
 * Human play: sequential `tutor_etb` prompts per land (DECISIONS.md), the `landsearch=` verb for the
   activations, the `dig` prompt for the in-combat crack.
 
@@ -55,16 +57,29 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
 
 ## Known gaps (DEFERRED -- each is a missing capability, not a heuristic)
 
-1. *(Closed 2026-10-15, follow-up (b).)* **Activation-vs-cast ORDER.** Board activations run in the
-   TRAILING pass, after the plan's casts, so "crack Evolving Wilds / Myriad / Khalni BEFORE casting
-   Avenger of Zendikar or Phylath" (more lands -> more Plants from the ETB count) was not one plan.
-   `Plan::land_search_acts_first` now twins every plan that both activates a land search and casts a
-   card whose ETB counts lands (`etb_tokens_per_land`); the twin applies the land-search activations in
-   the PRE-CAST pass (`TurnSolver::ApplyLandSearchActsFirst`, one body for both worlds, at the
-   Lotus/Suspend point before the batch prepay) and the trailing pass skips them
-   (`WithoutLandSearchActs`). Remaining boundary: the twin is not generated inside a breakpoint
-   continuation, and only for an ETB that COUNTS lands (an ordinary landfall watcher already prefers
-   cast-then-crack, which is the default order). Human play orders freely (`human_action_order`).
+1. *(Closed 2026-10-15, follow-up (b); re-expressed as a POSITION when the land drop became one.)*
+   **Activation-vs-cast ORDER.** Board activations run in the TRAILING pass, after the plan's casts,
+   so "crack Evolving Wilds / Myriad / Khalni BEFORE casting Avenger of Zendikar or Phylath" (more
+   lands -> more Plants from the ETB count) was not one plan. `Plan::land_search_act_slot` carries the
+   activations' position in exactly `Plan::land_slot`'s encoding (-1 trailing, the default; 0 before
+   every cast, at the Lotus/Suspend point before the batch prepay and after a land-first drop; k
+   right after the k-th `TurnSolver::PutsLandfallWatcher` cast, AFTER the land when both sit at k, so
+   a Khalni the land just filled is crackable; an unreached k falls back to the trailing pass). Both
+   worlds apply them through ONE body (`TurnSolver::ApplyLandSearchActs`) at the same points --
+   ApplyPlanDirect's pre-cast pass / `slot_hook` / trailing pass and AIEngine::TakeTurn's twins --
+   and a position plan's tied-rank watchers go first (`LandSlotWatchersFirst`) as for the land.
+   Emitted for every plan that both activates a land search and casts a card whose ETB counts lands
+   (`etb_tokens_per_land`): position 0, and 1..W-1 for its W watcher casts ("Baloths, crack, Avenger
+   counting the crack's land"); W only when a land-counting cast is not itself a watcher (with every
+   land-counter a watcher -- the whole current pool -- position W is the trailing pass up to where
+   tapped lands and a shuffle fall among casts that read neither, an identity fold).
+   LOCKSTEP NOTE (Courser of Kruphix): a crack's shuffle can leave a new playable land on top. The
+   rollout's per-cast window (end of apply_one) runs BEFORE its slot hook, the executor's
+   (`put_in_hand_armed`) AFTER `exec_slot_hook`, so the executor freezes the cast window's library-top
+   verdict across a positioned crack (`rdb_top_verdict`); the shuffle then arms site 10 through the
+   SECTION window in both worlds. Remaining boundary: no position twin inside a breakpoint
+   continuation, and none for a plan without a land-counting ETB (an ordinary landfall watcher already
+   prefers cast-then-crack, the default). Human play orders freely (`human_action_order`).
 2. **Search for Tomorrow hard-cast mana.** The untapped basic a HARD-CAST Search for Tomorrow puts is
    not credited to the same plan's later casts by the subset mana math (the Crop Rotation precedent,
    `Deliberately NOT modelled` in TurnSolver), so "Search for Tomorrow, then a spell paid with the

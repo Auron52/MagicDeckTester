@@ -3188,6 +3188,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // deferred_land_slot / deferred_watchers_seen.
     int         deferred_land_slot      = 0;
     int         deferred_watchers_seen  = 0;
+    // ...and the plan's LAND-SEARCH ACTIVATIONS at their searched position (Plan::land_search_act_slot)
+    // -- twin of ApplyPlanDirect's ls_act_seen / ls_act_done: 0 in the pre-cast pass, k >= 1 in
+    // exec_slot_hook after the k-th watcher (after the land at the same k), else the trailing pass.
+    int         exec_ls_act_seen        = 0;
+    bool        exec_ls_act_done        = false;
     // The deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix) -- lockstep twin of
     // ApplyPlanDirect's karoo_from_top: a deferred top land is played from the top or not at all.
     bool        karoo_from_top      = false;
@@ -4012,6 +4017,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // The playable library top before the current cast (Courser of Kruphix) -- the twin of rdb_hand
     // for put_in_hand_armed's TopLandNewlyPlayable (rollout twin: apply_one's top_at_cast).
     int rdb_top = 0;
+    // ...and its FROZEN verdict, when a positioned land-search activation (Plan::land_search_act_slot
+    // >= 1) shuffled the library between the cast and put_in_hand_armed: -1 = none (read the live
+    // top), 0 / 1 = the cast window's verdict as it stood BEFORE that shuffle. The rollout asks the
+    // same question at the end of apply_one, which runs before its slot_hook, so the shuffle is never
+    // the cast's; here the hook runs first, and without the freeze this cast would arm site 10 for a
+    // top the rollout attributes to the section window (a site-numbering split). Reset with rdb_top.
+    int rdb_top_verdict = -1;
     // Name hashes of the committed plan's hand casts -- lockstep twin of ApplyPlanDirect's
     // plan_cast_names. A card the plan casts is never "declined", so the breakpoint filter keeps it.
     std::vector<std::uint64_t> rdb_plan_casts;
@@ -4131,6 +4143,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
+        rdb_top_verdict = -1;
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
         // committed line that spends the staged copy this turn -- freeing the drawn copy for a later
         // turn -- replays exactly. Mirrors the land-play fix (TryPlaySpecificLand): the burn 6225
@@ -4206,6 +4219,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
+        rdb_top_verdict = -1;
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
@@ -4235,6 +4249,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
+        rdb_top_verdict = -1;
         auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (git == ap.graveyard.end()) { return; }
@@ -4396,8 +4411,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (d == nullptr || TurnSolver::ParamKeyedDrawClass(state, *d)) { return false; }
         // A new playable land on the library TOP is the same rule's other half (Courser of Kruphix;
         // rollout twin: the end of apply_one) -- the shared TopLandNewlyPlayable.
-        if (!TurnSolver::HandGainedACard(rdb_hand, state)
-            && !TurnSolver::TopLandNewlyPlayable(rdb_top, state, karoo_deferred)) { return false; }
+        const bool top_new = rdb_top_verdict >= 0 ? rdb_top_verdict == 1
+                           : TurnSolver::TopLandNewlyPlayable(rdb_top, state, karoo_deferred);
+        if (!TurnSolver::HandGainedACard(rdb_hand, state) && !top_new) { return false; }
         cast_draw_engine = true;
         return true;
     };
@@ -6263,15 +6279,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             resolve_now();
         }
     };
+    // ...and the plan's land-search activations at a position (Plan::land_search_act_slot >= 1), on
+    // the same hook AFTER the land at the same k -- twin of ApplyPlanDirect's slot_hook, through the
+    // ONE shared body. The cast window's library-top verdict is frozen across them (rdb_top_verdict).
     auto exec_slot_hook = [&](const Action& a)
     {
-        if (!land_after_deferred || deferred_land_slot <= 0) { return; }
+        const bool land_pending = land_after_deferred && deferred_land_slot > 0;
+        const bool acts_pending = plan.land_search_act_slot > 0 && !exec_ls_act_done;
+        if (!land_pending && !acts_pending) { return; }
         if (!TurnSolver::PutsLandfallWatcher(a)) { return; }
-        if (++deferred_watchers_seen == deferred_land_slot) { exec_play_deferred_land(); }
+        if (land_pending && ++deferred_watchers_seen == deferred_land_slot) { exec_play_deferred_land(); }
+        if (acts_pending && ++exec_ls_act_seen == plan.land_search_act_slot)
+        {
+            const bool top_new_before = TurnSolver::TopLandNewlyPlayable(rdb_top, state, karoo_deferred);
+            TurnSolver::ApplyLandSearchActs(state, plan.actions);
+            exec_ls_act_done = true;
+            rdb_top_verdict  = top_new_before ? 1 : 0;
+        }
     };
     // A position plan's tied-rank watcher casts go first (TurnSolver::LandSlotWatchersFirst), at the
-    // same point (before the stable rank sort) as ApplyPlanDirect's slot_order.
-    const bool exec_slot_order = land_after_deferred && deferred_land_slot > 0;
+    // same point (before the stable rank sort) as ApplyPlanDirect's slot_order -- for a land position
+    // and an activation position alike.
+    const bool exec_slot_order = (land_after_deferred && deferred_land_slot > 0)
+                               || plan.land_search_act_slot > 0;
     // Plan::soulbond_decline (lockstep twin of ApplyPlanDirect's scope): a plan the search scored
     // as "cast the Paladin, do not pair it" is realised that way here too.
     PlanSoulbondDeclineScope _sbd_plan(plan.soulbond_decline);
@@ -6303,11 +6333,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
     // every default-flag game; it is what makes that lever's executor half exist at all.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
-    // Plan::land_search_acts_first -- lockstep twin of ApplyPlanDirect's pre-cast pass: the plan's
+    // Plan::land_search_act_slot == 0 -- lockstep twin of ApplyPlanDirect's pre-cast pass: the plan's
     // land-search activations run now, through the ONE shared body, at the same point relative to the
     // line hold above (installed first in both worlds) and the plan-traits scope below (installed
     // after in both); the trailing pass skips them.
-    if (plan.land_search_acts_first) { TurnSolver::ApplyLandSearchActsFirst(state, plan.actions); }
+    if (plan.land_search_act_slot == 0)
+    {
+        TurnSolver::ApplyLandSearchActs(state, plan.actions);
+        exec_ls_act_done = true;
+    }
     // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
     // prepay and every cast payment below. Null scope (levers off) changes nothing.
     PlanTraits _plan_traits;
@@ -6721,10 +6755,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
     }
 
-    // Plan::land_search_acts_first: its land-search activations already ran before the casts.
-    const std::vector<Action> exec_trail = plan.land_search_acts_first
+    // Plan::land_search_act_slot: its land-search activations already ran at their position (twin of
+    // ApplyPlanDirect's trailing pass: a position never reached runs them here, as -1 does).
+    const std::vector<Action> exec_trail = exec_ls_act_done
         ? TurnSolver::WithoutLandSearchActs(plan.actions) : std::vector<Action>{};
-    const std::vector<Action>& exec_own_acts = plan.land_search_acts_first ? exec_trail : plan.actions;
+    const std::vector<Action>& exec_own_acts = exec_ls_act_done ? exec_trail : plan.actions;
     if (pending_cont_acts.empty()) { exec_trailing_activations(exec_own_acts); }
     else
     {

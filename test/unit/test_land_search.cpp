@@ -444,7 +444,7 @@ TEST_CASE("Land search: the IN-COMBAT Khalni crack is pinned by a bitmask, consu
     CHECK(s.players[0].library.size() == 0);   // four basics fetched across the two cracks
 }
 
-TEST_CASE("Land search: Plan::land_search_acts_first -- the shared pre-cast pass cracks, the trailing list drops it")
+TEST_CASE("Land search: Plan::land_search_act_slot -- the shared body cracks, the trailing list drops it")
 {
     LoadCards();
     GameState s = Fresh();
@@ -467,7 +467,95 @@ TEST_CASE("Land search: Plan::land_search_acts_first -- the shared pre-cast pass
     const std::vector<Action> trail = TurnSolver::WithoutLandSearchActs(acts);
     REQUIRE(trail.size() == 1);
     CHECK(trail[0].kind == Action::Kind::CastFromHand);
-    TurnSolver::ApplyLandSearchActsFirst(s, acts);
+    TurnSolver::ApplyLandSearchActs(s, acts);
     CHECK(CountIn(s.players[0].graveyard, "Khalni Heart Expedition") == 1);
     CHECK(CountOnBf(s, "Forest", /*tapped=*/true) == 2);
+}
+
+// Plan::land_search_act_slot in ApplyPlan, in Plan::land_slot's encoding: 0 cracks before every cast,
+// k after the k-th landfall-watcher cast, -1 in the trailing pass, and a k never reached falls back to
+// the trailing pass (never lost). Two watchers (Khalni Heart Expedition, Rampaging Baloths) + an
+// Evolving Wilds crack: the crack's landfall reaches exactly the watchers dispatched before it.
+TEST_CASE("Land search: Plan::land_search_act_slot positions the crack among the watcher casts")
+{
+    LoadCards();
+    GameState s = Fresh();
+    for (int i = 0; i < 8; ++i) { Put(s, "Forest", 20 + i, false); }
+    Put(s, "Evolving Wilds", 30, false);
+    Card baloths = D("Rampaging Baloths").card;          baloths.m_number = 1;
+    Card khalni  = D("Khalni Heart Expedition").card;    khalni.m_number  = 2;
+    s.players[0].hand.push_back(baloths);
+    s.players[0].hand.push_back(khalni);
+    Lib(s, "Forest", 50); Lib(s, "Forest", 51); Lib(s, "Forest", 52);
+    const TurnSolver::Plan* base = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.land_search_act_slot != -1 || !p.land_search_pins.empty() || p.bp_choice >= 0) { continue; }
+        bool b = false, k = false, crack = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() == "Rampaging Baloths" && a.kind == Action::Kind::CastFromHand) { b = true; }
+            if (a.card_name.str() == "Khalni Heart Expedition" && a.kind == Action::Kind::CastFromHand) { k = true; }
+            if (TurnSolver::IsLandSearchActivation(a)) { crack = true; }
+        }
+        if (b && k && crack) { base = &p; break; }
+    }
+    REQUIRE(base != nullptr);
+    auto triggers = [&](int8_t slot)
+    {
+        TurnSolver::Plan v = *base;
+        v.land_search_act_slot = slot;
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, v, true);
+        int beasts = 0, counters = 0;
+        for (const Permanent& p : t.battlefield)
+        {
+            if (CardHasSubtype(p.card, "Beast") && p.card.m_name.str() != "Rampaging Baloths") { ++beasts; }   // tokens
+            if (p.card.m_name.str() == "Khalni Heart Expedition") { counters += p.quest_counters; }
+        }
+        CHECK(CountIn(t.players[0].graveyard, "Evolving Wilds") == 1);   // cracked exactly once
+        return beasts + counters;
+    };
+    CHECK(triggers(-1) == 2);   // trailing: both watchers see the crack's Forest
+    CHECK(triggers(0)  == 0);   // before every cast: neither does
+    CHECK(triggers(1)  == 1);   // after the first-dispatched watcher only
+    CHECK(triggers(2)  == 2);   // after the second == after both
+    CHECK(triggers(5)  == 2);   // never reached -> the trailing pass, never lost
+}
+
+// The position fan: a plan that cracks a land search AND casts an ETB that counts lands gets 0 and
+// 1..W-1 over its W landfall-watcher casts (every land-counter in the pool is itself a watcher, so W
+// is the trailing pass, never a twin); a plan without a land-counter gets none.
+TEST_CASE("Land search: Plan::land_search_act_slot is fanned at 0 and between watchers, only with a land-counting ETB")
+{
+    LoadCards();
+    GameState s = Fresh();
+    for (int i = 0; i < 13; ++i) { Put(s, "Forest", 20 + i, false); }
+    Put(s, "Evolving Wilds", 40, false);
+    Card baloths = D("Rampaging Baloths").card;   baloths.m_number = 1;
+    Card avenger = D("Avenger of Zendikar").card; avenger.m_number = 2;
+    s.players[0].hand.push_back(baloths);
+    s.players[0].hand.push_back(avenger);
+    Lib(s, "Forest", 50); Lib(s, "Forest", 51);
+    bool both_0 = false, both_1 = false, both_2 = false, baloths_only_twin = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        bool b = false, a = false, crack = false;
+        for (const Action& x : p.actions)
+        {
+            if (x.kind == Action::Kind::CastFromHand && x.card_name.str() == "Rampaging Baloths")   { b = true; }
+            if (x.kind == Action::Kind::CastFromHand && x.card_name.str() == "Avenger of Zendikar") { a = true; }
+            if (TurnSolver::IsLandSearchActivation(x)) { crack = true; }
+        }
+        if (!crack) { CHECK(p.land_search_act_slot == -1); continue; }
+        if (b && a && p.land_search_act_slot == 0) { both_0 = true; }
+        if (b && a && p.land_search_act_slot == 1) { both_1 = true; }
+        if (b && a && p.land_search_act_slot == 2) { both_2 = true; }
+        if (b && !a && p.land_search_act_slot != -1) { baloths_only_twin = true; }
+    }
+    CHECK(both_0);
+    CHECK(both_1);
+    CHECK_FALSE(both_2);             // == the trailing pass: an identity fold, not a twin
+    CHECK_FALSE(baloths_only_twin);  // no land-counting ETB -> cast-then-crack is the only order
 }

@@ -1145,16 +1145,33 @@ public:
         //     that point, battlefield order; -1 = no crack). Rides GameState::
         //     scripted_combat_land_search_crack; the cracks' land picks continue the attack stream.
         int combat_crack_choice = -1;
-        // ACTIVATION-BEFORE-CAST ORDER for the land searches (follow-up (b) of the land-search
-        // design, 2026-10-15). Every board activation runs in the TRAILING pass, after the plan's
+        // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
+        // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
+        // became a position). Every board activation runs in the TRAILING pass, after the plan's
         // casts, so "crack Evolving Wilds / Myriad Landscape / Khalni Heart Expedition, THEN cast
         // Avenger of Zendikar / Phylath" (one more land -> one more Plant from the ETB count) was not
-        // one plan. When true, the plan's land-search activations (SacLandSearch / QuestSacLandSearch)
-        // run in the PRE-CAST pass instead (TurnSolver::ApplyLandSearchActsFirst, both worlds, at the
-        // Lotus/Suspend point before the batch prepay) and the trailing pass skips them. Fanned as a
-        // twin of a plan holding both such an activation and a cast whose ETB counts lands; the
-        // default (false) is the old cast-then-crack order, so every other plan is byte-identical.
-        bool land_search_acts_first = false;
+        // one plan, and neither was "cast Avenger, crack (its Plants get the landfall counter), THEN
+        // cast Phylath (which counts the crack's land too)". The plan's land-search activations
+        // (SacLandSearch / QuestSacLandSearch -- TurnSolver::IsLandSearchActivation) run, together,
+        // at ONE position, encoded exactly as Plan::land_slot encodes the land's:
+        //
+        //   kLandSlotAfterCasts (-1, DEFAULT) -- the trailing pass, as always: byte-identical.
+        //   kLandSlotFirst (0)                 -- the PRE-CAST pass (Lotus/Suspend point, before the
+        //                                         batch prepay and every cast; after a land-first drop).
+        //   k >= 1                             -- right after the k-th TurnSolver::PutsLandfallWatcher
+        //                                         action of the plan's own cast section (dispatch
+        //                                         order), AFTER the land when land_slot == k too (a
+        //                                         Khalni the land just filled is then crackable), before
+        //                                         the next cast. A k never reached falls back to the
+        //                                         trailing pass (never lost). LandSlotWatchersFirst
+        //                                         orders a position plan's tied casts, as for the land.
+        //
+        // Both worlds realize it through ONE body (TurnSolver::ApplyLandSearchActs) at the same
+        // points -- ApplyPlanDirect's pre-cast pass / slot_hook / trailing pass and AIEngine::TakeTurn's
+        // twins -- and the trailing pass then skips them (WithoutLandSearchActs). Fanned only for a
+        // plan holding both such an activation and a cast whose ETB counts lands (see the axis in
+        // AppendSubdecisionAxes); every other plan keeps -1.
+        int8_t land_search_act_slot = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);
@@ -2078,12 +2095,12 @@ public:
     // canonical pass -- so the failure mode is "the viewer can't sequence it", never a double
     // apply or a dropped action.
     static bool IsTrailingActivation(Action::Kind k);
-    // Plan::land_search_acts_first support (shared by ApplyPlanDirect and AIEngine::TakeTurn, so the
-    // two worlds apply the pre-cast land-search activations through ONE body): is `a` a land-search
+    // Plan::land_search_act_slot support (shared by ApplyPlanDirect and AIEngine::TakeTurn, so the
+    // two worlds apply the positioned land-search activations through ONE body): is `a` a land-search
     // activation; apply every such action of `acts` now (live source, {T} first, shared payer,
     // stranded -> the tap restored and nothing happens); and `acts` minus them (the trailing list).
     static bool IsLandSearchActivation(const Action& a);
-    static void ApplyLandSearchActsFirst(GameState& state, const std::vector<Action>& acts);
+    static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts);
     static std::vector<Action> WithoutLandSearchActs(const std::vector<Action>& acts);
     // MTG_SAC_FODDER_ACT_MAKER: a trailing sac whose victim this same line makes
     // (Kind::SacCreatureOutlet with sac_victim_id == kSameLineSacVictim) has to run AFTER the
