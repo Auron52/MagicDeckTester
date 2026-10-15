@@ -1194,6 +1194,38 @@ else rank 24 (last; the tutored card becomes next turn's upkeep-Call dump or dra
 
 ## burn
 
+**USER ORDER (2026-10-14), BUILT 2026-10-15 -- `MTG_BURN_ORDER`; record and measurement in
+`docs/design/burn-cast-order-2026-10-15.md`.** land > Goblin Guide > Monastery Swiftspear > Lightning
+Bolt > Shard Volley > Searing Blaze > Searing Blood > Skullcrack > Light Up the Stage > Eidolon of the
+Great Revel -- ranks from params, the name as the final tie-break (a TOTAL order); Shard Volley sequenced
+at its rank (`SacLandCastsInOrder`), not after every cast; the land drop first, but before Searing Blaze
+when Blaze is cast with a land in hand and after a self-paid Light Up the Stage. With it:
+`MTG_BURN_M2_RULE` (main 2 casts only Light Up, Eidolon, and Searing Blaze while no land has entered,
+plus what is played off a main-2 Light Up) and the engine's `MTG_SPECTACLE_PLAN_CREDIT`. A PROPOSED
+amendment, `MTG_BURN_BLOOD_FIRST` (Searing Blood before Searing Blaze), is a USER question. The report
+under the order (`MTG_BURN_ORDER=1 mtg decks/burn/burn.txt --cast-order-report`; the main column is
+advisory -- burn does not opt into the classifier filter, its main-2 rule is a separate restriction):
+
+```
+# [LAND] LAND DROP -> FIRST (exceptions above)
+# [11] HASTE CREATURE (USER order; mana value, then name): first -- prowess sees every later spell
+  11     -   m1    4  1  Goblin Guide
+  11     -   m1    4  1  Monastery Swiftspear
+# [22] BURN (USER order; mana value, then name; Shard Volley joins)
+  22     -   both    4  1  Lightning Bolt
+  22     -   both    4  1  Shard Volley
+# [24] BURN (USER order; mana value, then name; Shard Volley joins)
+  24     -   both    4  2  Searing Blaze
+  24     -   both    4  2  Searing Blood
+  24     -   both    4  2  Skullcrack
+# [30] SPECTACLE (Light Up the Stage): after the burn ({R}) and the creatures
+  30     -   m2    4  3  Light Up the Stage
+# [40] ON-CAST SELF-DAMAGE (Eidolon): the main's last cast
+  40     -   m2    4  2  Eidolon of the Great Revel
+```
+
+The generic table below is what plays with `MTG_BURN_ORDER=0`:
+
 ```
 # Cast order -- decks/burn/burn.txt
 # provider: Burn   ideal-order draw tier: off   cantrip max mv: 1
