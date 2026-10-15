@@ -59,7 +59,7 @@ name. That is an encoding of the USER's list, not a principle of its own: in pla
 since neither has a cast or enter trigger and the whole-turn prepay settles colour. ab2 (§5b) re-measures every arm
 on the flipped binary.
 
-## 3. The build (commit on the worktree branch; see §8 for hashes)
+## 3. The build (branch `worktree-agent-a888fc125f60b1de5`: `7c113028` order + arms, `fe342a71` Bogle before Scout, `74adde2b` arm b2)
 
 * `AurasProvider::CastOrderRank` / `CastOrderTierName` (`src/ai/DecisionProviders.cpp`, "AurasProvider::CastOrderRank").
   * The rank is `(class << 20) + name key`. Class bands are listed earliest first:
@@ -90,9 +90,12 @@ on the flipped binary.
   Bogle, Rancor, Armor, Coronet and Lion Umbra in hand. In every line that casts a restricted Aura, that Aura is realised
   after every other Aura and lands on a host that carries another Aura. The cast-ordering search keeps its own guard
   (`OrderingPlacesRestrictedAuraBeforeEnabler`).
-* **Unit tests:** `test/unit/test_auras_cast_order.cpp` (7 cases). The full suite passes 1060/1060.
+* **Unit tests:** `test/unit/test_auras_cast_order.cpp` (8 cases, including the b2 arm). The full suite passes 1061/1061
+  on `74adde2b`.
 
-## 4. The two USER questions, built as default-OFF arms (measured, NOT shipped)
+## 4. The USER's two open questions, built as default-OFF report arms (measured, NOT shipped)
+
+A third, (b2) `MTG_LP_FETCH_MV_AWARE`, was added while root-causing the slower games (§6b).
 
 ### (a) `MTG_AURAS_ORDER_SEARCH`: search the Aura order on Light-Paws turns (Q19)
 
@@ -215,6 +218,36 @@ on the flipped binary.
 
 Each cell reads "net (faster / slower)", where net is the summed win-turn delta over paired games and loss = 9.
 
+### 5c. ab3 -- the narrow fetch arm (b2) on `74adde2b`
+
+* **Setup:**
+  * order + `MTG_LP_FETCH_MV_AWARE`, every cell at ab1's seeds and sizes (45,000 games);
+  * plus the order arm on the first quarter of each cell (11,250 games);
+  * one pooled batch through the box lock, 10:28-10:33Z.
+* **Identity:** the order arm on `74adde2b` (every report arm OFF) equals `fe342a71`'s game for game: 11,250 / 11,250,
+  win turn and play digest.
+
+| cell | order + b2 | units ratio |
+|---|---|---|
+| auras shipped (4000) | -1 (1 / 0) | 1.0000 |
+| auras d3 b10 (6000) | -2 (2 / 0) | 0.9992 |
+| auras d0 (20000) | -9 (10 / 1) | - |
+| auras2hg shipped (2000) | -7 (7 / 0) | 0.9982 |
+| auras2hg d3 b10 (3000) | -5 (6 / 1) | 0.9995 |
+| auras2hg d0 (10000) | -16 (20 / 4) | - |
+
+* **Slower games: 6. 5 recover at stage 1, and one does not.** That one is auras2hg d3 b10 gi1863 (`--seed 11401864`):
+  4 -> 5, still 5 at stage 2 where old wins 4.
+* **gi1863, read off the diff.**
+  * T3, three lands, Light-Paws out, the hand Audacity + Ancestral Mask.
+  * Old casts the Mask, and its fetch takes Daybreak Coronet (+3).
+  * Under b2 the Mask's fetch would take All That Glitters: no later fetch reaches an MV-2 scaler, and Glitters is +2 at
+    that board.
+  * So the search casts Audacity instead (fetching Rancor) and the kill slips a turn.
+* **This is the USER's rule working as written.** It takes the scaler on its last chance even when the flat Aura is
+  bigger now, and here the flat Aura was right. Fixing it would mean weighing the scaler's projected growth against the
+  flat Aura, which goes beyond the 08-25 rule. It is a question for the USER, not a defect.
+
 ## 6. The order's slower games: 11 of 45,000, one mechanism, 2 do not recover
 
 **Recovery check** (the USER's two stages, on the shipped build `fe342a71`, order alone):
@@ -305,43 +338,73 @@ The order's 11 games show the opposite defect: an MV-1 Aura in hand counted as a
   Aura castable next turn whose mana value reaches the scaler arm (b) took: Gryff's Boon for an Armor, or Alpha
   Authority / Coronet / Lion Umbra / a second Mask / Glitters for a Glitters or Armor.
 * Measured in §5c.
+* **Single-game spot check on the 24 games** (the order's 11 plus (b)'s 13 non-recovering), each at its own cell
+  setting:
+  * b2 is at old's win turn in 21 of them, including the order's two non-recovering games, gi1665 and gi8546.
+  * The other 3: gi924 and gi12561 are order d0 games, which recover at stage 1 anyway. gi1863 is the one game b2 does
+    not fix (§5c).
 
-## 7. RESUME (wrapped 2026-10-14 ~13:10Z for the night at the coordinator's request: the box is needed)
+### 6c. Arm (a)'s slower games: 24, of which 14 do not recover (with a+b: 41 of 67 recover)
 
-* **Base:** `ff3e205b` (work/integ-2026-10-14).
-* **Built (commit `7c113028`):** the order + arms (a) and (b) + 7 unit tests. Unit tests 1060/1060.
-* **Measured (complete):** §5. Identity 1920/1920, =0 identity 11250/11250.
-* **Not yet run:**
-  1. **The two-stage recovery check** of the 11 order-arm slower games, and of the 145 arm games if wanted.
-     * Run `bash logs/auras-order/run_recover.sh ab1 order` (add `order_a order_b order_ab` for the arms).
-     * It reads `build/scratch/auras-order/ab1/cmp.slower.json`; a copy is in `logs/auras-order/ab1/`.
-     * Stage 1: `--depth W --budget-ms 100`, `W = min(8, max(5, old win turn))`.
-     * Stage 2: the stage-1 failures at `--depth 8 --budget-ms 0`, on the arm and on the old binary.
-     * Each stage is one pooled batch.
-  2. **Root-cause** every order-arm game that does not recover. The rest are expected to be the same fetch-rule
-     interaction as gi1665: check each with `bash logs/auras-order/repro.sh <tag> <seed> <gi> <2hg> <depth|shipped>
-     <budget> [MTG_LP_FETCH_USER_RULE=1]`.
-  3. **The Auras references, old against new.** Run `bash logs/auras-order/run_refs.sh`:
-     `viewer_protocol_check.py --strict --only references/Auras/` plus `ref_bench --deck Auras`, on both binaries.
-  4. Update `docs/design/cast-order-rankings.md` § Auras with the new `--cast-order-report`. The text is in
-     `build/scratch/auras-order/glog/report.txt`.
-  5. **The default decision** (§8). It is still default ON in the commit, as the task's default.
-* **Resume inputs.**
-  * Manifests: `logs/auras-order/ab1/{old,new}.json`, generated by `logs/auras-order/mkmanifest.py`.
-  * Per-game `.wins` / `.units`: `build/scratch/auras-order/ab1/{old,new}/` (build volume).
-  * Summaries on the host drive: `logs/auras-order/ab1/`.
-  * Seeds:
-    * auras: d0 11000001+, d3 11100001+, shipped 11200001+.
-    * auras2hg: d0 11300001+, d3 11400001+, shipped 11500001+.
-    * identity: d0 11600001+, d3 11700001+, shipped 11800001+.
+* **Inspected two** (auras d3 gi470, auras shipped gi1037): Kor Spiritdancer is in play in both.
+  * The searched-order plan casts FEWER spells than the canonical plan on the same board. gi470: old cast Rancor, Rancor,
+    a land and Spider Umbra; (a) cast Rancor and Spider Umbra.
+  * Each Kor draw opens a breakpoint. The canonical route re-plans after it and casts the drawn card or land; a
+    `searched_order` plan applied by vector order does not.
+* So these losses come from how the ordering search composes with Kor's draw breakpoint, not from the order or the
+  fetch.
+* Not pursued further, since (a) is not recommended. If it is ever wanted, it should first be confined to plans with no
+  Kor in play or cast.
 
-## 8. Defaults and the USER's questions (open)
+## 7. References (old vs new)
 
-* `MTG_AURAS_ORDER` is **default ON** in the commit. Whether it meets the bar ("every slower game recovers") is not yet
-  established: its aggregate is net <= 0 in every cell, but gi1665 likely does not recover.
-* (a) `MTG_AURAS_ORDER_SEARCH` and (b) `MTG_LP_FETCH_USER_RULE`: **default OFF**, as instructed, with their numbers above.
-* **Q1 (naming):** the order as handed over listed Slippery Bogle before Gladecover Scout, but its rule says "by name".
-  I applied the rule (Scout first). The two are interchangeable in play.
-* **Q2 (Q20):** adopt the 08-25 fetch rule (b)? It is better in all 6 cells, and it is the fix for the order's one
-  root-caused slower game.
-* **Q3 (Q19):** the Aura-order search (a) is mixed and costs ~2% units at shipped. My recommendation is not to adopt it.
+`logs/auras-order/run_refs.sh` ran under one hold of the box lock, from byte-identical copies of `references/Auras/`
+(30 games) on the ext4 mirror, on the old binary (`ff3e205b`) and the shipped one (`fe342a71`). Outputs are in
+`logs/auras-order/refs/`.
+
+* **`viewer_protocol_check.py --strict`:**
+  * 30 repaired, 0 play-drift, 0 board-diverged, 0 enum-gap, 0 shuffle-dead, 0 mull-drift, 0 contract-fail, on both
+    binaries.
+  * Every recorded line reproduces its win turn.
+  * The two reports are byte-identical.
+* **`ref_bench --deck Auras`** (shipped policy, forced opening hands):
+  * 0 of 30 short of the human.
+  * 3 faster (s12 7 -> 6, s14 5 -> 4, s3 4 -> 3).
+  * Search average 4.233 against the human's 4.333.
+  * Byte-identical on both binaries.
+
+## 8. Defaults as shipped, and the USER's questions
+
+* **`MTG_AURAS_ORDER`: default ON**, the USER's approved order (Bogle before Scout, as the settled list has it).
+  * Aggregate-neutral or better in every cell: net 0 / 0 / 0 for auras and -2 / 0 / 0 for auras2hg, at unchanged work.
+  * Identity holds on every other deck. References are unchanged.
+  * **It does not meet the full adoption bar.** 2 of its 11 slower games (auras2hg d3 gi1665, auras2hg d0 gi8546) do
+    not recover at any budget.
+  * Their root cause is the fetch rule (§6), which is a Q20 matter. Changing the order to dodge it would override the
+    USER's "highest mana value first".
+  * It stays ON because the USER's stated intent stands until they answer. Holding it for Q20 is a one-line default flip.
+* **Report arms, all default OFF** (the USER's open Q19 / Q20):
+
+  | arm | flag | net (auras shipped / d3 / d0; 2hg shipped / d3 / d0) | slower | do not recover | units |
+  |---|---|---|---|---|---|
+  | (a) search | `MTG_AURAS_ORDER_SEARCH` | -3 / -7 / 0; +2 / 0 / 0 | 24 | 14 | +1.5-2% at shipped |
+  | (b) literal | `MTG_LP_FETCH_USER_RULE` | -10 / -10 / -60; -10 / -8 / -20 | 54 | 13 | flat |
+  | (b2) narrow | `MTG_LP_FETCH_MV_AWARE` | -1 / -2 / -9; -7 / -5 / -16 | 6 | 1 | flat |
+  | (a) + (b) | both | -8 / -13 / -60; -6 / -6 / -20 | 67 | 26 | +1-2% at shipped |
+
+**Questions for the USER** (defaults taken; nothing waits on them):
+1. **Q20, the Light-Paws fetch rule.** Which reading is yours, and should it ship with the order?
+   * **(b), literal:** "the last fetch in the plan" means this turn. It has the biggest gain but 13 non-recovering games:
+     it takes a growing scaler over a bigger flat Aura on the last fetch of a turn whose next turn still casts Auras.
+   * **(b2), narrow:** mode 4 as is, but a later fetch counts only if its mana value can reach the scaler. It fixes the
+     order's two non-recovering games and leaves one of its own (gi1863, §5c), which is the 08-25 rule working as
+     written.
+   * **Recommendation: (b2) ON with the order.**
+     * With (b2), the order plus the fetch fix leaves 1 non-recovering game in 45,000, against 2 for the order alone.
+     * That one is a judgement the rule itself makes, not a defect.
+2. **Q19, the Aura-order search (a):** mixed (+2 on auras2hg shipped), +2% work, and 14 non-recovering games from a Kor
+   breakpoint interaction. Recommendation: no.
+3. **Until Q20 is answered:** keep the order ON alone (2 non-recovering games out of 45,000; the current default), or
+   hold it?
+4. **gi1863 (b2) and the USER's rule:** should a last-chance scaler still lead when a flat Aura is bigger now, as in
+   T3 Glitters +2 against Coronet +3? The 08-25 rule says yes. The one game says no.
