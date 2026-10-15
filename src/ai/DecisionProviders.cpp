@@ -21869,6 +21869,13 @@ const char* FluctuatorProvider::CastOrderTierName(int rank) const
         default: return nullptr;
     }
 }
+bool FluctuatorProvider::CastOrderTotalByName() const
+{
+    // The shared comparator's (and the enumeration walk's) NAME tie-break. The six slots never tie
+    // between different cards, so this only ever orders an unrecognised card; ArrangeCastOrder below
+    // re-sorts by the same (rank, name) key, so the two agree.
+    return FluctOrderEnabled();
+}
 bool FluctuatorProvider::OrderOpaqueCastsByRank() const
 {
     // Adopted-full-order marker (report semantics). Inert in play: nothing in this list is
