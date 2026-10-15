@@ -24,8 +24,8 @@ TOTAL (one card per position) and UNCONDITIONAL (the same on every turn), all ma
 | L | land drop | first: no cantrip in the deck; folded into the searched plan at depth > 0 (unchanged) |
 | 1 | Light-Paws, Emperor's Voice | creature, `aura_cast_tutor_attach`: every later Aura cast fetches |
 | 2 | Kor Spiritdancer | creature, `draw_on_aura_cast` / `aura_self_buff_*`: every later Aura cast draws |
-| 3 | Gladecover Scout | other creature, by name |
-| 4 | Slippery Bogle | other creature, by name |
+| 3 | Slippery Bogle | other creature with a hybrid pip ({G/U}) |
+| 4 | Gladecover Scout | other creature ({G}) |
 | 5 | Armadillo Cloak | plain Aura, MV 3 |
 | 6 | Alpha Authority | plain Aura, MV 2, power +0 |
 | 7 | Spirit Mantle | plain Aura, MV 2, power +1 |
@@ -51,20 +51,21 @@ TOTAL (one card per position) and UNCONDITIONAL (the same on every turn), all ma
   characters (case-insensitive). It needs no card-database state, so a newly added card cannot move an existing one.
   Only copies of one card can tie, and copies are interchangeable.
 
-**One deviation from the order as handed over, flagged for the USER (§9 Q1):** the list I was given read
-"... Slippery Bogle > Gladecover Scout ...", while its rule reads "then the other creatures by name". The two
-disagree. The rule is applied, the same as it is everywhere else in the list (Gryff's < Hyena < Spider,
-Audacity < Rancor), so Gladecover Scout comes before Slippery Bogle. In play the two are interchangeable: both are
-vanilla 1-mana 1/1 hexproof bodies, neither has a cast or enter trigger, and the whole-turn prepay settles colour.
-Flipping them is a one-line change.
+**Bogle before Scout (corrected 2026-10-15).** The first build (`7c113028`, measured in ab1) read the hand-over's
+rule "then the other creatures by name" and put Gladecover Scout first. The USER's settled list has Slippery Bogle >
+Gladecover Scout, and the coordinator corrected it. Both are vanilla 1-mana 1/1 hexproof bodies, and the one param
+that separates them is Bogle's hybrid pip ({G/U} against {G}). So the creature key is now hybrid cost first, then the
+name. That is an encoding of the USER's list, not a principle of its own: in play the two are interchangeable,
+since neither has a cast or enter trigger and the whole-turn prepay settles colour. ab2 (§5b) re-measures every arm
+on the flipped binary.
 
 ## 3. The build (commit on the worktree branch; see §8 for hashes)
 
 * `AurasProvider::CastOrderRank` / `CastOrderTierName` (`src/ai/DecisionProviders.cpp`, "AurasProvider::CastOrderRank").
   * The rank is `(class << 20) + name key`. Class bands are listed earliest first:
-    0 = an off-list accelerant; 1 = Light-Paws; 2 = Kor; 3 = the other creatures; 4..67 = plain Auras, keyed by
-    `(7 - MV) * 8 + power`; 68..75 = scalers, keyed by `7 - MV`; 76 = `modified`; 77 = `another_aura`;
-    78 = any other requirement; 79 = off-list.
+    0 = an off-list accelerant; 1 = Light-Paws; 2 = Kor; 3 = another creature with a hybrid pip (Bogle);
+    4 = the other creatures (Scout); 5..68 = plain Auras, keyed by `(7 - MV) * 8 + power`; 69..76 = scalers, keyed
+    by `7 - MV`; 77 = `modified`; 78 = `another_aura`; 79 = any other requirement; 80 = off-list.
   * The bands depend on params only. A card off the list keeps the generic order's one structural promise (an
     accelerant goes before the creatures) and otherwise goes last.
 * **`MTG_AURAS_ORDER`** is a heurarm slot (appended at the end of the enum and of `kNames`). It is read with

@@ -69,7 +69,7 @@ const DecisionProvider& GenericProvAco()
 const std::vector<std::string>& ApprovedOrder()
 {
     static const std::vector<std::string> v = {
-        "Light-Paws, Emperor's Voice", "Kor Spiritdancer", "Gladecover Scout", "Slippery Bogle",
+        "Light-Paws, Emperor's Voice", "Kor Spiritdancer", "Slippery Bogle", "Gladecover Scout",
         "Armadillo Cloak", "Alpha Authority", "Spirit Mantle", "Spirit Link", "Gryff's Boon", "Hyena Umbra",
         "Spider Umbra", "Audacity", "Rancor", "Ancestral Mask", "All That Glitters", "Ethereal Armor",
         "Lion Umbra", "Daybreak Coronet",
