@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "burn seed 9295 gi 294, turn 3 (docs/design/burn-cast-order-2026-10-15.md, part 3): the turn-3 kill the",
+    "engine missed at every budget. Opponent at 13; board 2 Mountains, Goblin Guide x2, Monastery Swiftspear;",
+    "hand Mountain, Swiftspear, Shard Volley, Light Up the Stage. The line: land, Swiftspear, Shard Volley (3),",
+    "Light Up the Stage for spectacle {R} -- three mana -- and the attack is 2 + 2 + (1+2) + (1+2) = 10: 13.",
+    "Both subset evaluators priced Light Up at {2}{R} (the pre-plan cost), so {Swiftspear, Volley, Light Up}",
+    "read as 5 mana on 3 lands and was cut at the odometer (validate_line said legal_not_enumerated). It needs",
+    "the USER's order (Swiftspear before the burn, Volley sequenced at its rank before Light Up) and the",
+    "spectacle plan credit."
+  ],
+  "env": { "MTG_BURN_ORDER": "1", "MTG_SPECTACLE_PLAN_CREDIT": "1" },
+  "deck": "decks/burn/burn.txt",
+  "profile": "decks/burn/burn.profile.json",
+  "turn": 3, "on_the_play": true, "max_turns": 3,
+  "active_life": 20, "opponent_life": 13,
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Goblin Guide", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Goblin Guide", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Monastery Swiftspear", "controller": 0, "tapped": false, "sick": false }
+  ],
+  "hand": [ "Light Up the Stage", "Shard Volley", "Mountain", "Monastery Swiftspear" ],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 6, "budget_ms": 0,
+  "validate_line": "land=Mountain;cast=Monastery Swiftspear;cast=Shard Volley;cast=Light Up the Stage",
+  "expect_verdict": "accept",
+  "expect_win_turn": 3
+}

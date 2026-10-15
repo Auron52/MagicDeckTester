@@ -384,6 +384,10 @@ private:
     // cast): consume-once in CastSpellFromHand onto StackEntry::land_put_credit, so the resolution
     // restricts the pick exactly as the rollout's apply_one does (cast_land_put). Empty elsewhere.
     ManaPool m_pending_land_put{};
+    // The main phase TakeTurn is playing (scoped there, restored on exit): true in the POST-combat main.
+    // Read by CastSpellFromHand's main-2 stager stamp (NoteMain2StagerCast), the executor twin of
+    // TurnSolver's apply_one, which knows its phase from ApplyPlanDirect's is_pre_combat.
+    bool m_exec_post_combat = false;
     int m_discard_choice_pin = -1;
 
     // Searched AETHER VIAL CHARGE (Plan::vial_charge_choice, MTG_VIAL_AXIS): 0 = hold, 1 = charge,

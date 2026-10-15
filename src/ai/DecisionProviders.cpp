@@ -9796,6 +9796,242 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
     return lands >= kBankThreshold;
 }
 
+// ---- BurnProvider: THE USER'S CAST ORDER + MAIN-2 RULE (2026-10-14) ---------------------------------
+//
+// USER, verbatim: "The burn order seems reasonable, though I wouldn't cast any spell but Light Up the
+// Stage, Searing Blaze (if missing a land drop) or Eidolon in main 2 without playing them off main 2
+// Light up the Stage." The settled order (docs/design/cast-order-review-2026-10-14.md "burn -- SETTLED"):
+//   land > Goblin Guide > Monastery Swiftspear > Lightning Bolt > Shard Volley > Searing Blaze >
+//   Searing Blood > Skullcrack > Light Up the Stage > Eidolon of the Great Revel.
+// The record and the measurement: docs/design/burn-cast-order-2026-10-15.md.
+//
+// MTG_BURN_ORDER (default OFF until its A/B is read; heurarm slot). Off -> the generic tiers, exactly.
+static bool BurnOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_BURN_ORDER");   // DEFAULT OFF until measured; =1 enables
+    return heurarm::Flag(heurarm::BURN_ORDER, on);
+}
+// MTG_BURN_M2_RULE (default OFF until measured) and its narrower reading MTG_BURN_M2_NARROW (OFF; a
+// USER question): see BurnProvider::Main2CastAllowed.
+static bool BurnM2RuleEnabled()
+{
+    static const bool on = EnvOn("MTG_BURN_M2_RULE");   // DEFAULT OFF until measured; =1 enables
+    return heurarm::Flag(heurarm::BURN_M2_RULE, on);
+}
+static bool BurnM2NarrowEnabled()
+{
+    static const bool on = EnvOn("MTG_BURN_M2_NARROW");   // DEFAULT OFF (USER question); =1 enables
+    return heurarm::Flag(heurarm::BURN_M2_NARROW, on);
+}
+// MTG_BURN_BLOOD_FIRST -- a PROPOSED amendment to the USER's order, NOT adopted (a USER question):
+// Searing Blood before Searing Blaze. See BurnOrderRankOf. DEFAULT OFF -> the USER's list verbatim.
+static bool BurnBloodFirstEnabled()
+{
+    static const bool on = EnvOn("MTG_BURN_BLOOD_FIRST");   // DEFAULT OFF (USER question); =1 enables
+    return heurarm::Flag(heurarm::BURN_BLOOD_FIRST, on);
+}
+
+// The order is read from PARAMS; the NAME is only the final tie-break (ArrangeCastOrder). Ranks:
+//   10 + mv  HASTE CREATURE (Goblin Guide, Monastery Swiftspear): first -- each attacks this turn, and
+//            Swiftspear's prowess ("Whenever you cast a noncreature spell") sees every later spell.
+//   20+2*mv  BURN (DirectDamage: Bolt, Shard Volley, Searing Blaze, Searing Blood, Skullcrack) by mana
+//            value -- every cost is red on an all-Mountain deck, so the mana is interchangeable, and each
+//            spell feeds prowess / Eidolon / spectacle alike. Shard Volley JOINS here
+//            (SacLandCastsInOrder): its sacrifice is paid from a tapped land, so the slot costs no mana.
+//            Under MTG_BURN_BLOOD_FIRST (the proposed amendment) a kill-trigger burn spell (Searing
+//            Blood: death_trigger_damage) takes the slot just below its mana value's (20+2*mv-1), so it
+//            precedes Searing Blaze: Blood's 3 to the face needs its creature to DIE this turn, Blaze is
+//            what finishes a creature Blood alone cannot kill, and a Blaze cast first kills the
+//            opponent's only creature and leaves Blood without a target.
+//   30       SPECTACLE (Light Up the Stage): after every burn spell (spectacle {R}, CR 702.137a) and every
+//            creature (it pumps Swiftspear), before Eidolon (it is MV 3 and would be pinged).
+//   40       ON-CAST SELF-DAMAGE (Eidolon of the Great Revel): the main's last cast -- "Whenever a player
+//            casts a spell with mana value 3 or less ... deals 2 damage to that player".
+//   100 + generic  anything the order does not name (a future card): after every named one.
+// Checked in this order, so Eidolon (a creature) and Light Up (a draw spell) take their own tiers.
+static int BurnOrderRankOf(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    const int mv = std::min(9, static_cast<int>(def.card.m_mana_cost.ManaValue()));
+    if (p.on_cast_trigger_damage > 0)                                  { return 40; }
+    if (p.spectacle_cost.has_value())                                  { return 30; }
+    if (def.card.IsCreature() && def.card.HasKeyword(Keyword::Haste))  { return 10 + mv; }
+    if (def.tmpl == CardTemplate::DirectDamage && !def.card.IsCreature())
+    {
+        const int r = 20 + 2 * std::min(4, mv);
+        return (p.death_trigger_damage > 0 && BurnBloodFirstEnabled()) ? r - 1 : r;
+    }
+    return -1;
+}
+
+int BurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!BurnOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
+    const int r = BurnOrderRankOf(def);
+    return r >= 0 ? r : 100 + DeckProvider::CastOrderRank(s, def);
+}
+
+const char* BurnProvider::CastOrderTierName(int rank) const
+{
+    if (!BurnOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
+    if (rank >= 10 && rank < 20) { return "HASTE CREATURE (USER order; mana value, then name): first -- prowess sees every later spell"; }
+    if (rank >= 20 && rank < 30)
+    {
+        return (rank % 2 == 1) ? "BURN, kill-trigger (MTG_BURN_BLOOD_FIRST amendment): before the same-cost burn"
+                               : "BURN (USER order; mana value, then name; Shard Volley joins)";
+    }
+    if (rank == 30)              { return "SPECTACLE (Light Up the Stage): after the burn ({R}) and the creatures"; }
+    if (rank == 40)              { return "ON-CAST SELF-DAMAGE (Eidolon): the main's last cast"; }
+    if (rank >= 100)             { return "UNNAMED CARD: generic rank + 100"; }
+    return nullptr;
+}
+
+// TOTAL ORDER (USER cross-deck ruling 2026-10-14: "Let's fully order the cards in each list inasmuch as
+// possible. I don't like the randomness of choosing the order."). The comparator ranks; this re-sorts
+// within an equal rank by NAME, so two different cards never fall back to plan / hand order (Goblin
+// Guide before Monastery Swiftspear; Bolt before Shard Volley; Searing Blaze before Searing Blood before
+// Skullcrack). Copies of one card keep their order (they are the same card). Reached at every site that
+// sorts a cast order, both worlds (ApplyDeckCastArrangement).
+void BurnProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                                    std::vector<int>& order) const
+{
+    if (!BurnOrderEnabled() || order.size() < 2) { return; }
+    auto rank_of = [&](const Action& a) -> int
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        return d ? CastOrderActionRank(s, a, CastOrderRank(s, *d)) : 1000;
+    };
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    {
+        const Action& a = actions[static_cast<std::size_t>(x)];
+        const Action& b = actions[static_cast<std::size_t>(y)];
+        const int ra = rank_of(a), rb = rank_of(b);
+        if (ra != rb) { return ra < rb; }
+        return a.card_name.str() < b.card_name.str();
+    });
+}
+
+bool BurnProvider::OrderOpaqueCastsByRank() const { return BurnOrderEnabled(); }
+bool BurnProvider::SacLandCastsInOrder() const    { return BurnOrderEnabled(); }
+
+// The land drop's place in the order: "LAND first, two exceptions: before Searing Blaze whenever Blaze is
+// cast and a land is in hand (landfall, 3 not 1); after Light Up the Stage when the turn pays for Light Up
+// without it (a land Light Up exiles can be played and the hand land kept)." Keys among EQUAL plans:
+//   0  a plan that holds the drop and casts Light Up (it was enumerated without the land, so its line
+//      pays for Light Up without it) -- the continuation after Light Up then chooses the land (an
+//      exiled one, or the hand one), which it can only do if the drop is still open;
+//   1  a plan that plays the drop up front;
+//   2  a plan that holds the drop while casting Searing Blaze with a land in hand (it should have been
+//      played first, for landfall) -- and, without the bank (PreferHoldLandDrop), any other holder.
+// With the bank (3+ lands, PreferHoldLandDrop) an ordinary holder keeps its old place ahead of the
+// develop plan (0): the bank exists FOR Searing Blaze, so it never outranks a Blaze that is being cast.
+int BurnProvider::LandPlanTieKey(const GameState& s, const std::vector<Action>& acts, bool plays_land,
+                                 bool provider_hold) const
+{
+    if (!BurnOrderEnabled()) { return -1; }
+    if (plays_land) { return 1; }
+    bool landfall = false, stager = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.landfall_damage > 0) { landfall = true; }
+        if (d->params.stages_cards)        { stager = true; }
+    }
+    if (landfall)
+    {
+        const Player& ap = s.ActivePlayer();
+        if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_impulse_no_land) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->card.IsLand()) { return 2; }
+            }
+        }
+    }
+    if (stager) { return 0; }
+    return provider_hold ? 0 : 2;
+}
+
+// The DEPTH-0 half of "after Light Up the Stage when the turn pays for Light Up without it": the d0
+// runner plays its drop before it plans (AIEngine::TakeTurn's pre-combat land block), so it asks here
+// first. Hold the drop only when the land's mana is not needed by anything the order casts BEFORE Light
+// Up: the board alone pays every haste creature and burn spell in hand plus Light Up (at {R} when a face
+// burn spell is among them and the spectacle credit is on, else at its live cost) -- and never with a
+// Searing Blaze in hand (land BEFORE Blaze). The held drop is played by Light Up's second pass (the land
+// it exiled, or the hand one -- PlayLandByName prefers the expiring staged copy), or by the held-drop
+// replay when the main casts no draw engine (MTG_DRAW_HELD_DROP_REPLAY) -- so it is never lost.
+bool BurnProvider::LandDropAfterDrawEngine(const GameState& s, int controller) const
+{
+    if (!BurnOrderEnabled()) { return false; }
+    const Player& p = s.players[static_cast<std::size_t>(controller)];
+    const CardDefinition* stager = nullptr;
+    ManaCost before;            // every haste creature + burn spell in hand (ranked before Light Up)
+    bool face_burn = false;
+    // Field-by-field: every cost in this deck is plain red / generic (no hybrid pips to carry).
+    auto add = [](ManaCost& a, const ManaCost& b)
+    {
+        a.white += b.white; a.blue += b.blue; a.black += b.black; a.red += b.red; a.green += b.green;
+        a.colorless += b.colorless; a.generic += b.generic;
+    };
+    for (const Card& c : p.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        if (d->params.landfall_damage > 0) { return false; }          // land BEFORE Searing Blaze
+        if (d->params.stages_cards && d->params.spectacle_cost.has_value())
+        { if (stager == nullptr) { stager = d; } continue; }
+        const int r = BurnOrderRankOf(*d);
+        if (r < 0 || r >= 30) { continue; }                             // Eidolon / unnamed: after Light Up
+        add(before, EffectiveSpellCost(*d, s));
+        if (d->tmpl == CardTemplate::DirectDamage && d->params.targeting != Targeting::Creature)
+        { face_burn = true; }
+    }
+    if (stager == nullptr) { return false; }
+    const bool spectacle_now = s.opponent_lost_life_this_turn || (face_burn && SpectaclePlanCreditOn());
+    add(before, spectacle_now ? SpectacleLiveCost(*stager, s) : EffectiveSpellCost(*stager, s));
+    return AvailableManaPool(s).CanPay(before);
+}
+
+// ...and where that held drop is played: right AFTER Light Up resolves, before its continuation casts
+// what it exiled (the d0 continuation is a greedy re-solve that does not play lands, so leaving the drop
+// to the second pass spent the turn's mana without it -- d0 probe seed 11699747 gi 246: Volley, Light Up,
+// then a Searing Blood that could not kill, where land + the exiled Searing Blaze's landfall was the kill).
+bool BurnProvider::HeldDropOpensDrawContinuation() const { return BurnOrderEnabled(); }
+
+bool BurnProvider::RestrictsMain2Casts() const { return BurnM2RuleEnabled(); }
+
+// THE USER'S MAIN-2 RULE. Allowed in the post-combat main:
+//   * Light Up the Stage (stages_cards) -- spectacle {R} after combat damage;
+//   * Eidolon of the Great Revel (on_cast_trigger_damage) -- the turn's last cast;
+//   * Searing Blaze (landfall_damage) while no land has entered this turn (lands_played_this_turn == 0:
+//     the only way a land enters on this deck), so a land a main-2 Light Up exiles can still turn
+//     landfall on;
+//   * anything "played off a main-2 Light Up" -- once a main-2 stager was cast this turn
+//     (GameState::m2_stage_turn): every spell (the BROAD reading, default: the cards it exiled AND hand
+//     spells cast after it in that main, e.g. paid by a land it exiled), or, under MTG_BURN_M2_NARROW,
+//     only the cards it exiled (staged, and not already staged when it was cast).
+// Every other spell is a main-1 spell. Main 1 is untouched (fully searched).
+bool BurnProvider::Main2CastAllowed(const GameState& s, const Action& a) const
+{
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return true; }
+    if (d->params.stages_cards)            { return true; }
+    if (d->params.on_cast_trigger_damage > 0) { return true; }
+    const Player& ap = s.ActivePlayer();
+    if (d->params.landfall_damage > 0 && ap.lands_played_this_turn == 0) { return true; }
+    if (s.m2_stage_turn != s.turn_number) { return false; }
+    if (!BurnM2NarrowEnabled()) { return true; }
+    if (a.hand_index < 0 || a.hand_index >= static_cast<int>(ap.hand.size())) { return false; }
+    const Card& hc = ap.hand[static_cast<std::size_t>(a.hand_index)];
+    if (!hc.m_is_staged) { return false; }
+    if (hc.m_number < 0 || hc.m_number >= 128) { return true; }
+    return (s.m2_prestaged_mask[hc.m_number >> 6] & (uint64_t{1} << (hc.m_number & 63))) == 0;
+}
+
 // ---- BurnProvider::CleanupDiscardCandidates ---------------------------------
 //
 // THE USER'S BUCKETS (2026-10-09, docs/design/burn-discard-policy-proposal.md, "burn: SETTLED"),

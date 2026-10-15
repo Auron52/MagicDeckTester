@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "burn, the USER's order (MTG_BURN_ORDER): Shard Volley JOINS the burn instead of trailing every cast in",
+    "the sacrifice-land pass (docs/design/burn-cast-order-2026-10-15.md). Four Mountains and an Eidolon of the",
+    "Great Revel already in play; hand Shard Volley + Skullcrack; opponent at 6 -- both burn spells are the",
+    "kill (3 + 3). Each spell we cast with Eidolon out pings us 2; the order casts Skullcrack and Volley in",
+    "the burn tier, so we take exactly 4 (the opponent dies on the second). The generic order cast Volley in",
+    "the trailing pass after every other cast -- the same 4 here, but the fixture pins that the sequenced",
+    "Volley still pays its sacrifice and kills on time."
+  ],
+  "env": { "MTG_BURN_ORDER": "1" },
+  "deck": "decks/burn/burn.txt",
+  "profile": "decks/burn/burn.profile.json",
+  "turn": 4, "on_the_play": true, "max_turns": 4,
+  "active_life": 20, "opponent_life": 6,
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Eidolon of the Great Revel", "controller": 0, "tapped": true, "sick": false }
+  ],
+  "hand": [ "Shard Volley", "Skullcrack" ],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 3, "budget_ms": 0,
+  "expect_win_turn": 4,
+  "expect_active_life": 16
+}

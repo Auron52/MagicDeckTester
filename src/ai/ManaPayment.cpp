@@ -2758,6 +2758,41 @@ void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>&
     ResolveProvider(state).ArrangeCastOrder(state, acts, order);
 }
 
+bool SacLandCastsInOrder(const GameState& state)
+{
+    return ResolveProvider(state).SacLandCastsInOrder();
+}
+
+ManaCost SpectacleLiveCost(const CardDefinition& def, const GameState& state)
+{
+    // EffectiveSpellCost's spectacle branch, verbatim but for the life-loss test (see the header).
+    ManaCost sc = def.params.spectacle_cost.value();
+    sc.generic += NoncreatureSpellTax(def, state);
+    return sc;
+}
+
+void NoteMain2StagerCast(GameState& state, const CardDefinition& def)
+{
+    if (!def.params.stages_cards) { return; }
+    if (!ResolveProvider(state).RestrictsMain2Casts()) { return; }
+    // The FIRST main-2 stager owns the snapshot: a second Light Up later in the same main is itself
+    // "played off" the first, and what it exiles is new either way.
+    if (state.m2_stage_turn == state.turn_number) { return; }
+    state.m2_stage_turn = state.turn_number;
+    state.m2_prestaged_mask[0] = 0;
+    state.m2_prestaged_mask[1] = 0;
+    auto mark = [&](const Card& c)
+    {
+        if (c.m_number < 0 || c.m_number >= 128) { return; }
+        state.m2_prestaged_mask[c.m_number >> 6] |= (uint64_t{1} << (c.m_number & 63));
+    };
+    const Player& ap = state.ActivePlayer();
+    // The rollout stages straight into the hand; the executor parks resolved exile in staged_cards
+    // until its next merge -- both count as "already staged".
+    for (const Card& c : ap.hand) { if (c.m_is_staged) { mark(c); } }
+    for (const StagedCard& sc : ap.staged_cards) { mark(sc.card); }
+}
+
 // A cast whose resolution triggers a mid-turn re-solve breakpoint (draw / staging / cascade
 // / retrace): the rest of the turn re-solves from the post-draw state, so the optimal cast
 // ORDER around it is situation-dependent (mana left, what is revealed) -- a static rank

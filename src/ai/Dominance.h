@@ -428,7 +428,10 @@ static_assert(sizeof(Player) == 200,
 // `deck_has_other_subtype_enter_draw`. Classification: DECK CONSTANT, stamped once in StampDeckTraits
 // and never written again; it only skips FireEtbWatchers' subtype-enter draw walk that provably finds
 // no watcher -- identical across every pair of states Build() compares, nothing to fold.
-static_assert(sizeof(GameState) == 1096,
+// +16 bytes (2026-10-15, burn): GameState::m2_stage_turn + m2_prestaged_mask (folded value-gated above).
+// REBASE 2026-10-16: both +16s (land-search cluster, burn) landed on 1080 independently -- PROVISIONAL, set
+// from the compiler once the rebased tree builds.
+static_assert(sizeof(GameState) == 1112,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -803,6 +806,14 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // and the reach loss shows up in a census.
     fold(static_cast<std::uint64_t>(s.hand_size_at_combat));
     fold(static_cast<std::uint64_t>(s.battlefield_at_combat));
+    // The main-2 stager marker (GameState::m2_stage_turn) -- same turn-scoped classification, folded
+    // value-gated (only a restricting provider ever writes it) so every other deck keeps its exact key.
+    if (s.m2_stage_turn >= 0)
+    {
+        fold(static_cast<std::uint64_t>(s.m2_stage_turn));
+        fold(s.m2_prestaged_mask[0]);
+        fold(s.m2_prestaged_mask[1]);
+    }
     // ZONE OBSERVABILITY (graveyard / exile). Conditional, exactly like the storm counter: on for
     // the cards, decks and models that can read the zone, IGNORED otherwise -- because most cards
     // cannot read either one (USER, 2026-08-15). And what matters is the TYPE of cards in the

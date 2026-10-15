@@ -9387,19 +9387,36 @@ static void PlanCastOrder(const GameState& state, const std::vector<Action>& can
                           const std::vector<int>& sel, std::vector<int>& out)
 {
     out.clear();
+    // SacLandCastsInOrder (burn under MTG_BURN_ORDER): the sac-land casts are IN the ordered sequence,
+    // exactly as both apply worlds sequence them; otherwise they trail, as before.
+    const bool sac_in_order = SacLandCastsInOrder(state);
     for (int j : sel)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { out.push_back(j); }
+        if (a.kind == Action::Kind::CastFromHand && (!a.sacrifice_land || sac_in_order)) { out.push_back(j); }
     }
     std::stable_sort(out.begin(), out.end(), [&](int x, int y)
     { return CastOrderLess(state, cands[static_cast<std::size_t>(x)], cands[static_cast<std::size_t>(y)]); });
     ApplyDeckCastArrangement(state, cands, out);
+    if (sac_in_order) { return; }
     for (int j : sel)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land) { out.push_back(j); }
     }
+}
+
+// The realised CAST order of a whole plan, every hand cast included (sac-land too) -- PlanCastOrder over
+// the plan's own actions. Public for the order tests (test/unit/test_burn_cast_order.cpp).
+std::vector<std::string> TurnSolver::PlanCastOrderNames(const GameState& state, const Plan& plan)
+{
+    std::vector<int> sel;
+    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i) { sel.push_back(i); }
+    std::vector<int> order;
+    PlanCastOrder(state, plan.actions, sel, order);
+    std::vector<std::string> names;
+    for (int i : order) { names.push_back(plan.actions[static_cast<std::size_t>(i)].card_name); }
+    return names;
 }
 
 // The attack after the plan's casts and life gains, on `t` -- the board with the plan's taps already
@@ -31373,6 +31390,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // needs a definition must call CollectedActionDef (the same expression), never read `def`.
     for (Action& a : actions) { a.def = CollectedActionDef(ap, a); }
 
+    // A PROVIDER'S MAIN-2 RESTRICTION (DecisionProvider::RestrictsMain2Casts / Main2CastAllowed; burn's
+    // MTG_BURN_M2_RULE, USER 2026-10-14). Drops, from the POST-combat collect only, every hand cast the
+    // deck does not play in main 2 -- a restriction of the options, never a pick: what survives is still
+    // searched, and main 1 (is_pre_combat) is untouched. Every main-2 consumer collects here -- the
+    // search's enumerations and continuations, the rollout's playout, the d0 runner, the executor's
+    // breakpoint re-solves -- so executor and rollout agree by construction. Human play keeps the full
+    // set (the viewer is never narrowed). One virtual call per main-2 collect for every other deck.
+    if (!is_pre_combat && !actions.empty() && !HumanPlayActive()
+        && ResolveProvider(state).RestrictsMain2Casts())
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+            [&](const Action& a)
+            { return a.kind == Action::Kind::CastFromHand && !prov.Main2CastAllowed(state, a); }),
+            actions.end());
+    }
+
     // Main-phase classification filter (USER design 2026-08-14; helpers above CollectActions).
     // Drop Main2-classified hand casts from the PRE-combat enumeration only -- the post-combat
     // pass re-offers them where they are weakly dominant. remove_if preserves the kept actions'
@@ -36019,6 +36053,82 @@ static bool PrecombatSwapTapsAttacker(const GameState& state, const Action& a)
     return false;
 }
 
+// ---- THE SPECTACLE PLAN CREDIT (MTG_SPECTACLE_PLAN_CREDIT; EngineFlags.h has the charter) ----------
+// Both subset evaluators (Solve::consider, EnumeratePlans::eval_and_push) price each cast at the cost
+// the PRE-plan state gives it, so a spectacle spell (Light Up the Stage, {2}{R} / spectacle {R}) read
+// as {2}{R} in every plan of a turn on which the opponent had not yet lost life -- including the plans
+// whose own burn spell, cast first, turns spectacle on. The odometer's scalar mana bound read it the
+// same way, so {Swiftspear, Shard Volley, Light Up} (1+1+3 = 5 on a 3-land board) was cut before it
+// was ever priced (burn seed 9295 gi 294: the turn-3 kill missed at every budget; the 2-card Plan B
+// spectacle builder covers only {burn, Light Up}).
+//
+// The credit is exactly the rule (CR 702.137a): a spectacle cast is priced at its spectacle cost when
+// the plan also casts a FACE-DAMAGE spell (Action::direct_damage > 0 -- damage that reaches the
+// opponent's life, CollectActions' own measure) that the REALISED order puts before it. That order is
+// knowable only when the deck rank-sorts its order-opaque sets (OpaqueCastOrderActive: a spectacle
+// spell stages cards, so its set is opaque) -- then it is CastOrderLess, the comparator both apply
+// worlds sort by -- and a sac-land burn counts only when it is sequenced at its rank
+// (SacLandCastsInOrder), never on the strength of the Spectacle hoist (the executor's continuation
+// loop has no hoist). Off any of those, nothing is credited and both evaluators are byte-identical.
+// The scalar bound is loosened by the most the credit can forgive (sound: it prunes less, never more),
+// and the selection-exact gate, whose per-candidate terms bake the printed cost, stands down.
+struct SpectacleCreditCtx
+{
+    bool                  live = false;     // some cast can turn spectacle on for some spectacle cast
+    int                   bound_credit = 0; // sum over spectacle casts of (printed MV - spectacle MV)
+    std::vector<char>     trig;             // cand j turns spectacle on, ordered before the spectacle cast
+    std::vector<char>     spec;             // cand j is a creditable spectacle cast
+    std::vector<ManaCost> live_cost;        // cand j's spectacle cost (spec[j] only)
+    // Does this selection both carry a trigger and a creditable spectacle cast?
+    bool On(const std::vector<int>& sel) const
+    {
+        if (!live) { return false; }
+        for (int j : sel) { if (trig[static_cast<std::size_t>(j)]) { return true; } }
+        return false;
+    }
+};
+
+static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Action>& cands,
+                                    SpectacleCreditCtx& out)
+{
+    out = SpectacleCreditCtx{};
+    if (!SpectaclePlanCreditOn() || state.opponent_lost_life_this_turn) { return; }
+    int rep = -1;
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && a.has_spectacle && !a.alt_cost && !a.free_cast
+            && a.def != nullptr && a.def->params.spectacle_cost.has_value())
+        { rep = j; break; }
+    }
+    if (rep < 0 || !OpaqueCastOrderActive(state)) { return; }
+    const bool sac_in_order = SacLandCastsInOrder(state);
+    const std::size_t m = cands.size();
+    out.trig.assign(m, 0);
+    out.spec.assign(m, 0);
+    out.live_cost.assign(m, ManaCost{});
+    int credit = 0;
+    for (std::size_t j = 0; j < m; ++j)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (a.has_spectacle)
+        {
+            if (!a.alt_cost && !a.free_cast && a.def != nullptr && a.def->params.spectacle_cost.has_value())
+            {
+                out.spec[j]      = 1;
+                out.live_cost[j] = SpectacleLiveCost(*a.def, state);
+                credit += std::max(0, a.cost.ManaValue() - out.live_cost[j].ManaValue());
+            }
+            continue;
+        }
+        if (a.direct_damage <= 0) { continue; }
+        if (a.sacrifice_land && !sac_in_order) { continue; }
+        if (CastOrderLess(state, a, cands[static_cast<std::size_t>(rep)])) { out.trig[j] = 1; out.live = true; }
+    }
+    out.bound_credit = out.live ? credit : 0;
+}
+
 TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat,
                                             const GreedyPermit& permit)
 {
@@ -36095,6 +36205,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // SubsetFilterPre): one pass now, in exchange for not re-deriving "this deck has no Aura" once
     // per enumerated subset. Lockstep twin in EnumeratePlans.
     const SubsetFilterPre pre = BuildSubsetFilterPre(state, cands);
+    // The spectacle plan credit (MTG_SPECTACLE_PLAN_CREDIT; see BuildSpectacleCreditCtx). Inert (live
+    // false) unless the flag is on and a creditable spectacle cast + an earlier face-damage cast exist.
+    // Lockstep twin in EnumeratePlans.
+    SpectacleCreditCtx spec_ctx;
+    BuildSpectacleCreditCtx(state, cands, spec_ctx);
     // Provider payoff-prune opt-in, hoisted out of consider(): it is a VIRTUAL call on a per-deck
     // provider, constant for the whole enumeration, and it used to be dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
@@ -36628,11 +36743,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
         int  cond_art_haste       = 0;     // Tomb Raider: hasty only if the subset adds a durable artifact
         bool subset_adds_artifact = false;
+        // The spectacle plan credit: this selection's spectacle casts pay their spectacle cost (an
+        // earlier face-damage cast in it turns spectacle on). False -> byte-identical.
+        const bool spec_sub = spec_ctx.On(sel);
 
         for (int j : sel)
         {
             const Action& c = cands[j];
             discard_lands_used += c.discard_lands;
+            const ManaCost& c_cost = (spec_sub && spec_ctx.spec[static_cast<std::size_t>(j)])
+                                   ? spec_ctx.live_cost[static_cast<std::size_t>(j)] : c.cost;
 
             // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
             // metadata, leaving a fully BAKED cost that demands each pip's first colour
@@ -36642,7 +36762,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // baked demand, so the bug only bites on a MONO-source board -- which is why a library
             // FILLER sweep, not a colour sweep, isolated it (Forest/Island fillers rejected the
             // cast that Adarkar Wastes / Yavimaya Coast fillers allowed).
-            AddCostCarryingHybrids(combined, c.cost);
+            AddCostCarryingHybrids(combined, c_cost);
 
             if (c.is_noncreature)
             {
@@ -36650,7 +36770,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 // metadata, leaving a fully BAKED cost that demands each pip's first colour
                 // (Card.h bakes it there). `pool.CanPay(noncreature_combined)` below then rejects
                 // subsets the board pays fine off the OTHER half.
-                AddCostCarryingHybrids(noncreature_combined, c.cost);
+                AddCostCarryingHybrids(noncreature_combined, c_cost);
                 ++noncreature_count;
             }
 
@@ -38199,13 +38319,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         return true;
     };
 
-    const int mana_bound = ManaPruneBound(pool, cands);   // legacy scalar bound (MTG_LEGACY_MANA_BOUND)
+    // legacy scalar bound (MTG_LEGACY_MANA_BOUND), loosened by the spectacle plan credit's most-forgiven
+    // mana (0 unless that credit is live -> byte-identical).
+    const int mana_bound = ManaPruneBound(pool, cands, spec_ctx.bound_credit);
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
     // branch is the price now; the allocation happens on the rare call that needs it.
     std::unique_ptr<ManaGateIndex> gate_owned;            // selection-exact bound; see BuildManaGateIndex
-    if (SelectionExactManaGateEnabled() && gate_relevant)
+    // ...which bakes each cast's printed cost, so it stands down while the spectacle credit is live.
+    if (SelectionExactManaGateEnabled() && gate_relevant && !spec_ctx.live)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
@@ -42586,6 +42709,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // resolution (below) + no BuildSimKey fold -> byte-identical for every non-storm deck.
         ++state.spells_cast_this_turn;
         state.mv_cast_this_turn += def.card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+        // The main-2 stager stamp (GameState::m2_stage_turn): a no-op unless this is a stages_cards cast
+        // in the post-combat main of a deck whose provider restricts main 2. Lockstep twin:
+        // AIEngine::CastSpellFromHand, at the same per-cast site.
+        if (!is_pre_combat) { NoteMain2StagerCast(state, def); }
 
         // Maintain the "one more spell" budget in lockstep with the storm counter (same per-cast site).
         // A non-restrictor spends one (when a budget is active); the restrictor itself (Irencrag) INSTALLS
@@ -44474,6 +44601,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // trailing sac loop skips them so they are not double-cast. Empty for every plan without a
         // hoisted Spectacle enabler.
         std::set<size_t> spec_hoisted_sac;
+        // SacLandCastsInOrder (DecisionProvider; burn under MTG_BURN_ORDER): the CANONICAL routes below
+        // sequence a sac-land cast at its own rank instead of trailing it (each one cast there joins
+        // spec_hoisted_sac, so the trailing pass skips it). The explicit route is untouched.
+        // AIEngine::TakeTurn's main and continuation loops are the lockstep twins.
+        const bool sac_in_order = SacLandCastsInOrder(state);
         // AETHER VIAL PUTS are sequenced like CASTS of their card (USER 2026-10-06: "Aether vial
         // deployments should be done in the same order as casting" / "it should be done in the order
         // the user specified" / "I should not be asked for an order. The order is apparent."). So a
@@ -44715,7 +44847,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // pair a sac-land burn with Light Up (the general powerset never affords Light Up
                 // at full cost), so this touches no other line / has no prowess interaction. Inert
                 // unless a Spectacle spell is present -> non-burn byte-identical.
-                bool spec_needed = !state.opponent_lost_life_this_turn;
+                // A deck that sequences its sac-land casts IN the order (SacLandCastsInOrder) needs no
+                // hoist: the rank already puts the burn spell before the spectacle spell, and the hoist
+                // is what put it ahead of a same-set Swiftspear (AIEngine::TakeTurn twin -- lockstep).
+                bool spec_needed = !sac_in_order && !state.opponent_lost_life_this_turn;
                 if (spec_needed)
                 {
                     bool has_spec = false;
@@ -44741,8 +44876,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
                     const Action& a = acts[i];
-                    if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a)
-                         && !is_hoisted_minter(a))
+                    // SacLandCastsInOrder: a sac-land cast joins the sequence at its rank (TakeTurn twin).
+                    if ((a.kind == Action::Kind::CastFromHand && (!a.sacrifice_land || sac_in_order)
+                         && !is_enabler(a) && !is_hoisted_minter(a))
                         || is_ordered_garth(a) || is_put(a))
                     { ord.push_back(i); }
                 }
@@ -44782,7 +44918,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             lo_pending_set = !lo_pending.empty();
                         }
                     }
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
+                    // a.sacrifice_land is true here only under SacLandCastsInOrder; the trailing sac
+                    // loop then skips it (spec_hoisted_sac).
+                    if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
                     lo_pending_set = false; lo_pending.clear();
                     slot_hook(a, tb);
                     dbg_cast("ord", a, dbg_before);
@@ -44797,7 +44936,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::vector<int> order;
                 for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
-                    if ((acts[i].kind == Action::Kind::CastFromHand && !acts[i].sacrifice_land)
+                    // SacLandCastsInOrder: a sac-land cast joins the sequence at its rank (TakeTurn twin).
+                    if ((acts[i].kind == Action::Kind::CastFromHand && (!acts[i].sacrifice_land || sac_in_order))
                         || is_ordered_garth(acts[i]) || is_put(acts[i]))
                     { order.push_back(i); }
                 }
@@ -44820,8 +44960,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     const bool tb = bp_truncate;
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
+                    if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }   // cast here, not in the trailing pass
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
                     slot_hook(a, tb);
                 }
@@ -44829,7 +44970,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         for (size_t ai = 0; ai < acts.size(); ++ai)
         {
-            if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
+            // Already cast: by the Spectacle hoist, or at its rank (SacLandCastsInOrder).
+            if (spec_hoisted_sac.count(ai)) { continue; }
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
@@ -48515,6 +48657,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
     // because the summary's whole claim is that it saw every member of `cands`.
     const SubsetFilterPre pre = BuildSubsetFilterPre(state, cands);
+    // The spectacle plan credit (MTG_SPECTACLE_PLAN_CREDIT; see BuildSpectacleCreditCtx). Lockstep
+    // twin of Solve's; built here, after both aura injectors, for the same reason as `pre`.
+    SpectacleCreditCtx spec_ctx;
+    BuildSpectacleCreditCtx(state, cands, spec_ctx);
     // Provider payoff-prune opt-in, hoisted out of eval_and_push: a virtual call, constant for the
     // enumeration, previously dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
@@ -49338,23 +49484,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
         int  cond_art_haste       = 0;     // Tomb Raider: hasty only if the subset adds a durable artifact
         bool subset_adds_artifact = false;
+        // The spectacle plan credit (lockstep twin of Solve::consider's). False -> byte-identical.
+        const bool spec_sub = spec_ctx.On(sel);
 
         for (int j : sel)
         {
             const Action& c = cands[j];
             discard_lands_used += c.discard_lands;
+            const ManaCost& c_cost = (spec_sub && spec_ctx.spec[static_cast<std::size_t>(j)])
+                                   ? spec_ctx.live_cost[static_cast<std::size_t>(j)] : c.cost;
             // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
             // metadata, leaving a fully BAKED cost that demands each pip's first colour
             // (Card.h bakes it there). `pool.CanPay(combined)` below then rejects
             // subsets the board pays fine off the OTHER half.
-            AddCostCarryingHybrids(combined, c.cost);
+            AddCostCarryingHybrids(combined, c_cost);
             if (c.is_noncreature)
             {
                 // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
                 // metadata, leaving a fully BAKED cost that demands each pip's first colour
                 // (Card.h bakes it there). `pool.CanPay(noncreature_combined)` below then rejects
                 // subsets the board pays fine off the OTHER half.
-                AddCostCarryingHybrids(noncreature_combined, c.cost);
+                AddCostCarryingHybrids(noncreature_combined, c_cost);
             }
             if (c.sacrifice_land)   { ++sacrifice_count; }
             if (c.is_noncreature)   { ++noncreature_count; }
@@ -50591,7 +50741,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const int mana_bound = any_hinata_credit
         ? std::numeric_limits<int>::max()
         : ManaPruneBound(pool, cands,
-                         haste_unlock_bound + metalcraft_bound + growth_bound,
+                         // + the spectacle plan credit's most-forgiven mana (0 unless it is live).
+                         haste_unlock_bound + metalcraft_bound + growth_bound + spec_ctx.bound_credit,
                          // ETB-untap refund, ENUMERATOR ONLY -- the same asymmetry the extra_credit
                          // terms above already have (Solve passes none). Its consumer is the
                          // MTG_EDF_SEQ_ETB rescue in eval_and_push, which Solve::consider
@@ -50643,8 +50794,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // consider() can credit it (measured, gi=22 no-draw fixture: plines 2 of 4, the Crackle rows
     // gone; MTG_MANA_PRUNE=0 "fixed" it only because that hatch happens to disable this gate too).
     // Bail to the scalar bound, which the credit already bails to unbounded.
+    // ...and the spectacle plan credit (its terms bake the printed cost) -- the same bail.
     if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork && growth_bound == 0
-        && !any_hinata_credit)
+        && !any_hinata_credit && !spec_ctx.live)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         // `&state`: the ETB-untap refund, per SELECTION (tighter than the scalar bound's whole-list
@@ -57429,7 +57581,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 448;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding)
+static constexpr std::size_t kPlanDomAssertedSize = 456;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; REBASE 2026-10-16: 448 + 8 PROVISIONAL, set from the compiler)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -58669,6 +58821,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // plan exists, i.e. only under a play-from-top permanent.
     const bool top_first_on_tie = PlayableTopLandNumber(state) != 0
         && ResolveProvider(state).TopLandSourceFirstOnTie(state, state.active_player_index);
+    // THE DECK'S OWN LAND-DROP ORDER among equal plans (DecisionProvider::LandPlanTieKey; burn's "land
+    // first, but before Searing Blaze / after a self-paid Light Up the Stage"). One key per plan, stamped
+    // once here so the comparator stays a strict weak order; it REPLACES the develop/hold rule (1) below
+    // when the provider answers, and every other deck answers -1 (one virtual call per plan) and keeps
+    // that rule byte-for-byte.
+    bool land_tie = false;
+    {
+        const DecisionProvider& lprov = ResolveProvider(state);
+        for (TurnSolver::Plan& p : all)
+        {
+            p.land_tie_key = lprov.LandPlanTieKey(state, p.actions, !p.land_to_play.empty(), provider_hold);
+            if (p.land_tie_key >= 0) { land_tie = true; }
+        }
+    }
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
@@ -58698,12 +58864,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 if (a_idle != b_idle) { return a_idle > b_idle; }
             }
             if (a.value != b.value) { return a.value > b.value; }
+            if (land_tie && a.land_tie_key != b.land_tie_key) { return a.land_tie_key < b.land_tie_key; }
             if (s_develop_tiebreak)
             {
                 const bool a_has = !a.land_to_play.empty();
                 const bool b_has = !b.land_to_play.empty();
                 // (1) develop first -- UNLESS banking for landfall, then hold (no-land) first.
-                if (a_has != b_has)
+                // (Under a provider land key -- land_tie -- equal keys mean the same side of this rule.)
+                if (a_has != b_has && !land_tie)
                 {
                     // Provider hold (Burn banking a landfall drop) is unconditional, as before.
                     if (provider_hold) { return a_has < b_has; }
@@ -59481,6 +59649,16 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     // so two identical-zone states can differ in it. User-suspected 2026-08-14; folded when nonzero.
     if (state.spells_cast_this_turn > 0)
     { Fold(k, 0x5709A); Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn)); }
+    // The MAIN-2 STAGER marker (GameState::m2_stage_turn): it decides which casts a restricting
+    // provider's main 2 offers (burn's main-2 rule), so two same-zone states with and without a main-2
+    // Light Up behind them enumerate differently. Value-gated: folded only while live THIS turn, and only
+    // ever written for a restricting provider -> every other state keeps its exact prior key.
+    if (state.m2_stage_turn >= 0 && state.m2_stage_turn == state.turn_number)
+    {
+        Fold(k, 0x325A6E);
+        Fold(k, state.m2_prestaged_mask[0]);
+        Fold(k, state.m2_prestaged_mask[1]);
+    }
     // DAY / NIGHT (CR 726, Brutal Cathar): which face every daybound permanent shows and whether a
     // transform trigger fires next turn. Nonzero-gated -> every other deck keeps its exact key.
     if (state.day_night != 0) { Fold(k, 0xDA1A0); Fold(k, static_cast<uint64_t>(state.day_night)); }

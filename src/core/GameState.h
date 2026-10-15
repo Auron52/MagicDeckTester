@@ -700,6 +700,16 @@ struct GameState
     // GameState is copied on every plan application.
     uint64_t                 m1start_hand_mask[2]      = { 0, 0 };
     int                      m1start_hand_turn         = -1;
+    // MAIN-2 STAGER marker (a provider's main-2 rule -- burn's MTG_BURN_M2_RULE, DecisionProvider::
+    // RestrictsMain2Casts): the TURN a stages_cards spell (Light Up the Stage) was CAST in this turn's
+    // post-combat main, and which deck cards (m_number 0..127) were ALREADY staged at that moment, so
+    // "played off a main-2 Light Up" can be read as either everything after it (the broad reading) or
+    // only the cards it exiled (MTG_BURN_M2_NARROW). Stamped by NoteMain2StagerCast (ManaPayment.h) at
+    // the cast in both worlds (TurnSolver's apply_one, AIEngine::CastSpellFromHand) and ONLY when the
+    // provider restricts main 2 -- so every other deck never writes it. m2_stage_turn != turn_number =>
+    // no main-2 stager this turn. Folded into BuildSimKey only when live (value-gated). No allocation.
+    int                      m2_stage_turn             = -1;
+    uint64_t                 m2_prestaged_mask[2]      = { 0, 0 };
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).
