@@ -252,7 +252,7 @@ inline bool DrawHeldDropReplayOn()
 // Only a deck holding a spectacle card can move (Light Up the Stage: burn alone). Per-job heurarm slot.
 inline bool SpectaclePlanCreditOn()
 {
-    static const bool env_on = EnvOn("MTG_SPECTACLE_PLAN_CREDIT");   // DEFAULT OFF until measured; =1 enables
+    static const bool env_on = EnvOn("MTG_SPECTACLE_PLAN_CREDIT", true);   // DEFAULT ON (measured 2026-10-15); =0 disables
     return heurarm::Flag(heurarm::SPECTACLE_PLAN_CREDIT, env_on);
 }
 
@@ -267,10 +267,10 @@ inline bool SpectaclePlanCreditOn()
 // only the projection can see it (burn2hg seeds 11671958 gi 1957, 11671187 gi 1186: not recovered at d8 b0
 // before this). A projection-accuracy fix, read by the two evaluators only; the apply already resolves the
 // trigger. One opposing creature only (every creature-damage spell then hits it); 0 -> byte-identical.
-// Default OFF until measured; per-job heurarm slot.
+// Default ON (measured 2026-10-15); per-job heurarm slot.
 inline bool KillTriggerComboOn()
 {
-    static const bool env_on = EnvOn("MTG_KILL_TRIGGER_COMBO");   // DEFAULT OFF until measured; =1 enables
+    static const bool env_on = EnvOn("MTG_KILL_TRIGGER_COMBO", true);   // DEFAULT ON (measured 2026-10-15); =0 disables
     return heurarm::Flag(heurarm::KILL_TRIGGER_COMBO, env_on);
 }
 
