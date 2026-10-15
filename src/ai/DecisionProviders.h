@@ -917,8 +917,8 @@ public:
 // cast_trigger_creates_tokens / etb_dig_requires_subtypes, which no Soldiers card carries, so they
 // fall through to the generic rank; everything else is the root default). It exists for the
 // every-deck-owns-a-provider rule: a name in the audit, a certificate, and the home for any
-// deck-specific hook that is later MEASURED and USER-ADOPTED (a cast order is a user question --
-// docs/design/cast-order-rankings.md -- and is NOT encoded here).
+// deck-specific hook that is later MEASURED and USER-ADOPTED (the cast order below, USER-approved
+// 2026-10-14, is the first).
 class SoldiersProvider : public VialProvider
 {
 public:
@@ -930,11 +930,14 @@ public:
                "pump and Harbin's 5-Soldier attack pump add power after the board is read; and Rick's "
                "anthem switches on mid-turn once a fourth Human is controlled." }; }
     const char* Name() const override { return "Soldiers"; }
-    // MTG_SOLDIERS_ORDER -- a PROPOSED total cast order (analyze-deck 4a/5e, 2026-10-04), DEFAULT
-    // OFF: cast order is USER-OWNED (docs/design/cast-order-rankings.md, "Soldiers"). Off =>
-    // VialProvider::CastOrderRank byte-for-byte.
+    // MTG_SOLDIERS_ORDER -- the TOTAL cast order: agent-authored (analyze-deck 4a/5e, 2026-10-04),
+    // USER-APPROVED 2026-10-14 with Thalia's Lieutenant moved to 4th (docs/design/cast-order-rankings.md,
+    // "Soldiers"; docs/design/soldiers-breaching-cast-order-2026-10-15.md). DEFAULT ON; =0 =>
+    // VialProvider::CastOrderRank byte-for-byte. Role slots by params, the order-free block cheapest
+    // first, and a rank tie between two different cards goes to the NAME (CastOrderTotalByName).
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotalByName() const override;
     // Authored cleanup-discard BUCKET policy (analyze-deck 5i; docs/design/soldiers-discard-policy-
     // proposal.md): MANA (lands net of board, quota 4) / THREATS (catch-all, param-derived value,
     // distance-to-playable) / VIAL (one, early only), every hand card named.

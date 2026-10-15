@@ -38,8 +38,10 @@ the same rule -- the three gaps this file used to list are closed by constructio
 ## What this means per deck
 
 The Vial put position is now decided by the deck's cast order. Where a deck's provider ties its
-creatures (Soldiers' generic order: every creature rank 10), ties fall to plan-vector position. The
-user-proposed Soldiers order (`MTG_SOLDIERS_ORDER`, Champion of the Parish rank 1 -- default OFF, the
-USER's pending decision, `cast-order-rankings.md`) puts every Human after the Champion; the scenario
+creatures (the generic order: every creature rank 10), ties fall to plan-vector position. The Soldiers
+order (`MTG_SOLDIERS_ORDER`, Champion of the Parish first) was AGENT-AUTHORED (2026-10-04, not a user
+proposal, as this line used to say) and is USER-APPROVED 2026-10-14 as amended, with Thalia's Lieutenant
+moved to 4th ("Soldiers' order also looks good."; `cast-order-rankings.md`,
+`soldiers-breaching-cast-order-2026-10-15.md`). It puts every Human after the Champion; the scenario
 `soldiers_vial_after_tutor_continuation` pins that flag to test continuation sequencing (T5 with it,
 T6 under the generic tie).
