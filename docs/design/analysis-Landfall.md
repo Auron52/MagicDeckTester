@@ -160,6 +160,47 @@ Courser + land-position commits on `landfall-analysis` (2026-10-15, ~17:35):
   Integration: a parallel worktree `landfall-search` (agent, started ~14:35) that routes put lands
   through `EnterLand` and is rebased onto `landfall-analysis` once agent A's work is committed.
 
+## Stage 3 — coverage re-check (2026-10-15 ~18:15, combined tree b6e29c62)
+`missing: []`, no gaps. Every card's bracket note is an implementation description; the real
+PROVISIONAL deferrals are listed in the card table above. (Tool trap: `audit_viewer_decisions.py`
+and `audit_card_costs.py` resolve `src/cards/data/cards.json` relative to the CWD — run them from
+the worktree root, or they silently audit the primary checkout's cards.json. Found when the viewer
+audit matched only 5 of 20 cards.)
+
+Static viewer audit (`--no-sweep`): expected decision types `bounce`, `dragon`, `target`, `tutor_etb`;
+oracle cross-check advisory only for Omnath's "any target" (disclosed PROVISIONAL: always face).
+
+## Stage 4a — provider (2026-10-15, be6f475d)
+`LandfallProvider`: an EMPTY DeckProvider derivation (play-neutral; Landfall had been captured by
+SelesnyaLifegainProvider, also empty, via Genesis Wave's `reveal_x_put_permanents`). Signature = the
+landfall-payoff params across five cards, routed above `selesnya`; it excludes the land-search params
+(Hydras runs Search for Tomorrow), Courser's params, and Searing Blaze's `landfall_damage`.
+`Certificate()` = NotAssessed (names what a bound must price). `provider_audit.py --check` rc 0; the
+routing pin test passes.
+
+## Stage 4 — baseline profile (in progress)
+`analyze_deck.py --no-rebuild --analyzer-seed 151015` launched 18:26 (detached; log
+`logs/landfall_profile.log`).
+
+## Stage 5f — performance gate (in progress)
+Suite gate reference: Snow 7,162 ms/game, so the new-deck budget is 21,486 ms/game (max per-game core-ms
+over the regression tier's searched cases). Early evidence (12 games d3 b20, contended): ~37 s/game
+mean, with one 257 s game (Genesis Wave: 13 -> 44 permanents). Likely OVER the 3x line, which makes
+performance the FIRST goal (CLAUDE.md). A perf agent in worktree `landfall-perf` (from be6f475d)
+profiles the heavy games and ships only sound collapses.
+
+## Investigation — Search for Tomorrow suspend (2026-10-15 ~18:35)
+- Probe: 24 games, d3 b20, seed 9000 (`logs/sft_probe/`): avg 5.75, all won; SLOW-GAMEs gi 11/13/17
+  at 130-198 s wall, 1.7-2.0M units.
+- Observation: SfT was NEVER suspended. In g12/g16/g19 the T1 board was Forest + SfT in hand and the
+  search played the Forest and left {G} idle.
+- Suspend IS offered: the claude-play T1 menu for seed 9019 lists plan 1 "land=Forest; cast: Search for
+  Tomorrow (suspend)".
+- Forced A/B via `--choices-then-auto` (d3 b20): Forest-only and Forest+suspend BOTH win T7, so in this
+  game the indifference is not provably wrong.
+- OPEN: whether a T1 suspend ever yields an earlier win is the 5g earliest-win miner's question
+  (MTG_DUMP_EWINS inclusion rule for "Search for Tomorrow (suspend)") — queued for when the box is free.
+
 ## Open questions for the user (collected; work continues on the stated default)
 - **(Courser integrator Q1 — CAST ORDER, USER-OWNED)** In a positioned-land plan, landfall-watcher casts
   go before other spells of the SAME cast-order rank. Only the arbitrary hand-order tie-break moves;
