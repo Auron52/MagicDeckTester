@@ -834,7 +834,10 @@ inline bool UntapBurstGrowthEnabled()
 //   (b) the single-attacker rung holds, among the strongest attackers that are mana sources, the one
 //       whose tap is worth LEAST as mana (a 1/1 Llanowar rather than an equal-power Priest);
 //   (c) a creature the line SACRIFICES as a cost (Natural Order's victim, the sac-fodder pin) is never
-//       held: it cannot attack after its own cast (CR 601.2h pays the cost during casting).
+//       held: it cannot attack after its own cast (CR 601.2h pays the cost during casting);
+//   (d) the single-attacker rung (hold ONE body) is tried AFTER the partial rungs (hold as many as the
+//       turn spares), not before them -- before them it paid gi287's 6-mana turn holding one Fyndhorn
+//       and tapped the other ahead of Priest whenever Priest sat later on the battlefield.
 // Remaining ties go to card name, then card number -- never the battlefield index. A summoning-sick
 // dork can neither tap for mana nor attack (CR 302.6), so it is outside the hold set as before.
 // Found on StompySurprise gi1526 (docs/design/stompy-order-2026-10-14.md §4): the T3 kill (Archdruid +
