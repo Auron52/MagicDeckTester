@@ -156,6 +156,15 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Nature's Lore / Three Visits / Search for Tomorrow) trips NO archetype signature today, so
         // this pin is what will catch the first future signature broad enough to capture it.
         {"Hydras", "Generic"},
+        // Landfall (being onboarded 2026-10-15; the landfall-trigger infrastructure is in, several of
+        // its ramp cards are not yet). PINNED FROM A MEASUREMENT on this binary -- the Hydras
+        // treatment -- and NOT a routing decision: Stage 4a of analyze-deck decides this deck's
+        // provider once every card is in. MEASURED: SelesnyaLifegain -- a CAPTURE, the misroute class
+        // recorded above: the SelesnyaLifegain signature keys on Genesis Wave's
+        // reveal_x_put_permanents, which was "carried by NO other card" until this list ran 2 Waves.
+        // SelesnyaLifegainProvider is an empty DeckProvider derivation, so the capture moves no play
+        // today; it is pinned so Stage 4a's own-provider decision is a visible change here.
+        {"Landfall", "SelesnyaLifegain"},
     };
 
     namespace fs = std::filesystem;

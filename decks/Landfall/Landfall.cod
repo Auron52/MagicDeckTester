@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="2" name="Rampaging Baloths"/>
+        <card number="4" name="Avenger of Zendikar"/>
+        <card number="4" name="Khalni Heart Expedition"/>
+        <card number="4" name="Search for Tomorrow"/>
+        <card number="2" name="Cultivate"/>
+        <card number="4" name="Primeval Titan"/>
+        <card number="13" name="Forest"/>
+        <card number="3" name="Evolving Wilds"/>
+        <card number="4" name="Myriad Landscape"/>
+        <card number="1" name="Radiant Fountain"/>
+        <card number="2" name="Genesis Wave"/>
+        <card number="4" name="Phylath, World Sculptor"/>
+        <card number="2" name="Courser of Kruphix"/>
+        <card number="2" name="Mountain"/>
+        <card number="1" name="Gruul Turf"/>
+        <card number="1" name="Omnath, Locus of Rage"/>
+        <card number="1" name="Haunted Fengraf"/>
+        <card number="1" name="Terramorphic Expanse"/>
+        <card number="1" name="Terastodon"/>
+        <card number="4" name="Rampant Growth"/>
+    </zone>
+</cockatrice_deck>

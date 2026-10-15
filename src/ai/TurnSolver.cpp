@@ -16701,6 +16701,13 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
     fold(static_cast<uint64_t>(p.saga_target_choice + 2) * 59);
+    // Searched land-drop TIMING and the landfall-target policy (2026-10-15). MUST-FOLD, the fling /
+    // Tectonic rule below: "land before the casts" and "land after the casts" are different plans
+    // (and so are two target ranks), and a fingerprint that cannot tell them apart re-steals the
+    // decision the axis exists to give the search. Gated on the non-default value, so every plan of
+    // every deck without a landfall card keeps its exact prior fingerprint.
+    if (p.land_after_casts)            { fold(0x4C41465445ull); }   // "LAFTE"
+    if (p.landfall_target_choice >= 0) { fold(static_cast<uint64_t>(p.landfall_target_choice + 2) * 89); }
     fold(static_cast<uint64_t>(p.etbcounter_choice + 2) * 67);
     fold(static_cast<uint64_t>(p.sweep_choice + 2) * 71);
     fold(static_cast<uint64_t>(p.le_fire_choice + 2) * 73);
@@ -16976,7 +16983,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
 {
     return p.actions.empty() && p.breakpoint_actions.empty()
         && p.land_decided && p.land_to_play.empty() && p.fetch_target.empty()
-        && p.land_face.empty()
+        && p.land_face.empty() && !p.land_after_casts && p.landfall_target_choice == -1
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
@@ -17003,7 +17010,10 @@ static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
     return p.bp_choice >= 0 || p.scry_choice >= 0 || p.etbdig_choice >= 0 || p.tutor_choice >= 0
         || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
         || p.etbcounter_choice >= 0 || p.sweep_choice >= 0 || p.le_fire_choice >= 0
-        || p.bounce_choice >= 1;
+        || p.bounce_choice >= 1
+        // A landfall-target rank that turned out inert (one class at resolution, or no targeted
+        // trigger fired) lands on its base plan's state: one apply, not a rollout.
+        || p.landfall_target_choice >= 0;
 }
 // SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above).
 static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p); }
@@ -23636,7 +23646,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             && def.params.targeting != Targeting::Creature)
         {
             direct = def.params.damage;
-            if (def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
+            if (def.params.landfall_damage > 0
+                && LandEnteredUnderControlThisTurn(state, state.active_player_index))   // played OR put
             {
                 direct = def.params.landfall_damage;
             }
@@ -32928,6 +32939,8 @@ namespace solvememo
             || a.combat_aura_swap_choice != b.combat_aura_swap_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
+            || a.land_after_casts != b.land_after_casts
+            || a.landfall_target_choice != b.landfall_target_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
             || a.bp_at != b.bp_at || a.bp_wave0 != b.bp_wave0)
         { return false; }
@@ -33122,7 +33135,9 @@ static GameState WithPlanLandDrop(const GameState& state, const TurnSolver::Plan
     if (plan.land_to_play.empty()) { return base; }
     static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
     const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
-    if (s_karoo_defer && ld && ld->params.etb_bounce_land)
+    // A land-after-casts plan (Plan::land_after_casts) is played after the casts exactly like the
+    // Karoo -- the caller's deferred play handles both.
+    if ((s_karoo_defer && ld && ld->params.etb_bounce_land) || plan.land_after_casts)
     {
         if (karoo_out != nullptr) { *karoo_out = plan.land_to_play; }
         return base;
@@ -37935,6 +37950,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedSagaCh1 _ssc1(plan.saga_ch1_choice);
     ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
     ScriptedEtbCounter _sec(plan.etbcounter_choice);   // searched optional ETB counter payment; -1 inert
+    // Searched landfall-target POLICY (Plan::landfall_target_choice) for this turn: installed BEFORE
+    // the land block below so the plan's own land drop's targeted triggers read it. -1 installs
+    // nothing (a continuation keeps the outer plan's policy). Lockstep: AIEngine::TakeTurn.
+    ScriptedLandfallTarget _slft(plan.landfall_target_choice, state.turn_number);
     ScriptedSweep _ssw(plan.sweep_choice);            // searched end-of-main-1 sweep; -1 = the rule
     struct LeFirePin { int saved; explicit LeFirePin(int k) : saved(g_le_fire_pin) { g_le_fire_pin = k; }
                        ~LeFirePin() { g_le_fire_pin = saved; } } _lefp(plan.le_fire_choice);
@@ -38209,6 +38228,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     std::string karoo_fetch;
     // Land Auras whose host is the deferred karoo (name, host number), cast right after it lands.
     std::vector<std::pair<std::string, int>> karoo_host_auras;
+    // SEARCHED LAND-AFTER-CASTS (Plan::land_after_casts, 2026-10-15): the SAME deferral as the
+    // Karoo's -- `karoo_deferred` reserves the drop and every breakpoint guard that keys on it
+    // applies unchanged -- but for an ordinary land, which keeps the rest of its land choice: the
+    // face, the rad mode and the searched ETB look (scry_choice) ride to the deferred play. The
+    // Karoo path itself is untouched (a Karoo is ALWAYS deferred and never carries this flag).
+    // Lockstep twin: AIEngine::TakeTurn.
+    bool        land_after_deferred = false;
+    std::string deferred_land_face;
+    int         deferred_rad_mode   = -1;
 
     // Human-play mode (tools/play GUI): execute EXACTLY the committed plan -- suppress every
     // auto-heuristic that would play cards the human didn't choose (draw-breakpoint re-solve,
@@ -38251,6 +38279,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     karoo_deferred  = true;
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
+                }
+                else if (plan.land_after_casts)
+                {
+                    // Searched land-after-casts timing (see land_after_deferred above): reserve the
+                    // drop exactly as for a Karoo; the land is played after the main casts.
+                    karoo_deferred      = true;
+                    land_after_deferred = true;
+                    karoo_land_name     = plan.land_to_play;
+                    karoo_fetch         = plan.fetch_target;
+                    deferred_land_face  = plan.land_face;
+                    deferred_rad_mode   = plan.rad_mode;
                 }
                 else
                 {
@@ -39737,7 +39776,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             int x_mult = def.params.x_damage_multiplier; if (x_mult < 1) { x_mult = 1; }
             int dmg = def.card.m_mana_cost.has_x ? (chosen_x * x_mult) : def.params.damage;
             if (!def.card.m_mana_cost.has_x
-                && def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
+                && def.params.landfall_damage > 0
+                && LandEnteredUnderControlThisTurn(state, state.active_player_index))   // played OR put
             {
                 dmg = def.params.landfall_damage;
             }
@@ -42680,6 +42720,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // above). Done before the deferred-cantrip re-solve so the drop is taken (lands_played==1)
     // and that re-solve never plays a freshly-revealed land as the drop. AIEngine mirrors this
     // (its Karoo play sits between the main cast loop and the breakpoint replay).
+    if (karoo_deferred && land_after_deferred)
+    {
+        // The SEARCHED land-after-casts drop (Plan::land_after_casts): the plan's casts have all
+        // resolved, so a landfall permanent among them sees this land enter (OnLandEntered fires
+        // inside PlayLandFromHand). Carries the rest of the land choice -- face, rad mode, and the
+        // searched ETB look (scry_choice) -- exactly as the land-first play does. Lockstep with
+        // AIEngine::TakeTurn's deferred play.
+        karoo_deferred      = false;
+        land_after_deferred = false;
+        ScriptedTopChoice    _stc(plan.scry_choice);
+        ScriptedBounceChoice _sbc(plan.bounce_choice);
+        PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode);
+    }
     if (karoo_deferred)
     {
         karoo_deferred = false;
@@ -50925,8 +50978,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // (all of them today) are byte-identical; the point is that the state mismatch above
                 // is only half the missing information, and the other half is "what else does this
                 // plan do this turn", which the provider currently guesses at.
+                // A land-after-casts plan (Plan::land_after_casts) has NOT played its land when this
+                // tutor resolves, so it is the pre-land state for every post-land read below.
+                const bool land_before_casts = !p.land_to_play.empty() && !p.land_after_casts;
                 const PlanContext pc{ &p.actions, ai, &p.land_to_play,
-                                      /*land_done=*/axis_postland && !p.land_to_play.empty() };
+                                      /*land_done=*/axis_postland && land_before_casts };
                 PlanContextScope _pcs(&pc);
                 if (prefix_stats)
                 {
@@ -50937,7 +50993,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     prefix_pos_sum += ai;
                 }
                 std::string key = act.card_name;
-                if (axis_postland)
+                if (axis_postland && land_before_casts)
                 {
                     key += '\x1f'; key += p.land_to_play;
                     key += '\x1f'; key += p.fetch_target;
@@ -50946,7 +51002,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 std::vector<std::string>& cands = cand_cache[key];
                 if (cands.empty())
                 {
-                    if (axis_postland && !p.land_to_play.empty())
+                    if (axis_postland && land_before_casts)
                     {
                         GameState ls = state;
                         PlayLandByName(ls, p.land_to_play, p.fetch_target, true, p.land_face);
@@ -51575,6 +51631,105 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // SEARCHED LANDFALL TARGET (Plan::landfall_target_choice, 2026-10-15) -- Phylath, World
+    // Sculptor's "put four +1/+1 counters on target Plant you control". The target resolves inside
+    // the landfall trigger (ResolveLandfallTargetCounters, the shared executor + rollout site), so it
+    // cannot be an Action; it rides the plan as a whole-turn RANK POLICY into the provider-ordered,
+    // identity-folded classes (the Emiel etbcounter shape: one variant per extra rank per base plan,
+    // additive). Rank 0 -- the provider's front -- is the base plan itself.
+    //
+    // WIDTH = the identity classes of the legal targets on THIS board + 1 headroom, capped at 4: the
+    // plan itself can make a new class (Phylath's or Avenger's ETB Plants are a sick class beside the
+    // old ones). An overshoot rank clamps at resolution and lands on its base plan's state, which the
+    // post-apply dedup skips for one apply (PlanIsAxisVariant). A board with at most one class, and no
+    // way for the plan to add one, emits nothing -- the sound identity fold already decided it.
+    //
+    // GATED: a targeted landfall card in the list (deck_has_landfall + the per-definition param), a
+    // watcher on the battlefield or cast/put by the plan, and a plan in which a land CAN enter (a land
+    // drop, or any cast -- a ramp spell puts one). Outer plans only (cont_axes_only): the policy is
+    // installed for the whole turn, so a continuation inherits it. Human play picks on the board.
+    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_landfall)
+    {
+        const int me = state.active_player_index;
+        auto targeted = [](const CardDefinition* d)
+        {
+            return d != nullptr && d->params.landfall_target_counters > 0
+                && !d->params.landfall_target_subtype.empty();
+        };
+        std::vector<std::string> subs;   // the target subtypes live on THIS board
+        for (const Permanent& pm : state.battlefield)
+        {
+            if (pm.controller_index != me || pm.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+            if (targeted(d) && std::find(subs.begin(), subs.end(), d->params.landfall_target_subtype)
+                                   == subs.end())
+            { subs.push_back(d->params.landfall_target_subtype); }
+        }
+        // Classes now, for the widest subtype on board (a cast-only watcher contributes its subtype
+        // too, so its plans size off the same count). Memoised per subtype for this enumeration: the
+        // count is a function of the board alone, and a plan set can hold many plans casting the same
+        // watcher -- recounting per plan would be O(plans x Plants x board).
+        std::vector<std::pair<std::string, int>> class_memo;
+        auto classes_for = [&](const std::string& sub) -> int
+        {
+            for (const auto& cm : class_memo) { if (cm.first == sub) { return cm.second; } }
+            std::vector<std::uint64_t> keys;
+            int singles = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != me) { continue; }
+                if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
+                if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+                std::uint64_t k = 0;
+                if (!LandfallTargetFoldKey(state, q, k)) { ++singles; continue; }
+                if (std::find(keys.begin(), keys.end(), k) == keys.end()) { keys.push_back(k); }
+            }
+            const int n = static_cast<int>(keys.size()) + singles;
+            class_memo.emplace_back(sub, n);
+            return n;
+        };
+        int board_classes = 0;
+        for (const std::string& sub : subs) { board_classes = std::max(board_classes, classes_for(sub)); }
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive.
+            if (p.landfall_target_choice >= 0 || p.scry_choice >= 0 || p.bp_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                || p.tutor_choice >= 0 || p.discard_choice >= 0 || p.etbcounter_choice >= 0
+                || !p.sac_pins.empty()) { continue; }
+            if (p.land_to_play.empty() && p.actions.empty()) { continue; }   // no land can enter
+            int classes = subs.empty() ? -1 : board_classes;
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+                if (d == nullptr) { continue; }
+                if (targeted(d))
+                {
+                    // A watcher this plan casts: its subtype's classes on the current board.
+                    classes = std::max(classes, classes_for(d->params.landfall_target_subtype));
+                }
+                else if (d->params.reveal_x_put_permanents && classes < 0) { classes = 0; }   // may put one
+            }
+            if (classes < 0) { continue; }                  // no targeted landfall watcher reachable
+            // +1 headroom only when the plan CASTS something: a cast can make a new class (Avenger's
+            // or Phylath's Plants, a Wave) or put more lands (a second trigger then sees the class the
+            // first one split off). A land-only plan has at most one trigger, on exactly this board,
+            // so its class count is exact and a rank past it could only clamp back onto rank 0.
+            const int width = std::min(4, classes + (p.actions.empty() ? 0 : 1));
+            for (int k = 1; k < width; ++k)
+            {
+                TurnSolver::Plan v = p;
+                v.landfall_target_choice = k;
+                extra.push_back(std::move(v));
+            }
+        }
+        TRACE("landfalltgt", "T%d landfall-target axis -> %zu variants (board classes %d)",
+              state.turn_number, extra.size(), board_classes);
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
     // SEARCHED END-OF-MAIN-1 SWEEP (2026-09-30, USER HARD RULE docs/design/no-greedy-in-search-window.md).
     // TapDripLandsIfUseful / TapPainSourcesIfUseful tap leftover drip / pain lands for their damage at
     // the end of main 1 -- but only when no castable card in hand could want them in main 2. That
@@ -52016,7 +52171,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         auto build_hmap = [&](const TurnSolver::Plan& p) -> bool
         {
             int drop = -1;
-            if (!p.land_to_play.empty())
+            // A land-after-casts plan (Plan::land_after_casts) was enumerated on the board WITHOUT
+            // its land played, so its hand indices are the state's own: no drop to remove.
+            if (!p.land_to_play.empty() && !p.land_after_casts)
             {
                 for (int i = 0; i < static_cast<int>(sc_ap.hand.size()); ++i)
                 {
@@ -52473,7 +52630,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08)
+static constexpr std::size_t kPlanDomAssertedSize = 408;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -52616,6 +52773,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
+            add(pl.land_after_casts); add(pl.landfall_target_choice);
             add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
             add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
             for (int s : pl.sac_pins)             { add(s); }
@@ -53184,6 +53342,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
 
     std::vector<TurnSolver::Plan> all;
 
+    // Every (land, fetch target, face) the land-first enumeration below actually OFFERED (its legality
+    // probe passed), Karoos excluded -- a Karoo is always played after the casts already. The
+    // land-after-casts axis (after the defer plans) re-offers exactly these, so it can never invent a
+    // land option the land-first enumeration did not have.
+    struct LandOption { std::string land, fetch, face; };
+    std::vector<LandOption> offered_lands;
+
     auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target,
                             const std::string& land_face = "")
     {
@@ -53217,6 +53382,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 { if (it->m_name == land_name) { karoo_num = it->m_number; h.erase(it); break; } }
             }
         }
+        if (state.deck_has_landfall && !land_name.empty() && !karoo_drop)
+        { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face }); }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
         // TRANCHE re-enumeration: the idle plan touches no group, so wave 0 already emitted it.
@@ -53300,7 +53467,72 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // (drop still open) -- the search then decides, at the post-draw breakpoint, whether to play the
     // drawn Reliquary as the drop, play a hand land, cast Land's Edge for the win, or nothing. That
     // is the whole of "don't play a land before TH/Throes"; nothing here dictates the after-play.
+    const std::size_t defer_begin = all.size();
     add_for_land("", "");
+    const std::size_t defer_end = all.size();
+
+    // ---- SEARCHED LAND-DROP TIMING: "cast the landfall payoff, THEN play the land" ---------------
+    // (Plan::land_after_casts, 2026-10-15.) Every plan above plays its land FIRST, so a landfall
+    // permanent cast in the same plan never sees this turn's land: "cast Rampaging Baloths, then play
+    // a Forest" (a 4/4 Beast now) was inexpressible at ANY budget -- a missing capability under the
+    // no-greedy rule, not a heuristic. This clones each DEFERRED-drop plan (land_to_play == "", whose
+    // casts were enumerated -- and are therefore affordable -- on the board WITHOUT the land) once per
+    // land option the land-first enumeration offered, with the land played after the casts. The
+    // land-first plans all remain, so nothing is lost: both orders are enumerable.
+    //
+    // GATED to where the order can matter, which is also what keeps it free elsewhere:
+    //   * the deck holds a landfall card (GameState::deck_has_landfall) -- otherwise offered_lands is
+    //     never filled and this block does nothing (byte-identical for every other deck);
+    //   * the plan CASTS something that puts a landfall watcher onto the battlefield -- the card
+    //     itself has a landfall trigger, or it is a mass put (Genesis Wave) that can put one. When no
+    //     cast does, every landfall watcher this land could trigger was already on the battlefield
+    //     before the casts, and for every payload in the pool (tokens, counters on each <subtype>,
+    //     life, quest counters) firing before or after an unrelated cast reaches the same end state,
+    //     so the order folds away. (Disclosed boundary: a future NON-watcher cast that MAKES a
+    //     payload's target subtype -- a non-landfall Plant maker -- or a "whenever you gain life"
+    //     watcher cast beside Courser would need adding here.)
+    // The variant carries nothing else of the base plan's land: face / fetch come from the option,
+    // and the scry / rad sub-axes fan over it later exactly as over a land-first plan.
+    // Human play gets the same variants (the viewer never narrows) through the `landafter=` verb.
+    // NOT inside a breakpoint-continuation derivation (g_bp_enum_depth > 0): a continuation's land is
+    // played by bp_play_searched_land BEFORE its casts in both worlds, so a land-after continuation
+    // would only duplicate its land-first sibling under a false label. (Disclosed gap: a landfall
+    // watcher cast in a CONTINUATION cannot yet take the continuation's own land after it.)
+    if (g_bp_enum_depth == 0 && !offered_lands.empty() && defer_end > defer_begin)
+    {
+        auto puts_landfall_watcher = [](const CardDefinition* d)
+        {
+            return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents);
+        };
+        std::vector<TurnSolver::Plan> after;
+        for (std::size_t i = defer_begin; i < defer_end; ++i)
+        {
+            const TurnSolver::Plan& p = all[i];
+            if (p.actions.empty()) { continue; }   // nothing cast: land-after == land-first
+            bool live = false;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+                    && a.kind != Action::Kind::ActivateVial) { continue; }
+                if (puts_landfall_watcher(CardDatabase::Instance().Lookup(a.card_name))) { live = true; break; }
+            }
+            if (!live) { continue; }
+            for (const LandOption& lo : offered_lands)
+            {
+                TurnSolver::Plan v = p;
+                v.land_decided     = true;
+                v.land_to_play     = lo.land;
+                v.fetch_target     = lo.fetch;
+                v.land_face        = lo.face;
+                v.land_after_casts = true;
+                after.push_back(std::move(v));
+            }
+        }
+        TRACE("landafter", "T%d land-after-casts -> %zu variants (%zu land options)",
+              state.turn_number, after.size(), offered_lands.size());
+        all.insert(all.end(), std::make_move_iterator(after.begin()),
+                              std::make_move_iterator(after.end()));
+    }
 
     // Land's Edge activation as a PICKABLE plan action (human play only) -- see the helper. Applied
     // here for the land-drop-available path; the !drop_available early-return applies it too.
@@ -67069,6 +67301,14 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
             { Fold(k, static_cast<uint64_t>((*g_scripted_sac_pins)[i] + 2)); }
         }
     }
+    // LIVE LANDFALL-TARGET POLICY (Plan::landfall_target_choice, 2026-10-15). A whole-turn policy
+    // installed by an outer candidate's apply STEERS every targeted landfall trigger resolved beneath
+    // it -- including those inside a nested solve's candidates that carry no policy of their own --
+    // so the same state can resolve differently under different live policies (the sac-pin argument
+    // above). Folded only while live for this state's turn; every deck without a targeted landfall
+    // card never installs one, so its key is unchanged.
+    if (const int lf_pin = LandfallTargetPinFor(state); lf_pin >= 0)
+    { Fold(k, 0x1A4DFA11ull); Fold(k, static_cast<uint64_t>(lf_pin)); }
     // Archangel free-cast bank (added 2026-08-20, caught by MTG_ENUM_MEMO_VERIFY: cached 9
     // plans vs fresh 4 at t8 m2 = the free-variant emission): a this-turn post-combat counter,
     // so two same-board same-life states can carry different banks (damage split across turns
@@ -69714,6 +69954,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         const Plan& p = plans[i];
         const std::string planLand = p.land_decided ? p.land_to_play : std::string();
         if (planLand != wantLand) { continue; }
+        // The land's TIMING (Plan::land_after_casts) is matched exactly: `land=` is the land-first
+        // plan, `landafter=` the land-after-casts one. A deck with no landfall card has no
+        // land-after plans, and its `land=` lines match exactly what they always did.
+        if (!planLand.empty() && p.land_after_casts != spec.land_after_casts) { continue; }
         // Actions split by how the human commits them, each matched against its own verb:
         //   DiscardToLandsEdge -> a COUNT vs spec.lands_edge (card_name is "Land's Edge")
         //   ActivateVial       -> creature names vs spec.vial_deploys (free Vial deploy)
@@ -70739,7 +70983,29 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     // Overgrown Tomb"). Function-scope RAII: every `return out` below restores the choosers.
     RevealLogPause pause_stage2;
 
-    if (spec.has_land)
+    if (spec.has_land && spec.land_after_casts)
+    {
+        // `landafter=` (Plan::land_after_casts): the land is played AFTER the casts, so its mana
+        // must NOT fund them -- the affordability sim below runs on the board without it. Only its
+        // playability is checked here (an open drop and a playable copy in hand).
+        const Player& lap = s.ActivePlayer();
+        bool playable = lap.lands_played_this_turn < lap.LandDropsAvailable();
+        bool in_hand  = false;
+        for (const Card& c : lap.hand)
+        {
+            if (c.m_name.str() != spec.land || c.m_impulse_no_land) { continue; }
+            if (PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { in_hand = true; break; }
+        }
+        if (!playable || !in_hand)
+        {
+            out.verdict = V::Illegal;
+            out.failed_action = "landafter=" + spec.land;
+            out.reason = "can't play land '" + spec.land +
+                         "' after the casts (land drop unavailable, or it is not a land in hand)";
+            return out;
+        }
+    }
+    else if (spec.has_land)
     {
         if (!PlayLandByName(s, spec.land))
         {

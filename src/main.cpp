@@ -396,6 +396,11 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             { os << " -> " << ld->params.mdfc_back_name << " (back face)"; }
             else { os << " (back face)"; }
         }
+        // SEARCHED LAND-DROP TIMING (Plan::land_after_casts): the land is played AFTER this plan's
+        // casts, so a landfall permanent it casts sees it. Annotated only when set, so every plan of
+        // every deck without a landfall card reads exactly as before -- and the two orders of one
+        // land + cast set are never byte-identical menu twins (the rad_mode / land_face lesson above).
+        if (plan.land_after_casts) { os << " (after the casts)"; }
         os << "; ";
     }
     else if (plan.land_decided)                           { os << "land=none; "; }
@@ -1406,7 +1411,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (hide_bundle[i]) { continue; }
             bool has_collapse = false;
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "|"
-                            + std::to_string(plans[i].rad_mode) + "#";
+                            + std::to_string(plans[i].rad_mode)
+                            + (plans[i].land_after_casts ? "@after" : "") + "#";
             for (const Action& a : plans[i].actions)
             {
                 if (a.kind == Action::Kind::ActivatePod)
@@ -1574,7 +1580,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // seed-8 representative logic below keeps its job.
         auto plan_identity = [&](const TurnSolver::Plan& p) -> std::string
         {
-            std::string k = p.land_to_play + "|" + p.land_face + "#";
+            // The land's TIMING is identity too (Plan::land_after_casts): land-first and land-after
+            // over one cast list are different lines, never menu twins.
+            std::string k = p.land_to_play + "|" + p.land_face + (p.land_after_casts ? "@after" : "") + "#";
             for (const Action& a : p.actions) { k += payload_key(a); k += ';'; }
             return k;
         };
@@ -1626,7 +1634,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
         {
             if (hide_bundle[i] || taken[i]) { continue; }
-            std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "#";
+            std::string key = plans[i].land_to_play + "|" + plans[i].land_face
+                            + (plans[i].land_after_casts ? "@after" : "") + "#";
             std::vector<std::string> nm;
             nm.reserve(plans[i].actions.size());
             for (const Action& a : plans[i].actions) { nm.push_back(a.card_name); }
@@ -1716,6 +1725,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         os << ", \"land\": ";
         if (p.land_decided && !p.land_to_play.empty()) { JsonStr(os, p.land_to_play); }
         else                                            { os << "null"; }
+        // The searched land-drop TIMING (Plan::land_after_casts): emitted only when set, so every
+        // other plan serialises byte-identically. The GUI's line builder reads it to encode a land it
+        // queued AFTER a cast as `landafter=` (and only when the menu offers such a line).
+        if (p.land_after_casts) { os << ", \"land_after_casts\": true"; }
         // Casts this plan DECLARES but cannot make in its own cast order. Emitted only when
         // non-empty, so summaries and every other plan serialise byte-identically -- which is
         // deliberate: the alternative (deleting these plans) was measured to move Dragonstorm's GT
@@ -3772,7 +3785,8 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
-// "land=<name>", "cast=<name>", "act=<board source name>" (a cast= that must be an ACTIVATION), "vial=<name>", "retrace=<name>", "landsedge=<n>",
+// "land=<name>", "landafter=<name>" (the land played AFTER the casts -- Plan::land_after_casts),
+// "cast=<name>", "act=<board source name>" (a cast= that must be an ACTIVATION), "vial=<name>", "retrace=<name>", "landsedge=<n>",
 // "sacout=<outlet name>" (repeat for repeat activations),
 // "equip=<equipment name>[#<source m_number>][@<host m_number>]",
 // "attachall=<name>", "equipallfree=<host m_number>", "sfput=<equipment name>",
@@ -3799,6 +3813,10 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         std::string key = tok.substr(0, eq);
         std::string val = tok.substr(eq + 1);
         if      (key == "land")      { ls.has_land = true; ls.land = val; }
+        // "landafter=<name>": the same land, played AFTER the line's casts (Plan::land_after_casts)
+        // -- "cast Rampaging Baloths, then play the Forest". `land=` keeps meaning land-FIRST, so
+        // every saved reference replays unchanged.
+        else if (key == "landafter") { ls.has_land = true; ls.land = val; ls.land_after_casts = true; }
         else if (key == "cast")      { ls.casts.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }

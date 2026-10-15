@@ -698,9 +698,12 @@ void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp)
 //  4. LANDS GO THROUGH EnterLand, NOT the land drop -- a land put by an effect is not PLAYED, so
 //     lands_played_this_turn is untouched BY CONSTRUCTION. Their own triggered ETBs (Karoo bounce,
 //     land lifegain) are deferred to PASS 2 via ResolveLandEnterEtbExtras for reason 1: Blossoming
-//     Sands' 1 life must be seen by an Ageless Entity that entered alongside it. (A put land also
-//     does not trigger landfall, which the engine models off lands_played_this_turn -- no landfall
-//     card in this deck.) A put MDFC enters FRONT face up (CR 712.12): the library card IS the front.
+//     Sands' 1 life must be seen by an Ageless Entity that entered alongside it. A put land DOES
+//     trigger landfall (the trigger watches the zone change, not the land drop): EnterLand is told
+//     not to fire it in pass 1, and PASS 3 fires it once per placed land after the enter triggers,
+//     through the landfall chokepoint (OnLandEntered) with a pre-trigger target snapshot -- so every
+//     landfall watcher on the battlefield, including one put by this same Wave, sees every land
+//     (CR 603.6a). A put MDFC enters FRONT face up (CR 712.12): the library card IS the front.
 //  5. NO SHUFFLE. This is not a search. Both neighbouring helpers (PerformTutorToBattlefield,
 //     PerformUpkeepSacTutor) end in ShuffleAfterSearch; inheriting that would be a rules error AND
 //     would scramble the library the clairvoyant search depends on.
@@ -813,7 +816,10 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         {
             // resolve_full_etb stays FALSE: the Karoo bounce and the land lifegain are TRIGGERED
             // abilities and belong in pass 2, with everything else's (see header note 4).
-            EnterLand(state, *d, raw.m_number);
+            // fire_landfall FALSE for the same reason: landfall is a trigger too, and it fires in
+            // PASS 3 below, once every entrant is on the battlefield and their enter triggers have
+            // resolved (header note 4).
+            EnterLand(state, *d, raw.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/false);
         }
         else
         {
@@ -841,7 +847,6 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         ++n_milled;
     }
 
-    // ---- PASS 2: now the enter-triggers, in reveal order ----------------------------------------
     auto find_slot = [&](const Placed& pl) -> int {
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
@@ -852,27 +857,141 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         }
         return -1;   // gone (e.g. a neighbour's mandatory Karoo bounce returned it to hand)
     };
+
+    // ---- WHICH TRIGGER ORDER (CR 603.3b: the controller orders their own simultaneous triggers) ----
+    // The Wave's own entrants' enter triggers, every landfall trigger the Wave's lands cause, and the
+    // lands' own enter triggers all go on the stack together, and the ORDER is the controller's
+    // choice. Two orders are used:
+    //
+    //   LEGACY (reveal order, interleaved) -- every game in which nothing can observe the difference:
+    //   no landfall watcher is on the battlefield or among the entrants, and no entrant counts lands
+    //   as its ETB resolves. Byte-identical to the pre-landfall Wave (SelesnyaLifegain).
+    //
+    //   LANDFALL ORDER -- otherwise, by a DOMINANCE argument rather than a heuristic (it can only
+    //   move value one way for every trigger pair in the pool, against the passive goldfish):
+    //     2a. every entrant's enter-watchers, then the OWN ETBs that create or count (Avenger's and
+    //         Phylath's Plants, Baloths/Omnath bodies' watchers, ...) -- in reveal order;
+    //     3.  LANDFALL, once per placed land: Avenger's "each Plant" counter now reaches the Plants
+    //         2a just made (never fewer recipients than any earlier slot would give); tokens, life and
+    //         quest counters commute with everything in 2a;
+    //     2b. the ETBs that READ or SHRINK the board last: an own-permanent destroyer (Terastodon,
+    //         Acidic Slime, Shriekmaw), Craterhoof's creature-count pump (the landfall Beasts and
+    //         Elementals are on the battlefield to be counted and pumped), and each land's own
+    //         triggers (the Karoo bounce, land lifegain). Removing a land AFTER the counting ETBs and
+    //         after landfall can only raise those counts; it cannot un-trigger a landfall.
+    //   The one class this ordering could put on the wrong side is a "first life gain each turn"
+    //   reader (Nykthos Paragon) racing Courser's 1 life against a bigger gain -- not reachable by
+    //   any list holding both today; disclosed (6a) rather than modelled.
+    bool landfall_order = false;
     for (const Placed& pl : placed)
     {
-        int slot = find_slot(pl);
-        if (slot < 0) { continue; }
-        FireEtbWatchers(state, controller, slot);    // the universal cascade: Avatars see the entrant
-        slot = find_slot(pl);
-        if (slot < 0) { continue; }
-        // kEtbKxHeuristic: a PUT entry carries no searched destroy-K axis, so project K at
-        // resolution (the Natural Order / Turntimber put convention).
-        FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
-        if (pl.is_land)
+        if (pl.def->landfall_watcher || pl.def->params.etb_tokens_per_land > 0) { landfall_order = true; break; }
+    }
+    if (!landfall_order)
+    {
+        for (const Permanent& q : state.battlefield)
         {
+            if (q.controller_index != controller || q.def_absent) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd != nullptr && qd->landfall_watcher) { landfall_order = true; break; }
+        }
+    }
+
+    if (!landfall_order)
+    {
+        // ---- PASS 2 (LEGACY): the enter-triggers, in reveal order -----------------------------
+        for (const Placed& pl : placed)
+        {
+            int slot = find_slot(pl);
+            if (slot < 0) { continue; }
+            // The universal cascade: Avatars see the entrant. fire_landfall FALSE -- a land placed by
+            // pass 1 deferred its landfall (EnterLand), and with no watcher anywhere there is none.
+            FireEtbWatchers(state, controller, slot, /*fire_landfall=*/false);
             slot = find_slot(pl);
             if (slot < 0) { continue; }
-            ResolveLandEnterEtbExtras(state, *pl.def, slot);
+            // kEtbKxHeuristic: a PUT entry carries no searched destroy-K axis, so project K at
+            // resolution (the Natural Order / Turntimber put convention).
+            FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
+            if (pl.is_land)
+            {
+                slot = find_slot(pl);
+                if (slot < 0) { continue; }
+                ResolveLandEnterEtbExtras(state, *pl.def, slot);
+            }
+        }
+    }
+    else
+    {
+        // LANDFALL TARGET SNAPSHOT (OnLandEntered's simultaneity rule). The event is complete --
+        // every entrant is on the battlefield -- and no trigger has resolved yet, so THIS is the
+        // board a targeted landfall trigger (Phylath) chooses its target from as it is put on the
+        // stack (CR 603.3d). A Plant an Avenger put by this same Wave makes in 2a does not exist yet
+        // and is therefore not a legal target for these triggers; with no Plant at all they are
+        // removed and do nothing (no over-credit).
+        std::vector<int> landfall_targets;
+        landfall_targets.reserve(state.battlefield.size());
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index == controller) { landfall_targets.push_back(q.card.m_number); } }
+
+        // An own ETB that reads or shrinks the board belongs to 2b (see the order note above).
+        auto late_own_etb = [](const CardParams& pp)
+        {
+            return pp.etb_destroy_own_noncreature_max > 0 || pp.etb_destroy_artifact_enchantment_land
+                || pp.etb_destroy_nonartifact_nonblack || pp.etb_team_pump_per_creature;
+        };
+
+        // ---- PASS 2a: enter-watchers for every entrant, then the early own ETBs ---------------
+        for (const Placed& pl : placed)
+        {
+            int slot = find_slot(pl);
+            if (slot < 0) { continue; }
+            FireEtbWatchers(state, controller, slot, /*fire_landfall=*/false);   // pass 3 fires it
+            // A land's own FireOwnEtbTriggers runs here too, exactly as in the legacy pass (an
+            // as-enters choice such as etb_choose_color lives there); only its bounce / lifegain
+            // (ResolveLandEnterEtbExtras) waits for 2b.
+            if (late_own_etb(pl.def->params)) { continue; }
+            slot = find_slot(pl);
+            if (slot < 0) { continue; }
+            FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
+        }
+
+        // ---- PASS 3: LANDFALL, once per placed land, in reveal order --------------------------
+        // Every landfall watcher on the battlefield fires for EVERY land this Wave put -- including
+        // one that entered in this same Wave (CR 603.6a: simultaneous entrants see each other), so a
+        // Rampaging Baloths put beside five lands makes five Beasts. Iterates the PLACED list, never
+        // the surviving battlefield: a land that has already left (a neighbour's Karoo bounce, a
+        // Terastodon) still triggered on entry, and the trigger still resolves (CR 603.2 / 603.3).
+        // Before the legend rule below, so a legend-ruled duplicate's landfall triggers still fire.
+        for (const Placed& pl : placed)
+        {
+            if (!pl.is_land) { continue; }
+            OnLandEntered(state, controller, pl.number, &landfall_targets);
+        }
+
+        // ---- PASS 2b: the board-reading / board-shrinking own ETBs, then each land's own triggers --
+        for (const Placed& pl : placed)
+        {
+            if (pl.is_land)
+            {
+                const int slot = find_slot(pl);
+                if (slot >= 0) { ResolveLandEnterEtbExtras(state, *pl.def, slot); continue; }
+                // GONE (another land's bounce already returned it). Its own enter triggers fired on
+                // entry and still resolve: a Karoo's "return a land you control" with no self to
+                // fall back on (-1), and its lifegain -- in ResolveLandEnterEtbExtras' order.
+                if (pl.def->params.etb_bounce_land) { BounceKarooLand(state, controller, -1); }
+                if (pl.def->params.etb_lifegain > 0) { GainLife(state, controller, pl.def->params.etb_lifegain); }
+                continue;
+            }
+            if (!late_own_etb(pl.def->params)) { continue; }
+            const int slot = find_slot(pl);
+            if (slot < 0) { continue; }
+            FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
         }
     }
 
     // A legend-rule event is possible in principle (two copies of one legendary name entering at
-    // once, or one entering beside a live copy) even though the default subset above declines the
-    // duplicate and this deck runs no legend. Once, after the puts -- not per put (they entered
+    // once, or one entering beside a live copy -- GenesisWavePutPicks PUTS a duplicate legend, since
+    // the alternative is the same graveyard). Once, after the puts -- not per put (they entered
     // simultaneously, CR 704.5j).
     EnforceLegendRule(state, controller);
 

@@ -125,11 +125,14 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # Not a combat/evasion keyword, so stripping it cannot mask a missing one.
     "partner",
 }
-# Supertypes the engine does NOT model because they are inert in goldfishing:
-# Basic-ness is derived from the card name; the World rule never fires (one
-# permanent). Legendary (legend rule) and Snow (snow mana) ARE modeled, so they
-# stay HARD-checked and are deliberately absent here.
-IGNORED_SUPERTYPES = {"Basic", "World"}
+# Supertypes the engine does NOT model because they are inert in goldfishing: the World rule
+# never fires (one permanent). Legendary (legend rule), Snow (snow mana) and -- since 2026-10-15 --
+# BASIC ARE modeled, so they stay HARD-checked and are deliberately absent here. Basic used to be
+# listed with the note "Basic-ness is derived from the card name", but no such code ever existed,
+# and it now has readers (IsBasicLandCard: Phylath's "for each basic land you control", every
+# "search for a basic land card"): a basic land entry missing "supertypes": ["Basic"] -- Mountain and
+# Island both were -- would be invisible to all of them.
+IGNORED_SUPERTYPES = {"World"}
 
 
 # ------------------------------------------------------------------ normalisation
@@ -266,7 +269,12 @@ def diff_card(local, ref, allow):
     if l_supers != r_supers:
         findings.append(("supertypes", f"local={l_supers} scryfall={r_supers}"))
 
-    l_kw = sorted(k.lower() for k in local.get("keywords", []))
+    # Stripped on BOTH sides (2026-10-15): a card may carry one of these tags verbatim from Scryfall
+    # (the engine accepts "Landfall" as an inert ability-word tag) or omit it, and neither is a
+    # mismatch. Before, only the Scryfall side was stripped, so a verbatim paste read as a HARD
+    # finding. No existing entry lists any of these words, so every prior verdict is unchanged.
+    l_kw = sorted(k for k in (kw.lower() for kw in local.get("keywords", []))
+                  if k not in MODELED_ELSEWHERE_KEYWORDS)
     r_kw = sorted(k for k in (kw.lower() for kw in ref.get("keywords", []))
                   if k not in MODELED_ELSEWHERE_KEYWORDS)
     if l_kw != r_kw:

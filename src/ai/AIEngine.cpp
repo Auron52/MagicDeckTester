@@ -3173,6 +3173,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Land Auras whose host is the deferred karoo (name, host number) -- lockstep twin of
     // ApplyPlanDirect's karoo_host_auras (Bruna sweep D): held by cast_by_name, cast after the karoo.
     std::vector<std::pair<std::string, int>> karoo_host_auras;
+    // SEARCHED LAND-AFTER-CASTS (Plan::land_after_casts) -- lockstep twin of ApplyPlanDirect's
+    // land_after_deferred: an ordinary land the committed plan scored as played AFTER its casts rides
+    // the Karoo deferral (karoo_deferred reserves the drop) and keeps its face / rad mode / scry pin.
+    bool        land_after_deferred = false;
+    std::string deferred_land_face;
+    int         deferred_rad_mode   = -1;
+    // The committed plan's landfall-target POLICY (Plan::landfall_target_choice), installed BEFORE
+    // its land drop and held for the rest of the phase -- lockstep with ApplyPlanDirect's
+    // ScriptedLandfallTarget. Empty (nothing installed) for a plan carrying no policy.
+    std::optional<ScriptedLandfallTarget> landfall_target_exec;
 
     if (play_this_phase)
     {
@@ -3801,6 +3811,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
             }
 
+            // The plan's landfall-target policy, before its land drop (see landfall_target_exec).
+            if (plan.landfall_target_choice >= 0)
+            { landfall_target_exec.emplace(plan.landfall_target_choice, state.turn_number); }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -3810,6 +3823,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     karoo_deferred  = true;
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
+                }
+                else if (plan.land_after_casts)
+                {
+                    // The searched land-after-casts timing: reserve the drop like a Karoo and play
+                    // it after the main cast loop (lockstep with ApplyPlanDirect).
+                    karoo_deferred      = true;
+                    land_after_deferred = true;
+                    karoo_land_name     = plan.land_to_play;
+                    karoo_fetch         = plan.fetch_target;
+                    deferred_land_face  = plan.land_face;
+                    deferred_rad_mode   = plan.rad_mode;
                 }
                 else
                 {
@@ -6648,6 +6672,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // catch-all breakpoint/dig replay below -- the same logical point as the rollout (which
     // plays it right after apply_plan_actions, before its deferred-cantrip re-solve). Taking the
     // drop here (lands_played==1) keeps a later breakpoint from playing a revealed land as it.
+    if (karoo_deferred && land_after_deferred)
+    {
+        // The searched land-after-casts drop (Plan::land_after_casts) -- lockstep with
+        // ApplyPlanDirect's deferred play: the casts above have resolved, so a landfall permanent
+        // among them sees this land enter. Same face / rad mode / scry pin the search scored.
+        karoo_deferred      = false;
+        land_after_deferred = false;
+        ScriptedTopChoice    _stc(plan.scry_choice);
+        ScriptedBounceChoice _sbc(plan.bounce_choice);
+        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, deferred_land_face, deferred_rad_mode);
+    }
     if (karoo_deferred)
     {
         karoo_deferred = false;

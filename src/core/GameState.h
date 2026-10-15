@@ -624,6 +624,15 @@ struct GameState
     // (`is_land_aura`), mainboard + sideboard, held open by Garth -- so a clear bit proves every walk
     // would have found nothing. DEFAULT TRUE == walk == the old behaviour for an unstamped state.
     bool                     deck_has_land_aura              = true;  // Wild Growth & co.
+    // AND A SEVENTH, 2026-10-15 -- the LANDFALL dispatch (OnLandEntered, SpellEffects.h). Unlike the
+    // six above this one gates a walk that did not exist before: the dispatch is new, and the stamp
+    // is what lets it be added at every land-entry site of every deck for the cost of one bool test.
+    // Stamped from DefHasLandfallTrigger -- the SAME disjunction the per-definition
+    // `landfall_watcher` byte is computed from -- so a clear bit PROVES the walk would find no
+    // watcher (byte-identical by construction, the deck_has_creature_enter_watcher argument). Garth
+    // holds it open. DEFAULT TRUE == walk, so an unstamped GameState (the scenario harness, a unit
+    // test) keeps every trigger. Only ever err true.
+    bool                     deck_has_landfall               = true;  // Avenger / Baloths / Omnath & co.
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

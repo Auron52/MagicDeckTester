@@ -71,6 +71,9 @@
    "types": [
     "Land"
    ],
+   "supertypes": [
+    "Basic"
+   ],
    "subtypes": [
     "Mountain"
    ],
@@ -653,6 +656,9 @@
    "mana_cost": "",
    "types": [
     "Land"
+   ],
+   "supertypes": [
+    "Basic"
    ],
    "subtypes": [
     "Island"
@@ -10529,7 +10535,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Reveal the top X cards of your library. You may put any number of permanent cards with mana value X or less from among them onto the battlefield. Then put all cards revealed this way that weren't put onto the battlefield into your graveyard. [reveal_x_put_permanents: ONE gate param, because the reveal COUNT and the MV CAP are the SAME chosen X and the leftovers are MILLED. The Muxus params (etb_reveal_count / _put_max_mv) are fixed ints, subtype-filtered, rest-to-BOTTOM and fire from an ETB, so bending them into this would have cost four new flags to express one card. Shape precedent is PerformMuxusReveal; X threading is tutor_mv_max_is_x (Chord of Calling -- the cap reads off the SAME Action::chosen_x the enumeration used, never recomputed at resolution); simultaneity is PerformUpkeepSacTutor (Defense of the Heart). NOTHING DEFERRED. (1) SEARCH: X is a real cast axis, enumerated by its own branch in TurnSolver's {X} block -- without that branch the block's terminal `continue` (non-DirectDamage) would drop the card from enumeration ENTIRELY and it could never be cast (the Luxurious Libation trap). GenericProvider's max-X rule is kept (a bigger X is a strictly deeper reveal AND a strictly higher cap, so one variant per cast), which is also the only thing keeping a card castable at X=12 finite; MTG_UNPRUNED=xspell opens the full range for the A/B. Under HumanPlayActive() the branch emits EVERY legal X (0..max) because human play must be offered every legal X (GenericProvider::XCandidates' generic path does not check HumanPlayActive), which is WIDENING. (2) PERMANENT CARD = the six-type disjunction (Creature/Land/Enchantment/Artifact/Planeswalker/Battle), now the shared predicate Card::IsPermanentCard(); both the type test and the MV test read the DEFINITION via LookupCached, never the library card -- a library card is a placeholder with EMPTY type masks (the ExileTop/ApplyRadMill trap), so raw.IsCreature() is false for every card here and the Wave would put nothing, or everything. Lands are MV 0, so every land qualifies at any X >= 1: the Wave's floor is 'put your lands and dorks', never a whiff. In this 60, 53 cards are permanents and 7 are not (3 Feed the Clan + the 4 other Waves), so a big X really does bin your own copies -- priced, not dodged. (3) 'ANY NUMBER' is a real choice, not 'all': DecisionProvider::GenesisWavePutPicks, a disclosed rule and NOT a searched subset (a searched subset is 2^X plan variants, and Turntimber's SINGLE named put already measured as this engine's #1 branching driver). Default: put every legal revealed permanent EXCEPT a second copy of a legend we control or already selected this resolution (the legend rule bins one at once, CR 704.5j) and a creature whose MANDATORY ETB would destroy one of our own permanents; a Karoo is always PUT (worst case it returns itself to hand, which beats the graveyard). (4) SIMULTANEITY IS THE CARD. 'Put ... onto the battlefield' is ONE event, so every entrant's watchers are live before any enter-trigger resolves (the paired-Soul-Warden ruling, CR 603.6d). PerformGenesisWave uses TWO passes -- pass 1 appends every selected permanent, pass 2 re-finds each by per-copy m_number and fires FireEtbWatchers + FireOwnEtbTriggers in reveal order (CR 603.3b: the controller orders their own simultaneous triggers). A per-put sequential loop (PerformTutorToBattlefield's shape) UNDERCOUNTS, and here that is the whole payoff: a Wave putting N creatures with A Verdant Sun's Avatars live gains life A x N times (each Avatar sees every simultaneous entrant AND itself, own_creature_enters_lifegain_toughness + creature_enters_includes_self), and every one of those is a separate life-gain EVENT (CR 119.10) through the shared GainLife -- so a separate +1/+1 counter batch on each Ageless Entity and a separate Nykthos Paragon look. Re-find is by NUMBER, never battlefield.back(), because an earlier cascade can push tokens or sweep slots. (5) LANDS go through EnterLand, NOT the land drop -- a land put by an effect is not PLAYED, so lands_played_this_turn is untouched BY CONSTRUCTION (EnterLand's header: 'Does NOT touch the hand or the land-drop count'). Their own enter-triggers (etb_bounce_land, etb_lifegain) are DEFERRED TO PASS 2 through the shared ResolveLandEnterEtbExtras, exactly so they obey the same simultaneity: Blossoming Sands' 1 life is a gain event that must be seen by an Ageless Entity that entered ALONGSIDE it, and Selesnya Sanctuary's bounce is MANDATORY (skipping it would gift a free Karoo). A put Branchloft Pathway enters FRONT face up (CR 712.12), i.e. {G} only. A put land does not trigger landfall (the engine models landfall off lands_played_this_turn) -- no landfall card in this 60. (6) GRAVEYARD: leftovers are pushed in reveal order. NO SHUFFLE -- this is not a search, and the tutor helpers' trailing ShuffleAfterSearch would both be a rules error and scramble the library the clairvoyant search reads. (7) CLAIRVOYANCE: the search already reads the real top, so 'reveal the top X' gives it no new information; and because this is a public REVEAL (not Turntimber's 'LOOK at'), showing the human the same cards leaks nothing -- EmitReveal labels each revealed card 'battlefield' or 'graveyard'. (8) Every put creature is summoning sick (entered_this_turn), so the board the Wave makes cannot attack this turn; the value is the lifegain burst landing on creatures ALREADY untapped, which is why MainPhasePlacement pulls it to Main1 (the Muxus ETB MASS-PUT rule) and why it does NOT open a second main. EnforceLegendRule runs once after the puts. PERF: this is the deck's most expensive card by a wide margin -- O(puts x watchers x board) at every rollout leaf, on FireCreatureEnterWatchers, already the hottest symbol in the engine; MTG_ENTER_WATCHER_GATE cannot help because the decklist HOLDS a creature-enter watcher.]",
+   "oracle_text": "Reveal the top X cards of your library. You may put any number of permanent cards with mana value X or less from among them onto the battlefield. Then put all cards revealed this way that weren't put onto the battlefield into your graveyard. [reveal_x_put_permanents: ONE gate param, because the reveal COUNT and the MV CAP are the SAME chosen X and the leftovers are MILLED. The Muxus params (etb_reveal_count / _put_max_mv) are fixed ints, subtype-filtered, rest-to-BOTTOM and fire from an ETB, so bending them into this would have cost four new flags to express one card. Shape precedent is PerformMuxusReveal; X threading is tutor_mv_max_is_x (Chord of Calling -- the cap reads off the SAME Action::chosen_x the enumeration used, never recomputed at resolution); simultaneity is PerformUpkeepSacTutor (Defense of the Heart). NOTHING DEFERRED. (1) SEARCH: X is a real cast axis, enumerated by its own branch in TurnSolver's {X} block -- without that branch the block's terminal `continue` (non-DirectDamage) would drop the card from enumeration ENTIRELY and it could never be cast (the Luxurious Libation trap). GenericProvider's max-X rule is kept (a bigger X is a strictly deeper reveal AND a strictly higher cap, so one variant per cast), which is also the only thing keeping a card castable at X=12 finite; MTG_UNPRUNED=xspell opens the full range for the A/B. Under HumanPlayActive() the branch emits EVERY legal X (0..max) because human play must be offered every legal X (GenericProvider::XCandidates' generic path does not check HumanPlayActive), which is WIDENING. (2) PERMANENT CARD = the six-type disjunction (Creature/Land/Enchantment/Artifact/Planeswalker/Battle), now the shared predicate Card::IsPermanentCard(); both the type test and the MV test read the DEFINITION via LookupCached, never the library card -- a library card is a placeholder with EMPTY type masks (the ExileTop/ApplyRadMill trap), so raw.IsCreature() is false for every card here and the Wave would put nothing, or everything. Lands are MV 0, so every land qualifies at any X >= 1: the Wave's floor is 'put your lands and dorks', never a whiff. In this 60, 53 cards are permanents and 7 are not (3 Feed the Clan + the 4 other Waves), so a big X really does bin your own copies -- priced, not dodged. (3) 'ANY NUMBER' is a real choice, not 'all': DecisionProvider::GenesisWavePutPicks, a disclosed rule and NOT a searched subset (a searched subset is 2^X plan variants, and Turntimber's SINGLE named put already measured as this engine's #1 branching driver). Default: put every legal revealed permanent EXCEPT a creature whose MANDATORY ETB would destroy one of our own permanents -- a DUPLICATE LEGEND IS PUT (2026-10-15): the unpicked alternative is the same graveyard, and the put copy's ETB, its landfall triggers on the lands entering beside it, and its legend-rule DEATH (CR 704.5j / 700.4) all still happen; a Karoo is always PUT (worst case it returns itself to hand, which beats the graveyard). (4) SIMULTANEITY IS THE CARD. 'Put ... onto the battlefield' is ONE event, so every entrant's watchers are live before any enter-trigger resolves (the paired-Soul-Warden ruling, CR 603.6d). PerformGenesisWave uses TWO passes -- pass 1 appends every selected permanent, pass 2 re-finds each by per-copy m_number and fires FireEtbWatchers + FireOwnEtbTriggers in reveal order (CR 603.3b: the controller orders their own simultaneous triggers). A per-put sequential loop (PerformTutorToBattlefield's shape) UNDERCOUNTS, and here that is the whole payoff: a Wave putting N creatures with A Verdant Sun's Avatars live gains life A x N times (each Avatar sees every simultaneous entrant AND itself, own_creature_enters_lifegain_toughness + creature_enters_includes_self), and every one of those is a separate life-gain EVENT (CR 119.10) through the shared GainLife -- so a separate +1/+1 counter batch on each Ageless Entity and a separate Nykthos Paragon look. Re-find is by NUMBER, never battlefield.back(), because an earlier cascade can push tokens or sweep slots. (5) LANDS go through EnterLand, NOT the land drop -- a land put by an effect is not PLAYED, so lands_played_this_turn is untouched BY CONSTRUCTION (EnterLand's header: 'Does NOT touch the hand or the land-drop count'). Their own enter-triggers (etb_bounce_land, etb_lifegain) are DEFERRED TO PASS 2 through the shared ResolveLandEnterEtbExtras, exactly so they obey the same simultaneity: Blossoming Sands' 1 life is a gain event that must be seen by an Ageless Entity that entered ALONGSIDE it, and Selesnya Sanctuary's bounce is MANDATORY (skipping it would gift a free Karoo). A put Branchloft Pathway enters FRONT face up (CR 712.12), i.e. {G} only. A put land DOES trigger landfall (the trigger watches the zone change, not the land drop): PerformGenesisWave fires it once per placed land in a THIRD pass, after the enter triggers, through the shared chokepoint OnLandEntered, so every landfall watcher on the battlefield -- one put by this same Wave included -- sees every land (CR 603.6a). (6) GRAVEYARD: leftovers are pushed in reveal order. NO SHUFFLE -- this is not a search, and the tutor helpers' trailing ShuffleAfterSearch would both be a rules error and scramble the library the clairvoyant search reads. (7) CLAIRVOYANCE: the search already reads the real top, so 'reveal the top X' gives it no new information; and because this is a public REVEAL (not Turntimber's 'LOOK at'), showing the human the same cards leaks nothing -- EmitReveal labels each revealed card 'battlefield' or 'graveyard'. (8) Every put creature is summoning sick (entered_this_turn), so the board the Wave makes cannot attack this turn; the value is the lifegain burst landing on creatures ALREADY untapped, which is why MainPhasePlacement pulls it to Main1 (the Muxus ETB MASS-PUT rule) and why it does NOT open a second main. EnforceLegendRule runs once after the puts. PERF: this is the deck's most expensive card by a wide margin -- O(puts x watchers x board) at every rollout leaf, on FireCreatureEnterWatchers, already the hottest symbol in the engine; MTG_ENTER_WATCHER_GATE cannot help because the decklist HOLDS a creature-enter watcher.]",
    "template": "custom",
    "parameters": {
     "reveal_x_put_permanents": true
@@ -11537,6 +11543,162 @@
     "tutor_types": [],
     "tutor_from_graveyard": true,
     "wish_requires_multicolored": true
+   }
+  },
+  {
+   "name": "Rampaging Baloths",
+   "mana_cost": "{4}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [
+    "Trample",
+    "Landfall"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Trample\nLandfall — Whenever a land you control enters, create a 4/4 green Beast creature token. [LANDFALL: landfall_creates_tokens 1 + landfall_token_power/toughness 4/4, subtypes [Beast], colour G -- dispatched by the ONE landfall chokepoint, OnLandEntered (core/SpellEffects.h), once per land entering under our control: a PLAYED land (PlayLandFromHand, the land drop of every world) and a land PUT by an effect (EnterLand: fetches, land tutors, ramp spells; FireEtbWatchers: blinks and generic puts) alike. The current Oracle is MANDATORY ('create' -- the original printing's 'you may put ... onto the battlefield' was errata'd), so there is no choice to surface. The Beast token is created through CreateTokens (Doubling Season, the enter cascade) and is SUMMONING SICK: it attacks from next turn. So a land played AFTER Baloths is cast this turn is worth a Beast now -- the searched land-drop timing (Plan::land_after_casts) is what makes 'cast Baloths, then play the land' a line. Simultaneity (CR 603.6a): a Baloths put by Genesis Wave beside N lands sees all N (PerformGenesisWave's landfall pass). Trample is INERT -- the passive goldfish opponent never blocks -- and carried for faithfulness. Nothing deferred.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_creates_tokens": 1,
+    "landfall_token_power": 4,
+    "landfall_token_toughness": 4,
+    "landfall_token_subtypes": [
+     "Beast"
+    ],
+    "landfall_token_color": "G"
+   }
+  },
+  {
+   "name": "Avenger of Zendikar",
+   "mana_cost": "{5}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "When this creature enters, create a 0/1 green Plant creature token for each land you control.\nLandfall — Whenever a land you control enters, you may put a +1/+1 counter on each Plant creature you control. [ETB: etb_tokens_per_land 1 + the shared etb_created_token_* spec (0/1, [Plant], G) -- one Plant per land we control, counted at RESOLUTION (CR 608.2h), so lands that entered SIMULTANEOUSLY (a Genesis Wave putting Avenger beside them) are counted; ONE CreateTokens event (Doubling Season, the enter cascade per body); every Plant summoning sick. LANDFALL: landfall_counters_each 1 + landfall_counters_each_subtype Plant -- +1/+1 on EACH Plant creature we control, read at resolution, once per land played or put (OnLandEntered). The 'you may' is resolved YES by a stated DOMINANCE argument (FireLandfallTriggers): the choice is all-or-nothing, and against the passive opponent a +1/+1 counter on our own creature is never worse -- attack damage is monotone in power, toughness is never read, the counter-threshold keywords only ADD, persist / -1/-1 annihilation favours more +1/+1, and the one mechanic a +1/+1 counter can hurt (undying) exists on no card in the pool. A counter on a NON-sick Plant is damage THIS turn, which is why the land drop's timing is searched (Plan::land_after_casts): Avenger first then the land trades one more Plant for a counter on each. Under Genesis Wave the landfall triggers resolve AFTER the Wave's own enter triggers (the dominant CR 603.3b order), so the counter reaches the Plants Avenger's ETB just made. An Elemental, so its death feeds Omnath, Locus of Rage. Nothing deferred.]",
+   "template": "custom",
+   "parameters": {
+    "etb_tokens_per_land": 1,
+    "etb_created_token_power": 0,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Plant"
+    ],
+    "created_token_color": "G",
+    "landfall_counters_each": 1,
+    "landfall_counters_each_subtype": "Plant"
+   }
+  },
+  {
+   "name": "Omnath, Locus of Rage",
+   "mana_cost": "{3}{R}{R}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Landfall — Whenever a land you control enters, create a 5/5 red and green Elemental creature token.\nWhenever Omnath or another Elemental you control dies, Omnath deals 3 damage to any target. [LANDFALL: landfall_creates_tokens 1 + landfall_token_* -- a 5/5 red AND green Elemental (landfall_token_color 'RG': BuildTokenProto adds every colour letter), mandatory, summoning sick, once per land played or put (OnLandEntered). DEATH TRIGGER: the Pashalik Mons shape -- dies_watch_subtype Elemental + dies_watch_includes_self + dies_trigger_damage 3, consumed by OnCreatureDies, which every death site reaches INCLUDING THE LEGEND RULE (EnforceLegendRule fires OnCreatureDies for each doomed creature; CR 704.5j puts it into the graveyard and CR 700.4 makes that a death): with Omnath out, a second Phylath, World Sculptor (a legendary Elemental) cast or put dies to the legend rule and Omnath deals 3. Avenger of Zendikar and Omnath's own tokens are Elementals too. 'Any target' is resolved to the OPPONENT'S FACE, the dies_trigger_damage precedent (Pashalik Mons, Slimefoot): the opponent's life is the only thing that advances the race, the passive opponent's creatures never block or attack, and damage to our own permanents only costs us -- even the one self-target with a payoff (an own Elemental of toughness <= 3, to re-trigger Omnath) ends with the same 3 to the face minus a body. The damage lands straight on opponent life, so every lethal check and rollout sees it. Legendary, one copy; the legend rule is modelled. [PARTIAL: 'any target' is not offered to the human as a board choice -- the dies_trigger_damage precedent, classified inert in scripts/audit_viewer_decisions.py; WHY inert: the dominance above (PROVISIONAL, user sign-off pending).]]",
+   "template": "custom",
+   "parameters": {
+    "landfall_creates_tokens": 1,
+    "landfall_token_power": 5,
+    "landfall_token_toughness": 5,
+    "landfall_token_subtypes": [
+     "Elemental"
+    ],
+    "landfall_token_color": "RG",
+    "dies_watch_subtype": "Elemental",
+    "dies_watch_includes_self": true,
+    "dies_trigger_damage": 3
+   }
+  },
+  {
+   "name": "Phylath, World Sculptor",
+   "mana_cost": "{4}{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "When Phylath enters, create a 0/1 green Plant creature token for each basic land you control.\nLandfall — Whenever a land you control enters, put four +1/+1 counters on target Plant you control. [ETB: etb_tokens_per_land 1 + etb_tokens_per_land_basic_only + the etb_created_token_* spec (0/1, [Plant], G) -- one Plant per BASIC land we control, counted at resolution through the shared IsBasicLandCard predicate (the Basic SUPERTYPE and the Land type, never the basic_land template, which Gruul Turf also carries); one CreateTokens event; every Plant summoning sick. LANDFALL: landfall_target_counters 4 + landfall_target_subtype Plant -- four +1/+1 counters on TARGET Plant we control, once per land played or put (OnLandEntered). THE TARGET is chosen as the trigger is put on the stack (CR 603.3d): with no Plant the trigger is removed and does nothing; from a SIMULTANEOUS entry (Genesis Wave) only a Plant that existed when the lands entered is legal (the post-placement snapshot), so Plants made by the same Wave are not. WHICH Plant is SEARCHED: the legal Plants are identity-folded into classes (LandfallTargetFoldKey -- identical in all state, a sound fold), the provider ORDERS the classes (DecisionProvider::LandfallCounterTargetOrder: a Plant that can attack now first, then the highest power), and the search branches over the rank (Plan::landfall_target_choice, a whole-turn policy); the d0 runner and the beyond-horizon playout take rank 0. Human play picks on the board over EVERY legal Plant (the `target` decision through g_play_loyalty_chooser, the Saga-chapter-II shape). Legendary, four copies: a second copy's ETB resolves before the legend rule bins one (the provider keeps the oldest -- the un-sick body), and that death is an Elemental dying for Omnath, Locus of Rage. Nothing deferred.]",
+   "template": "custom",
+   "parameters": {
+    "etb_tokens_per_land": 1,
+    "etb_tokens_per_land_basic_only": true,
+    "etb_created_token_power": 0,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Plant"
+    ],
+    "created_token_color": "G",
+    "landfall_target_counters": 4,
+    "landfall_target_subtype": "Plant"
+   }
+  },
+  {
+   "name": "Courser of Kruphix",
+   "mana_cost": "{1}{G}{G}",
+   "types": [
+    "Enchantment",
+    "Creature"
+   ],
+   "subtypes": [
+    "Centaur"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 2,
+   "toughness": 4,
+   "oracle_text": "Play with the top card of your library revealed.\nYou may play lands from the top of your library.\nLandfall — Whenever a land you control enters, you gain 1 life. [PENDING: play-from-top being integrated -- clause 1 ('Play with the top card of your library revealed') and clause 2 ('You may play lands from the top of your library') are designed in logs/landfall_drafts/_courser_design.md and are NOT modelled by this entry yet: until they land this card only gains life on landfall, and the integrator removes this marker. LANDFALL (clause 3): landfall_lifegain 1 -- one life-gain EVENT (CR 119.10) through the shared GainLife hook (it fires every 'whenever you gain life' watcher), once per land played or put (OnLandEntered). Life is near-inert for the goldfish clock (nothing damages us); the event matters only to lifegain readers. The 2/4 Enchantment Creature body is modelled.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_lifegain": 1
+   }
+  },
+  {
+   "name": "Khalni Heart Expedition",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Landfall"
+   ],
+   "oracle_text": "Landfall — Whenever a land you control enters, you may put a quest counter on this enchantment.\nRemove three quest counters from this enchantment and sacrifice it: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. [PENDING: activation being integrated -- 'Remove three quest counters from this enchantment and sacrifice it: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle' is NOT modelled by this entry yet (designed in logs/landfall_drafts/Khalni_Heart_Expedition.json: an ActivatePermAbility mode whose cost is three quest counters plus sacrificing the source, no {T}, resolving each basic -- picked through IsBasicLandCard -- through EnterLand so each put land fires landfall); the integrator removes this marker. LANDFALL: landfall_quest_counters 1 through PutQuestCounters (Doubling Season doubles it), once per land played or put (OnLandEntered). The 'you may' is resolved YES by DOMINANCE: a quest counter is only ever SPENT by the optional activation, so one more never removes an option -- no cap, no threshold that punishes, the passive opponent never interacts -- the Beastmaster Ascension precedent.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_quest_counters": 1
    }
   }
  ]

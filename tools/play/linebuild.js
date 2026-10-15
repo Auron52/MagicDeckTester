@@ -421,8 +421,20 @@
          + (ac.length ? '+' + ac.join('+') : '');
   }
 
+  // LAND-DROP TIMING (engine Plan::land_after_casts, 2026-10-15). Does this decision offer ANY line
+  // that plays its land AFTER the casts? Only a deck holding a landfall card ever does, and only on
+  // a turn where a cast can put a landfall permanent onto the battlefield; everywhere else this is
+  // false and a queued land encodes as `land=` exactly as it always did.
+  function offersLandAfter(decision) {
+    return !!(decision && Array.isArray(decision.plans) && decision.plans.some(pl => pl && pl.land_after_casts));
+  }
+  // A queued entry that is a cast/activation the land could come AFTER (not a land, pretap, LE discard).
+  function isCastLike(p) { return p && p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'pretap'; }
+
   function encodeLine(plan) {
-    const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
+    // A land queued AFTER a cast on a decision that offers land-after lines is marked `after` by
+    // queueCard and encodes as `landafter=` -- "cast Rampaging Baloths, then play the Forest".
+    const parts = []; const l = planLand(plan); if (l) parts.push((l.after ? 'landafter=' : 'land=') + l.name);
     // Taps first: they are what the rest of the line is paid from.
     for (const p of plan) if (isPreTap(p)) parts.push(preTapToken(p));
     for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act')) parts.push(lineVerb(p) + '=' + p.name);
@@ -463,12 +475,17 @@
       // issue #7). At the ordinary one drop the old rules stand: the same land toggles off, a
       // different one means "actually, this land instead". Removing one of two queued lands is the
       // plan chip's ✕ / drag-back, as for any other queued entry.
+      // The land's TIMING follows the click order: queued after a cast, on a decision that offers
+      // land-after lines (offersLandAfter), it is played AFTER the casts (`landafter=`). A deck that
+      // never offers one pushes exactly the {name, kind} entry it always did.
+      const landEntry = () => (offersLandAfter(decision) && plan.some(isCastLike))
+        ? { name, kind, after: true } : { name, kind };
       if (lands.length < landDropsLeft(decision) && same.length < castableCount(decision, name)) {
-        plan.push({ name, kind });
+        plan.push(landEntry());
       } else if (same.length) {
         const cur = same[same.length - 1];
         plan = plan.filter(p => p !== cur);                                    // toggle that land off
-      } else { plan = plan.filter(p => p.kind !== 'land'); plan.push({ name, kind }); }
+      } else { plan = plan.filter(p => p.kind !== 'land'); plan.push(landEntry()); }
       // A queued land drop consumes a land that can no longer feed Land's Edge -> trim excess.
       while (leCount(plan) > leMax(decision, plan)) { const i = plan.map(p => p.kind).lastIndexOf('le'); if (i < 0) break; plan.splice(i, 1); }
     } else {
@@ -603,6 +620,7 @@
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
+           offersLandAfter,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.

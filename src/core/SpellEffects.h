@@ -867,7 +867,18 @@ inline void CreateTokens(GameState&, int, int, int, int, const std::vector<std::
 // Forward-declared because FireEtbWatchers is mutually recursive with CreateToken (a Lathliss 5/5
 // token entering re-fires the cascade). Defined after CreateToken; called FROM CreateToken so
 // every token enter fires the watchers too.
-inline void FireEtbWatchers(GameState&, int controller, int entered_index);
+//
+// `fire_landfall` (default true): a LAND entrant passed here reaches the landfall chokepoint
+// (OnLandEntered) from the cascade's top. The ONE caller that passes false is a site that has
+// already registered the same land's entry through EnterLand -- PerformGenesisWave's second pass --
+// so a land never fires landfall twice for one entry. See OnLandEntered's contract.
+inline void FireEtbWatchers(GameState&, int controller, int entered_index, bool fire_landfall = true);
+// THE LANDFALL CHOKEPOINT (defined beside FireSnowEnterWatchers). Declared here so EnterLand and
+// LandPlay.cpp -- both far below / outside -- and FireEtbWatchers can all reach the one function.
+inline void OnLandEntered(GameState& state, int controller, int land_number,
+                          const std::vector<int>* target_snapshot = nullptr);
+inline void FireLandfallTriggers(GameState& state, int controller, int land_number,
+                                 const std::vector<int>* target_snapshot);
 inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
@@ -1445,6 +1456,31 @@ inline const CardDefinition* LandFaceDefOf(const CardDefinition* def)
     return nullptr;
 }
 inline bool PlayableAsLand(const CardDefinition* def) { return LandFaceDefOf(def) != nullptr; }
+
+// THE BASIC-LAND PREDICATE (2026-10-15) -- the one definition every "basic land" reader shares:
+// Phylath, World Sculptor's "for each basic land you control" (etb_tokens_per_land_basic_only), and
+// every "search your library for a basic land card" (Rampant Growth, Cultivate, Search for Tomorrow,
+// Evolving Wilds, Terramorphic Expanse, Myriad Landscape, Khalni Heart Expedition).
+//
+// KEYED ON THE BASIC SUPERTYPE (CR 205.4c) AND THE LAND TYPE -- NEVER on the `basic_land` cards.json
+// TEMPLATE, which is the engine's "plain mana land" shape and is carried by NONBASIC lands too (Gruul
+// Turf, Haven of the Spirit Dragon, Blossoming Sands). Mountain and Island were missing the Basic
+// supertype in cards.json until this predicate gained readers; scripts/audit_card_fields.py now
+// hard-checks Basic against Scryfall so that cannot recur silently.
+//
+// The DEFINITION form is the safe one for any zone: a library / hand / graveyard Card is a name-only
+// placeholder with EMPTY masks. The Card form resolves through the definition when it has one and
+// falls back to the card's own masks (a battlefield permanent's card, a token) when it does not.
+inline bool IsBasicLandCard(const CardDefinition& def)
+{
+    return def.card.IsLand() && def.card.HasSupertype(Supertype::Basic);
+}
+inline bool IsBasicLandCard(const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    const Card& k = d ? d->card : c;
+    return k.IsLand() && k.HasSupertype(Supertype::Basic);
+}
 
 // True if `card`'s card-type set includes the named type ("Enchantment"/"Artifact"/
 // "Creature"/"Land"/"Instant"/"Sorcery"). Used by tutor type filters.
@@ -2762,9 +2798,35 @@ inline int FindBurnKillTarget(const GameState& state, int active, int damage)
 // would SURVIVE a self-cast for prowess. Computed at RESOLUTION (CR 608.2b) -- the snow count is a
 // live battlefield scan, never baked at cast.
 inline int SnowPermanentCount(const GameState&, int controller_index);   // defined below
+
+// Searing Blaze's landfall CONDITION: "If you had a land enter the battlefield under your control this
+// turn". A land PUT onto the battlefield by an effect counts exactly as a played one (the condition is
+// about the zone change, the same event the landfall TRIGGERS watch -- see OnLandEntered). Until
+// 2026-10-15 every reader tested `lands_played_this_turn > 0` alone, which misses a land put by a
+// fetch / land tutor / Genesis Wave on a turn whose drop was not used.
+//
+// Read off state the engine ALREADY tracks (no new field, nothing new to fold into a state key): a
+// land drop was used, OR a land we control is on the battlefield with entered_this_turn set (both
+// worlds clear that flag at the turn start -- GameEngine::UntapStep / SimulateEndAndStartNextTurn).
+// The one event it cannot see is a land PUT and then gone again the same turn with no drop used; no
+// card in the pool does that today (disclosed rather than tracked).
+//
+// BYTE-IDENTICAL for every existing reader's deck: burn (the only list holding Searing Blaze) puts no
+// land by any effect, so in its games a land entered this turn iff the drop was used.
+inline bool LandEnteredUnderControlThisTurn(const GameState& state, int controller)
+{
+    if (state.players[static_cast<std::size_t>(controller)].lands_played_this_turn > 0) { return true; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.entered_this_turn && p.card.IsLand()) { return true; }
+    }
+    return false;
+}
+
 inline int CreatureBurnDamage(const CardDefinition& def, const GameState& state)
 {
-    if (def.params.landfall_damage > 0 && state.ActivePlayer().lands_played_this_turn > 0)
+    if (def.params.landfall_damage > 0
+        && LandEnteredUnderControlThisTurn(state, state.active_player_index))
     { return def.params.landfall_damage; }
     if (def.params.damage_equals_snow_permanents)
     { return SnowPermanentCount(state, state.active_player_index); }
@@ -6038,9 +6100,13 @@ inline TokenProto BuildTokenProto(int                              power,
     // Token colour (StompySurprise: green Insect/Wurm/Elephant tokens are legal "sacrifice a
     // green creature" fodder for Natural Order). Empty = the historical colourless token --
     // byte-identical for every existing call site (nothing else reads token colour).
-    if (!color.empty())
+    // MULTICOLOUR (Omnath, Locus of Rage's "5/5 red and green Elemental", 2026-10-15): every letter
+    // of the string is a colour, so "RG" makes a red AND green token. Every pre-existing value in
+    // cards.json is a single letter, which this loop reads exactly as the old color[0] switch did --
+    // byte-identical for every existing token.
+    for (const char ch : color)
     {
-        switch (color[0])
+        switch (ch)
         {
             case 'W': token.card.AddColor(Color::White); break;
             case 'U': token.card.AddColor(Color::Blue);  break;
@@ -6706,7 +6772,394 @@ inline void FireSnowEnterWatchers(GameState& state, int entered_index)
     }
 }
 
-inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
+// =================================================================================================
+// LANDFALL -- "Whenever a land you control enters, <payload>." (CR 207.2c ability word; the trigger
+// itself is an ordinary CR 603.2 triggered ability that watches a zone change).
+//
+// THE CHOKEPOINT CONTRACT -- read before adding ANY route that puts a land onto the battlefield.
+//
+//   OnLandEntered(state, controller, land_number) runs EXACTLY ONCE for every land that enters the
+//   battlefield, AFTER the permanent is on the battlefield with its as-enters state (tapped,
+//   depletion counters) applied, and fires every landfall watcher `controller` controls -- once per
+//   land, for a PLAYED land and a land PUT onto the battlefield by an effect alike. It reads nothing
+//   about the land beyond its controller, so a land that has ALREADY LEFT again by the time it runs
+//   (a Karoo that bounced itself) still triggers: the trigger exists from the moment of the event.
+//
+//   Three routes call it; a new land-entry effect must reuse one of them, never hand-roll its own:
+//     1. PlayLandFromHand (src/ai/LandPlay.cpp) -- every PLAYED land: the executor's searched and
+//        greedy drops, the combo route and the rollout's PlayLandByName (one function, all worlds).
+//        A fetchland's land drop fires for the fetchland itself FIRST (the real card enters before it
+//        is sacrificed, even though this engine collapses its battlefield stay) and then again, via
+//        route 2, for the land it fetches -- two triggers, as in a real game.
+//     2. EnterLand (below) -- every land PUT by an effect: PerformFetch, PerformLandTutorToBattlefield,
+//        Genesis Wave's lands, and every ramp spell / ability that builds its land through EnterLand.
+//     3. FireEtbWatchers (the universal enter cascade) -- any LAND entrant passed to it: a blinked land,
+//        a land a generic put path returns or puts (PutCardOntoBattlefield, ApplyPutFromHand,
+//        PerformTutorToBattlefield with a land type, Kaldring's graveyard play).
+//   Never route ONE entry through two of them (a double trigger): the two opt-outs exist for exactly
+//   that -- EnterLand(..., fire_landfall=false) and FireEtbWatchers(..., fire_landfall=false), used
+//   only by PerformGenesisWave, which fires the batch itself after its enter triggers (below).
+//   A site that hand-builds a land Permanent and calls none of the three silently drops landfall,
+//   and nothing but a landfall deck playing that card would ever notice.
+//
+//   SIMULTANEITY (CR 603.6a / 603.3d). Permanents entering together see each other, so a Rampaging
+//   Baloths put alongside five lands makes five Beasts. A multi-put that includes NON-lands with
+//   enter triggers places everything first, runs those triggers, and only then calls OnLandEntered
+//   per land with a TARGET SNAPSHOT: the numbers of the permanents on the battlefield when the event
+//   completed, because a TARGETED landfall trigger (Phylath) chooses its target as it is put on the
+//   stack -- before any of the simultaneous enter triggers resolve -- so a Plant an Avenger makes in
+//   that same Wave is not a legal target for it. (Resolving the untargeted landfall payloads AFTER the
+//   simultaneous enter triggers is the controller's CR 603.3b ordering choice, and it is the dominant
+//   one for every payload in the pool: Avenger's "each Plant" counters land on the Plants its own ETB
+//   just made.) A put of SEVERAL LANDS AND NOTHING ELSE (Primeval Titan, Khalni Heart Expedition's
+//   sacrifice) may simply call EnterLand once per land: every landfall payload in the pool commutes
+//   with every other (tokens, counters on each <subtype>, life, quest counters) and no payload makes a
+//   permanent another landfall trigger could target, so sequential and simultaneous resolution are
+//   identical. A future payload that DOES create a target-subtype permanent breaks that argument and
+//   must take the snapshot shape instead.
+//
+//   PER-GAME GATE: GameState::deck_has_landfall (stamped from DefHasLandfallTrigger, the same
+//   disjunction as the per-definition CardDefinition::landfall_watcher byte). A deck with no landfall
+//   card pays ONE bool test per land entry and walks nothing -- byte-identical by construction. The
+//   opponent side (controller 1) keeps the walk, the deck_has_soulbond rule: OpponentDeck.h's fixed
+//   list is not described by the stamp. It puts no land through these routes today, so this is free.
+//
+//   COST WHEN LIVE: one walk of the battlefield per land entry to collect watchers (the per-definition
+//   byte, with the def_absent short-circuit, so a 15-Plant board costs 15 pointer tests), plus each
+//   payload's own work. Land entries are a handful per turn, so this is never the quadratic family
+//   (FireCreatureEnterWatchers runs per CREATURE entry; this runs per LAND entry).
+// =================================================================================================
+
+// Searched landfall-target POLICY (Plan::landfall_target_choice; TurnSolver's AppendSubdecisionAxes).
+// A RANK into the provider-ordered, identity-folded candidate list, applied to EVERY targeted landfall
+// trigger that resolves during the turn of the plan that pinned it -- a whole-plan policy, not a
+// consumed pin (the Emiel etbcounter_choice precedent: one variant per base plan, so the cost stays
+// additive). -1 = the provider's front pick. TURN-SCOPED (g_landfall_target_pin_turn) so a pin
+// installed for one turn's apply never steers a LATER turn of a rollout running inside the same scope.
+// Installed ONLY by a plan that carries a value: a nested continuation apply with none of its own
+// keeps the outer plan's policy for the rest of the turn.
+inline thread_local int g_landfall_target_pin      = -1;
+inline thread_local int g_landfall_target_pin_turn = -1;
+struct ScriptedLandfallTarget
+{
+    bool installed  = false;
+    int  saved      = -1;
+    int  saved_turn = -1;
+    ScriptedLandfallTarget(int k, int turn)
+    {
+        if (k < 0) { return; }
+        installed  = true;
+        saved      = g_landfall_target_pin;
+        saved_turn = g_landfall_target_pin_turn;
+        g_landfall_target_pin      = k;
+        g_landfall_target_pin_turn = turn;
+    }
+    ~ScriptedLandfallTarget()
+    {
+        if (!installed) { return; }
+        g_landfall_target_pin      = saved;
+        g_landfall_target_pin_turn = saved_turn;
+    }
+    ScriptedLandfallTarget(const ScriptedLandfallTarget&) = delete;
+    ScriptedLandfallTarget& operator=(const ScriptedLandfallTarget&) = delete;
+};
+// The policy live for `state`'s turn, or -1. Read by the resolver below and folded into the solve
+// memo key while live (TurnSolver's ACTIVE SCRIPTED PINS block), since a live pin steers resolution.
+inline int LandfallTargetPinFor(const GameState& state)
+{
+    return g_landfall_target_pin_turn == state.turn_number ? g_landfall_target_pin : -1;
+}
+
+// IDENTITY FOLD for a landfall counter target -- SOUND, the USER's "identical in all state" bar (the
+// FoldInterchangeableCreatureAuraHosts precedent). Two candidates whose keys are EQUAL are the same
+// target: the same card characteristics (name, type / supertype / colour / keyword masks, P/T,
+// subtypes), the same counters, the same tapped / summoning-sick / control-age state, the same token
+// provenance, and no attachment or per-object state at all. Putting N counters on either yields two
+// boards that differ only in WHICH per-copy number holds them -- a relabelling no rule can observe.
+// Anything this does not recognise as plain returns false and stays a singleton, so a refusal costs
+// branching, never a line.
+inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, std::uint64_t& key)
+{
+    if (p.damage != 0 || p.pending_death_trigger != 0 || p.marked_for_destruction) { return false; }
+    if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
+    if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
+    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
+        || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
+    if (p.is_animated || p.echo_resolved)                                         { return false; }
+    if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
+        || p.storage_counters != 0 || p.loyalty != 0 || p.ice_counters != 0
+        || p.age_counters != 0 || p.spore_counters != 0 || p.fade_counters != 0
+        || p.quest_counters != 0 || p.hone_counters != 0)                         { return false; }
+    if (p.storage_hold_this_turn || p.loyalty_activated_this_turn
+        || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
+        || p.lifegain_counters_used_this_turn)                                    { return false; }
+    if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
+        || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
+    if (!static_cast<const std::string&>(p.copy_printed_name).empty())           { return false; }
+    // ...and nothing attached TO it / paired WITH it: that link lives on the OTHER permanent.
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number
+            || q.paired_with == p.card.m_number) { return false; }
+    }
+    std::uint64_t h = 0x6C616E64ull;   // "land"
+    auto mix = [&h](std::uint64_t v)
+    {
+        h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2);
+        h *= 0xBF58476D1CE4E5B9ull;
+        h ^= h >> 31;
+    };
+    mix(p.card.m_name_hash);
+    mix(p.card.m_type_mask);
+    mix(p.card.m_supertype_mask);
+    mix(p.card.m_color_mask);
+    mix(p.card.m_keyword_mask);
+    mix(static_cast<std::uint64_t>(p.card.m_power.value_or(-99) + 1000));
+    mix(static_cast<std::uint64_t>(p.card.m_toughness.value_or(-99) + 1000));
+    for (const std::string& s : p.card.m_subtypes) { mix(std::hash<std::string>{}(s)); }
+    mix((p.is_token ? 1u : 0u) | (p.def_absent ? 2u : 0u) | (p.tapped ? 4u : 0u)
+        | (p.entered_this_turn ? 8u : 0u) | (p.gained_control_this_turn ? 16u : 0u)
+        | (p.fresh_hold_exempt ? 32u : 0u) | (p.pay_sac_eaten ? 64u : 0u));
+    mix(static_cast<std::uint64_t>(p.owner_index));
+    mix(static_cast<std::uint64_t>(p.mana_tap_mark));
+    mix(static_cast<std::uint64_t>(p.created_by_number));
+    for (const Counter& c : p.counters)
+    { mix((static_cast<std::uint64_t>(c.type) << 32) ^ static_cast<std::uint64_t>(c.count)); }
+    key = h;
+    return true;
+}
+
+// "put N +1/+1 counters on target <subtype> you control" (Phylath, World Sculptor). Resolved where
+// the trigger resolves, from BOTH worlds (the dispatch below is shared), so the executor and the
+// rollout pick identically.
+//
+//   * LEGAL SET: <subtype> permanents (an all-creature-types animation counts) we control, minus
+//     shroud (CR 702.18b -- the trigger TARGETS). Under a simultaneous entry, also restricted to
+//     `target_snapshot` (see the contract above). EMPTY -> the trigger had no legal target when it
+//     would have been put on the stack and is removed (CR 603.3d): nothing happens.
+//   * BRANCHING: the legal set is identity-folded (LandfallTargetFoldKey) into classes, the
+//     provider ORDERS the class representatives (DecisionProvider::LandfallCounterTargetOrder), and
+//     the SEARCH chooses the rank (Plan::landfall_target_choice -> g_landfall_target_pin). Rank 0 is
+//     the default for every path with no plan (the d0 runner, rollout leaves beyond the horizon).
+//   * HUMAN PLAY re-asks over the FULL legal set (never the folded list) through the shared
+//     board-click `target` decision (g_play_loyalty_chooser -- the Saga-chapter-target shape), with
+//     the engine's pick preselected. Nulled by RevealLogPause, so autonomous play is untouched.
+inline void ResolveLandfallTargetCounters(GameState& state, int controller, const std::string& src_name,
+                                          const CardParams& wp, const std::vector<int>* target_snapshot)
+{
+    const std::string& sub = wp.landfall_target_subtype;
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller) { continue; }
+        if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
+        if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+        if (target_snapshot != nullptr
+            && std::find(target_snapshot->begin(), target_snapshot->end(), q.card.m_number)
+                   == target_snapshot->end()) { continue; }
+        legal.push_back(i);
+    }
+    if (legal.empty()) { return; }   // CR 603.3d: no legal target -> the trigger is removed
+
+    // Sound identity fold: one representative (the oldest, i.e. battlefield order) per class.
+    std::vector<int>           reps;
+    std::vector<std::uint64_t> seen;
+    reps.reserve(legal.size());
+    for (int i : legal)
+    {
+        std::uint64_t k = 0;
+        if (LandfallTargetFoldKey(state, state.battlefield[static_cast<std::size_t>(i)], k))
+        {
+            if (std::find(seen.begin(), seen.end(), k) != seen.end()) { continue; }
+            seen.push_back(k);
+        }
+        reps.push_back(i);
+    }
+    ResolveProvider(state).LandfallCounterTargetOrder(state, controller, reps);
+    if (reps.empty()) { reps.push_back(legal.front()); }   // a provider may restrict, never empty
+    int pick = reps.front();
+    const int pin = LandfallTargetPinFor(state);
+    if (pin >= 0)
+    {
+        // Out of range clamps to the last class (duplicate-not-whiff, the sac-pin rule): a variant
+        // sized off the turn-start board can meet a smaller board mid-plan.
+        pick = reps[std::min<std::size_t>(static_cast<std::size_t>(pin), reps.size() - 1)];
+    }
+    if (g_play_loyalty_chooser && legal.size() > 1)
+    {
+        int def_opt = 0;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        { if (legal[static_cast<std::size_t>(k)] == pick) { def_opt = k; break; } }
+        const std::string prompt = "given " + std::to_string(wp.landfall_target_counters)
+                                 + " +1/+1 counters (permanently)";
+        const int chosen = (*g_play_loyalty_chooser)(state, controller, src_name + " (landfall)",
+                                                     prompt, legal, def_opt);
+        if (chosen >= 0 && chosen < static_cast<int>(legal.size()))
+        { pick = legal[static_cast<std::size_t>(chosen)]; }
+    }
+    Permanent& t = state.battlefield[static_cast<std::size_t>(pick)];
+    PutPlusCounters(state, t, wp.landfall_target_counters);
+    AnnihilateCounters(t);   // CR 704.5r -- a no-op unless the body carries -1/-1 counters
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x8C\x8D " + src_name + " (landfall): +"
+                      + std::to_string(wp.landfall_target_counters) + "/+"
+                      + std::to_string(wp.landfall_target_counters) + " counters on "
+                      + t.card.m_name.str());
+    }
+}
+
+// The dispatch: every landfall watcher `controller` controls fires once for this land entry. Called
+// ONLY through OnLandEntered (the gate lives there).
+inline void FireLandfallTriggers(GameState& state, int controller, int land_number,
+                                 const std::vector<int>* target_snapshot)
+{
+    // SNAPSHOT the watchers by per-copy number BEFORE resolving any: a token payload appends to the
+    // battlefield (reallocating it) and a watcher must not be found twice or skipped. Battlefield order
+    // is the CR 603.3b order (the controller orders their own simultaneous triggers; the house
+    // convention used by every other watcher family).
+    std::vector<int> watchers;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller || w.def_absent) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (wd == nullptr || !wd->landfall_watcher) { continue; }
+        watchers.push_back(w.card.m_number);
+    }
+    if (watchers.empty()) { return; }
+    const bool log = (g_play_event_sink != nullptr) && !g_tap_speculating;
+    std::string land_name = "a land";
+    if (log)
+    {
+        for (const Permanent& l : state.battlefield)
+        { if (l.card.m_number == land_number && l.card.IsLand()) { land_name = l.card.m_name.str(); break; } }
+    }
+    for (const int num : watchers)
+    {
+        int wi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& w = state.battlefield[static_cast<std::size_t>(i)];
+            if (w.card.m_number == num && w.controller_index == controller) { wi = i; break; }
+        }
+        // Gone mid-cascade (an earlier trigger removed it). Its trigger would still resolve using
+        // last-known information; no payload in the pool can remove a permanent, so this is
+        // unreachable today -- noted rather than modelled.
+        if (wi < 0) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(wi)].card);
+        if (wd == nullptr) { continue; }
+        const CardParams& wp = wd->params;
+        const std::string wname = wd->card.m_name.str();
+
+        // Tokens (Rampaging Baloths' 4/4 Beast, Omnath's 5/5 Elemental). MANDATORY in the current
+        // Oracle text of both. One event of N tokens through the token chokepoint (Doubling Season,
+        // the enter cascade). Each enters summoning sick, so a landfall token cannot attack this turn.
+        if (wp.landfall_creates_tokens > 0)
+        {
+            CreateTokens(state, controller, wp.landfall_creates_tokens, wp.landfall_token_power,
+                         wp.landfall_token_toughness, wp.landfall_token_subtypes,
+                         wp.landfall_token_color, wp.landfall_token_keywords);
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name + "): create "
+                              + std::to_string(wp.landfall_creates_tokens) + " "
+                              + std::to_string(wp.landfall_token_power) + "/"
+                              + std::to_string(wp.landfall_token_toughness)
+                              + (wp.landfall_token_subtypes.empty()
+                                     ? std::string() : " " + wp.landfall_token_subtypes.front()));
+            }
+        }
+
+        // "You MAY put a +1/+1 counter on each <subtype> creature you control" (Avenger of Zendikar).
+        // RESOLVED AS YES -- a dominance argument, not a heuristic: the decision is all-or-nothing
+        // (every Plant or none), so YES weakly dominates NO iff no Plant is worse off for a counter.
+        // Against the passive goldfish no Plant is ever blocked, damaged or targeted, so a counter's
+        // only effects are +1 power (attack damage is monotone non-decreasing in power) and +1
+        // toughness (never read). The engine mechanics that read an own creature's counters or power
+        // other than combat are all monotone-or-neutral here -- the counter-threshold keywords only
+        // ADD keywords, persist/-1/-1 annihilation favours more +1/+1 -- with ONE exception the pool
+        // could express: undying (returns only "if it had no +1/+1 counters"). No card in cards.json
+        // carries undying, and a Plant creature never could unless it were a changeling, so the fold
+        // is sound for every board this engine can build today. Disclosed (6a); revisit if an undying
+        // card is ever added.
+        if (wp.landfall_counters_each > 0 && !wp.landfall_counters_each_subtype.empty())
+        {
+            const std::string& sub = wp.landfall_counters_each_subtype;
+            const int sh = DoublerShift(state, controller, /*for_tokens=*/false);
+            int hit = 0;
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != controller) { continue; }
+                if (!q.card.IsCreature() && !q.is_animated) { continue; }   // "<subtype> CREATURE"
+                if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
+                AddPlusCounters(q, wp.landfall_counters_each << sh);
+                AnnihilateCounters(q);
+                ++hit;
+            }
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name + "): +"
+                              + std::to_string(wp.landfall_counters_each) + "/+"
+                              + std::to_string(wp.landfall_counters_each) + " counter on each " + sub
+                              + " (" + std::to_string(hit) + ")");
+            }
+        }
+
+        // "Put N +1/+1 counters on target <subtype> you control" (Phylath) -- searched target.
+        if (wp.landfall_target_counters > 0 && !wp.landfall_target_subtype.empty())
+        { ResolveLandfallTargetCounters(state, controller, wname, wp, target_snapshot); }
+
+        // "You gain N life" (Courser of Kruphix) -- one life-gain EVENT through the shared hook.
+        if (wp.landfall_lifegain > 0)
+        {
+            GainLife(state, controller, wp.landfall_lifegain);
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "lifegain",
+                              "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name + "): gain "
+                              + std::to_string(wp.landfall_lifegain) + " life");
+            }
+        }
+
+        // "You MAY put a quest counter on this enchantment" (Khalni Heart Expedition). RESOLVED AS YES
+        // by dominance: a quest counter does nothing by itself and is only ever SPENT by the card's
+        // optional "remove three quest counters and sacrifice it" activation, so holding one more
+        // never removes an option (the activation stays optional), there is no cap and no
+        // threshold-punishes clause, and the passive opponent never interacts with it -- the
+        // Beastmaster Ascension "you may" precedent (quest_counter_per_attacker). Re-found by number:
+        // the token payloads above may have reallocated the battlefield.
+        if (wp.landfall_quest_counters > 0)
+        {
+            for (Permanent& w : state.battlefield)
+            {
+                if (w.card.m_number != num || w.controller_index != controller) { continue; }
+                PutQuestCounters(state, w, wp.landfall_quest_counters);
+                if (log)
+                {
+                    EmitPlayEvent(state.turn_number, "trigger",
+                                  "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name
+                                  + "): quest counter (" + std::to_string(w.quest_counters) + ")");
+                }
+                break;
+            }
+        }
+    }
+}
+
+// THE LANDFALL CHOKEPOINT -- see the contract at the top of this block. `target_snapshot` is non-null
+// only for the deferred landfall of a SIMULTANEOUS multi-put (PerformGenesisWave).
+inline void OnLandEntered(GameState& state, int controller, int land_number,
+                          const std::vector<int>* target_snapshot)
+{
+    if (controller == 0 && !state.deck_has_landfall) { return; }   // per-game gate (see above)
+    FireLandfallTriggers(state, controller, land_number, target_snapshot);
+}
+
+inline void FireEtbWatchers(GameState& state, int controller, int entered_index, bool fire_landfall)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
     // DAYBOUND (Brutal Cathar): FIRST, before anything can observe the entrant. "If it's neither day
@@ -6734,6 +7187,17 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     RefreshStoriedLatch(state);   // storied: same state-trigger contract, same cascade site
     // Snow-enter scry watcher (param-gated; one supertype bit-test for every other deck).
     FireSnowEnterWatchers(state, entered_index);
+    // LANDFALL, route 3 of the chokepoint contract (see OnLandEntered): a LAND entrant reaching the
+    // universal cascade -- a blinked land, a land a generic put path returns or puts. One type-mask
+    // test for every other entrant, and OnLandEntered's per-game gate behind it, so every deck
+    // without a landfall card is byte-identical. No reference into the battlefield is held across
+    // this call (every block below re-indexes), and a landfall payload only APPENDS (tokens) -- it
+    // never erases -- so `entered_index` stays valid for a land creature continuing down the cascade.
+    if (fire_landfall && state.battlefield[entered_index].card.IsLand())
+    {
+        OnLandEntered(state, state.battlefield[entered_index].controller_index,
+                      state.battlefield[entered_index].card.m_number);
+    }
     // Creature-enter watchers (Creature Giving: Wardens / Suture Priest). This function is the
     // UNIVERSAL enter cascade -- every enter site already calls it -- so the watcher fire lives at
     // its top, BEFORE the Dragon-subtype early-out, gated on the newcomer being a creature. A gift
@@ -8165,6 +8629,38 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         CreateToken(state, controller, p.etb_created_token_power,
                     p.etb_created_token_toughness, p.etb_created_token_subtypes,
                     p.created_token_color, HasteKeywords(p.created_token_haste));
+    }
+    // (1-l) ETB tokens PER LAND (Avenger of Zendikar: "create a 0/1 green Plant creature token for
+    //     each land you control"; Phylath, World Sculptor: "...for each BASIC land you control").
+    //     The count is read at RESOLUTION (CR 608.2h), so a land that entered SIMULTANEOUSLY with
+    //     this creature (a Genesis Wave putting both) is counted -- PerformGenesisWave places every
+    //     entrant before any enter trigger resolves. ONE event of N tokens through CreateTokens (the
+    //     bulk token chokepoint: Doubling Season, the enter cascade per body). Each Plant enters
+    //     summoning sick. Shared etb_created_token_* spec. Param-gated -> byte-identical elsewhere.
+    if (p.etb_tokens_per_land > 0)
+    {
+        int lands = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller || !q.card.IsLand()) { continue; }
+            if (p.etb_tokens_per_land_basic_only && !IsBasicLandCard(q.card)) { continue; }   // the shared predicate
+            ++lands;
+        }
+        const int n = lands * p.etb_tokens_per_land;
+        CreateTokens(state, controller, n, p.etb_created_token_power,
+                     p.etb_created_token_toughness, p.etb_created_token_subtypes,
+                     p.created_token_color, HasteKeywords(p.created_token_haste));
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "etb",
+                          def->card.m_name.str() + " -- create " + std::to_string(n) + " "
+                          + std::to_string(p.etb_created_token_power) + "/"
+                          + std::to_string(p.etb_created_token_toughness)
+                          + (p.etb_created_token_subtypes.empty()
+                                 ? std::string() : " " + p.etb_created_token_subtypes.front())
+                          + " token(s) (one per " + (p.etb_tokens_per_land_basic_only ? "basic " : "")
+                          + "land you control)");
+        }
     }
     // (1-t) ETB Treasure mint (Corsair Captain: "When this creature enters, create a Treasure
     //     token"). The existing "Treasure Token" def via the Gold Rush helper; a live pay-sac source
@@ -28628,8 +29124,13 @@ inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& de
 // PerformLandTutorToBattlefield would FIX a genuine bug (`Creature Giving` runs Crop Rotation AND
 // Azorius Chancery, so a Crop-Rotated Karoo currently enters without bouncing -- a free Karoo) but
 // it moves that deck's ground truth, so it is its own item with its own rebaseline.
+//
+// LANDFALL: this is ROUTE 2 of the landfall chokepoint contract (OnLandEntered) -- every land an
+// effect PUTS onto the battlefield reaches the landfall watchers here, after its own ETBs.
+// `fire_landfall = false` is for exactly one shape: a SIMULTANEOUS multi-put that fires the batch's
+// landfall itself after its enter triggers (PerformGenesisWave), so the land is not counted twice.
 inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
-                      bool resolve_full_etb = false)
+                      bool resolve_full_etb = false, bool fire_landfall = true)
 {
     bool tapped = LandEntersTapped(state, def);
     Permanent perm;
@@ -28660,6 +29161,9 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     {
         ResolveLandEnterEtbExtras(state, def, static_cast<int>(state.battlefield.size()) - 1);
     }
+    // Landfall (route 2). Captured by number, not by slot: a bounce extra above may already have
+    // moved or returned the land, and landfall still triggered on the entry.
+    if (fire_landfall) { OnLandEntered(state, perm.controller_index, perm.card.m_number); }
 }
 
 // Execute a fetchland (Windswept Heath etc.): pull `target_name` (empty -> the heuristic's
@@ -28708,6 +29212,7 @@ inline void PerformFetch(GameState& state, int controller_index,
         perm.owner_index       = state.active_player_index;
         perm.entered_this_turn = true;
         state.battlefield.push_back(perm);
+        OnLandEntered(state, perm.controller_index, perm.card.m_number);   // landfall, route 2's twin
     }
     // Searching the library shuffles it (CR 701.19). Deterministic + lockstep, and ON BY
     // DEFAULT -- SearchShuffleEnabled() is !EnvOn("MTG_NO_SEARCH_SHUFFLE"), so the opt-OUT is
@@ -28939,6 +29444,7 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         perm.owner_index       = controller_index;
         perm.entered_this_turn = true;
         state.battlefield.push_back(perm);
+        OnLandEntered(state, perm.controller_index, perm.card.m_number);   // landfall, route 2's twin
     }
     // "...then shuffle" (CR 701.19); deterministic + lockstep. ON BY DEFAULT (opt-OUT is
     // MTG_NO_SEARCH_SHUFFLE).

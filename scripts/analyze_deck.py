@@ -524,9 +524,14 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
                 and not is_d("sacrifice"):
             gaps.append("'Sacrifice a land' cost in oracle text but sacrifice_land not set")
 
-        # Landfall
-        if "Landfall" in oracle and not params.get("landfall_damage") and not is_d("landfall"):
-            gaps.append("Landfall in oracle text but landfall_damage not set")
+        # Landfall. Two engine shapes: the resolution-time CONDITION (Searing Blaze's landfall_damage)
+        # and the TRIGGERED payoffs (2026-10-15: landfall_creates_tokens / landfall_counters_each /
+        # landfall_target_counters / landfall_lifegain / landfall_quest_counters, dispatched by the
+        # OnLandEntered chokepoint). Any truthy landfall_* param satisfies the check -- it used to
+        # demand landfall_damage alone, which flagged every landfall trigger as a gap.
+        if "Landfall" in oracle and not is_d("landfall") \
+                and not any(v for k, v in params.items() if k.startswith("landfall_")):
+            gaps.append("Landfall in oracle text but no landfall_* param set")
 
         # Staged exile
         if ("end of your next turn" in oracle or "your next turn" in oracle) \

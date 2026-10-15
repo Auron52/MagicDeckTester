@@ -1459,6 +1459,22 @@ int DecisionProvider::SoulbondPartner(
     return best_num;   // 0 = no legal partner (the caller's list was empty), i.e. stay unpaired
 }
 
+void DecisionProvider::LandfallCounterTargetOrder(const GameState& s, int controller,
+                                                  std::vector<int>& class_reps) const
+{
+    // The Saga-chapter-II key (SagaChapterTargetCandidates): swings now, then effective power,
+    // descending; stable, so ties keep the caller's battlefield order (oldest first). ORDER ONLY --
+    // the search branches over every entry, so this decides nothing but the default.
+    auto key = [&](int idx)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(idx)];
+        const bool swings_now = !q.tapped && CanAttackFull(q, s.battlefield, controller);
+        return (swings_now ? 1000 : 0) + q.EffectivePower();
+    };
+    std::stable_sort(class_reps.begin(), class_reps.end(),
+                     [&](int a, int b) { return key(a) > key(b); });
+}
+
 // ---- Base rules for the remaining ported built-ins -------------------------------------------
 // Each reproduces the historical inline pick at index 0, so every port is byte-identical. See the
 // hook declarations in DecisionProvider.h for what each rule says and where it looks weak.

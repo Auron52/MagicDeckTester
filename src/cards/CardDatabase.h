@@ -197,8 +197,55 @@ struct CardParams
     bool combat_damage_free_cast = false;
 
     // Landfall: if > 0 and a land entered the battlefield under the caster's control
-    // this turn, use this value instead of `damage` (e.g. Searing Blaze).
+    // this turn, use this value instead of `damage` (e.g. Searing Blaze). NOT a trigger: a
+    // condition read at resolution (LandEnteredUnderControlThisTurn, SpellEffects.h), and NOT one of
+    // the DefHasLandfallTrigger terms below.
     int  landfall_damage = 0;
+
+    // ---- LANDFALL TRIGGERS (CR 207.2c ability word; the trigger is CR 603.2) -------------------
+    // "Landfall -- Whenever a land you control enters, <payload>." One trigger PER LAND, for a land
+    // PLAYED and a land PUT onto the battlefield by an effect alike (the trigger watches the zone
+    // change, not the land drop). Dispatched from ONE chokepoint, OnLandEntered (SpellEffects.h),
+    // which every land-entry route reaches -- see its header for the contract. Every field is
+    // inert at its default, and DefHasLandfallTrigger is the lockstep disjunction (a new payload
+    // needs a term there, or the per-definition `landfall_watcher` byte skips it on every board).
+    //
+    // Token payload (Rampaging Baloths: a 4/4 green Beast; Omnath, Locus of Rage: a 5/5 red and
+    // green Elemental). `landfall_token_color` is a colour-letter STRING and may hold several
+    // letters ("RG") -- BuildTokenProto adds every letter it recognises.
+    int                      landfall_creates_tokens   = 0;
+    int                      landfall_token_power      = 0;
+    int                      landfall_token_toughness  = 0;
+    std::vector<std::string> landfall_token_subtypes;
+    std::string              landfall_token_color;
+    std::vector<std::string> landfall_token_keywords;
+    // "you may put a +1/+1 counter on each <subtype> creature you control" (Avenger of Zendikar:
+    // 1 on each Plant). The set is read at RESOLUTION (CR 608.2), so Plants made earlier in the same
+    // cascade receive it. The "may" is resolved as YES by a dominance argument stated at the
+    // resolution site (FireLandfallTriggers).
+    int                      landfall_counters_each        = 0;
+    std::string              landfall_counters_each_subtype;
+    // "put N +1/+1 counters on target <subtype> you control" (Phylath, World Sculptor: four on target
+    // Plant). A TARGETED trigger: the target is chosen as it is put on the stack (CR 603.3d), so a
+    // landfall from a SIMULTANEOUS entry (Genesis Wave) may only target a permanent that existed when
+    // the event completed (LandfallBatch's snapshot). WHICH target is a SEARCHED choice over the
+    // identity-folded candidate classes (Plan::landfall_target_choice), ordered by the provider's
+    // LandfallCounterTargetOrder; the human picks on the board (`target`, loyalty-prompt shape).
+    int                      landfall_target_counters      = 0;
+    std::string              landfall_target_subtype;
+    // "you gain N life" (Courser of Kruphix). Through the shared GainLife hook: one life-gain EVENT.
+    int                      landfall_lifegain             = 0;
+    // "you may put a quest counter on this enchantment" (Khalni Heart Expedition). Through
+    // PutQuestCounters (Doubling Season doubles it). The "may" is resolved as YES by dominance (see
+    // FireLandfallTriggers).
+    int                      landfall_quest_counters       = 0;
+
+    // ETB per-land tokens (Avenger of Zendikar: "create a 0/1 green Plant creature token for each
+    // land you control"; Phylath, World Sculptor: "...for each BASIC land you control"). N tokens of
+    // the shared etb_created_token_* spec as ONE event (CreateTokens), N = the count at RESOLUTION
+    // (so lands that entered simultaneously -- a Genesis Wave -- are counted). Multiplier, normally 1.
+    int                      etb_tokens_per_land            = 0;
+    bool                     etb_tokens_per_land_basic_only = false;
 
     // If true, drawn cards are placed in the staged exile zone rather than the hand
     // and expire at the end of the player's next turn (e.g. Light Up the Stage).
@@ -3707,6 +3754,11 @@ struct CardDefinition
     // is never left at its default in a live DB -- RebuildInternedIndex runs at the end of every
     // LoadFromJson AND every Register, so every reachable definition has been visited.
     bool enter_watcher   = false;
+    // "This definition has at least one LANDFALL trigger" (DefHasLandfallTrigger below). The
+    // enter_watcher shape for the landfall dispatch (FireLandfallTriggers, SpellEffects.h): one byte
+    // beside `enter_watcher` instead of six scattered CardParams probes per permanent walked. Same
+    // derivation contract -- computed by RebuildInternedIndex for every reachable definition.
+    bool landfall_watcher = false;
     // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
     // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
     // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).
@@ -3758,6 +3810,22 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.any_creature_enters_self_counters_power
         || p.opp_creature_enters_life_loss > 0
         || p.own_creature_enters_opp_life_loss > 0;   // Forerunner of the Coalition (2026-09-26)
+}
+
+// The lockstep disjunction for CardDefinition::landfall_watcher: TRUE iff FireLandfallTriggers
+// (core/SpellEffects.h) has a payload that could fire for this definition. ONE TERM PER PAYLOAD
+// BLOCK THERE -- add a term here whenever a payload is added there, or the new card's trigger is
+// silently skipped on every board (the per-definition byte short-circuits the walk) AND the
+// per-game presence stamp (GameState::deck_has_landfall) stays clear for a deck that needs it.
+// `landfall_damage` (Searing Blaze) is deliberately NOT a term: it is a resolution-time CONDITION
+// on a spell, never a trigger.
+inline bool DefHasLandfallTrigger(const CardParams& p)
+{
+    return p.landfall_creates_tokens > 0
+        || (p.landfall_counters_each > 0 && !p.landfall_counters_each_subtype.empty())
+        || (p.landfall_target_counters > 0 && !p.landfall_target_subtype.empty())
+        || p.landfall_lifegain > 0
+        || p.landfall_quest_counters > 0;
 }
 
 // Codegen hints for CardDatabase::LookupCached (the hottest call in the search; see its comment).

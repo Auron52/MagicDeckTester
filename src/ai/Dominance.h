@@ -408,6 +408,12 @@ static_assert(sizeof(Player) == 200,
 // new state is Player::gy_size_at_turn_start, placed in Player's offset-4 padding so neither this
 // number nor Player's moved (see the 200 -> 200 entry above for the measurement and the fold).
 // `GyR_DescendCount` is a new bit in the existing deck_gy_readers mask, not a new field.
+// +bool (2026-10-15, Landfall; NO size change -- it lands in the existing bool padding beside
+// deck_has_land_aura, which is why the number below is unmoved): `deck_has_landfall`. Classification:
+// DECK CONSTANT, stamped once in StampDeckTraits and never written again; it only skips the landfall
+// dispatch walk (OnLandEntered) that provably finds no watcher -- identical across every pair of
+// states Build() compares, nothing to fold. (The landfall-target policy pin is THREAD-LOCAL, not
+// GameState, and is folded into the solve memo key while live -- TurnSolver's ACTIVE SCRIPTED PINS.)
 static_assert(sizeof(GameState) == 1080,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

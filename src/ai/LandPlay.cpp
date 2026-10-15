@@ -26,6 +26,14 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
         ap.hand.erase(it);
         ++ap.lands_played_this_turn;
         ap.graveyard.push_back(fetchland);
+        // LANDFALL for the FETCHLAND ITSELF (route 1 of OnLandEntered's contract). The engine
+        // collapses the fetchland's battlefield stay to nothing (it goes straight to the graveyard
+        // above), but the real card is PLAYED -- it enters the battlefield and is only then
+        // sacrificed -- so its entry triggers landfall, and the land it fetches triggers again
+        // through PerformFetch -> EnterLand (route 2): two triggers, as in a real game. Fired before
+        // the fetch because that is the order the two entries happen in. Gated per game inside, so
+        // every deck without a landfall card is byte-identical.
+        OnLandEntered(state, state.active_player_index, fetchland.m_number);
         PerformFetch(state, state.active_player_index, def.params, opts.fetch_target);
         return true;
     }
@@ -165,6 +173,13 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
             && lp.controller_index == state.active_player_index)
         { FireSnowEnterWatchers(state, li); break; }
     }
+    // LANDFALL (route 1 of OnLandEntered's contract, core/SpellEffects.h): every PLAYED land, in all
+    // three callers' worlds at once -- this is THE land drop. After the land's own enter triggers
+    // (scry, Karoo bounce, lifegain, Orchard spawn, snow scry), which is a CR 603.3b ordering among
+    // simultaneous triggers that no landfall payload in the pool can observe. Keyed by the played
+    // card's NUMBER and our controller, never by slot, so a Karoo that bounced ITSELF still triggers
+    // (the trigger exists from the entry). Gated per game inside -> byte-identical without landfall.
+    OnLandEntered(state, state.active_player_index, perm.card.m_number);
     return true;
 }
 

@@ -585,6 +585,21 @@ public:
         const GameState& s, int controller, const Permanent& source,
         const std::vector<int>& candidate_bf_indices) const;
 
+    // LandfallCounterTargetOrder -- a TARGETED landfall trigger ("put four +1/+1 counters on target
+    // Plant you control", Phylath, World Sculptor). `class_reps` arrives as battlefield indices, ONE
+    // per identity class (the engine's sound fold, LandfallTargetFoldKey -- identical-in-all-state
+    // candidates already collapsed), and the provider ORDERS it in place: entry 0 is the default
+    // (rollout leaves past the horizon, the d0 runner, the human's preselection), and the SEARCH
+    // branches over the rest (Plan::landfall_target_choice is a rank into this order). A provider MAY
+    // also RESTRICT the list (the core invariant's one licence: a named, A/B-able prune), but must
+    // leave it non-empty and must never add to it.
+    //
+    // Base rule (out-of-line): the Saga-chapter-II shape -- a body that can attack RIGHT NOW first
+    // (the counters swing this turn), then the highest effective power (concentrating), ties to the
+    // lowest battlefield index (the oldest). Restricts nothing.
+    virtual void LandfallCounterTargetOrder(const GameState& s, int controller,
+                                            std::vector<int>& class_reps) const;
+
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
     // double-strike mid-step earnings (see JitteDamageMath; per-turn damage-optimal). The one
@@ -2598,13 +2613,20 @@ public:
     // axis (the {X} cast branch), which is what keeps a card castable at X = 12 finite.
     //
     // DEFAULT (a deliberate, disclosed rule, the PutCreaturesFromLibraryPicks precedent): take
-    // every legal revealed permanent EXCEPT
-    //   (a) a second copy of a LEGENDARY name we already control or have already selected this
-    //       resolution -- the legend rule bins one of them at once (CR 704.5j), so the put is a
-    //       pure loss (the card would be better left in the graveyard than exiled from choice);
-    //   (b) a creature whose MANDATORY enter-trigger destroys one of OUR OWN permanents
-    //       (etb_destroy_artifact_enchantment_land always -- the passive opponent controls none;
-    //       etb_destroy_nonartifact_nonblack only when the opponent offers no legal victim).
+    // every legal revealed permanent EXCEPT a creature whose MANDATORY enter-trigger destroys one of
+    // OUR OWN permanents (etb_destroy_artifact_enchantment_land always -- the passive opponent
+    // controls none; etb_destroy_nonartifact_nonblack only when the opponent offers no legal victim).
+    //
+    // A DUPLICATE LEGEND IS TAKEN (changed 2026-10-15, the Landfall review). The old rule (a)
+    // refused "a second copy of a legendary name we already control or have already selected",
+    // reasoning that the legend rule bins one at once. But the comparison was against the wrong
+    // alternative: a Wave's unpicked card is MILLED, so the duplicate ends in the same graveyard
+    // either way, and putting it is therefore never worse and often strictly better -- its ETB still
+    // resolves (CR 603.3: Phylath's Plants), it sees and triggers on the lands entering beside it
+    // (CR 603.6a: Phylath's landfall), every enter-watcher counts it, and the legend-rule death is a
+    // DEATH (CR 704.5j / 700.4: Omnath's 3 damage, a Bishop of Wings Spirit). The only way it could
+    // be worse is a watcher that PUNISHES an own creature entering or dying, and none exists in the
+    // pool. Byte-identical for the one pre-existing Wave list (SelesnyaLifegain holds no legend).
     // A Karoo (etb_bounce_land) IS taken: worst case its mandatory bounce returns itself to hand,
     // which still beats the graveyard. Everything else is weakly better on the battlefield than
     // milled -- in a goldfish more bodies attack, more lands cast, and nothing here prices a
@@ -2613,16 +2635,12 @@ public:
                                                  const std::vector<Card>& candidates, int x) const
     {
         (void)x;
-        std::vector<std::string> legends;
         bool opp_victim = false;
         for (const Permanent& q : s.battlefield)
         {
-            if (q.controller_index == controller)
-            {
-                if (q.card.HasSupertype(Supertype::Legendary)) { legends.push_back(q.card.m_name.str()); }
-            }
-            else if (q.card.IsCreature() && !q.card.HasType(CardType::Artifact)
-                     && !q.card.HasColor(Color::Black)) { opp_victim = true; }
+            if (q.controller_index != controller && q.card.IsCreature()
+                && !q.card.HasType(CardType::Artifact) && !q.card.HasColor(Color::Black))
+            { opp_victim = true; }
         }
         std::vector<int> out;
         out.reserve(candidates.size());
@@ -2632,12 +2650,6 @@ public:
             if (d == nullptr) { continue; }
             if (d->params.etb_destroy_artifact_enchantment_land) { continue; }
             if (d->params.etb_destroy_nonartifact_nonblack && !opp_victim) { continue; }
-            if (d->card.HasSupertype(Supertype::Legendary))
-            {
-                const std::string nm = candidates[static_cast<std::size_t>(i)].m_name.str();
-                if (std::find(legends.begin(), legends.end(), nm) != legends.end()) { continue; }
-                legends.push_back(nm);
-            }
             out.push_back(i);
         }
         return out;

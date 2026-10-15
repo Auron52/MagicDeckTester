@@ -1,0 +1,106 @@
+{
+  "_comment": [
+    "Landfall 2026-10-15: the SEARCHED LAND-DROP TIMING axis (Plan::land_after_casts). Seven untapped",
+    "Forests, six old (non-sick) 0/1 Plant tokens, opponent at 6, hand Avenger of Zendikar + Forest,",
+    "resumed at main 1. Exact lethal T7: CAST AVENGER FIRST (seven Forests), THEN play the Forest --",
+    "Avenger's landfall puts a +1/+1 counter on every Plant (it is on the battlefield when the land",
+    "enters), and the six old Plants swing for 6. Land-first (the only order before this axis) plays",
+    "the Forest, casts Avenger off eight lands, makes eight SICK Plants and no counter: 0 damage, win",
+    "T8. So the T7 win needs the land-after plan to be enumerated, applied by both worlds through the",
+    "Karoo deferral path, and the landfall dispatch to fire from the land drop (PlayLandFromHand).",
+    "Filler = Swords to Plowshares: a dead draw on a mono-Forest board."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [
+    "Avenger of Zendikar",
+    "Forest"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "expect_win_turn": 7
+}

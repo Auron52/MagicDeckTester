@@ -160,6 +160,13 @@ enum class Keyword
     // (Action::Kind::AuraSwap + the in-combat swap pin), not by this enum. Kept so the Scryfall keywords
     // field ["Aura Swap"] stays faithful.
     AuraSwap,
+    // Landfall (Rampaging Baloths, Avenger of Zendikar, Omnath, Phylath, Courser of Kruphix, Khalni
+    // Heart Expedition, Searing Blaze): an INERT ability-word tag (CR 207.2c -- an ability word has no
+    // rules meaning of its own). The triggers are modelled structurally by the CardParams landfall_*
+    // params and the OnLandEntered chokepoint (SpellEffects.h); no engine code reads this enumerator.
+    // It exists so Scryfall's keywords array can be pasted VERBATIM (KeywordFromString throws on an
+    // unmapped keyword -- see Jump's note).
+    Landfall,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

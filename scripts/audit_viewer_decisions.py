@@ -429,6 +429,12 @@ MANIFEST = {
     # Unexpectedly Absent: target rides the shared `target` decision (tuck branch consults
     # g_play_target_chooser); X rides the chosen_x plan-variant axis.
     "tuck_to_library":       ("target",               truthy),
+    # ---- Landfall (2026-10-15) ----
+    # Phylath, World Sculptor: "put four +1/+1 counters on target Plant you control" -- the target
+    # rides the shared `target` board-click (g_play_loyalty_chooser, the Saga-chapter-II shape) at
+    # ResolveLandfallTargetCounters, over EVERY legal Plant; the engine's searched pick
+    # (Plan::landfall_target_choice) is preselected. A single legal Plant is forced (not prompted).
+    "landfall_target_counters": ("target",            positive),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -563,6 +569,18 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # ---- Landfall triggers (2026-10-15; OnLandEntered, core/SpellEffects.h) ----
+    "landfall_creates_tokens": "automatic landfall token (Rampaging Baloths' 4/4 Beast, Omnath's 5/5 Elemental) -- MANDATORY in the current Oracle of both, no choice",
+    "landfall_token_power": "landfall token spec constant", "landfall_token_toughness": "landfall token spec constant",
+    "landfall_token_subtypes": "landfall token spec constant", "landfall_token_color": "landfall token spec constant (may hold several colour letters)",
+    "landfall_token_keywords": "landfall token spec constant",
+    "landfall_counters_each": "Avenger of Zendikar's 'you MAY put a +1/+1 counter on each Plant creature you control' -- all-or-nothing, resolved YES by a stated dominance (a +1/+1 counter on our own creature is never worse vs the passive opponent; the one mechanic it could hurt, undying, exists on no card) -- DISCLOSED 6a, PROVISIONAL",
+    "landfall_counters_each_subtype": "landfall each-<subtype> counter filter (rides landfall_counters_each)",
+    "landfall_target_subtype": "landfall target filter (rides landfall_target_counters, which IS surfaced)",
+    "landfall_lifegain": "automatic landfall lifegain (Courser of Kruphix), through GainLife -- no target, no choice",
+    "landfall_quest_counters": "Khalni Heart Expedition's 'you MAY put a quest counter' -- resolved YES by dominance (a quest counter only feeds the optional activation; one more never removes an option), the quest_counter_per_attacker precedent -- DISCLOSED 6a, PROVISIONAL",
+    "etb_tokens_per_land": "automatic ETB token count per land you control (Avenger of Zendikar / Phylath), no choice",
+    "etb_tokens_per_land_basic_only": "ETB per-land count filter -- BASIC lands only (Phylath), via IsBasicLandCard",
     # ---- Giants (2026-09-22) ----
     "attack_trigger_damage_any": "Inferno Titan's attack half -- automatic 3 damage; 'divided among one, two, or three targets' collapses to the opponent's face in the goldfish (the opponent never blocks and its spawns are worth 0, so the face is strictly optimal). The etb_damage_any / dragon_ping_on_enter precedent. DISCLOSED in 6a",
     "attack_trigger_damage_each_opponent": "Tectonic Giant mode A payload -- automatic once the MODE is chosen; the mode itself is the decision and rides attack_trigger_modal -> attack_mode",

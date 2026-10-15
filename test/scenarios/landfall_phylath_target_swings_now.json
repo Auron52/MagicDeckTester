@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "Landfall 2026-10-15: Phylath, World Sculptor's TARGETED landfall ('put four +1/+1 counters on",
+    "target Plant you control'). One OLD 0/1 Plant (can attack) and two SICK 0/1 Plants (made this",
+    "turn); opponent at 4; a Forest in hand. Playing the Forest is lethal T7 only if the four counters",
+    "land on the Plant that can attack NOW: the identity fold makes the two sick Plants one class and",
+    "the provider orders the swings-now class first (DecisionProvider::LandfallCounterTargetOrder);",
+    "the search may branch the other rank (Plan::landfall_target_choice) and must still pick the kill.",
+    "Phylath itself is sick, so the counters are the only damage."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 4,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Phylath, World Sculptor",
+      "sick": true
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G",
+      "sick": true
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G",
+      "sick": true
+    }
+  ],
+  "hand": [
+    "Forest"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "expect_win_turn": 7
+}

@@ -938,6 +938,17 @@ public:
         // reason human_pre_taps is: it is an instruction riding on a plan, not part of the search's
         // plan space.
         int human_untap_need = 0;
+        // (Placed after human_untap_need, in the 4-byte hole before would_drop: no size cost.)
+        // SEARCHED LANDFALL TARGET (2026-10-15; Phylath, World Sculptor's "put four +1/+1 counters on
+        // target Plant you control"). -1 (default) == the provider's front class at every targeted
+        // landfall trigger; k >= 1 == the class ranked k in DecisionProvider::LandfallCounterTargetOrder
+        // over the identity-folded legal targets (LandfallTargetFoldKey), computed AT EACH TRIGGER's
+        // resolution state and clamped. A WHOLE-TURN POLICY, not a consumed pin (the Emiel
+        // etbcounter_choice precedent: one variant per class rank per base plan, so the cost stays
+        // additive): installed by both worlds for the turn (ScriptedLandfallTarget, turn-scoped) and
+        // folded into the solve memo key while live. Emitted by AppendSubdecisionAxes only for a deck
+        // whose list holds a targeted landfall card, and only for plans in which a land can enter.
+        int landfall_target_choice = -1;
 
         // Casts this ORDERING declares but provably cannot make -- filled only by the cast-ordering
         // enumeration, by watching the apply on its scoring copy. It is a LABEL, never a filter: two
@@ -956,6 +967,26 @@ public:
         // choice consistent between the real game and the lookahead rollout — the
         // rollout re-searches lands every turn exactly as the real game does.
         bool        land_decided = false;
+        // (Placed beside land_decided, in the padding before land_to_play: no size cost.)
+        // SEARCHED LAND-DROP TIMING (2026-10-15, the Landfall deck). false (default) == the land is
+        // played FIRST, before every cast, so its mana funds them -- the historical and still the
+        // default order. true == the land is played AFTER this plan's main casts, through the very
+        // path the Karoo deferral already uses in both worlds (ApplyPlanDirect / AIEngine::TakeTurn
+        // `karoo_deferred`), so a landfall permanent CAST in this plan is on the battlefield when the
+        // land enters and its trigger fires this turn: "cast Rampaging Baloths, THEN play the land"
+        // is a Beast now, where land-first is no Beast. Without this field that line was
+        // inexpressible at every budget -- a missing searched capability, not a heuristic.
+        //
+        // EMITTED ONLY where the order can matter: EnumeratePlansWithLandUncached clones each
+        // DEFERRED-drop plan (land_to_play == "", whose casts were enumerated -- and are therefore
+        // affordable -- WITHOUT the land) once per land option, iff the deck holds a landfall card
+        // and one of the plan's casts puts a landfall watcher onto the battlefield. Every land-first
+        // plan stays enumerated alongside, so the axis is lossless; a deck with no landfall card
+        // never emits one (byte-identical). Composes with the other land sub-decisions: the deferred
+        // play carries fetch_target / land_face / rad_mode / scry_choice exactly as the land-first
+        // play does (and is designed to carry a land_from_top source bit the same way, see
+        // logs/landfall_drafts/_courser_design.md). Human play: the `landafter=` line verb.
+        bool        land_after_casts = false;
         std::string land_to_play;
 
         // Fetchland search target (Pass 2 of the real-fetch model): when land_to_play is a
@@ -2045,6 +2076,9 @@ public:
         bool        pass = false;            // explicit pass / cast nothing, no land
         bool        has_land = false;        // play a land this phase
         std::string land;                    // the land card name (has_land)
+        // "landafter=<name>": the land is played AFTER the line's casts (Plan::land_after_casts), so
+        // a landfall permanent the line casts sees it. false == `land=`, land-first, as always.
+        bool        land_after_casts = false;
         std::vector<std::string> casts;      // hand spells to cast, in clicked order
         int         lands_edge = 0;          // discard this many lands to Land's Edge (0 = none)
         std::vector<std::string> vial_deploys;  // creatures put onto the battlefield via Aether

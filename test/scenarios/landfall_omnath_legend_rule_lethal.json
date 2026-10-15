@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "Landfall 2026-10-15: Omnath, Locus of Rage's 'whenever Omnath or another Elemental you control",
+    "dies, Omnath deals 3 damage to any target', fed by the LEGEND RULE. Omnath and Phylath, World",
+    "Sculptor (a legendary Elemental) are both on the battlefield but summoning sick; a second Phylath",
+    "in hand; six lands with a Mountain for {R}; opponent at 3. Exact lethal T7: cast the second",
+    "Phylath -- its ETB resolves, the legend rule bins one copy (CR 704.5j), that is a DEATH (CR",
+    "700.4), and Omnath deals 3 to the face. Proves the death is credited where the search can see",
+    "it (opponent life, during the plan's own apply). Without it nothing attacks this turn: win T8."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Omnath, Locus of Rage",
+      "sick": true
+    },
+    {
+      "name": "Phylath, World Sculptor",
+      "sick": true
+    }
+  ],
+  "hand": [
+    "Phylath, World Sculptor"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "expect_win_turn": 7
+}

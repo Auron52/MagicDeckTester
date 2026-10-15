@@ -668,7 +668,7 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     {
         damage = def.params.damage;
         if (def.params.landfall_damage > 0
-            && state.players[entry.controller_index].lands_played_this_turn > 0)
+            && LandEnteredUnderControlThisTurn(state, entry.controller_index))   // played OR put
         {
             damage = def.params.landfall_damage;
         }

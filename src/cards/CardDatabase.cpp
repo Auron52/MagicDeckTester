@@ -353,7 +353,10 @@ void CardDatabase::RebuildInternedIndex()
     // every creature that enters, and on a Saproling board that walk is ~220 permanents x 14M
     // enters, of which at most one or two are ever watchers. See CardDefinition::enter_watcher.
     for (auto& kv : m_cards)
-    { kv.second.enter_watcher = DefHasCreatureEnterWatcher(kv.second.params); }
+    {
+        kv.second.enter_watcher    = DefHasCreatureEnterWatcher(kv.second.params);
+        kv.second.landfall_watcher = DefHasLandfallTrigger(kv.second.params);   // same contract
+    }
 }
 
 std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
@@ -474,6 +477,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Eternalize")    { return Keyword::Eternalize; } // inert tag; mechanic is param-modelled
     if (s == "Jump")          { return Keyword::Jump; }       // inert tag; see Keyword::Jump
     if (s == "Aura Swap")     { return Keyword::AuraSwap; }   // inert tag; param-modelled (aura_swap_cost)
+    if (s == "Landfall")      { return Keyword::Landfall; }   // inert ability-word tag; landfall_* params
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -779,6 +783,23 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.protection_from_everything        = params.value("protection_from_everything", false);
     p.combat_damage_free_cast = params.value("combat_damage_free_cast", false);
     p.landfall_damage        = params.value("landfall_damage", 0);
+    // Landfall TRIGGERS (CardParams' LANDFALL TRIGGERS block; dispatched by OnLandEntered).
+    p.landfall_creates_tokens  = params.value("landfall_creates_tokens", 0);
+    p.landfall_token_power     = params.value("landfall_token_power", 0);
+    p.landfall_token_toughness = params.value("landfall_token_toughness", 0);
+    for (const std::string& s : params.value("landfall_token_subtypes", json::array()))
+        p.landfall_token_subtypes.push_back(s);
+    p.landfall_token_color     = params.value("landfall_token_color", std::string());
+    for (const std::string& s : params.value("landfall_token_keywords", json::array()))
+        p.landfall_token_keywords.push_back(s);
+    p.landfall_counters_each         = params.value("landfall_counters_each", 0);
+    p.landfall_counters_each_subtype = params.value("landfall_counters_each_subtype", std::string());
+    p.landfall_target_counters       = params.value("landfall_target_counters", 0);
+    p.landfall_target_subtype        = params.value("landfall_target_subtype", std::string());
+    p.landfall_lifegain              = params.value("landfall_lifegain", 0);
+    p.landfall_quest_counters        = params.value("landfall_quest_counters", 0);
+    p.etb_tokens_per_land            = params.value("etb_tokens_per_land", 0);
+    p.etb_tokens_per_land_basic_only = params.value("etb_tokens_per_land_basic_only", false);
     p.stages_cards           = params.value("stages_cards", false);
     p.death_trigger_damage   = params.value("death_trigger_damage", 0);
     p.scales_per_matching    = params.value("scales_per_matching", false);
