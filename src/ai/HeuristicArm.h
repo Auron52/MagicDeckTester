@@ -468,6 +468,7 @@ enum Slot : int
     ANGELS_GIADA_M2,          // MTG_ANGELS_GIADA_M2  a NARROW post-combat main for Angels (USER 2026-10-14): it opens ONLY when a vigilant Giada, Font of Hope could attack this turn and is still untapped after combat, and some Angel spell in hand is payable WITH her Angel-only {W} but not without it; inside it the only option is ONE such Angel cast (the admission makes two unaffordable), no other cast, land, equip or activation. A sound identity fold in a goldfish: an Angel payable without her was castable in main 1 alongside that main's casts without tapping her, which is weakly better. docs/design/angels-cast-order-2026-10-14.md
     LINE_SPARE_TIGHT,         // MTG_LINE_SPARE_TIGHT  PROPOSED payer fix (the shared payer, executor + rollout + walks): MTG_LINE_SPARE_GENERIC_FIRST's SHORT test also fires at ZERO surplus -- the rest of the line owes EXACTLY what the float + non-spare board can make of a colour, so a generic pip spending one of those units strands a later pip. Found under the USER's Angels order: Righteous Valkyrie {2}{W} before Lightstall Inquisitor {W} off Remote Farm ({W}{W}) + Sol Ring -- the Farm's second {W} paid the generic and Lightstall was dropped, so the line was unfindable at any budget. Default OFF until measured (it reaches every deck's payer)
     ANGELS_GIADA_FIRST,       // MTG_ANGELS_GIADA_FIRST  PROPOSED amendment to the USER's Angels order (not ruled): (c) with no engine (Thune / Lyra AoD) on our battlefield or in the cast set, Righteous Valkyrie goes behind Giada (Righteous first buys only Giada's toughness in life; Giada first gives Righteous N +1/+1 counters); (d) with at most one converter, Lyra, Archangel of Dawn goes behind Giada (the counter count ties at k = 1 and Giada enters Lyra bigger). The A/B's slower games that recover at no depth or budget. Default OFF -- an order change is the USER's call
+    ANGELS_GIADA_SEARCH,      // MTG_ANGELS_GIADA_SEARCH  PROPOSED (not ruled): when Giada and an Angel the USER's order puts ahead of her (Righteous Valkyrie / Archangel of Thune / Lyra AoD) are cast in one set, the cast-ordering search tries both orders (the USER's first, then Giada ahead of them) and keeps the better end state; every other set is untouched (no candidates -> the plan is kept as enumerated). Neither deterministic order dominates (counters vs Righteous's +7 anthem threshold). Default OFF -- the order is the USER's call
     COUNT
 };
 
@@ -891,6 +892,7 @@ inline const char* Name(int slot)
         "MTG_ANGELS_GIADA_M2",
         "MTG_LINE_SPARE_TIGHT",
         "MTG_ANGELS_GIADA_FIRST",
+        "MTG_ANGELS_GIADA_SEARCH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
