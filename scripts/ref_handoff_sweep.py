@@ -33,7 +33,9 @@ sys.path.insert(0, os.path.join(ROOT, "test"))
 import viewer_protocol_check as vpc          # noqa: E402
 import combo_off_replay_hunt as hunt         # noqa: E402  -- Session (persistent child walk)
 
-MTG = os.path.join(ROOT, "build", "Release", "mtg")
+# MTG_BIN overrides, as in viewer_protocol_check / combo_off_sweep (whose Session this sweep also
+# drives), so an old-vs-new reference comparison runs both arms through the same script.
+MTG = os.environ.get("MTG_BIN", os.path.join(ROOT, "build", "Release", "mtg"))
 
 
 def board_line(d):
