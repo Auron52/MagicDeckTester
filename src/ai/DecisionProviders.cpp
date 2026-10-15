@@ -28067,6 +28067,22 @@ bool StompyIsCast(const Action& a)
     return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land;
 }
 
+// The order's FIXED tie-break: the canonical name tie-break of a TOTAL deck order (CastOrderNameTieLess,
+// DecisionProvider::CastOrderTotalByName -- different cards by name), then, for copies of ONE card that
+// carry different choices (two Worldly Tutors fetching different creatures, two Natural Orders), the
+// tutor target, the sacrificed card and X -- the arrangement's refinement, so not even copies fall back to
+// plan / hand order. Two casts it calls equal are interchangeable copies of one choice.
+bool StompyFixedKeyLess(const GameState& s, const Action& a, const Action& b)
+{
+    if (CastOrderNameTieLess(s, a, b)) { return true; }
+    if (CastOrderNameTieLess(s, b, a)) { return false; }
+    const std::string& ta = a.tutor_target.str();
+    const std::string& tb = b.tutor_target.str();
+    if (ta != tb) { return ta < tb; }
+    if (a.soulfire_own_targets != b.soulfire_own_targets) { return a.soulfire_own_targets < b.soulfire_own_targets; }
+    return a.chosen_x < b.chosen_x;
+}
+
 // The four dual-position classes, by param.
 enum StompyDual : unsigned { kDualWT = 1u, kDualTT = 2u, kDualNO = 4u, kDualHulk = 8u };
 unsigned StompyDualClass(const CardParams& p)
@@ -28096,7 +28112,7 @@ int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
         // [1] 1-mana elves first ("Sol Ring can't fund these, but they can be funded by scaling elves if
         // they are played early"); [3-4] scaling elves cheapest-first ("more elves can still be discounted
         // and the cheapest is easiest to do this with"). The three 1-drops have identical text; the
-        // order's fixed key (CastOrderTotal) puts them by name.
+        // order's name tie-break (CastOrderTotalByName) puts them by name.
         if (!p.mana_per_creature_subtype.empty())
         { return def.card.m_mana_cost.ManaValue() <= 2 ? kStompyPriest : kStompyArchdruid; }
         return kStompyElf1;
@@ -28149,7 +28165,7 @@ int StompyProvider::CastOrderRankLatest(const GameState& s, const CardDefinition
     return CastOrderRank(s, def);
 }
 
-bool StompyProvider::CastOrderTotal() const { return StompyOrderEnabled(); }
+bool StompyProvider::CastOrderTotalByName() const { return StompyOrderEnabled(); }
 
 bool StompyProvider::TopResolveOptIn() const { return StompyOrderEnabled() && StompyTopResolveEnabled(); }
 
@@ -28224,7 +28240,7 @@ void StompyProvider::SortBySlots(const GameState& s, const std::vector<Action>& 
     {
         const int kx = key[static_cast<std::size_t>(x)], ky = key[static_cast<std::size_t>(y)];
         if (kx != ky) { return kx < ky; }
-        return CastOrderFixedKeyLess(acts[x], acts[y]);
+        return StompyFixedKeyLess(s, acts[x], acts[y]);
     });
 }
 
@@ -28280,7 +28296,7 @@ bool StompyProvider::CastOrderingCandidates(const GameState& s, const std::vecto
         {
             const Action& ax = reorder[static_cast<std::size_t>(x[k])];
             const Action& ay = reorder[static_cast<std::size_t>(y[k])];
-            if (CastOrderFixedKeyLess(ax, ay) || CastOrderFixedKeyLess(ay, ax)) { return false; }
+            if (StompyFixedKeyLess(s, ax, ay) || StompyFixedKeyLess(s, ay, ax)) { return false; }
         }
         return true;
     };

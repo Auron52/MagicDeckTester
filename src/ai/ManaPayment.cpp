@@ -2671,19 +2671,6 @@ bool CastOrderNameTieLess(const GameState& state, const Action& a, const Action&
     return na < nb;
 }
 
-bool CastOrderFixedKeyLess(const Action& a, const Action& b)
-{
-    // .str(): LEXICOGRAPHIC, never the interned pointer (pointer order varies run to run).
-    const std::string& na = a.card_name.str();
-    const std::string& nb = b.card_name.str();
-    if (na != nb) { return na < nb; }
-    const std::string& ta = a.tutor_target.str();
-    const std::string& tb = b.tutor_target.str();
-    if (ta != tb) { return ta < tb; }
-    if (a.soulfire_own_targets != b.soulfire_own_targets) { return a.soulfire_own_targets < b.soulfire_own_targets; }
-    return a.chosen_x < b.chosen_x;
-}
-
 bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
                                                  const Action& b, int rb)
 {

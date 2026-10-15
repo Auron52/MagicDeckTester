@@ -198,7 +198,7 @@ TEST_CASE("Stompy order: the rank lays the list out in the approved order, total
         const GenericProvider generic;
         for (const auto& e : list)
         { CAPTURE(e.second); CHECK(ProvSo().CastOrderRank(*e.first, DefSo(e.second)) == generic.CastOrderRank(*e.first, DefSo(e.second))); }
-        CHECK_FALSE(ProvSo().CastOrderTotal());
+        CHECK_FALSE(ProvSo().CastOrderTotalByName());
         CHECK_FALSE(ProvSo().WantsCastOrderingSearch());
         CHECK_FALSE(ProvSo().TopResolveOptIn());
     }
@@ -223,13 +223,17 @@ TEST_CASE("Stompy order: the realised order is TOTAL -- every permutation of the
         CAPTURE(k);
         CHECK(RealisedSo(s, CastsSo(s, plan)) == want);
     }
-    // Two copies of a dual card with DIFFERENT targets are ordered by the target, not by plan order.
+    // Two copies of a dual card with DIFFERENT targets are ordered by the target, not by plan order: the
+    // shared comparator keeps copies of one card in plan order (the canonical CastOrderTotalByName), and
+    // the deck's arrangement -- which every realising site runs after it -- orders them by the target.
     const GameState s = BoardSo({ kWT, kWT });
     std::vector<Action> a1 = { CastSo(s, kWT, kSpine), CastSo(s, kWT, kHoof) };
     std::vector<Action> a2 = { a1[1], a1[0] };
     std::vector<int> o1 = { 0, 1 }, o2 = { 0, 1 };
     std::stable_sort(o1.begin(), o1.end(), [&](int x, int y) { return CastOrderLess(s, a1[x], a1[y]); });
     std::stable_sort(o2.begin(), o2.end(), [&](int x, int y) { return CastOrderLess(s, a2[x], a2[y]); });
+    ApplyDeckCastArrangement(s, a1, o1);
+    ApplyDeckCastArrangement(s, a2, o2);
     CHECK(a1[o1[0]].tutor_target.str() == a2[o2[0]].tutor_target.str());
     CHECK(a1[o1[0]].tutor_target.str() == std::string(kHoof));   // "Craterhoof..." < "Worldspine..."
 }

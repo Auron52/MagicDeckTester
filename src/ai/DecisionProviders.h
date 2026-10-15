@@ -2014,7 +2014,7 @@ public:
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     int         CastOrderRankLatest(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
-    bool        CastOrderTotal() const override;
+    bool        CastOrderTotalByName() const override;
     void        ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
     bool        WantsCastOrderingSearch() const override;
     bool        CastOrderingCandidates(const GameState&, const std::vector<Action>& plan_actions,
