@@ -1,3 +1,4 @@
+#include "core/OutputHealth.h"
 #include "core/EnvFlags.h"
 #include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 #include <iostream>
@@ -6891,6 +6892,7 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
         }
         out << '\n';
     }
+    outhealth::Check(out, (dir / (name + ".wins")).string());
 }
 
 // Scenario mode: run ONE constructed board through the real AI turn engine and report the outcome.
@@ -8059,6 +8061,7 @@ int main(int argc, char* argv[])
                                                              : static_cast<int>(i))
                                << ' ' << r.units[i] << '\n';
                         }
+                        outhealth::Check(uo, (game_log_dir / (r.name + ".units")).string());
                     }
                     // Games ABANDONED at the work ceiling, one global index per line. A driver
                     // cannot infer these from the hole in <name>.wins: a job also finishes short
@@ -8069,6 +8072,7 @@ int main(int argc, char* argv[])
                     {
                         std::ofstream ao(game_log_dir / (r.name + ".abandoned"));
                         for (int gi : r.abandoned) { ao << gi << '\n'; }
+                        outhealth::Check(ao, (game_log_dir / (r.name + ".abandoned")).string());
                     }
                 }
                 // Goldfish metric = avg (mean turn-to-win; an unwon game is scored max_turns+1).
@@ -8100,6 +8104,7 @@ int main(int argc, char* argv[])
             for (const BatchJobResult& r : results) { total_games += r.games_played; }
             std::cout << "=== BATCH done (" << results.size() << " jobs, "
                       << total_games << " games) ===\n" << std::flush;
+            outhealth::Check(std::cout, "stdout (the per-job result lines)");
             if (gate_probe)
             {
                 const uint32_t live = QueriedGatesMask();
@@ -8128,6 +8133,13 @@ int main(int argc, char* argv[])
         // need it -- pushing perf claims back onto wall clock, which is documented to lie here.
         // No-op (expands to nothing) unless MTG_PROFILE is defined, so Release codegen is unchanged.
         PROF_REPORT(std::cerr);
+        // A failed output write (see OutputHealth.h) must reach the caller's exit-status gate.
+        if (outhealth::Failures().load() > 0)
+        {
+            std::cerr << "[output] " << outhealth::Failures().load()
+                      << " output write(s) FAILED during this batch -- exiting 5 (outputs incomplete)\n";
+            return 5;
+        }
         return 0;
     }
 

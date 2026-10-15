@@ -1,3 +1,4 @@
+#include "../core/OutputHealth.h"
 #include "ValueArm.h"
 #include "HeuristicArm.h"
 #include "../core/EnvFlags.h"
@@ -594,7 +595,12 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
             v_out << (static_cast<double>(earliest_sum) / earliest_n);
             for (int vv : feat) { v_out << ' ' << vv; }
             v_out << ' ' << state.game_seed << ' ' << state.turn_number << '\n';
-            v_out.flush();
+            outhealth::Check(v_out, std::string("value rows ") + s_value_rows_path);
+        }
+        else
+        {
+            static bool v_reported = false;   // the stream died earlier (or never opened): say so once
+            if (!v_reported) { v_reported = true; outhealth::Fail(std::string("value rows ") + s_value_rows_path); }
         }
     }
 
@@ -603,7 +609,12 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
     // Per-candidate eval rows (features reshuffle-invariant -> from the ORIGINAL state).
     static std::ofstream s_out(s_eval_rows_path, std::ios::app);
     static bool          s_header = false;
-    if (!s_out.good()) { return; }
+    if (!s_out.good())
+    {
+        static bool s_reported = false;   // see OutputHealth.h: a dropped row must not exit 0
+        if (!s_reported) { s_reported = true; outhealth::Fail(std::string("eval rows ") + s_eval_rows_path); }
+        return;
+    }
     if (!s_header)
     {
         s_out << "# label";
