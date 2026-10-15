@@ -186,13 +186,14 @@ inline bool LineSpareGenericFirstOn()
     return heurarm::Flag(heurarm::LINE_SPARE_GENERIC_FIRST, env_on);
 }
 
-// MTG_LINE_SPARE_TIGHT (DEFAULT OFF; a proposed payer fix, measured in
-// docs/design/angels-cast-order-2026-10-14.md) -- LineSpareSourceMask's SHORT test also fires at ZERO
-// surplus: the rest of the line owes EXACTLY what the float plus the non-spare board can make of a colour,
-// so a generic pip that spends one of those units strands a later pip. Same payer, same lockstep.
+// MTG_LINE_SPARE_TIGHT (DEFAULT ON since 2026-10-15; =0 restores the strict test) -- LineSpareSourceMask's
+// SHORT test also fires at ZERO surplus: the rest of the line owes EXACTLY what the float plus the non-spare
+// board can make of a colour, so a generic pip that spends one of those units strands a later pip. Same
+// payer, same lockstep. Measured in docs/design/angels-cast-order-2026-10-14.md: it clears 10 of the 13
+// Angels lost lines; outside Angels 0 slower games (dragonstorm d3 1 faster, a few digest-only games).
 inline bool LineSpareTightOn()
 {
-    static const bool env_on = EnvOn("MTG_LINE_SPARE_TIGHT");
+    static const bool env_on = EnvOn("MTG_LINE_SPARE_TIGHT", true);
     return heurarm::Flag(heurarm::LINE_SPARE_TIGHT, env_on);
 }
 
