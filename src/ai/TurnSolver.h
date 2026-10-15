@@ -1535,6 +1535,15 @@ public:
     static bool BpUnbranchedCanon(const GameState& state, bool is_pre_combat, const Plan& plan,
                                   int seen_before, bool class_on, Plan& out);
 
+    // THE OPEN LAND DROP, read the way the dig loop needs it (DecisionProvider::DigUsesDrawnLandDrop):
+    // is this turn's land drop still open, and would playing a land in hand (`only_land` = that one
+    // land name, nullptr = any distinct land in hand) make a held NONLAND castable that is not
+    // castable now? Played on a copy through the rollout's own land play, so enters-tapped and
+    // Capital City's filter are exact; a land that enters tapped never qualifies. Same per-card
+    // legality as the dig loop's AnyHandCastableNow (targets, goldfish_inert, saturated reducers).
+    // Read-only. Also the MTG_FLUCT_LANDDRAW_CENSUS instrument's "would it have paid" test.
+    static bool DropOpenLandEnablesCast(const GameState& state, const std::string* only_land = nullptr);
+
     // MTG_BP_NEW_ONLY (default ON since 2026-09-22): a breakpoint emits only continuations that
     // use a card that arrived there. Public because the executor's resolve_draw_breakpoint binds
     // the same snapshot under the same condition -- the lockstep pair -- and the reader lives with

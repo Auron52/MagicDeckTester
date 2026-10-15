@@ -353,6 +353,33 @@ public:
         return false;
     }
 
+    // DigUsesDrawnLandDrop -- a land the dig loop DRAWS is considerable as this turn's LAND DROP.
+    // USER 2026-10-14 (Fluctuator): "Why can't we use a land drawn by cycling? We should be able to
+    // consider it whether this is in a go-off heuristic or actual search."
+    //
+    // The loop has three gaps that together make such a drop unreachable at ANY budget on a deck
+    // with no second main (the searched depth suppresses main 2's greedy land play, so a drop the
+    // chain does not spend is lost for the turn):
+    //   (1) a land draw never opens a re-solve (`resolve_now = !drew_land || ...`);
+    //   (2) at a NONLAND draw, AnyHandCastableNow reads only the battlefield's mana, so a held card
+    //       that the open drop + a land in hand would pay for reads "uncastable" and the re-solve
+    //       is skipped (DigResolveOnlyWhenCastable);
+    //   (3) when the chain ENDS with the drop still open, nothing offers it again.
+    // With this hook on, the loop asks DropOpenLandEnablesCast at (1) and (2) -- a re-solve opens
+    // only while the drop is open AND playing a land in hand makes a held nonland castable that is
+    // not castable now (which a tapped-entering land never does), so no nested re-solve fires where
+    // nothing can change -- and at (3) it opens ONE final site-4 re-solve per apply when a land
+    // entered the hand during the chain and the drop is still open (a drawn tapped land played now
+    // is next turn's mana). Every one of these is a SEARCHED breakpoint: the continuation list
+    // already carries the land-drop entries and the "play no land" EMPTY world, so the engine picks
+    // nothing. The provider's HoldFuelWhileComboing still skips all three while going off.
+    // Base false -> every other dig deck is byte-identical.
+    virtual bool        DigUsesDrawnLandDrop(const GameState& s) const
+    {
+        (void)s;
+        return false;
+    }
+
     // MaxDigsPerTurn / DigContinueAfterResolve -- the two remaining TREASURE HUNT assumptions in
     // the dig loop, both of which CAP A COMBO TURN for a deck whose cycling IS the wincon.
     //

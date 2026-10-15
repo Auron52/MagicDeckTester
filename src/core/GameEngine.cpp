@@ -221,6 +221,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     if (at <= static_cast<int>(ResumeAt::Main2)) { MainPhase(state, /*is_pre_combat=*/false); }
     if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state))
     { NoteOwnDeath(state); return; }
+    // MTG_LANDDRAW_CENSUS (diagnostic only, a no-op unless set): did this turn's dig chain draw a
+    // land with the drop open and end with the drop unused? Read before the end step changes nothing.
+    AIEngine::LandDrawCensusEndTurn(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
     // The passive opponent's notional draw for THEIR turn, which falls between ours (see

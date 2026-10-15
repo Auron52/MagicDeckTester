@@ -9502,6 +9502,27 @@ static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state,
     return EffectiveSpellCost(def, state, copies);
 }
 
+// The per-card half of AnyHandCastableNow: is this hand nonland LEGAL to cast (mana aside)?
+// Shared with DropOpenLandEnablesCast so the two can never disagree about what "castable" means.
+static bool HandCardLegalToCast(const GameState& state, const CardDefinition* d)
+{
+    if (!d || d->card.IsLand())   { return false; }   // a land drop is not what the re-solve is for
+    if (d->params.goldfish_inert) { return false; }   // can never be cast at all
+    // A saturated cost-reducer is castable but changes NOTHING, and this probe feeds
+    // DigResolveOnlyWhenCastable -- so counting it as "castable" is what drags the dig loop
+    // into a re-solve whose only move is to spend a card and its mana for no effect. Skipping
+    // it here is what lets the chain keep cycling instead (reference s6/gi5).
+    if (NoRedundantReducerEnabled()
+        && IsSaturatedCyclingReducer(state, state.active_player_index, *d)) { return false; }
+    // A spell whose only mode needs a target it does not have is not castable (CR 601.2c).
+    if (d->params.reanimate_creature_max_mv > 0
+        && !HasReanimateTarget(state, state.active_player_index,
+                               d->params.reanimate_creature_max_mv)) { return false; }
+    // A regrowth (Auroral Procession / Reborn Hope) likewise needs a legal graveyard card.
+    if (!HasGraveyardTutorTarget(state, state.active_player_index, d->params)) { return false; }
+    return true;
+}
+
 static bool AnyHandCastableNow(const GameState& state)
 {
     const Player& ap = state.ActivePlayer();
@@ -9510,21 +9531,7 @@ static bool AnyHandCastableNow(const GameState& state)
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (!d || d->card.IsLand())   { continue; }   // a land drop is not what the re-solve is for
-        if (d->params.goldfish_inert) { continue; }   // can never be cast at all
-        // A saturated cost-reducer is castable but changes NOTHING, and this probe feeds
-        // DigResolveOnlyWhenCastable -- so counting it as "castable" is what drags the dig loop
-        // into a re-solve whose only move is to spend a card and its mana for no effect. Skipping
-        // it here is what lets the chain keep cycling instead (reference s6/gi5).
-        if (NoRedundantReducerEnabled()
-            && IsSaturatedCyclingReducer(state, state.active_player_index, *d)) { continue; }
-        // A spell whose only mode needs a target it does not have is not castable (CR 601.2c).
-        if (d->params.reanimate_creature_max_mv > 0
-            && !HasReanimateTarget(state, state.active_player_index,
-                                   d->params.reanimate_creature_max_mv)) { continue; }
-        // A regrowth (Auroral Procession / Reborn Hope) likewise needs a legal graveyard card.
-        if (!HasGraveyardTutorTarget(state, state.active_player_index, d->params)) { continue; }
-        if (pool.CanPay(EffectiveCost(*d, state))) { return true; }
+        if (HandCardLegalToCast(state, d) && pool.CanPay(EffectiveCost(*d, state))) { return true; }
     }
     return false;
 }
@@ -37144,6 +37151,56 @@ static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& land_face = "", int rad_mode = -1);
 static std::string SimulateLandPlay(GameState& state);
 
+// See the declaration (TurnSolver.h). The cheap pre-filter (LandWouldEnterTapped) keeps the copies
+// off every tapped-entering land -- 34 of the Fluctuator list's 42 -- so a copy is made only for a land
+// that can actually add mana this turn.
+//
+// PAYMENT IS COLOUR-EXACT HERE (the real payer on a copy), deliberately NOT ManaPool::CanPay: the
+// pool books every dual as one `wild` that pays ANY pip, so on the draft's own §4.3 board (Polluted
+// Mire + Irrigated Farmland) it reads Drannith Stinger's {1}{R} as ALREADY payable without the
+// Capital City -- and an "already castable" answer would make this test say the City changes
+// nothing, which is exactly the land-draw re-solve the hook exists to open. (The dig loop's own
+// AnyHandCastableNow keeps the pool read: there a phantom only fires a re-solve, never skips one.)
+static bool HandCardPayableExact(const GameState& state, const CardDefinition* d)
+{
+    if (!HandCardLegalToCast(state, d)) { return false; }
+    GameState pay = state;
+    return TapForCostDirect(pay, EffectiveCost(*d, state), d->card.IsCreature());
+}
+bool TurnSolver::DropOpenLandEnablesCast(const GameState& state, const std::string* only_land)
+{
+    const Player& ap = state.ActivePlayer();
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    bool any_nonland = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && !d->card.IsLand() && !d->params.goldfish_inert) { any_nonland = true; break; }
+    }
+    if (!any_nonland) { return false; }
+    std::vector<std::string> tried;
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_impulse_no_land) { continue; }
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(c);
+        if (!ld || !ld->card.IsLand()) { continue; }
+        const std::string nm = c.m_name.str();
+        if (only_land != nullptr && nm != *only_land) { continue; }
+        if (std::find(tried.begin(), tried.end(), nm) != tried.end()) { continue; }
+        tried.push_back(nm);
+        if (LandWouldEnterTapped(state, *ld)) { continue; }   // adds nothing this turn
+        GameState scratch = state;
+        if (!PlayLandByName(scratch, nm)) { continue; }
+        for (const Card& h : scratch.ActivePlayer().hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (!hd || hd->card.IsLand()) { continue; }
+            if (HandCardPayableExact(scratch, hd) && !HandCardPayableExact(state, hd)) { return true; }
+        }
+    }
+    return false;
+}
+
 // ---- GREEDY LAND-DROP INSTRUMENT (MTG_LANDDROP_STATS, default off, zero cost when off) --------
 //
 // The USER's standing directive is that no greedy component may sit inside the searched window, and
@@ -44570,7 +44627,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                         : ResolveProvider(state).MaxDigsPerTurn();
         const bool dig_continue   = dig_chain_open
                                         || ResolveProvider(state).DigContinueAfterResolve();
+        // A LAND THE CHAIN DRAWS CAN BE THE DROP (DecisionProvider::DigUsesDrawnLandDrop; base
+        // false -> every line below that reads it is inert and the loop is byte-identical). The copy
+        // numbers of the lands this chain drew while the drop was open, and the recorded DigDraw the
+        // chain-end re-solve nests under (an INDEX: out_breakpoint grows, so a pointer would dangle).
+        const bool drop_hook = ResolveProvider(state).DigUsesDrawnLandDrop(state);
+        std::vector<int> chain_lands;
+        std::size_t last_dig_rec = std::numeric_limits<std::size_t>::max();
+        bool chain_end_resolved = false;
         int dig_guard = 0;
+        for (;;)   // the chain; then, at most once per apply, its chain-end land re-solve
+        {
         while (dig_guard++ < dig_cap
                && (plan.dig_choice == 1 || ResolveProvider(state).ShouldConsiderDig(state))
                && !ap.library.empty())
@@ -44627,6 +44694,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
             const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
             bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
+            std::string drawn_land_name;   // filled only under the drawn-land hook (see below)
+            if (drop_hook && drew_land && ap.lands_played_this_turn < ap.LandDropsAvailable())
+            {
+                chain_lands.push_back(drawn.m_number);
+                drawn_land_name = drawn.m_name.str();
+            }
             EnterHand(state, state.active_player_index, std::move(drawn),
                       HandEntryReason::Draw);
             if (!dig_census_counted)
@@ -44679,6 +44752,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 rec.dig_sacrifice = is_sac;
                 out_breakpoint->push_back(rec);
                 my_bp_sink = &out_breakpoint->back().breakpoint_casts;
+                last_dig_rec = out_breakpoint->size() - 1;
             }
 
             // Dig THROUGH lands toward the first nonland (Treasure Hunt is a nonland). On a
@@ -44699,12 +44773,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Unearth live, and every further pingless draw before that Unearth resolves is a
             // card the kill will not have. Provider-gated (base false, byte-identical elsewhere);
             // see DecisionProvider::DigResolveEvenOnLand.
+            // THE DRAWN LAND (DigUsesDrawnLandDrop, gaps (1) and (2)): a land draw re-solves when the
+            // drop is open and THAT land, played, makes a held card castable that is not castable
+            // now (a tapped-entering land never does, so no nested re-solve where nothing can
+            // change); and the castability gate below counts the open drop + a land in hand, so a
+            // Stinger drawn with an untapped Capital City in hand is not read as "uncastable".
+            const bool land_unlocks = drop_hook && !drawn_land_name.empty()
+                                   && TurnSolver::DropOpenLandEnablesCast(state, &drawn_land_name);
             const bool resolve_now = !drew_land
-                                  || ResolveProvider(state).DigResolveEvenOnLand(state);
+                                  || ResolveProvider(state).DigResolveEvenOnLand(state)
+                                  || land_unlocks;
             if (resolve_now
                 && ResolveProvider(state).DigResolveOnlyWhenCastable()
                 && !DecisionUnpruned(UnprunedGate::DigResolve)
-                && !AnyHandCastableNow(state))
+                && !AnyHandCastableNow(state)
+                && !(drop_hook && (land_unlocks || TurnSolver::DropOpenLandEnablesCast(state))))
             {
                 continue;   // cycle on; nothing this re-solve could have deployed
             }
@@ -44743,6 +44826,54 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!dig_continue) { break; }
             }
         }
+        // THE CHAIN-END DROP (DigUsesDrawnLandDrop, gap (3)): the chain has stopped with the land
+        // drop still open and a land IT DREW still in hand. On a deck with no second main that drop
+        // is otherwise gone for the turn -- even a tapped land played now is next turn's mana (the
+        // pre-Fluctuator {2} cycles draw exactly those). ONE searched site-4 re-solve per apply,
+        // nested under the last recorded DigDraw so the executor replays it in place; its list holds
+        // every land-drop entry and the explicit EMPTY ("play no land") world, so the search decides.
+        // Only a land the CHAIN drew opens it: a land held at plan time was already the plan's own
+        // land decision, and nothing about it changed. Going off still plays no fuel. If the
+        // re-solve changed the state (a land played, a card cast), the chain resumes -- an untapped
+        // land pays a {2} cycle, a cast Stinger makes every further cycle a ping.
+        if (!drop_hook || chain_end_resolved || chain_lands.empty()) { break; }
+        chain_end_resolved = true;
+        if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { break; }
+        {
+            bool held = false;
+            for (const Card& c : ap.hand)
+            {
+                if (std::find(chain_lands.begin(), chain_lands.end(), c.m_number) != chain_lands.end())
+                { held = true; break; }
+            }
+            if (!held) { break; }
+        }
+        if (DigHoldFuelEnabled()
+            && ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index))
+        { break; }
+        {
+            std::vector<Action>* end_sink =
+                (out_breakpoint != nullptr && last_dig_rec < out_breakpoint->size())
+                    ? &(*out_breakpoint)[last_dig_rec].breakpoint_casts
+                    : out_breakpoint;
+            const int         lands_before = ap.lands_played_this_turn;
+            const std::size_t hand_before  = ap.hand.size();
+            {
+                if (out_breakpoint) { bp_sink_push(end_sink); }
+                TurnSolver::Plan extra;
+                bp_searched_plan(4, extra);   // the continuation the plan carries, or EMPTY
+                ContPinFrame _cpf(extra, end_sink);
+                bp_play_searched_land(extra, end_sink);
+                apply_continuation_precasts(extra);
+                apply_continuation_plan(extra);
+                apply_continuation_activations(extra, out_breakpoint != nullptr && end_sink != nullptr);
+                if (out_breakpoint) { bp_sink_pop(); }
+            }
+            const bool changed = ap.lands_played_this_turn != lands_before
+                              || ap.hand.size() != hand_before;
+            if (!changed) { break; }
+        }
+        }   // for (;;) -- a changed state re-enters the chain
     }
 
     // Activate Land's Edge after all spells resolve (mirrors GameEngine::MainPhase's

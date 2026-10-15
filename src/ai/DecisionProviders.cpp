@@ -21774,6 +21774,151 @@ bool DragonsProvider::OrderOpaqueCastsByRank() const
     return DragonsOrderEnabled();
 }
 
+// ---- FluctuatorProvider::CastOrderRank -----------------------------------------
+//
+// THE USER'S TOTAL ORDER (2026-10-14): *"I guess the Fluctuator order is okay. The order doesn't
+// matter much in that deck, except that cycling always goes at the end. (that should also be
+// placed)"*, on the draft in docs/design/cast-order-drafts-2026-10-14/Fluctuator.md, plus the
+// cross-deck ruling *"Let's fully order the cards in each list inasmuch as possible. I don't like
+// the randomness of choosing the order."*
+//
+//  pos   card                  param                                  why
+//  land  the land drop         (structural: played before every cast)  it can only add mana to the casts
+//  1     Unearth {B}           reanimate_creature_max_mv > 0           one coloured pip, no generic
+//  2     Enlightened Tutor {W} tutor_to_top                            one coloured pip; its card is drawn
+//                                                                       by the chain's first cycle
+//  3     Drannith Stinger      cycle_trigger_damage_each_opponent > 0  coloured + a generic pip; must land
+//                                                                       before the first cycle it pings for
+//  4     Fluctuator {2}        reduces_cycling_activation > 0          generic only; its payoff is cycling,
+//                                                                       which runs after every cast anyway
+//  5     Hollow One {5}        cost_less_per_cycle_or_discard > 0      generic only; its cost only FALLS
+//                                                                       with cycles, which come after
+//  6     a SECOND Fluctuator   the same, with a copy already on the    it does nothing (one copy floors
+//                              battlefield or earlier in the set        cycling at {0}), so it goes last and
+//                                                                       a one-at-a-time payment never spends
+//                                                                       the Stinger's mana on it
+//  last  CYCLING               (not a rank -- see below)               USER: "cycling always goes at the end"
+//  -     Forsake the Worldly   goldfish_inert                          never cast; cycling fodder only
+//
+// TOTALITY. Slots 1-6 are distinct, so no two of the deck's cards compare equal; ArrangeCastOrder
+// then re-sorts every cast set by (slot, NAME), so even an unrecognised card (a future decklist
+// change, ranked after slot 6 on its generic tier) separates by name and never by plan/hand order.
+//
+// CYCLING IS PLACED LAST STRUCTURALLY, at every site that can cycle (verified 2026-10-15):
+//   * rollout -- ApplyPlanDirect's dig loop runs after the plan's casts; a cast after N cycles is a
+//     site-4 continuation, i.e. a NEW window whose own casts again precede the next cycle;
+//   * executor -- the recorded DigDraw script is replayed after the main plan's casts, and each
+//     DigDraw's nested continuation (its PlayLand, then its casts) after its own cycle;
+//   * the depth-0 / uncommitted reactive dig (UseSurplusLandAbilities) runs after the cast loop;
+//   * the searched dig axis (Plan::dig_choice) only gates whether that loop runs;
+//   * human play offers each cycle as a standalone DigDraw line listed after the cast plans (the
+//     viewer's cycle badge is the human's own sequencing, not an engine order).
+// So no rank is needed -- and none could express it, since a cycle is an activation, not a cast.
+// The unit test test_fluctuator_order.cpp pins it (a Stinger cast with a cycle chain pings for
+// EVERY card cycled).
+static bool FluctOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_FLUCT_ORDER", true);   // DEFAULT ON; =0 -> generic (A/B hatch)
+    return heurarm::Flag(heurarm::FLUCT_ORDER, on);
+}
+static bool FluctControlsCyclingReducer(const GameState& s)
+{
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.reduces_cycling_activation > 0) { return true; }
+    }
+    return false;
+}
+// Slot 1..6 per the table above; -1 = not one of the order's cards (generic tier, after slot 6).
+static int FluctOrderSlot(const CardDefinition& def, bool reducer_already_out)
+{
+    const CardParams& p = def.params;
+    if (p.goldfish_inert)                         { return -1; }
+    if (p.reanimate_creature_max_mv > 0)          { return 1; }
+    if (p.tutor_to_top)                           { return 2; }
+    if (p.cycle_trigger_damage_each_opponent > 0) { return 3; }
+    if (p.reduces_cycling_activation > 0)         { return reducer_already_out ? 6 : 4; }
+    if (p.cost_less_per_cycle_or_discard > 0)     { return 5; }
+    return -1;
+}
+static constexpr int kFluctUnrankedBase = 7 * 64;   // generic tiers sit after the USER's six slots
+int FluctuatorProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!FluctOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
+    const bool second = def.params.reduces_cycling_activation > 0 && FluctControlsCyclingReducer(s);
+    const int  slot   = FluctOrderSlot(def, second);
+    if (slot >= 0) { return slot * 64; }
+    return kFluctUnrankedBase + GenericProvider::CastOrderRank(s, def);
+}
+const char* FluctuatorProvider::CastOrderTierName(int rank) const
+{
+    if (!FluctOrderEnabled()) { return GenericProvider::CastOrderTierName(rank); }
+    if (rank >= kFluctUnrankedBase) { return "UNRANKED: generic tier, after the USER's six slots (by name)"; }
+    switch (rank / 64)
+    {
+        case 1:  return "1 Unearth -- one coloured pip, no generic";
+        case 2:  return "2 Enlightened Tutor -- one coloured pip; the chain's first cycle draws its card";
+        case 3:  return "3 Drannith Stinger -- on the battlefield before the first cycle it pings for";
+        case 4:  return "4 Fluctuator -- generic only; cycling (its payoff) runs after every cast";
+        case 5:  return "5 Hollow One -- generic only; its cost falls only with the cycles that follow";
+        case 6:  return "6 SECOND Fluctuator -- a copy is already out (or earlier in the set): does nothing";
+        default: return nullptr;
+    }
+}
+bool FluctuatorProvider::OrderOpaqueCastsByRank() const
+{
+    // Adopted-full-order marker (report semantics). Inert in play: nothing in this list is
+    // order-opaque (no cast-draw, staging, cascade, retrace or impulse param).
+    return FluctOrderEnabled();
+}
+// The SET-level half: a second Fluctuator in the same cast set (none on the battlefield) moves to
+// slot 6, and the whole set is re-sorted by (slot, name) so the order is TOTAL. Every cast-order site
+// in both apply worlds calls this through ApplyDeckCastArrangement, after the comparator sort.
+void FluctuatorProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                                          std::vector<int>& order) const
+{
+    if (!FluctOrderEnabled() || order.size() < 2) { return; }
+    bool reducer_seen = FluctControlsCyclingReducer(s);
+    struct Key { int rank; std::string name; int idx; };
+    std::vector<Key> keys;
+    keys.reserve(order.size());
+    for (int idx : order)
+    {
+        const Action& a = actions[static_cast<std::size_t>(idx)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        int rank = std::numeric_limits<int>::max() / 2;   // unknown card: after everything, by name
+        if (d != nullptr)
+        {
+            if (d->params.reduces_cycling_activation > 0 && !d->params.goldfish_inert)
+            {
+                rank = (reducer_seen ? 6 : 4) * 64;
+                reducer_seen = true;
+            }
+            else
+            {
+                rank = CastOrderRank(s, *d);
+            }
+        }
+        keys.push_back({ rank, a.card_name.str(), idx });
+    }
+    std::stable_sort(keys.begin(), keys.end(), [](const Key& x, const Key& y)
+    {
+        if (x.rank != y.rank) { return x.rank < y.rank; }
+        return x.name < y.name;
+    });
+    for (std::size_t i = 0; i < keys.size(); ++i) { order[i] = keys[i].idx; }
+}
+std::optional<DecisionProvider::MainPhase> FluctuatorProvider::MainPhaseOverride(
+    const GameState& s, const CardDefinition& def) const
+{
+    (void)s; (void)def;
+    if (!FluctOrderEnabled()) { return std::nullopt; }
+    return MainPhase::Main1;
+}
+
 // ---- FluctuatorProvider: cycling is the deck, not a "dig when stuck" ---------
 //
 // See the header comment for why this provider exists at all (Generic switches cycling OFF).
@@ -21862,6 +22007,21 @@ bool FluctuatorProvider::DigResolveEvenOnLand(const GameState& s) const
             && FluctuatorCanPayNow(s, d->card.m_mana_cost)) { return true; }
     }
     return false;
+}
+
+// A land the chain DRAWS can be the drop (USER 2026-10-14: "Why can't we use a land drawn by
+// cycling? We should be able to consider it whether this is in a go-off heuristic or actual
+// search."). The deck has no second main, so at a searched depth a drop the dig chain does not
+// spend is LOST for the turn (main 2's greedy land play runs at depth 0 only), and three gaps in the
+// shared loop made spending it on a drawn land unreachable at any budget -- see
+// DecisionProvider::DigUsesDrawnLandDrop. The search decides whether to play it; this only lets the
+// loop ASK. Going off is still the USER's "don't play any fuel" (HoldFuelWhileComboing skips every
+// one of these re-solves exactly as it skips the cast ones).
+bool FluctuatorProvider::DigUsesDrawnLandDrop(const GameState& s) const
+{
+    (void)s;
+    static const bool on = EnvOn("MTG_FLUCT_DRAWN_LAND", true);   // DEFAULT ON; =0 -> 16dfb7e4 behaviour
+    return heurarm::Flag(heurarm::FLUCT_DRAWN_LAND, on);
 }
 
 // FluctuatorCastRouteReachable -- can the lands we CONTROL ever pay `cost`? Deliberately ignores
@@ -22285,6 +22445,40 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
     }
 
 
+    // "...and OCCASIONALLY AN UNTAPPED LAND" (USER 2026-09-04, the third protection, built
+    // 2026-10-15). The occasion is the open land drop with no Stinger out yet: an untapped land in
+    // hand can still BE the drop, and the turn's next draw can be the card it pays for (draft §4.3:
+    // Fluctuator out, Polluted Mire + Irrigated Farmland, the chain draws Capital City then Drannith
+    // Stinger -- dropping the City casts the Stinger, and it is the ONLY untapped colour source in
+    // the deck). Every land was rank-3 fodder, so the chain cycled the City before the Stinger came.
+    // ONE land, the best kind (a colour source -- Capital City's filter -- over colourless Blasted
+    // Landscape, then the lowest copy number for lockstep), and it is ORDERED LAST rather than
+    // refused: the chain still cycles it when nothing else is left, so no line is lost -- it only
+    // stops being spent ahead of fodder that cannot be the drop. Off once a Stinger is on the
+    // battlefield ("everything is still free game") and once the drop is spent.
+    // MTG_FLUCT_KEEP_UNTAPPED (default ON; =0 -> every land is rank-3 fodder, 16dfb7e4).
+    int keep_land_num = 0;   // the hand card (m_number) ordered last; 0 = none
+    {
+        static const bool s_keep = EnvOn("MTG_FLUCT_KEEP_UNTAPPED", true);
+        if (protect && heurarm::Flag(heurarm::FLUCT_KEEP_UNTAPPED, s_keep)
+            && ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            int best_tier = -1, best_n = 0;
+            for (const Card& c : ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d || !d->card.IsLand() || c.m_impulse_no_land) { continue; }
+                if (LandWouldEnterTapped(s, *d)) { continue; }
+                bool colour = false;
+                for (Color col : d->params.produces) { if (col != Color::Colorless) { colour = true; break; } }
+                const int tier = colour ? 1 : 0;
+                if (tier > best_tier || (tier == best_tier && c.m_number < best_n))
+                { best_tier = tier; best_n = c.m_number; }
+            }
+            if (best_tier >= 0) { keep_land_num = best_n; }
+        }
+    }
+
     int best_rank = std::numeric_limits<int>::max();
     int best_num  = 0;
     std::string best_name;
@@ -22296,7 +22490,8 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
 
         const CardParams& p = d->params;
         int rank;
-        if (p.goldfish_inert)                                 { rank = 0; }   // Forsake the Worldly
+        if (keep_land_num != 0 && c.m_number == keep_land_num) { rank = 6; }   // the kept untapped land: LAST
+        else if (p.goldfish_inert)                            { rank = 0; }   // Forsake the Worldly
         else if (p.reduces_cycling_activation > 0)
         {
             if (protect && bf_fluctuator == 0) { continue; }                  // NEVER: the engine
