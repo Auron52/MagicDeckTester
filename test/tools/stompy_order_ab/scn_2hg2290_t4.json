@@ -1,0 +1,25 @@
+{
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "profile": "decks/StompySurprise/StompySurprise.profile.json",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 6,
+ "active_life": 30,
+ "opponent_life": 29,
+ "opponent_heads": 2,
+ "battlefield": [
+  {"name": "Forest", "controller": 0, "tapped": false},
+  {"name": "Llanowar Elves", "controller": 0, "tapped": false, "sick": false},
+  {"name": "Elvish Mystic", "controller": 0, "tapped": false, "sick": false},
+  {"name": "Forest", "controller": 0, "tapped": false},
+  {"name": "Elvish Archdruid", "controller": 0, "tapped": false, "sick": false},
+  {"name": "Fyndhorn Elves", "controller": 0, "tapped": false, "sick": false}
+ ],
+ "hand": ["Apex Altisaur", "Natural Order", "Ghalta, Stampede Tyrant"],
+ "library_top": ["Natural Order", "Forest", "Craterhoof Behemoth", "Forest", "Craterhoof Behemoth", "Forest"],
+ "library_filler": "Forest",
+ "library_size": 25,
+ "depth": 3,
+ "budget_ms": 0,
+ "_comment": "PROBE (stompy2hg d3 gi2290): the base arm's T4 board (Natural Order is the T4 draw). Base line: Natural Order x2 -> Craterhoof x2, sacrificing the tapped Llanowar and Mystic, Fyndhorn held to attack; 32 against 29."
+}

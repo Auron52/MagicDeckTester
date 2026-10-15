@@ -565,3 +565,45 @@ TEST_CASE("Sacrifice victim (MTG_SAC_VICTIM_SAME_NAME): a stale pin eats another
     }
     heurarm::t_arm[heurarm::SAC_VICTIM_SAME_NAME] = -1;
 }
+
+TEST_CASE("Payment fix (MTG_HOLD_PRODUCER_FIRST): gi2290's two Natural Orders tap Archdruid and both victims, keep the other 1/1 up")
+{
+    // stompy2hg d3 gi2290 T4: Forest x2, Llanowar Elves, Elvish Mystic, Elvish Archdruid, Fyndhorn Elves; the
+    // line is Natural Order x2 (8 mana) sacrificing Llanowar and Mystic. It pays only with Archdruid tapped
+    // while four Elves live, and the kill needs Fyndhorn up to attack. Under MTG_HOLD_RELEASE_YIELD alone
+    // the ladder held Archdruid (power 2) on every rung and the prepay declined.
+    EnsureCardsSo();
+    const std::vector<std::vector<std::string>> orders = {
+        { kLlanowar, kMystic, kArch, kFyndhorn }, { kLlanowar, kMystic, kFyndhorn, kArch },
+        { kFyndhorn, kArch, kMystic, kLlanowar }, { kArch, kFyndhorn, kLlanowar, kMystic } };
+    for (const bool pf : { true, false })
+    {
+        heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD]  = 1;
+        heurarm::t_arm[heurarm::HOLD_PRODUCER_FIRST] = pf ? 1 : 0;
+        for (const auto& ord : orders)
+        {
+            CAPTURE(pf); CAPTURE(ord[0]); CAPTURE(ord[1]); CAPTURE(ord[2]); CAPTURE(ord[3]);
+            GameState s = HoldBoardSo(ord);
+            // The helper lays Forest, Forest, Sol Ring: this board has no Sol Ring.
+            s.battlefield.erase(std::remove_if(s.battlefield.begin(), s.battlefield.end(),
+                [](const Permanent& p) { return p.card.m_name.str() == kSolRing; }), s.battlefield.end());
+            s.turn_number = 4;
+            s.players[0].hand.clear();
+            s.players[0].hand.push_back(CardSo(kNO, 10));
+            s.players[0].hand.push_back(CardSo(kNO, 11));
+            std::vector<Action> acts = { CastSo(s, kNO, kHoof), CastSo(s, kNO, kHoof) };
+            acts[0].soulfire_own_targets = NumberOfSo(s, kLlanowar);
+            acts[1].soulfire_own_targets = NumberOfSo(s, kMystic);
+            const bool paid = TurnSolver::BatchPrepayMainCasts(s, acts);
+            if (pf)
+            {
+                CHECK(paid);
+                CHECK_FALSE(TappedSo(s, kFyndhorn));
+                CHECK(TappedSo(s, kArch));
+            }
+            else { CHECK_FALSE((paid && !TappedSo(s, kFyndhorn))); }   // the defect: never the kill's payment
+        }
+    }
+    heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD]  = -1;
+    heurarm::t_arm[heurarm::HOLD_PRODUCER_FIRST] = -1;
+}

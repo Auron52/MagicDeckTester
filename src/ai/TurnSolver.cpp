@@ -39650,6 +39650,39 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (ca.m_name != cb.m_name) { return ca.m_name.str() < cb.m_name.str(); }
         return ca.m_number < cb.m_number;
     };
+    // MTG_HOLD_PRODUCER_FIRST (f): every body the turn's casts sacrifice as a cost (bit per battlefield
+    // index). A second pin of a copy already marked takes another copy of its name, lowest card number.
+    const bool producer_first = hold_yield_on && HoldProducerFirstEnabled();
+    std::uint64_t victim_mask = 0;
+    if (producer_first && n <= 64)
+    {
+        const int nb = static_cast<int>(state.battlefield.size());
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.soulfire_own_targets <= 0) { continue; }
+            const CardDefinition* d = a.def != nullptr
+                ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+            if (d == nullptr || d->params.sac_additional_creature_color.empty()) { continue; }
+            int pinned = -1;
+            for (int i = 0; i < nb; ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index == active && p.card.m_number == a.soulfire_own_targets) { pinned = i; break; }
+            }
+            if (pinned < 0) { continue; }
+            if ((victim_mask & (1ull << pinned)) == 0) { victim_mask |= (1ull << pinned); continue; }
+            int alt = -1;
+            for (int i = 0; i < nb; ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != active || (victim_mask & (1ull << i)) != 0 || !p.card.IsCreature()
+                    || p.card.m_name != state.battlefield[pinned].card.m_name) { continue; }
+                if (alt < 0 || p.card.m_number < state.battlefield[alt].card.m_number) { alt = i; }
+            }
+            if (alt >= 0) { victim_mask |= (1ull << alt); }
+        }
+    }
+    auto is_victim = [&](int i) { return i >= 0 && i < 64 && (victim_mask & (1ull << i)) != 0; };
     if (DepletionReserveEnabled() && n <= 64)
     {
         for (int i = 0; i < n; ++i)
@@ -39681,6 +39714,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             {
                 const Permanent& p = state.battlefield[i];
                 if (p.controller_index != active || p.tapped || p.EffectivePower() != bpow) { continue; }
+                if (is_victim(i)) { continue; }   // MTG_HOLD_PRODUCER_FIRST (f)
                 if (!CanAttackFull(p, state.battlefield, active, &hs)) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
                 if (!(d && ((d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
@@ -39691,6 +39725,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             }
             if (pick >= 0) { best = pick; }
         }
+        if (is_victim(best)) { best = -1; }   // MTG_HOLD_PRODUCER_FIRST (f): its body is spent by a cost
         if (best >= 0 && best < 64)
         {
             const Permanent& bp = state.battlefield[best];
@@ -39724,6 +39759,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // MTG_HOLD_RELEASE_YIELD (c): the line's own sacrifice victim is spent by a cost, so
             // holding it protects no attack -- leave it payable (the sac-fodder pin taps it first).
             if (hold_yield_on && _sac_victim != 0 && p.card.m_number == _sac_victim) { continue; }
+            if (is_victim(i)) { continue; }   // MTG_HOLD_PRODUCER_FIRST (f): every victim of the turn
             reserved_crea |= (1ull << i);
         }
     }
@@ -39859,6 +39895,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             }
             const int pwa = state.battlefield[a].EffectivePower();
             const int pwb = state.battlefield[b].EffectivePower();
+            if (producer_first)
+            {
+                // MTG_HOLD_PRODUCER_FIRST (e): the biggest producer releases first, at any power.
+                const int ya = hold_yield(a), yb = hold_yield(b);
+                if (ya != yb) { return ya > yb; }
+                if (pwa != pwb) { return pwa < pwb; }
+                return hold_tie_less(a, b);
+            }
             if (pwa != pwb || !hold_yield_on) { return pwa < pwb; }
             // MTG_HOLD_RELEASE_YIELD (a): equal power -> the bigger producer releases first (one
             // tap of it covers what several flat bodies would, each costing one attacker), then the
