@@ -177,14 +177,39 @@ Every 20-life StompySurprise slower game recovers under both order arms. The fou
 The three slower games -- selesnya d3 gi964 6->7, selesnya d0 gi36 6->7, fivecolour d0 gi1040 6->7 -- all
 recover at stage 1 (single-game repros). **The payment fix alone meets the bar on every deck it moves.**
 
-### 3.3 v6 (2026-10-15): the candidate lever set -- PENDING (queued behind the fleet's FIFO lock)
+### 3.3 v6 (2026-10-15): the candidate lever set
 
-ONE pooled batch (`run_v6.sh`, `gen_v6.py`, `analyze_v6.py`; 2,616 jobs, 644,400 games): StompySurprise at
-twice the v4 sizes (8,000 / 12,000 / 40,000; 2HG half) under `off`, `ofix`, `onotop`, `ofixall` (= ofix +
-`MTG_SAC_VICTIM_SAME_NAME` + `MTG_EXEC_PUT_DEFERRED` + `MTG_HOLD_PRODUCER_FIRST`, the candidate),
-`onotopall`, `ofixsvnpd` (what producer-first adds) and `fixall` (the order OFF, the engine levers alone);
-every other suite deck at 150 games per cell under `fixall`, against v4's off / fix arms on the same games.
-Results: see the RESUME note until filled in.
+ONE pooled batch (`run_v6.sh`, `gen_v6.py`, `analyze_v6.py`; 2,616 jobs, 644,400 games, 15:22-16:02 UTC,
+20/20 workers busy; binary = `cfd18d67`'s src): StompySurprise at twice the v4 sizes under `off`, `ofix`,
+`onotop`, `ofixall` (= ofix + `MTG_SAC_VICTIM_SAME_NAME` + `MTG_EXEC_PUT_DEFERRED` + `MTG_HOLD_PRODUCER_FIRST`,
+the candidate), `onotopall`, `ofixsvnpd` (without producer-first) and `fixall` (the order OFF, the payment fix
++ the three levers); every other suite deck at 150 games per cell under `fixall`. Paired per game vs `off`,
+loss = 9. Full table: `test/tools/stompy_order_ab/results/analysis_v6.txt`.
+
+**Identity:** `off`, `ofix`, `onotop` equal v4's same arms game for game on every StompySurprise cell (v4's
+games: 4,000 / 6,000 / 20,000 and 2HG half -- 0 differences in 45,000 x 3 arm-games).
+
+| deck | cell | games | `ofixall` vs off (faster / slower / net / units) | `onotopall` vs off | `fixall` vs off | `ofixall` vs `ofix` |
+|---|---|---|---|---|---|---|
+| stompy | shipped | 8,000 | 58 / 5 / **-53** / 1.910x | 44 / 0 / -44 / 1.015x | 14 / 0 / -14 / 0.989x | 3 / 0 / -3 |
+| stompy | d3 b10 | 12,000 | 107 / 13 / **-94** / 1.210x | 89 / 2 / -87 / 1.006x | 33 / 1 / -32 / 0.996x | 13 / 1 / -12 |
+| stompy | d0 | 40,000 | 2,767 / 300 / **-2,537** | 2,545 / 271 / -2,333 | 1,327 / 24 / -1,306 | 1,013 / 63 / -950 |
+| stompy2hg | shipped | 4,000 | 81 / 7 / **-74** / 1.549x | 64 / 1 / -63 / 0.990x | 31 / 0 / -31 / 0.974x | 20 / 0 / -20 |
+| stompy2hg | d3 b10 | 6,000 | 133 / 8 / **-126** / 1.202x | 112 / 3 / -110 / 1.000x | 52 / 0 / -53 / 0.989x | 38 / 0 / -38 |
+| stompy2hg | d0 | 20,000 | 1,375 / 265 / **-1,177** | 1,281 / 219 / -1,129 | 637 / 9 / -634 | 503 / 9 / -501 |
+
+* **Every cell net <= 0 for every arm**, and the three engine levers improve on the order + payment fix in
+  every cell (`ofixall` vs `ofix`). `MTG_HOLD_PRODUCER_FIRST` carries almost all of that (`ofixall` vs
+  `ofixsvnpd`: -3 / -12 / -945 / -17 / -35 / -504); the other two are rare-board fixes.
+* **What TOP_RESOLVE buys now** (`ofixall` vs `onotopall`): shipped -9 (14 / 5) at 1.88x units and 2HG -11
+  (19 / 8) at 1.56x; d3 -7 / -16 at 1.20x; d0 -204 / -48.
+* **The other suite decks under `fixall`** (vs v4's off, 150 games per cell): byte-identical outcomes
+  everywhere except SelesnyaLifegain (shipped -2, d3 -2, d0 1 faster / 1 slower -- the known gi36 -- and
+  -1 / -1 / -1 against the payment fix alone) and FiveColour d0 (-1); digest-only moves on Bruna and
+  FiveColour; KittyEquipment v2 / v3 change work units only (0.998x-1.005x), not play.
+
+**Recovery** of every slower game (598 `ofixall`, 35 `fixall`, 496 `onotopall`) and the reference bench run in
+one queued lock slot (`refs_v6`); results in §3.4.
 
 ### 3.0 The first A/B, without the fix (2026-10-14, superseded)
 
