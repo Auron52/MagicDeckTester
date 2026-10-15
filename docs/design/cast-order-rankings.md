@@ -876,8 +876,11 @@ shipped games lost a turn and recovered at no budget; the cause was a PAYMENT ti
 ladder chose which equal-power elf to keep by battlefield position, and the order always lands the 1-drops
 before Priest of Titania), fixed behind `MTG_HOLD_RELEASE_YIELD`. `MTG_STOMPY_ORDER` is default OFF until the
 order + fix clears the bar; v4 (order + fix vs today): shipped -17, d3 -45, d0 -774 on StompySurprise and
--26 / -45 / -330 on 2HG. The implemented order, every tie-break and the measurement:
-**docs/design/stompy-order-2026-10-14.md**. The text below is the history.
+-26 / -45 / -330 on 2HG. v5: every 20-life slower game recovers; four 2HG ones did not, and each had its own
+engine defect the order exposed (a stale Natural Order victim pin, an executor breakpoint replayed inline,
+a prepay hold that never released Archdruid) -- three more default-OFF levers, with which all of them
+recover at stage 1; the pooled adoption A/B of the set (v6) is queued. The implemented order, every
+tie-break and the measurement: **docs/design/stompy-order-2026-10-14.md**. The text below is the history.
 
 **PROPOSED (USER, 2026-08-21) — implemented behind `MTG_STOMPY_ORDER` (default OFF), measured,
 awaiting the USER's adoption call.** `StompyProvider::CastOrderRank` + `CastOrderTierName` deliver

@@ -1,6 +1,8 @@
 # StompySurprise: the USER-approved cast order, built and measured (2026-10-14)
 
-**Status (2026-10-14 night): BUILT (commit `e1f1bba1`), measurement PARTIAL -- paused for the USER's value-leaf run; see RESUME at the end.** Defaults in the commit: `MTG_STOMPY_ORDER`, `MTG_STOMPY_ORDER_SEARCH`, `MTG_STOMPY_TOP_RESOLVE` all ON (=0 hatches), PENDING the bar below. Self-contained. The USER's verbatim 2026-08-21 order
+**Status (2026-10-15): BUILT; the order and five engine / payment levers are all DEFAULT OFF pending the bar
+(§6).** Every slower game of the v4 measurement has a root cause (§4) and, with the candidate lever set,
+recovers at stage 1 (§3.2); the pooled adoption A/B of that set is §3.3. Self-contained. The USER's verbatim 2026-08-21 order
 and rulings are in `docs/design/cast-order-rankings.md` §StompySurprise; the 2026-10-14 draft it was
 amended from is `docs/design/cast-order-drafts-2026-10-14/StompySurprise.md`.
 
@@ -48,9 +50,13 @@ and come from card params, never names; `[n]` is the USER's 2026-08-21 tier numb
     `top_stacked_card_number`): Turntimber consumes it where it stands; the tutor goes late.
   * World War Hulk reads the **hand** (chapter I frees a hand card).
   This removes the documented over-trigger of the 08-21 rank ("an UNCAST hand tutor still forces NO early").
-* **`CastOrderTotal`** (new `DecisionProvider` hook): the shared comparator (`CastOrderLessRanked`) breaks a
-  rank tie between two different casts by a FIXED key -- name, then tutor target, own target (Natural
-  Order's sacrifice), X -- never plan / hand order. Every other provider keeps plan order (default false).
+* **The TOTAL order's name key** is the canonical one (`DecisionProvider::CastOrderTotalByName` +
+  `CastOrderNameTieLess`, ManaPayment.h, integration `2ac8db0b`, cherry-picked here as `12940063`; the
+  first build's own `CastOrderTotal` hook is gone, play-identical -- `e6e3db0d`): the shared comparator breaks
+  a rank tie between two DIFFERENT cards by name, never plan / hand order. Copies of ONE card carrying
+  different choices are refined by the arrangement's `StompyFixedKeyLess`: tutor target (by name, or with
+  `MTG_STOMPY_NO_TARGET_RANK` for Natural Order copies by the target's own slot -- default OFF, it moved
+  nothing measured), then the sacrificed card, then X.
 * **The searched two-way slots** (`WantsCastOrderingSearch` + `CastOrderingCandidates`,
   `MTG_STOMPY_ORDER_SEARCH`): the canonical order first, then one variant per dual card present at its OTHER
   slot, deduplicated (by sequence here, by end state in `EnumeratePlans`). A set with no dual card, or whose
@@ -142,6 +148,44 @@ SelesnyaLifegain (shipped 1 faster, d3 1 faster, d0 1 SLOWER -- gi36 6->7), Five
 shipped and two d3 games digest-only) and Bruna (one digest-only game per cell). Those three are re-measured
 at a larger sample in v5 (§3.2), with every slower game's recovery.
 
+### 3.2 v5 (2026-10-15): every v4 slower game's recovery, and the fix's movers at a larger sample
+
+ONE pooled batch on the fix binary (2,026 jobs, 19,650 games; finished before the 9p mount loss). Stage 1 =
+`--depth max(shipped, old win turn) --budget-ms 100`, stage 2 = `--depth 8 --budget-ms 0`, each under its
+arm's flags (`recov_v5.py`).
+
+| arm | slower games (v4) | stage 1 | stage 2 | NO |
+|---|---|---|---|---|
+| fix | 6 (stompy d0 2, stompy2hg d0 3, selesnya d0 1) | 6 | - | 0 |
+| ofix | 516 | 512 | 0 | **4**: stompy2hg ship gi160, ship gi797, d3 gi797, d3 gi2290 (each 4 -> 5, s1 = s2 = 5) |
+| onotop | 453 | 448 | 0 | **5**: the same four + stompy2hg d3 gi2791 |
+
+Every 20-life StompySurprise slower game recovers under both order arms. The four 2HG ones are §4b-§4d.
+
+**The payment fix's movers** (fix vs off, paired; v4's games 0..149 pooled with v5's 150..; `analyze_v5.py`):
+
+| deck | cell | games | faster | slower | net | units |
+|---|---|---|---|---|---|---|
+| SelesnyaLifegain | shipped | 750 | 3 | 0 | **-3** | 0.996x |
+| | d3 | 1,150 | 5 | 1 | **-4** | 0.996x |
+| | d0 | 3,150 | 10 | 1 | **-9** | - |
+| FiveColour | shipped | 450 | 0 | 0 | 0 | 0.998x |
+| | d3 | 650 | 0 | 0 | 0 | 0.999x |
+| | d0 | 2,150 | 5 | 1 | **-4** | - |
+| Bruna | shipped / d3 / d0 | 300 / 450 / 1,150 | 0 | 0 | 0 | 1.000x |
+
+The three slower games -- selesnya d3 gi964 6->7, selesnya d0 gi36 6->7, fivecolour d0 gi1040 6->7 -- all
+recover at stage 1 (single-game repros). **The payment fix alone meets the bar on every deck it moves.**
+
+### 3.3 v6 (2026-10-15): the candidate lever set -- PENDING (queued behind the fleet's FIFO lock)
+
+ONE pooled batch (`run_v6.sh`, `gen_v6.py`, `analyze_v6.py`; 2,616 jobs, 644,400 games): StompySurprise at
+twice the v4 sizes (8,000 / 12,000 / 40,000; 2HG half) under `off`, `ofix`, `onotop`, `ofixall` (= ofix +
+`MTG_SAC_VICTIM_SAME_NAME` + `MTG_EXEC_PUT_DEFERRED` + `MTG_HOLD_PRODUCER_FIRST`, the candidate),
+`onotopall`, `ofixsvnpd` (what producer-first adds) and `fixall` (the order OFF, the engine levers alone);
+every other suite deck at 150 games per cell under `fixall`, against v4's off / fix arms on the same games.
+Results: see the RESUME note until filled in.
+
 ### 3.0 The first A/B, without the fix (2026-10-14, superseded)
 
 Pre-flight (seed 1001, the smoke seeds): the new binary with `MTG_STOMPY_ORDER=0` reproduces the committed
@@ -207,40 +251,111 @@ Unit cover: `test/unit/test_stompy_order.cpp`, both boards in several battlefiel
 
 The full re-measure with the fix is §3 (v4).
 
-## 5. Findings and questions for the USER (so far)
+### 4b. 2HG gi160: a stale Natural Order victim pin falls back by battlefield position
 
-1. **The TOP_RESOLVE opt-in costs ~2x work** at the shipped settings (1.9x on the partial A/B, 2.3x on the
-   pre-flight), because the reset's continuation is not narrowed by BP_NEW_ONLY (§2). Shipped ON per the
-   approved design; the USER may prefer to wait for the audit's narrowing.
-2. **The tie-breaks of §1.2** are agent choices for the USER to confirm (1-drops by name; Terastodon last,
-   the other fatties cheapest first, Hornet Queen before Elderscale).
-3. **Terastodon's K projection** (pre-existing, not the order): `ProjectEtbDestroyK`'s this-turn Craterhoof
+* The proposed fix was "order Natural Order copies by TARGET rank, not target name" (`MTG_STOMPY_NO_TARGET_RANK`,
+  built, default OFF). **It is not the cause and recovers none of the four**: the plan's two Natural Orders
+  carry no pinned target there (each resolves the provider's choice), so the name key never ordered them.
+* **The cause** (scenarios `scn_2hg160_t3.json`, `_t4.json`, `_t4b.json`): the T4 kill is Natural Order ->
+  Ghalta (its ETB puts the drawn Craterhoof from hand) and Natural Order -> Craterhoof, paying with both
+  Priests (tapped while three Elves live) and the lands, Fyndhorn Elves held to attack: 31 against 30.
+  TurnSolver emits a Natural Order's sacrifice victim **once per distinct NAME**, the pre-plan board's
+  most-expendable copy pinned by card number -- so BOTH Natural Orders pin the SAME Priest. The second pin
+  is stale when it is paid, and `PerformSacrificeCreatureCost` fell back to the most-expendable creature by
+  power, then **battlefield position**. With Fyndhorn entered between the Priests (the USER order casts the
+  1-drop first) it ate the held Fyndhorn. The same T4 board in the two layouts: T4 vs T5 **on either arm,
+  order on or off** -- the order only exposes it.
+* **Fix: `MTG_SAC_VICTIM_SAME_NAME`** (`EngineFlags.h`; `ResolveSacVictimId`, SpellEffects.h): a stale pin
+  means what the axis means -- another copy of that name (tapped first, then lowest card number); the
+  payment's sac-victim pin reads the same id, in both worlds (one helper). Rules: any green creature is a
+  legal victim (CR 601.2h pays the additional cost while casting); this only names which. Only
+  StompySurprise plays Natural Order. **gi160 recovers at stage 1.**
+
+### 4c. 2HG gi797 (shipped and d3): the executor replayed a deferred breakpoint inline
+
+* T4 line Elvish Mystic, Vaultborn Tyrant, Natural Order (sacrificing Vaultborn, whose token copy and the
+  fetched Craterhoof each draw) + the continuation [Fyndhorn, Fyndhorn, Craterhoof]. The order's searched
+  candidate (`Plan::searched_order`) took the executor's searched-order loop, where `put_in_hand_armed()`
+  (MTG_BP_PUT_IN_HAND, site 10: "did the hand gain a card?") is an INLINE breakpoint: the committed segment
+  replayed right after Vaultborn's draw, before Natural Order -- one Fyndhorn castable, the other Fyndhorn
+  and the Craterhoof not yet drawn, and the end-of-main catch-all then saw the segment as replayed.
+* **The rollout arms site 10 as a DEFERRED re-solve** (end of `apply_one`: `deferred_cantrip_resolve`, cast
+  the rest of the plan, then run the continuation), and the executor's clean loop matches it -- which is why
+  the order-off arm (clean route) won T4. The searched and opaque loops did not.
+* **Fix: `MTG_EXEC_PUT_DEFERRED`** (executor only; the rollout already defers): those two loops treat a
+  site-10 cast like `acq_deferred` -- a committed segment replays at the catch-all, the no-commit fallback
+  re-solves once after the main casts. Searched decisions only. **gi797 recovers at stage 1 in both cells.**
+
+### 4d. 2HG gi2290 (d3): the prepay held the power-2 Archdruid on every rung
+
+* T4 kill: Natural Order x2 -> Craterhoof x2, sacrificing the 1-drops Llanowar and Mystic; 8 mana EXACTLY,
+  with Elvish Archdruid tapped while four Elves live and Fyndhorn held to attack (32 against 29). Same board
+  in two layouts (`scn_2hg2290_t4.json` / `_t4b.json`, Archdruid before / after Fyndhorn): T4 vs T5 on either
+  arm.
+* `MTG_PREPAY_HOLD_TRACE`: every rung of the whole-turn prepay held Archdruid -- (a) orders only EQUAL-power
+  bodies by yield, so a power-2 body outlives every 1/1 -- and (c) excluded only the FIRST Natural Order's
+  victim, so the prepay declined and the sequential payer's battlefield order decided which body paid.
+* **Fix: `MTG_HOLD_PRODUCER_FIRST`** (under `MTG_HOLD_RELEASE_YIELD`): (e) the ladder releases the biggest
+  producer first (yield, then power, then name / number) -- under a team pump every body is one attacker, and
+  one Archdruid tap pays what four 1/1s would; (f) no body any of the turn's casts sacrifices is held (every
+  Natural Order victim; a repeated pin takes another copy of its name). **gi2290 recovers at stage 1.**
+  Payment is the permitted greedy area; unit cover in `test_stompy_order.cpp`.
+
+### 4e. 2HG gi2791 (d3): recovers with TOP_RESOLVE, not without
+
+Slower only in the `onotop` arm. The faster line casts Vaultborn, then Worldly Tutor (its card on top), then
+Natural Order, whose entries make Vaultborn draw the tutored card the same turn. With the TOP_RESOLVE opt-in
+(the shipped design) it recovers at stage 1 (`ofixall`); without it, it stays at 5 at both stages. It is a
+statement about the TOP_RESOLVE question (§5.1), not a defect of the order.
+
+**All together** (`ofixall`: the order + `MTG_HOLD_RELEASE_YIELD` + `MTG_SAC_VICTIM_SAME_NAME` +
+`MTG_EXEC_PUT_DEFERRED` + `MTG_HOLD_PRODUCER_FIRST`): the four 2HG non-recoverers AND the ten 20-life
+shipped / d3 slower games of v4 recover at stage 1 (`rec_ntr/r_all`, single-game repros).
+
+## 5. Findings and questions for the USER
+
+1. **TOP_RESOLVE costs ~1.9x work units at the shipped settings** (1.90x StompySurprise, 1.56x 2HG; 1.2x at
+   d3) for 3 (20-life) and 9 (2HG) shipped turns over 4,000 / 2,000 games (§3.1), because the reset's
+   continuation is not narrowed by BP_NEW_ONLY (§2). It also carries 2HG gi2791 (§4e). Shipped ON inside the
+   order per the approved design; the USER's call whether that price is right, or to wait for the
+   breakpoint audit's narrowing.
+2. **The tie-breaks of §1.2** are agent choices for the USER to confirm: the 1-drops by name; Terastodon
+   last, the other fatties cheapest first, Hornet Queen before Elderscale; copies of one card by target name.
+3. **Natural Order copies by target rank** (`MTG_STOMPY_NO_TARGET_RANK`): built as asked, default OFF. It is
+   not what lost gi160 and moved none of the measured games; the rule (Ghalta 1700 before Craterhoof 2100,
+   i.e. the USER's own order applied to what Natural Order puts) is the USER's to adopt or drop.
+4. **Three engine defects found under the order, each its own default-OFF lever** (§4b-§4d):
+   `MTG_SAC_VICTIM_SAME_NAME`, `MTG_EXEC_PUT_DEFERRED`, `MTG_HOLD_PRODUCER_FIRST`. All three are
+   battlefield-position or executor/rollout lockstep defects that the order merely exposed (each one's
+   failing board fails with the order OFF too). Recommendation: adopt with the order if §3.3 clears the bar.
+5. **Terastodon's K projection** (pre-existing, not the order): `ProjectEtbDestroyK`'s this-turn Craterhoof
    window prices the route against the pool BEFORE the destroyed permanents, while the destroy loop eats
    UNTAPPED Forests once the tapped ones run out -- so K can eat mana a later Craterhoof cast needed.
    Terastodon-last-in-the-group minimises the exposure; the projection itself is unchanged.
-4. **World War Hulk early with a plan that hard-casts the dearest body:** chapter I frees that same body
+6. **World War Hulk early with a plan that hard-casts the dearest body:** chapter I frees that same body
    and the hard-cast finds no card (its mana is left unspent). The searched late slot covers it at d > 0;
-   d0 plays the canonical (early) slot. Watch the d0 cell for it.
+   d0 plays the canonical (early) slot.
 
 ## 6. Defaults as shipped
 
-In `e1f1bba1`: all three ON. If the full measurement fails the bar they go OFF (=0 restores today exactly).
+All DEFAULT OFF (`=1` enables, per job via heurarm): `MTG_STOMPY_ORDER` (since `0731e8a5`; its
+`MTG_STOMPY_ORDER_SEARCH` and `MTG_STOMPY_TOP_RESOLVE` stay ON inside it), `MTG_HOLD_RELEASE_YIELD`,
+`MTG_SAC_VICTIM_SAME_NAME`, `MTG_EXEC_PUT_DEFERRED`, `MTG_HOLD_PRODUCER_FIRST`, `MTG_STOMPY_NO_TARGET_RANK`.
+Off, every one is byte-identical to the tree before it (v6's identity rows). The recommendation, pending
+§3.3 and the reference bench: the order ON with the four levers above (TOP_RESOLVE as built) -- a USER
+decision.
 
-## RESUME (2026-10-14 night)
+## RESUME (2026-10-15)
 
-* **Base commit** `3e3c44a1` (work/integ-2026-10-14 tip). **Branch** `worktree-agent-a9d0a1cbf3361f164`.
-  Implementation `e1f1bba1`; this WIP commit adds the tooling + partial results + this note.
-* **Binaries** (build volume, regenerable): `build/scratch/stompy-order/bin/mtg.base` (3e3c44a1),
-  `bin/mtg.new` (e1f1bba1). Rebuild with `./build.sh` at those commits if the volume is gone.
-* **Resume the A/B:** `bash test/tools/stompy_order_ab/run_ab.sh v3` from the worktree root (both binaries
-  concurrently, cores 0-5, one pooled batch each; manifests via `gen_manifest.py`, saved copies in
-  `test/tools/stompy_order_ab/results/`). Cells: shipped (value_play, d6 b20), d3 b10, d0; stompy 4,000 /
-  6,000 / 20,000 games, stompy2hg half; seeds 10900001+gi (chunk: seed = 10900001+off, game_index = off);
-  identity = every other suite deck x 3 cells x 24 games; the off-switch prefix (new binary,
-  `MTG_STOMPY_ORDER=0`) in the new manifest. To skip the 2,750 shipped games already done, reuse
-  `ab_v2/wins_*` (the analysis pairs on (deck, cell, gi)) and drop chunks c0..c2500 of `stompy.ship.*`.
-* **Then:** `analyze.py <wins_base> <wins_new> --slower-out slower.txt`; recovery stage 1 / 2 via
-  `gen_recovery.py slower.txt 1|2 out.json` + `runm.sh mtg.new out.json <dir>`; per-turn diffs via
-  `gen_trace.py` + `runt.sh` on both binaries + `diffgames.py`.
-* **Left:** the rest of the A/B, every slower game's recovery / root cause, the rankings-doc update, the
-  defaults decision.
+* **Branch** `worktree-agent-a9d0a1cbf3361f164` (local only). Code: `d95813f6` (victim + target-rank levers),
+  `cfd18d67` (put-deferred + producer-first), `093daf8c` (unit case, reference tools).
+* **Binaries** (build volume): `build/scratch/stompy-order/bin/mtg.pf` = `mtg.final` = `cfd18d67`'s src
+  (`mtg.svn` was re-pointed at the same binary before v6 started; the svn-only build is `mtg.svnonly`).
+* **v6** (`ab_v6`, queued 12:51 UTC on FIFO ticket 12, swapped to the final arm set at 13:12 -- `SWAP.txt`):
+  when it lands, `analysis.txt` holds every arm vs off, the increments, the identity rows and the other-deck
+  screen; then recovery of every slower game: `gen_rec.py <out> ofixall,onotopall,fixall <ab_v6/slower.*.txt>`
+  + `repro.sh` (or one pooled batch through the lock if there are many).
+* **Reference bench** (`refs_v6`, queued after v6): `run_refs.sh` -> `refs_v6/cmp.txt` (defaults vs the
+  levers, every reference deck). It runs the worktree's `build/Release/mtg`: do not rebuild the worktree
+  before it has started.
+* **Left:** fill §3.3 and the reference result; the defaults decision is the USER's.

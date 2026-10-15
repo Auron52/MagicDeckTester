@@ -1,0 +1,17 @@
+loss = 9; fix vs off, paired per game; net = sum(fix - off)
+
+deck        cell       n      off      fix  fast  slow    net  ident    units
+selesnya    ship     750   5.1240   5.1200     3     0     -3    704   0.996x
+selesnya    d3      1150   5.1678   5.1643     5     1     -4   1083   0.996x
+selesnya    d0      3150   5.6870   5.6841    10     1     -9   3013        -
+fivecolour  ship     450   4.7911   4.7911     0     0     +0    441   0.998x
+fivecolour  d3       650   4.8292   4.8292     0     0     +0    640   0.999x
+fivecolour  d0      2150   5.5544   5.5526     5     1     -4   2082        -
+bruna       ship     300   4.9533   4.9533     0     0     +0    299   1.000x
+bruna       d3       450   4.9933   4.9933     0     0     +0    449   1.000x
+bruna       d0      1150   6.1400   6.1400     0     0     +0   1146        -
+
+slower games (deck cell gi off fix):
+  selesnya d3 gi964 6->7
+  selesnya d0 gi36 6->7
+  fivecolour d0 gi1040 6->7

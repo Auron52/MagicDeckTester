@@ -1,0 +1,25 @@
+== ofix: {'stage1': 512, 'NO': 4}
+   stompy     d0    {'stage1': 304}
+   stompy     d3    {'stage1': 8}
+   stompy     ship  {'stage1': 2}
+   stompy2hg  d0    {'stage1': 188}
+   stompy2hg  d3    {'stage1': 6, 'NO': 2}
+   stompy2hg  ship  {'NO': 2, 'stage1': 4}
+   NO  stompy2hg ship gi160 4->5 s1=5 s2=5
+   NO  stompy2hg ship gi797 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi797 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi2290 4->5 s1=5 s2=5
+== onotop: {'stage1': 448, 'NO': 5}
+   stompy     d0    {'stage1': 289}
+   stompy2hg  d0    {'stage1': 158}
+   stompy2hg  d3    {'NO': 3, 'stage1': 1}
+   stompy2hg  ship  {'NO': 2}
+   NO  stompy2hg ship gi160 4->5 s1=5 s2=5
+   NO  stompy2hg ship gi797 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi797 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi2290 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi2791 4->5 s1=5 s2=5
+== fix: {'stage1': 6}
+   selesnya   d0    {'stage1': 1}
+   stompy     d0    {'stage1': 2}
+   stompy2hg  d0    {'stage1': 3}
