@@ -306,8 +306,12 @@ aligned them strictly left-to-right, read Volley's target as an insertion, jamme
 frame, and answered every later pick -- the T4 land drop included -- by default (a pass). The engine played the
 human's line correctly; the checker lost it. `test/viewer_protocol_check.py` now answers a sub-decision of the
 current plan with the recorded answer of the SAME identity (type, turn, source) found later in the same plan's
-run of frames, reported as a repair ("answered in the plan's new cast order"). Whole-corpus replay of the checker
-change (original vs patched checker on the shipped binary, every deck's references): see "Defaults".
+run of frames, reported as a repair ("answered in the plan's new cast order"). Whole corpus with the shipped
+binary and the patched checker (every deck's references but KittyEquipment v2 `claude_s8_gi7`, whose replay
+runs for hours on every binary): **579 refs, 181 ok, 398 repaired, 0 play-drift / shuffle-dead / board-diverged
+/ enum-gap / mull-drift / contract-fail**. The new branch fired on exactly two references, both burn
+(`claude_s17_gi16`, `claude_s7_gi6` -- the latter already reproduced, but with 2 recorded picks left unused; now
+all consumed); on the other 577 the walk is the original checker's by construction (the branch never ran).
 
 ## Defaults as shipped
 
