@@ -26920,194 +26920,86 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
     if (EnvOn("MTG_FIVEC_UNITE_ALLIN", true)) { out.push_back(N); }
 }
 
-// ---- KittyEquipment: the USER-reviewed cast order (review held 2026-08-19) -----------------------
+// ---- KittyEquipment: the USER's cast order (MTG_KE_ORDER, DEFAULT ON) ---------------------------
 //
-// THE RULING, verbatim: "Puresteel Paladin, Stoneforge Mystic and equipment should be in front I
-// think for the card draw/tutor effect. Swords and Unexpectedly are essentially unused in
-// goldfish."
+// THE CURRENT RULING, verbatim (USER 2026-10-15; docs/design/cast-order-review-2026-10-14.md,
+// "KittyEquipment -- SETTLED"): "I guess v1s order is okay except thatwe should split the equipment.
+// The creatures going after equipment is not all that important." and "Sram should be main 1 like
+// Puresteel." It amends the 2026-10-04 ruling (ONE order for v1, v2-puresteel-hammer and
+// v3-adelbert-gauntlets; land first, equip abilities last, removal never cast) and the 2026-10-05
+// Dwalin amendment. The realised v1 order, every cast in main 1:
+//   land > Sol Ring > Puresteel Paladin > Stoneforge Mystic > Kor Duelist > Kemba, Kha Regent >
+//   Armored Skyhunter > Balan, Wandering Knight > Bonesplitter > Colossus Hammer > O-Naginata >
+//   Shadowspear > Lightning Greaves > Umezawa's Jitte > Grafted Wargear > Loxodon Warhammer.
+// The classes are keyed on PARAMS, not names (house style: a deck gets its order from card data); the
+// class list is in EquipmentProvider::CastOrderRank below, and test/unit/test_kitty_cast_order.cpp
+// pins all three lists.
 //
-// What that buys, in card terms (params read from cards.json, not recalled):
-//   * Puresteel Paladin FIRST of the three. draw_on_equipment_etb makes every Equipment that
-//     enters AFTER it draw a card, and metalcraft_equip_zero_artifacts=3 makes every equip cost
-//     {0} once three artifacts are out. Cast it after the equipment and BOTH halves are wasted --
-//     the draws never happen and the equips are paid at printed cost.
-//   * Stoneforge Mystic second. Its ETB tutor_to_hand(Equipment) puts a card in HAND, so it cannot
-//     draw off itself -- it has to precede the equipment casts it feeds, and MTG_ACQ_RESOLVE
-//     re-solves the phase at that acquisition so the tutored card is castable in the same line.
-//   * Equipment third -- AHEAD OF THE REMAINING CREATURES, which is the part that differs from the
-//     generic order (creatures 10, "other noncreature" 20). With a Paladin out a {1} Equipment IS
-//     this deck's cantrip, so it belongs in front on the same information-first argument that puts
-//     draws early everywhere else. With no Paladin out the move is a no-op: the equips are applied
-//     after every cast either way, so cast order among triggerless spells cannot change the board.
-//     That is why this is a FLAT rule and not a board-conditional promotion -- there is nothing to
-//     gate, and a conditional rank would only make the report harder to review.
-//   * Swords to Plowshares / Unexpectedly Absent LAST, and Main2. HONEST BRACKET: they are inert
-//     here only because this goldfish has no blocking -- in a real game Swords on a blocker is
-//     precisely an attack-enabler, so this ranking is right for the current apparatus and wrong for
-//     the eventual real-opponent phase. UA's hand-cast is additionally pruned from the autonomous
-//     search altogether (UnprunedGate::UACast), so its rank is inert today whatever it says.
+// "SPLIT THE EQUIPMENT": every Equipment gets its own slot -- cheapest mana value first (with a Paladin
+// out each Equipment that enters draws a card, so cheapest first is the most draws per mana), then BY
+// NAME within a cost, through CastOrderTotalByName (the USER's cross-deck rule, 2026-10-14: "Let's
+// fully order the cards in each list inasmuch as possible. I don't like the randomness of choosing the
+// order."). That replaced an 8-bit name HASH as the within-cost tie-break: an order nobody could
+// review, and one a future list could collide on (a silent hand-order tie).
 //
-// Sol Ring is deliberately NOT listed: it is not an Equipment, so it falls through to the generic
-// MANA ROCK tier (5) and stays ahead of all of this -- which is what the ruling wants anyway, since
-// its {C}{C} funds the very casts being pulled forward, and it is itself artifact #N for metalcraft.
-// Colossus Hammer is deliberately NOT special-cased either: its equip {8} is unpayable without
-// metalcraft / Balan's attach-all / a Skyhunter put, but it is still a fine ARTIFACT to cast (it
-// advances metalcraft and Balan's two-equipment double-strike threshold), so it rides the
-// equipment tier with the rest.
+// "THE CREATURES GOING AFTER EQUIPMENT IS NOT ALL THAT IMPORTANT": the hosts stay ahead of the
+// Equipment, as on 10-04. That supersedes the 2026-08-25 order (Equipment AHEAD of the hosts; USER
+// then: "It just shouldn't be played until you have finished drawing"), adopted because under the
+// GENERIC order breakpoint condemnation lost 6 of 3,000 games. It costs no line here: the Puresteel
+// draws (breakpoint site 6) are deferred past every cast of the plan, so a host's slot inside the plan
+// never changes what the draws can inform, and condemnation only drops a card the plan skipped, whose
+// sibling plan casting it at its own slot the search still enumerates.
 //
-// ADOPTED 2026-08-25 (USER). DEFAULT ON; MTG_KE_ORDER=0 disables. It governs three hooks together
-// -- CastOrderRank, OrderOpaqueCastsByRank and MainPhaseOverride -- and all three were measured as
-// one arm.
+// Swords to Plowshares / Unexpectedly Absent are never cast (NeverCast, USER 2026-10-04). HONEST
+// BRACKET: they are inert only because this goldfish has no blocking -- in a real game Swords on a
+// blocker is precisely an attack-enabler.
 //
-// Quality: 3,000 paired games at play settings, 0 better / 0 worse against the generic order (and
-// 5,000 paired earlier, likewise 0 changed win turns). Cost: single-threaded min-of-3 over 750
-// games x 2 seeds, 67.47 vs 67.35 and 65.81 vs 65.80 -- inside +-0.2%. The "+4.8% SLOWER" recorded
-// in cast-order-rankings.md does NOT reproduce at that sample size; do not quote it again without
-// re-measuring (and never from a pooled batch -- this deck has already produced a +71% pooled
-// artifact for a +4.8% real delta).
-//
-// So it does not clear the bar on its own measurement -- it is neutral on both axes. What carries
-// it is a SECOND, independent result: this order is the precondition that makes breakpoint
-// condemnation sound. The generic order ranks creatures 10 and every other noncreature, Equipment
-// included, 20 -- so it deploys Kor Duelist BEFORE the Equipment whose Puresteel ETB does the
-// drawing, which is backwards from the information-first rule this order exists to encode
-// (Equipment 8, ahead of the hosts at 10: "with a Paladin out a {1} Equipment IS this deck's
-// cantrip"). Under the generic order, order-aware condemnation still loses 6 games in 3,000
-// because the winning line is unrepresentable; under this one it loses none. USER 2026-08-25:
-// "It just shouldn't be played until you have finished drawing."
-//
-// Adopted SEPARATELY from condemnation, at the USER's direction -- condemnation may yet need more
-// work, and this order should not be held hostage to it.
+// MTG_KE_ORDER=0 restores the generic order (and every hook below) byte-for-byte. History -- the
+// 08-19 review, the 08-25 adoption (3,000 paired games, 0 better / 0 worse against the generic order)
+// and the agent-filled 17-slot MTG_KE_ORDER_FULL (OFF from 10-04, deleted 2026-10-15) -- is in
+// docs/design/cast-order-rankings.md, "KittyEquipment".
 static bool KittyOrderEnabled()
 {
     static const bool on = EnvOn("MTG_KE_ORDER", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::KE_ORDER, on);
 }
 
-// MTG_KE_ORDER_FULL -- the USER's FULL (total) cast order for KittyEquipment.
-//
-// USER, 2026-08-26: *"I always asked for a full order in the past."* and *"The order not mattering
-// within a class has never prevented us from choosing an order to make condemnation a real tool."*
-//
-// The order below it is a CLASS ranking with ties: all eight Equipment share rank 8 and all four
-// hosts share 10. Those ties are why breakpoint condemnation is inert on this deck. Condemnation
-// drops a card the pre-breakpoint section already declined, judged by cast-order position -- and a
-// TIE cannot be a decline, because two cards at the same rank have no enumerated order between them,
-// so condemning a peer is symmetric and deletes the sibling line that would have cast it (measured:
-// Bonesplitter + Lightning Greaves both at rank 8, condemning the peer turns a T4 kill into T5).
-// The exemption that fixes that is what neuters the tool: MEASURED at shipped settings, 50 games,
-// condemnation is live on 82,506 of 82,506 continuation enumerations and drops 84 cards, every one
-// of them Puresteel Paladin -- the deck's only card ranked strictly before the equipment-ETB site.
-//
-// A TOTAL order removes the tie and with it the need for the exemption: every pair has a defined
-// order, so "earlier in the order" is a genuine decline everywhere. The within-class positions are a
-// CHOICE, not a derivation -- per the USER, the fact that order does not matter within a class is
-// the reason to pick one anyway, not a reason to leave them tied.
-//
-// Param-derived, no card names (house style: a deck gets its order from card DATA), and TOTAL by
-// construction -- the trailing tie-break folds mana value and the name hash so two cards can never
-// share a rank even if the decklist changes.
-static bool KittyOrderFullEnabled()
-{
-    static const bool on = EnvOn("MTG_KE_ORDER_FULL");
-    return heurarm::Flag(heurarm::KE_ORDER_FULL, on);
-}
-
-static int KittyFullOrderRank(const CardDefinition& def)
-{
-    const CardParams& p = def.params;
-    // 5-7: the engine pieces, unchanged from the class order the USER already reviewed.
-    if (p.mana_rock)                                              { return 5; }   // Sol Ring
-    if (p.draw_on_equipment_etb
-        || p.metalcraft_equip_zero_artifacts > 0)                 { return 6; }   // Puresteel Paladin
-    if (p.tap_put_from_hand_cost.has_value()
-        || (p.tutor_to_hand
-            && std::find(p.tutor_types.begin(), p.tutor_types.end(),
-                         std::string("Equipment")) != p.tutor_types.end()))
-                                                                  { return 7; }   // Stoneforge Mystic
-    // 8-15: the eight Equipment, one rank each. Cheapest-to-cast first (with Puresteel out every
-    // Equipment ENTERING draws a card, so more casts per turn is more cards), and the ladder within
-    // a cast cost runs biggest-payoff first.
-    if (p.is_equipment)
-    {
-        if (p.equip_power_bonus >= 10)              { return 8;  }  // Colossus Hammer  {1}, equip {8}
-        if (p.equip_min_power > 0)                  { return 11; }  // O-Naginata       {1}, power>=3
-        if (p.equip_grants_haste)                   { return 12; }  // Lightning Greaves{2}, equip {0}
-        if (p.equip_combat_damage_charges > 0)      { return 13; }  // Umezawa's Jitte  {2}
-        if (p.equip_sacrifices_prior_host)          { return 14; }  // Grafted Wargear  {3}, equip {0}
-        const int mv = def.card.m_mana_cost.ManaValue();
-        if (mv <= 1)
-        {
-            // Bonesplitter (equip {1}) before Shadowspear (equip {2}): cheaper to actually USE.
-            return p.equip_grants_lifelink ? 10 : 9;
-        }
-        return 15;                                                  // Loxodon Warhammer {3}, equip {3}
-    }
-    // 16-19: the four hosts, cheapest first -- Kor Duelist is the Colossus Hammer kill.
-    if (p.double_strike_while_equipped)                           { return 16; }  // Kor Duelist
-    if (p.upkeep_tokens_per_equipment)                            { return 17; }  // Kemba
-    if (p.double_strike_min_equipment > 0
-        || p.attach_all_equipment_cost.has_value()
-        || p.begin_combat_attach_all)                             { return 18; }  // Balan / Ardenn (mass-attach hosts)
-    if (p.attack_dig_attach_count > 0)                            { return 19; }  // Armored Skyhunter
-    // 30-31: removal, near-inert in a goldfish. Cheaper first.
-    if (def.tmpl == CardTemplate::Removal)
-    { return def.card.m_mana_cost.ManaValue() <= 1 ? 30 : 31; }
-    return 40;
-}
+// The composite key: class in the high bits, the mana value under it. NO name bits -- two cards of one
+// class and mana value share a key and the NAME orders them (CastOrderTotalByName), in the shared
+// comparator, the enumeration's sequential walk and the condemnation peer test alike.
+static constexpr int kKittyClassScale = 4096;
+static constexpr int kKittyMvScale    = 256;
 
 int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    if (KittyOrderFullEnabled())
-    {
-        // TOTALITY GUARD. A rank collision would silently re-introduce exactly the tie this order
-        // exists to remove, so any card that lands on a shared tier is separated deterministically.
-        // Scaled by 64 to leave room; the tie-break is mana value then name hash, both stable.
-        const int base = KittyFullOrderRank(def) * 64;
-        if (base >= 40 * 64)
-        {
-            return base + static_cast<int>(def.card.m_mana_cost.ManaValue() & 0x1F)
-                        + static_cast<int>(def.card.m_name_hash & 0x1F);
-        }
-        return base;
-    }
     if (!KittyOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
-    // ONE ORDER FOR BOTH LISTS (v1 and v2-puresteel-hammer), TOTAL, USER 2026-10-04: *"the only cards
-    // with this list that cares about order (even regarding condemnation) are Sol Ring and Puresteel
-    // Paladin. If we played Sigarda's Aid in this list I would say to put it before the creatures and
-    // creatures before the equipment ... We should probably make the order generic for both."* and
-    // *"Sram should go just after puresteel. We should order all of them. No reason to leave ties as
-    // that weakens condemnation."*
+    // ONE ORDER FOR EVERY LIST (USER 2026-10-04: *"We should probably make the order generic for
+    // both"*; *"Sram should go just after puresteel. We should order all of them. No reason to leave
+    // ties as that weakens condemnation."*):
     //   1  Sol Ring -- untapped mana for the rest of the turn.
     //   2  Sigarda's Aid -- on the battlefield before every Equipment it attaches for free.
     //   3  Puresteel Paladin, 4 Sram -- they draw off every Equipment entering / cast after them.
-    //   5  Cid (discounts every Equipment cast after it), 6 Stoneforge Mystic.
+    //   5  Cid (discounts every Equipment cast after it), 6 Stoneforge Mystic (its ETB feeds the casts).
     //   7  every other creature (the hosts).
     //   8  every Equipment.
     //   9  Dwalin, Weaponmaster (hone counters on ENTER onto Equipment already in play; USER 2026-10-05).
-    // Inside 7 and 8 the order is the USER's "does not matter" -- so it is a deterministic total
-    // order rather than a tie: cheapest mana value first, then the name hash. The scale leaves room
-    // for both keys, so no two distinct cards share a rank (checked on both lists with
-    // --cast-order-report). Removal is never cast (EquipmentProvider::NeverCast) and needs no slot.
+    //  10  anything else (none on any list today).
+    // Within a class: cheapest mana value first, then the card NAME (USER 2026-10-15, "split the
+    // equipment"). Removal is never cast (EquipmentProvider::NeverCast) and needs no slot of its own.
     // Equip ACTIVATIONS are not cast order: they run in the phase's trailing pass, after every cast
-    // (USER: "the equip usages should all go at the end of main 1").
-    // Superseded here: the 2026-08-25 class order (watchers 6 / Stoneforge+Cid 7 / Equipment 8 /
-    // hosts at the generic 10, i.e. Equipment BEFORE the hosts, with ties).
+    // (USER: "the equip usages should all go at the end of main 1"; ActivationOrderRankFor).
     const CardParams& p = def.params;
-    const auto total = [&](int cls)
-    {
-        return cls * 4096 + (def.card.m_mana_cost.ManaValue() & 0xF) * 256
-             + static_cast<int>(def.card.m_name_hash & 0xFF);
-    };
-    if (p.mana_rock && !def.card.IsCreature())                   { return total(1); }
-    if (p.attach_equipment_on_etb)                               { return total(2); }
-    if (p.draw_on_equipment_etb || p.metalcraft_equip_zero_artifacts > 0) { return total(3); }
-    if (!p.draw_on_cast_subtypes.empty())                        { return total(4); }
-    if (!p.reduces_spell_subtype.empty())                        { return total(5); }
+    const auto key = [&](int cls)
+    { return cls * kKittyClassScale + (def.card.m_mana_cost.ManaValue() & 0xF) * kKittyMvScale; };
+    if (p.mana_rock && !def.card.IsCreature())                   { return key(1); }
+    if (p.attach_equipment_on_etb)                               { return key(2); }
+    if (p.draw_on_equipment_etb || p.metalcraft_equip_zero_artifacts > 0) { return key(3); }
+    if (!p.draw_on_cast_subtypes.empty())                        { return key(4); }
+    if (!p.reduces_spell_subtype.empty())                        { return key(5); }
     if (p.tap_put_from_hand_cost.has_value()
         || (p.tutor_to_hand
             && std::find(p.tutor_types.begin(), p.tutor_types.end(),
-                         std::string("Equipment")) != p.tutor_types.end())) { return total(6); }
+                         std::string("Equipment")) != p.tutor_types.end())) { return key(6); }
     // 9: Dwalin, Weaponmaster -- AFTER the Equipment, BEFORE the equip abilities (USER 2026-10-05:
     // *"Dwalin is the one creature that should go after equipment, but before equip abilities."*).
     // His ENTERS trigger puts a hone counter on each Equipment you ALREADY control, so casting him
@@ -27116,12 +27008,14 @@ int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& d
     // hone-on-enter param, not its name. Checked before the generic creature class (7) so it wins.
     // Equip activations still run in the phase's trailing pass (ActivationOrderRankFor), i.e. after
     // this cast, so a just-honed Equipment is equipped afterwards.
-    if (p.hone_counters_on_enter_or_attack > 0)                  { return total(9); }
-    if (def.card.IsCreature())                                   { return total(7); }
-    if (p.is_equipment)                                          { return total(8); }
-    // Anything else (none on either list today) after the Equipment and Dwalin, still totally ordered.
-    return total(10);
+    if (p.hone_counters_on_enter_or_attack > 0)                  { return key(9); }
+    if (def.card.IsCreature())                                   { return key(7); }
+    if (p.is_equipment)                                          { return key(8); }
+    return key(10);
 }
+
+// The within-class tie-break is the card NAME (see the key above): never the hash, never hand order.
+bool EquipmentProvider::CastOrderTotalByName() const { return KittyOrderEnabled(); }
 
 int EquipmentProvider::LandDropCastOrderRank() const { return KittyOrderEnabled() ? 0 : -1; }
 
@@ -27778,13 +27672,21 @@ std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
 const char* EquipmentProvider::CastOrderTierName(int rank) const
 {
     if (!KittyOrderEnabled()) { return nullptr; }
-    switch (rank)
+    // The rank is a composite key (class * 4096 + mana value * 256, see CastOrderRank): decode the
+    // class, so every row of the report is labelled. One header per class + mana value; the rows
+    // under it are ordered by name.
+    switch (rank / kKittyClassScale)
     {
-        case 6:  return "ENGINE (Puresteel): every Equipment after it DRAWS, and 3 artifacts make equip {0}";
-        case 7:  return "TUTOR (Stoneforge): its ETB puts an Equipment in HAND, so it must precede the casts it feeds";
-        case 8:  return "EQUIPMENT: in front of the hosts -- with a Paladin out each one is a cantrip";
-        case 30: return "GOLDFISH-INERT REMOVAL: last, and m2 (no blocking in this apparatus)";
-        default: return nullptr;
+        case 1:  return "MANA ROCK (Sol Ring): untapped mana for the rest of the turn";
+        case 2:  return "ATTACH-ON-ETB (Sigarda's Aid): before every Equipment it attaches for free";
+        case 3:  return "ENGINE (Puresteel): every Equipment after it DRAWS, and 3 artifacts make equip {0}";
+        case 4:  return "CAST-DRAW WATCHER (Sram): every Equipment / Aura cast after it draws";
+        case 5:  return "EQUIPMENT REDUCER (Cid): every Equipment cast after it is cheaper";
+        case 6:  return "TUTOR (Stoneforge): its ETB puts an Equipment in HAND, so it precedes the casts it feeds";
+        case 7:  return "HOST CREATURE: before the Equipment (USER 10-04), cheapest first, then name";
+        case 8:  return "EQUIPMENT: each its own slot -- cheapest first (most draws per mana), then name";
+        case 9:  return "HONE-ON-ENTER (Dwalin): after the Equipment it hones, before the equips (USER 10-05)";
+        default: return "OTHER (removal is never cast: NeverCast); cheapest first, then name";
     }
 }
 

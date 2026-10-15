@@ -72,7 +72,6 @@ enum Slot : int
     BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
-    KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
     HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata FULL cast order (Ponder/Preordain PEERS)
     HINATA_PP_STRICT,         // MTG_HINATA_PP_STRICT      ...and split the peers: Ponder before Preordain
     HINATA_IREN_EARLY,        // MTG_HINATA_IREN_EARLY     LOO: Irencrag back to 18 (any payoff may follow)
@@ -516,7 +515,6 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_TAIL_EXEMPT",
         "MTG_BP_CONDEMN_ORDER_AWARE",
         "MTG_SF_PUT_BP",
-        "MTG_KE_ORDER_FULL",
         "MTG_HINATA_ORDER_FULL",
         "MTG_HINATA_PP_STRICT",
         "MTG_HINATA_IREN_EARLY",

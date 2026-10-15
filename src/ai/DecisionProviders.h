@@ -1898,17 +1898,19 @@ public:
     // rollout-leaf Solve walks ~1M subsets and a d5 game hit 40+ min on one seed (300003 gi=2)
     // once the rollout learned Puresteel draws (enter-cascade fix). Off-switch MTG_NO_LETHAL_CUT.
     bool UseLethalShortCircuit() const override { return true; }
-    // The USER-reviewed cast order (review held 2026-08-19; see cast-order-rankings.md for the
-    // ruling verbatim). Gated on MTG_KE_ORDER, default OFF -> byte-identical.
+    // The USER's cast order (2026-10-04 one order for every list, 10-05 Dwalin, 10-15 "split the
+    // equipment"; docs/design/cast-order-rankings.md has the rulings verbatim). Gated on MTG_KE_ORDER,
+    // DEFAULT ON; =0 restores the generic order. A param class, then cheapest mana value first, then
+    // the card NAME (CastOrderTotalByName) -- one slot per card, never hand order.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    bool CastOrderTotalByName() const override;
     // "Order everything, not have search own the order" -- the same opaque-set adoption Mirrorwing
     // took, on the same lever.
     bool OrderOpaqueCastsByRank() const override;
     // Swords / Unexpectedly Absent are "essentially unused in goldfish" (USER): last, and in the
     // later phase.
     std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
-    // Review-artifact labels: this deck's reviewed tiers land on generic rank numbers whose
-    // generic names mean unrelated things.
+    // Review-artifact labels: the class decoded from the composite rank (class * 4096 + mv * 256).
     const char* CastOrderTierName(int rank) const override;
     // BUCKETED cleanup discard, to the USER's design (2026-08-22, verbatim): "bucket creatures
     // (max 2, preferably Puresteel Paladin and Kor Duelist, or alternatively another enabler
