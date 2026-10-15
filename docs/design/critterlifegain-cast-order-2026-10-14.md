@@ -86,57 +86,114 @@ resolves and the legend rule runs (executor `walker_cast_activation` after `cast
 Pridemate token there, ahead of Heliod and the bodies, and every watcher on the battlefield fires on the token.
 Which ability makes the token is read off `loyalty_abilities[i].effect`, never the name.
 
-## RESUME (2026-10-14, stopped for the night at the coordinator's request -- the box was needed)
+## 5. Measurement
 
-**Base commit:** ff3e205b (work/integ-2026-10-14 tip). Branch `worktree-agent-a239469ed898c5c26`, local only.
-Commits: af7434cc (the order, default ON), fb96134a (diag trace note), the WIP commit holding this note and
-`scripts/critter_order_ab/`.
+Paired per game (seed of game gi = 11200001 + 100000 x k + 30000 x cell + gi; critter k = 0, critter2hg k = 1 at
+starting life 30 / two heads), loss scored 9, held-out seeds. Cells: **shipped** (no depth / budget key: the
+deck's d5 b20, profile attached so the value leaf and the keep table are in place), **d3 b10**, **d0**. Scripts:
+`scripts/critter_order_ab/` (`make_ab.py` day 1, `make_ab2.py` / `run_ab2.sh` the resumed pooled batch,
+`recovery.py` / `run_recovery.sh`); scratch under `build/scratch/critter-order/`.
 
-**Built (build volume, regenerable):** `build/scratch/critter-order/bin/mtg.base` (ff3e205b), `mtg.new` (af7434cc),
-`mtg.diag` (fb96134a, play-identical to mtg.new + the trace note). Unit suite 1061 / 1061 (8 new cases).
+* Day 1 (2026-10-14) ran critter shipped as two binaries side by side (ff3e205b vs af7434cc).
+* The resumed run (2026-10-15, through the fleet's box lock, `--threads 20`) is ONE pooled batch holding both arms:
+  the old arm is `MTG_CRITTER_ORDER=0` per job on the new build. That arm is byte-identical to ff3e205b,
+  checked chunk by chunk against the real base binary in every cell (below).
 
-**Measured -- COMPLETE:**
-* Probe boards (draft section 4 + four new Heliod / Ajani boards; `scripts/critter_order_ab/run_probes.sh`): Thune
-  probe 8 -> 14 counters at d3 b50 and unlimited; flip probe Pridemate first 6/6 (4 life) vs 5/5 (5 life), and at
-  opponent life 20 d5 b0 the new order wins T6 where base wins T7; Heliod "needs Ocelot" 4 -> 6; Heliod dev-4
-  (bp9 off) 6 -> 8; Ajani -2 now cast between Pridemate and Heliod. **Finding for the USER:** on the walk-past-2
-  board (Warden + Attendant out, hand Heliod + Ocelot + Serra) the walked order gives Heliod 2 counters where the
-  old Heliod-first gave 4 (both win T6): walking Heliod until it is a creature trades every gain event of the
-  creatures it waits for against the watchers firing on its own entry. Same shape on the two-way boards (the
-  canonical after-the-creatures order: 0-1 counters vs 1-3). Whether that costs turns is what the A/B decides.
-* References (`test/viewer_protocol_check.py --strict --only CritterLifegain`): base and new identical, 29 ok, 1
-  repaired, 0 drift / enum-gap / board-diverged (30 refs incl. v1). `scripts/ref_bench.py`: search 4.350 (20 v2) /
-  4.600 (10 v1) on both arms, 0 / 30 short of the human.
+| deck | cell | games | old | new | new - old | t | faster | slower | **net** | work units old -> new |
+|---|---|---|---|---|---|---|---|---|---|---|
+| critter | shipped d5 b20 | 4000 | 4.3652 | 4.3645 | -0.00075 | -1.73 | 3 | 0 | **-3** | 5.41M -> 5.46M (1.009x) |
+| critter | d3 b10 | 6000 | 4.3742 | 4.3735 | -0.00067 | -2.00 | 4 | 0 | **-4** | 41.24M -> 41.30M (1.002x) |
+| critter | d0 | 20000 | 4.6053 | 4.6044 | -0.00095 | -3.31 | 26 | 7 | **-19** | - |
+| critter2hg | shipped d5 b20 | 2000 | 4.6640 | 4.6635 | -0.00050 | -1.00 | 1 | 0 | **-1** | 5.70M -> 5.71M (1.002x) |
+| critter2hg | d3 b10 | 3000 | 4.6817 | 4.6817 | 0 | 0.00 | 1 | 1 | **0** | 26.15M -> 26.17M (1.001x) |
+| critter2hg | d0 | 10000 | 4.8108 | 4.8096 | -0.00120 | -3.47 | 12 | 0 | **-12** | - |
 
-**Measured -- PARTIAL (the pooled A/B was stopped part-way; both arms' scratch is in
-`build/scratch/critter-order/ab_base|ab_new/`, batch.out / batch.err):**
-* critter shipped (d5 b20, profile attached): 4000 / 4000 games paired -- 4.3652 -> 4.3645, **3 faster / 0 slower
-  (net -3)**, units 1.009x.
-* critter2hg shipped: 518 / 2000 paired -- 0 / 0, units 1.21x (PARTIAL).
-* critter d3 b10, d0; critter2hg d3, d0: NOT RUN (queued behind the shipped cells).
-* Hatch (`MTG_CRITTER_ORDER=0` on the new binary vs base): 8 / 8 chunks digest-identical, 400 / 400 games (PARTIAL).
-* Identity (every other suite deck): 9 / 9 jobs identical so far (PARTIAL; the shipped jobs of 9 decks).
-* Heliod case census (executor lists holding Heliod + another cast, `MTG_USER_ORDER_TRACE` notes; PARTIAL, about
-  2,850 shipped games): critter 120 lists -- at slot 91, walked1 6, walked2 0, two-way 23 (after 13, searched FIRST
-  10); critter2hg 60 lists -- at slot 52, walked 0, two-way 8 (after 7, FIRST 1). Flip lists (live flip with a payoff
-  and a watcher both cast): critter 26, critter2hg 21.
+Per-deck net, all cells: **critter -26, critter2hg -13**. Work is flat (at most 1.009x).
 
-**Left:**
-1. Re-run the pooled A/B in full: `bash scripts/critter_order_ab/run_ab.sh 6` (builds both manifests: critter
-   ship 4000 / d3 6000 / d0 20000, critter2hg half; identity 20 / 20 / 40 games per cell for every other suite deck
-   at seeds 11500001 + 1000 x deck + 300 x cell; hatch on the first 400 / 600 / 2000 critter games; seeds 11200001 +
-   100000 x k + 30000 x cell + gi; chunks of 50). The keep tables are now cached for every deck path it uses, so
-   parse takes seconds. Analyse: `python3 -I scripts/critter_order_ab/make_ab.py analyse <ab_base> <ab_new>`
-   (writes `<ab_new>/moved.json`).
-2. Recovery of every slower game: `python3 -I scripts/critter_order_ab/recovery.py build <ab_new> <dir>`, run its
-   manifest on `mtg.new` (MTG_DUMP_WINS=1, cwd = the worktree), then `recovery.py analyse`.
-3. Heliod census in full: `bash scripts/critter_order_ab/run_census.sh 3` (mtg.diag; the count parser is fixed --
-   card names carry spaces).
-4. Root-cause any unrecovered slower game; the walk finding above is the first suspect.
-5. The rest of this doc (measurement, defaults) and the CritterLifegain section of `cast-order-rankings.md`.
+**Identity.**
+* `MTG_CRITTER_ORDER=0` vs ff3e205b:
+  * 81 / 81 chunks of the five resumed cells (the first 300 / 600 / 2000 games, half for 2HG) digest-identical;
+  * the first 518 critter2hg shipped games 9 / 9 chunks;
+  * day 1's critter cells 8 / 8 chunks.
+* The diag build (fb96134a, the trace note) plays exactly af7434cc: 11 / 11 chunks.
+* Every other suite deck, ff3e205b vs the new build, at d0 (40 games), d3 b10 (20) and shipped (20):
+  **96 / 96 jobs identical** in digest and average. Work units differ by under 0.3% on the three KittyEquipment
+  lists with identical play (the shared-cache capacity effect seen in earlier A/Bs, not this change).
 
-**Open questions for the USER (taking the conservative default meanwhile):**
-* The flip moves the WHOLE payoff block, Ajani -2 included (the -2 token is a Pridemate, and leaving it behind would
-  break "right after Pridemate"). Default: yes.
-* Two-way FIRST means position 0 (before every watcher), as the coordinator specified; the canonical order is after
-  the creatures.
+**References.**
+* `test/viewer_protocol_check.py --strict --only CritterLifegain`: both binaries 29 ok, 1 repaired, 0 play-drift /
+  enum-gap / board-diverged / shuffle-dead (30 refs incl. the archived v1 list).
+* `scripts/ref_bench.py` (the shipped search on each reference's opening hand): search 4.350 (v2, 20) / 4.600 (v1,
+  10) on both arms, 0 / 30 short of the human.
+
+**Probe boards** (the draft's, plus Heliod / Ajani boards; `run_probes.sh`, old -> new):
+* Thune + Ocelot 8 -> 14 counters at d3 b50 AND unlimited (the attack 6 -> 10).
+* The flip board Pridemate 5/5 -> 6/6 (life 5 -> 4); at opponent life 20 and d5 b0 it wins T6 where the old order
+  wins T7.
+* Heliod needing Ocelot 4 -> 6.
+* Heliod at devotion 4 6 -> 8.
+* Ajani -2 now cast between Pridemate and Heliod.
+
+## 6. Every slower game
+
+| deck | cell | gi | seed | old | new | stage 1 (`--depth max(5, old) --budget-ms 100`) | stage 2 (`--depth 8 --budget-ms 0`) | mechanism |
+|---|---|---|---|---|---|---|---|---|
+| critter2hg | d3 b10 | 210 | 11330211 | 4 | 5 | **4** | 4 | T2 plan differs (new: Attendant x2, old: Ocelot) -- search churn |
+| critter | d0 | 269 | 11260270 | 4 | 5 | **4** | 4 | Heliod two-way, canonical [Ocelot, Heliod] vs old [Heliod, Ocelot] |
+| critter | d0 | 1239 | 11261240 | 5 | 6 | **5** | 5 | Heliod two-way, [Serra, Heliod] vs [Heliod, Serra] |
+| critter | d0 | 2384 | 11262385 | 4 | 5 | **4** | 4 | the FLIP: Heliod (a creature at its flipped slot) before Auriok Champion; one more counter, one less life on a board with two Serra Ascendants (the 30-life clause) |
+| critter | d0 | 4871 | 11264872 | 4 | 5 | **4** | 4 | Heliod two-way, [Ocelot, Heliod] |
+| critter | d0 | 5562 | 11265563 | 4 | 5 | **4** | 4 | Heliod two-way, [Ocelot, Heliod] |
+| critter | d0 | 13045 | 11273046 | 5 | 6 | **5** | 5 | Heliod two-way, [Serra, Heliod] |
+| critter | d0 | 15923 | 11275924 | 5 | 6 | **5** | 5 | Heliod two-way, [Serra, Heliod] |
+
+**All 8 recover at stage 1.** The bar is met.
+
+Six of the seven d0 games are one mechanism. In Heliod's two-way case the d0 runner takes the canonical order,
+"after the creatures". With one body after it, Heliod is not a creature there either, so it simply misses that
+body's gain events, where the old plan order happened to cast it first. That observation is the proposed
+amendment in section 8.
+
+## 7. How often each case occurs
+
+Executor cast lists holding Heliod and at least one other cast (the `MTG_USER_ORDER_TRACE` notes; critter shipped from
+day 1's ~2,000-game census, every other cell from the resumed batch's new arm):
+
+| deck | cell | at slot | walked past 1 | walked past 2 | two-way: after (canonical) | two-way: FIRST (searched pick) | flip live (payoff + watcher cast) |
+|---|---|---|---|---|---|---|---|
+| critter | shipped (~2000 g) | 91 | 6 | 0 | 13 | 10 | 26 |
+| critter | d3 b10 (6000) | 270 | 19 | 0 | 34 | 15 | 86 |
+| critter | d0 (20000) | 926 | 44 | 0 | 64 (+1 single-position) | - (no search) | 337 |
+| critter2hg | shipped (2000) | 104 | 3 | 0 | 10 | 3 | 39 |
+| critter2hg | d3 b10 (3000) | 168 | 3 | 0 | 17 | 2 | 64 |
+| critter2hg | d0 (10000) | 481 | 18 | 0 | 28 | - | 192 |
+
+* About 85% of Heliod lists are a creature at its slot. The walk is about 4% and never needs the second creature.
+* The two-way case is about 10%. At searched depths the search picks FIRST in about a third of them.
+
+## 8. Proposed amendment: `MTG_CRITTER_HELIOD_FIRST` (default OFF -- the USER's call)
+
+* **The rule.** In the two-way case, when Heliod would not be a creature even after the LAST creature of the list,
+  FIRST dominates after-the-creatures:
+  * it is a non-creature enchantment either way, so no watcher fires on its entry in either;
+  * FIRST is on the battlefield for every gain event of the turn;
+  * nothing else in the deck reads its position.
+* **What changes.** The canonical order becomes FIRST, and there is nothing left to search. The two-way case where
+  after-the-creatures DOES make it a creature (a 3rd+ creature) keeps the USER's searched choice.
+* **Built** in 116810b5, with a unit case.
+* **Measurement:** see 8a.
+
+## 9. Defaults as shipped and questions for the USER
+
+* **`MTG_CRITTER_ORDER` ships default ON.** It meets the bar: every deck's net <= 0 in every cell (critter -26,
+  critter2hg -13), every slower game recovers at stage 1, play is byte-identical for every other deck, the `=0`
+  hatch restores ff3e205b exactly, and work is flat.
+* **`MTG_CRITTER_HELIOD_FIRST` ships default OFF** until the USER rules (section 8).
+* **Questions:**
+  1. Adopt `MTG_CRITTER_HELIOD_FIRST`? It is a dominance, and it is aimed at exactly the six d0 slower games.
+  2. The flip moves the whole payoff block, Ajani -2 included, so the token stays "right after Pridemate". Kept.
+  3. Two-way FIRST = position 0, before every watcher.
+  4. The walk's counter cost: on the walk-past-2 probe board, Heliod after Ocelot and Serra gets 2 counters where
+     Heliod first gets 4 (both win T6). In play, walked-past-2 never occurred (section 7), and walked-past-1 lost
+     no game. One d0 slower game (gi 2384) comes from the flip interacting with Serra Ascendant's 30-life clause
+     (one less life); it recovers at stage 1.
