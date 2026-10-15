@@ -118,9 +118,52 @@ The three slower games (stompy ship, gi 287 4->5, gi 1526 3->4, gi 2653 3->4) ar
 Identity: 48 games (goblins + fivecolour shipped) byte-identical; the rest not run. d3, d0, stompy2hg and the
 off-switch prefix: not run.
 
-## 4. Every slower game
+## 4. Every slower game: the root cause is a battlefield-position tap choice (2026-10-15)
 
-Not done yet (3 so far, listed in §3).
+**The three partial-A/B slower games did not recover** at stage 1 (d6 b100) or stage 2 (d8 b0): identical
+digests at both, the budget never binding. **Attribution** (each game under every arm of the new binary):
+the ORDER alone reproduces them -- `MTG_STOMPY_TOP_RESOLVE=0`, `MTG_STOMPY_ORDER_SEARCH=0` and both off give
+the same slow line; `MTG_STOMPY_ORDER=0` restores the old win turn. So the default went OFF (`0731e8a5`)
+until this was fixed.
+
+**gi1526, pinned with scenarios** (`test/tools/stompy_order_ab/scn_1526_t*.json`, `bforder*.sh`):
+* From the old line's T3 board (Forest x2, Sol Ring, Fyndhorn Elves, Elvish Mystic, Priest of Titania; hand
+  Elvish Archdruid + Natural Order) the kill is Archdruid, then Natural Order sacrificing the tapped Priest
+  and fetching Craterhoof: 21 damage. It needs BOTH 1/1 elves untapped to attack; the lands + Sol Ring pay
+  4 of the 7 and Priest's one tap (3 Elves) the rest.
+* **All 24 battlefield permutations, order OFF:** the kill is found exactly when Priest is NOT on the
+  battlefield after both 1-drop elves. The USER order casts the 1-mana elves first ([1] before [3]), so
+  Priest always lands last and the T3 kill (and every line built on it) disappears.
+* **The mechanism (`MTG_PREPAY_HOLD_TRACE=1`, new, diagnosis only):** the whole-turn prepay
+  (`TurnSolver::BatchPrepayMainCasts`, the one payer both the executor and the rollout run) first tries to
+  hold every untapped mana creature (infeasible: 7 needed, 4 available), then its SINGLE-ATTACKER rung --
+  hold ONE body, chosen by `FindBestOwnAttacker`, which breaks the equal 1/1 tie by LOWEST battlefield index
+  -- and pays with the rest. With Priest last, that rung kept one 1-drop and the joint solve tapped the
+  other plus Priest; with Priest earlier, the same ladder happened to keep both.
+* **gi287** is the same defect one level in: its T3 line (Elvish Archdruid x2, 6 mana: three lands +
+  Priest) needs both Fyndhorn Elves to swing; the single-attacker rung paid holding ONE Fyndhorn and the
+  solve tapped the other ahead of Priest whenever Priest sat later on the battlefield (T4 vs T5 by
+  Priest's position alone, 3 of 3 positions checked). **gi2653** recovers with the same fix.
+
+**The fix: `MTG_HOLD_RELEASE_YIELD`** (`2f6f2634` + `85621796`; `EngineFlags.h` shared reader, heurarm slot;
+the prepay is the one payer both worlds run, so lockstep holds by construction). Under the flag the hold
+ladder never reads the battlefield index:
+* (a) the partial hold releases equal-power bodies BIGGEST MANA YIELD first (`PermanentManaYield`: one tap of
+  Priest pays what three 1/1s would, and each costs one attacker);
+* (b) the single-attacker rung holds, among the strongest attackers that are mana sources, the lowest-yield one;
+* (c) the line's own sacrifice victim (Natural Order's, the sac-fodder pin) is never held -- it cannot attack
+  after its own cast (CR 601.2h: the additional cost is paid while casting);
+* (d) the single-attacker rung is tried AFTER the partial rungs, not before them;
+* remaining ties: card name, then card number.
+Rules review: a summoning-sick dork can neither {T} for mana nor attack (CR 302.6), so it was and stays
+outside the hold set (`CanTapNow`); haste is read by the same predicate. Payment is the permitted greedy
+area -- this only re-keys its tie-breaks and the order of its rungs.
+
+**Result on the probes:** gi1526's T3 board finds the kill in 24/24 orders (8/24 failed before), gi287's in
+3/3, and with order + fix all three shipped games replay at their OLD win turns (287 T4, 1526 T3, 2653 T3).
+Unit cover: `test/unit/test_stompy_order.cpp`, both boards in several battlefield orders.
+
+The full re-measure with the fix is §3 (v4).
 
 ## 5. Findings and questions for the USER (so far)
 
