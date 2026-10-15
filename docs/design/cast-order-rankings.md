@@ -1340,3 +1340,66 @@ switch). Until then, ~3 games per 1000 at play settings are inexpressible under 
 
 The one oracle game the order does not recover (gi170) is the generic provider's user-ruled
 clairvoyant-dig exclusion (Silent Clearing cracked the turn it is played), not an ordering question.
+
+## CritterLifegain -- USER-settled TOTAL order (2026-10-14; `MTG_CRITTER_ORDER`, default ON)
+
+The USER's ruling on the draft (`docs/design/cast-order-drafts-2026-10-14/CritterLifegain.md`): Ajani,
+Strength of the Pride after Ajani's Pridemate when cast for its -2 ("it produces them"), the +1 where the draft
+had it; Heliod at its slot if it enters as a creature there, else after the next creatures until it is one, and
+if it still is not after the next 2, a searched choice of playing it before; the rest of the draft kept
+(Thune right after the watchers, the flip, main 1 for everything). Total order: a tie between two different
+names falls to the name, never to plan order. Full design, measurement and every slower game:
+`docs/design/critterlifegain-cast-order-2026-10-14.md`.
+
+```
+# Cast order -- decks/CritterLifegain/CritterLifegain.cod
+# provider: CritterLifegain   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [641] ENTER-WATCHER: first -- every later entry this turn is a gain event (cheapest, then name)
+  641     -   m1    4  1  Soul Warden
+  641     -   m1    4  1  Soul's Attendant
+#
+# [642] ENTER-WATCHER: first -- every later entry this turn is a gain event (cheapest, then name)
+  642     -   m1    3  2  Auriok Champion
+  642     -   m1    1  2  Daxos, Blessed by the Sun
+#
+# [709] TEAM PAYOFF (Archangel of Thune): every later entry is a counter on every body
+  709     -   m1    2  5  Archangel of Thune
+#
+# [810] UNIT PAYOFF: more white pips first (Voice {W}{W} -> Heliod devotion), then Pridemate
+  810     -   m1    4  2  Voice of the Blessed
+#
+# [818] UNIT PAYOFF: more white pips first (Voice {W}{W} -> Heliod devotion), then Pridemate
+  818     -   m1    4  2  Ajani's Pridemate
+#
+#        (rank 836: AJANI CAST FOR -2 -- the Pridemate token right after Pridemate; a CastOrderActionRank on the cast)
+#
+# [899] HELIOD (devotion god): here if it enters as a creature; else after up to the next 2 creature entries until it would; else SEARCHED first vs after the creatures
+  899     -   m1    2  3  Heliod, Sun-Crowned
+#
+# [961] OTHER CREATURE: after every watcher and payoff (cheapest, then name)
+  961     -   m1    4  1  Ocelot Pride
+  961     -   m1    4  1  Serra Ascendant
+#
+# [963] OTHER CREATURE: after every watcher and payoff (cheapest, then name)
+  963     -   m1    1  3  Ranger-Captain of Eos
+#
+# [1028] AJANI CAST FOR +1 / no activation: after the creatures (a -2 cast ranks at slot 13)
+  1028     -   m1    1  4  Ajani, Strength of the Pride
+#
+# [1090] other noncreature spell (Unexpectedly Absent): last
+  1090     -   m1    3  2  Unexpectedly Absent
+```
+
+Rows sharing a rank are ordered by name (the comparator's `CastOrderTiesByName`), which here is the USER's order.
+**The flip:** with 2+ more watchers than payoffs on the board and no Thune there, the payoff block (Thune, Voice,
+Pridemate, Ajani -2, Heliod) moves ahead of the new watchers (slots 4-7 = ranks 256-511, the watchers at slot 9 =
+ranks 576-639; the bodies onwards are unchanged). `MTG_CRITTER_ORDER=0`
+restores the 2026-09-08 mined order (`MTG_CRITTER_WATCHER_ORDER`: watchers 8, Pridemate / Voice 9, Generic for
+the rest), byte-identical to ff3e205b.
