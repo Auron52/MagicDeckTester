@@ -10822,7 +10822,22 @@ static bool HinataGambleSearched()
     return heurarm::Flag(heurarm::HINATA_GAMBLE_SEARCHED, on);
 }
 
-bool HinataProvider::WantsCastOrderingSearch() const { return HinataOrderFullEnabled() && HinataGambleSearched(); }
+// MTG_HINATA_PP_SEARCHED (under the order; DEFAULT OFF -- a PROPOSED second fan, the USER decides): the
+// Preordain / Ponder relation searched the same way. The coordinator's other tie-break (Preordain before Ponder)
+// is what hinata shipped gi 82 (seed 11100083) turns on: its T5 kill plays the Soulfire exile as Ponder
+// (shuffle), Reality Spasm, Ponder, Spasm, Preordain, Ponder, Crackle, and under the bound order a plan holding
+// both cantrips casts Preordain first -- T6 even at d8 b0; with the reverse tie-break (MTG_HINATA_PP_STRICT) it
+// is T5 at the shipped settings. It is also the USER's own August remark: "It's possible you might sometimes
+// want to do Ponder -> Preordain -> Ponder." The variant moves every Ponder of the set to just before its first
+// Preordain; with MTG_HINATA_GAMBLE_SEARCHED too, both fans combine (at most four candidate orders).
+static bool HinataPonderPreordainSearched()
+{
+    static const bool on = EnvOn("MTG_HINATA_PP_SEARCHED");
+    return heurarm::Flag(heurarm::HINATA_PP_SEARCHED, on);
+}
+
+bool HinataProvider::WantsCastOrderingSearch() const
+{ return HinataOrderFullEnabled() && (HinataGambleSearched() || HinataPonderPreordainSearched()); }
 
 bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
                                             const std::vector<Action>& reorder,
@@ -10831,21 +10846,54 @@ bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vecto
     (void)plan_actions;   // Hinata's plans carry no pre-cast sacrifice / convoke to apply first
     out.clear();
     if (!WantsCastOrderingSearch()) { return false; }
+    const bool fan_g = HinataGambleSearched();
+    const bool fan_p = HinataPonderPreordainSearched();
     const int n = static_cast<int>(reorder.size());
     auto def_of = [&](int i) -> const CardDefinition*
     { return reorder[i].def ? reorder[i].def : CardDatabase::Instance().Lookup(reorder[i].card_name); };
     auto is_cast = [&](int i) { return reorder[i].kind == Action::Kind::CastFromHand && !reorder[i].sacrifice_land; };
     auto is_gamble = [&](int i)
     { const CardDefinition* d = def_of(i); return is_cast(i) && d != nullptr && d->params.tutor_to_hand; };
+    auto is_ponder = [&](int i)
+    { const CardDefinition* d = def_of(i); return is_cast(i) && d != nullptr && d->params.cast_reorder > 0; };
+    auto is_preordain = [&](int i)
+    { const CardDefinition* d = def_of(i); return is_cast(i) && d != nullptr && d->params.cast_scry > 0; };
     auto is_find = [&](int i)   // the cantrips and the dig: Preordain, Ponder, Expressive Iteration
     {
         const CardDefinition* d = def_of(i);
         return is_cast(i) && d != nullptr
             && (d->params.cast_reorder > 0 || d->params.cast_scry > 0 || d->params.expressive_iteration);
     };
-    bool any_g = false, any_f = false;
-    for (int i = 0; i < n; ++i) { any_g = any_g || is_gamble(i); any_f = any_f || is_find(i); }
-    if (!any_g || !any_f) { return true; }   // nothing to search: keep the base plan un-searched
+    // Gamble after the last find card that follows it; unchanged when none does.
+    auto gamble_late = [&](std::vector<int> o)
+    {
+        int gpos = -1, last_find = -1;
+        for (int k = 0; k < n; ++k)
+        {
+            if (gpos < 0 && is_gamble(o[static_cast<std::size_t>(k)])) { gpos = k; }
+            else if (gpos >= 0 && is_find(o[static_cast<std::size_t>(k)])) { last_find = k; }
+        }
+        if (gpos >= 0 && last_find >= 0)
+        {
+            const int g = o[static_cast<std::size_t>(gpos)];
+            o.erase(o.begin() + gpos);
+            o.insert(o.begin() + last_find, g);   // last_find shifted down by one: lands just after it
+        }
+        return o;
+    };
+    // Every Ponder moved to just before the first Preordain; unchanged when no Ponder follows one.
+    auto ponder_first = [&](std::vector<int> o)
+    {
+        int fp = -1;
+        for (int k = 0; k < n && fp < 0; ++k) { if (is_preordain(o[static_cast<std::size_t>(k)])) { fp = k; } }
+        if (fp < 0) { return o; }
+        std::vector<int> pons, rest;
+        for (int k = 0; k < n; ++k)
+        { (k > fp && is_ponder(o[static_cast<std::size_t>(k)]) ? pons : rest).push_back(o[static_cast<std::size_t>(k)]); }
+        if (pons.empty()) { return o; }
+        rest.insert(rest.begin() + fp, pons.begin(), pons.end());
+        return rest;
+    };
     // The realised order, exactly as the apply takes it for a set it sorts itself.
     auto finish = [&](std::vector<int>& o)
     {
@@ -10853,31 +10901,37 @@ bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vecto
         ApplyEnablerWipeRecheck(s, reorder, o);
         ApplyPayableCastOrder(s, reorder, o);
     };
+    bool relevant = false;
+    {
+        bool g = false, f = false, po = false, pr = false;
+        for (int i = 0; i < n; ++i) { g = g || is_gamble(i); f = f || is_find(i); po = po || is_ponder(i); pr = pr || is_preordain(i); }
+        relevant = (fan_g && g && f) || (fan_p && po && pr);
+    }
+    if (!relevant) { return true; }   // nothing to search: keep the base plan un-searched
     std::vector<int> canon(static_cast<std::size_t>(n));
     for (int i = 0; i < n; ++i) { canon[static_cast<std::size_t>(i)] = i; }
     std::stable_sort(canon.begin(), canon.end(), [&](int x, int y) { return CastOrderLess(s, reorder[x], reorder[y]); });
     ArrangeCastOrder(s, reorder, canon);
-    std::vector<int> late = canon;   // Gamble after the last find card that follows it (pre-finish order)
+    std::vector<std::vector<int>> cands;
+    cands.push_back(canon);                                   // the arranged order first
+    if (fan_g) { cands.push_back(gamble_late(canon)); }
+    if (fan_p) { cands.push_back(ponder_first(canon)); }
+    if (fan_g && fan_p) { cands.push_back(gamble_late(ponder_first(canon))); }
+    auto same_names = [&](const std::vector<int>& x, const std::vector<int>& y)
     {
-        int gpos = -1, last_find = -1;
-        for (int k = 0; k < n; ++k)
-        {
-            if (gpos < 0 && is_gamble(late[static_cast<std::size_t>(k)])) { gpos = k; }
-            else if (gpos >= 0 && is_find(late[static_cast<std::size_t>(k)])) { last_find = k; }
-        }
-        if (gpos < 0 || last_find < 0) { return true; }   // the find cards already precede Gamble
-        const int g = late[static_cast<std::size_t>(gpos)];
-        late.erase(late.begin() + gpos);
-        late.insert(late.begin() + last_find, g);   // last_find shifted down by one: lands just after it
+        if (x.size() != y.size()) { return false; }
+        for (std::size_t k = 0; k < x.size(); ++k)
+        { if (reorder[static_cast<std::size_t>(x[k])].card_name != reorder[static_cast<std::size_t>(y[k])].card_name) { return false; } }
+        return true;
+    };
+    for (std::vector<int>& c : cands)
+    {
+        finish(c);
+        bool dup = false;
+        for (const std::vector<int>& prev : out) { if (same_names(prev, c)) { dup = true; break; } }
+        if (!dup) { out.push_back(std::move(c)); }
     }
-    finish(canon);
-    finish(late);
-    bool same = canon.size() == late.size();
-    for (std::size_t k = 0; same && k < canon.size(); ++k)
-    { same = reorder[static_cast<std::size_t>(canon[k])].card_name == reorder[static_cast<std::size_t>(late[k])].card_name; }
-    if (same) { return true; }   // the passes folded the two together: nothing to search
-    out.push_back(std::move(canon));
-    out.push_back(std::move(late));
+    if (out.size() == 1) { out.clear(); }   // the passes folded every variant into the order: nothing to search
     return true;
 }
 

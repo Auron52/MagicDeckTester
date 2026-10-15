@@ -513,3 +513,31 @@ TEST_CASE("Hinata MTG_HINATA_GAMBLE_SEARCHED: Gamble before AND after the cantri
         CHECK_FALSE(OffersAnyWithHo(g, kIren));
     }
 }
+
+TEST_CASE("Hinata PROPOSED MTG_HINATA_PP_SEARCHED: Ponder before Preordain offered too; combines with the Gamble fan")
+{
+    const GameState s = BoardHo(WithIsland(12), {}, 20, 15);
+    const std::vector<Action> acts = CastsHo(s, { kCrk, kPon, kGam, kPre });
+    {
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_PP_SEARCHED, true);
+        REQUIRE(HoProv().WantsCastOrderingSearch());
+        std::vector<std::vector<int>> out;
+        REQUIRE(HoProv().CastOrderingCandidates(s, {}, acts, out));
+        REQUIRE(out.size() == 2);
+        CHECK(NamesHo(acts, out[0]) == std::vector<std::string>{ kGam, kPre, kPon, kCrk });
+        CHECK(NamesHo(acts, out[1]) == std::vector<std::string>{ kGam, kPon, kPre, kCrk });
+    }
+    {
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_PP_SEARCHED, true);
+        arms.Set(heurarm::HINATA_GAMBLE_SEARCHED, true);
+        std::vector<std::vector<int>> out;
+        REQUIRE(HoProv().CastOrderingCandidates(s, {}, acts, out));
+        REQUIRE(out.size() == 4);
+        CHECK(NamesHo(acts, out[0]) == std::vector<std::string>{ kGam, kPre, kPon, kCrk });
+        CHECK(NamesHo(acts, out[1]) == std::vector<std::string>{ kPre, kPon, kGam, kCrk });
+        CHECK(NamesHo(acts, out[2]) == std::vector<std::string>{ kGam, kPon, kPre, kCrk });
+        CHECK(NamesHo(acts, out[3]) == std::vector<std::string>{ kPon, kPre, kGam, kCrk });
+    }
+}
