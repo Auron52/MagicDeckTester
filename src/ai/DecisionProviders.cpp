@@ -28733,11 +28733,19 @@ int EquipmentProvider::EnumGroupCap() const
 std::optional<DecisionProvider::MainPhase>
 EquipmentProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) const
 {
-    // "Swords and Unexpectedly are essentially unused in goldfish" (USER 2026-08-19). The base
-    // classifier reaches removal through the DOUBT default, which keeps it pre-combat; rank 30
-    // already puts it last within a phase, this puts it in the later phase too. See the honest
-    // bracket above -- this is an apparatus-scoped ruling, not an MTG-general one.
-    if (KittyOrderEnabled() && def.tmpl == CardTemplate::Removal) { return MainPhase::Main2; }
+    if (!KittyOrderEnabled()) { return std::nullopt; }
+    // A DRAW WATCHER IS MAIN 1 (USER 2026-10-15: "Sram should be main 1 like Puresteel."). Sram,
+    // Senior Edificer (draw_on_cast_subtypes) and Puresteel Paladin (draw_on_equipment_etb) are paid
+    // by THIS main's later Equipment casts, so a watcher deferred to main 2 would sit behind the very
+    // casts it draws from -- the enablers-before-payoffs rule on the phase axis. The base classifier
+    // labels Sram m2 (a vanilla-template body) and Puresteel m1; pinning both keeps the label from
+    // ever biting. Inert in play today: v2/v3 do not use a second main, and v1's Puresteel is m1 anyway.
+    const CardParams& p = def.params;
+    if (!p.draw_on_cast_subtypes.empty() || p.draw_on_equipment_etb) { return MainPhase::Main1; }
+    // "Swords and Unexpectedly are essentially unused in goldfish" (USER 2026-08-19); never cast
+    // since 2026-10-04 (NeverCast), so this pin only keeps the report honest. See the honest bracket
+    // above -- this is an apparatus-scoped ruling, not an MTG-general one.
+    if (def.tmpl == CardTemplate::Removal) { return MainPhase::Main2; }
     return std::nullopt;
 }
 
