@@ -130,6 +130,8 @@ on the flipped binary.
 
 ## 5. Measurement: the pooled A/B (COMPLETE)
 
+### 5a. ab1 -- the first build `7c113028` (Gladecover Scout before Slippery Bogle)
+
 * **Setup.**
   * old = the integration tip `ff3e205b`, built and kept as `build/scratch/auras-order/bin/mtg.base`.
   * new = commit `7c113028`, kept as `bin/mtg.new`.
@@ -189,33 +191,83 @@ on the flipped binary.
     shipped, and auras2hg shipped is +2, i.e. worse.
   * **a+b** is no better than b alone anywhere. It is worse than b in 4 cells and equal at d0.
 
-## 6. The order's slower games (11 of 45,000) -- recovery check NOT YET RUN
+### 5b. ab2 -- the shipped build `fe342a71` (Slippery Bogle before Gladecover Scout)
 
-These are the 11 order-arm games. The arms add 145 more, listed in `logs/auras-order/ab1/cmp.slower.json`.
+* **What was re-run.** Every arm, every cell, the same seeds and sizes as ab1 (180,000 games). It was one pooled batch
+  through the box lock, 2026-10-15 04:51-05:15Z, run from an ext4 mirror of the inputs (byte-identical copies, cmp'd).
+* **What was not re-run.**
+  * The old side is ab1's old batch: same seeds, same inputs.
+  * Identity was not re-run. The flip changes only `AurasProvider::CastOrderRank`'s creature branch, a function no
+    other deck reaches. Identity was proven on `7c113028`: 1920/1920 other-deck games and 11250/11250 `=0` games.
+* **Result: every faster / slower / net count is the same as ab1, in every arm and cell.**
+  * Play-changed counts move by single digits (e.g. auras shipped order 1121 -> 1115).
+  * Units ratios move by <= 0.0002.
+  * The 156 slower games are the same games: 11 order, 24 a, 54 b, 67 a+b.
 
-| cell | gi | repro seed | old -> new |
-|---|---|---|---|
-| auras2hg d3 b10 | 1665 | 11401666 | 4 -> 5 |
-| auras2hg d0 | 695, 924, 1638, 2252, 2450, 4689, 8546 | 11300001 + gi | 4 -> 5 each |
-| auras d0 | 4082, 6808, 12561 | 11000001 + gi | 5 -> 6, 4 -> 5, 5 -> 6 |
+| cell | order | order_a | order_b | order_ab | units ratio order / a / b / ab |
+|---|---|---|---|---|---|
+| auras shipped (4000) | 0 (0 / 0) | -3 (6 / 3) | -10 (10 / 0) | -8 (11 / 3) | 1.0001 / 1.0195 / 0.9993 / 1.0188 |
+| auras d3 b10 (6000) | 0 (0 / 0) | -7 (10 / 3) | -10 (12 / 2) | -13 (18 / 5) | 0.9999 / 1.0010 / 0.9980 / 0.9999 |
+| auras d0 (20000) | 0 (3 / 3) | 0 (3 / 3) | -60 (74 / 14) | -60 (74 / 14) | - |
+| auras2hg shipped (2000) | -2 (2 / 0) | +2 (3 / 5) | -10 (13 / 3) | -6 (13 / 7) | 1.0001 / 1.0147 / 0.9976 / 1.0127 |
+| auras2hg d3 b10 (3000) | 0 (1 / 1) | 0 (3 / 3) | -8 (13 / 5) | -6 (14 / 8) | 1.0012 / 1.0020 / 1.0011 / 1.0010 |
+| auras2hg d0 (10000) | 0 (7 / 7) | 0 (7 / 7) | -20 (50 / 30) | -20 (50 / 30) | - |
 
-**Root-caused so far: auras2hg d3 gi1665.** On T3, Light-Paws is in play and the hand holds Spider Umbra (MV1, +1) and
-Alpha Authority (MV2, +0), with three lands.
+Each cell reads "net (faster / slower)", where net is the summed win-turn delta over paired games and loss = 9.
 
-* **Old line (plan order):** Spider first. Its fetch took Ethereal Armor on a library-order tie. Alpha Authority's fetch,
-  then the LAST one, took All That Glitters as a scaler. The four Auras reached +9; the opponent went 30 -> 19, and the
-  game was won on T4.
-* **The approved order:** Alpha Authority first (highest MV first). Its MV-2 fetch is no longer the last, so mode 4 does
-  not let the scaler lead. "Another Aura castable this turn or next" counts the Spider, though a 1-drop's fetch cannot
-  take an MV-2 Glitters. Lion Umbra (+3 flat) wins on realized power over Glitters (+2 now, +4 by end of turn). The
-  Spider's fetch then takes the Armor. The board reached +8, the opponent 30 -> 20, and the game was won on T5.
-* **The mechanism:** the slot is position 6 (Alpha Authority ahead of the MV-1 plains). The interaction is the fetch
-  rule's MV-blind "last fetch" test, i.e. the draft's finding (a) / Q20.
-* **Verified:** under `MTG_LP_FETCH_USER_RULE=1` the same game takes Glitters at Alpha Authority's fetch and wins T4,
-  with a board identical to old's. So the amendment that keeps the USER's order is the USER's own 08-25 fetch rule,
-  arm (b).
-* **The recovery check for this game is not run yet.** Under the order alone it is likely unrecoverable at any budget:
-  the fetch is a provider pick, not a searched decision, and the rank fixes the order.
+## 6. The order's slower games: 11 of 45,000, one mechanism, 2 do not recover
+
+**Recovery check** (the USER's two stages, on the shipped build `fe342a71`, order alone):
+* Stage 1 is `--depth W --budget-ms 100` with `W = max(5, old win turn)`, i.e. 5.
+* Stage 2 is `--depth 8 --budget-ms 0`, run on the order arm AND on the old binary.
+
+The 11 games, each run single-game (`--threads 1`) from the ext4 mirror:
+
+| cell | gi | repro `--seed` | old -> new | stage 1 | stage 2 (new / old) |
+|---|---|---|---|---|---|
+| auras2hg d3 b10 | 1665 | 11401666 | 4 -> 5 | 5: no | **5 / 4: no** |
+| auras2hg d0 | 8546 | 11308547 | 4 -> 5 | 5: no | **5 / 4: no** |
+| auras2hg d0 | 695 | 11300696 | 4 -> 5 | 4: recovers | - |
+| auras2hg d0 | 924 | 11300925 | 4 -> 5 | 4: recovers | - |
+| auras2hg d0 | 1638 | 11301639 | 4 -> 5 | 4: recovers | - |
+| auras2hg d0 | 2252 | 11302253 | 4 -> 5 | 4: recovers | - |
+| auras2hg d0 | 2450 | 11302451 | 4 -> 5 | 4: recovers | - |
+| auras2hg d0 | 4689 | 11304690 | 4 -> 5 | 4: recovers | - |
+| auras d0 | 4082 | 11004083 | 5 -> 6 | 4: recovers | - |
+| auras d0 | 6808 | 11006809 | 4 -> 5 | 4: recovers | - |
+| auras d0 | 12561 | 11012562 | 5 -> 6 | 4: recovers | - |
+
+**One mechanism for all 11, read off the per-turn diffs** (`logs/auras-order/firstdiff.py`). Every game has the same
+opening hand on both sides, so this is not a draw divergence.
+
+* **The board:** Light-Paws is in play, and the turn casts one MANA-VALUE-2 plain Aura (Alpha Authority or Spirit
+  Mantle) together with one or two 1-drop plain Auras.
+* **Old line:** the generic tier tied all of them, so plan order put the 1-drop first.
+  * The 1-drop's fetch took a 1-drop (Ethereal Armor, or Audacity / Rancor).
+  * The 2-drop's fetch was then the LAST fetch, so mode 4 let the scaler lead: All That Glitters.
+* **The approved order** puts the 2-drop first (highest MV first: positions 6 / 7 ahead of 8-13).
+  * Its fetch is now not the last, because mode 4's "another Aura castable this turn or next" counts the 1-drop.
+  * A 1-drop's fetch can never take a 2-drop, so that was the last chance at Glitters, and it is passed over.
+  * The fetch takes Daybreak Coronet (+3 flat, legal now that Light-Paws carries the 2-drop), Lion Umbra, or Ethereal
+    Armor. The 1-drop's fetch then takes the Armor (or Rancor).
+  * Glitters (+1 per artifact or enchantment, about +4 by the end of the turn) is lost, and the board is 1-2 power
+    smaller.
+* **The slot** is the MV-2 plains (positions 6-7) ahead of the MV-1 plains. The interaction is the fetch rule's
+  MV-blind "last fetch" test, which is exactly the draft's finding (a) and the USER's open Q20.
+* **Not clairvoyant.** Glitters is fetched from the library by the fetch's own search; no future draw is involved.
+* **Why it cannot recover under the order alone:** the order fixes the casting sequence, and the fetch is a provider
+  pick, not a searched decision. At `--depth 8 --budget-ms 0` the search plays the identical T3 line, and the old binary
+  still wins T4.
+* **Why 9 recover at stage 1:** the deeper search finds another winning line within the old win turn.
+* **Under arm (b), the USER's 08-25 rule, every one of the 11 is fixed at its own cell setting.**
+  * Re-run single-game on `fe342a71` with `MTG_LP_FETCH_USER_RULE=1`, each takes Glitters at the 2-drop's fetch (no
+    later fetch of the line can reach an MV-2 scaler).
+  * All 11 return to the old win turn: 1665 and the seven 2HG d0 games win T4; 4082 and 12561 win T5; 6808 wins T4.
+  * gi1665 under b also ends on a board identical to old's.
+
+**So the order alone does NOT meet the bar:** net <= 0 in every cell, but 2 slower games do not recover. The amendment
+that keeps the USER's order is arm (b), the USER's own fetch rule. It is built, measured (§5), and fixes all 11; it is
+OFF pending Q20. Arms (b) and (a+b) have slower games of their own: 54 and 67. Their recovery check is in §6b.
 
 ## 7. RESUME (wrapped 2026-10-14 ~13:10Z for the night at the coordinator's request: the box is needed)
 
