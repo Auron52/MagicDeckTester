@@ -713,6 +713,7 @@ inline std::vector<int> RefindByNumberInOrder(const GameState& state, const std:
 inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx)
 {
     if (!state.deck_has_land_search) { return; }   // deck stamp: no land-search source can exist
+    ++combatpin::t_reads;   // reads scripted_attack_land_search (GameState.h, COMBAT-PIN READ WITNESS)
     std::vector<int> nums;
     nums.reserve(atk_idx.size());
     bool any = false;
@@ -778,6 +779,7 @@ inline bool IsQuestLandSearchSource(const Permanent& p, const CardDefinition*& d
 inline void FireCombatLandSearchCracks(GameState& state, int controller, std::vector<int>& atk_idx)
 {
     if (!state.deck_has_land_search) { return; }
+    ++combatpin::t_reads;   // reads both combat pins (GameState.h, COMBAT-PIN READ WITNESS)
     const int mask = state.scripted_combat_land_search_crack;
     state.scripted_combat_land_search_crack = -1;   // consumed whether or not it fires
     const bool human = g_play_dig_chooser != nullptr && !g_tap_speculating;

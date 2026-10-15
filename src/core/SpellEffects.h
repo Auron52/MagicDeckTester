@@ -7724,6 +7724,9 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // its class.
     //
     // Param-gated scan -> byte-identical for every deck without the param.
+    // DECK PRESENCE GATE (GameState::deck_has_other_subtype_enter_draw): a clear bit proves no
+    // watcher can be found, so our own entrants skip the walk; an opponent entrant keeps it.
+    if (state.battlefield[entered_index].controller_index != 0 || state.deck_has_other_subtype_enter_draw)
     {
         const Permanent& entrant = state.battlefield[entered_index];
         const int nctrl2 = entrant.controller_index;

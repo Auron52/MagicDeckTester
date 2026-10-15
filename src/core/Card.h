@@ -253,6 +253,9 @@ struct ManaCost
     // X counts as 0 outside the stack (CR 202.3). Hybrid pips are already counted in their
     // first colour's flat int.
     int ManaValue() const { return generic + white + blue + black + red + green + colorless; }
+    // Memberwise equality (C++20 defaulted: every member, so a new field is compared automatically).
+    // Used by TurnSolver::Plan / Action equality (the combat-pin main-phase share).
+    bool operator==(const ManaCost&) const = default;
 
     // Flat copy with hybrid pip i moved from its FIRST colour to its SECOND when bit i of `bits`
     // is set (bits == 0 returns the plain flat cost). Result carries no hybrid metadata.

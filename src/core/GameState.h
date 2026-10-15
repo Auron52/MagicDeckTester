@@ -656,6 +656,15 @@ struct GameState
     // projection are skipped (dead-code elimination, byte-identical). Garth holds it open. DEFAULT
     // TRUE == walk, the same only-err-true rule as above.
     bool                     deck_has_land_search            = true;
+    // ...and a NINTH, 2026-10-15 (Landfall perf) -- "whenever another <subtype> you control enters, draw"
+    // (CardParams::draw_on_other_subtype_enter). FireEtbWatchers walked the whole battlefield with a
+    // LookupCached per permanent for EVERY entrant to find such a watcher, so a token-making deck paid
+    // O(entrants x board) to learn there is none (~1% of a heavy Landfall game: Avenger's Plants,
+    // Baloths' Beasts). Stamped from the param itself, mainboard + sideboard, Garth holding it open, so
+    // a clear bit PROVES the walk finds nothing (dead-code elimination, no lever). The opponent's
+    // entrants keep the walk (OpponentDeck.h's list is not described by the stamp). DEFAULT TRUE ==
+    // walk, the only-err-true rule.
+    bool                     deck_has_other_subtype_enter_draw = true;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later
@@ -1081,4 +1090,18 @@ inline bool OpponentHasLost(const GameState& s)
     // "we died first" or "we died together". Unarmed decks read `raw` -- byte-identical.
     if (s.own_death_live) { return raw && s.ActivePlayer().life > 0; }
     return raw;
+}
+
+// COMBAT-PIN READ WITNESS (perf, 2026-10-15). Bumped by EVERY reader of the two combat-resolved
+// land-search pins -- GameState::scripted_attack_land_search and scripted_combat_land_search_crack:
+// FireAttackLandSearch / FireCombatLandSearchCracks (core/LandSearch.h, the consumers; the attack
+// projection's CountAttackLandSearchPump reaches the pins only through FireAttackLandSearch),
+// BuildSimKey and dominance::Build (the two state keys that fold them), and the turn-start reset.
+// A main-phase apply across which this did not move cannot have depended on the pins' values, which
+// is what lets SolveWithLookahead share one such apply between a base plan and its combat-pin
+// variants (see the COMBAT-PIN MAIN-PHASE SHARE there). Over-counting is safe (it only declines a
+// share); a reader that does NOT bump it would be a soundness hole -- grep the two field names.
+namespace combatpin
+{
+inline thread_local unsigned long long t_reads = 0;
 }

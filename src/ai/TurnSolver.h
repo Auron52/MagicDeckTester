@@ -652,6 +652,12 @@ struct Action
     // ran after the FIRST Hunt, the base plan's second Hunt then could not pay, T4 kill -> T5).
     // Nested records (breakpoint_casts) keep 0 -- they replay under their own recorded cast.
     int rec_bp_ord = 0;
+
+    // Memberwise equality (C++20 defaulted: EVERY member, so a field added later is compared without
+    // anyone remembering to). The one consumer is the combat-pin main-phase share in
+    // SolveWithLookahead (Plan::operator==), which must prove a variant IS its base plan but for the
+    // combat pins; a member compared by identity (cont_pins, def) only makes the test stricter.
+    bool operator==(const Action&) const = default;
 };
 
 // Finds the optimal set of spells to cast in one main phase by exhaustive
@@ -801,6 +807,7 @@ public:
         int         color = -1;  // static_cast<int>(Color) of the face to tap for; -1 = unstated
         int         position = 0;// declared ordered entries that precede it (LineSpec leaves it 0)
         std::vector<int> aura_colors;   // one Color-as-int per ANY-COLOUR land Aura on the host
+        bool operator==(const PreTap&) const = default;
     };
 
     struct Plan
@@ -1441,6 +1448,9 @@ public:
         int bp_self = -1;
 
         bool empty() const { return actions.empty(); }
+        // Memberwise equality (C++20 defaulted: every member, a new field included automatically).
+        // See Action::operator== for the one consumer.
+        bool operator==(const Plan&) const = default;
     };
 
     // ============================================================================================

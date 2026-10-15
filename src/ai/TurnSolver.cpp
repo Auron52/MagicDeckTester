@@ -843,6 +843,9 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
 // and pinned candidates folded after combat (la_cand loop / FSLineWin).
 static std::atomic<long long> g_combat_pin_m2_skipped{0};
 static std::atomic<long long> g_combat_pin_folded[2]{{0}, {0}};
+// COMBAT-PIN MAIN-PHASE SHARE firing counters (SolveWithLookahead; printed with the rollout stats):
+// base applies cached, variant applies replaced by the cached state.
+static std::atomic<long long> g_cpshare_cached{0}, g_cpshare_used{0};
 // MTG_EQUIP_INERT_FOLD's firing counter (see DropInertHasteShroudEquips): equip actions dropped.
 static std::atomic<long long> g_equip_inert_dropped{0};
 static std::atomic<long long> g_equip_idle_release_rejects{0};   // ...and subsets its subset half refused
@@ -1838,7 +1841,9 @@ namespace
                       << " idle_release_rejects=" << g_equip_idle_release_rejects.load() << "\n";
             std::cerr << "[rollout-stats] combat_pins m2_variants_not_emitted<=" << g_combat_pin_m2_skipped.load()
                       << " folded_postcombat la_cand=" << g_combat_pin_folded[0].load()
-                      << " fslinewin=" << g_combat_pin_folded[1].load() << "\n";
+                      << " fslinewin=" << g_combat_pin_folded[1].load()
+                      << " share_cached=" << g_cpshare_cached.load()
+                      << " share_used=" << g_cpshare_used.load() << "\n";
             std::cerr << "[rollout-stats] plan_axes etbcounter_variants=" << g_axis_etbcounter_vars.load()
                       << " sweep_variants=" << g_axis_sweep_vars.load()
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
@@ -44109,6 +44114,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
+    ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
@@ -55528,6 +55534,7 @@ static thread_local int g_simkey_m2coarse = 0;
 static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
                                            bool second_main)
 {
+    ++combatpin::t_reads;   // folds the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
     TranspositionTable::Key k;
     const bool canon = CanonSimKeyOn();
     // Order-insensitive fold of a section: sub-hash each item into its own Key, sort the
@@ -66284,9 +66291,99 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     bool         have_prev    = false;
     bool         have_prev2   = false;
 
+    // ---- COMBAT-PIN MAIN-PHASE SHARE (perf, 2026-10-15) -----------------------------------------
+    // Primeval Titan's attack pick (Plan::attack_land_search_choice) and the in-combat Khalni crack
+    // (Plan::combat_crack_choice) are pins a variant carries into COMBAT: AppendSubdecisionAxes
+    // clones a base plan and changes only those two fields, and ApplyPlanDirect merely writes them
+    // into the state for the declare-attackers step. So a variant's MAIN PHASE is its base plan's
+    // main phase -- one per Titan pick (~24 per attacking Titan), and on a Titan board those
+    // variants are close to half of every candidate list, each re-running the same apply.
+    //
+    // THE SHARE IS EXACT, so play is byte-identical. A variant reuses the base's post-apply state
+    // (plus the two pins, written exactly as ApplyPlanDirect's preamble writes them) only when
+    //   * it IS its base but for the two pins -- Plan::operator== (defaulted: every member), on the
+    //     variant with the pins masked; and neither carries a Karoo bounce group (the bounce fold
+    //     records a probe the apply fills);
+    //   * the base's apply read neither pin -- combatpin::t_reads did not move across it (every
+    //     reader bumps it: the two combat consumers, the attack projection through them, the two
+    //     state keys that fold the pins, the turn-start reset; GameState.h) -- so the pins' values
+    //     could not have steered it;
+    //   * it consumed no work unit and reached no breakpoint (the w0 records below describe a
+    //     no-breakpoint apply, and the variant's charge is the la_cand unit alone, as before).
+    // Anything else applies as it always did. Per pass (an apply is pass-independent, but the cache
+    // stays as local as the other per-pass memos).
+    std::vector<int>  cp_base_of;   // per candidate: the base whose apply it may share, or -1
+    std::vector<char> cp_is_base;   // per candidate: a later variant may share ITS apply
+    if (is_pre_combat && state.deck_has_land_search && !HumanPlayActive())
+    {
+        bool any_pinned = false;
+        for (const Plan& p : candidates)
+        {
+            if ((p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0) && p.bounce_group == 0)
+            { any_pinned = true; break; }
+        }
+        if (any_pinned)
+        {
+            cp_base_of.assign(candidates.size(), -1);
+            cp_is_base.assign(candidates.size(), 0);
+            // A bucketing hash only -- equality decides. Ignores nothing the share depends on
+            // because operator== below compares every member.
+            auto masked_hash = [](const Plan& p) -> std::uint64_t
+            {
+                std::uint64_t h = 0xC0B4A7ull + p.actions.size();
+                auto mix = [&h](std::uint64_t v) { h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); };
+                for (const Action& a : p.actions)
+                {
+                    mix(static_cast<std::uint64_t>(a.kind));
+                    mix(static_cast<std::uint64_t>(a.hand_index + 7));
+                    mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(a.card_name.c_str())));
+                    mix(static_cast<std::uint64_t>(a.chosen_x));
+                    mix(static_cast<std::uint64_t>(a.sac_source_id));
+                }
+                mix(static_cast<std::uint64_t>(p.land_slot + 300));
+                mix(static_cast<std::uint64_t>(p.land_search_act_slot + 300));
+                mix(p.land_search_pins.size());
+                for (int v : p.land_search_pins) { mix(static_cast<std::uint64_t>(v + 7)); }
+                mix(static_cast<std::uint64_t>(p.bp_choice + 7));
+                mix(static_cast<std::uint64_t>(p.landfall_target_choice + 7));
+                mix(std::hash<std::string>{}(p.land_to_play));
+                return h;
+            };
+            std::unordered_multimap<std::uint64_t, int> bases;
+            for (std::size_t i = 0; i < candidates.size(); ++i)
+            {
+                const Plan& p = candidates[i];
+                if (p.attack_land_search_choice < 0 && p.combat_crack_choice < 0 && p.bounce_group == 0)
+                { bases.emplace(masked_hash(p), static_cast<int>(i)); }
+            }
+            for (std::size_t i = 0; i < candidates.size(); ++i)
+            {
+                Plan& v = candidates[i];
+                if (v.attack_land_search_choice < 0 && v.combat_crack_choice < 0) { continue; }
+                if (v.bounce_group != 0) { continue; }
+                const int a = v.attack_land_search_choice;
+                const int c = v.combat_crack_choice;
+                v.attack_land_search_choice = -1;
+                v.combat_crack_choice       = -1;
+                int b = -1;
+                const auto rng = bases.equal_range(masked_hash(v));
+                for (auto it = rng.first; it != rng.second; ++it)
+                {
+                    if (it->second < static_cast<int>(i) && candidates[static_cast<std::size_t>(it->second)] == v)
+                    { b = it->second; break; }
+                }
+                v.attack_land_search_choice = a;
+                v.combat_crack_choice       = c;
+                if (b >= 0) { cp_base_of[i] = b; cp_is_base[static_cast<std::size_t>(b)] = 1; }
+            }
+        }
+    }
+
     for (int sub_depth = 0; sub_depth <= depth - 1; ++sub_depth)
     {
         long long remaining_at_start = budget ? budget->Remaining() : LLONG_MAX;
+        // The combat-pin share's per-pass cache: a base candidate's post-apply state, by index.
+        std::unordered_map<int, GameState> cp_cache;
 
         // --- Start gate: skip a pass we estimate won't fit (commit pass k-1) ---
         if (gate && sub_depth > 0)
@@ -66920,7 +67017,16 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 DedupCensusOn() ? g_stranded_activation_count : 0;
             const std::uint64_t dd_strand_td_before =
                 DedupCensusOn() ? g_stranded_tapdraw_count : 0;
-            GameState copy = state;
+            // COMBAT-PIN MAIN-PHASE SHARE (see the block before the pass loop): a variant whose base's
+            // apply was cached starts from that post-apply state instead of re-applying it.
+            const std::size_t cp_i = static_cast<std::size_t>(&plan - candidates.data());
+            const GameState* cp_shared = nullptr;
+            if (is_pre_combat && !cp_base_of.empty() && cp_base_of[cp_i] >= 0)
+            {
+                const auto it = cp_cache.find(cp_base_of[cp_i]);
+                if (it != cp_cache.end()) { cp_shared = &it->second; }
+            }
+            GameState copy = cp_shared != nullptr ? *cp_shared : state;
             // Make g_bp_cands_last describe THIS apply (same reset FSLineWin does, same reason).
             if (w0len_here) { g_bp_cands_last = 0; }
             // ...and the chain channel, which is per-apply for the same reason (-2 = never reached
@@ -66942,7 +67048,31 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (is_pre_combat)
             {
                 bounce_fold.Arm(plan);
-                ApplyPlanDirect(copy, plan, true);
+                if (cp_shared != nullptr)
+                {
+                    // ApplyPlanDirect's pin preamble -- the ONLY part of this variant's apply that
+                    // differs from its base's (the share's conditions above prove the rest equal).
+                    if (plan.attack_land_search_choice >= 0)
+                    { copy.scripted_attack_land_search = plan.attack_land_search_choice; }
+                    if (plan.combat_crack_choice >= 0)
+                    { copy.scripted_combat_land_search_crack = plan.combat_crack_choice; }
+                    g_cpshare_used.fetch_add(1, std::memory_order_relaxed);
+                }
+                else
+                {
+                    const bool cp_rec = !cp_is_base.empty() && cp_is_base[cp_i] != 0;
+                    const unsigned long long cp_reads0 = combatpin::t_reads;
+                    const long long cp_units0 = budget != nullptr ? budget->Used() : 0;
+                    ApplyPlanDirect(copy, plan, true);
+                    if (cp_rec && combatpin::t_reads == cp_reads0
+                        && (budget == nullptr || budget->Used() == cp_units0)
+                        && g_bp_any_last == any_before && g_bp_classon_last == classon_before
+                        && g_bp_latent9_last == latent9_before)
+                    {
+                        cp_cache.emplace(static_cast<int>(cp_i), copy);
+                        g_cpshare_cached.fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
                                    [&] { return BuildDedupKey(copy); });
                 if (bounce_expect != nullptr)

@@ -424,6 +424,10 @@ static_assert(sizeof(Player) == 200,
 // folded value-gated in Build() like the two above. `deck_has_land_search` (a bool, landed in existing
 // padding) is a DECK CONSTANT stamped once in StampDeckTraits that only skips provably-empty walks --
 // identical across every pair of states Build() compares, nothing to fold. Measured sizeof, not summed.
+// +bool (2026-10-15, Landfall perf; NO size change -- existing bool padding after deck_has_land_search):
+// `deck_has_other_subtype_enter_draw`. Classification: DECK CONSTANT, stamped once in StampDeckTraits
+// and never written again; it only skips FireEtbWatchers' subtype-enter draw walk that provably finds
+// no watcher -- identical across every pair of states Build() compares, nothing to fold.
 static_assert(sizeof(GameState) == 1096,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -652,6 +656,7 @@ inline bool AtCleanBoundary(const GameState& s)
 inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                      std::uint64_t ident_h1 = 0, std::uint64_t ident_h2 = 0)
 {
+    ++combatpin::t_reads;   // folds the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
     DomSnap n;
     n.ident_h1 = ident_h1;
     n.ident_h2 = ident_h2;

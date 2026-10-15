@@ -44,6 +44,8 @@ struct ManaPool
     int snow_units = 0;
 
     int Total() const { return white + blue + black + red + green + colorless + wild; }
+    // Memberwise equality (C++20 defaulted; see ManaCost::operator==).
+    bool operator==(const ManaPool&) const = default;
 
     void Add(Color c, int amount = 1)
     {
