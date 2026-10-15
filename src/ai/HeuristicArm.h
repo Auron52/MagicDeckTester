@@ -504,6 +504,7 @@ enum Slot : int
     FLUCT_ORDER,              // MTG_FLUCT_ORDER          Fluctuator: the USER's TOTAL cast order (2026-10-14): land > Unearth > Enlightened Tutor > Drannith Stinger > Fluctuator > Hollow One > a SECOND Fluctuator (one on the battlefield or earlier in the same cast set) > cycling; names as the final tie-break, never plan/hand order. Default ON; =0 -> GenericProvider::CastOrderRank (the A/B hatch). docs/design/fluctuator-cast-order-2026-10-14.md
     FLUCT_DRAWN_LAND,         // MTG_FLUCT_DRAWN_LAND     Fluctuator: a land DRAWN by the dig chain is considerable as the turn's land drop (USER 2026-10-14: "Why can't we use a land drawn by cycling?"): the dig loop re-solves (searched, site 4) when the drop is open and a land in hand makes a held card castable, and once at the chain's end when a drawn land could still be the drop. Completeness fix. Default ON; =0 -> the drop is unreachable after a land draw, byte-identical to 16dfb7e4
     FLUCT_KEEP_UNTAPPED,      // MTG_FLUCT_KEEP_UNTAPPED  Fluctuator: the USER's "occasionally an untapped land" cycling protection (ledger §7.5) -- while the land drop is open and no Stinger is on the battlefield, ONE untapped-entering land in hand is cycled LAST (an order, never a refusal). Default ON; =0 -> every land is rank-3 fodder, byte-identical to 16dfb7e4
+    FLUCT_ORDER_FUNDED,       // MTG_FLUCT_ORDER_FUNDED   Fluctuator: the USER's order is kept whenever the cast set can be PAID in it; when the exact payer (a copy) cannot pay the whole set in that order, Unearth and Enlightened Tutor move after Hollow One, so the casts that survive an unpayable set are the Stinger and the Fluctuator. Root cause it answers: the pool over-credits Capital City's net-zero conversion, so the d0 greedy and the playouts pick sets like {Fluctuator, Unearth} that only one of can be paid, and the first-ranked one is the one cast (2026-10-15 A/B: the order alone was +204 net at d0). Default OFF (measured)
     COUNT
 };
 
@@ -962,6 +963,7 @@ inline const char* Name(int slot)
         "MTG_FLUCT_ORDER",
         "MTG_FLUCT_DRAWN_LAND",
         "MTG_FLUCT_KEEP_UNTAPPED",
+        "MTG_FLUCT_ORDER_FUNDED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

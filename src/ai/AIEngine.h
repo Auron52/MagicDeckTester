@@ -507,7 +507,10 @@ private:
     // Plan::dig_choice: under MTG_DIG_SEARCHED_CHOICE the reactive dig realises the SEARCHED choice the
     // plan was scored with (0 = none, 1 = dig while affordable, 2 = the gate without the main-2
     // deferral) instead of re-deciding by heuristic; -1 (the d0 runner's greedy plan) keeps the gate.
-    void UseSurplusLandAbilities(GameState& state,
+    // Returns true iff it then PLAYED a land drawn by the dig as the turn's drop (depth 0 only, under
+    // DecisionProvider::DigUsesDrawnLandDrop) -- the caller requests the second pass so the main
+    // re-solves with that land's mana.
+    bool UseSurplusLandAbilities(GameState& state,
                                  const std::function<void(GameState&)>& resolve_stack = {},
                                  int dig_choice = -1);
 
