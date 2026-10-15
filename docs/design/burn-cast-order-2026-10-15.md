@@ -1,6 +1,7 @@
 # burn: the USER's cast order, main-2 rule, and the spectacle plan credit (2026-10-15)
 
-**Status:** built, unit-tested, measured -- see "Measurement" and "Defaults as shipped" below.
+**Status:** built, unit-tested, measured; SHIPPED default ON (order + conditional Blood-first + main-2 rule +
+spectacle credit + kill-trigger fix) -- see "Measurement" and "Defaults as shipped"; five USER questions at the end.
 Branch `worktree-agent-ab91716804a6cfac5` (base: integration tip `16dfb7e4`). Nothing pushed.
 
 The USER's ruling, verbatim (2026-10-14, `cast-order-review-2026-10-14.md`, "burn -- SETTLED"):
@@ -93,9 +94,9 @@ So the amendment is CONDITIONAL (`BurnProvider::CastOrderActionRank`): Searing B
 earlier (before Searing Blaze) exactly when FindBurnKillTarget's pick -- the target both apply worlds give
 it -- survives Blood alone; otherwise, and with no opposing creature, the USER's list stands. The order
 then reads land > Goblin Guide > Swiftspear > Bolt > Shard Volley > {**Searing Blood > Searing Blaze** if
-Blood cannot kill alone, else Searing Blaze > Searing Blood} > Skullcrack > Light Up > Eidolon. Default
-OFF -- a USER decision. (The running A/B's arms `o1b` / `o123b` measured the first, UNCONDITIONAL form;
-the conditional form is measured in the follow-up batch as `o1c` / `o123c`.)
+Blood cannot kill alone, else Searing Blaze > Searing Blood} > Skullcrack > Light Up > Eidolon. Shipped
+ON PENDING THE USER (see "Defaults"). (The first A/B's `o1b` / `o123b` measured the UNCONDITIONAL form; the
+conditional form is `...c` in the follow-up.)
 
 ### Not built: Eidolon last across BOTH mains (an option for the USER)
 
@@ -218,12 +219,127 @@ drop for a line Solve cannot find. Measured as the `...s` arms; default OFF.
 
 ## Measurement
 
-MEASUREMENT_PLACEHOLDER
+**Setup.** Paired per game against the BASE binary (the integration tip `16dfb7e4`, arm `old`); loss = turn 9;
+held-out seeds from 11600001 (burn ship 11600001 / d3 11610001 / d0 11630001; burn2hg 11670001 / 11675001 /
+11681001); every arm of a cell plays the SAME games (seed = base + gi, game_index = gi). Cells: **shipped**
+(`--budget-ms 20`, the deck's profile attached, so its own depth), **d3** (`--depth 3 --budget-ms 10`), **d0**.
+Sizes: burn 4000 / 6000 / 40000, burn2hg 2000 / 3000 / 15000 per arm (the base ran 8000 / 12000 / 40000 and
+4000 / 6000 / 15000; the arms pair with its first games). Two pooled batches of the branch through the FIFO lock
+(`scripts/burn_order_ab/`): the first A/B (`mtg.new1` = `b8dea210`: the unconditional Blood-first, no kill-trigger
+fix; 4551 jobs, 68 min) and the follow-up (`mtg.new2` = `6952c526` + the cost-only `31448361`: the conditional
+Blood-first, the kill-trigger fix, and the stage-1 / stage-2 recovery job of EVERY slower game of every arm;
+22948 jobs, 50 min at 20/20 workers). `MTG_DUMP_WINS=1`; analysis `make_ab.py --analyse`, verdict
+`verdict.py`.
+
+**The table** -- per cell `faster/slower **net**` (net = sum of turn deltas, loss = 9) and the searched work
+ratio `u` (units vs base on the same chunks); `N nr` = slower games NOT recovered at stage 1
+(`--depth max(6, old wt) --budget-ms 100`) or stage 2 (`--depth 8 --budget-ms 0`). Arms: `o` = order, `1/2/3` =
+parts, `c` = conditional Blood-first, `k` = kill-trigger fix, `s` = credit search-only, `n` = narrow reading, `b` =
+UNCONDITIONAL Blood-first (first A/B; superseded by `c`). The SHIPPED defaults are `o123ck`.
+
+| arm | burn ship | burn d3 | burn d0 | burn2hg ship | burn2hg d3 | burn2hg d0 | bar |
+|---|---|---|---|---|---|---|---|
+| `o1` (the literal list) | 0/0 **+0** u0.95 | 1/0 **-1** u0.99 | 20/6 **-12** | 0/1 **+1** u0.99 **1 nr** | 4/1 **-3** u0.99 **1 nr** | 44/8 **-35** | fails |
+| `o1c` | 2/0 **-2** u0.95 | 1/0 **-1** u0.99 | 25/4 **-21** | 1/0 **-1** u0.99 | 10/0 **-10** u0.99 | 56/1 **-55** | MEETS |
+| `o1ck` | 2/0 **-2** u0.95 | 1/0 **-1** u0.99 | 50/4 **-46** | 1/0 **-1** u0.99 | 11/0 **-11** u0.99 | 59/1 **-58** | MEETS |
+| `o12` | 0/1 **+1** u0.47 **1 nr** | 4/3 **-1** u0.85 **2 nr** | 20/6 **-12** **2 nr** | 3/9 **+6** u0.61 **7 nr** | 11/13 **+2** u0.85 **5 nr** | 44/8 **-35** **4 nr** | fails |
+| `o12k` | 0/1 **+1** u0.47 **1 nr** | 4/3 **-1** u0.85 **2 nr** | 38/6 **-30** **2 nr** | 3/7 **+4** u0.60 **5 nr** | 12/11 **-1** u0.85 **4 nr** | 45/8 **-36** **4 nr** | fails |
+| `o12c` | 2/0 **-2** u0.47 | 4/1 **-3** u0.85 | 25/4 **-21** | 4/4 **+0** u0.60 **2 nr** | 17/8 **-9** u0.85 **1 nr** | 56/1 **-55** | fails |
+| `o12ck` | 2/0 **-2** u0.47 | 4/1 **-3** u0.85 | 50/4 **-46** | 4/2 **-2** u0.60 | 19/6 **-13** u0.85 | 59/1 **-58** | MEETS |
+| `o13` | 4/0 **-4** u0.97 | 8/0 **-8** u0.99 | 1299/715 **-533** | 0/3 **+4** u1.00 **1 nr** | 7/2 **-5** u1.00 **1 nr** | 754/439 **-280** **1 nr** | fails |
+| `o13ck` | 6/0 **-6** u0.96 | 8/0 **-8** u0.99 | 1328/713 **-565** | 1/2 **+1** u1.00 | 14/1 **-13** u1.00 | 764/432 **-298** **1 nr*** | fails (net) |
+| `o123` | 4/1 **-3** u0.48 **1 nr** | 11/3 **-8** u0.85 **2 nr** | 1299/715 **-533** **2 nr** | 3/11 **+9** u0.63 **7 nr** | 14/16 **+2** u0.85 **5 nr** | 754/439 **-280** **5 nr** | fails |
+| `o123k` (literal + all) | 4/1 **-3** u0.48 **1 nr** | 11/3 **-8** u0.85 **2 nr** | 1317/715 **-551** **2 nr** | 3/8 **+6** u0.62 **5 nr** | 15/14 **-1** u0.85 **4 nr** | 755/439 **-281** **5 nr** | fails |
+| `o123c` | 6/0 **-6** u0.48 | 11/1 **-10** u0.85 | 1303/713 **-540** | 4/5 **+1** u0.62 **2 nr** | 20/10 **-10** u0.85 **1 nr** | 761/432 **-295** **1 nr*** | fails |
+| **`o123ck` (SHIPPED)** | 6/0 **-6** u0.48 | 11/1 **-10** u0.85 | 1328/713 **-565** | 4/3 **-1** u0.62 | 22/8 **-14** u0.85 | 764/432 **-298** **1 nr*** | MEETS (see *) |
+| `o123sc` | 6/0 **-6** u0.48 | 10/1 **-9** u0.85 | 25/4 **-21** | 4/5 **+1** u0.62 **2 nr** | 19/9 **-10** u0.85 **1 nr** | 56/1 **-55** | fails |
+| `o123n` (narrow) | 4/10 **+6** u0.44 | 11/26 **+15** u0.83 | 1299/715 **-533** | 4/20 **+17** u0.61 | 15/22 **+7** u0.84 | 754/439 **-280** | fails (net) |
+| `o123b` | 6/1 **-5** u0.48 | 10/2 **-8** u0.85 | 1301/718 **-533** | 4/7 **+3** u0.62 | 18/12 **-6** u0.85 | 756/433 **-289** | fails (net) |
+| `o1b` | 2/1 **-1** u0.95 | 0/1 **+1** u0.99 | 24/13 **-11** | 1/1 **+0** u0.99 | 8/2 **-6** u0.99 | 52/2 **-50** | fails (net) |
+
+(`o123n`, `o123b`, `o1b` fail on net alone, so their slower games were not put through recovery.) d0 has no
+search, so no `u`. Wall-clock is NOT compared: the arms and the base ran in different batches, and the `off` arm
+-- identical games, identical units -- read 1.8x the base's ms, i.e. box load, not work.
+
+**\* burn2hg d0 seed 11689717 gi 8716 -- the only slower game of the shipped arm that does not recover, and it
+is pre-existing.** Base d0: T5; every credit arm d0: T6 (T2: the greedy now casts Shard Volley, sacrificing a
+land, + Light Up the Stage {R} in main 1 -- the Volley hold's exception (b) -- where the base cast Skullcrack and
+kept the land; it then misses a land drop on T4). But the BASE binary's own `--depth 8 --budget-ms 0` is T6 too
+(and so are `off`, `o12ck` and `o123ck` at d8 b0): the base's T5 is a depth-0 line its full search never
+plays. Nothing is lost at large budget -- the completeness invariant holds -- so it is classified with the
+"committed-tree binary also fails it" class (`no-greedy-in-search-window.md`, checkpoint 4), and reported.
+
+**What the non-recovering games of the other arms are.**
+* *The literal list (Searing Blaze before Searing Blood)* -- `o1`, `o12(k)`, `o123(k)`, `o13`: burn ship gi 3206;
+  d3 2206, 4126; d0 17876, 33696; burn2hg ship 386 (`o1`'s one), 486, 1096, 1106, 1566; d3 2736 (`o1`'s one),
+  506, 1516, 2516; d0 2526, 3266, 3556, 4076 -- all NOT recovered at d8 b0, and every one is gone in the same arm
+  with only `MTG_BURN_BLOOD_FIRST` added, which changes nothing but the Blood / Blaze order. The mechanism (the probes' gi 26, 386, 486, 1096, 1106, 1566): Blaze
+  first kills the 3/3 that Blood needed to finish for its death trigger, and Blood is stranded.
+* *The main-2 rule without the kill-trigger fix* -- `o12c`, `o123c`, `o123sc`: burn2hg ship 1186, 1957; d3 37:
+  the rule moves the lethal Shard Volley to main 1, where the projection could not see a Blood finished by the
+  plan's own creature damage (part "Found by the measurement"); all gone with `MTG_KILL_TRIGGER_COMBO`.
+* *The credit at d0* -- gi 8716 above (`o13c`, `o13ck`, `o123c`, `o123ck`).
+
+**The shipped arm's slower games and their recovery** (`o123ck`): burn ship none; burn d3 gi 3785 (T5 -> T6,
+stage 1); burn d0 713, all stage 1; burn2hg ship gi 571 (T7 -> T8, stage 1: the sac-pin variant strands Light
+Up's mana at b20), 824 (T7 -> T8, stage 2: a budget-dependent T2 main-2 Light Up {R} leaves no land for the T4
+drop), 1021 (T8 -> loss, stage 1); burn2hg d3 gi 322, 1157, 1726, 1732, 1876, 2444, 2566, 2897 (all stage 1;
+gi 1732 is the credit's main-1 {Bolt, Light Up {R}} judged better at d3 than attacking first and casting two
+Light Ups for {R} in main 2 -- recovers with depth); burn2hg d0 432 slower: 431 stage 1, gi 8716 pre-existing.
+
+**Work.** The main-2 rule is a large SOUND collapse of main-2 options: searched units 0.47-0.48 (burn) /
+0.60-0.62 (burn2hg) of the base at the shipped setting, 0.85 at d3. The order alone 0.95-0.99; the credit adds
+about 1% (it widens the odometer's bound).
+
+**Identity.** Every other suite deck (32: angels ... whiteknights), shipped 20 / d3 30 / d0 100 games, with every
+new lever ON: 96 jobs, 0 differ, in BOTH batches. The new binary with every lever off (`off`): 215 chunks
+byte-identical to the base. The shipped binary (`mtg.final`, new defaults, no flags) on those suites' d0 + d3
+identity jobs: 64 jobs / 4160 games, 0 differ vs the base; and on the first chunk of every `o123ck` cell (1150
+games): 0 differ vs the batch -- so the defaults ARE the measured arm. HEAD's src (`31448361` + comments) vs `mtg.new2`: 0 differ on the same chunks.
+
+**References** (`references/burn/`, 16 hand-played games). Reference bench (`scripts/ref_bench.py`, shipped
+settings): 0/16 short, search 4.375 vs human 4.625, identical to the base (4.375). Strict protocol replay: base
+16/16; shipped 16/16 repaired AFTER a replay-checker fix -- before it, `claude_s17_gi16` read as play-drift (T5 ->
+T8) under every arm with the order: the order casts that T3 plan's Shard Volley before Skullcrack, so the
+plan's sub-decisions (Volley's target and sacrifice, Skullcrack's target) arrive in a new order; the checker
+aligned them strictly left-to-right, read Volley's target as an insertion, jammed on the recorded Skullcrack
+frame, and answered every later pick -- the T4 land drop included -- by default (a pass). The engine played the
+human's line correctly; the checker lost it. `test/viewer_protocol_check.py` now answers a sub-decision of the
+current plan with the recorded answer of the SAME identity (type, turn, source) found later in the same plan's
+run of frames, reported as a repair ("answered in the plan's new cast order"). Whole-corpus replay of the checker
+change (original vs patched checker on the shipped binary, every deck's references): see "Defaults".
 
 ## Defaults as shipped
 
-DEFAULTS_PLACEHOLDER
+As of this commit (the defaults ARE arm `o123ck`, verified byte-identical above):
+
+| lever | default | why |
+|---|---|---|
+| `MTG_BURN_ORDER` | **ON** | meets the bar with the Blood-first amendment (`o1c`, `o1ck`, `o12ck`, `o123ck`) |
+| `MTG_BURN_BLOOD_FIRST` (conditional) | **ON, PENDING THE USER** | the USER's literal list fails the bar: 2 slower games not recovered at d8 b0 with the order alone (burn2hg ship gi 386, d3 gi 2736), 18 with parts 2-3; the amendment is the smallest change that passes. `=0` gives the literal list |
+| `MTG_BURN_M2_RULE` (broad) | **ON** | meets the bar with the kill-trigger fix (`o12ck`, `o123ck`); halves the searched work |
+| `MTG_BURN_M2_NARROW` | OFF | measured worse in every searched cell (+6 / +15 / +17 / +7) -- a USER question, default unchanged |
+| `MTG_SPECTACLE_PLAN_CREDIT` (EngineFlags.h) | **ON** | all six cells net <= 0 (burn d0 -565, burn2hg d0 -298); one d0 slower game not recovered, pre-existing (above) |
+| `MTG_KILL_TRIGGER_COMBO` (EngineFlags.h) | **ON** | a projection-accuracy fix; it is what lets parts 2 and 3 meet the bar; byte-identical on every other deck |
+| `MTG_SPECTACLE_CREDIT_SEARCH_ONLY` | OFF | a measured alternative: it gives up the credit's d0 gain (-21 vs -565) and, without the kill-trigger fix, failed burn2hg ship (+1) |
+
+The burn / burn2hg ground truth moves with these defaults (`test/regression_gt.txt` is not touched here): the
+integrator re-runs and accepts smoke and regression; the overnight rows wait for the next periodic overnight run.
 
 ## Questions for the USER
 
-QUESTIONS_PLACEHOLDER
+1. **Conditional Searing Blood before Searing Blaze** (shipped ON pending your answer). Your list puts Blaze
+   first. When the opponent's creature survives Blood alone (a 3/3) Blaze-first kills it and strands Blood's
+   death trigger (burn2hg gi 386 T4 -> T5, gi 486, 1096, 1106, 1566 ...); when Blood alone kills it (a 1/1),
+   Blaze-first is right (gi 1354) -- so the amendment applies only in the first case. With your literal list
+   the order fails the bar on 2 games by itself and on 18 with parts 2-3; with the amendment it meets it.
+   Keep it, or `MTG_BURN_BLOOD_FIRST=0`?
+2. **Eidolon of the Great Revel last across BOTH mains** (not built). Within a main it is last; an Eidolon cast
+   in main 1 still pings a main-2 Light Up (2 to us). Build "Eidolon only in main 2"?
+3. **The "played off" reading** of your main-2 rule. Shipped broad (once a main-2 Light Up was cast, any spell
+   may follow in that main); the narrow reading (only the cards it exiled) measured worse in every searched
+   cell (`o123n`). Confirm broad?
+4. **burn2hg d0 gi 8716** -- the credit's one non-recovered slower game; the base's own d8 b0 is the same T6, so
+   I classed it pre-existing. Agree?
+5. **The credit in the search only** (`MTG_SPECTACLE_CREDIT_SEARCH_ONLY`) is measured and OFF: it keeps the
+   greedy walk at the printed cost, which removes the d0 slower games but also the d0 gain.

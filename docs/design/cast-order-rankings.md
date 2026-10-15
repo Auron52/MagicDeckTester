@@ -1194,17 +1194,21 @@ else rank 24 (last; the tutored card becomes next turn's upkeep-Call dump or dra
 
 ## burn
 
-**USER ORDER (2026-10-14), BUILT 2026-10-15 -- `MTG_BURN_ORDER`; record and measurement in
-`docs/design/burn-cast-order-2026-10-15.md`.** land > Goblin Guide > Monastery Swiftspear > Lightning
+**USER ORDER (2026-10-14), BUILT AND SHIPPED DEFAULT ON 2026-10-15 -- `MTG_BURN_ORDER`; record and measurement
+in `docs/design/burn-cast-order-2026-10-15.md`.** land > Goblin Guide > Monastery Swiftspear > Lightning
 Bolt > Shard Volley > Searing Blaze > Searing Blood > Skullcrack > Light Up the Stage > Eidolon of the
 Great Revel -- ranks from params, the name as the final tie-break (a TOTAL order); Shard Volley sequenced
 at its rank (`SacLandCastsInOrder`), not after every cast; the land drop first, but before Searing Blaze
 when Blaze is cast with a land in hand and after a self-paid Light Up the Stage. With it:
 `MTG_BURN_M2_RULE` (main 2 casts only Light Up, Eidolon, and Searing Blaze while no land has entered,
-plus what is played off a main-2 Light Up) and the engine's `MTG_SPECTACLE_PLAN_CREDIT`. A PROPOSED
-amendment, `MTG_BURN_BLOOD_FIRST` (Searing Blood before Searing Blaze), is a USER question. The report
-under the order (`MTG_BURN_ORDER=1 mtg decks/burn/burn.txt --cast-order-report`; the main column is
-advisory -- burn does not opt into the classifier filter, its main-2 rule is a separate restriction):
+plus what is played off a main-2 Light Up) and the engine's `MTG_SPECTACLE_PLAN_CREDIT` and
+`MTG_KILL_TRIGGER_COMBO` -- all default ON. The amendment `MTG_BURN_BLOOD_FIRST` -- Searing Blood before
+Searing Blaze WHEN Blood alone cannot kill its target -- ships ON PENDING THE USER (the literal list misses the
+adoption bar; `=0` restores it). Measured (`o123ck` vs the integration tip, loss = 9): burn shipped -6 / d3 -10 /
+d0 -565, burn2hg -1 / -14 / -298; searched work 0.48 / 0.62 of the base at the shipped setting. The report
+(`mtg decks/burn/burn.txt --cast-order-report`; the conditional Blood-first is board-dependent, so a static
+report cannot show it; the main column is advisory -- burn does not opt into the classifier filter, its main-2
+rule is a separate restriction):
 
 ```
 # [LAND] LAND DROP -> FIRST (exceptions above)
@@ -1219,7 +1223,7 @@ advisory -- burn does not opt into the classifier filter, its main-2 rule is a s
   24     -   both    4  2  Searing Blood
   24     -   both    4  2  Skullcrack
 # [30] SPECTACLE (Light Up the Stage): after the burn ({R}) and the creatures
-  30     -   m2    4  3  Light Up the Stage
+  30     -   m2    4  3  Light Up the Stage   -- SPECTACLE: cheap only after damage -- conditional position, see doc
 # [40] ON-CAST SELF-DAMAGE (Eidolon): the main's last cast
   40     -   m2    4  2  Eidolon of the Great Revel
 ```
