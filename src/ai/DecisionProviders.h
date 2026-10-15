@@ -995,14 +995,14 @@ public:
     // THE USER'S CAST ORDER (2026-10-14, MTG_BURN_ORDER; docs/design/burn-cast-order-2026-10-15.md):
     // land > Goblin Guide > Monastery Swiftspear > Lightning Bolt > Shard Volley > Searing Blaze >
     // Searing Blood > Skullcrack > Light Up the Stage > Eidolon of the Great Revel. Ranks come from
-    // PARAMS (haste creature / burn by mana value / spectacle / on-cast self-damage); ArrangeCastOrder
-    // breaks an equal rank by NAME, so the order is total and never falls to hand order. Shard Volley
-    // joins the burn (SacLandCastsInOrder); sets holding Light Up sort by rank (OrderOpaqueCastsByRank).
-    // The land drop's two exceptions are LandPlanTieKey (the search) and LandDropAfterDrawEngine (d0).
+    // PARAMS (haste creature / burn by mana value / spectacle / on-cast self-damage); an equal rank is
+    // broken by NAME (CastOrderTotalByName, the shared comparator), so the order is total and never falls
+    // to hand order. Shard Volley joins the burn (SacLandCastsInOrder); sets holding Light Up sort by
+    // rank (OrderOpaqueCastsByRank). The land drop's two exceptions are LandPlanTieKey (the search) and
+    // LandDropAfterDrawEngine (d0).
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     const char* CastOrderTierName(int rank) const override;
-    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
-                          std::vector<int>& order) const override;
+    bool CastOrderTotalByName() const override;
     bool OrderOpaqueCastsByRank() const override;
     bool SacLandCastsInOrder() const override;
     int  LandPlanTieKey(const GameState& s, const std::vector<Action>& acts, bool plays_land,
