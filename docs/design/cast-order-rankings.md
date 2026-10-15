@@ -87,15 +87,37 @@ Scoped-arm evidence: train green-or-flat, held-out 7 green / 5 flat / 0 red, per
 
 ## Auras
 
-**FLAG FIX (2026-08-19):** `feeds_combat` was a false negative for this deck — `DeckFeedsCombat`
-scanned `power_bonus`/`scales_per_matching` but auras pump via `aura_power_bonus`/`aura_scale_*`.
-Found in the 2026-08-18 review; play-inert (this deck reads `uses_second_main=no`, so the phase
-filter never runs — smoke 36/36 byte-identical after the fix), but the m1/m2 column below is now
-computed from the correct flag.
+**USER ORDER, BUILT (`MTG_AURAS_ORDER`, default ON; 2026-10-14; adoption bar: see the design doc).** USER, on the 10-14 draft:
+*"Otherwise the auras order seems okay. (pending tests)"*, amended with *"Maybe Lion Umbra before Daybreak just in
+case"* (*"So that you could play 2 Daybreak"*, *"(if light paws is out)"*), and made TOTAL per the cross-deck ruling
+*"Let's fully order the cards in each list inasmuch as possible"*.
+
+The order, one card per position, all main 1, the same on every turn:
+
+    land > Light-Paws > Kor Spiritdancer > Slippery Bogle > Gladecover Scout > Armadillo Cloak > Alpha Authority >
+    Spirit Mantle > Spirit Link > Gryff's Boon > Hyena Umbra > Spider Umbra > Audacity > Rancor > Ancestral Mask >
+    All That Glitters > Ethereal Armor > Lion Umbra > Daybreak Coronet
+
+* **Rules, keyed on params** (`AurasProvider::CastOrderRank`):
+  * creatures first: Light-Paws, then Kor, then a creature with a hybrid pip (Bogle), then the rest;
+  * plain Auras: highest mana value first, then the weakest power first, then by name;
+  * scalers next, highest mana value first;
+  * restricted Auras last: `modified` before `another_aura`.
+* **What it replaces.** The generic creature-10 / noncreature-20 tiers, plus the agent's board-conditional Light-Paws
+  sub-order (`MTG_AURA_CAST_ORDER`, still in `GenericProvider` for other decks). `MTG_AURAS_ORDER=0` restores those
+  exactly.
+* **Measurement, every slower game, and the two default-OFF report arms for the USER's open questions:**
+  `docs/design/auras-cast-order-2026-10-14.md`.
+  * The arms are `MTG_AURAS_ORDER_SEARCH` (Q19) and `MTG_LP_FETCH_USER_RULE` (Q20).
+* The rank numbers below are `(class << 20) + name key`. Their size carries no meaning beyond the order.
+
+**FLAG FIX (2026-08-19):** `feeds_combat` was a false negative for this deck. `DeckFeedsCombat` scanned
+`power_bonus` / `scales_per_matching`, but Auras pump via `aura_power_bonus` / `aura_scale_*`. It is play-inert,
+because this deck reads `uses_second_main=no`.
 
 ```
 # Cast order -- decks/Auras/Auras.cod
-# provider: Generic   ideal-order draw tier: off   cantrip max mv: 1
+# provider: Auras   ideal-order draw tier: off   cantrip max mv: 1
 # deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
@@ -104,27 +126,59 @@ computed from the correct flag.
 # [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
   land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
-# [10] CREATURE: before noncreature spells (prowess catches later casts)
-  10     -   m2    3  1  Gladecover Scout
-  10     -   m2    4  1  Slippery Bogle
-  10     -   m2    2  2  Kor Spiritdancer
-  10     -   m2    4  2  Light-Paws, Emperor's Voice
+# [1342025] ENGINE: Light-Paws -- on the battlefield before any Aura, so every Aura cast fetches
+  1342025     -   m2    4  2  Light-Paws, Emperor's Voice
 #
-# [20] other noncreature spell
-  20     -   m1    1  1  Audacity
-  20     -   m1    4  1  Ethereal Armor
-  20     -   m1    1  1  Gryff's Boon
-  20     -   m1    1  1  Hyena Umbra
-  20     -   m1    4  1  Rancor
-  20     -   m1    1  1  Spider Umbra
-  20     -   m1    1  1  Spirit Link
-  20     -   m1    1  2  All That Glitters
-  20     -   m1    1  2  Alpha Authority
-  20     -   m1    4  2  Daybreak Coronet
-  20     -   m1    1  2  Lion Umbra
-  20     -   m1    1  2  Spirit Mantle
-  20     -   m1    4  3  Ancestral Mask
-  20     -   m1    1  3  Armadillo Cloak
+# [2373653] ENGINE: Kor Spiritdancer -- before any Aura, so every Aura cast draws
+  2373653     -   m2    2  2  Kor Spiritdancer
+#
+# [3595257] CREATURE (hybrid cost): a host before the Auras that target it; Bogle before Scout (USER list)
+  3595257     -   m2    4  1  Slippery Bogle
+#
+# [4380173] CREATURE: a host before the Auras that target it (by name)
+  4380173     -   m2    3  1  Gladecover Scout
+#
+# [40953658] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  40953658     -   m1    1  3  Armadillo Cloak
+#
+# [47240501] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  47240501     -   m1    1  2  Alpha Authority
+#
+# [48687163] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  48687163     -   m1    1  2  Spirit Mantle
+#
+# [56027195] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  56027195     -   m1    1  1  Spirit Link
+#
+# [56814351] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  56814351     -   m1    1  1  Gryff's Boon
+#
+# [56841239] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  56841239     -   m1    1  1  Hyena Umbra
+#
+# [57075757] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  57075757     -   m1    1  1  Spider Umbra
+#
+# [57732974] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  57732974     -   m1    1  1  Audacity
+#
+# [58090760] PLAIN AURA: highest mana value first; weakest power first within one mana value; then by name
+  58090760     -   m1    4  1  Rancor
+#
+# [76601830] SCALER: after every plain Aura, highest mana value first (an earlier fetch can take a second copy)
+  76601830     -   m1    4  3  Ancestral Mask
+#
+# [77649085] SCALER: after every plain Aura, highest mana value first (an earlier fetch can take a second copy)
+  77649085     -   m1    1  2  All That Glitters
+#
+# [78791634] SCALER: after every plain Aura, highest mana value first (an earlier fetch can take a second copy)
+  78791634     -   m1    4  1  Ethereal Armor
+#
+# [81034031] RESTRICTED (enchant modified creature): last for legality, before Coronet so a fetch can take a 2nd Coronet
+  81034031     -   m1    1  2  Lion Umbra
+#
+# [81900987] RESTRICTED (another Aura attached): last for legality
+  81900987     -   m1    4  2  Daybreak Coronet
 ```
 
 ## Creature Giving
