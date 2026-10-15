@@ -265,6 +265,13 @@ breakpoint-enumeration memo is thread-local and survives a batch worker's job sw
 job's units depend on which jobs shared its worker. A same-manifest rerun of the 4 jobs on both binaries
 is the clean check; not run.
 
+### 4.7 The NEW_LAST deletion and the executor lockstep fix
+
+One manifest, three binaries back to back in one hold of the box lock (`scripts/bp_open/lock3.sh`): all 33
+suite decks, shipped b20 + d3 b10, 40 games per cell, every lever at its shipped default, fresh seeds
+10700001+. r2 vs r3 = the deletion (must be byte-identical); r3 vs r4 = the lockstep fix (the movers).
+**Queued, results pending.** Both r3 and r4: `mtg-test` 1061 / 1061, scenarios 162 / 162.
+
 ## 5. State (2026-10-15) and what the USER decides
 
 * **Base:** rebased onto 16dfb7e4 (work/integ-2026-10-14). Branch `worktree-agent-a9469f45bff622cfb`.
@@ -288,8 +295,6 @@ is the clean check; not run.
      `MTG_BP_NEW_ONLY`, a USER-adopted rule, and re-admits the "pull-order" lines the 2026-09-21 ruling
      declined to preserve. Ships OFF until the USER rules.
   2. **A3 (6.1),** the one-deviation-per-apply representation: a project, proposal only.
-  3. **The executor lockstep gaps (6.2):** the pod twin and the site-9 twin do not honour `bp_all` / the
-     chain sentinel. Pre-existing, not a closure; a lockstep fixture would pin it.
 
 ## 6. Not fixed
 
@@ -319,10 +324,16 @@ twins). It is a project, not a lever, so it waits for the USER.
 
 ### 6.2 Smaller things seen, not changed
 
-* **Executor lockstep gaps, pre-existing.** The pod-chain twin (`AIEngine`, site 7) honours neither
-  `bp_all` nor the chain sentinel, and the site-9 twin not the chain sentinel, while
-  `bp_searched_plan` resolves both at those sites. A variant scored that way realises a different line.
-  Not a search closure; worth a lockstep fixture.
+* **Executor lockstep gaps -- FIXED (2026-10-15, no lever).** The pod-chain twin (`AIEngine`, site 7)
+  tested `pod_bp_idx == plan.bp_at` and indexed the list with the raw `bp_choice`; the site-9 twin
+  indexed with the raw `bp_choice` too. `bp_searched_plan` makes a `bp_all` (uniform) variant eligible
+  at EVERY class-on occurrence and resolves `kBpChainChoice + j` through `BpChainCandIndex`. So a uniform
+  variant's pod occurrence at any other index, and a chain variant at site 7 or 9, were scored with the
+  variant's continuation and then played with the committed mirror's canon (or the re-solve) at site 7,
+  or with nothing at site 9: the committed line was not the line the search ranked. Both twins now
+  resolve exactly as the main executor site and the rollout do (eligibility `bp_all || idx == bp_at`;
+  chain via `BpChainCandIndex`; a chain scan with no entry falls through as the rollout's does).
+  Measured in section 4.7.
 * **The SolveWithLookahead candidate loop has no main-2 fixpoint for any line**, base plans included.
   Consistent within that host (the executor's own fixpoint covers real play), so F3 leaves it.
 * **Node children do not get the main-2 fixpoint.** Their siblings are the full re-decision of the

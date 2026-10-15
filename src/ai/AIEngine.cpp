@@ -5497,10 +5497,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         ~PodLandGuard() { if (l.pending) { l.pending = false; --held; } }
                     } _pod_land_guard{ pod_land, exec_cont_lands_held };
                     const int pod_bp_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
-                    if (pod_bp_idx == plan.bp_at)
+                    // ELIGIBILITY AND THE CHAIN SENTINEL, in lockstep with bp_searched_plan and the
+                    // main site (2026-10-15). This twin used to test `pod_bp_idx == plan.bp_at` and
+                    // index cands with the raw bp_choice, so a bp_all (uniform) variant's pod
+                    // occurrence at any OTHER index, and a CHAIN variant (kBpChainChoice + j) at its
+                    // own index, fell through to the committed mirror's canon or the re-solve while
+                    // the rollout had applied the variant's continuation: the committed line was not
+                    // the line the search scored.
+                    if (pod_bp_idx >= 0 && (plan.bp_all || pod_bp_idx == plan.bp_at))
                     {
                         const std::vector<TurnSolver::Plan> cands =
                             TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+                        const int pod_ci =
+                            (plan.bp_choice >= TurnSolver::kBpChainChoice)
+                                ? TurnSolver::BpChainCandIndex(state, cands,
+                                                               plan.bp_choice - TurnSolver::kBpChainChoice)
+                                : plan.bp_choice;
                         // EMPTY ARM lockstep -- the pod twin of the main site's special-case. Same
                         // reason, same shape: the sentinel is not an index and must not fall through
                         // to the re-solve, which would act where the search scored "done".
@@ -5518,9 +5530,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             extra.land_decided = true;
                             pod_bp_searched    = true;
                         }
-                        else if (pod_dem || plan.bp_choice < static_cast<int>(cands.size()))
+                        else if (pod_dem || (pod_ci >= 0 && pod_ci < static_cast<int>(cands.size())))
                         {
-                            extra           = pod_dem ? pod_demoted[pod_dj] : cands[plan.bp_choice];
+                            extra           = pod_dem ? pod_demoted[pod_dj] : cands[pod_ci];
                             pod_bp_searched = true;
                             // The continuation's land is part of the searched decision
                             // (mirrors bp_play_searched_land; no Karoo reservation can be live
@@ -6984,9 +6996,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 : std::vector<TurnSolver::Plan>{};
             const std::size_t pe_dj = pe_dem
                 ? static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice) : 0;
-            if (pe_dem ? (pe_dj < pe_demoted.size()) : (plan.bp_choice < static_cast<int>(cands.size())))
+            // CHAIN SENTINEL lockstep (2026-10-15): the rollout's site 9 resolves kBpChainChoice + j
+            // through BpChainCandIndex like every site; indexing with the raw value overran the list
+            // and applied nothing where the scored line had applied the chain continuation. A chain
+            // scan that finds no entry (-1) applies nothing, as the rollout's unresolved site 9 does.
+            const int pe_ci = (plan.bp_choice >= TurnSolver::kBpChainChoice)
+                ? TurnSolver::BpChainCandIndex(state, cands, plan.bp_choice - TurnSolver::kBpChainChoice)
+                : plan.bp_choice;
+            if (pe_dem ? (pe_dj < pe_demoted.size())
+                       : (pe_ci >= 0 && pe_ci < static_cast<int>(cands.size())))
             {
-                extra       = pe_dem ? pe_demoted[pe_dj] : cands[plan.bp_choice];
+                extra       = pe_dem ? pe_demoted[pe_dj] : cands[pe_ci];
                 pe_searched = true;
                 if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
                     && !exec_cont_land_defer(pe_land, extra))   // a positioned land waits for its slot
