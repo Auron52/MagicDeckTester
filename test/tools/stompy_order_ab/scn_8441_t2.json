@@ -1,0 +1,20 @@
+{
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "profile": "decks/StompySurprise/StompySurprise.profile.json",
+ "turn": 2,
+ "on_the_play": true,
+ "max_turns": 8,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {"name": "Forest", "controller": 0, "tapped": false},
+  {"name": "Llanowar Elves", "controller": 0, "tapped": false, "sick": false}
+ ],
+ "hand": ["Elvish Archdruid", "Priest of Titania", "Elvish Archdruid", "Llanowar Elves"],
+ "library_top": ["Sol Ring", "Elvish Archdruid", "Forest", "Forest", "Craterhoof Behemoth", "Forest"],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 0,
+ "_comment": "PROBE (stompy d3 gi8441): the T2 board (Sol Ring is the T2 draw, Archdruid T3, Forest T4). Base line: T2 Sol Ring + Priest, T3 Archdruid x2 + Llanowar, T4 Forest + Archdruid, attack for exactly 20."
+}

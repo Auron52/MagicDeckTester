@@ -879,8 +879,12 @@ order + fix clears the bar; v4 (order + fix vs today): shipped -17, d3 -45, d0 -
 -26 / -45 / -330 on 2HG. v5: every 20-life slower game recovers; four 2HG ones did not, and each had its own
 engine defect the order exposed (a stale Natural Order victim pin, an executor breakpoint replayed inline,
 a prepay hold that never released Archdruid) -- three more default-OFF levers, with which all of them
-recover at stage 1; the pooled adoption A/B of the set (v6) is queued. The implemented order, every
-tie-break and the measurement: **docs/design/stompy-order-2026-10-14.md**. The text below is the history.
+recover at stage 1. v6 (644,400 games): the order with those levers is net <= 0 in every cell (shipped -53,
+d3 -94, d0 -2,537; 2HG -74 / -126 / -1,177), the 580 references unchanged, 596 of 598 slower games recover;
+the two that do not share one payer weakness (floating green spent on a generic pip; amendment proposed,
+not built). The levers alone, order OFF, clear the whole bar. All default OFF pending the USER. The
+implemented order, every tie-break and the measurement: **docs/design/stompy-order-2026-10-14.md**. The text
+below is the history.
 
 **PROPOSED (USER, 2026-08-21) — implemented behind `MTG_STOMPY_ORDER` (default OFF), measured,
 awaiting the USER's adoption call.** `StompyProvider::CastOrderRank` + `CastOrderTierName` deliver

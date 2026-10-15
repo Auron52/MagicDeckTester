@@ -1,8 +1,9 @@
 # StompySurprise: the USER-approved cast order, built and measured (2026-10-14)
 
-**Status (2026-10-15): BUILT; the order and five engine / payment levers are all DEFAULT OFF pending the bar
-(§6).** Every slower game of the v4 measurement has a root cause (§4) and, with the candidate lever set,
-recovers at stage 1 (§3.2); the pooled adoption A/B of that set is §3.3. Self-contained. The USER's verbatim 2026-08-21 order
+**Status (2026-10-15): BUILT and MEASURED; everything DEFAULT OFF, adoption is the USER's call (§5, §6).**
+The payment fix + three engine levers clear the whole bar with the order OFF; the order with them is net
+<= 0 in every cell, references unchanged, but 2 of 598 slower games do not recover (§3.3, §3.4, §4f).
+Self-contained. The USER's verbatim 2026-08-21 order
 and rulings are in `docs/design/cast-order-rankings.md` §StompySurprise; the 2026-10-14 draft it was
 amended from is `docs/design/cast-order-drafts-2026-10-14/StompySurprise.md`.
 
@@ -208,8 +209,27 @@ games: 4,000 / 6,000 / 20,000 and 2HG half -- 0 differences in 45,000 x 3 arm-ga
   -1 / -1 / -1 against the payment fix alone) and FiveColour d0 (-1); digest-only moves on Bruna and
   FiveColour; KittyEquipment v2 / v3 change work units only (0.998x-1.005x), not play.
 
-**Recovery** of every slower game (598 `ofixall`, 35 `fixall`, 496 `onotopall`) and the reference bench run in
-one queued lock slot (`refs_v6`); results in §3.4.
+### 3.4 v6 recovery and the reference bench (one lock slot, 17:03-17:06 UTC)
+
+**Recovery** (`gen_rec_v6.py` / `recov_v6.py`; `results/recovery_v6.txt`), stage 1 then stage 2:
+
+| arm | slower games | stage 1 | stage 2 | NO |
+|---|---|---|---|---|
+| `ofixall` (the candidate) | 598 | 596 | 0 | **2**: stompy d3 gi8441 (4 -> 5), stompy2hg d3 gi4296 (5 -> 6); s1 = s2 = slower (§4f) |
+| `fixall` (order OFF) | 35 (stompy 25, stompy2hg 9, selesnya 1) | 35 | 0 | 0 |
+| `onotopall` | 496 | 492 | 0 | 4: the same two + stompy2hg gi2791 shipped and d3 (§4e) |
+
+**`fixall` -- the payment fix and the three engine levers with the order OFF -- clears the whole bar**: every
+deck and cell net <= 0 and every slower game recovers at stage 1. The candidate with the order has two
+non-recoverers, both one root cause (§4f).
+
+**The reference bench** (`scripts/ref_bench.py`, every reference deck, 580 hand-played games, the shipped play
+policy, forced hands; `run_refs.sh` -> `results/refs_v6_cmp.txt`): A = defaults, B = `MTG_STOMPY_ORDER=1
+MTG_HOLD_RELEASE_YIELD=1 MTG_SAC_VICTIM_SAME_NAME=1 MTG_EXEC_PUT_DEFERRED=1 MTG_HOLD_PRODUCER_FIRST=1`.
+**No win turn moved on any of the 580** (net 0; the four pre-existing shortfalls -- bruna, dragonstorm,
+fungus candidate b, melira pod -- are unchanged). The levers did reach the engine: 8 games' traces differ
+(7 of the 11 archived-list StompySurprise references, 1 Anti-Lifegain), same win turns
+(`results/refs_v6_tracediff.txt`).
 
 ### 3.0 The first A/B, without the fix (2026-10-14, superseded)
 
@@ -337,27 +357,55 @@ statement about the TOP_RESOLVE question (§5.1), not a defect of the order.
 `MTG_EXEC_PUT_DEFERRED` + `MTG_HOLD_PRODUCER_FIRST`): the four 2HG non-recoverers AND the ten 20-life
 shipped / d3 slower games of v4 recover at stage 1 (`rec_ntr/r_all`, single-game repros).
 
+### 4f. v6's two non-recoverers (stompy d3 gi8441, stompy2hg d3 gi4296): floating colour spent on a generic pip
+
+NOT BUILT -- root-caused, amendment proposed. Both are the same payer weakness, which the USER order exposes
+because it casts the 1-drop Elves before the Archdruids.
+* gi8441 T3 (`scn_8441_t3.json`): Forest, Llanowar Elves, Sol Ring, Priest of Titania; the base line casts
+  Elvish Archdruid x2 + Llanowar (7 mana: 5 green pips, 2 generic -- exactly the green the Forest, Llanowar and a
+  3-Elf Priest make, with Sol Ring's {C}{C} for the generics). Under the order it realises Llanowar, Archdruid,
+  Archdruid: Priest's tap (now 3 Elves) floats {G}{G}{G}, the first Archdruid pays its {1} out of that FLOATING
+  GREEN instead of Sol Ring, and the second Archdruid finds Sol Ring's {C}{C} plus one green: unpayable
+  (`[uo-cast] ... paid=0 pool=3`). The rollout realises the same (lockstep), so the search scores the line as
+  a T5 -- at every depth and budget (s1 = s2 = 5). The base order casts the Archdruids first, while Sol Ring
+  is still the only generic source in reach.
+* gi4296 (2HG): the base line's T3 board (`scn_2hg4296_t3.json`: Forest, Elvish Mystic, Sol Ring, Priest;
+  Archdruid x2 + the drawn Mystic) fails the same way under the order -- Mystic, Archdruid paid, the second
+  Archdruid `paid=0 pool=3` with Sol Ring untapped -- so from T1 the search no longer sees that line and
+  plays Sol Ring first instead (T6 vs T5).
+* The whole-turn prepay cannot save either: it taps every source BEFORE the 1-drop resolves, so it prices
+  Priest at one Elf fewer and declines the turn.
+* **Proposed amendment (payment, the permitted greedy area; one payer, so lockstep by construction):** pay a
+  generic pip from colourless before floating coloured mana the rest of the plan still needs -- the real
+  payer's twin of the affordability walk's `PayFromPoolLineAware` (ManaPayment.cpp), so a scaler's burst
+  keeps its green for the plan's later pips and Sol Ring pays the {1}. Behind its own lever, then a held-out
+  A/B on every deck that taps a rock beside a scaled dork; not built in this session.
+
 ## 5. Findings and questions for the USER
 
-1. **TOP_RESOLVE costs ~1.9x work units at the shipped settings** (1.90x StompySurprise, 1.56x 2HG; 1.2x at
-   d3) for 3 (20-life) and 9 (2HG) shipped turns over 4,000 / 2,000 games (§3.1), because the reset's
-   continuation is not narrowed by BP_NEW_ONLY (§2). It also carries 2HG gi2791 (§4e). Shipped ON inside the
-   order per the approved design; the USER's call whether that price is right, or to wait for the
-   breakpoint audit's narrowing.
+1. **TOP_RESOLVE costs ~1.9x work units at the shipped settings** for a small gain: with everything else on
+   (`ofixall` vs `onotopall`, §3.3) shipped -9 at 1.88x (StompySurprise) and -11 at 1.56x (2HG), d3 -7 / -16
+   at 1.20x, d0 -204 / -48; it also carries 2HG gi2791 (§4e). Shipped ON inside the order per the approved
+   design; the USER's call whether that price is right, or to wait for the breakpoint audit's narrowing of
+   the reset's continuation (§2).
 2. **The tie-breaks of §1.2** are agent choices for the USER to confirm: the 1-drops by name; Terastodon
    last, the other fatties cheapest first, Hornet Queen before Elderscale; copies of one card by target name.
 3. **Natural Order copies by target rank** (`MTG_STOMPY_NO_TARGET_RANK`): built as asked, default OFF. It is
    not what lost gi160 and moved none of the measured games; the rule (Ghalta 1700 before Craterhoof 2100,
-   i.e. the USER's own order applied to what Natural Order puts) is the USER's to adopt or drop.
-4. **Three engine defects found under the order, each its own default-OFF lever** (§4b-§4d):
-   `MTG_SAC_VICTIM_SAME_NAME`, `MTG_EXEC_PUT_DEFERRED`, `MTG_HOLD_PRODUCER_FIRST`. All three are
-   battlefield-position or executor/rollout lockstep defects that the order merely exposed (each one's
-   failing board fails with the order OFF too). Recommendation: adopt with the order if §3.3 clears the bar.
-5. **Terastodon's K projection** (pre-existing, not the order): `ProjectEtbDestroyK`'s this-turn Craterhoof
+   the USER's own order applied to what Natural Order puts) is the USER's to adopt or drop.
+4. **The payment fix + three engine levers, order OFF (`fixall`), clear the whole bar** (§3.3 / §3.4: every
+   deck and cell net <= 0, 35 / 35 slower games recover at stage 1, references unchanged). Recommendation:
+   adopt `MTG_HOLD_RELEASE_YIELD`, `MTG_SAC_VICTIM_SAME_NAME`, `MTG_EXEC_PUT_DEFERRED`, `MTG_HOLD_PRODUCER_FIRST`
+   default ON. Each is a battlefield-position or executor / rollout lockstep defect (§4, §4b-§4d).
+5. **The order itself** (`ofixall`): every cell net <= 0 (-53 / -94 / -2,537; 2HG -74 / -126 / -1,177), 596 of
+   598 slower games recover, the references are unchanged -- but **two games do not recover** (§4f), both the
+   floating-green-on-a-generic payer weakness the order exposes. Recommendation: build §4f's amendment and
+   re-measure before turning the order ON; or the USER may accept the two as they stand.
+6. **Terastodon's K projection** (pre-existing, not the order): `ProjectEtbDestroyK`'s this-turn Craterhoof
    window prices the route against the pool BEFORE the destroyed permanents, while the destroy loop eats
    UNTAPPED Forests once the tapped ones run out -- so K can eat mana a later Craterhoof cast needed.
    Terastodon-last-in-the-group minimises the exposure; the projection itself is unchanged.
-6. **World War Hulk early with a plan that hard-casts the dearest body:** chapter I frees that same body
+7. **World War Hulk early with a plan that hard-casts the dearest body:** chapter I frees that same body
    and the hard-cast finds no card (its mana is left unspent). The searched late slot covers it at d > 0;
    d0 plays the canonical (early) slot.
 
@@ -366,21 +414,18 @@ shipped / d3 slower games of v4 recover at stage 1 (`rec_ntr/r_all`, single-game
 All DEFAULT OFF (`=1` enables, per job via heurarm): `MTG_STOMPY_ORDER` (since `0731e8a5`; its
 `MTG_STOMPY_ORDER_SEARCH` and `MTG_STOMPY_TOP_RESOLVE` stay ON inside it), `MTG_HOLD_RELEASE_YIELD`,
 `MTG_SAC_VICTIM_SAME_NAME`, `MTG_EXEC_PUT_DEFERRED`, `MTG_HOLD_PRODUCER_FIRST`, `MTG_STOMPY_NO_TARGET_RANK`.
-Off, every one is byte-identical to the tree before it (v6's identity rows). The recommendation, pending
-§3.3 and the reference bench: the order ON with the four levers above (TOP_RESOLVE as built) -- a USER
-decision.
+Off, every one is byte-identical to the tree before it (v6 identity: 0 differences). Adopting any of them is
+the USER's decision (§5.4, §5.5).
 
-## RESUME (2026-10-15)
+## RESUME (2026-10-15, 17:20 UTC)
 
-* **Branch** `worktree-agent-a9d0a1cbf3361f164` (local only). Code: `d95813f6` (victim + target-rank levers),
-  `cfd18d67` (put-deferred + producer-first), `093daf8c` (unit case, reference tools).
-* **Binaries** (build volume): `build/scratch/stompy-order/bin/mtg.pf` = `mtg.final` = `cfd18d67`'s src
-  (`mtg.svn` was re-pointed at the same binary before v6 started; the svn-only build is `mtg.svnonly`).
-* **v6** (`ab_v6`, queued 12:51 UTC on FIFO ticket 12, swapped to the final arm set at 13:12 -- `SWAP.txt`):
-  when it lands, `analysis.txt` holds every arm vs off, the increments, the identity rows and the other-deck
-  screen; then recovery of every slower game: `gen_rec.py <out> ofixall,onotopall,fixall <ab_v6/slower.*.txt>`
-  + `repro.sh` (or one pooled batch through the lock if there are many).
-* **Reference bench** (`refs_v6`, queued after v6): `run_refs.sh` -> `refs_v6/cmp.txt` (defaults vs the
-  levers, every reference deck). It runs the worktree's `build/Release/mtg`: do not rebuild the worktree
-  before it has started.
-* **Left:** fill §3.3 and the reference result; the defaults decision is the USER's.
+* **Branch** `worktree-agent-a9d0a1cbf3361f164` (local only, nothing pushed). Code: `d95813f6` (victim +
+  target-rank levers), `cfd18d67` (put-deferred + producer-first), `093daf8c` (unit case, reference tools).
+  Unit: `test_stompy_order.cpp` 11 / 11, full suite 1061 / 1061.
+* **Binaries** (build volume): `build/scratch/stompy-order/bin/mtg.final` = `mtg.pf` = `mtg.svn` (re-pointed
+  before v6 started) = `cfd18d67`'s src; `mtg.svnonly` = `d95813f6`.
+* **Done:** v5 (recovery + the payment fix's movers), v6 (the candidate set, 644,400 games), v6 recovery, the
+  reference bench. Results under `test/tools/stompy_order_ab/results/`.
+* **Left:** §4f's amendment (generic pips paid from colourless before floating colour the plan still needs)
+  behind its own lever, its two repros (`scn_8441_t3.json`, `scn_2hg4296_t3.json`), then one pooled A/B of
+  the order with it; the USER's decisions in §5.

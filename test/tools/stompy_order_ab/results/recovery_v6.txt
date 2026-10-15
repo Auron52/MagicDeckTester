@@ -1,0 +1,24 @@
+== ofixall: {'stage1': 596, 'NO': 2}
+   stompy           d0    {'stage1': 300}
+   stompy           d3    {'stage1': 12, 'NO': 1}
+   stompy           ship  {'stage1': 5}
+   stompy2hg        d0    {'stage1': 265}
+   stompy2hg        d3    {'stage1': 7, 'NO': 1}
+   stompy2hg        ship  {'stage1': 7}
+   NO  stompy d3 gi8441 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi4296 5->6 s1=6 s2=6
+== fixall: {'stage1': 35}
+   selesnya         d0    {'stage1': 1}
+   stompy           d0    {'stage1': 24}
+   stompy           d3    {'stage1': 1}
+   stompy2hg        d0    {'stage1': 9}
+== onotopall: {'NO': 4, 'stage1': 492}
+   stompy           d0    {'stage1': 271}
+   stompy           d3    {'NO': 1, 'stage1': 1}
+   stompy2hg        d0    {'stage1': 219}
+   stompy2hg        d3    {'stage1': 1, 'NO': 2}
+   stompy2hg        ship  {'NO': 1}
+   NO  stompy d3 gi8441 4->5 s1=5 s2=5
+   NO  stompy2hg ship gi2791 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi2791 4->5 s1=5 s2=5
+   NO  stompy2hg d3 gi4296 5->6 s1=6 s2=6

@@ -1,0 +1,23 @@
+{
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "profile": "decks/StompySurprise/StompySurprise.profile.json",
+ "turn": 3,
+ "on_the_play": true,
+ "max_turns": 8,
+ "active_life": 30,
+ "opponent_life": 30,
+ "opponent_heads": 2,
+ "battlefield": [
+  {"name": "Forest", "controller": 0, "tapped": false},
+  {"name": "Elvish Mystic", "controller": 0, "tapped": false, "sick": false},
+  {"name": "Sol Ring", "controller": 0, "tapped": false},
+  {"name": "Priest of Titania", "controller": 0, "tapped": false, "sick": false}
+ ],
+ "hand": ["Elvish Archdruid", "Elvish Archdruid"],
+ "library_top": ["Elvish Mystic", "Forest", "Call of the Wild", "Forest", "Forest"],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 0,
+ "_comment": "PROBE (stompy2hg d3 gi4296): the base arm's T3 board (Elvish Mystic is the T3 draw). Base line: T3 Archdruid x2 + Mystic, T4 Forest, attack; T5 lethal vs 30."
+}
