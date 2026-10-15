@@ -2642,17 +2642,21 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 // than {1}{R}. Ranking by the printed cost put the spliced copy early and dropped it exactly like
 // Seething Song. Was a byte-identical twin pair (TurnSolver's CastOrderLess / AIEngine's
 // CastOrderLessAI); executor and rollout now share this definition.
-bool CastOrderFixedKeyLess(const Action& a, const Action& b)
+// THE NAME TIE-BREAK of a TOTAL deck order (DecisionProvider::CastOrderTotalByName; USER 2026-10-14:
+// "I don't like the randomness of choosing the order"). Two casts whose sort keys tie are ordered by the
+// NAME of the card their order derives from (OrderDefOf -- a Garth activation as its copy), so different
+// cards never fall back to plan (hand) order. Copies of one card compare equal (stable: plan order).
+// A byte-wise std::string compare, so Linux and MSVC agree (std::hash would not). False unless the
+// provider opts in -- every other deck is byte-identical.
+static const CardDefinition* OrderDefOf(const Action& a);
+bool CastOrderNameTieLess(const GameState& state, const Action& a, const Action& b)
 {
-    // .str(): LEXICOGRAPHIC, never the interned pointer (pointer order varies run to run).
-    const std::string& na = a.card_name.str();
-    const std::string& nb = b.card_name.str();
-    if (na != nb) { return na < nb; }
-    const std::string& ta = a.tutor_target.str();
-    const std::string& tb = b.tutor_target.str();
-    if (ta != tb) { return ta < tb; }
-    if (a.soulfire_own_targets != b.soulfire_own_targets) { return a.soulfire_own_targets < b.soulfire_own_targets; }
-    return a.chosen_x < b.chosen_x;
+    if (LegacyCastTierOrder() || !ResolveProvider(state).CastOrderTotalByName()) { return false; }
+    const CardDefinition* da = OrderDefOf(a);
+    const CardDefinition* db = OrderDefOf(b);
+    const std::string& na = da ? da->card.m_name.str() : a.card_name.str();
+    const std::string& nb = db ? db->card.m_name.str() : b.card_name.str();
+    return na < nb;
 }
 
 bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
@@ -2661,30 +2665,22 @@ bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
     if (ra != rb) { return ra < rb; }
     if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
     const DecisionProvider& prov = ResolveProvider(state);
-    // A TOTAL order (CastOrderTotal, StompySurprise's USER order) falls back to the fixed key where
-    // every other deck keeps plan order. Read only on a rank tie; false for every provider that does
-    // not opt in, so the two returns below are byte-identical for them.
-    const bool total = prov.CastOrderTotal();
-    if (prov.CastCheapestFirstWithinTier())
-    {
-        // Reuse the action's memoized def (back-filled once per node, == Lookup(card_name)) instead of
-        // re-hashing the name string on every comparison -- this comparator runs O(n log n) per sort.
-        // Byte-identical; def==nullptr (an action from a path that didn't back-fill) falls back to Lookup.
-        const CardDefinition* da = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        const CardDefinition* db = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
-        // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
-        // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
-        // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
-        // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
-        if (da && db && IsManaRitual(*da) && IsManaRitual(*db))
-        {
-            const int ca = a.cost.ManaValue();
-            const int cb = b.cost.ManaValue();
-            if (ca != cb || !total) { return ca < cb; }
-        }
-    }
-    if (!total) { return false; }                                                  // stable: keep plan order
-    return CastOrderFixedKeyLess(a, b);
+    // A TOTAL deck order breaks the tie by name and nothing else (the deck's own rank already orders
+    // whatever cost should order, so the accelerant rule below is not consulted -- mixing the two keys
+    // could make the comparator intransitive across a ritual / non-ritual tie).
+    if (prov.CastOrderTotalByName()) { return CastOrderNameTieLess(state, a, b); }
+    if (!prov.CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
+    // Reuse the action's memoized def (back-filled once per node, == Lookup(card_name)) instead of
+    // re-hashing the name string on every comparison -- this comparator runs O(n log n) per sort.
+    // Byte-identical; def==nullptr (an action from a path that didn't back-fill) falls back to Lookup.
+    const CardDefinition* da = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
+    // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
+    // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
+    // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
+    // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
+    if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
+    return a.cost.ManaValue() < b.cost.ManaValue();
 }
 
 bool OrderM1FirstEnabled()
