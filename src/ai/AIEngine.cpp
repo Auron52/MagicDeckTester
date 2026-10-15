@@ -738,11 +738,12 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // worker's AIEngine does not accumulate/cross-hit across games. See m_leaf_cache.
     if (m_leaf_cache_enabled) { m_leaf_cache.Clear(); }
 
-    // New game: same rule, same reason, for the thread_local PLAN memos (see
-    // TurnSolver::ClearPerGameCaches). Their entries are epoch-scoped to one decision and so can
-    // never be hit across a game boundary -- but they still occupy the shared cap, which made the
-    // eviction schedule (and therefore a game's work-unit count) depend on which games shared the
-    // worker thread. Play was never affected; the work METER's determinism was.
+    // New game: same rule, same reason, for every thread_local cache and learned value the search
+    // keeps (see TurnSolver::ClearPerGameCaches for the list). A game must be a pure function of its
+    // own spec; anything a reused batch worker carries in from an earlier game breaks that. It is NOT
+    // only the work meter at stake: the meter IS the search budget (SearchBudget::Consume feeds
+    // gamework::Add), so a few carried units can flip the iterative-deepening start gate and change
+    // the committed line (docs/design/batch-run-to-run-nondeterminism.md).
     TurnSolver::ClearPerGameCaches();
 
     m_last_bottomed_numbers.clear();

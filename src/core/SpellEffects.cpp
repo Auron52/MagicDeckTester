@@ -4822,6 +4822,25 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 }
 } // namespace
 
+// PER-GAME RESET (DEFAULT ON; MTG_LEGACY_MANA_CACHE_ACROSS_GAMES=1 restores cross-game retention).
+// The cache is DESIGNED to be shareable across games -- an entry is a pure function of its key -- and
+// where the key is complete, emptying it per game changes nothing but wall clock (payments are not
+// metered, so not even units move). The reason to do it anyway is the cache's record: every key hole
+// found so far (the MTG_FILTER_FEED_STRICT lever, the 2HG heads delta, the scaled-dork yield, the
+// land-Aura fold; see ManaCacheKey) was a CROSS-GAME channel precisely because this thread_local
+// outlives the game, so a stale entry's reach -- and, through the 500,000-entry wipe, its survival --
+// depended on which games had shared the worker. Emptied here, a hole can still give a wrong answer,
+// but the SAME wrong answer every time the game is played: reproducible, and caught by GT and by
+// MTG_MANA_CACHE_VERIFY instead of surfacing as pool flicker. docs/design/batch-run-to-run-
+// nondeterminism.md. A game whose result moves with this flag has found the next key hole.
+// (Defined OUTSIDE the anonymous namespace above: it is the header's ::ManaCacheClearPerGame.)
+void ManaCacheClearPerGame()
+{
+    static const bool s_keep = EnvOn("MTG_LEGACY_MANA_CACHE_ACROSS_GAMES");
+    if (!s_keep) { g_mana_cache.clear(); }
+}
+
+
 // Public entry: thin wrapper over the worker. Identical behaviour; under MTG_TAP_STATS it records the
 // payable/unpayable OUTCOME of each top-level call and the nodes it consumed (the recursion calls the
 // worker directly, so every call here is exactly one top-level entry). Diagnostic only -- when the flag

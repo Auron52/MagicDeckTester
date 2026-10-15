@@ -1619,10 +1619,18 @@ public:
     // worker thread -- measured on KittyEquipment game 54: 2,127,508 run alone, 2,127,270 with 53
     // games ahead of it on the same thread, and varying run-to-run at --threads 24.
     //
-    // PLAY was never affected (a memo hit returns what recomputation returns, and every digest was
-    // identical across thread counts); the casualty was ai/GameWorkMeter.h's invariant that units
-    // are "a deterministic function of (deck, seed, depth, arm, limit) and identical everywhere",
-    // on which the abandon ceiling and cross-machine skip lists rest.
+    // CORRECTED 2026-10-14: "PLAY was never affected" was wrong. The work meter and the search budget
+    // are ONE currency (SearchBudget::Consume feeds gamework::Add), so carried units reach play
+    // through the iterative-deepening start gate wherever a game sits on its edge. The casualty is
+    // both ai/GameWorkMeter.h's invariant that units are "a deterministic function of (deck, seed,
+    // depth, arm, limit) and identical everywhere" AND the play digest of the edge games.
+    //
+    // The rule this function enforces is therefore the general one: EVERY thread_local cache or
+    // learned value that outlives a game is emptied here, whether or not its hits are decision-scoped
+    // -- the epoch-scoped memos above for their fill level, and the caches that are NOT epoch-scoped
+    // (the breakpoint-enum plan cache, the EDF combo-route trial memo, the hybrid's learned R/G) for
+    // their content as well. After it, a game's play AND units are a pure function of the game, the
+    // same as it gets alone in a fresh process. See docs/design/batch-run-to-run-nondeterminism.md.
     static void ClearPerGameCaches();
 
     // Committed-depth telemetry (MTG_ROLLOUT_STATS; counters only, no behaviour). Called once per

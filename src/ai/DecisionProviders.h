@@ -2853,6 +2853,9 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller);
 bool EdfComboRoutePiecesInPlace(const GameState& s, int controller);
 int  EdfComboRouteTrial(const GameState& s, int controller);   // 0 no, 1 WIN (kills), 2 DEVELOP (bank + cast)
 int  EdfComboRouteApply(GameState& s, int controller);        // same codes; live run on `s`
+// Drop the trial's board-keyed memo. Called once per game from TurnSolver::ClearPerGameCaches so a
+// reused batch worker thread starts every game with an empty memo (see the memo's own comment).
+void EdfComboRouteClearMemo();
 
 // THE MECHANICAL EQUIP-CHAIN GO-OFF (DecisionProvider::EquipRouteEnabled; the free-Equipment draw
 // engine). Same three-part shape as the EDF route above and the same all-or-nothing discipline:

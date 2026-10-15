@@ -30162,6 +30162,11 @@ inline std::uint64_t ReservableSpecialMask(const GameState& state)
     return mask;
 }
 
+// Empty this thread's payable-mana cache (g_mana_cache) at the start of a game. Called from
+// TurnSolver::ClearPerGameCaches; see the definition for why. MTG_LEGACY_MANA_CACHE_ACROSS_GAMES=1
+// keeps the old cross-game retention (A/B hatch for the wall cost).
+void ManaCacheClearPerGame();
+
 // TapForCostBacktrack -- body in SpellEffects.cpp (see the header note above).
 // `src_cands` (threaded, nullptr at the top-level call) is the controller's structural mana sources
 // {battlefield index, cached def}, enumerated ONCE at the top-level call and reused by every recursion

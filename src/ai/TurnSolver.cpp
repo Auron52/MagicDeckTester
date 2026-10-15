@@ -4046,11 +4046,88 @@ struct BpEnumEntry
     // WHICH DECISION FILLED THIS ENTRY (MTG_BP_ENUM_EPOCH; see BpEnumEpochScoped). Every SIBLING
     // memo in this family -- solvememo, enummemo, the candidate dedup -- stamps and checks this,
     // and the stated reason is that their shared key is only exact WITHIN one decision. This cache
-    // is the one that does not: its own store site says so ("it is never epoch- or game-cleared"),
-    // and MTG_BP_ENUM_VERIFY reports a CONTENT-DIFF on ~5% of hits. The field is written
+    // is the one that does not: its own store site said so ("it is never epoch- or game-cleared";
+    // game-cleared since 2026-10-14, still not epoch-scoped), and MTG_BP_ENUM_VERIFY reported a
+    // CONTENT-DIFF on ~5% of hits (0.0079% once its source-only / order-only classes were split out
+    // -- see BpEnumVerify). The field is written
     // unconditionally (one store, no branch) so the check can be flipped on without a second edit.
     std::uint64_t epoch = 0;
+    // MTG_BP_ENUM_LIBCHECK stamps (diagnostic; written only under the flag -- see bplibcheck):
+    // the PHYSICAL library order (card numbers) and the NAME order the entry was derived under, and
+    // the thread's game ordinal. The key folds the name order already (BuildSimKey's ordered
+    // library digest); the number order is what it does not fold.
+    std::uint64_t lib_num = 0, lib_name = 0, game = 0;
 };
+// MTG_BP_ENUM_LIBCHECK (DIAGNOSTIC, default off): IS A HIT EVER SERVED UNDER DIFFERENT LIBRARY
+// CONTENTS, AND DOES IT MATTER? Every entry is stamped on insert with an ordered hash of both
+// libraries by card NUMBER (physical copies) and by NAME, plus the game ordinal; every hit compares
+// the stamps with the current state AND re-derives the list fresh (multiset compare: exact, or equal
+// once the interchangeable physical copy is blinded -- the BpEnumVerify classes). The exit report is
+// the table {library same / differs by copy only / differs by name} x {same / source-only / CONTENT
+// differs}, split by whether the entry came from this decision or an earlier one. Re-deriving on
+// every hit perturbs units (it is a second derivation), so an instrumented run's play is not the
+// shipped play -- the counts are the deliverable, not the digests.
+//
+// MEASURED 2026-10-15 (FiveColour d3 x100, Melira d3 x75, Dragonstorm d5 x150, KittyEquipment v2 d5
+// x50; 766,137 hits): ZERO hits served under a different library, by name or by physical copy, and
+// zero cross-game hits. The library is not a soundness gap in this key, so no library fold was added.
+// The only CONTENT differences (kittyv2 43, Melira 158; FiveColour and Dragonstorm 0) all have the SAME
+// library, and 131 of the 201 are within ONE decision -- a different unkeyed input, which
+// epoch-scoping could not remove either. docs/design/batch-run-to-run-nondeterminism.md.
+namespace bplibcheck
+{
+inline bool On() { static const bool v = EnvOn("MTG_BP_ENUM_LIBCHECK"); return v; }
+inline thread_local std::uint64_t t_game = 0;   // bumped by TurnSolver::ClearPerGameCaches
+inline std::uint64_t LibHash(const GameState& s, bool by_number)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    for (const Player& p : s.players)
+    {
+        h = (h ^ 0x9E37ull) * 1099511628211ull;
+        for (std::size_t i = 0, n = p.library.size(); i < n; ++i)
+        {
+            const Card& c = p.library.RawAt(i);
+            h = (h ^ (by_number ? static_cast<std::uint64_t>(c.m_number) : c.m_name_hash)) * 1099511628211ull;
+        }
+    }
+    return h;
+}
+// [lib: 0 same, 1 copy-only (names equal, numbers differ), 2 names differ][epoch: 0 this decision,
+// 1 earlier decision][verdict: 0 same multiset, 1 source-only, 2 CONTENT differs]
+struct Stats
+{
+    std::atomic<unsigned long long> n[3][2][3] = {};
+    std::atomic<unsigned long long> cross_game{0};
+    ~Stats()
+    {
+        if (!On()) { return; }
+        unsigned long long tot = 0;
+        for (auto& a : n) { for (auto& b : a) { for (auto& c : b) { tot += c.load(); } } }
+        std::fprintf(stderr, "=== BP ENUM LIBCHECK: %llu hits re-derived (cross-game hits %llu) ===\n",
+                     tot, cross_game.load());
+        static const char* kLib[3] = { "library same", "library differs by COPY only", "library differs by NAME" };
+        static const char* kEp[2]  = { "this decision", "earlier decision" };
+        for (int l = 0; l < 3; ++l)
+        {
+            for (int e = 0; e < 2; ++e)
+            {
+                std::fprintf(stderr, "    %-30s | %-16s | same %llu | source-only %llu | CONTENT %llu\n",
+                             kLib[l], kEp[e], n[l][e][0].load(), n[l][e][1].load(), n[l][e][2].load());
+            }
+        }
+    }
+};
+inline Stats g_stats;
+}
+// The cache BpEnumEntryFor serves from. At namespace scope rather than a function-local static ONLY
+// so TurnSolver::ClearPerGameCaches can reach it: it is cleared at every game start, which is what
+// makes a game's play AND work units a pure function of the game (see ClearPerGameCaches and
+// docs/design/batch-run-to-run-nondeterminism.md, "ROOT-CAUSED").
+namespace bpcache
+{
+using Map = std::unordered_map<TranspositionTable::Key, BpEnumEntry, TranspositionTable::KeyHash>;
+inline thread_local Map t_plans;
+}
 // Build the enum-memo key (all folds included). Returns false when the cache is disabled
 // (MTG_NO_BP_ENUM_CACHE) -- callers then skip every memo layer.
 static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
@@ -53504,9 +53581,9 @@ namespace plancache
     inline thread_local long long t_bp_bytes   = 0;   // BpEnumEntryFor's continuation cache
     // THREAD EXIT -- the leak MTG_PLAN_POOL_STATS caught on this change's very first run. Every
     // IN-thread clear pairs with a Release, but a worker's FINAL balance used to die with the thread:
-    // t_bp_bytes above all, because the bp cache is deliberately never epoch- or game-cleared (see
-    // BpEnumEntryFor), so each worker accumulates for its whole life. Under the OLD thread_local
-    // budget that was self-correcting -- the budget died with the counter. Against a GLOBAL pool it
+    // t_bp_bytes above all, because the bp cache was then never epoch- or game-cleared (see
+    // BpEnumEntryFor; game-cleared since 2026-10-14), so each worker accumulated for its whole
+    // life. Under the OLD thread_local budget that was self-correcting -- the budget died with the counter. Against a GLOBAL pool it
     // is permanent: 32 workers x ~22 MB left 716 MB of an 805 MB hiwater reserved by threads that no
     // longer existed. The symptom is precisely the silent one Release warns about -- play stays
     // byte-identical while every thread recomputes, so nothing looks broken. Destruction order is
@@ -53515,11 +53592,22 @@ namespace plancache
     // later. Destructor defined out-of-line below because it calls Release.
     struct ThreadReleaser { ~ThreadReleaser(); };
     inline thread_local ThreadReleaser t_releaser;
+    // Times the pool said NO. "Result-neutral" above is not true of WORK: a refused store is
+    // recomputed, and a recompute can cost units (the bp cache's derivations do), which the
+    // iterative-deepening start gate reads; a bp-cache wipe also changes which lists are SERVED
+    // (see BpEnumEpochScoped). With every per-game cache now emptied at game start, a
+    // single thread's pool use is a function of the game it is playing -- but the pool is GLOBAL, so
+    // under a multi-threaded batch a refusal depends on what OTHER workers hold. A run with refusals
+    // is therefore not guaranteed byte-identical across thread counts or interleavings; it is
+    // reported at exit (DeterminismReport, with the FSL pool) so that can never pass silently.
+    inline std::atomic<long long>& Refused() { static std::atomic<long long> v{0}; return v; }
     inline bool Fits(long long add)
     {
         const long long b = BudgetBytes();
         if (b <= 0) { return true; }                 // 0/unset = unbounded = byte-identical, unchanged
-        return PoolUsed().load(std::memory_order_relaxed) + add <= b;
+        if (PoolUsed().load(std::memory_order_relaxed) + add <= b) { return true; }
+        Refused().fetch_add(1, std::memory_order_relaxed);
+        return false;
     }
     // Relaxed atomics for the reason the FSL pool documents: the counter guards MEMORY, not results,
     // and the store rate is far below the lookup rate.
@@ -53977,6 +54065,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
 // here because it must follow both memo namespaces. Cheap: an unordered_map::clear on maps whose
 // live content is one decision's worth of entries.
 static void M1MemoClear();   // the rollout pre-combat memo (defined with it, below)
+static void HybridLearnedStateClear();   // the value-leaf hybrid's learned R/G (defined with them, below)
 void TurnSolver::ClearPerGameCaches()
 {
     solvememo::t_cache.clear();
@@ -53986,15 +54075,35 @@ void TurnSolver::ClearPerGameCaches()
     plancache::Release(plancache::t_enum_bytes);
     // The all-paths accumulator (MTG_BP_CONDEMN_ALLPATHS) belongs here and NOT in the bp-enum cache,
     // and the reason is this function's own: a thread_local that survives a batch worker's job switch
-    // makes a game's answer depend on which games shared the worker. For the plan memos that cost
-    // only the work METER's determinism ("Play was never affected"); for an accumulator that decides
-    // what is condemned it would cost PLAY determinism, which no thread-shape-dependent input may do.
+    // makes a game's answer depend on which games shared the worker. For an accumulator that decides
+    // what is condemned that is PLAY determinism directly. (The plan memos above were once said to
+    // cost "only the work METER's determinism"; that was wrong -- the meter is the search budget, so
+    // carried units reach play through the start gate. See TurnSolver.h.)
     BpAllPathsClear();
     // The cross-node continuation-LENGTH memo (MTG_BP_NSKIP_GLOBAL). A length cannot change a play
     // -- it only declines slots whose every rank is past the end of the list -- but it CAN change the
     // work meter, and a thread_local that outlived a batch worker's job switch would make a game's
     // units depend on which games shared the worker. Same argument as the plan memos above.
     BpLenMemo().clear();
+    // The breakpoint-enum plan cache (BpEnumEntryFor). Unlike the epoch-scoped memos above, its hits
+    // are NOT confined to one decision -- it is keyed on BuildBreakpointKey alone and evicted only by a
+    // count/byte cap -- so it carried both CONTENT and FILL LEVEL from one game into the next on a
+    // reused worker thread. A hit saves the units a derivation costs (and in a tiny residue serves a
+    // list a fresh derivation would not -- BpEnumVerify's CONTENT-DIFF, 0.0079% of hits after its
+    // reclassification), so its history moved a game's work units AND, through the start gate, play: KittyEquipment v2 d5 s2002 gi=34
+    // is 48,188 units alone and 45,409 after games 0-33 on the same thread (deterministic,
+    // --threads 1), and that game's digest moved in a 24-thread pool. Cleared here, a game starts
+    // from the same empty cache whatever ran before it. Within-game reuse across decisions is kept.
+    bpcache::t_plans.clear();
+    plancache::Release(plancache::t_bp_bytes);
+    ++bplibcheck::t_game;   // MTG_BP_ENUM_LIBCHECK's game ordinal (diagnostic stamp only)
+    // The EDF combo route's board-keyed trial memo -- same channel, see EdfComboRouteClearMemo.
+    EdfComboRouteClearMemo();
+    // The hybrid's per-game learned cost model (emulated ladder R/G, single-pass R, research R).
+    HybridLearnedStateClear();
+    // The payable-mana cache (SpellEffects.cpp): pure in design, but every key hole it has had was a
+    // cross-game channel because it outlived the game -- see ManaCacheClearPerGame.
+    ManaCacheClearPerGame();
 }
 
 
@@ -55882,6 +55991,8 @@ inline std::atomic<long long>& FslPoolUsed()
 { static std::atomic<long long> v{ 0 }; return v; }
 inline std::atomic<long long>& FslPoolHiwater()   // peak of Used (heartbeat / rss-cap report)
 { static std::atomic<long long> v{ 0 }; return v; }
+inline std::atomic<long long>& FslPoolRefused()   // acquisitions refused (see DeterminismReport)
+{ static std::atomic<long long> v{ 0 }; return v; }
 inline long long FslPool()
 {
     static const long long v = []{
@@ -55922,8 +56033,32 @@ inline bool FslPoolAcquire(long long kb)
         return true;
     }
     FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
+    FslPoolRefused().fetch_add(1, std::memory_order_relaxed);
     return false;
 }
+// THE DETERMINISM CAVEAT OF THE TWO GLOBAL POOLS, reported once at exit and only when it applies.
+// A refused store is recomputed, and the recompute can cost search units, which the start gate
+// reads (and a bp-cache wipe changes which lists are served). Under a multi-threaded batch a refusal depends on the OTHER workers'
+// holdings, so any refusal means this run's per-game units -- and, for a game on the start gate's
+// edge, its budgeted play -- may differ at another thread count or interleaving. Always on (no
+// flag): it prints nothing unless a pool actually bound. See
+// docs/design/batch-run-to-run-nondeterminism.md ("ROOT-CAUSED", the residual).
+struct DeterminismReport
+{
+    ~DeterminismReport()
+    {
+        const long long p = plancache::Refused().load();
+        const long long f = FslPoolRefused().load();
+        if (p == 0 && f == 0) { return; }
+        std::fprintf(stderr,
+            "[determinism] WARNING: the shared memory pools refused stores (plan cache %lld, FSL "
+            "line cache %lld). Per-game work units -- and so budgeted play at the start gate's edge "
+            "-- are only guaranteed identical across thread counts and interleavings when no pool "
+            "binds. Raise MTG_PLAN_CACHE_KB / MTG_FSL_POOL (or MTG_MEM_BUDGET_MB) for a "
+            "byte-identical pooled run.\n", p, f);
+    }
+};
+inline DeterminismReport g_determinism_report;
 // The two pools' used/hiwater tokens for the batch heartbeat line and the rss-cap abort report
 // (src/core/MemBudget.h). Registered once at static init; read from the watchdog/heartbeat threads
 // (relaxed atomics -- these are gauges, not results).
@@ -57163,6 +57298,24 @@ inline thread_local int    g_emul_Gn[16] = {0};
 // AUDIT-only: the climb's per-depth MEASURED pass costs + start depth, for the lossy-case dump.
 inline thread_local double    g_climb_cmeas[16] = {0};
 inline thread_local int       g_climb_start = 0;
+
+// Per-GAME reset of the hybrid's learned cost model (called from TurnSolver::ClearPerGameCaches).
+// g_emul_* and g_single_R are already meant to be per game -- each is keyed on deck + arm + GAME SEED
+// and resets when the key changes -- but a key-change test cannot see a new game whose key equals
+// the previous one's, and in a pooled batch that is not hypothetical: every suite deck runs its d3
+// and d5 jobs on the SAME seed (kittyv2_regression_d3_s2002 game k and _d5_s2002 game k are both
+// game seed 2002+k), as does any depth ladder over one seed set. A worker that played one and then
+// the other carried the first game's learned R/G into the second. Emptying the key at game start
+// makes "per game" literal, so the existing reset fires on the game's first decision whatever ran
+// before it. g_esc_R (adaptive only on the MTG_ESC_PREDICT / MTG_ESC_SINGLE env research paths; the
+// adopted per-deck path holds R frozen) persisted across games outright; it now starts each game at
+// its documented "uninitialized" 0 and is learned within the game exactly as before.
+static void HybridLearnedStateClear()
+{
+    g_emul_key.clear();
+    g_single_R_key.clear();
+    g_esc_R = 0.0;
+}
 
 // ==== THE SEARCH QUERIES THE COMBO OFF RULE =====================================================
 //
@@ -67395,6 +67548,15 @@ static bool BpEnumCacheOn()
 // defect, not an observed play bug, and it does not by itself block anything. Turning this on is
 // expected to cost hit rate; the question it answers first is whether CONTENT-DIFF goes to zero,
 // which is what would confirm the epoch as the missing scope rather than leaving it a hypothesis.
+//
+// CROSS-DECISION REUSE IS MATERIAL (2026-10-14, docs/design/batch-run-to-run-nondeterminism.md). On
+// KittyEquipment v2 d5/b20 seed 2002 game 34, played alone in a fresh process, the shipped cache gives
+// digest 0e31c1ce3b739553 at 48,188 units, while MTG_BP_ENUM_EPOCH=1 (within-decision hits only) and
+// MTG_NO_BP_ENUM_CACHE=1 both give 5f7114a3f7298e48 (same win turn) at 58,187 / 58,273 units. Whether
+// the move comes from served CONTENT or from the ~10k units the reuse saves the start gate was settled
+// by MTG_BP_ENUM_LIBCHECK on the same deck/depth/seed (50 games): 54,845 earlier-decision hits, ZERO
+// with different content. So the reuse is content-sound here and the play move is the units it saves. The per-game clear in ClearPerGameCaches removes only the
+// cross-GAME channel and does not change this; epoch-scoping is a play change for the user to decide.
 static bool BpEnumEpochScoped()
 {
     static const bool s = EnvOn("MTG_BP_ENUM_EPOCH");
@@ -68265,9 +68427,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // way, and the smoke digests are the check. See docs/design/post-breakpoint-search.md.
     // MTG_BP_ENUM_CACHE_CAP overrides the cap (value-carrying; A/B probe for the memo-thrash
     // question above -- results must be identical at ANY cap, only the wall clock may move).
-    using BpEnumMap = std::unordered_map<TranspositionTable::Key, BpEnumEntry,
-                                         TranspositionTable::KeyHash>;
-    static thread_local BpEnumMap cache;
+    using BpEnumMap = bpcache::Map;
+    BpEnumMap& cache = bpcache::t_plans;   // cleared per game -- see bpcache / ClearPerGameCaches
     static const std::size_t s_bp_enum_cap =
         static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192)));
 
@@ -68412,6 +68573,46 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 else if (!same_seq)
                 { g_bp_enum_verify.order_only.fetch_add(1, std::memory_order_relaxed); }
             }
+            // MTG_BP_ENUM_LIBCHECK -- see bplibcheck. Suppressed inside any re-derivation (its own
+            // or BpEnumVerify's), so a hit reached from inside the check is not itself checked.
+            if (bplibcheck::On() && !t_bp_enum_verifying)
+            {
+                // Copy what the check needs BEFORE re-deriving: a nested enumeration inside the
+                // derivation may insert into (or clear-on-full) this very cache.
+                const BpEnumEntry e = it->second;
+                const std::uint64_t cur_num  = bplibcheck::LibHash(state, true);
+                const std::uint64_t cur_name = bplibcheck::LibHash(state, false);
+                const int lib = (cur_name != e.lib_name) ? 2 : (cur_num != e.lib_num) ? 1 : 0;
+                const int ep  = (e.epoch != g_decision_epoch) ? 1 : 0;
+                if (e.game != bplibcheck::t_game)
+                { bplibcheck::g_stats.cross_game.fetch_add(1, std::memory_order_relaxed); }
+                t_bp_enum_verifying = true;
+                const std::vector<TurnSolver::Plan> fresh =
+                    BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false);
+                t_bp_enum_verifying = false;
+                std::vector<std::uint64_t> fa, sa, fb, sb;
+                for (const TurnSolver::Plan& p : fresh)   { fa.push_back(BpCandFingerprint(p)); fb.push_back(BpCandFingerprint(p, kBlindBoth)); }
+                for (const TurnSolver::Plan& p : e.plans) { sa.push_back(BpCandFingerprint(p)); sb.push_back(BpCandFingerprint(p, kBlindBoth)); }
+                std::sort(fa.begin(), fa.end()); std::sort(sa.begin(), sa.end());
+                std::sort(fb.begin(), fb.end()); std::sort(sb.begin(), sb.end());
+                const int verdict = (fa == sa) ? 0 : (fb == sb) ? 1 : 2;
+                const unsigned long long k =
+                    bplibcheck::g_stats.n[lib][ep][verdict].fetch_add(1, std::memory_order_relaxed);
+                if (verdict == 2 && k < 4)
+                {
+                    std::fprintf(stderr, "[bp-libcheck] CONTENT lib=%d epoch=%s turn=%d served=%zu fresh=%zu site=%s\n",
+                                 lib, ep ? "earlier" : "this", state.turn_number, e.plans.size(), fresh.size(),
+                                 g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)");
+                }
+                // Re-seat `it` (see the copy above); serve the copied entry if it was evicted.
+                it = cache.find(key);
+                if (it == cache.end())
+                {
+                    static thread_local BpEnumEntry s_libcheck_served;
+                    s_libcheck_served = e;
+                    return &s_libcheck_served;
+                }
+            }
             return &it->second;
         }
     }
@@ -68433,7 +68634,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             { g_bp_enum_probe.nested_misses.fetch_add(1, std::memory_order_relaxed); }
         }
         // Byte-budget gate (plancache, 2026-09-06): this cache is count-capped but its entries are
-        // whole vector<Plan> results and it is never epoch- or game-cleared, so it was byte-unbounded.
+        // whole vector<Plan> results and it is never epoch-cleared (game-cleared since 2026-10-14, see
+        // ClearPerGameCaches), so it was byte-unbounded.
         // Over budget => clear (same reclaim as clear-on-full, so the cache stays useful); an entry
         // that alone exceeds the whole budget is served uncached via the scratch path below.
         const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
@@ -68449,6 +68651,12 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             BpEnumEntry ent;
             ent.plans = std::move(plans);
             ent.epoch = g_decision_epoch;   // stamped unconditionally; see BpEnumEpochScoped
+            if (bplibcheck::On())
+            {
+                ent.lib_num  = bplibcheck::LibHash(state, true);
+                ent.lib_name = bplibcheck::LibHash(state, false);
+                ent.game     = bplibcheck::t_game;
+            }
             // insert_or_assign, not emplace: under MTG_BP_ENUM_EPOCH a stale-epoch entry is still
             // PRESENT in the map (the hit site only declines to serve it), and emplace would leave
             // it in place -- so the next decision would re-derive on every single lookup and never

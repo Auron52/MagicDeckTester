@@ -1,8 +1,263 @@
-# Batch run-to-run nondeterminism — REPRODUCED (2026-09-03)
+# Batch run-to-run nondeterminism — ROOT-CAUSED (2026-10-14); first reproduced 2026-09-03
 
-**Status: open bug, now with a ~13-minute repro.** This was first seen on 2026-08-25 (one overnight
-run of three diverged, on exactly one deck's 12 cells) and has been carried since as *cause unknown,
-never reproduced*. It is reproducible now, on demand, on `EldraziDisplacerFlicker`.
+**Status (2026-10-15): carriers found and fixed on branch `nondet`; every single-threaded / light check
+passes (see "Validation"); the pooled 24-thread run-twice check is the one thing still owed.** The user, on the pooled-run flicker having been explained
+away as "a known effect of running games in a shared pool": *"This is not something we should just
+accept."* The contract this section establishes and the fix enforces:
+
+> **A game's play digest AND its work units are a pure function of (binary, game spec)** — identical
+> to what that game produces alone in a fresh process, whatever ran before it on its worker thread,
+> at any thread count. The one stated exception is a binding *global* memory pool, which is now
+> reported at exit rather than silently tolerated.
+
+Everything from "## The observation" down is the 2026-09-03 investigation, kept as history. Read
+this section first; it supersedes that one's open questions.
+
+## ROOT-CAUSED (2026-10-14)
+
+### A deterministic repro that needs no pool
+
+The 09-03 work could only see the defect statistically (two 24-thread runs, count diverging games).
+The decisive move is to make thread history CONTROLLED instead: a `--threads 1` batch whose manifest
+places chosen predecessor games (the per-job `"weight"` field orders the queue) before a target game,
+compared with the target run alone in a fresh process. Everything below is single-threaded, so every
+number reproduces exactly.
+
+Target: `kittyv2_regression_d5_s2002` gi=34 — the game whose digest moved in a 24-thread regression
+pool on 2026-10-14 (KittyEquipment v2, depth from the profile = 5, `budget_ms` 20). A one-game chunk is
+`"seed": 2002+34, "game_index": 34, "games": 1` — **not** `"seed": 2002, "game_index": 34`, which plays
+game 0's shuffle under game 34's spawn index (an earlier repro attempt did exactly that and "isolated"
+the wrong game).
+
+| what ran on the thread before gi=34 (binary: base `a1ae1e67`) | gi=34 units | gi=34 digest |
+|---|---|---|
+| nothing (fresh process) | **48,188** | `0e31c1ce3b739553` |
+| gi 0–33, same job (the GT/`--threads 1` order) | **45,409** | `0e31c1ce3b739553` |
+| gi 0–33 as a *separate job* (new `AIEngine`, same thread) | 45,409 | `0e31c1ce3b739553` |
+| gi 17–33, same job | 48,188 | `0e31c1ce3b739553` |
+| gi 0–16, same job (17–33 skipped) | 48,188 | `0e31c1ce3b739553` |
+
+So: the carrier is **thread_local**, not `AIEngine` (row 3 rebuilds the engine and still carries it),
+and it is **cumulative** — neither half of the history moves it, the whole history does, which is the
+signature of a capped cache's fill level deciding when its wipe fires. The 45,409 matches the
+committed GT job (`ccf53277e7e92a6b`, 605,944 units), which was therefore recorded under one particular
+history, not the game's own result. In the 24-thread pool the same game got a different history again,
+and there the units moved far enough to flip the start gate and the digest.
+
+### Carrier 1 (MEASURED): the breakpoint-enum plan cache
+
+Bisected with existing levers, each run as the pair (predecessors 0–33, then gi=34) vs (gi=34 alone):
+
+| lever | with predecessors | alone | history-independent? |
+|---|---|---|---|
+| shipped | 45,409 / `0e31…` | 48,188 / `0e31…` | **no** |
+| `MTG_MANA_CACHE=0` | 45,409 | 48,188 | no |
+| `MTG_NO_BP_ENUM_CACHE=1` | 58,273 / `5f71…` | 58,273 / `5f71…` | yes |
+| `MTG_BP_ENUM_EPOCH=1` | 58,187 / `5f71…` | 58,187 / `5f71…` | yes |
+| the 09-03 memo-class OFF set (includes the two above) | 58,273 / `5f71…` | 58,273 / `5f71…` | yes |
+
+`BpEnumEntryFor`'s cache (`MTG_BP_ENUM_CACHE_CAP`, 8,192) is keyed on `BuildBreakpointKey` alone, is
+NOT decision-scoped, and was cleared only on overflow (or a plan-pool byte refusal). It therefore
+carried CONTENT and FILL LEVEL from game to game. A hit saves the derivation's units, so its history
+moved units, and units reach play through the start gate. (Its served lists differ from a fresh
+derivation only in a tiny residue -- `MTG_BP_ENUM_VERIFY`'s CONTENT-DIFF, 0.0079% of hits once the
+benign source-only/order-only classes were split out; see BpEnumVerify in TurnSolver.cpp.)
+
+**Fix 1:** the cache moves to namespace scope (`bpcache::t_plans`) and `TurnSolver::ClearPerGameCaches`
+empties it (releasing its plan-pool bytes) at every game start. Within-game reuse across decisions is
+kept. Measured on gi=34: with predecessors **48,188 / `0e31…`**, alone **48,188 / `0e31…`** — the same,
+and equal to the fresh-process answer.
+
+This is the change the 09-03 pass tried and reverted (it measured no improvement on EDF at 24 threads).
+That reversion was right for EDF on that day — EDF had a second carrier, see "the 09-03 residual" below
+— but wrong as a conclusion about this cache, which is a carrier on its own.
+
+### The history-independence battery (the instrument)
+
+`logs/nondet/h/` (gitignored; regenerate with `gen.py` / `gen2.py`, run with `hrun2.sh <bin> <out> <iso:0|1>
+<seqs…>`, compare with `hcmp.py <out>`). 84 target games — 4 random games from each of 21 regression
+cases across 21 decks (d3 and d5; kittyv2 d5 gi=34 included as the positive control) — each run ALONE
+in its own process, then inside seven single-threaded sequences: three shuffles of the 84 as one-game
+jobs (A/B/C), one with each case's games in one multi-game job (D: `AIEngine` reuse), and three heavy
+pool-like histories (H1/H2: 350 games of 14 other cases first; H3: every target preceded by 6 games of
+a random case, 588 games in all). ≤4 processes, `MTG_MEM_BUDGET_MB=3000`.
+
+| binary | games differing from their fresh-process result (units / digest), all 7 sequences |
+|---|---|
+| base `a1ae1e67` | **2 / 0** — kittyv2 d5 gi=34 in H1 (49,244 vs 48,188), kittyv2 d5 gi=25 in H3 (49,203 vs 47,233) |
+| fix 1 (bp cache cleared per game) | **0 / 0** of 588 comparisons |
+
+The fresh-process results themselves are identical between base and fix 1 (84/84) — by construction,
+since a fresh process starts with an empty cache either way. **That is the point of the fix: it makes
+every game in every pool equal its fresh-process answer, and leaves the fresh-process answer alone.**
+
+### Carriers 2–4, by audit (in the same commit; see "Validation")
+
+Every `thread_local` in `src/` was classified by the question the user posed: *can a hit cost
+different units than a miss, or can its content differ by history?* Scratch buffers (cleared or
+overwritten before every read), RAII-scoped flags, diagnostic counters and the decision-epoch-scoped
+memos (`solvememo`, `enummemo`, `m1memo`, the equip route's `DSeen`, `TrialPolicy`'s `DecisionMemo`)
+pass. Four further cross-game channels do not, and are now emptied in `ClearPerGameCaches`:
+
+1. **The EDF combo route's trial memo** (`comboroute::TrialMemo`, DecisionProviders.cpp). Board-keyed,
+   NOT decision-scoped (both of its siblings are), key reads only the top 8 library cards, wiped only
+   at 65,536 entries. → `EdfComboRouteClearMemo()`.
+2. **The value-leaf hybrid's learned cost model** (`g_emul_R/Rd/G`, `g_single_R`). Meant to be per
+   game — each is reset when a key of deck + arm + **game seed** changes — but a key-change test cannot
+   see a new game whose key equals the last one's, and every suite deck runs its d3 and d5 jobs on the
+   SAME seeds (`_d3_s2002` game k and `_d5_s2002` game k are both game seed 2002+k). Emptying the keys
+   at game start makes "per game" literal. `g_esc_R` (adaptive only on the `MTG_ESC_PREDICT` /
+   `MTG_ESC_SINGLE` env research paths) persisted across games outright; it now starts each game at its
+   documented "uninitialized" 0. → `HybridLearnedStateClear()`.
+3. **The payable-mana cache** (`g_mana_cache`, SpellEffects.cpp). Pure by design, so where its key is
+   complete a per-game clear changes nothing but wall clock (payments are unmetered). But every key
+   hole it has had — the `MTG_FILTER_FEED_STRICT` lever, the 2HG heads delta, the scaled-dork yield,
+   **and EDF's land-Aura hole, found 2026-09-07, four days after the 09-03 runs** — was a cross-game
+   channel precisely because the cache outlives the game. Cleared per game, a hole still gives a wrong
+   answer, but the same one every time: reproducible and caught by GT / `MTG_MANA_CACHE_VERIFY`
+   instead of surfacing as pool flicker. `MTG_LEGACY_MANA_CACHE_ACROSS_GAMES=1` restores retention
+   (the A/B hatch for its wall cost). A game whose result moves with this flag has found the next hole.
+
+**The 09-03 residual, explained.** The 09-03 "memo class OFF" experiment was never written up; its
+data (`/workspaces/MagicDeckTester2/logs/edf_memo_off/`, EDF s4303, 100 games x2 at 24 threads,
+per-game keyed): ON 2/100 games unit-divergent (gi 34, 95), OFF 2/100 (gi 57, 85), 0 digest changes
+in either. The OFF set disabled the bp cache and every plan memo but NOT the mana cache — and on that
+date EDF's mana-cache key had the land-Aura hole. That is the most likely reason clearing the bp
+caches alone "did not work" on EDF. (Not proven: the EDF battery that would test it on today's binary
+was stopped when the box was needed for a value-leaf generation, and is listed below.)
+
+### The residual: the two GLOBAL memory pools (detected, not hidden)
+
+The plan-cache byte pool (`MTG_PLAN_CACHE_KB`, default workers x 100 MB) and the FSL line-cache pool
+(`MTG_FSL_POOL`) are process-wide by user-approved design (2026-09-11: one monster enumeration may
+draw GBs while typical workers hold little). Their contract — "a refused store just recomputes, so
+play is identical at any budget" — is true of content but not of WORK: a recompute can cost units
+(the bp cache's derivations do, see the table above), and a bp-cache byte refusal wipes the cache. With
+every per-game cache now reset, one thread's pool use is a function of its own game, but under a
+multi-threaded batch a refusal depends on what OTHER workers hold. That cannot be made per-game
+deterministic without giving up the shared pool. So it is surfaced instead: both pools now count
+refusals, and a `[determinism] WARNING` line prints at exit iff any store was refused.
+
+Measured headroom in the last regression-tier pool heartbeat (2026-10-13, 24 threads, primary
+checkout): plan pool hiwater **1,497 MB of 2,400 MB**, FSL **52 MB of 7,234 MB** -- neither binds, and
+the plan pool's use should fall further (unmeasured) now that the bp cache no longer accumulates for a worker's whole
+life. If the warning ever fires on a GT tier, the choice between per-thread pool shares and more
+memory is the user's.
+
+(Cross-MACHINE identity is a separate axis, not addressed here: the MemBudget-derived per-table TT cap
+scales with RAM and CPU count, so a decision that fills its table could differ on a different box.)
+
+### Cross-decision reuse in the bp cache changes play — a USER decision, not taken
+
+Played alone in a fresh process, gi=34 gives `0e31c1ce3b739553` at 48,188 units with the shipped
+cache, and `5f7114a3f7298e48` (same win turn T6) under both `MTG_BP_ENUM_EPOCH=1` (58,187 units) and
+`MTG_NO_BP_ENUM_CACHE=1` (58,273). So the cache's reuse ACROSS DECISIONS within one game moves play.
+The LIBCHECK measurement below settles why: on this deck every earlier-decision hit served exactly the
+list a fresh derivation produces, so the move is the units the reuse saves, not unsound content. The
+per-game clear removes only the cross-GAME channel and does not touch this. Epoch-scoping would cost
+those units for no soundness gain on the evidence; it stays default-off, and whether to change it is
+the user's call.
+
+### What the fix does to budgeted play and GT
+
+Every game's result becomes its fresh-process result. GT was recorded in pools, so any GT game whose
+recorded play came from a contaminated history moves; nothing else can. Expected size is small — in
+the battery, pool-like histories on the base binary moved units on 2 of 84 sampled games and digests on
+none, and the regression tier reported one changed digest. A concrete prediction to check:
+`kittyv2_regression_d5_s2002` (`--threads 1`) keeps digest `ccf53277e7e92a6b` (every per-game digest
+already equals its fresh-process digest) and its units go from 605,944 to **608,723** (gi=34
+45,409 → 48,188; the other 49 games already match their fresh-process units). **No GT is accepted or
+edited by this change** — the pooled validation below sizes it for the user.
+
+### Is the bp cache's reuse UNSOUND? Measured: not through the library (`MTG_BP_ENUM_LIBCHECK`)
+
+The user's direction: *"If that cache reuse is truly unsound then we will have to try out a sound
+version and see if it fixes things."* The key already folds an ORDER-EXACT digest of both libraries by
+card NAME (BuildSimKey, since 2026-08-20); what it does not fold is the PHYSICAL copy order (card
+numbers). `MTG_BP_ENUM_LIBCHECK=1` (diagnostic, default off) stamps every entry with ordered library
+hashes by card number and by name plus a per-thread game ordinal, and on every hit re-derives the list
+fresh and tabulates the result (exit report `=== BP ENUM LIBCHECK`). Run on the full fix binary,
+`--threads 1`, the regression cases' own seeds:
+
+| deck (case, games) | hits re-derived | library differs (copy / name) | cross-game | CONTENT differs: this decision / earlier decision | source-only |
+|---|---|---|---|---|---|
+| FiveColour d3 s2002 x100 (fetches) | 162,088 | 0 / 0 | 0 | 0 / 0 | 0 |
+| Melira Pod d3 s2002 x75 (tutors) | 378,684 | 0 / 0 | 0 | 88 / 70 | 138 |
+| Dragonstorm d5 s2002 x150 (tutors) | 82,557 | 0 / 0 | 0 | 0 / 0 | 0 |
+| KittyEquipment v2 d5 s2002 x50 | 142,808 | 0 / 0 | 0 | 43 / 0 | 0 |
+| **total** | **766,137** | **0 / 0** | **0** | **131 / 70** | 138 |
+
+**Reading.**
+1. **The library is not a soundness gap.** Not one hit in 766,137 was served under a different library
+   — not by name, not by physical copy — on the two shuffling decks included. So the sound version the
+   user asked for, "fold a shuffle counter or library hash into the key", has nothing to fix; it was
+   built behind a flag (`MTG_BP_ENUM_LIBKEY`) for exactly this decision and has been removed unmeasured
+   rather than left as a dead lever.
+2. **On KittyEquipment the cross-decision reuse is content-SOUND:** 54,845 earlier-decision hits, zero
+   with different content. So gi=34's play move under `MTG_BP_ENUM_EPOCH=1` (`0e31…` → `5f71…`) is the
+   ~10k units the reuse saves the start gate, not a wrong list served. Epoch-scoping would make the
+   search pay again for the same lists.
+3. **A small residue of CONTENT differences remains, and it is not about the library or about
+   staleness across decisions:** 201 of 766,137 hits (0.026%), every one with the SAME library, 131 of
+   them inside ONE decision (which epoch-scoping could not remove either). KittyEquipment's 43 are all
+   at a Skateboard breakpoint with `served=1 fresh=2`; Melira's are equal-length lists with different
+   content. That is the same residue BpEnumVerify recorded on Snow (served a subset of fresh), and it
+   points at an unkeyed input that changes WITHIN a decision — the equip route's budget-priced trial is
+   the obvious suspect for the Skateboard cases. It is deterministic per game after this fix, so it is
+   a search-completeness question, not a determinism one; naming the differing plans with
+   `MTG_BP_ENUM_VERIFY=2` on these two cases is the next step if the user wants it pursued.
+
+(Caveat on the instrument: re-deriving on every hit spends extra units, so the instrumented runs' play
+is not the shipped play — kittyv2's digest moved to `ca604b4e…`. The classification of each hit is
+still exact; the counts describe a nearby trajectory, not the GT one.)
+
+### Validation (2026-10-15)
+
+All on the full fix (bp cache + combo-route memo + hybrid keys + mana cache + pool report; LIBCHECK
+present but off), binaries copied to the ext4 build volume (`build/wt/nondet/`) after the 9p mount died
+once under a running batch. Cost is never read from wall or user time here: the VM was shared at load
+45–90 on 24 cores, and its PMU is not exposed (`perf stat -e instructions:u` reports "not supported"),
+so cost comes from the engine's own deterministic counters.
+
+1. **Build + unit tests:** clean; `build/Release/mtg-test` **596/596 test cases, 2,646,986 assertions**
+   (on the probe binary and again on the final source, `build/wt/nondet/mtg.fix3`, which differs only by
+   the removed `MTG_BP_ENUM_LIBKEY` read and reproduces the kittyv2 job game-for-game: 50/50 identical).
+2. **gi=34:** with predecessors 0–33 **48,188 / `0e31c1ce3b739553`**, alone **48,188 / `0e31…`**.
+3. **The kittyv2 prediction holds exactly:** `kittyv2_regression_d5_s2002` at `--threads 1` gives digest
+   **`ccf53277e7e92a6b`** (= GT) and **608,723** units (GT run: 605,944), and all 50 games equal their
+   fresh-process results (base: 1 exception, gi=34).
+4. **History battery** (84 games x 7 sequences, see above): **0 units / 0 digest differences in 588
+   comparisons** (base: 2 / 0), and the 84 fresh-process results are identical to base's.
+5. **EDF**, the original 09-03 deck (d5/b20 s4303; seqE1 = games 0–39 as one job, seqE2 = 60 games of
+   kittyv2 d5 / Fungus d5 / Hinata d3 / Melira d3 / EDF s5505 then targets 24–39 as one-game jobs):
+   **0 / 0 differences in 32 comparisons on BOTH binaries**, and base and fix2 agree on all 132 game
+   results (16 fresh-process, 40 + 76 in sequence). So today's EDF shows no history effect at this
+   power — consistent with its 09-03 residual having been the mana-cache land-Aura hole fixed on 09-07
+   — and the fix changes nothing on it.
+6. **Mana-cache per-game clear, same binary, `MTG_LEGACY_MANA_CACHE_ACROSS_GAMES=1` vs unset**, the
+   smoke manifest capped at 20 games per job (125 jobs, 2,490 games incl. every 2HG job), both arms
+   concurrently at `--threads 2`, `MTG_TAP_STATS=1`:
+   * **identity: 2,490 / 2,490 games identical in digest, win turn AND units** — no mana-cache key hole
+     surfaced, and payment really is unmetered;
+   * **cost:** cache misses 839,885 → 954,079 (+114,194, hit rate 92.3% → 91.3%), backtracker nodes on
+     misses 4,091,073 → 4,689,134 (+598k, ~240 per game), against 41.6M payment calls that are the same
+     in both arms. An instruction count could not be taken (no PMU); at any plausible 1–10 µs per
+     backtracker node that is ~0.6–6 s over a ~0.8 core-hour arm, i.e. well under 1%. A callgrind spot
+     check would make it exact if wanted.
+   * no `[determinism]` line in either arm (neither memory pool refused a store at `--threads 2`).
+7. **Soundness count:** see the LIBCHECK table above — zero library-mismatched hits; `MTG_BP_ENUM_LIBKEY`
+   removed; a 0.026% same-library CONTENT residue left as a separate (non-determinism) question.
+
+Owed, needs the whole box (the coordinator's run):
+
+8. **Pooled:** the regression manifest twice at 24 threads and once at a different thread count, each
+   `MTG_DUMP_UNITS=1 /workspaces/MagicDeckTester2/build/wt/nondet/mtg.fix3 --batch <manifest> --threads N --game-log-dir
+   logs/nondet/pool/<run> > logs/nondet/pool/<run>.out 2> logs/nondet/pool/<run>.err` from the `nondet`
+   worktree root, compared with `python3 logs/nondet/poolcmp.py logs/nondet/pool/<A> logs/nondet/pool/<B>
+   --gt test/gt_logs`. Pass = 0 digest and 0 units differences between every pair and no `[determinism]`
+   line in any `.err`; the `--gt` report sizes the GT change.
+
+## History: the 2026-09-03 investigation
 
 ## The observation
 

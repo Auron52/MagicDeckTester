@@ -23820,6 +23820,19 @@ static std::uint64_t BoardKey(const GameState& s, int me)
 }
 }   // namespace comboroute
 
+// PER GAME, not only on overflow. The memo is board-keyed and NOT decision-scoped (its two siblings,
+// the equip route's DSeen and TrialPolicy's DecisionMemo, both are), and the key reads only the top
+// eight library cards: a verdict that depends on a deeper dig is exact within one permutation and
+// not beyond it. Left alone, a worker thread carried the memo from game to game, so which games
+// shared the thread decided both what it could hit and WHEN the 65,536-entry clear fired -- the
+// cross-game history channel docs/design/batch-run-to-run-nondeterminism.md rules out. Within one
+// game the memo is kept: there the hit pattern is a function of the game alone.
+void EdfComboRouteClearMemo()
+{
+    comboroute::TrialMemo& memo = comboroute::Memo();
+    memo.m.clear();
+}
+
 int EdfComboRouteTrial(const GameState& s, int me)
 {
     if (!comboroute::On()) { return 0; }
