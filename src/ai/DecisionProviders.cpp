@@ -27985,7 +27985,9 @@ int StompyProvider::ExtraLethalDamage(const GameState& s,
 static bool StompyOrderEnabled()
 {
     // Per-job overridable (heurarm) so both arms of an A/B run in ONE pooled batch.
-    static const bool on = EnvOn("MTG_STOMPY_ORDER");   // DEFAULT OFF (pending the payment fix); =1 enables
+    // DEFAULT ON at integration 2026-10-15 with the payment fix + the three levers (v6: every cell net <= 0,
+    // 596/598 slower games recover; pending the USER); =0 -> the generic order.
+    static const bool on = EnvOn("MTG_STOMPY_ORDER", true);
     return heurarm::Flag(heurarm::STOMPY_ORDER, on);
 }
 

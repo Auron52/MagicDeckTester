@@ -856,9 +856,10 @@ inline bool UntapBurstGrowthEnabled()
 // 1-drop elves (24 of 24 permutations), and the USER cast order always lands the 1-drops first.
 // Payment is the permitted greedy area; this only re-keys its tie-breaks. DEFAULT OFF until measured;
 // =1 enables.
+// DEFAULT ON at integration 2026-10-15 (v6: clears the bar; pending the USER); =0 disables.
 inline bool HoldReleaseYieldEnabled()
 {
-    static const bool v = EnvOn("MTG_HOLD_RELEASE_YIELD");
+    static const bool v = EnvOn("MTG_HOLD_RELEASE_YIELD", true);
     return heurarm::Flag(heurarm::HOLD_RELEASE_YIELD, v);
 }
 
@@ -876,9 +877,10 @@ inline bool HoldReleaseYieldEnabled()
 // every rung held Archdruid, the prepay declined, and the sequential payer's battlefield order decided the
 // kill (scn_2hg2290_t4 / _t4b: same board, two layouts, T4 vs T5 on either arm). Payment is the permitted
 // greedy area. DEFAULT OFF until measured; =1 enables.
+// DEFAULT ON at integration 2026-10-15 (v6: clears the bar; pending the USER); =0 disables.
 inline bool HoldProducerFirstEnabled()
 {
-    static const bool v = EnvOn("MTG_HOLD_PRODUCER_FIRST");
+    static const bool v = EnvOn("MTG_HOLD_PRODUCER_FIRST", true);
     return heurarm::Flag(heurarm::HOLD_PRODUCER_FIRST, v);
 }
 
@@ -897,9 +899,10 @@ inline bool HoldProducerFirstEnabled()
 // USER order casts the 1-drop first) the second Natural Order ate Fyndhorn and the kill was
 // unfindable at any depth. Rules: any green creature is a legal victim (CR 601.2h pays the cost while
 // casting); this only names which. DEFAULT OFF until measured; =1 enables.
+// DEFAULT ON at integration 2026-10-15 (v6: clears the bar; pending the USER); =0 disables.
 inline bool SacVictimSameNameEnabled()
 {
-    static const bool v = EnvOn("MTG_SAC_VICTIM_SAME_NAME");
+    static const bool v = EnvOn("MTG_SAC_VICTIM_SAME_NAME", true);
     return heurarm::Flag(heurarm::SAC_VICTIM_SAME_NAME, v);
 }
 
@@ -916,9 +919,10 @@ inline bool SacVictimSameNameEnabled()
 // candidate replayed the three right after Vaultborn's draw, cast the one Fyndhorn in hand and stranded
 // the Fyndhorn and Craterhoof that Natural Order then drew. Executor-only (the rollout is already
 // deferred), so one reader. DEFAULT OFF until measured; =1 enables.
+// DEFAULT ON at integration 2026-10-15 (v6: clears the bar; pending the USER); =0 disables.
 inline bool ExecPutDeferredEnabled()
 {
-    static const bool v = EnvOn("MTG_EXEC_PUT_DEFERRED");
+    static const bool v = EnvOn("MTG_EXEC_PUT_DEFERRED", true);
     return heurarm::Flag(heurarm::EXEC_PUT_DEFERRED, v);
 }
 
