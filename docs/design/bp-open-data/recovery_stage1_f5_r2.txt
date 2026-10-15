@@ -1,0 +1,7 @@
+hinata           ship on       gi=79   faster=4 slower=5 -> stage1 4 RECOVERED
+hinata           ship on       gi=85   faster=6 slower=7 -> stage1 5 RECOVERED
+creature_giving  ship on       gi=196  faster=6 slower=7 -> stage1 6 RECOVERED
+creature_giving  d3   on       gi=298  faster=5 slower=6 -> stage1 5 RECOVERED
+mirrorwing       ship on       gi=141  faster=4 slower=5 -> stage1 4 RECOVERED
+bruna            d3   on       gi=5    faster=5 slower=6 -> stage1 5 RECOVERED
+recovered 6 / 6
