@@ -21406,13 +21406,14 @@ bool AngelsProvider::CastOrderingCandidates(const GameState& s, const std::vecto
 // would make holding a cast for after combat a real choice -- re-derive for phase 2.
 //
 // The pools are AvailableManaPool with and without her, exact for this mono-white list's sources
-// (Plains; Remote Farm's {W}{W}; Seraph Sanctuary's and Sol Ring's colourless). Default OFF until the
-// USER's call on the measured cost (docs/design/angels-cast-order-2026-10-14.md).
+// (Plains; Remote Farm's {W}{W}; Seraph Sanctuary's and Sol Ring's colourless). DEFAULT ON (2026-10-15):
+// it met the bar and its cost is small -- +6.5% work units at the shipped cell over the order alone, 0.99x
+// the pre-order tree (docs/design/angels-cast-order-2026-10-14.md).
 namespace
 {
 bool AngelsGiadaM2Enabled()
 {
-    static const bool on = EnvOn("MTG_ANGELS_GIADA_M2", false);   // DEFAULT OFF; =1 opens the phase
+    static const bool on = EnvOn("MTG_ANGELS_GIADA_M2", true);   // DEFAULT ON since 2026-10-15; =0 closes it
     return heurarm::Flag(heurarm::ANGELS_GIADA_M2, on);
 }
 
