@@ -851,6 +851,26 @@ inline bool HoldReleaseYieldEnabled()
     return heurarm::Flag(heurarm::HOLD_RELEASE_YIELD, v);
 }
 
+// MTG_HOLD_PRODUCER_FIRST=1 (live only under MTG_HOLD_RELEASE_YIELD) -- two more rules for the same hold
+// ladder (TurnSolver::BatchPrepayMainCasts):
+//   (e) when the ladder must release held bodies, the BIGGEST PRODUCER releases first (yield, then power,
+//       then name / number): under a team pump every body is one attacker, and one tap of a 4-Elf Elvish
+//       Archdruid pays what four 1/1 elves would, each of which costs the attack a body. (a) only ordered
+//       EQUAL-power bodies by yield, so a power-2 Archdruid outlived every 1/1 on the ladder;
+//   (f) a body ANY of the turn's casts sacrifices as a cost is never held -- every Natural Order victim,
+//       not only the first one (c) covers; a second pin of the same copy takes another copy of its name
+//       (MTG_SAC_VICTIM_SAME_NAME's reading), lowest card number.
+// Found on stompy2hg d3 gi2290 (docs/design/stompy-order-2026-10-14.md §4d): T4 Natural Order x2 ->
+// Craterhoof x2 is exactly 8 mana with Archdruid tapped while four Elves live and one 1/1 held to attack;
+// every rung held Archdruid, the prepay declined, and the sequential payer's battlefield order decided the
+// kill (scn_2hg2290_t4 / _t4b: same board, two layouts, T4 vs T5 on either arm). Payment is the permitted
+// greedy area. DEFAULT OFF until measured; =1 enables.
+inline bool HoldProducerFirstEnabled()
+{
+    static const bool v = EnvOn("MTG_HOLD_PRODUCER_FIRST");
+    return heurarm::Flag(heurarm::HOLD_PRODUCER_FIRST, v);
+}
+
 // MTG_SAC_VICTIM_SAME_NAME=1 -- a "sacrifice a <color> creature" additional cost (Natural Order) is
 // searched by victim NAME: TurnSolver emits one cast variant per distinct name, pinning that name's
 // most-expendable copy on the PRE-PLAN board by card number (same-name victims are fungible). A second
@@ -870,6 +890,25 @@ inline bool SacVictimSameNameEnabled()
 {
     static const bool v = EnvOn("MTG_SAC_VICTIM_SAME_NAME");
     return heurarm::Flag(heurarm::SAC_VICTIM_SAME_NAME, v);
+}
+
+// MTG_EXEC_PUT_DEFERRED=1 -- executor lockstep for the put-in-hand breakpoint (MTG_BP_PUT_IN_HAND,
+// site 10). The rollout arms it at the END of apply_one as a DEFERRED re-solve (deferred_cantrip_resolve:
+// cast the rest of the plan, then run the continuation), at the main level always. The executor's clean
+// cast loop matches that (no inline breakpoint; the end-of-main catch-all replays the committed segment),
+// but its searched-order and opaque loops treated put_in_hand_armed() as an INLINE site and replayed the
+// committed segment at the cast -- before the plan's remaining casts, which is not the line the rollout
+// scored. With the lever those two loops defer it exactly like acq_deferred (commit: the catch-all
+// replays it; no commit: re-solve once after the main casts). Searched decisions only (lookahead depth
+// > 0), as acq_deferred. Found on stompy2hg gi797 (docs/design/stompy-order-2026-10-14.md §4c): T4 Elvish
+// Mystic, Vaultborn Tyrant, Natural Order + [Fyndhorn, Fyndhorn, Craterhoof] -- the order's searched
+// candidate replayed the three right after Vaultborn's draw, cast the one Fyndhorn in hand and stranded
+// the Fyndhorn and Craterhoof that Natural Order then drew. Executor-only (the rollout is already
+// deferred), so one reader. DEFAULT OFF until measured; =1 enables.
+inline bool ExecPutDeferredEnabled()
+{
+    static const bool v = EnvOn("MTG_EXEC_PUT_DEFERRED");
+    return heurarm::Flag(heurarm::EXEC_PUT_DEFERRED, v);
 }
 
 // MTG_GARTH_ORDERED=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):

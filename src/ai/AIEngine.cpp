@@ -6230,7 +6230,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
-            if (s_full_depth && acq_deferred(a.card_name))
+            // MTG_EXEC_PUT_DEFERRED: a put-in-hand site defers as the rollout arms it (see the reader).
+            const bool put_deferred = put_armed && ExecPutDeferredEnabled() && m_lookahead_depth > 0
+                                   && !is_draw_engine(a.card_name);
+            if (s_full_depth && (acq_deferred(a.card_name) || put_deferred))
             { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
             else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
@@ -6418,7 +6421,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
-            if (s_full_depth && acq_deferred(a.card_name))
+            // MTG_EXEC_PUT_DEFERRED: a put-in-hand site defers as the rollout arms it (see the reader).
+            const bool put_deferred = put_armed && ExecPutDeferredEnabled() && m_lookahead_depth > 0
+                                   && !is_draw_engine(a.card_name);
+            if (s_full_depth && (acq_deferred(a.card_name) || put_deferred))
             { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
             else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {

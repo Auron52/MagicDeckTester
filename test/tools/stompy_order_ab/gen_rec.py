@@ -13,6 +13,8 @@ WT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abs
 S0 = 10900001
 NTR = {"MTG_STOMPY_NO_TARGET_RANK": True}
 SVN = {"MTG_SAC_VICTIM_SAME_NAME": True}
+PD = {"MTG_EXEC_PUT_DEFERRED": True}
+PF = {"MTG_HOLD_PRODUCER_FIRST": True}
 OF = {"MTG_HOLD_RELEASE_YIELD": True, "MTG_STOMPY_ORDER": True}
 FLAGS = {"fix": {"MTG_HOLD_RELEASE_YIELD": True},
          "ofix": dict(OF),
@@ -22,6 +24,10 @@ FLAGS = {"fix": {"MTG_HOLD_RELEASE_YIELD": True},
          "ofixsvn": dict(OF, **SVN),
          "onotopsvn": dict(OF, MTG_STOMPY_TOP_RESOLVE=False, **SVN),
          "svn": dict(SVN),
+         "ofixsvnpd": dict(OF, **SVN, **PD),
+         "onotopsvnpd": dict(OF, MTG_STOMPY_TOP_RESOLVE=False, **SVN, **PD),
+         "ofixall": dict(OF, **SVN, **PD, **PF),
+         "onotopall": dict(OF, MTG_STOMPY_TOP_RESOLVE=False, **SVN, **PD, **PF),
          "off": None}
 
 import re
