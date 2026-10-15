@@ -1,0 +1,16 @@
+hin85_f14_s1:[play] depth=6 budget=100ms source=cli(--ignore-play-profile)
+hin85_f14_s1:[win] gi=0 wt=5
+cg196_on_b0:[play] depth=5 budget=0ms source=value_play(depth)+cli(budget)
+cg196_on_b0:[win] gi=0 wt=6
+mw141_on_b0:[play] depth=5 budget=0ms source=default(depth)+cli(budget)
+mw141_on_b0:[win] gi=0 wt=4
+bruna5_on_b0:[play] depth=3 budget=0ms source=cli(--ignore-play-profile)
+bruna5_on_b0:[win] gi=0 wt=5
+hin79_f14_s1:[play] depth=4 budget=100ms source=cli(--ignore-play-profile)
+hin79_f14_s1:[win] gi=0 wt=4
+mw141_on:[play] depth=5 budget=20ms source=default(depth)+cli(budget)
+mw141_on:[win] gi=0 wt=5
+cg298_on_b0:[play] depth=3 budget=0ms source=cli(--ignore-play-profile)
+cg298_on_b0:[win] gi=0 wt=5
+mw141_off:[play] depth=5 budget=20ms source=default(depth)+cli(budget)
+mw141_off:[win] gi=0 wt=4

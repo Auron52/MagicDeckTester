@@ -1,8 +1,9 @@
 # Every breakpoint continuation open to the search, "cast nothing more" included
 
-Status (2026-10-14, WIP): **audited; fixed behind five default-ON levers; identity, targeted cases and
-the 33-deck movers check done; the per-deck A/B PARTIAL** -- stopped for the night, see section 5
-(RESUME). The integrator owns smoke / regression GT. Started as the root cause of Hinata2 shipped gi 137
+Status (2026-10-15): **audited; fixed behind five levers -- F1-F4 default ON and through the whole
+adoption bar on the rebased build, F5 default OFF pending the USER (section 5)**; identity, targeted
+cases, the 33-deck movers check, the per-deck A/B and recovery done; the d3 b0 exactness sample is
+queued (4.5). The integrator owns smoke / regression GT. Started as the root cause of Hinata2 shipped gi 137
 (docs/design/final-ab-2026-10-13.md); widened to an audit of every place the breakpoint machinery
 produces or chooses a post-breakpoint continuation, because the USER's ask was general:
 
@@ -99,9 +100,10 @@ fix gi 137 at the shipped budget too, with the EMPTY ordered last (section 4).
 
 ## 4. Measurements
 
-Every run on this worktree's Release build, `MTG_PGO=0`, `--threads 6`, decks from the primary checkout
-(as every A/B here does, so the machine-local keep-table caches are reused). Loss = 9. Builders and
-analysers: `logs/bp_open/make_ab.py` (worktree-local scratch, gitignored).
+Sections 4.1-4.3 ran on this worktree's Release builds at `--threads 6` with the primary checkout's
+inputs (base 77e094a2); 4.4-4.5 on the rebased build `r2` (16dfb7e4 + this branch) at `--threads 20`
+under the box lock, inputs staged onto the build volume. `MTG_PGO=0`, loss = 9 throughout. Builders and
+analysers: `scripts/bp_open/`.
 
 ### 4.1 Targeted cases
 
@@ -116,7 +118,7 @@ analysers: `logs/bp_open/make_ab.py` (worktree-local scratch, gitignored).
 Unit tests: `test/unit/test_bp_wave_empty.cpp` (9 cases: the walker contract through
 `TurnSolver::WaveWalkerTraceForTest` -- EMPTY last in a slot, none for an empty list or a wave-0 slot,
 the node-turn mask by host, hosted nested slots, the demoted wave, `NEW_LAST` ordering); full
-`mtg-test` 1042/1042 on build v3 (the final build: see section 5). Scenarios 162/162 on v3 (the two new ones included).
+`mtg-test` 1062/1062 and scenarios 162/162 (the two new ones included) on the rebased build `r2`.
 
 ### 4.2 Identity (all five `=0` vs the committed tree)
 
@@ -145,50 +147,102 @@ units for it (budget the fixed per-decision budget had left over, now spent on t
 Most of that is F5: with F5 off (the `nodemote` arm) stompy 1.00, auras 1.05, critter 1.03 at shipped,
 and of the movers mirrorwing 1.01 (1.30 with F5), pirates 1.10 (1.35 with F5).
 
-### 4.4 Per-deck held-out A/B on the nine movers -- PARTIAL (stopped for the night)
+### 4.4 Per-deck held-out A/B on the nine movers (rebased build r2, complete)
 
 FRESH seeds 10400001+, `seed = 10400001 + 20000*deck_index + 5000*cell_index + gi` (deck_index =
-position in `scripts/bp_open/make_ab.py` ALL_DECKS). Arms: `on` (all five), `off` (all five =0, the
-committed tree's play), `nodemote` (F1-F4 on, F5 off). Shipped b20 (value_play depth), d3 b10. Raw:
-`docs/design/bp-open-data/ab_partial_vs_off.txt`. **net = summed win-turn change, lower is better.**
+position in `scripts/bp_open/make_ab.py` ALL_DECKS). Binary: `r2` = 16dfb7e4 (work/integ-2026-10-14) +
+this branch, inputs staged onto the build volume (`scripts/bp_open/stage_data.sh`), ONE pooled batch
+(767 jobs, 19,175 games, 22 min at `--threads 20` under the box lock). Every arm names
+`MTG_BP_NEW_ONLY_DEMOTE` explicitly. Arms: `off` (all five =0, the committed tree's play), `nodemote`
+(**F1-F4 = the shipped default**), `on` (all five), `onnl` (all five + `MTG_BP_WAVE_NEW_LAST`), `nl14`
+(F1-F4 + `NEW_LAST`). Shipped b20 (value_play depth), d3 b10, d0. Raw:
+`docs/design/bp-open-data/ab_r2_vs_{off,nodemote,on}.txt`. **net = summed win-turn change vs off, lower
+is better.**
 
-| deck | cell | games/arm | on: fast / slow / net | F1-F4 only: fast / slow / net | units x (on / F1-F4) |
+| deck | cell | games/arm | F1-F4: fast / slow / net | all five: fast / slow / net | units x vs off (F1-F4 / all five) |
 |---|---|---|---|---|---|
-| hinata | shipped | 175 | 0 / 2 / **+2** | 0 / 2 / +2 | 1.086 / 1.022 |
-| hinata | d3 | 250 | 5 / 0 / **-5** | 3 / 0 / -3 | 1.040 / 1.027 |
-| creature_giving | shipped | 200 | 0 / 1 / **+1** | 0 / 0 / 0 | 1.097 / 1.026 |
-| creature_giving | d3 | 300 | 0 / 1 / **+1** | 0 / 0 / 0 | 1.041 / 1.007 |
-| mirrorwing | shipped | 200 | 0 / 1 / **+1** | 0 / 0 / 0 | 1.240 / 1.024 |
-| melira | shipped / d3 | 200 / 249 | 0 / 0 / 0 both | 0 / 0 / 0 both | 1.029 / 1.009 ; 1.012 / 1.004 |
+| th | shipped | 200 | 0 / 0 / 0 | 1 / 0 / -1 | 1.019 / 0.975 |
+| th | d3 | 100 | 0 / 0 / 0 | 1 / 0 / -1 | 1.016 / 1.009 |
+| hinata | shipped | 175 | 0 / 2 / **+2** | 0 / 2 / **+2** | 1.022 / 1.086 |
+| hinata | d3 | 250 | 3 / 0 / -3 | 5 / 0 / -5 | 1.027 / 1.040 |
+| creature_giving | shipped | 200 | 0 / 0 / 0 | 0 / 1 / **+1** | 1.026 / 1.097 |
+| creature_giving | d3 | 300 | 0 / 0 / 0 | 0 / 1 / **+1** | 1.007 / 1.041 |
+| mirrorwing | shipped | 200 | 0 / 0 / 0 | 0 / 1 / **+1** | 1.024 / 1.240 |
+| mirrorwing | d3 | 300 | 1 / 0 / -1 | 1 / 0 / -1 | 1.002 / 1.099 |
+| melira | shipped / d3 | 200 / 300 | 0 / 0 / 0 both | 0 / 0 / 0 both | 1.009 / 1.028 ; 1.005 / 1.007 |
 | fluctuator | shipped / d3 | 200 / 300 | 1 / 0 / -1 each | 1 / 0 / -1 each | 1.002 / 1.002 ; 1.024 / 1.024 |
-| pirates | shipped | 200 | 0 / 0 / 0 | 0 / 0 / 0 | 1.287 / 1.060 |
-| pd | shipped | 200 | 0 / 0 / 0 | 0 / 0 / 0 | 1.022 / 1.016 |
-| th | shipped | 200 | 1 / 0 / -1 | 0 / 0 / 0 | 0.975 / 1.019 |
-| bruna | shipped / d3 | 50 / 100 | 0 / 0 / 0 ; 0 / 1 / **+1** | 0 / 0 / 0 both | 1.009 / 1.009 ; 1.071 / 1.010 |
-| (not run yet) | d3 of pd, mirrorwing, pirates, th; d0 of all nine | -- | -- | -- | -- |
+| pirates | shipped / d3 | 200 / 100 | 0 / 0 / 0 both | 0 / 0 / 0 both | 1.060 / 1.285 ; 1.002 / 1.031 |
+| pd | shipped / d3 | 200 / 100 | 0 / 0 / 0 both | 0 / 0 / 0 both | 1.016 / 1.024 ; 1.001 / 1.043 |
+| bruna | shipped / d3 | 50 / 100 | 0 / 0 / 0 both | 0 / 0 / 0 ; 0 / 1 / **+1** | 1.009 / 1.009 ; 1.010 / 1.071 |
+| all nine | d0 | 100 | -- | identical play in 36 / 36 chunks (no search at d0) | -- |
 
-**Per deck so far:** F1-F4 alone are net <= 0 on all nine (hinata -1 = +2 shipped -3 d3, fluctuator
--2, the rest 0). All five: hinata -3, fluctuator -2, th -1, melira / pirates / pd 0, but
-**creature_giving +2, mirrorwing +1, bruna +1 -- every one of those four slower games is F5's**
-(on vs nodemote).
+**Per deck, F1-F4 (shipped): net <= 0 on all nine** -- th 0, hinata -1 (+2 shipped, -3 d3), creature_giving
+0, mirrorwing -1, melira 0, fluctuator -2, pirates 0, pd 0, bruna 0. Two slower games, both Hinata2
+shipped (gi 79 T4 -> T5, gi 85 T6 -> T7). **All five: creature_giving +2 and bruna +1 are above 0** (hinata
+-3, th -2, fluctuator -2, mirrorwing 0, the rest 0); the four extra slower games (creature_giving shipped
+gi 196, d3 gi 298; mirrorwing shipped gi 141; bruna d3 gi 5) are every one F5's.
 
-**Slower-game recovery (stage 1, `--depth W --budget-ms 100`, W = the faster arm's win turn, lever arm)
--- PARTIAL, 4 of 6 run, all 4 recovered:** creature_giving d3 gi 298 (6 -> 5), creature_giving shipped
-gi 196 (7 -> 6), bruna d3 gi 5 (6 -> 5), hinata shipped gi 85 (7 -> 5). Not yet run: hinata shipped
-gi 79 (off T4, on T5), mirrorwing shipped gi 141 (off T4, on T5). Raw:
-`docs/design/bp-open-data/recovery_stage1_partial.txt`.
+**`MTG_BP_WAVE_NEW_LAST` does nothing measurable.** `onnl` vs `on` and `nl14` vs `nodemote`: identical
+per-game win turns in all 18 deck-cells, units within 0.0000-0.0025 (melira shipped 0.978 the one
+outlier), one chunk's digest differs (hinata shipped, same win turns). So ordering the new options after
+EVERY slot's ranks instead of after their own slot's does not move the churn: F5's slower games are not
+the walker handing a demoted option out early. NEW_LAST stays default OFF and is a candidate for deletion.
 
-### 4.5 Not yet run
+**The rebase moved none of these games.** Each of `off`, `nodemote` and `on` plays per game identically on
+r2 and on yesterday's v5 (77e094a2 + the levers, primary-checkout inputs), over every deck-cell both ran
+(14 deck-cells, 2,824 games per arm; 2,831 for `on`): `docs/design/bp-open-data/rebase_vs_v5.txt`.
 
-* The rest of the A/B (d3 of pd / mirrorwing / pirates / th at 100 games x 3 arms; d0 of all nine at
-  100 x 2 -- d0 cannot move, no search there, and the movers check confirms 0 of 33 decks move at d0).
-* `onnl` (all five + `MTG_BP_WAVE_NEW_LAST=1`) on hinata / creature_giving / mirrorwing / bruna, same
-  seeds: does ordering the new options after EVERY slot's ranks remove F5's churn?
-* Exactness at `--budget-ms 0` (d3 b0): fluctuator / th / mirrorwing / pirates / dragonstorm / auras /
-  critter / goblins 20 games x on/off; hinata / creature_giving 10. (A first pass at 25 games per deck on
-  the expensive decks never started a game in 70 minutes on this box: drop bruna, melira, pd, kitty
-  from it.)
-* Stage 2 (`--depth 8 --budget-ms 0`) for any stage-1 miss.
+**Slower-game recovery, stage 1 (`--depth W --budget-ms 100`, W = the faster arm's win turn, the lever
+arm) and stage 2 (`--depth 8 --budget-ms 0`):**
+
+| arm | game | off | lever arm | stage 1 | verdict |
+|---|---|---|---|---|---|
+| F1-F4 | hinata shipped gi 79 | T4 | T5 | d4 b100: **T4** | recovered |
+| F1-F4 | hinata shipped gi 85 | T6 | T7 | d6 b100: **T5** | recovered |
+| all five | hinata shipped gi 79 | T4 | T5 | queued (batch 2) | -- |
+| all five | hinata shipped gi 85 | T6 | T7 | d6 b100: T5 (v5) | recovered |
+| all five | creature_giving shipped gi 196 | T6 | T7 | d6 b100: T6 (v5) | recovered; b0 T6 |
+| all five | creature_giving d3 gi 298 | T5 | T6 | d5 b100: T5 (v5) | recovered; d3 b0 T5 |
+| all five | mirrorwing shipped gi 141 | T4 | T5 | queued (batch 2) | b0 T4 |
+| all five | bruna d3 gi 5 | T5 | T6 | d5 b100: T5 (v5) | recovered; d3 b0 T5 |
+
+F1-F4's two (`scripts/bp_open/f14_stage1_singles.sh`, r2, single games) both recover at stage 1, so
+**F1-F4 meet the whole adoption bar**: every deck net <= 0, every slower game recovered, no stage 2
+needed. (The "(v5)" stage-1 rows ran on yesterday's binary, whose A/B games are per-game identical to
+r2's; batch 2 re-runs all six on r2.)
+
+**F5's slower games at an UNLIMITED budget, their own cell's depth** (all five on, `--budget-ms 0`, one game
+each, `scripts/bp_open/f5_b0_singles.sh`): **every one plays at the off arm's turn** -- Mirrorwing shipped
+gi 141 T4 (was T5 at b20), creature_giving shipped gi 196 T6 (was T7), creature_giving d3 gi 298 T5 (was
+T6), bruna d3 gi 5 T5 (was T6). So F5 loses nothing at a large budget (the doctrine's invariant holds);
+what it costs at b20 / b10 is pure budget churn.
+
+**Why `NEW_LAST` cannot help, and what would.** Mirrorwing gi 141 diverges on turn 2: off casts Elvish
+Mystic, Ancestral Anger (drawing Game Trail) and attacks for 2, wins T4; all five cast Mystic, Fists of
+Flame (drawing the same Game Trail), no attack, and win T5 for 66: a different turn-2 base plan, not a
+different post-draw continuation. The inference (from b0 restoring it and `NEW_LAST` not moving it): what
+moved the root's choice is the budget the demoted waves spent INSIDE the lookahead -- every walker of
+every node below the root hands its demoted wave out, last in its own slot, and those few applies per
+node add up to +21% units on Mirrorwing shipped (on vs F1-F4) -- so the root decision's per-decision
+budget covered less of the tree the T4 line lives in. "LAST" in each walker is local; it does not make the demoted work later than the
+REST of the tree. The ordering that would is global: a **decision-level second pass** -- search the
+decision with the demoted waves closed, and only when that search completes inside the budget re-open
+them (iterative widening). At a binding budget that plays exactly the F5-off line; at an unlimited one it
+reaches every demoted continuation. The same shape would take F1-F4's two Hinata2 shipped slower games
+out if they are churn too (stage 1 above). Not built: it is a search-architecture change and F5's
+default is the USER's.
+
+### 4.5 Exactness at an unlimited budget (d3 b0)
+
+**QUEUED, not yet run** (batch 2, `build/scratch/bp_open/b2`, waiting on the box lock since 04:22 UTC;
+`bash scripts/bp_open/analyse_b2.sh` reads it into `docs/design/bp-open-data/exact_r2_vs_off.txt`). The
+cell: depth 3, `--budget-ms 0`, arms off / F1-F4 / all five; 50 games per arm on auras, critter,
+dragonstorm, fluctuator, goblins; 20 on creature_giving, mirrorwing, pirates, th; 4 on hinata (off / all
+five only: one d3 b0 Hinata2 game ran over 33 CPU-minutes unfinished in the cost probe). The test: at an
+unlimited budget the levers only ADD options, so no game may be slower than off.
+
+What already speaks to it: Hinata2 gi 137 at d8 b0 (T8 -> T7, 4.1), both Mirrorwing order scenarios at
+b0 (no win -> T4, 4.1), and F5's four slower games each back at the off arm's turn at b0 (4.4).
 
 ### 4.6 Identity detail
 
@@ -199,43 +253,31 @@ breakpoint-enumeration memo is thread-local and survives a batch worker's job sw
 job's units depend on which jobs shared its worker. A same-manifest rerun of the 4 jobs on both binaries
 is the clean check; not run.
 
-## 5. RESUME (2026-10-14 night; stopped by the integrator for a value-leaf run)
+## 5. State (2026-10-15) and what the USER decides
 
-* **Base:** 77e094a2 (phase-1-2-deck-analyzer). Branch `worktree-agent-a9469f45bff622cfb`.
-* **Built:** all five levers + `MTG_BP_WAVE_NEW_LAST` (ordering only, default OFF), unit tests, two
-  scenario fixtures. The measured binary of every number above is this commit's source (scratch build
-  `v5` for the A/B and recovery; `v3` = the same minus the `NEW_LAST` lever and minus the
-  `AddHostedDemoted` same-slot guard, for the movers check; `base` = 77e094a2 + the slot names).
-* **Unit tests:** `v3` full suite 1042 / 1042; `v5` `test_bp_wave_empty` 9 / 9; the `v5` full-suite run
-  was killed by the wrap-up after 440 / 440 passing (the one "failure" in its log is the SIGTERM).
-  **Run `build/Release/mtg-test` in full before treating this commit as final.** Scenarios 162 / 162 on
-  `v3`; rerun on the final build.
-* **Scripts:** `scripts/bp_open/` (copies of the worktree-local `logs/bp_open/`). Every batch:
-  `bash scripts/bp_open/run_batch.sh <bin-tag> <dir> ""` with the binary at
-  `build/scratch/bp_open/bin/<tag>/mtg` (`bash scripts/bp_open/build.sh <tag>` builds and copies it;
-  edit the two paths at its top if the worktree moved). Analyse with
-  `python3 scripts/bp_open/make_ab.py analyse <dir> [--base off|nodemote]`.
-* **To finish the A/B (one pooled batch):**
-  1. `make_ab.py build --out <D>/ab2 --seed0 10400001 --decks pd,mirrorwing,pirates,th --cells d3
-     --games d3=100 --arms on,off,nodemote --chunk 25`
-  2. `make_ab.py build --out <D>/ab2d0 --seed0 10400001 --decks hinata,creature_giving,fluctuator,bruna,th,mirrorwing,melira,pirates,pd --cells d0 --games d0=100 --arms on,off --chunk 25`
-  3. `make_ab.py build --out <D>/abnl --seed0 10400001 --decks hinata,creature_giving,mirrorwing,bruna
-     --cells ship,d3 --games ship=200,d3=300 --arms onnl --chunk 25 --scale-expensive`
-  4. exactness: `make_ab.py build --out <D>/exact2 --seed0 10400001 --decks fluctuator,th,mirrorwing,pirates,dragonstorm,auras,critter,goblins --cells x3 --games x3=20 --arms on,off --chunk 10`
-     and `--out <D>/exact3 --decks hinata,creature_giving --games x3=10 --chunk 5`
-  5. recovery: `make_recovery.py build <D>/ab <D>/rec1 --stage 1 --arm on` (6 jobs; 4 already done --
-     results above), then pool them all with `merge_plain.py <D>/fu/manifest.json <the others>` (the
-     manifests from tonight are still in `build/scratch/bp_open/{ab2,ab2d0,abnl,exact2,exact3,rec1,fu}`)
-     and run once. Combine with tonight's `build/scratch/bp_open/ab` via `combine.sh` before analysing.
-* **The finding the USER should hear now:** F1-F4 (the walker's EMPTY, the un-hosted mask, the m2
-  walker's fixpoint, the node's nested slots) measure clean so far -- net <= 0 on all nine movers,
-  identical play on the other 24 decks, units +0-6%. F5 (keeping `MTG_BP_NEW_ONLY`'s dropped
-  continuations as the walker's last wave) is the only lever that fixes the Mirrorwing order cases, but
-  it costs +20-30% units on Mirrorwing / Pirates / Stompy at the shipped budget and is +1 / +2 on three
-  decks so far (its slower games recover at stage 1, i.e. budget churn). It also modifies a rule the
-  USER adopted and re-admits the "pull-order" lines the 2026-09-21 ruling declined to preserve. Its
-  default is the USER's call; the recommendation is ON if `onnl` (or a narrower demoted set) takes the
-  churn out, OFF otherwise.
+* **Base:** rebased onto 16dfb7e4 (work/integ-2026-10-14). Branch `worktree-agent-a9469f45bff622cfb`.
+  Conflicts in the rebase: only the two append-only lists (`HeuristicArm.h`'s enum tail + `kNames`, and
+  `CMakeLists.txt`'s test list), resolved by keeping both sides, integration's entries first.
+* **Shipped default:** F1-F4 ON, F5 OFF, `NEW_LAST` OFF. The two Mirrorwing scenarios set
+  `MTG_BP_NEW_ONLY_DEMOTE=1` in their `env` (at `=0` neither line is found: opponent at 84 / 46).
+* **Measured binary:** `r2` (= this branch's source). Full `mtg-test` 1062 / 1062, scenarios 162 / 162
+  on `r2`.
+* **Scripts:** `scripts/bp_open/`. `build.sh <tag>` builds and copies the binary to
+  `build/scratch/bp_open/bin/<tag>/`; `stage_data.sh` copies the inputs onto the build volume;
+  `run_boxed.sh <tag> <dir>` runs `<dir>/manifest.json` through the box lock; `plan_r2.sh` / `plan_b2.sh`
+  build the two batches above; `make_ab.py analyse <dir> --base off|nodemote|on`,
+  `make_recovery.py analyse <dir>`, `cmp_bases.py` read them.
+* **The USER decides:**
+  1. **F5 (`MTG_BP_NEW_ONLY_DEMOTE`).** The only lever that makes the Mirrorwing order lines findable,
+     and the only one with a deck net above 0 (creature_giving +2, bruna +1) at +24-29% units on
+     Mirrorwing / Pirates shipped. Every one of its slower games plays at the off arm's turn at an
+     unlimited budget (pure budget churn), and `NEW_LAST` does not take the churn out (4.4); a
+     decision-level second pass would (4.4, proposal). It modifies
+     `MTG_BP_NEW_ONLY`, a USER-adopted rule, and re-admits the "pull-order" lines the 2026-09-21 ruling
+     declined to preserve. Ships OFF until the USER rules.
+  2. **A3 (6.1),** the one-deviation-per-apply representation: a project, proposal only.
+  3. **The executor lockstep gaps (6.2):** the pod twin and the site-9 twin do not honour `bp_all` / the
+     chain sentinel. Pre-existing, not a closure; a lockstep fixture would pin it.
 
 ## 6. Not fixed
 
