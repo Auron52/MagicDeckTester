@@ -106,9 +106,10 @@ The order, one card per position, all main 1, the same on every turn:
 * **What it replaces.** The generic creature-10 / noncreature-20 tiers, plus the agent's board-conditional Light-Paws
   sub-order (`MTG_AURA_CAST_ORDER`, still in `GenericProvider` for other decks). `MTG_AURAS_ORDER=0` restores those
   exactly.
-* **Measurement, every slower game, and the two default-OFF report arms for the USER's open questions:**
+* **Measurement, every slower game, and the three default-OFF report arms for the USER's open questions:**
   `docs/design/auras-cast-order-2026-10-14.md`.
-  * The arms are `MTG_AURAS_ORDER_SEARCH` (Q19) and `MTG_LP_FETCH_USER_RULE` (Q20).
+  * The arms are `MTG_AURAS_ORDER_SEARCH` (Q19), and `MTG_LP_FETCH_USER_RULE` / `MTG_LP_FETCH_MV_AWARE` (two readings of
+    Q20).
 * The rank numbers below are `(class << 20) + name key`. Their size carries no meaning beyond the order.
 
 **FLAG FIX (2026-08-19):** `feeds_combat` was a false negative for this deck. `DeckFeedsCombat` scanned
