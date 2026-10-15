@@ -191,6 +191,28 @@ TEST_CASE("Fluct order: MTG_FLUCT_ORDER=0 restores the generic tiers (creatures 
     CHECK(FProv().MainPhaseOverride(s, *CardDatabase::Instance().Lookup(kS)) == std::nullopt);
 }
 
+TEST_CASE("Fluct order funded: an UNPAYABLE set keeps the engine and wincon; a payable set keeps the USER's order")
+{
+    // Capital City + two Blasted Landscapes: the pool reads {2}{B} as payable (the City's fed colour
+    // credited on top of its feeder), but the real payer pays Fluctuator OR Unearth, not both.
+    {
+        FoArms arms(1);
+        heurarm::t_arm[heurarm::FLUCT_ORDER_FUNDED] = 0;
+        const GameState s = FoState({}, { "Capital City", "Blasted Landscape", "Blasted Landscape" });
+        CHECK(Realised(s, { kF, kU }) == std::vector<std::string>{ kU, kF });   // =0: the USER's order as is
+        heurarm::t_arm[heurarm::FLUCT_ORDER_FUNDED] = 1;
+        CHECK(Realised(s, { kF, kU }) == std::vector<std::string>{ kF, kU });   // the Fluctuator survives
+        CHECK(Realised(s, { kT, kS }) == std::vector<std::string>{ kS, kT });   // the Stinger survives
+    }
+    {
+        // Enough mana for both: the USER's order stands, funded or not.
+        FoArms arms(1);
+        heurarm::t_arm[heurarm::FLUCT_ORDER_FUNDED] = 1;
+        const GameState s = FoState({}, { "Capital City", "Blasted Landscape", "Blasted Landscape", "Polluted Mire" });
+        CHECK(Realised(s, { kF, kU }) == std::vector<std::string>{ kU, kF });
+    }
+}
+
 TEST_CASE("Fluct order: single main -- every card is Main1 under the order")
 {
     FoArms arms(1);

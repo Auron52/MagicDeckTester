@@ -6863,7 +6863,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // d3 s1001 gi87: a T3 main-2 Canyon Slough cycle spent a Drannith Stinger ping the T4 kill
     // needed, T4 -> T5 at every budget).
     if (is_pre_combat_main && !fd_plan_committed)
-    { UseSurplusLandAbilities(state, resolve_stack, plan.dig_choice); }
+    {
+        // A drawn land played as the drop (depth 0, DigUsesDrawnLandDrop): re-solve with its mana.
+        if (UseSurplusLandAbilities(state, resolve_stack, plan.dig_choice)) { cast_draw_engine = true; }
+    }
     // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: Mutavault and the token
     // taps are searched plan actions, realised in exec_trailing_activations below.)
 
@@ -6992,12 +6995,13 @@ bool AIEngine::TryPlayLand(GameState& state)
 
 // ---- Surplus land card-draw abilities (cycling, sacrifice-to-draw) ----
 
-void AIEngine::UseSurplusLandAbilities(GameState& state,
+bool AIEngine::UseSurplusLandAbilities(GameState& state,
                                        const std::function<void(GameState&)>& resolve_stack,
                                        int dig_choice)
 {
     Player& ap = state.ActivePlayer();
-    if (!state.stack.empty()) { return; }   // let pending spells resolve first
+    bool dug_a_land = false;   // the drawn-land drop below (DigUsesDrawnLandDrop)
+    if (!state.stack.empty()) { return false; }   // let pending spells resolve first
     // THE SEARCHED CHOICE, REALISED (MTG_DIG_SEARCHED_CHOICE, default ON). This path runs only when the
     // turn carries no recorded script (d0, or the develop-when-stuck fallback), and there the plan's
     // dig_choice is all that says which world the search scored: ApplyPlanDirect suppresses the loop at
@@ -7005,8 +7009,8 @@ void AIEngine::UseSurplusLandAbilities(GameState& state,
     // this function re-decided by heuristic whatever the plan said -- an opt-in deck whose search chose
     // "no dig" still dug here. =0 restores the heuristic-only reactive dig (the d0 plan is -1 either way).
     const bool honour = DigSearchedChoiceOn();
-    if (honour && dig_choice == 0) { return; }
-    if (!ResolveProvider(state).HasAnyDigSource(state)) { return; }
+    if (honour && dig_choice == 0) { return false; }
+    if (!ResolveProvider(state).HasAnyDigSource(state)) { return false; }
     const bool dig_while_affordable = honour && dig_choice == 1;
 
     // Reactive "dig when stuck" used on the depth-0 / develop-when-stuck paths (full-depth
@@ -7042,6 +7046,7 @@ void AIEngine::UseSurplusLandAbilities(GameState& state,
         const int  drawn_before = ap.cards_drawn_this_turn;
         const bool drew_land    = PerformDig(state, src, is_sac);
         if (ap.cards_drawn_this_turn == drawn_before) { break; }   // dig did not happen
+        if (drew_land) { dug_a_land = true; }
         // The rebuy deployment (Fluctuator: cycle Stinger -> Unearth). This reactive path runs
         // AFTER the turn's cast loop, so a reanimation the dig just made live would otherwise sit
         // uncast while the loop cycles the library away pingless -- at depth 0 that turned wins
@@ -7066,6 +7071,25 @@ void AIEngine::UseSurplusLandAbilities(GameState& state,
         }
         if (!drew_land && !dig_continue)              { break; }   // legacy: action found -> stop
     }
+    // THE DRAWN LAND AS THE DROP, the depth-0 runner's half of DigUsesDrawnLandDrop (USER 2026-10-14:
+    // "We should be able to consider it whether this is in a go-off heuristic or actual search"). A
+    // uses_second_main=no deck never runs a post-combat main, so a drop this chain did not spend is
+    // LOST for the turn (MTG_LANDDRAW_CENSUS: every d0 turn that drew a land with the drop open ended
+    // with the drop unused). The search's twin is ApplyPlanDirect's searched chain-end re-solve; the
+    // d0 runner is greedy by design, so it plays the shared ranker's land -- the same greedy drop it
+    // made at the start of this main -- and asks for the second pass, which re-solves the main with
+    // that land's mana (a drawn Stinger it now pays for), the LandDropAfterDrawEngine replay's shape.
+    // Depth 0 only: at depth > 0 the search owns every land decision. The hold-fuel land-drop rule
+    // ("Don't play any fuel once you are going off") still holds it, exactly as at the main's start.
+    if (m_lookahead_depth == 0 && dug_a_land && state.stack.empty()
+        && ResolveProvider(state).DigUsesDrawnLandDrop(state)
+        && ap.lands_played_this_turn < ap.LandDropsAvailable()
+        && !(GreedyHoldLandEnabled()
+             && ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index)))
+    {
+        return TryPlayLand(state);
+    }
+    return false;
 }
 
 bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_sacrifice)
@@ -7148,19 +7172,23 @@ namespace ldcensus
         unsigned long long seed = 0;
         int                turn = -1;
         std::vector<int>   lands;          // copy numbers drawn by a dig with the drop open
-        bool               enabling = false;
+        bool               enabling = false;      // ...and one would have paid a held card (not going off)
+        bool               enabling_off = false;  // ...the same, but while going off (the USER's no-fuel rule)
     };
     inline thread_local Turn t_turn;
     inline void CheckEnabling(const GameState& state)
     {
-        if (t_turn.enabling || t_turn.lands.empty()) { return; }
+        if (t_turn.lands.empty() || (t_turn.enabling && t_turn.enabling_off)) { return; }
         const Player& ap = state.ActivePlayer();
         for (const Card& c : ap.hand)
         {
             if (std::find(t_turn.lands.begin(), t_turn.lands.end(), c.m_number) == t_turn.lands.end())
             { continue; }
             const std::string nm = c.m_name.str();
-            if (TurnSolver::DropOpenLandEnablesCast(state, &nm)) { t_turn.enabling = true; return; }
+            if (!TurnSolver::DropOpenLandEnablesCast(state, &nm)) { continue; }
+            const bool off = ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index);
+            (off ? t_turn.enabling_off : t_turn.enabling) = true;
+            return;
         }
     }
 }
@@ -7197,9 +7225,11 @@ void AIEngine::LandDrawCensusEndTurn(const GameState& state)
     {
         if (std::find(t.lands.begin(), t.lands.end(), c.m_number) != t.lands.end()) { held = true; break; }
     }
-    std::fprintf(stderr, "[ldcensus] job=%s seed=%llu T=%d drawn=%zu lost=%d held_at_end=%d enabling=%d\n",
+    const bool going_off = ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index);
+    std::fprintf(stderr, "[ldcensus] job=%s seed=%llu T=%d drawn=%zu lost=%d held_at_end=%d enabling=%d"
+                         " enabling_goingoff=%d goingoff_at_end=%d\n",
                  heurarm::t_job_name ? heurarm::t_job_name : "-", t.seed, t.turn, t.lands.size(),
-                 lost ? 1 : 0, held ? 1 : 0, t.enabling ? 1 : 0);
+                 lost ? 1 : 0, held ? 1 : 0, t.enabling ? 1 : 0, t.enabling_off ? 1 : 0, going_off ? 1 : 0);
     t = ldcensus::Turn{};
 }
 

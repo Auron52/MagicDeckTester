@@ -21911,6 +21911,45 @@ void FluctuatorProvider::ArrangeCastOrder(const GameState& s, const std::vector<
         return x.name < y.name;
     });
     for (std::size_t i = 0; i < keys.size(); ++i) { order[i] = keys[i].idx; }
+
+    // MTG_FLUCT_ORDER_FUNDED (default OFF, measured): WHICH CASTS SURVIVE A SET THAT CANNOT BE PAID.
+    // The USER's order assumes the set is paid in full (the joint prepay), and then its sequence is
+    // payment-neutral. But the flat pool books Capital City's FED colour as a wild on top of the land
+    // that feeds it -- a net-zero conversion credited as +1 -- so the d0 greedy and the playouts pick
+    // sets like {Fluctuator, Unearth} off City + two Blasted Landscapes that only ONE of can be paid,
+    // and the payer then casts the first-ranked card and silently drops the rest. Under the USER's
+    // order that first card is Unearth or Enlightened Tutor -- the zero-generic slots -- where the
+    // accidental old order cast the Stinger or the Fluctuator (2026-10-15 A/B: +204 net turns at d0
+    // over 40,000 games, every slower game read so far this shape). So: walk the set with the REAL
+    // payer on a copy, in the USER's order; if it pays in full, nothing changes. If it does not,
+    // Unearth and the Tutor go after Hollow One, so the survivors are the deck's engine and wincon.
+    static const bool s_funded = EnvOn("MTG_FLUCT_ORDER_FUNDED");   // DEFAULT OFF; =1 enables
+    if (heurarm::Flag(heurarm::FLUCT_ORDER_FUNDED, s_funded))
+    {
+        GameState pay = s;
+        bool paid = true;
+        for (int idx : order)
+        {
+            const Action& a = actions[static_cast<std::size_t>(idx)];
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (a.alt_cost) { continue; }
+            if (!TapForCostDirect(pay, a.cost, d != nullptr && d->card.IsCreature())) { paid = false; break; }
+        }
+        if (!paid)
+        {
+            for (Key& k : keys)
+            {
+                const int slot = k.rank / 64;
+                if (k.rank < kFluctUnrankedBase && (slot == 1 || slot == 2)) { k.rank = 5 * 64 + 8 * slot; }
+            }
+            std::stable_sort(keys.begin(), keys.end(), [](const Key& x, const Key& y)
+            {
+                if (x.rank != y.rank) { return x.rank < y.rank; }
+                return x.name < y.name;
+            });
+            for (std::size_t i = 0; i < keys.size(); ++i) { order[i] = keys[i].idx; }
+        }
+    }
 }
 std::optional<DecisionProvider::MainPhase> FluctuatorProvider::MainPhaseOverride(
     const GameState& s, const CardDefinition& def) const
