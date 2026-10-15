@@ -10434,9 +10434,11 @@ bool HinataProvider::RestrictorSubsetWasted(const GameState& s, const std::vecto
 // deck opts into OrderOpaqueCastsByRank -- which this order does, so the rank is what plays there too.
 //
 // Param-derived, no card names (house style: a deck gets its order from card DATA).
+// DEFAULT ON (integration 2026-10-15, with MTG_HINATA_GAMBLE_SEARCHED, pending the USER); =0 -> the generic
+// tiering.
 static bool HinataOrderFullEnabled()
 {
-    static const bool on = EnvOn("MTG_HINATA_ORDER_FULL");
+    static const bool on = EnvOn("MTG_HINATA_ORDER_FULL", true);
     return heurarm::Flag(heurarm::HINATA_ORDER_FULL, on);
 }
 
@@ -10798,8 +10800,8 @@ void HinataProvider::ArrangeCastOrder(const GameState& s, const std::vector<Acti
     if (HinataSpasmLate()) { HinataPlaceSpasmsLate(s, acts, order); }
 }
 
-// GAMBLE'S SLOT RELATIVE TO THE CANTRIPS IS SEARCHED (MTG_HINATA_GAMBLE_SEARCHED, under the order; DEFAULT OFF
-// until measured). Neither fixed slot holds up: Gamble BEFORE the cantrips (the coordinator's tie-break, the
+// GAMBLE'S SLOT RELATIVE TO THE CANTRIPS IS SEARCHED (MTG_HINATA_GAMBLE_SEARCHED, under the order; DEFAULT ON
+// at integration 2026-10-15 with the order, pending the USER; =0 -> the arranged order alone). Neither fixed slot holds up: Gamble BEFORE the cantrips (the coordinator's tie-break, the
 // built order) costs hinata shipped +13 -- 2HG gi 98 / d3 gi 253 are unwon at their old turn even at d8 b0,
 // because a bound cantrip plan casts Gamble before Ponder / Preordain and its fetch and random discard land
 // differently -- while Gamble AFTER them (MTG_HINATA_GAMBLE_LATE) recovers both and costs hinata d0 +71. So the
@@ -10818,7 +10820,7 @@ void HinataProvider::ArrangeCastOrder(const GameState& s, const std::vector<Acti
 // offered at every budget, nothing is pruned.
 static bool HinataGambleSearched()
 {
-    static const bool on = EnvOn("MTG_HINATA_GAMBLE_SEARCHED");
+    static const bool on = EnvOn("MTG_HINATA_GAMBLE_SEARCHED", true);
     return heurarm::Flag(heurarm::HINATA_GAMBLE_SEARCHED, on);
 }
 
