@@ -25,8 +25,8 @@ set -u -o pipefail
 OUT="${1:?usage: etb_gate_ab.sh <out-dir> <seed:gi> [...]}"; shift
 mkdir -p "$OUT"
 BIN=./build/Release/mtg
-DECK=decks/Fungus/Fungus.cod
-PROF=decks/Fungus/Fungus.profile.json
+DECK=decks/Fungus/v1-sporesower-shelldweller/Fungus.cod
+PROF=decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json
 
 pids=()
 for spec in "$@"; do

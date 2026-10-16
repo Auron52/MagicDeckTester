@@ -1,25 +1,47 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cockatrice_deck version="1">
-    <deckname></deckname>
-    <comments></comments>
+    <deckname>Fungus v2 (2026-10-16)</deckname>
+    <comments>Adopted 2026-10-16 after a 39-round screen (~1.06M games, scripts/deck_compare.py). Beats the
+candidate-b base by -0.4697 +-0.0089 turns (std) / -0.5817 +-0.0105 (2hg), replicated across four
+disjoint seed blocks (1340000/1350000/1370000/1380000) at ~50 sigma. 36 spells / 24 lands, mono-green
+plus colourless acceleration.
+
+USER RULINGS baked in (none of these is an agent decision): Doubling Season 3 (4 is OUT); Beastmaster
+Ascension 4; Shroofus Sproutsire 1; Concordant Crossroads 1; Utopia Mycon 1; Saproling Migration 4;
+Ancient Tomb 4; mono-green (black CLOSED); Mycoloth 0; Parallel Lives 0; Vitaspore out; Peat Bog out.
+
+LEGALITY: Vintage/Legacy copy counts. Sol Ring 1 (Vintage-restricted); every nonbasic land capped at
+4. Ancient Tomb is not Modern-legal, which is already true of Sol Ring.
+
+MEASURED, NOT ASSUMED, for anyone revisiting a count: Saproling Migration 4 is the one edit clearing
+the apparatus floor (4-&gt;3 costs +0.0061 std / +0.0088 2hg) and it is robust to the known EvalCard
+token under-valuation, which can only reinforce it. A Wild Growth is worth THE SAME as a Forest
+(-0.0036 +-0.0029 std / -0.0031 +-0.0032 2hg over two blocks), so the 3rd copy is not a ramp bet the
+screen can second-guess. Hickory Woodlot BEATS Forest by ~0.018/copy in both formats, so its count is
+pinned by the nonbasic-4 cap rather than by measurement. 24 lands is right: 25 is worse
+(+0.0072/+0.0092) and 23 gains only in std. Every other single-card change sits at or under the
+provisional floor (0.0068-0.0079).
+
+HISTORY: the predecessor is archived at v1-sporesower-shelldweller/ with its own profile, value
+sidecar and keep table (all three were fitted to that list and must never be read by this one). The
+unadopted user variant stays at candidate-b-2026-09/. Full screen record:
+docs/design/fungus-screen-2026-10-13.md and docs/design/analysis-Fungus.md.</comments>
     <zone name="main">
-        <card number="4" name="Thallid Shell-Dweller"/>
-        <card number="4" name="Sporesower Thallid"/>
-        <card number="4" name="Thallid"/>
-        <card number="4" name="Utopia Mycon"/>
-        <card number="4" name="Doubling Season"/>
-        <card number="19" name="Forest"/>
-        <card number="3" name="Simic Growth Chamber"/>
         <card number="4" name="Beastmaster Ascension"/>
+        <card number="4" name="Brightcap Badger"/>
+        <card number="4" name="Saproling Burst"/>
+        <card number="4" name="Saproling Migration"/>
         <card number="4" name="Sporecrown Thallid"/>
-        <card number="4" name="Tukatongue Thallid"/>
-        <card number="1" name="Psychotrope Thallid"/>
-        <card number="2" name="Mycoloth"/>
-        <card number="2" name="Wild Growth"/>
-        <card number="1" name="Essence Warden"/>
-    </zone>
-    <zone name="side">
-        <card number="1" name="Spore Flower"/>
-        <card number="3" name="Essence Warden"/>
+        <card number="4" name="Undercellar Myconid"/>
+        <card number="3" name="Doubling Season"/>
+        <card number="3" name="Wild Growth"/>
+        <card number="2" name="Thallid"/>
+        <card number="1" name="Concordant Crossroads"/>
+        <card number="1" name="Shroofus Sproutsire"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="1" name="Utopia Mycon"/>
+        <card number="16" name="Forest"/>
+        <card number="4" name="Hickory Woodlot"/>
+        <card number="4" name="Ancient Tomb"/>
     </zone>
 </cockatrice_deck>

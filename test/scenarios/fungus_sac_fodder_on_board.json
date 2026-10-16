@@ -1,6 +1,6 @@
 {
  "note": "Utopia Mycon's 'Sacrifice a Saproling: add one mana of any color' pays the 4th mana for Sporesower Thallid ({2}{G}{G}) off THREE lands. The fodder is a Saproling TOKEN already on the battlefield -- which is why this fixture needs the harness's token staging ('token': true): Fungus's whole engine reads permanents that can only be tokens, and before that existed NO fixture could state this deck's real board. Guards the working half of the pair below.",
- "deck": "decks/Fungus/Fungus.cod",
+ "deck": "decks/Fungus/v1-sporesower-shelldweller/Fungus.cod",
  "turn": 5,
  "on_the_play": false,
  "active_life": 20,

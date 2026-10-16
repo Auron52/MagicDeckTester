@@ -27,8 +27,8 @@ def main():
     ap.add_argument("--alt-arm", required=True)
     ap.add_argument("--seed", type=int, required=True, help="the manifest's seed for BOTH arms")
     ap.add_argument("--max-turns", type=int, default=8)
-    ap.add_argument("--deck", default="decks/Fungus/Fungus.cod")
-    ap.add_argument("--profile", default="decks/Fungus/Fungus.profile.json")
+    ap.add_argument("--deck", default="decks/Fungus/v1-sporesower-shelldweller/Fungus.cod")
+    ap.add_argument("--profile", default="decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json")
     args = ap.parse_args()
 
     arms = collections.defaultdict(dict)

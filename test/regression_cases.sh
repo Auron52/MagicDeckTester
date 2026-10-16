@@ -18,7 +18,13 @@
 # profile, and sibling models live in decks/<name>/. The engine resolves sibling artifacts
 # (value/eval/constraints/keepmodel.exhaustive) directory-relative off the profile path.
 declare -A DECK_FILE=(
-  [fungus]=decks/Fungus/Fungus.cod
+  # fungus: the RETIRING INCUMBENT (v1), archived 2026-10-16 when the screen's winner was adopted as
+  # the top-level list. The key still names the decklist it has always named -- ONE KEY PER DECKLIST
+  # (see the case-key rule below and docs/design/kitty-v3-promotion-2026-10-14.md): repointing this
+  # key at the NEW list would have silently diffed a different deck against v1's ground truth, which
+  # is the +2.2620 repoint. It stays until the new list's own artifacts are generated and validated,
+  # then it is removed with its GT keys.
+  [fungus]=decks/Fungus/v1-sporesower-shelldweller/Fungus.cod
   # fungusb: the Fungus ADOPTION CANDIDATE (candidate-b), carried ALONGSIDE the incumbent for the
   # duration of the transition and removed only when one list fully retires the other. This is the
   # user's 2026-10-01 proposal -- "maybe we should actually have new versions of lists in the
@@ -68,7 +74,7 @@ declare -A DECK_FILE=(
   [landfall]=decks/Landfall/Landfall.cod
 )
 declare -A DECK_PROF=(
-  [fungus]=decks/Fungus/Fungus.profile.json
+  [fungus]=decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json
   [fungusb]=decks/Fungus/candidate-b-2026-09/Fungus.profile.json
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
   [burn]=decks/burn/burn.profile.json

@@ -1,6 +1,6 @@
 {
  "note": "A spore activation and a hand cast DO combine in one line -- the general mechanism is sound, which is what makes the _GAP fixture's failure specifically about same-line-created fodder rather than about mixing activations with casts. Four lands, so no sacrifice is needed.",
- "deck": "decks/Fungus/Fungus.cod",
+ "deck": "decks/Fungus/v1-sporesower-shelldweller/Fungus.cod",
  "turn": 5,
  "on_the_play": false,
  "active_life": 20,

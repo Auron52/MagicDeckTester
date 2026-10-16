@@ -66,8 +66,8 @@ log "build rc=$brc  binary: $(ls -la $BIN 2>/dev/null || echo MISSING)"
 # of the position, not of one depth's search.
 # Flags mirror the manifest's H2 job exactly (ignore_play_profile, max_turns 8, budget 0,
 # ladder_value_leaf via the now-live sidecar).
-ARGS=(decks/Fungus/Fungus.cod
-      --profile decks/Fungus/Fungus.profile.json
+ARGS=(decks/Fungus/v1-sporesower-shelldweller/Fungus.cod
+      --profile decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json
       --depth 2 --budget-ms 0 --max-turns 8 --ignore-play-profile
       --seed 8165 --game-index 157 --games 1 --threads 1)
 log "target: --seed 8165 --game-index 157 (H2 cell, 25.93 h, 4.94M units, 53 units/s)"

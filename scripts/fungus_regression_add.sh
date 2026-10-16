@@ -62,8 +62,8 @@ def add_map(src, name, value):
     if '[fungus]=' in src[m.end():end]: return src
     return src[:m.end()] + '  [fungus]=%s\n' % value + src[m.end():]
 
-src = add_map(src, 'DECK_FILE', 'decks/Fungus/Fungus.cod')
-src = add_map(src, 'DECK_PROF', 'decks/Fungus/Fungus.profile.json')
+src = add_map(src, 'DECK_FILE', 'decks/Fungus/v1-sporesower-shelldweller/Fungus.cod')
+src = add_map(src, 'DECK_PROF', 'decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json')
 
 # Mirrors of the hinata block in each array, same depths/seeds/counts/budgets.
 SMOKE = """  # fungus: Hinata's sizing, adopted wholesale rather than probed (user call 2026-09-20).

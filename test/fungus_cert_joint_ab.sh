@@ -44,8 +44,8 @@ GPJ=${3:-2}
 BASE=${4:-62000}
 THREADS=${THREADS:-12}          # per arm; two arms => 2 x THREADS on the box
 BIN=${BIN:-build/Release/mtg}
-DECK=decks/Fungus/Fungus.cod
-PROF=decks/Fungus/Fungus.profile.json
+DECK=decks/Fungus/v1-sporesower-shelldweller/Fungus.cod
+PROF=decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json
 
 OUT=logs/fungus_joint/$TAG
 mkdir -p "$OUT"
@@ -54,8 +54,8 @@ mkdir -p "$OUT"
 python3 - "$OUT/manifest.json" "$JOBS" "$GPJ" "$BASE" <<'PY'
 import json, sys
 out, jobs, gpj, base = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-json.dump({"jobs": [{"name": f"fj_{i:03d}", "deck": "decks/Fungus/Fungus.cod",
-                     "profile": "decks/Fungus/Fungus.profile.json",
+json.dump({"jobs": [{"name": f"fj_{i:03d}", "deck": "decks/Fungus/v1-sporesower-shelldweller/Fungus.cod",
+                     "profile": "decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json",
                      "games": gpj, "seed": base + i * gpj, "game_index": 0}
                     for i in range(jobs)]}, open(out, "w"), indent=1)
 PY

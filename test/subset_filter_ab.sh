@@ -65,8 +65,8 @@ mkdir -p "$OUT"
 # perf refuses to write its output onto the workspace mount (see the header), so the .perf files live
 # in a /tmp scratch dir keyed to this run and only the parsed numbers come back.
 PERFDIR="$(mktemp -d /tmp/subset_ab.XXXXXX)"
-DECK=decks/Fungus/Fungus.cod
-PROF=decks/Fungus/Fungus.profile.json
+DECK=decks/Fungus/v1-sporesower-shelldweller/Fungus.cod
+PROF=decks/Fungus/v1-sporesower-shelldweller/Fungus.profile.json
 
 pids=()
 for spec in "$@"; do
