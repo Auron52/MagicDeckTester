@@ -8050,6 +8050,104 @@ inline int CountEtbDestroyTargets(const GameState& state, int controller)
     return n;
 }
 
+// HUMAN PLAY: WHICH permanents Terastodon destroys (Landfall claude-play sweep flag 3, 2026-10-16).
+// The search keeps the USER's rule (EtbDestroyVictimClass: Forests first, tapped before untapped, the
+// pool widening only when Forests run out -- the K fan is its only searched axis), but a person is
+// owed the unpruned choice: a Myriad Landscape, a Mountain or a Gruul Turf is not fungible with a
+// Forest, and the oracle text ("destroy up to three target noncreature permanents") lets them aim at
+// ANY noncreature permanent, the opponent's included -- whose controller then makes the Elephant.
+// Asked through the own-permanent board-pick (`target` with a `loyalty` prompt -- the Shriekmaw /
+// Acidic Slime shape), ONE pick per target, K picks (K = the human's menu choice for a cast; the
+// provider's projection for a put), each over the noncreature permanents not yet targeted. The
+// default of every pick is the rule's next victim, so a frame answered by default destroys exactly
+// what the autonomous loop below destroys, in the same order (a reference that predates this frame
+// replays unchanged). A pick is not asked when it is forced (no more legal permanents than picks
+// left). Targets are all chosen first, then destroyed in that order, then the Elephants are made
+// (CR 603.3d / 608.2: the targets are fixed before resolution). An indestructible target is not
+// destroyed and makes no Elephant.
+inline void AskHumanEtbDestroyVictims(GameState& state, int controller, const CardDefinition& def, int k)
+{
+    const CardParams& p = def.params;
+    // The rule's whole order on THIS board (the autonomous loop's: class, tapped first, last slot
+    // first), by card number -- a pick's default is its first entry not yet targeted.
+    std::vector<int> rule_order;
+    for (int cls = 0; cls <= 4; ++cls)
+    {
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            const bool want_tapped = (pass == 0);
+            for (std::size_t i = state.battlefield.size(); i-- > 0; )
+            {
+                const Permanent& q = state.battlefield[i];
+                if (q.tapped != want_tapped || EtbDestroyVictimClass(state, controller, q) != cls) { continue; }
+                rule_order.push_back(q.card.m_number);
+            }
+        }
+    }
+    std::vector<int> targets;   // card numbers, in pick order
+    for (int n = 0; n < k; ++n)
+    {
+        std::vector<int> legal;   // battlefield indices: every noncreature permanent not yet targeted
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.is_animated || q.card.IsCreature()) { continue; }
+            if (std::find(targets.begin(), targets.end(), q.card.m_number) != targets.end()) { continue; }
+            legal.push_back(i);
+        }
+        int rule_num = 0;
+        for (int num : rule_order)
+        { if (std::find(targets.begin(), targets.end(), num) == targets.end()) { rule_num = num; break; } }
+        int pick = -1;
+        for (std::size_t li = 0; li < legal.size(); ++li)
+        {
+            if (state.battlefield[static_cast<std::size_t>(legal[li])].card.m_number == rule_num)
+            { pick = static_cast<int>(li); break; }
+        }
+        // The rule has no victim left (the human already aimed elsewhere): "up to" -- stop, as the
+        // autonomous loop would.
+        if (pick < 0) { break; }
+        if (static_cast<int>(legal.size()) > k - n)
+        {
+            // Same-named targets (four Forests) read alike in the option labels; the option's board
+            // index (legal_targets[].index == the board's `idx`) says which, tapped or not.
+            const std::string what = "destroyed -- target " + std::to_string(n + 1) + " of "
+                                   + std::to_string(k) + " (its controller creates a 3/3 green Elephant;"
+                                   + " the AI's pick takes Forests first, tapped before untapped)";
+            const int c = (*g_play_loyalty_chooser)(state, controller, def.card.m_name.str(), what, legal, pick);
+            if (c >= 0 && c < static_cast<int>(legal.size())) { pick = c; }
+        }
+        targets.push_back(state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(pick)])].card.m_number);
+    }
+    std::vector<int> elephant_for;   // the controller of each permanent put into a graveyard this way
+    for (int num : targets)
+    {
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.card.m_number != num) { continue; }
+            if (q.card.HasKeyword(Keyword::Indestructible)) { break; }
+            const int ctrl = q.controller_index;
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              def.card.m_name.str() + ": destroys "
+                              + (ctrl == controller ? std::string("your ") : std::string("the opponent's "))
+                              + q.card.m_name.str() + (q.tapped ? " (tapped)" : ""));
+            }
+            state.players[q.owner_index].graveyard.push_back(q.card);
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            elephant_for.push_back(ctrl);
+            break;
+        }
+    }
+    for (int ctrl : elephant_for)
+    {
+        CreateToken(state, ctrl, p.etb_created_token_power, p.etb_created_token_toughness,
+                    p.etb_created_token_subtypes, p.created_token_color);
+    }
+}
+
 // kEtbKxHeuristic (declared with the FireOwnEtbTriggers fwd decl above): the PUT paths (Natural
 // Order / Call of the Wild / Turntimber) pass it to mean "no searched K rode this entry -- pick
 // one heuristically at resolution". Distinct from -1 ("no K specified, destroy nothing") because
@@ -8789,7 +8887,12 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // above (Forests first; the pool widens past them only when Forests run out).
     if (p.etb_destroy_own_noncreature_max > 0 && etb_kx == kEtbKxHeuristic)
     { etb_kx = ResolveProvider(state).EtbDestroyK(state, controller, *def); }
-    if (p.etb_destroy_own_noncreature_max > 0 && etb_kx > 0)
+    // Human play picks WHICH permanents (AskHumanEtbDestroyVictims); the loop below is the rule.
+    const bool tera_human = p.etb_destroy_own_noncreature_max > 0 && etb_kx > 0
+                         && g_play_loyalty_chooser != nullptr && !g_tap_speculating;
+    if (tera_human)
+    { AskHumanEtbDestroyVictims(state, controller, *def, std::min(etb_kx, p.etb_destroy_own_noncreature_max)); }
+    if (p.etb_destroy_own_noncreature_max > 0 && etb_kx > 0 && !tera_human)
     {
         int k = std::min(etb_kx, p.etb_destroy_own_noncreature_max);
         int made = 0;

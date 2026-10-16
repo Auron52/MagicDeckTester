@@ -357,8 +357,12 @@ MANIFEST = {
     "untap_creature_cost":    ("main_phase",          truthy),
     # Mirri's Guile: upkeep arrange-top-3 fires the shared reorder decision (ReorderNoShuffle).
     "upkeep_reorder":         ("reorder",             positive),
-    # Terastodon: destroy-count K = chosen_x plan variants (WHICH Forest is fungible -- disclosed).
-    "etb_destroy_own_noncreature_max": ("main_phase", positive),
+    # Terastodon: destroy-count K = chosen_x plan variants (main_phase), and WHICH permanents is the
+    # `target` board-pick at resolution (AskHumanEtbDestroyVictims, SpellEffects.h; one pick per target,
+    # every noncreature permanent either side, default = the user's Forests-first rule). The old
+    # "WHICH Forest is fungible" disclosure was wrong for a Myriad / Mountain / Gruul Turf board
+    # (Landfall claude-play sweep gi12, 2026-10-16).
+    "etb_destroy_own_noncreature_max": ("target", positive),
     # Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): at upkeep, pay the echo cost OR sacrifice --
     # a real human choice -> its own `echo` type (WriteEchoDecisionJson / echoPanelHtml), an upkeep
     # chooser (g_play_echo_chooser in AIEngine echo resolution, mirroring vial_charge). Default = pay
