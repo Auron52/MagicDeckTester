@@ -150,3 +150,165 @@ config on two seed bases).
    skip a variant whose first deviating ordinal clamps onto an emitted sibling) but it removes unit
    charges, so it moves play under budget and needs the large-budget proof; not built.
 4. Per-node remainder: `ShuffleByKey` ~5%, `SimulateEndAndStartNextTurn` ~4%, the greedy walk ~4%.
+
+## 6. The gi38 runaway: SolveWithLookahead's passes had no overrun ceiling (2026-10-15)
+
+Branch `landfall-runaway` (from `223cbba4`). Regression job `landfall_regression_d3_s2002` gi 38
+(seed 2040, d3 b10 = 9,000 units per decision, the profile's `search_leaf_depth: 0`) ran **606 s and
+38.6M units**; its census put 37.94M of them in ONE root: `turn=1 root=1 probe=1`.
+
+### 6.1 The state, and where the units went (instrumented, then the instrumentation removed)
+
+* **Whose root.** The real game mulligans to 5: the mull-2 hand is Evolving Wilds, Forest, Rampant
+  Growth, Khalni Heart Expedition x3, Rampaging Baloths, bottom 2. Landfall ships no keep table and no
+  `bottom_eval_*`, so lookahead bottoming plays one full TRIAL game per name-distinct legal subset (11
+  here) at the deck's own play settings. The 9th bottoms Forest + Baloths: turn 1, empty board, hand
+  **Evolving Wilds, Rampant Growth, Khalni x3**. 99.98% of the game's units are trial-game units
+  (38,637,194 probe vs 8,322 real); the realised game is cheap.
+* **Why SolveWithLookahead.** FullSearchLineHybrid (root 2) spends 303 units and has no verified win
+  to commit (none exists inside a d3 window at turn 1 of 8), so `AIEngine::TakeTurn` runs the FALLBACK
+  `SolveWithLookahead` on a fresh decision budget (`AIEngine.cpp:3626-3631`).
+* **The ladder.** 4 root candidates. Pass 0 = 4 units, pass 1 = 144 (ratio 36); the start gate
+  estimates pass 2 at 144 x 36 = 5,184 <= 1.1 x 8,852 and starts it. Candidate 0: 143 units.
+  **Candidate 1 ("play Evolving Wilds, nothing else"): 37,936,253 units, 665 s.** Only then could the
+  between-candidate guard abort the pass (it committed pass 1's plan, which is why the realised game
+  never showed anything).
+* **Inside that one candidate.** `SimulateToEnd(.., sub_depth = 2, ..)` re-solves EVERY later turn at
+  depth 2 (`SimulateToEndImpl`: `turn_depth = depth` for every turn), and each of those solves rolls
+  its candidates out re-solving every later turn at depth 1 -- the cost of pass k grows like
+  `(sum_t W_t)^k`, so a line that reaches a wide board late is paid for multiplicatively. By turn 7
+  this line has Primeval Titan, 6 Forests and 2 Evolving Wilds in play (Khalni x3, Search for Tomorrow,
+  Terramorphic in hand). Per solve (logged at >= 20k units): t5 depth-2: 59 plans, 190k units; t6
+  depth-2: 159 plans, 1.1M; **t7 depth-2: 6,616 plans, 36.6M** -- each of its plans rolls into a turn-8
+  depth-1 re-solve, and the logged ones held **21,182-61,688 plans** (mode ~23-30k). It is `W7 x W8` at
+  the last two turns of the 8-turn horizon, charged to a turn-1 decision.
+* **What a turn-8 list is made of** (one state: Forest x6, Khalni x2, Titan, Evolving Wilds x2 in
+  play; Khalni, Search for Tomorrow x2, Terramorphic in hand): 43,684 plans = **432 base plans x ~101
+  variants**. Bases = {cast Khalni or not} x {each Search for Tomorrow: hard-cast / suspend / no} x
+  {Khalni crack activations 0-2} x {Evolving Wilds activations 0-2} x {Terramorphic first / after the
+  casts / no drop}. Variants: 61.5% carry a Titan attack pin (`attack_land_search_choice`), 41.3% an
+  in-combat Khalni crack (`combat_crack_choice`, which keeps a Titan pick too), 26.8% in-plan
+  land-search pins (`land_search_pins`, product <= 64), 0.2% breakpoints.
+* **They almost never discriminated.** `[leaf-eval] published=17,898,674 ties=17,855,669
+  life-equal-ties=17,839,900` over the whole game (98% of whose units are that one root): 99.9% of
+  the equal-win-turn comparisons were also ties on opponent life, the graded leaf's only live term for
+  this deck (the board terms are off by default).
+
+### 6.2 Q1 -- is any of the width a sound fold? No identity fold was found
+
+Every axis above is a different line under the engine's model: a different fetched land is a
+different library and a different board, and the exact folds that exist already run on this list
+(post-apply dedup, the combat-pin fold after combat, the combat-pin main-phase share). The waste is
+at the horizon's LAST turn: there a land-search pin changes only which (tapped) land arrives and
+which landfall/ETB fires for the rest of that turn, and with no damage-relevant landfall payoff and
+no second main every variant has the same opponent-life leaf. Collapsing them is a RELEVANCE
+argument ("nothing left in this turn reads the fetched land's identity": landfall watchers, ETB
+counters, Courser's top, a second main, the leaf's optional board terms), decided per state -- not an
+identity fold. Not built; recorded in 6.7.
+
+### 6.3 Q2 -- why the budget did not stop it
+
+The budget WAS threaded (that is how the census charged 37.9M units to the root); nothing armed a
+ceiling that the rollouts poll.
+
+* The rollouts poll one thing, per turn-step (`SimulateToEndImpl`, `TurnSolver.cpp:56611` at
+  `223cbba4`): `if (budget && budget->Overrun()) { ++g_fs_trunc_events; ...; return max_turns + 1; }`
+  -- and `SearchBudget::Overrun()` is `(m_overrun_limit > 0 && m_used >= m_overrun_limit) || ...`,
+  false while `m_overrun_limit == 0`.
+* Only the FullSearchLine / FullSearchLineHybrid ladders arm it: `budget->SetOverrunLimit(SearchBudget::SatAdd(
+  used_before, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit())))`
+  (`TurnSolver.cpp:63394`; also 64469, 65136, 65252) -- the 25x proportional ceiling of 2026-09-09.
+* SolveWithLookahead never armed it. Its one guard runs at the TOP of each root-candidate iteration
+  (`:66922`): `if (gate && budget->Exhausted() && candidates_done > 0) { ... way_over = pass_used >
+  kOverrunBeta * remaining_at_start; finish_expensive = projected > remaining_at_start; if (way_over &&
+  finish_expensive) { pass_aborted = true; break; } }` -- so it can only act BETWEEN candidates, and the
+  candidate's rollout (`:67542`, `SimulateToEnd(std::move(copy), sub_depth, max_turns, budget, ...)`)
+  runs its nested solves with `enforce_budget=false`, where `gate` is false and there is no guard at
+  all. "The rollout runs to completion, only consuming budget" is the design comment.
+* Not host-specific, not a nullptr, not trial-specific (6.4).
+
+### 6.4 Q3 -- leaf depth and real roots
+
+* **Not specific to `search_leaf_depth: 0`.** SolveWithLookahead's rollouts re-solve each turn at the
+  pass's sub_depth; the leaf depth only shapes FullSearchLine's leaf (`EffectiveFdLeafDepth`, FSLineWin).
+  `MTG_FD_LEAF_DEPTH=1` on the same game (base binary) changes every trial game's trajectory and the
+  runaway moves: trial 8 (hand Forest, Rampant Growth, Khalni x3) has a turn-1 SolveWithLookahead root of
+  **79,459,883 units** (2,927 s on shared cores; run stopped there). With the fix, the same leaf-1 game
+  is 4,276,948 units / 221 s in total.
+* **Not specific to trial games.** `--force-mulligan "2:13,50"` makes the REAL game keep the trial's
+  hand: its turn-1 root is `root=1 probe=0`, **37,936,744 units, 1,410 s** (shared cores), and the game
+  does not win by turn 8. Same mechanism, real play.
+
+### 6.5 The fix (`89dee2e2`)
+
+Every SolveWithLookahead pass after the first, at a budgeted root (`gate`), arms the same ceiling
+FullSearchLine uses (`used_before + kOverrunBudgetMult x EffectiveLimit()`; an enclosing armed
+ceiling is kept if tighter and restored on exit). A pass whose candidate loop ran into it -- including
+inside its last candidate -- rolls back to the last COMPLETED pass, keeping a strictly better win the
+pass had already proven (FullSearchLine's anytime rule: a cut rollout only returns a no-win). A trip
+during the bp/group waves leaves the pass complete (the waves only take strictly better wins). Pass 0
+is never armed, so the root always has a complete ranking. The ceiling only re-prices work: inert at
+an unlimited budget (the saturating multiply), proportional to the budget below it, turn-complete on
+rollback, same constant (no calibration touched). `MTG_LA_PASS_CEILING=0` (a per-job heurarm slot,
+default ON) restores the uncapped pass.
+
+### 6.6 Measured
+
+**gi38** (single game, single thread, census on): before **38,645,516 units, 689 s**; after
+**944,929 units, 47.7 s** (shared cores). The heavy root is now 235,959 units (the 225,000 ceiling +
+the unwind) and commits the same pass-1 plan, so the realised game is identical (turn-by-turn log
+equal, win turn 7). 99% of the remaining units are still trial games (6.7, item 1).
+
+**Suite:** unit tests 649/649, scenarios 184/184, smoke 119/119 byte-identical:
+
+```
+AUDIT smoke   (old = committed gt_logs   new = test/logs/smoke/wins)
+  configs changed: 0   unchanged: 119   no-run-dir: 0
+  [searched] slower=0  faster=0  play-changed=0  (slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)
+  [d0      ] slower=0  faster=0  play-changed=0  (slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)
+```
+
+**Pooled Landfall A/B** -- ONE `mtg --batch` (`89dee2e2` binary, 6 threads on 6 shared cores), both
+arms interleaved per case; "off" = the per-job `MTG_LA_PASS_CEILING: false` hatch:
+
+| case | games | off avg | on avg | paired better / worse | units on/off | wall (job ms) on/off |
+|---|---|---|---|---|---|---|
+| d3b10 s2002 | 50 | 5.8600 | 5.8600 | 0 / 0 (digest identical) | 10,686,765 / 48,387,352 = **0.221** | 493 s / 1,554 s = **0.317** |
+| d3b10 s3003 | 50 | 5.9200 | 5.9200 | 0 / 0 (digest identical) | 1.000 | 0.994 |
+| d5b20 s2002 | 25 | 5.8000 | 5.8000 | 0 / 0 (digest identical) | 1.000 | 0.816 (noise: identical work) |
+| d5b20 s3003 | 25 | 5.8800 | 5.8800 | 0 / 0 (digest identical) | 1.000 | 0.963 (noise) |
+
+Exactly one game's units moved in 150 paired games: s2002 gi38, 38,645,516 -> 944,929 (pool wall
+1,091.5 s -> 46.3 s). The off arm reproduces the `223cbba4` binary byte for byte (same digests and
+units, run as a separate base-binary batch of the same jobs). The two identical-work rows show what
+the wall column is worth on this host (+-20%).
+
+### 6.7 Measured but NOT shipped (user decisions)
+
+1. **`bottom_eval_depth: 0` + `bottom_eval_topk: 5` for Landfall** (the Melira Pod settings; a
+   profile copy, same pooled batch, ceiling on):
+
+   | case | games | on avg | beval avg | paired better / worse | units beval/on | wall beval/on |
+   |---|---|---|---|---|---|---|
+   | d3b10 s2002 | 50 | 5.8600 | 5.8400 | 1 / 0 | 0.566 | 0.485 |
+   | d3b10 s3003 | 50 | 5.9200 | 5.9400 | 0 / 1 | 0.692 | 0.600 |
+   | d5b20 s2002 | 25 | 5.8000 | 5.8400 | 0 / 1 | 0.564 | 0.666 |
+   | d5b20 s3003 | 25 | 5.8800 | 5.8800 | 0 / 0 | 0.565 | 0.487 |
+
+   Cheapening the bottoming trial games removes 31-44% of Landfall's units with the ceiling already
+   on (and they are 99% of what is left of gi38), so this is the next large cost lever. Quality is unresolved: 1 better / 2 worse in 150 paired games (net +1 turn,
+   +0.007 turns/game) -- far too small a sample (Melira's adoption used 2,000-3,000 paired games per
+   config). A held-out A/B of that size is the measurement this needs; adopting it is the user's call.
+2. **A last-turn relevance collapse** (6.2): at `turn_number == max_turns` inside a rollout, fold the
+   land-search / attack / crack pin variants of a base plan when nothing that remains of the turn can
+   read the fetched lands (no landfall watcher or land-counting ETB in play or castable, no second main,
+   no Courser, leaf board terms off). It would remove most of the `W8` factor (99.9% life-equal ties),
+   but it is a per-state relevance proof with many readers, i.e. a projection with a soundness argument
+   to check, not an identity fold. Not built.
+
+### 6.8 Open
+
+* The start gate's growth estimate (`c_prev x c_prev / c_prev2`) was off by 7,300x on this root: pass
+  costs grow like `(sum_t W_t)^k` and the per-turn width explodes late in a rollout line, so the ratio
+  measured on the shallow passes says nothing about pass 2. The ceiling now bounds the damage at 25x;
+  a better estimator was not attempted (calibration is the user's).
