@@ -24572,6 +24572,50 @@ static bool FluctuatorSecondThreatLive(const GameState& s)
     return false;
 }
 
+// MTG_FLUCT_KEEP_NEEDED's two payability reads (land == nullptr: the Stinger's cost payable now; else
+// payable once `*land` is dropped), colour-exact on copies (TurnSolver::CostPayableExact /
+// CostPayableWithLand) and MEMOISED: SelectDigSource runs once per cycle, and between cycles the chain
+// changes only the hand, library and graveyard, so the answer is decided by the active player's
+// battlefield (each permanent's copy number, name, tapped and entered-this-turn state), the floating
+// mana, life, turn and the drop count. A 4-entry thread_local cache keyed on exactly those keeps the
+// GameState copies off the chain's hot path. Pure read; a hit returns what the copies would.
+static bool FluctKeepPayable(const GameState& s, const CardDefinition& cost_def, const std::string* land)
+{
+    struct Entry { std::uint64_t key = 0; bool val = false; bool used = false; };
+    static thread_local Entry t_cache[4];
+    std::uint64_t h = 1469598103934665603ULL;
+    auto mix = [&h](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+    const int me = s.active_player_index;
+    mix(static_cast<std::uint64_t>(s.turn_number));
+    mix(static_cast<std::uint64_t>(me));
+    mix(static_cast<std::uint64_t>(s.players[me].life));
+    mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&cost_def)));
+    const ManaPool& f = s.floating_mana;
+    for (int v : { f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild })
+    { mix(static_cast<std::uint64_t>(v)); }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        mix(static_cast<std::uint64_t>(p.card.m_number));
+        mix(std::hash<std::string>{}(p.card.m_name.str()));
+        mix((p.tapped ? 1u : 0u) | (p.entered_this_turn ? 2u : 0u));
+    }
+    if (land != nullptr)
+    {
+        mix(std::hash<std::string>{}(*land));
+        mix(static_cast<std::uint64_t>(s.players[me].lands_played_this_turn));
+        mix(0x5bd1e995ULL);
+    }
+    Entry& e = t_cache[h & 3u];
+    if (e.used && e.key == h) { return e.val; }
+    const ManaCost& cost = cost_def.card.m_mana_cost;
+    const bool v = land != nullptr
+        ? TurnSolver::CostPayableWithLand(s, *land, cost, cost_def.card.IsCreature())
+        : TurnSolver::CostPayableExact(s, cost, cost_def.card.IsCreature());
+    e.key = h; e.val = v; e.used = true;
+    return v;
+}
+
 std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPool& pool,
                                                 bool& out_is_sac) const
 {
@@ -24668,17 +24712,21 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
                     }
                 }
             }
+            // No Stinger left, or one the battlefield already pays: no land is what pays it.
+            const bool none_needed = needed_only
+                && (sting_def == nullptr || FluctKeepPayable(s, *sting_def, nullptr));
             int best_tier = -1, best_n = 0;
             for (const Card& c : ap.hand)
             {
+                if (none_needed) { break; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d || !d->card.IsLand() || c.m_impulse_no_land) { continue; }
                 if (LandWouldEnterTapped(s, *d)) { continue; }
-                if (needed_only
-                    && (sting_def == nullptr
-                        || !TurnSolver::DropLandEnablesCost(s, c.m_name.str(), sting_def->card.m_mana_cost,
-                                                            sting_def->card.IsCreature())))
-                { continue; }
+                if (needed_only)
+                {
+                    const std::string land = c.m_name.str();
+                    if (!FluctKeepPayable(s, *sting_def, &land)) { continue; }
+                }
                 bool colour = false;
                 for (Color col : d->params.produces) { if (col != Color::Colorless) { colour = true; break; } }
                 const int tier = colour ? 1 : 0;

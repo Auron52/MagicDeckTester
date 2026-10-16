@@ -1716,6 +1716,11 @@ public:
     // on copies, the same payer and land play as DropOpenLandEnablesCast. Read-only.
     static bool DropLandEnablesCost(const GameState& state, const std::string& land,
                                     const ManaCost& cost, bool for_creature);
+    // Its two halves, for a caller that memoises them: `cost` payable now (colour-exact, on a copy), and
+    // payable once `land` (in hand) is played as the open drop (false when the drop is spent).
+    static bool CostPayableExact(const GameState& state, const ManaCost& cost, bool for_creature);
+    static bool CostPayableWithLand(const GameState& state, const std::string& land,
+                                    const ManaCost& cost, bool for_creature);
 
     // MTG_BP_NEW_ONLY (default ON since 2026-09-22): a breakpoint emits only continuations that
     // use a card that arrived there. Public because the executor's resolve_draw_breakpoint binds
