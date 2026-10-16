@@ -259,6 +259,16 @@ d3 s2002 18,512.
 - Rows and GT are NOT committed yet: GT is accepted once the two gap fixes (Search for Tomorrow mana,
   fetched-Karoo bounce) land, so the deck enters with the play it will keep.
 
+## Stage 5a/5b — mismatch harnesses + depth sanity, EARLY run (2026-10-16 ~02:00, tree f0758952)
+Pre-integration run (runaway fix in; the land-search gap fix and the sweep-flag fixes NOT yet), pooled
+per arm as `verify_deck.py` does, seeds 2002/3003/7001/7002 x 50 games, b20. `verify_deck.py` re-runs
+the gate on the final tree.
+- **nonconv (d3): 0 lines. fd-diverge (d5, MTG_FULL_DEPTH): 0 lines.** 400 games, both arms rc=0.
+- Depth sanity (avg win turn, all 50/50 won): d3 5.82 / 5.92 / 5.86 / 5.86; d5 5.76 / 5.86 / 5.84 /
+  5.84 -- d5 <= d3 on every seed; d0 (regression s2002) 7.667. Monotone, and a T5-T6 clock is the
+  deck's realistic ramp-into-Titan/Avenger line.
+- Slowest games (d5): s2002 gi38 115 s / 3.5M units, gi22 97 s; all under the pass ceiling now.
+
 ## Claude-play sweep
 - commit: `223cbba4` (frozen checkout `.claude/worktrees/landfall-sweep`, binary copied before any later
   rebuild), benchmark d5 b20 with the shipped profile (search_leaf_depth 0)
