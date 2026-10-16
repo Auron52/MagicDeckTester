@@ -311,6 +311,23 @@ binds. Default ON stays (a lever that does not fire costs nothing). The decisive
 the keep table, when the bottoming trial games (92-99% of today's cost) are a table read and the sample
 is ~20x cheaper -- recorded, not skipped.
 
+## Stage 5e — oracle diffs vs the shipped narrowings (2026-10-16, tree b35f9f0e)
+Paired per game against the shipped arm of the 5c2 batch (same seeds 1.0M/1.1M x 250, PLAY settings d5
+b20); each oracle is process-wide, so its own batch.
+| oracle arm | turns vs shipped | worse / better | units |
+|---|---|---|---|
+| `MTG_UNPRUNE=xspell,terak` (Genesis Wave full X range + Terastodon K fan 0..cap) | -0.002 (se 0.002) | 0 / 1 | 1.06-1.08x |
+| `MTG_SEARCH_ORDER=1` (cast-ordering search) | +0.002 (se 0.002) | 1 / 0 | 1.09x |
+- The one better game (s1100151 gi151, 7 -> 6) is `xspell` alone (`terak` alone = 7). It diverges on T2
+  (Gruul Turf vs a Terramorphic crack) and the T6 win NEVER casts Genesis Wave: the wider X menu changed
+  the search's valuation of the rollouts, not the realised Wave. The SHIPPED search at b200 also wins T6
+  -> budget starvation at b20, not a line the max-X prune makes unfindable.
+- The one worse game (s1100228 gi228, 5 -> 6 under the ordering search) recovers to T5 at b200: the
+  permutation search diluting a fixed budget (the 5e step-4 caveat).
+- Verdict: neither the max-X rule, the user's Terastodon K rule nor the generic cast order shows a loss
+  on 500 games. These remain disclosed narrowings (6a 3.1 / 3.2 / 3.4); the user's own calls (cast order,
+  Terastodon K) are unchanged and still surfaced.
+
 ## Mulligan keep rule — `curve_check: two_drop` measured (2026-10-16 ~03:00, input for the USER's decision)
 The Stage 4 profile keeps the engine-default `two_drop` curve check: at mulligan 0/1 a hand needs >= 2
 lands AND a nonland of MV <= 2 (`AIEngine.cpp` KeepHand). In this 60 only Rampant Growth and Khalni
