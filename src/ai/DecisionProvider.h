@@ -2790,6 +2790,17 @@ public:
                                     const std::vector<std::vector<std::string>>& picks) const
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
       return static_cast<int>(picks.size()); }
+    // LandSearchAdmitsLand -- the same narrowing at the CLASS level: may the autonomous world's pick hold
+    // this land at all? Applied BEFORE the maximal-pick walk, so the picks are re-formed without the
+    // rejected lands -- "up to N" then reaches a smaller complete pick, or none (the search finds
+    // nothing) -- instead of every pick pairing an admitted land with a rejected one. Gated exactly like
+    // LandSearchPickWidth (human play and MTG_UNPRUNE=landpick never narrow). It may read ONLY the land's
+    // definition and the spec flags: the memo key carries the provider's type and the pruned bit, not
+    // this answer. Base: every legal land.
+    virtual bool LandSearchAdmitsLand(const GameState& s, int controller, int count, int to_hand,
+                                      bool basic_only, bool share_land_type, const CardDefinition& land) const
+    { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
+      (void)land; return true; }
 
     // BounceSearchCandidates -- the SEARCHED Karoo bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice):
     // the subset of BounceLandCandidates the search branches over, in THAT order, so element 0 is

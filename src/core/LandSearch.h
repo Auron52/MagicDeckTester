@@ -154,7 +154,17 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
 {
     std::vector<std::vector<std::string>> out;
     if (spec.count <= 0) { return out; }
-    const std::vector<LandSearchClass> cls = LandSearchClasses(s, ctrl, spec);
+    std::vector<LandSearchClass> cls = LandSearchClasses(s, ctrl, spec);
+    const DecisionProvider& prov = ResolveProvider(s);
+    // The provider's CLASS narrowing (LandSearchAdmitsLand): autonomous play only, like the width below.
+    if (LandSearchPickPruned())
+    {
+        cls.erase(std::remove_if(cls.begin(), cls.end(), [&](const LandSearchClass& k)
+                  { return k.def == nullptr
+                        || !prov.LandSearchAdmitsLand(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
+                                                      spec.share_land_type, *k.def); }),
+                  cls.end());
+    }
     const int n = static_cast<int>(cls.size());
     if (n == 0) { return out; }
     // Multisets of class indices (non-decreasing), size 1..count, respecting copy counts and the
@@ -231,7 +241,6 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         }
         for (auto& v : splits) { out.push_back(std::move(v)); }
     }
-    const DecisionProvider& prov = ResolveProvider(s);
     prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type, out);
     // The provider's NARROWING (LandSearchPickWidth): autonomous play only; see LandSearchPickPruned.
     if (LandSearchPickPruned())
@@ -686,21 +695,55 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                                    t_credit_idx);
             if (!t_credit_idx.empty()) { def_k = static_cast<std::size_t>(t_credit_idx.front()); }
         }
-        const std::vector<std::string> def_pick = picks.empty() ? std::vector<std::string>{}
-                                                                : picks[std::min(def_k, picks.size() - 1)];
+        // The picks hold CLASS REPRESENTATIVES (Evolving Wilds stands for Terramorphic Expanse too) and
+        // the prompts offer REAL names, so the two are matched by identity class, never by name: with
+        // the Wilds already taken, a {Wilds, Wilds} pick's second land IS the Terramorphic Expanse (USER
+        // 2026-10-16, Landfall s5 gi4: the second Titan prompt defaulted to a Forest, entry 0, because
+        // "Evolving Wilds" was no longer a candidate name). And the default follows the HUMAN's earlier
+        // answers: it is the next land of the first pick -- the credited one, then list order -- that
+        // holds every land chosen so far.
+        auto same_class = [](const std::string& a, const std::string& b)
+        {
+            if (a == b) { return true; }
+            const CardDefinition* da = CardDatabase::Instance().Lookup(a);
+            const CardDefinition* db = CardDatabase::Instance().Lookup(b);
+            return da != nullptr && db != nullptr && da->behaviour_identity != 0
+                && da->behaviour_identity == db->behaviour_identity;
+        };
         const int bf_slots = std::max(0, spec.count - spec.to_hand);
         std::vector<std::string> names;
+        auto default_for = [&](const std::vector<std::string>& cands) -> int
+        {
+            for (std::size_t r = 0; r <= picks.size(); ++r)
+            {
+                const std::size_t pi = r == 0 ? def_k : r - 1;
+                if (pi >= picks.size() || (r > 0 && pi == def_k)) { continue; }
+                const std::vector<std::string>& pk = picks[pi];
+                std::vector<char> used(pk.size(), 0);
+                bool holds = true;
+                for (const std::string& nm : names)
+                {
+                    bool hit = false;
+                    for (std::size_t j = 0; j < pk.size() && !hit; ++j)
+                    { if (!used[j] && same_class(pk[j], nm)) { used[j] = 1; hit = true; } }
+                    if (!hit) { holds = false; break; }
+                }
+                if (!holds) { continue; }
+                for (std::size_t j = 0; j < pk.size(); ++j)
+                {
+                    if (used[j]) { continue; }
+                    for (std::size_t c = 0; c < cands.size(); ++c)
+                    { if (same_class(cands[c], pk[j])) { return static_cast<int>(c); } }
+                }
+            }
+            return 0;
+        };
         for (int k = 0; k < spec.count; ++k)
         {
             const std::vector<std::string> cands =
                 LandSearchHumanCandidates(state, controller, spec, names);
             if (cands.empty()) { break; }
-            int def_idx = 0;
-            if (k < static_cast<int>(def_pick.size()))
-            {
-                auto it = std::find(cands.begin(), cands.end(), def_pick[static_cast<std::size_t>(k)]);
-                if (it != cands.end()) { def_idx = static_cast<int>(it - cands.begin()); }
-            }
+            const int def_idx = default_for(cands);
             std::string lbl = label() + " -- " + (spec.basic_only ? "basic land" : "land");
             if (k < bf_slots) { lbl += spec.tapped ? " onto the battlefield tapped" : " onto the battlefield"; }
             else              { lbl += " into your hand"; }

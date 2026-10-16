@@ -1793,7 +1793,10 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
 //     MOST Wilds / Myriad -- SEARCHED among those (up to Wilds+Wilds, Wilds+Myriad, Myriad+Myriad).
 //     Wilds and Terramorphic are one class already (LandSearch.h's identity fold). A slot the rule's
 //     lands cannot fill stays open (searched); a board with no Turf to want and no Wilds / Myriad left
-//     is not narrowed at all.
+//     is not narrowed at all. Then: "Primeval Titan must never search for a basic in my opinion."
+//     (LandfallProvider::LandSearchAdmitsLand): the autonomous list is built without basics, so with
+//     one nonbasic left Titan takes it alone, and with none it finds nothing ("up to two"). The human
+//     prompt still offers every land, with the basic-holding picks ordered last.
 // The resolving source is never counted as an "other" one: a fetch land / Myriad / Khalni is
 // sacrificed as the cost and a spell is off the hand before it resolves (AIEngine::CastSpellFromHand
 // erases it before the effect; the rollout's apply_one is its lockstep twin).
@@ -1982,15 +1985,16 @@ std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller
     std::vector<std::size_t> out;
     if (picks.size() < 2) { return out; }
     std::vector<std::vector<TitanLand>> cls(picks.size());
-    bool basics_left = false;
     for (std::size_t i = 0; i < picks.size(); ++i)
     {
-        for (const std::string& nm : picks[i])
-        {
-            const TitanLand t = TitanLandOf(CardDatabase::Instance().Lookup(nm));
-            cls[i].push_back(t);
-            if (t == TitanLand::Basic) { basics_left = true; }
-        }
+        for (const std::string& nm : picks[i]) { cls[i].push_back(TitanLandOf(CardDatabase::Instance().Lookup(nm))); }
+    }
+    // Read off the LIBRARY: the autonomous list holds no basic at all (LandSearchAdmitsLand).
+    bool basics_left = false;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand() && IsBasicLandCard(*d)) { basics_left = true; break; }
     }
     if (!basics_left)
     {
@@ -2069,15 +2073,29 @@ void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, i
     DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, picks);
     if (!basic_only)
     {
-        // Titan: the rule's picks to the front, each part keeping the base order.
+        // Titan: the rule's picks to the front, and within each part the picks holding a basic LAST
+        // ("never search for a basic" -- the autonomous list has none; this keeps a basic off the human
+        // prompt's default while a basic-free pick exists), each group keeping the base order.
         const std::vector<std::size_t> keep = LandfallTitanAllowed(s, controller, picks);
-        if (keep.empty() || keep.size() == picks.size()) { return; }
-        std::vector<char> in(picks.size(), 0);
+        std::vector<char> in(picks.size(), keep.empty() ? 1 : 0);
         for (std::size_t i : keep) { in[i] = 1; }
+        std::vector<char> basic(picks.size(), 0);
+        for (std::size_t i = 0; i < picks.size(); ++i)
+        {
+            for (const std::string& nm : picks[i])
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                if (d != nullptr && IsBasicLandCard(*d)) { basic[i] = 1; break; }
+            }
+        }
         std::vector<std::vector<std::string>> out;
         out.reserve(picks.size());
-        for (std::size_t i = 0; i < picks.size(); ++i) { if (in[i])  { out.push_back(std::move(picks[i])); } }
-        for (std::size_t i = 0; i < picks.size(); ++i) { if (!in[i]) { out.push_back(std::move(picks[i])); } }
+        for (int grp = 0; grp < 4; ++grp)
+        {
+            const char want_in = grp < 2 ? 1 : 0, want_basic = (grp % 2) ? 1 : 0;
+            for (std::size_t i = 0; i < picks.size(); ++i)
+            { if (in[i] == want_in && basic[i] == want_basic) { out.push_back(std::move(picks[i])); } }
+        }
         picks = std::move(out);
         return;
     }
@@ -2091,6 +2109,15 @@ void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, i
     auto it = std::find(picks.begin(), picks.end(), want);
     if (it == picks.end() || it == picks.begin()) { return; }
     std::rotate(picks.begin(), it, it + 1);   // the rule's pick to the front; the rest keep their order
+}
+
+bool LandfallProvider::LandSearchAdmitsLand(const GameState& s, int controller, int count, int to_hand,
+                                            bool basic_only, bool share_land_type, const CardDefinition& land) const
+{
+    (void)s; (void)controller; (void)count; (void)to_hand; (void)share_land_type;
+    // USER 2026-10-16: "Primeval Titan must never search for a basic in my opinion." Titan's is this
+    // list's only any-land search; a basic search admits its basics, of course.
+    return basic_only || !IsBasicLandCard(land);
 }
 
 int LandfallProvider::LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,

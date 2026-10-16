@@ -763,7 +763,7 @@ TEST_CASE("Landfall Titan rule: Gruul Turf with no land in hand or when short of
     Hand(one, "Forest", 44);
     Lib(one, "Evolving Wilds", 70); Lib(one, "Gruul Turf", 71); Lib(one, "Radiant Fountain", 72);
     const std::vector<Pick> c = LandSearchPicks(one, 0, ti);
-    CHECK(c.size() == 3);
+    CHECK(c.size() == 2);   // Wilds beside the Turf or the Fountain -- never the Forest
     for (const Pick& p : c) { CHECK(std::count(p.begin(), p.end(), "Evolving Wilds") == 1); }
     // The base (DefaultProvider) list is not narrowed.
     GameState base = lh; base.m_provider = nullptr;
@@ -789,6 +789,66 @@ TEST_CASE("Landfall Titan rule: out of basics -- Turf, Myriad, Radiant Fountain,
     CHECK(LfProv().LandSearchPickOrderKey(h0, 0, k0));
     CHECK(LfProv().LandSearchPickOrderKey(h1, 0, k1));
     CHECK(k0 != k1);
+}
+
+TEST_CASE("Landfall Titan rule: never a basic -- one nonbasic alone, or nothing")
+{
+    // USER 2026-10-16: "Primeval Titan must never search for a basic in my opinion."
+    LoadCards();
+    const LandSearchSpec ti = LandSearchSpecOf(D("Primeval Titan").params);
+    GameState s = LfState(4, 0, 3); Put(s, "Mountain", 30, true); Put(s, "Mountain", 31, true);
+    Hand(s, "Forest", 44);
+    TitanLib(s);
+    for (const Pick& p : LandSearchPicks(s, 0, ti))
+    { CHECK(std::count(p.begin(), p.end(), "Forest") == 0); CHECK(std::count(p.begin(), p.end(), "Mountain") == 0); }
+    GameState one = LfState(4, 2, 3); Hand(one, "Forest", 44); Lib(one, "Evolving Wilds", 70);
+    CHECK(LandSearchPicks(one, 0, ti) == std::vector<Pick>{ Pick{ "Evolving Wilds" } });
+    GameState none = LfState(4, 2, 3); Hand(none, "Forest", 44);
+    CHECK(LandSearchPicks(none, 0, ti).empty());
+    // The base (DefaultProvider) list still holds the basics.
+    GameState b = none; b.m_provider = nullptr;
+    CHECK_FALSE(LandSearchPicks(b, 0, ti).empty());
+}
+
+TEST_CASE("Land search: the human prompt's default matches lands by identity class and follows the human's answers")
+{
+    // USER 2026-10-16, Landfall s5 gi4: Titan's rule pick was Wilds + Wilds with only one Evolving Wilds
+    // and one Terramorphic Expanse left; the second prompt defaulted to a Forest (entry 0) because the
+    // pick names the class "Evolving Wilds", no longer a candidate name. It must be the Terramorphic.
+    LoadCards();
+    const LandSearchSpec ti = LandSearchSpecOf(D("Primeval Titan").params);
+    GameState s = LfState(4, 1, 3);
+    Put(s, "Mountain", 30, true); Put(s, "Myriad Landscape", 31, true); Put(s, "Radiant Fountain", 32, true);
+    Hand(s, "Evolving Wilds", 40); Hand(s, "Forest", 41); Hand(s, "Gruul Turf", 42);
+    Lib(s, "Evolving Wilds", 70); Lib(s, "Terramorphic Expanse", 71); Lib(s, "Myriad Landscape", 72);
+    Lib(s, "Haunted Fengraf", 73);
+    std::vector<std::string> defaults;
+    int answer_first = -2;   // -2 = take the default
+    TutorChooser tc = [&](const GameState&, int, const std::string&, const std::vector<std::string>& cands, int def,
+                          const std::vector<int>&)
+    {
+        REQUIRE(def >= 0); REQUIRE(def < static_cast<int>(cands.size()));
+        defaults.push_back(cands[static_cast<std::size_t>(def)]);
+        if (defaults.size() == 1 && answer_first >= -1)
+        {
+            for (std::size_t i = 0; i < cands.size(); ++i) { if (cands[i] == "Myriad Landscape") { return static_cast<int>(i); } }
+        }
+        return def;
+    };
+    TutorChooser* saved = g_play_tutor_chooser;
+    g_play_tutor_chooser = &tc;
+    GameState t = s;
+    PerformLandSearch(t, 0, ti, "Primeval Titan", -1);
+    REQUIRE(defaults.size() == 2);
+    CHECK(defaults[0] == "Evolving Wilds");
+    CHECK(defaults[1] == "Terramorphic Expanse");
+    // The human answers Myriad first: the default follows (a pick holding Myriad -> its Wilds).
+    defaults.clear(); answer_first = 0;
+    GameState u = s;
+    PerformLandSearch(u, 0, ti, "Primeval Titan", -1);
+    g_play_tutor_chooser = saved;
+    REQUIRE(defaults.size() == 2);
+    CHECK(defaults[1] == "Evolving Wilds");
 }
 
 TEST_CASE("Landfall Karoo rule: bounce colourless first, then the colour with the most to spare")
