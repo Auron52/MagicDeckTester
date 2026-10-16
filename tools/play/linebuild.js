@@ -91,6 +91,7 @@
   //   suspend=    Lotus Bloom's from-HAND Suspend (names the card)             (LineSpec::suspends)
   //   eternalize= Timeless Witness's from-GRAVEYARD Eternalize (names the card) (LineSpec::eternalizes)
   //   adventure=  Brightcap Badger's adventure half (names the PARENT card)     (LineSpec::adventures)
+  //   kicked=     Saproling Migration cast WITH its kicker paid (names the card)  (LineSpec::kickeds)
   //   blink=      Emiel / Eldrazi Displacer, "<outlet>[@<target m_number>]"    (LineSpec::blinks)
   //   taplife=    Wellwisher's "{T}: gain 1 life for each Elf" (names the SOURCE) (LineSpec::tap_lifes)
   //   landsearch= Evolving Wilds / Myriad Landscape / Khalni Heart Expedition crack (names the SOURCE;
@@ -488,6 +489,11 @@
     // not casts at all). The engine compares the adventure set unconditionally, so omitting the
     // token means "cast the creature".
     for (const p of plan) if (p.adventure) parts.push('adventure=' + p.name);
+    // KICKER (CR 702.33) rides alongside its own `cast=` for exactly the adventure reason above:
+    // kicking IS a cast of that hand card, just a dearer one, so the cast loop has already emitted
+    // `cast=<name>` and this token only says WHICH MODE. Compared unconditionally by the engine, so
+    // omitting it means "do not kick".
+    for (const p of plan) if (p.kicked) parts.push('kicked=' + p.name);
     // Board activations that are neither a hand cast nor a pass need their own verb -- a line made
     // up ONLY of them used to encode as 'pass' (CheckLine stage 0). MODE_VERBS name the MODE INT,
     // every other verb names a card.

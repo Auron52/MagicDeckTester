@@ -257,6 +257,41 @@ struct ManaCost
     // Used by TurnSolver::Plan / Action equality (the combat-pin main-phase share).
     bool operator==(const ManaCost&) const = default;
 
+    // True when this cost is nothing but generic and plain coloured pips -- no hybrid, phyrexian,
+    // twobrid or snow metadata and no {X}. Those four are fixed-capacity side tables whose pips are
+    // ALSO baked into `generic`/the flat colour ints by the parser, so a cost carrying one cannot be
+    // combined field-wise with another (see PlusAdditionalCost).
+    bool IsFlat() const
+    {
+        return hybrid_count == 0 && phyrexian_count == 0 && twobrid_count == 0
+            && snow_pips == 0 && !has_x && x_pips == 0;
+    }
+
+    // CR 601.2b -- an ADDITIONAL cost (kicker, CR 702.33) is ADDED INTO the total cost, whereas an
+    // ALTERNATIVE cost (evoke CR 702.75, bestow CR 702.103) REPLACES it. So this returns
+    // base + extra, and that is the whole and only difference between the kicker path and the
+    // evoke_cost / bestow_cost paths, which assign their cost straight over the printed one.
+    // Saproling Migration: {1}{G} + kicker {4} = {5}{G}.
+    //
+    // ONLY `extra` MUST BE FLAT; `this` MAY CARRY ANYTHING. The base cost is copied whole, so every
+    // exotic-pip slot it owns survives untouched with its indices still matching the flat ints they
+    // were baked into -- it is the ADDED cost whose metadata has nowhere to go. No printed kicker
+    // carries such a pip (they are generic or plain coloured), so rather than silently drop
+    // metadata and produce a cost that pays wrong, the caller asserts extra.IsFlat() first. If a
+    // card ever needs a hybrid kicker, that assert is the place it will say so.
+    ManaCost PlusAdditionalCost(const ManaCost& extra) const
+    {
+        ManaCost c   = *this;
+        c.generic   += extra.generic;
+        c.white     += extra.white;
+        c.blue      += extra.blue;
+        c.black     += extra.black;
+        c.red       += extra.red;
+        c.green     += extra.green;
+        c.colorless += extra.colorless;
+        return c;
+    }
+
     // Flat copy with hybrid pip i moved from its FIRST colour to its SECOND when bit i of `bits`
     // is set (bits == 0 returns the plain flat cost). Result carries no hybrid metadata.
     ManaCost ExpandHybrids(unsigned bits) const

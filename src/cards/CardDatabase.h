@@ -2730,6 +2730,12 @@ struct CardParams
     // through the shared CreateToken cascade, so they are doubled by Doubling Season and seen by
     // every ETB watcher exactly like any other token. 0 = inert.
     int                      cast_creates_tokens        = 0;
+    // KICKER's payload (CR 702.33 -- Saproling Migration: "If this spell was kicked, create four of
+    // those tokens INSTEAD"). It REPLACES cast_creates_tokens rather than adding to it, so the
+    // kicked face is built with cast_creates_tokens = this. The token's power/toughness/subtypes
+    // are shared with the unkicked mode above -- only the COUNT differs, which is true of every
+    // kicker in the pool. 0 = the kicked mode makes no tokens (an effect-only kicker).
+    int                      kicked_creates_tokens      = 0;
     int                      cast_created_token_power   = 0;
     int                      cast_created_token_toughness = 0;
     std::string              cast_created_token_color;
@@ -3434,6 +3440,27 @@ struct CardParams
     // now). "It becomes a creature again if it's not attached" is inert -- nothing removes our
     // creatures. nullopt = no bestow.
     std::optional<ManaCost> bestow_cost;
+
+    // KICKER (CR 702.33 -- Saproling Migration "Kicker {4}"): an OPTIONAL ADDITIONAL cost, which is
+    // what separates it from bestow_cost and evoke_cost sitting beside it. Those two are
+    // ALTERNATIVE costs and REPLACE the printed cost; a kicker is ADDED INTO it (CR 601.2b), so the
+    // kicked total is printed + this ({1}{G} + {4} = {5}{G}), never just this. Getting that
+    // backwards would make the kicked mode CHEAPER than the unkicked one.
+    //
+    // THE VALUE HERE IS THE KICKER ALONE, exactly as printed on the card -- do NOT pre-add the
+    // printed cost in cards.json. CardDatabase does the addition once, when it synthesizes the
+    // "<name> (Kicked)" face (the bestow-face trick), so every downstream reader sees an ordinary
+    // card with an ordinary cost and needs no kicker awareness at all. Must be a FLAT cost
+    // (generic + plain colours); asserted at synthesis. nullopt = no kicker.
+    std::optional<ManaCost> kicker_cost;
+
+    // Set ONLY on a synthesized "<name> (Kicked)" face, naming the printed card it came from. The
+    // face exists so the cost and payload resolve without any kicker awareness downstream, but it
+    // must not leak into a ZONE: the card put into the graveyard is the spell card itself, ONE card
+    // named "Saproling Migration" (CR 608.2m -- "kicked" is a property of the spell on the stack,
+    // not a different card). UnkickedSpellCard maps the face back at the two graveyard sites.
+    // Empty on every printed card, which is what makes it the "am I a kicked face?" test.
+    std::string             kicked_base_name;
 
     // ---- Flicker combo (EldraziDisplacerFlicker; see docs/design/flicker-combo.md) ----
 

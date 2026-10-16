@@ -216,7 +216,11 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
     // rollout's instant/sorcery line in TurnSolver's apply_one.
     if (d != nullptr && d->params.shuffles_self_into_library_on_resolve)
     { ShuffleSelfIntoLibrary(state, entry.controller_index, entry.source); return; }
-    state.players[entry.controller_index].graveyard.push_back(entry.source);
+    // KICKER (CR 702.33): entry.source is the "(Kicked)" face the cast swapped in, but the card that
+    // goes to the graveyard is the printed spell card (CR 608.2m). LOCKSTEP with the rollout's
+    // instant/sorcery line in TurnSolver's apply_one. Identity for every non-kicked resolution.
+    state.players[entry.controller_index].graveyard.push_back(
+        d != nullptr ? UnkickedSpellCard(*d, entry.source) : entry.source);
 }
 
 // ---- Public dispatch ----

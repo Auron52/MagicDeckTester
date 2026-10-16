@@ -237,6 +237,64 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             m_def_hash[bname] = CardDefHash(entry) ^ std::hash<std::string>{}(bname);
             m_cards[bname] = std::move(aura);
         }
+        // KICKER (CR 702.33 -- Saproling Migration "Kicker {4}"): synthesize a "<name> (Kicked)"
+        // face, the bestow trick directly above and the MDFC-back trick above that, and for the
+        // identical reason -- every downstream reader resolves a spell's cost and params through a
+        // name lookup, so a kicked mode that is genuinely its own DB entry needs ZERO kicker
+        // awareness in SpellEffects, EffectHandler, the resolution paths or the token cascade. The
+        // ONLY sites that learn a kicker exists are action enumeration (which emits the extra
+        // variant) and the two one-line def swaps that mirror bestow's.
+        //
+        // IT DIFFERS FROM BESTOW AND THE MDFC BACK IN ONE WAY, AND IT IS THE RULES-CRITICAL ONE: a
+        // kicker is an ADDITIONAL cost, ADDED INTO the total (CR 601.2b), where bestow and evoke are
+        // ALTERNATIVE costs that REPLACE it. Hence PlusAdditionalCost rather than an assignment.
+        // Assign and the kicked mode would come out CHEAPER than the unkicked one ({4} < {1}{G} is
+        // false here, but {4} vs {5}{G} is the comparison that matters) -- the search would take it
+        // unconditionally and the measurement would be nonsense in the flattering direction.
+        //
+        // THE FACE IS A FULL COPY with only the cost and the kicked clause overridden -- not the
+        // selective field copy the aura face above uses -- because a kicked spell IS the same spell
+        // with one clause changed. Anything not named here must behave identically by construction,
+        // which a field list cannot promise once a param is added next month.
+        if (def.params.kicker_cost.has_value())
+        {
+            // A hybrid/phyrexian/twobrid/snow/{X} kicker cannot be combined field-wise (those pips
+            // are side tables indexed against the flat ints the parser baked them into). No printed
+            // kicker is one. THROWN, not asserted: an assert is compiled out under NDEBUG, which is
+            // every build that measures anything, and the failure mode it would let through is a
+            // kicked cost that pays wrong -- silently, in the direction that flatters the card.
+            if (!def.params.kicker_cost->IsFlat())
+            {
+                throw std::runtime_error(
+                    "kicker_cost must be a flat generic/coloured cost (no hybrid, phyrexian, "
+                    "twobrid, snow or {X} pip): " + def.card.m_name.str());
+            }
+            const std::string kname = def.card.m_name.str() + " (Kicked)";
+            CardDefinition kicked = def;
+            kicked.card.m_name = kname;
+            kicked.card.m_def  = nullptr;   // name-derived def cache must reset (MDFC-back precedent)
+            kicked.card.RehashName();
+            kicked.card.m_mana_cost =
+                def.card.m_mana_cost.PlusAdditionalCost(*def.params.kicker_cost);
+            kicked.params.kicker_cost.reset();        // CR 601.2b: a kicked spell cannot re-kick
+            // ...and remember which printed card this face came from, so the resolution tail can
+            // file the PRINTED card in the graveyard rather than this face (see UnkickedSpellCard).
+            kicked.params.kicked_base_name = def.card.m_name.str();
+            // "...create four of those tokens INSTEAD" -- a replacement of the count, not an
+            // addition to it. Left alone when the kicked mode makes no tokens, so an effect-only
+            // kicker keeps whatever the unkicked mode made.
+            if (def.params.kicked_creates_tokens > 0)
+            { kicked.params.cast_creates_tokens = def.params.kicked_creates_tokens; }
+            kicked.params.kicked_creates_tokens = 0;
+            // 0 is the documented "no behavioural identity, fall back to the NAME" value. The
+            // kicked face must never fold with its own unkicked entry: they come from one cards.json
+            // entry, so they would digest identically, yet they differ in cost and in token count.
+            // Unreachable today (no fold site can see a name that is never a hand card) -- set
+            // because inheriting an identity that asserts interchangeability would be false.
+            kicked.behaviour_identity = 0;
+            m_def_hash[kname] = CardDefHash(entry) ^ std::hash<std::string>{}(kname);
+            m_cards[kname] = std::move(kicked);
+        }
         // Alternate-printing names (Rick, Steadfast Leader = Greymond, Avacyn's Stalwart): the entry
         // is keyed on the deck's PRINTED name; `scryfall_name` is the oracle name Scryfall knows, and
         // `scryfall_image` ("<set>/<collector number>") pins the printing whose art the viewer shows.
@@ -1358,6 +1416,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.adventure_face_name       = params.value("adventure_face_name", std::string());
     p.adventure_parent_name     = params.value("adventure_parent_name", std::string());
     p.cast_creates_tokens       = params.value("cast_creates_tokens", 0);
+    if (params.contains("kicker_cost"))
+        p.kicker_cost = ManaCostFromString(params["kicker_cost"].get<std::string>());
+    p.kicked_creates_tokens     = params.value("kicked_creates_tokens", 0);
     p.cast_created_token_power  = params.value("cast_created_token_power", 0);
     p.cast_created_token_toughness = params.value("cast_created_token_toughness", 0);
     p.cast_created_token_color  = params.value("cast_created_token_color", std::string());

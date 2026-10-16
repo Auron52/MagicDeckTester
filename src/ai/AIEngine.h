@@ -557,12 +557,19 @@ private:
                                                         // (GameState::free_casts_available) instead of
                                                         // paying mana; falls back to a paid attempt if
                                                         // the bank is empty (stranded marker).
-                           bool adventure = false);     // Adventure (Brightcap Badger // Fungus
+                           bool adventure = false,      // Adventure (Brightcap Badger // Fungus
                                                         // Frolic, CR 715): cast the SPELL half --
                                                         // swap in the adventure face's def, and on
                                                         // resolution the card goes to staged_cards
                                                         // (this engine's castable exile) so the
                                                         // creature half can be cast from there later
+                           bool kicked = false);        // Kicker (Saproling Migration, CR 702.33):
+                                                        // PAY the kicker -- swap in the "(Kicked)"
+                                                        // face, whose cost is printed + kicker
+                                                        // (ADDED, CR 601.2b -- the one way this
+                                                        // differs from bestow/evoke above, which
+                                                        // REPLACE) and whose payload is the kicked
+                                                        // clause (four tokens, not two)
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;

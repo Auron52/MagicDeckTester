@@ -8196,6 +8196,27 @@ struct SeqChainTrace
 // reject, so an unmodelled action kind or a modelling gap resolves to "no rescue" (return false),
 // which is exactly the status quo. It must never be consulted to REJECT a subset a gate accepted.
 static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state, int copies);
+
+// KICKER (CR 702.33): resolve a cast's definition to its DB-synthesized "(Kicked)" face when the
+// action paid the kicker. One helper rather than three copies of the lookup, because every COST
+// RECOMPUTE site must agree with what enumeration billed: a site that misses the swap prices a
+// kicked Saproling Migration at its printed {1}{G} instead of {5}{G}, so the prepay taps four mana
+// short and the search believes a line is affordable that is not. It is the ADDITIVE-cost analogue
+// of the `if (a.evoke) ec = *evoke_cost;` line each of those sites already carries -- except that
+// here the summed cost lives on the face, so the recompute needs the right DEF, not a cost
+// override. Returns `d` unchanged for every card without a kicker and for every unkicked cast, so
+// it is inert for every deck in the suite but Fungus.
+//
+// THE TWO ACTUAL CAST SITES DO NOT CALL THIS: apply_one and CastSpellFromHand swap the def ONCE, up
+// front, so everything below them -- cost, resolution, tokens -- already reads the kicked face.
+static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked)
+{
+    if (d == nullptr || !kicked || !d->params.kicker_cost.has_value()) { return d; }
+    const CardDefinition* k =
+        CardDatabase::Instance().Lookup(d->card.m_name.str() + " (Kicked)");
+    return k != nullptr ? k : d;
+}
+
 // The walk over ONE fixed cast order -- SubsetPayableSequential's body, lifted out so a caller that
 // already holds the order (the EDF provider's ArrangeCastOrder range projection, via
 // TurnSolver::OrderPaysSequentially) prices it with exactly this walk. No sort, no arrangement, no
@@ -8239,7 +8260,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     for (int j : ord)
     {
         const Action& a   = cands[j];
-        const CardDefinition& def = *a.def;
+        // KICKER: price the "(Kicked)" face when this action paid the kicker, BEFORE EffectiveCost,
+        // so the reduction applies to the summed cost (CR 601.2f order). Identity for every other
+        // card and for an unkicked cast.
+        const CardDefinition& def = *KickedFaceOr(a.def, a.kicked);
         if (!a.free_cast && !a.alt_cost)
         {
             // Live cost -- the same recompute the rollout's apply_one performs at cast time.
@@ -13079,6 +13103,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, a.evoke  ? 1u : 0u);
     FoldMix(h, a.bestow ? 1u : 0u);
     FoldMix(h, a.adventure ? 1u : 0u);
+    FoldMix(h, a.kicked ? 1u : 0u);
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
@@ -18604,6 +18629,9 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.bestow) != static_cast<long long>(y.bestow))
     { add("bestow", std::to_string(static_cast<long long>(x.bestow)),
            std::to_string(static_cast<long long>(y.bestow))); }
+    if (static_cast<long long>(x.kicked) != static_cast<long long>(y.kicked))
+    { add("kicked", std::to_string(static_cast<long long>(x.kicked)),
+           std::to_string(static_cast<long long>(y.kicked))); }
     if (static_cast<long long>(x.ponder_keep) != static_cast<long long>(y.ponder_keep))
     { add("ponder_keep", std::to_string(static_cast<long long>(x.ponder_keep)),
            std::to_string(static_cast<long long>(y.ponder_keep))); }
@@ -21993,6 +22021,9 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         if (pa.free_cast || pa.alt_cost || pa.sacrifice_land) { continue; }
                         const CardDefinition* pd =
                             pa.def ? pa.def : CardDatabase::Instance().Lookup(pa.card_name);
+                        // KICKER: the summed cost lives on the "(Kicked)" face, so swap the def
+                        // before EffectiveCost rather than overriding the cost after it.
+                        pd = KickedFaceOr(pd, pa.kicked);
                         if (pd != nullptr) { ec = EffectiveCost(*pd, state); }
                         if (pa.evoke && pd != nullptr && pd->params.evoke_cost.has_value())
                         { ec = *pd->params.evoke_cost; }
@@ -25454,6 +25485,45 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.bestow         = true;
                     actions.push_back(std::move(a));
                 }
+            }
+        }
+
+        // KICKER (CR 702.33 -- Saproling Migration "Kicker {4}"): an EXTRA variant sharing
+        // hand_index (the bestow idiom above -- no `continue`, the unkicked cast still emits below).
+        // Pays printed + kicker and resolves the DB's "(Kicked)" face, which is where the
+        // four-tokens-instead-of-two lives; see CardDatabase's synthesis for why that face exists
+        // rather than a `kicked` flag threaded into SpellEffects.
+        //
+        // THE COST COMES OFF THE KICKED FACE, NOT FROM ADDING HERE. EffectiveCost(*kdef) applies
+        // cost reduction to the TOTAL (printed + kicker), which is the CR 601.2f order -- additional
+        // costs are added before reductions are applied. Adding the kicker to a reduced base here
+        // would apply the reduction to the printed half only, and under-charge by the difference.
+        //
+        // NO EMISSION GATE, deliberately -- unlike evoke below, which is gated on a live LTB target
+        // because with nothing to return the dearer cast is STRICTLY DOMINATED. Nothing dominates
+        // here: the kicked mode is twice the bodies for three times the mana, and whether that beats
+        // spending the same mana on Saproling Burst or a third Doubling Season depends on the whole
+        // board. A "kick when mana is spare" test would be a heuristic pick inside the search
+        // window; the search prices it instead.
+        if (def.params.kicker_cost.has_value())
+        {
+            const CardDefinition* kdef =
+                CardDatabase::Instance().Lookup(def.card.m_name.str() + " (Kicked)");
+            if (kdef != nullptr)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(*kdef, state);
+                a.eval           = EvalCard(*kdef, state);
+                // Same expression the ordinary cast below uses, read off the KICKED face -- kicking
+                // never changes a card's types, so the two variants must agree here or the subset
+                // machinery would treat one mode as a creature spell and the other as not.
+                a.is_noncreature = !kdef->card.IsCreature();
+                a.card_mv        = kdef->card.m_mana_cost.ManaValue();
+                a.kicked         = true;
+                actions.push_back(std::move(a));
             }
         }
 
@@ -39888,6 +39958,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (!g_prepay_producer_on) { return Pp(PP_PRODUCER); }   // producer breaks fungibility
         }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        // KICKER: a kicked cast's bill is its "(Kicked)" face's cost, not the printed one. Swapped
+        // here, before every test below reads `d`, so the prepay's affordability checks and its
+        // combined bill agree with what enumeration charged.
+        d = KickedFaceOr(d, a.kicked);
         if (!d) { return Pp(PP_NO_DEF); }
         // A fixed upfront combined is only valid when no cast's cost can shrink/grow dynamically:
         // {X} spells and Hinata/Soulfire per-target discounts change the cost as the line resolves.
@@ -42634,13 +42708,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (act.free_cast && state.free_casts_available > 0)
         { cascade_free = true; --state.free_casts_available; }
     };
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int, bool, bool)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int, bool, bool, bool)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
                     const std::string& chosen_float_color, int enchant_target, bool bestow,
                     int replicate_count, int convoke_green, int convoke_other, int phyrexian_life,
-                    bool evoke, bool adventure)
+                    bool evoke, bool adventure, bool kicked)
     {
         // The land-put credit (Search for Tomorrow): consumed FIRST, before any early return, so a
         // skipped cast can never hand its credit to a later apply_one call that does not set it.
@@ -42749,6 +42823,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const CardDefinition* aopt =
                 CardDatabase::Instance().Lookup(opt->params.adventure_face_name);
             if (aopt != nullptr) { opt = aopt; }
+        }
+        // KICKER (CR 702.33): the same one-place def swap, and it is the ENTIRE resolution half of
+        // this feature. The "(Kicked)" face carries the summed cost (CR 601.2b) and the kicked token
+        // count, so the cost paid below, the text that resolves and the tokens created all read it
+        // with no further kicker awareness anywhere -- SpellEffects, EffectHandler and the token
+        // cascade are untouched by this change. Executor twin: AIEngine's CastSpellFromHand.
+        if (kicked && opt->params.kicker_cost.has_value())
+        {
+            const CardDefinition* kopt =
+                CardDatabase::Instance().Lookup(opt->card.m_name.str() + " (Kicked)");
+            if (kopt != nullptr) { opt = kopt; }
         }
         const CardDefinition& def = *opt;
 
@@ -43054,7 +43139,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                           HandEntryReason::Reveal);
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                 apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                          std::string{}, 0, false, -1, 0, 0, 0, false, false);
+                          std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
             }
             else { state.exile.push_back(std::move(found)); }
         };
@@ -43146,7 +43231,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               HandEntryReason::Reveal);
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                     apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                              std::string{}, 0, false, -1, 0, 0, 0, false, false);
+                              std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
                 }
                 else { ap.library.push_back(std::move(hit)); }   // declined/forbidden: bottomed
             }
@@ -43211,7 +43296,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                   HandEntryReason::Reveal);
                         cascade_free = true;
                         apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
-                                  0, std::string{}, 0, false, -1, 0, 0, 0, false, false);
+                                  0, std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
                     }
                     else { EnterHand(state, pe.controller, std::move(found),
                                      HandEntryReason::Reveal); }
@@ -44732,7 +44817,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (GszShuffleCopyIdOn()) { self.m_number = cast_number; }
                 ShuffleSelfIntoLibrary(state, state.active_player_index, self);
             }
-            else                                       { ap.graveyard.push_back(def.card); }
+            // KICKER (CR 702.33): `def` is the "(Kicked)" face the cast swapped in, but the card
+            // filed is the printed spell card (CR 608.2m). LOCKSTEP with EffectHandler's
+            // MoveToGraveyard. Identity -- and so byte-identical -- for every non-kicked cast.
+            else { ap.graveyard.push_back(UnkickedSpellCard(def, def.card)); }
         }
 
         if (is_sacrifice && !def.params.tutor_land_to_battlefield)
@@ -44811,7 +44899,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (const std::pair<std::string, int>& ha : held)
         {
             apply_one(ha.first, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false);
+                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false, false);
         }
     };
 
@@ -44955,7 +45043,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         }
                     }
                     const bool tb = bp_truncate;
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     lo_pending_set = false; lo_pending.clear();
                     fire_unlock();
                     slot_hook(a, tb);
@@ -45107,7 +45195,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -45134,7 +45222,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -45191,7 +45279,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // a.sacrifice_land is true here only under SacLandCastsInOrder; the trailing sac
                     // loop then skips it (spec_hoisted_sac).
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock();
                     lo_pending_set = false; lo_pending.clear();
                     slot_hook(a, tb);
                     dbg_cast("ord", a, dbg_before);
@@ -45232,7 +45320,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }   // cast here, not in the trailing pass
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     fire_unlock();
                     slot_hook(a, tb);
                 }
@@ -45247,7 +45335,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 prep_free(a);
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
             }
         }
@@ -45256,7 +45344,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
             }
         }
@@ -45396,7 +45484,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0, false, false);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -46146,7 +46234,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         { if (hp.card.m_number == host) { host_ok = CreatureTargetableByAuraSpell(hp, state, me); break; } }
                         if (!host_ok) { break; }
                         apply_one(wd->card.m_name.str(), false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                                  std::string{}, host, false, -1, 0, 0, 0, false, false);
+                                  std::string{}, host, false, -1, 0, 0, 0, false, false, false);
                         bool attached = false;
                         for (const Permanent& wp : state.battlefield)
                         { if (wp.card.m_number == a.sac_source_id && wp.aura_attached_to == host) { attached = true; break; } }
@@ -46498,7 +46586,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (const std::pair<std::string, int>& ha : held)
         {
             apply_one(ha.first, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false);
+                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false, false);
         }
     }
     }   // end of the bp_resume prefix skip
@@ -51890,6 +51978,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // only one mode per subset. Gated on the param -- the #S/#V/#K/#B precedent.
                         + ((act.def && !act.def->params.adventure_face_name.empty())
                            ? (act.adventure ? "#A1" : "#A0") : "")
+                        // KICKER: exactly the bestow and adventure case, and the ONE site where
+                        // forgetting it would silently undo the whole change -- the signature is
+                        // keyed on the card NAME, and kicked/unkicked Saproling Migration share
+                        // one name. Without this marker the dedup keeps whichever plan sorted
+                        // higher and the search sees only ONE mode per subset, so the enumeration
+                        // above would emit both variants and the kicker would still never be
+                        // weighed. "#KI" not "#K": #K is already Terastodon's destroy-K count.
+                        // Gated on the param -- the #S/#V/#K/#B/#A precedent -- so no deck without
+                        // a kicker card moves a signature.
+                        + ((act.def && act.def->params.kicker_cost.has_value())
+                           ? (act.kicked ? "#KI1" : "#KI0") : "")
                         // Chord of Calling: X, the fetch target AND the convoke tap counts are all
                         // real decisions (core invariant; the MTG_SIG_X_AUDIT class -- without the
                         // gate the autonomous dedup collapses the X axis). Gated on the params so
@@ -76407,6 +76506,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     // silently resolve as the adventure.
     std::vector<std::string> sortedAdventures = spec.adventures;
     std::sort(sortedAdventures.begin(), sortedAdventures.end());
+    // KICKER (CR 702.33) -- compared UNCONDITIONALLY for exactly the adventure reason above: kicked
+    // and unkicked Saproling Migration are both a CastFromHand of the same card, so an empty
+    // declaration cannot mean "legacy, match by name". Empty means "do not kick".
+    std::vector<std::string> sortedKickeds = spec.kickeds;
+    std::sort(sortedKickeds.begin(), sortedKickeds.end());
     std::vector<std::string> sortedAnimates = spec.animates;
     std::sort(sortedAnimates.begin(), sortedAnimates.end());
     const bool animate_declared   = !spec.animates.empty();
@@ -76492,6 +76596,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         std::vector<std::string> attachAllNames, sfPutNames, channelNames, suspendNames;
         std::vector<std::string> auraSwapNames;   // Arcanum Wings' swap: ALWAYS its own verb
         std::vector<std::string> adventureNames;
+        std::vector<std::string> kickedNames;
         // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
         std::vector<LineSpec::EquipSpec> equipActs;
@@ -76565,6 +76670,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // the human declares `cast=Brightcap Badger` exactly as they would for the creature and
             // `adventure=` only picks the MODE (the bestow shape, not the channel shape).
             if (a.adventure) { adventureNames.push_back(a.card_name); }
+            // NO `continue`, same as adventure: a kicked cast IS a hand cast and still belongs in
+            // the cast multiset, so the human declares `cast=Saproling Migration` either way and
+            // `kicked=` only picks the MODE.
+            if (a.kicked) { kickedNames.push_back(a.card_name); }
             if (animate_declared && a.kind == Action::Kind::AnimateLand)
             { animateNames.push_back(a.card_name); continue; }
             if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
@@ -76716,6 +76825,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = adventureNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedAdventures) { continue; }   // unconditional -- see sortedAdventures
+        }
+        {
+            std::vector<std::string> v2 = kickedNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedKickeds) { continue; }      // unconditional -- see sortedKickeds
         }
         if (animate_declared)
         {

@@ -540,6 +540,24 @@ struct Action
                                        // cheaper and is itself a lord-buffed Minotaur; the aura mode
                                        // dodges summoning sickness and pumps a creature that can
                                        // attack NOW). false = the ordinary creature cast.
+    bool        kicked           = false;
+                                       // KICKER (CR 702.33 -- Saproling Migration "Kicker {4}"):
+                                       // this CastFromHand PAYS THE KICKER, so it costs printed +
+                                       // kicker (CR 601.2b, {1}{G} + {4} = {5}{G}) and resolves the
+                                       // "<name> (Kicked)" face the DB synthesizes -- four tokens
+                                       // instead of two. Mechanically it is the bestow field above
+                                       // with an ADDITIVE cost instead of a replacing one; that is
+                                       // the only difference, and getting it backwards would make
+                                       // the kicked mode cheaper than the unkicked one.
+                                       // CollectActions emits BOTH modes as variants sharing
+                                       // hand_index (mutually exclusive), so the SEARCH decides --
+                                       // neither dominates and the choice is NOT gated on a
+                                       // heuristic like "only when mana is spare" (the no-greedy
+                                       // rule): unkicked is two mana for two bodies, the best
+                                       // unconditional rate in the Fungus pool, while kicked is six
+                                       // for four and competes for exactly the turn-4/5 mana that
+                                       // casts Saproling Burst or a Doubling Season. Under one
+                                       // Season that is 8 bodies against 4. false = unkicked.
     std::shared_ptr<const ContPins> cont_pins;
                                        // Set ONLY on the first recorded action of a breakpoint
                                        // continuation whose plan carried during-cast pins (see
@@ -2437,6 +2455,20 @@ public:
         // adventure_face_name) and NO saved reference plays it, so there is no line in the repo
         // whose meaning this can move.
         std::vector<std::string> adventures;
+        // "kicked=<card name>": PAY THE KICKER on this cast (CR 702.33 -- Saproling Migration).
+        //
+        // SAME SHAPE AS adventure= ABOVE, FOR THE SAME REASON, so read that note first: kicked and
+        // unkicked are two CastFromHand actions of the SAME card differing only in cost and in how
+        // many tokens resolve, so they are indistinguishable inside the cast multiset and a declared
+        // set is the only way a line can say which the human meant. Hence this set is compared
+        // ALWAYS, not only when non-empty -- declaring nothing means "do not kick", which is the
+        // cheap mode and therefore the reading a silent line most plausibly intended.
+        //
+        // Unconditional is safe here on the same evidence as adventure=: Saproling Migration is the
+        // engine's first and only kicker card (verified -- it is the sole cards.json entry carrying
+        // kicker_cost), and NO saved reference plays it (verified by grep over references/), so
+        // there is no recorded line in the repo whose meaning this can move.
+        std::vector<std::string> kickeds;
         // "animate=<land name>" / "taptoken=<land name>": the two greedy mana sinks, now real
         // human-play activations (Mutavault's "{1}: becomes a 2/2", Sliver Hive's "{5},{T}: create a
         // Sliver"). One entry per activation; EMPTY keeps the legacy card-name-in-casts matching, so

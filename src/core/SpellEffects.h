@@ -2265,6 +2265,31 @@ inline bool StageAdventureParent(GameState& state, int controller,
     return true;
 }
 
+// KICKER (CR 702.33), the resolution TAIL -- the one place the "(Kicked)" face must not leak.
+//
+// A kicked spell resolves as that face, which is the whole point: the face carries the summed cost
+// (CR 601.2b) and the kicked payload, so no resolution site needs to know a kicker happened. But the
+// physical card that then goes to the graveyard is the SPELL CARD, one card named "Saproling
+// Migration" -- CR 608.2m, and CR 601.2b makes "kicked" a property of the spell ON THE STACK, not a
+// different card. File the face instead and two things go wrong: the graveyard is plainly
+// mis-labelled for anything that ever reads it by name, and -- the one that costs measurably -- EOT
+// DOMINANCE FOLDING SPLITS, because a graveyard holding "Saproling Migration (Kicked)" is a
+// different state from one holding the printed name, so two lines reaching an identical board stop
+// folding into each other and the search pays for both.
+//
+// The resolved copy's m_number rides along: a kicked card is the same physical copy, and the
+// adventure path keeps the number for exactly the same reason (an adventure is ONE card, not two).
+// Identity for every def that is not a kicked face, so this is inert for every other card.
+inline Card UnkickedSpellCard(const CardDefinition& def, const Card& resolved)
+{
+    if (def.params.kicked_base_name.empty()) { return resolved; }
+    const CardDefinition* b = CardDatabase::Instance().Lookup(def.params.kicked_base_name);
+    if (b == nullptr) { return resolved; }   // broken link: file the face rather than drop the card
+    Card c     = b->card;
+    c.m_number = resolved.m_number;
+    return c;
+}
+
 inline void PutFadeCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }

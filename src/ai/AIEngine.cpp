@@ -4140,7 +4140,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             int convoke_other = 0,
                             int phyrexian_life = 0,      // Phyrexian ({G/P}): life paid for pips
                             bool evoke = false,          // Evoke (Reveillark): alternate-cost self-sac cast
-                            bool adventure = false)      // Adventure (Brightcap Badger): cast the SPELL half
+                            bool adventure = false,      // Adventure (Brightcap Badger): cast the SPELL half
+                            bool kicked = false)         // Kicker (Saproling Migration): PAY the kicker
     {
         // Bruna sweep D: a land Aura naming the DEFERRED karoo waits for it (see karoo_host_auras;
         // lockstep with ApplyPlanDirect's apply_one).
@@ -4207,7 +4208,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
                           bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke,
-                          adventure);
+                          adventure, kicked);
         // Paid <=> the card left the hand (an unpayable cast leaves it there). An unnumbered card
         // cannot be told apart from a copy, so it keeps the old always-armed reading.
         last_cast_paid = cast_num <= 0
@@ -4685,7 +4686,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::CastFromHand)
             { if (a.convoke_green > 0 || a.convoke_other > 0)
               { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
-              if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); } resolve_now(); walker_cast_activation(a);
+              if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); } resolve_now(); walker_cast_activation(a);
  }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
@@ -5232,7 +5233,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { deploy_via_vial(a.card_name); resolve_now(); cont_unlock->Fire(&cont_unlock_fired);
               exec_cont_land_hook(rdb_land, a); continue; }
             {
-                m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
+                m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); resolve_now(); walker_cast_activation(a);
                 const bool cont_cast_paid = last_cast_paid;   // before the nested re-solve overwrites it
                 const bool put_armed_c = put_in_hand_armed(a.card_name);
                 // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID continuation cast opens no nested
@@ -5271,7 +5272,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // Under SacLandCastsInOrder every sac-land cast was sequenced (and cast) above.
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && !cont_sac_in_order)
-            { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
+            { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); resolve_now(); walker_cast_activation(a);
               exec_cont_land_hook(rdb_land, a); }
         }
         for (const Action& a : extra.actions)
@@ -6537,7 +6538,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
@@ -6641,7 +6642,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int i : ena)
         {
             const Action& a = plan.actions[i];
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
         }
     }
@@ -6667,7 +6668,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -6739,7 +6740,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // At its rank (SacLandCastsInOrder): the trailing sac loop below skips it.
             if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }
-            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
@@ -6841,7 +6842,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
         if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }   // at its rank (SacLandCastsInOrder)
-        m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+        m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
         exec_slot_hook(a);
         const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
@@ -6888,7 +6889,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
+        { m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; m_pending_land_put = a.rock_mana; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
     }
     for (const Action& a : plan.actions)
     {
@@ -7744,7 +7745,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                                  const std::string& chosen_float_color, int enchant_target,
                                  bool free_cast, bool bestow, int replicate_count,
                                  int convoke_green, int convoke_other, int phyrexian_life,
-                                 bool evoke, bool adventure)
+                                 bool evoke, bool adventure, bool kicked)
 {
     // Twobrid variant (Beseech): consume-once, BEFORE any early return, like m_pending_devour_count.
     const int twobrid_colored = m_pending_twobrid;
@@ -7776,6 +7777,18 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         const CardDefinition* bdef =
             CardDatabase::Instance().Lookup(def->card.m_name.str() + " (Bestowed)");
         if (bdef != nullptr) { def = bdef; }
+    }
+    // KICKER (Saproling Migration, CR 702.33): the same one-place def swap -- the DB's "(Kicked)"
+    // face carries the summed cost (printed + kicker, CR 601.2b) and the kicked token count, so the
+    // cost paid below and the text that resolves both read it. The hand card itself is still
+    // `hand_card` (removed below by number, never by def name), so this is the exact executor twin
+    // of the rollout's apply_one swap -- lockstep by construction. Inert for every card without a
+    // kicker.
+    if (kicked && def->params.kicker_cost.has_value())
+    {
+        const CardDefinition* kdef =
+            CardDatabase::Instance().Lookup(def->card.m_name.str() + " (Kicked)");
+        if (kdef != nullptr) { def = kdef; }
     }
 
     // Irencrag Feat "you can cast only one more spell this turn": mirror TurnSolver::apply_one's

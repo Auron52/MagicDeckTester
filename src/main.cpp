@@ -2270,6 +2270,22 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (pdef && !pdef->params.adventure_face_name.empty())
                 { os << ", \"adventure_name\": "; JsonStr(os, pdef->params.adventure_face_name); }
             }
+            //  * KICKER (Saproling Migration, CR 702.33) is the adventure case exactly: the two
+            //    modes share a hand slot AND a name and split by no sub-key, so without this the
+            //    dialog offers "Saproling Migration" twice with nothing to tell {1}{G} for two
+            //    Saprolings from {5}{G} for four. The verb says which, and `kicked_cost` names the
+            //    kicker's mana value so the badge can read "kicked (+4)" rather than leaving the
+            //    human to work out which of two identical rows is the dear one. MV, not the pip
+            //    string: this file has no ManaCost printer, and every kicker in the pool is plain
+            //    generic, so MV loses nothing today (`a.cost` already carries the exact pips).
+            if (ac.kicked)
+            {
+                os << ", \"kicked\": true, \"verb\": \"kick\"";
+                const CardDefinition* kd = ac.def ? ac.def
+                                                  : CardDatabase::Instance().Lookup(ac.card_name);
+                if (kd && kd->params.kicker_cost.has_value())
+                { os << ", \"kicked_cost_mv\": " << kd->params.kicker_cost->ManaValue(); }
+            }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             // Kitesail Larcenist: the searched own-side Treasure target (0 = none, -2 = choose on
@@ -3979,6 +3995,10 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
         // Adventure (CR 715): cast the adventure half rather than the creature. See LineSpec.
         else if (key == "adventure") { ls.adventures.push_back(val); }
+        // Kicker (CR 702.33): PAY the kicker on this cast. See LineSpec::kickeds -- like
+        // adventure=, and unlike every optional verb, an absent key MEANS "unkicked" and is
+        // enforced, because by card name the two modes are the same cast.
+        else if (key == "kicked")    { ls.kickeds.push_back(val); }
         else if (key == "suspend")   { ls.suspends.push_back(val); }      // from-hand Suspend (Lotus Bloom)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
         else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"
