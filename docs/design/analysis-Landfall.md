@@ -607,6 +607,25 @@ preselected); every Karoo bounce, played OR put (`bounce`); the Terastodon K fan
    (replay-landfall counts net out in the common case), but the identity of the returned land was
    never argued for a landfall deck.
 
+## Decisions awaiting the user — CONSOLIDATED (2026-10-16 ~07:15; default taken in brackets)
+| # | decision | default taken | recommendation |
+|---|---|---|---|
+| L1 | **5j route.** Landfall is 4.30x PD in one pooled run; 92-99% of the cost is mulligan-bottoming trial games, which the keep table replaces. (1) lift the gate for Landfall (`MTG_ALLOW_UNTESTED_DECK=1`, user-only) to build the keep table + value leaf; (2) rule that 5j measures post-artifact cost; (3) cheaper bottoming | [nothing adopted; deck in NO tier; rows proposed only] | **(2) via (1)**, as recommended for PD. Not (3): Melira shape +0.036 turns (0.59x units), all-greedy +0.126 (0.19x) |
+| L2 | `search_leaf_depth: 0` in the profile (greedy horizon leaf, Melira precedent) | [ADOPTED 223cbba4: -0.141 turns, se 0.031, 62/23, 0.47-0.65x units] | Confirm |
+| L3 | Mulligan keep rule `curve_check: two_drop` (only RG/Khalni qualify; ~35% of 7s fail) | [kept] | Keep: `none` measured +0.218 turns worse (se 0.035) |
+| L4 | Cast order (user-owned): no Landfall order authored; generic = creatures before ramp. Also the Courser Q1 tie-break (watchers first within a rank) | [generic + Q1 tie-break] | Generic looks right for landfall payoffs (a later land pumps / adds tokens); the 5e ordering oracle found nothing better over 500 games |
+| L5 | Terastodon K rule + Forests-first victims in a landfall deck (Review Q2) | [user's rule kept for the search; victims now surfaced to the human] | Keep for now: `MTG_UNPRUNE=terak` found no loss over 500 games |
+| L6 | Discard BUCKET policy (Stage 5i, authored) | [NOT adopted] | Review; sheds are rare (0.0225/game, all ties) |
+| L7 | New default-ON levers: `MTG_LA_PASS_CEILING` (budget re-price, inert unlimited), `MTG_PUT_BOUNCE_FOLD` (exact fold) | [ON] | Keep ON (both re-price or fold only) |
+| L8 | Representation caps that bind at ANY budget (6a 1b.1-1b.3: land-search product <=64 then one-hot, one axis per variant, Phylath target <=4 classes) -- a completeness-invariant question | [unchanged] | Schedule as engine items if you want them findable at large budget |
+| L9 | Titan's rank-0 land pick is alphabetical (drives d0 and every leaf playout under leaf depth 0) | [unchanged] | A reasoned provider default would need a 5e A/B; worth one |
+| L10 | Provisional collapses / deferrals: Avenger + Khalni "may", Omnath face, every "up to" collapse, SfT "may cast", instant-window collapses, Fengraf seeded random, Genesis Wave dup legend, Courser Q2/Q3/Q5 | [PROVISIONAL YES] | Approve (each argued in 6a Source 2) |
+| L11 | Courser Q4 / Land-search Q1: no autonomous main 2 for the Titan-attack top land | [not built] | Measure the capability before deciding |
+| L12 | Crop Rotation (Creature Giving) on the shared land-search path | [separate item] | Do it with its own rebaseline |
+| L13 | Kili (storied) / Saproling Migration (kicker) keyword-enum gaps (other decks) | [surfaced] | Small data/enum item |
+| L14 | `landat=<k>` only for landfall-watcher casts in the viewer; PUT Terastodon K not asked of the human; K menu caps at own permanents | [unchanged] | Low priority |
+| L15 | Deferred measurements: 5c2 decisive tie-break sample, 5g miner at full size | [after the keep table / value leaf] | -- |
+
 ## Open questions for the user (collected; work continues on the stated default)
 - **(Courser integrator Q1 — CAST ORDER, USER-OWNED)** In a positioned-land plan, landfall-watcher casts
   go before other spells of the SAME cast-order rank. Only the arbitrary hand-order tie-break moves;
