@@ -18,4 +18,15 @@ struct MtgTestSeam
     static void CastSpellFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail,
                                   int chosen_x)
     { e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), chosen_x); }
+
+    // Commit ONE phase plan, so the engine's next TakeTurn for that phase EXECUTES it (the
+    // committed-line pop) instead of searching -- the only way a test can hand the real executor a
+    // specific plan, e.g. to check it realises a plan exactly as the rollout's ApplyPlan does.
+    static void CommitPhasePlan(AIEngine& e, const TurnSolver::Plan& p, bool is_pre_combat)
+    {
+        TurnSolver::PhasePlan pp;
+        pp.is_pre_combat = is_pre_combat;
+        pp.plan          = p;
+        e.m_committed_line.push_back(pp);
+    }
 };

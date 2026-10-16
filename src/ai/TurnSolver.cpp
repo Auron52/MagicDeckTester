@@ -15756,6 +15756,19 @@ static thread_local int g_apply_caller_line = 0;
 // "the apply the candidate loop is about to make", i.e. depth g_apd_depth + 1, so a nested apply (a
 // breakpoint continuation's trial, a payability probe) can never answer for it. See BounceProbe.
 static thread_local int g_apd_depth = 0;
+// THE LAND-POSITION PREFIX PROBE (Plan::land_slot k >= 1; Landfall claude-play sweep flag 1,
+// 2026-10-16). A "land right after the k-th landfall-watcher cast" plan is cloned from a LAND-FIRST
+// plan, whose casts were enumerated WITH the land's mana -- so a cast dispatched BEFORE the land can
+// be unpayable without it (T2 "Khalni Heart Expedition, then the Forest" with one Forest in play).
+// Both worlds then drop that cast and play the land anyway (the slot hook counts the ATTEMPT), and
+// the rest of the plan runs: the line the menu showed silently becomes a different one. The
+// enumeration asks the ONE question that decides it by applying the plan once, armed here: the
+// apply at depth `apd_depth` records, at its first declared top-level cast that fails while the
+// positioned land is still pending, how many landfall watchers had been DISPATCHED before it
+// (`first_drop_watchers`; -1 = no such drop). Every position at or below that count has a payable
+// prefix; every position above it is the degenerate line. Inert (-1 depth) outside the probe.
+struct SlotPrefixProbe { int apd_depth = -1; int first_drop_watchers = -1; };
+static thread_local SlotPrefixProbe g_slot_prefix_probe;
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr,
                             BpPrefixSnap* bp_capture = nullptr,
@@ -39696,6 +39709,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 && state.players[state.active_player_index].life <= phyrexian_life)
             {
                 if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
+                if (sink_stack.empty() && g_slot_prefix_probe.apd_depth == g_apd_depth && land_after_deferred
+                    && deferred_land_slot > 0 && g_slot_prefix_probe.first_drop_watchers < 0)
+                { g_slot_prefix_probe.first_drop_watchers = deferred_watchers_seen; }   // see SlotPrefixProbe
                 return;
             }
             // RESERVE THE AURA'S OWN HOST across its payment -- the REALIZATION twin of the
@@ -39748,6 +39764,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ++g_dropped_cast_count;
                     if (g_enum_drop_names) { g_enum_drop_names->push_back(name); }
+                    // The land-position prefix probe (see SlotPrefixProbe): THIS apply only, the
+                    // first declared cast that fails while the positioned land is still pending.
+                    if (g_slot_prefix_probe.apd_depth == g_apd_depth && land_after_deferred
+                        && deferred_land_slot > 0 && g_slot_prefix_probe.first_drop_watchers < 0)
+                    { g_slot_prefix_probe.first_drop_watchers = deferred_watchers_seen; }
                 }
                 return;
             }
@@ -53834,6 +53855,42 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
     }
 }
 
+// THE LAND-POSITION PREFIX PROBE's soundness boundary (see SlotPrefixProbe). The probe applies a
+// positioned plan under its DEFAULT resolution, so a prefix drop it reports proves the line degenerate
+// only when nothing fanned out of the same base plan later -- a sub-decision axis appended after the
+// position clones, a breakpoint continuation, or the human answering a prompt -- could buy the missing
+// mana back. This is the closed list of choices in the engine that can ADD mana a later cast of the
+// same section may spend; a plan holding one keeps every position (the pre-probe behaviour: its
+// degenerate positions stay honest, scored lines, merely wasted):
+//   * a land search that puts an UNTAPPED land (Search for Tomorrow hard-cast: WHICH basic decides the
+//     colour a later cast can pay) -- Plan::land_search_pins, the human's tutor_etb pick;
+//   * a Treasure-minting cast -- Plan::freshmode_choice releases the fresh mint;
+//   * a sacrifice-land cast while the sac-target axis is on -- Plan::sac_pins picks WHICH land goes;
+//   * the mana-creature hold/tap audit -- Plan::tapmode_choice (UnprunedGate::TapReserve);
+//   * any breakpoint the plan opens EXCEPT site 9 -- a continuation, or a wave variant's partition
+//     truncation, inside the prefix may cast a mana source or skip the failing cast. Site 9 (a
+//     post-entry activation: Khalni Heart Expedition's crack, a just-cast walker) is the TRAILING
+//     pass, after every cast and after a positioned land, so it can never reach the prefix.
+// Every other axis resolves a choice the prefix's payment never reads (a scry, a target, a counter, a
+// discard) or, for the land-search activations' position, can only move mana use EARLIER. A new
+// mana-adding resolution choice must be added here, or the probe would delete its cured line.
+static bool PositionPrefixChoiceMayAddMana(const GameState& state, const TurnSolver::Plan& p)
+{
+    // The tapmode axis's own emission gate (AppendSubdecisionAxes): never under human play, where the
+    // global MTG_UNPRUNED opens every gate but the axis is not fanned (a person pays by hand instead).
+    if (DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive()) { return true; }
+    for (const Action& a : p.actions)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && SacAxisEnabled()) { return true; }
+        if (d->params.creates_treasures > 0) { return true; }
+        const LandSearchSpec ls = LandSearchSpecOf(d->params);
+        if (ls.count > ls.to_hand && !ls.tapped) { return true; }
+    }
+    return (PlanOpensBreakpoint(state, p) & ~(1 << 9)) != 0;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
                                                                     bool is_pre_combat)
 {
@@ -54570,7 +54627,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     //   cast it holds (TurnSolver::PutsLandfallWatcher -- the predicate both worlds' cast loops count
     //   by). Those are the only positions that can matter: moving the land past a NON-watcher cast
     //   triggers the same watchers and gives its mana to fewer casts. A position whose prefix cannot
-    //   be paid without the land simply does less when applied (a wasted line, scored as one).
+    //   be paid without the land is NOT emitted (the prefix probe below: a degenerate line that
+    //   realises a different, separately enumerated plan).
     //
     // GATED to where the order can matter, which is also what keeps it free elsewhere:
     //   * the deck holds a landfall card (GameState::deck_has_landfall) -- otherwise offered_lands is
@@ -54624,6 +54682,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             }
         }
         const std::size_t n_after = after.size();
+        // A POSITION WHOSE PREFIX CANNOT BE PAID WITHOUT THE LAND IS NOT EMITTED (Landfall claude-play
+        // sweep flag 1, 13 of 16 games, 2026-10-16). The casts were enumerated with the land's mana, so
+        // "Khalni Heart Expedition, then the Forest" with one Forest in play was offered; applied, both
+        // worlds drop Khalni and play the land anyway (the slot hook counts the ATTEMPT -- ApplyPlanDirect
+        // and AIEngine::TakeTurn alike, so the rollout never scored a phantom quest counter), and the
+        // rest of the plan runs -- gi10's "land after Phylath; Phylath, Khalni crack" cast no Phylath and
+        // still cracked Khalni, a different line than the one the human picked.
+        //
+        // WHY DROPPING IT LOSES NOTHING. With the casts D of the prefix dropped, the apply realises the
+        // plan's casts minus D with the land right after the same watcher ATTEMPT -- which is the
+        // position variant of the land-first plan over (casts minus D) at the watcher count that
+        // survives D (or that land-first plan itself when no prefix watcher survives), enumerated in its
+        // own right; its trailing activations (a Khalni crack included) run after the land in both, and
+        // its land-search-activation position children map one-for-one. What the degenerate line could
+        // differ in is only WHICH lands it tapped -- the payment allocation, which is not a searched
+        // decision anywhere (the standing mana-payment exemption) -- so no line becomes unfindable at
+        // any budget. The human loses nothing either: the cured line ("cast the Expedition next turn",
+        // or one commit at a time) is still offered, and commit-the-line re-asks after every commit.
+        //
+        // ONE probe per base plan, at its LAST position (land right after its last watcher): the
+        // watchers dispatched before its first failed prefix cast (SlotPrefixProbe) bound every position
+        // at once, because positions 1..s dispatch exactly that probe's casts before their land (same
+        // watchers-first order, no land yet) and a position above s drops the same cast before its land.
+        // Skipped -- every position kept, as before -- where a later fan-out could buy the mana back
+        // (PositionPrefixChoiceMayAddMana) and inside a breakpoint continuation's derivation (applied
+        // there through apply_continuation_plan, which has no whole-turn prepay, so this top-level probe
+        // is not that world's answer; the memo's own g_bp_enum_depth == 0 gate keeps the two lists
+        // apart).
+        const bool slot_probe_on = g_bp_enum_depth == 0;
+        std::size_t n_slot_pruned = 0;
         for (std::size_t i = 0; i < defer_begin; ++i)
         {
             const TurnSolver::Plan& p = all[i];
@@ -54631,16 +54719,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             { continue; }
             const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
             if (ld != nullptr && ld->params.etb_bounce_land) { continue; }   // a Karoo: after-all already
-            const int w = watchers_in(p);
-            for (int k = 1; k <= w && k <= 127; ++k)
+            const int w = std::min(watchers_in(p), 127);
+            int payable = w;   // positions 1..payable have a payable prefix
+            const bool probed = w > 0 && slot_probe_on && !PositionPrefixChoiceMayAddMana(state, p);
+            if (probed)
+            {
+                TurnSolver::Plan probe = p;
+                probe.land_slot = static_cast<int8_t>(w);
+                const SlotPrefixProbe saved = g_slot_prefix_probe;
+                g_slot_prefix_probe = SlotPrefixProbe{ g_apd_depth + 1, -1 };
+                {
+                    GameState probe_state = state;
+                    ApplyPlanDirect(probe_state, probe, is_pre_combat);
+                }
+                const int first_drop = g_slot_prefix_probe.first_drop_watchers;
+                g_slot_prefix_probe = saved;
+                if (first_drop >= 0) { payable = std::min(w, first_drop); }
+                n_slot_pruned += static_cast<std::size_t>(w - payable);
+            }
+            TRACE("landslot", "T%d base land=%s casts=%zu watchers=%d probed=%d payable=%d",
+                  state.turn_number, p.land_to_play.c_str(), p.actions.size(), w,
+                  probed ? 1 : 0, payable);
+            for (int k = 1; k <= payable; ++k)
             {
                 TurnSolver::Plan v = p;
                 v.land_slot = static_cast<int8_t>(k);
                 after.push_back(std::move(v));
             }
         }
-        TRACE("landafter", "T%d land position -> %zu after-casts + %zu mid-sequence variants (%zu land options)",
-              state.turn_number, n_after, after.size() - n_after, offered_lands.size());
+        TRACE("landafter", "T%d land position -> %zu after-casts + %zu mid-sequence variants (%zu land options, %zu unpayable-prefix positions not emitted)",
+              state.turn_number, n_after, after.size() - n_after, offered_lands.size(), n_slot_pruned);
         all.insert(all.end(), std::make_move_iterator(after.begin()),
                               std::make_move_iterator(after.end()));
     }
@@ -72883,10 +72991,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     // keeps the flat answer -- the only case this cannot judge. Viewer-only (CheckLine), GT-neutral.
     std::size_t real_fail_k = static_cast<std::size_t>(-1);
     ManaCost    real_fail_cost{};
+    const GameState* real_pays_base = &s;   // the board the walk pays from (see the landat= prefix check)
     auto real_pays = [&](const std::vector<std::size_t>& order, const std::vector<ManaCost>& costs) -> bool
     {
         if (sac_wild > 0) { return true; }
-        GameState cp = s;
+        GameState cp = *real_pays_base;
         RevealLogPause quiet;
         ManaCost line_total{};
         for (std::size_t k : order) { if (!pending[k].alt_free) { AddManaCost(line_total, costs[k]); } }
@@ -73090,6 +73199,44 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     auto is_producer = [](const PendingCast& pc) -> bool {
         return pc.rock || (pc.def && IsManaRitual(*pc.def));
     };
+
+    // `landat=<k>` (Plan::land_slot k): the land is played right after the line's k-th cast, so its
+    // mana cannot fund the first k -- but `s` above already has it played (the land-first reading),
+    // and every walk below would then call "Khalni Heart Expedition, then the Forest" on ONE Forest
+    // rules-legal (Landfall claude-play sweep flag 1, 2026-10-16: the enumerator no longer emits that
+    // position, and the legality fallback must not re-admit it as legal_not_enumerated -- applied,
+    // the cast is dropped and the land played anyway). So the k casts before the land are paid FIRST,
+    // in the declared order, by the real payer on the board WITHOUT the land; a cast that cannot be
+    // is Illegal. Only when those k names are the line's first k hand casts (a battlefield activation
+    // among them is paid in the trailing pass, not at its click position), and not on a board with an
+    // unmodelled sacrifice-for-mana source (`sac_wild`, the walk's own blind spot).
+    if (spec.has_land && spec.land_at_cast > 0 && sac_wild == 0)
+    {
+        const std::size_t kk = static_cast<std::size_t>(spec.land_at_cast);
+        bool mapped = kk <= pending.size() && kk <= spec.casts.size();
+        for (std::size_t i = 0; mapped && i < kk; ++i)
+        { if (pending[i].board_act || pending[i].name != spec.casts[i]) { mapped = false; } }
+        if (mapped)
+        {
+            std::vector<std::size_t> prefix(kk);
+            std::vector<ManaCost>    prefix_cost(pending.size());
+            for (std::size_t i = 0; i < kk; ++i) { prefix[i] = i; prefix_cost[i] = cur_cost(pending[i]); }
+            real_pays_base = &state;   // the board before the land is played
+            const bool prefix_ok = real_pays(prefix, prefix_cost);
+            real_pays_base = &s;
+            if (!prefix_ok)
+            {
+                const std::string nm = real_fail_k < pending.size() ? pending[real_fail_k].name : std::string("?");
+                out.verdict = V::Illegal;
+                out.failed_action = "cast=" + nm;
+                out.reason = "can't pay " + real_fail_cost.ToString() + " for '" + nm + "' before the land: "
+                             "`landat=" + std::to_string(spec.land_at_cast) + "` plays '" + spec.land
+                             + "' after cast " + std::to_string(spec.land_at_cast)
+                             + ", so its mana is not available to the casts before it";
+                return out;
+            }
+        }
+    }
 
     // --- Declared-order affordability: honor the human's EXACT cast order first -----------------
     // The producers-first greedy below is order-INDEPENDENT (rituals cast before everything), which

@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Landfall claude-play sweep flag 1 (2026-10-16; seed 31009 gi9 T2): ONE Forest in play, hand Khalni",
+    "Heart Expedition ({1}{G}) + Forest. 'Cast Khalni, THEN play the Forest' (`landat=1`) cannot be paid --",
+    "the Expedition needs the Forest's mana -- and was offered anyway (the position clone inherited casts",
+    "enumerated WITH the land); picked, it dropped Khalni and played the Forest. The position is no",
+    "longer emitted, so the line must not be ACCEPTED (it is not a plan any more). Land-first",
+    "('Forest, then Khalni') stays the legal line."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Forest" }
+  ],
+  "hand": [
+    "Khalni Heart Expedition",
+    "Forest"
+  ],
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 2,
+  "validate_line": "land=Forest;landat=1;cast=Khalni Heart Expedition",
+  "expect_verdict": "illegal"
+}

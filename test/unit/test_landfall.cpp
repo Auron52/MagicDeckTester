@@ -26,12 +26,14 @@
 //     casts put no landfall watcher gets no land-after variant.
 #include <doctest/doctest.h>
 
+#include "ai/AIEngine.h"
 #include "ai/LandPlay.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "mtg_test_seam.h"   // MtgTestSeam: hand the real executor a committed plan
 
 #include <string>
 #include <vector>
@@ -598,4 +600,114 @@ TEST_CASE("Land position: a land Aura cast onto the positioned land is held unti
     for (const Permanent& p : t.battlefield) { if (p.card.m_name.str() == "Wild Growth") { wg = &p; } }
     REQUIRE(wg != nullptr);                              // released after the land, not dropped
     CHECK(wg->aura_attached_to == 2);
+}
+
+// ---- UNPAYABLE PREFIX (Landfall claude-play sweep flag 1, 2026-10-16) ----------------------------
+// A position clone inherits casts enumerated WITH the land's mana; a position whose casts before the
+// land cannot be paid without it is not emitted. Applied, such a line dropped the cast and played the
+// land anyway -- in BOTH worlds, so nothing ever scored a phantom quest counter (checked below on the
+// rollout's own apply) -- and ran the rest of the plan: a different line than the one offered.
+
+TEST_CASE("Land position: 'Khalni, then the Forest' with one Forest in play is not offered")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    PutLf(s, "Forest", 10);                              // ONE land: Khalni ({1}{G}) needs the drop
+    s.players[0].hand.push_back(HandLf(kKhalni, 1));
+    s.players[0].hand.push_back(HandLf("Forest", 2));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* land_first = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool khalni = false;
+        for (const Action& a : p.actions) { if (a.card_name.str() == kKhalni) { khalni = true; } }
+        if (!khalni) { continue; }
+        CHECK(p.land_slot == 0);                         // never "after Khalni": unpayable without it
+        if (p.land_to_play == "Forest") { land_first = &p; }
+    }
+    REQUIRE(land_first != nullptr);                      // the payable line stays
+
+    // The rollout's own apply of the degenerate clone (what the search used to score): Khalni is
+    // DROPPED -- not cast for free -- and the Forest is played anyway. No phantom quest counter.
+    TurnSolver::Plan degenerate = *land_first;
+    degenerate.land_slot = 1;
+    GameState t = s;
+    TurnSolver::ApplyPlan(t, degenerate, true);
+    CHECK(CountNamed(t, kKhalni) == 0);
+    CHECK(t.players[0].lands_played_this_turn == 1);
+    CHECK(CountNamed(t, "Forest") == 2);
+    int khalni_in_hand = 0;
+    for (const Card& c : t.players[0].hand) { if (c.m_name.str() == kKhalni) { ++khalni_in_hand; } }
+    CHECK(khalni_in_hand == 1);
+}
+
+TEST_CASE("Land position: gi10's 'land after Phylath; Phylath, Khalni crack' is not offered -- its realised line is")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    for (int i = 0; i < 4; ++i) { PutLf(s, "Forest", 10 + i); }
+    PutLf(s, "Mountain", 14);                            // five lands: Phylath ({4}{R}{G}) needs the sixth
+    const int kh = PutLf(s, kKhalni, 20);
+    s.battlefield[static_cast<std::size_t>(kh)].quest_counters = 2;   // the land's landfall fills it
+    for (int i = 0; i < 6; ++i) { s.players[0].library.push_back(HandLf("Forest", 40 + i)); }   // crack targets
+    s.players[0].hand.push_back(HandLf(kPhylath, 1));
+    s.players[0].hand.push_back(HandLf("Forest", 2));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool phylath_first_offered = false, crack_line = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool phylath = false, crack = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() == kPhylath && a.kind == Action::Kind::CastFromHand) { phylath = true; }
+            if (TurnSolver::IsLandSearchActivation(a)) { crack = true; }
+        }
+        if (phylath && p.land_slot >= 1) { phylath_first_offered = true; }
+        if (crack && !phylath && p.land_to_play == "Forest" && p.land_slot == 0) { crack_line = true; }
+    }
+    CHECK_FALSE(phylath_first_offered);
+    CHECK(crack_line);   // "Forest, then crack" -- what the degenerate pick actually did -- is its own plan
+}
+
+TEST_CASE("Land position: the EXECUTOR realises an unpayable-prefix position exactly as the rollout does")
+{
+    // The claude-play sweep asked whether the search could have been scoring a phantom quest counter:
+    // did the rollout (ApplyPlanDirect) and the executor (AIEngine::TakeTurn) treat the degenerate
+    // "Khalni, then the Forest" (one Forest in play) the same way? Both drop the unpayable Khalni and
+    // play the Forest anyway (the slot hook counts the ATTEMPT in each world) -- no counter anywhere.
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    PutLf(s, "Forest", 10);
+    s.players[0].hand.push_back(HandLf(kKhalni, 1));
+    s.players[0].hand.push_back(HandLf("Forest", 2));
+    for (int i = 0; i < 5; ++i) { s.players[0].library.push_back(HandLf("Forest", 40 + i)); }
+    TurnSolver::Plan degenerate;
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        if (p.land_to_play != "Forest" || p.land_slot != 0 || p.actions.size() != 1) { continue; }
+        if (p.actions[0].card_name.str() != kKhalni) { continue; }
+        degenerate = p; found = true; break;
+    }
+    REQUIRE(found);
+    degenerate.land_slot = 1;
+
+    GameState rollout = s;
+    TurnSolver::ApplyPlan(rollout, degenerate, true);
+
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, degenerate, true);
+    GameState exec = s;
+    eng.TakeTurn(exec, true, [](GameState&) {});
+
+    for (const GameState* g : { &rollout, &exec })
+    {
+        CHECK(CountNamed(*g, kKhalni) == 0);
+        CHECK(CountNamed(*g, "Forest") == 2);
+        CHECK(g->players[0].lands_played_this_turn == 1);
+        int khalni_in_hand = 0;
+        for (const Card& c : g->players[0].hand) { if (c.m_name.str() == kKhalni) { ++khalni_in_hand; } }
+        CHECK(khalni_in_hand == 1);
+        CHECK(g->stack.empty());
+    }
 }
