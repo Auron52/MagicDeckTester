@@ -1,7 +1,8 @@
 {
   "_comment": [
     "CONTROL for landsearch_khalni_cracked_in_combat_after_titan: one life more (24) must NOT die",
-    "on turn 6 -- the in-combat crack is worth exactly +6 (two landfalls x three Plants)."
+    "on turn 6 -- the in-combat crack is worth exactly +6 (two landfalls x three Plants).",
+    "2026-10-16: Primeval Titan never searches for a basic in Landfall (USER: 'basics are a resource in the deck'), so the library holds two NONBASICS for its trigger (Radiant Fountain, Haunted Fengraf: no bounce, no crack -- exactly two landfalls, as the arithmetic above assumes); Khalni's crack still finds two basics."
   ],
   "deck": "decks/Landfall/Landfall.cod",
   "turn": 6,
@@ -70,7 +71,8 @@
   "library_filler": "Swords to Plowshares",
   "library_size": 30,
   "library": [
-    "Forest",
+    "Radiant Fountain",
+    "Haunted Fengraf",
     "Forest",
     "Forest",
     "Forest",

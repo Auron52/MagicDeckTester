@@ -6,7 +6,8 @@
     "step, BEFORE damage (FireCombatLandSearchCracks, Plan::combat_crack_choice): two more landfalls, every Plant",
     "+2 again. Titan 6 + Avenger 5 + three Plants at 4 = 23 = the opponent's life; without the in-combat crack it",
     "is 17 (a main-2 crack cannot reach this combat). No land in hand and a dead draw, so nothing else can add",
-    "landfall this turn."
+    "landfall this turn.",
+    "2026-10-16: Primeval Titan never searches for a basic in Landfall (USER: 'basics are a resource in the deck'), so the library holds two NONBASICS for its trigger (Radiant Fountain, Haunted Fengraf: no bounce, no crack -- exactly two landfalls, as the arithmetic above assumes); Khalni's crack still finds two basics."
   ],
   "deck": "decks/Landfall/Landfall.cod",
   "turn": 6,
@@ -75,7 +76,8 @@
   "library_filler": "Swords to Plowshares",
   "library_size": 30,
   "library": [
-    "Forest",
+    "Radiant Fountain",
+    "Haunted Fengraf",
     "Forest",
     "Forest",
     "Forest",

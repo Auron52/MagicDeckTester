@@ -6,7 +6,8 @@
     "ATTACKING Plants this combat. Board: Titan, Avenger and four 0/1 Plants, all able to attack; no land in hand",
     "and a dead-draw library holding two Forests. Swing: Titan 6 + Avenger 5 + four Plants at 0+2 = 19, exactly",
     "the opponent's life -- reachable ONLY if the trigger's two landfalls pump the Plants before damage (without",
-    "them it is 11). The search must also attack (PendingAttackDamage prices the pump: CountAttackLandSearchPump)."
+    "them it is 11). The search must also attack (PendingAttackDamage prices the pump: CountAttackLandSearchPump).",
+    "2026-10-16: Primeval Titan never searches for a basic in Landfall (USER: 'basics are a resource in the deck'), so the library holds two NONBASICS for its trigger (Radiant Fountain, Haunted Fengraf: no bounce, no crack -- exactly two landfalls, as the arithmetic above assumes)."
   ],
   "deck": "decks/Landfall/Landfall.cod",
   "turn": 6,
@@ -86,8 +87,8 @@
   "library_filler": "Swords to Plowshares",
   "library_size": 30,
   "library": [
-    "Forest",
-    "Forest"
+    "Radiant Fountain",
+    "Haunted Fengraf"
   ],
   "depth": 2,
   "budget_ms": 50,

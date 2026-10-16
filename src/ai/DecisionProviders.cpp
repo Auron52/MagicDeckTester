@@ -1793,8 +1793,10 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
 //     MOST Wilds / Myriad -- SEARCHED among those (up to Wilds+Wilds, Wilds+Myriad, Myriad+Myriad).
 //     Wilds and Terramorphic are one class already (LandSearch.h's identity fold). A slot the rule's
 //     lands cannot fill stays open (searched); a board with no Turf to want and no Wilds / Myriad left
-//     is not narrowed at all. Then: "Primeval Titan must never search for a basic in my opinion."
-//     (LandfallProvider::LandSearchAdmitsLand): the autonomous list is built without basics, so with
+//     is not narrowed at all. Then: "Primeval Titan must never search for a basic in my opinion." --
+//     because "basics are a resource in the deck. You don't want to waste them when being able to
+//     choose any land" (every other search here -- Rampant Growth, Cultivate, Search for Tomorrow,
+//     Khalni, Myriad, Wilds -- can find ONLY a basic). (LandfallProvider::LandSearchAdmitsLand): the autonomous list is built without basics, so with
 //     one nonbasic left Titan takes it alone, and with none it finds nothing ("up to two"). The human
 //     prompt still offers every land, with the basic-holding picks ordered last.
 // The resolving source is never counted as an "other" one: a fetch land / Myriad / Khalni is
@@ -2115,8 +2117,9 @@ bool LandfallProvider::LandSearchAdmitsLand(const GameState& s, int controller, 
                                             bool basic_only, bool share_land_type, const CardDefinition& land) const
 {
     (void)s; (void)controller; (void)count; (void)to_hand; (void)share_land_type;
-    // USER 2026-10-16: "Primeval Titan must never search for a basic in my opinion." Titan's is this
-    // list's only any-land search; a basic search admits its basics, of course.
+    // USER 2026-10-16: "Primeval Titan must never search for a basic in my opinion." -- "basics are a
+    // resource in the deck. You don't want to waste them when being able to choose any land." Titan's
+    // is this list's only any-land search; a basic search admits its basics, of course.
     return basic_only || !IsBasicLandCard(land);
 }
 
