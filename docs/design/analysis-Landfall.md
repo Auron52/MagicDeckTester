@@ -233,6 +233,32 @@ diagnostic `NO_COST_INTERACTIONS`; discard evidence (400 games d3) `STATUS_QUO_O
 in 400 games (0.0225/game), multi-optimal rate 1.0 (every shed a tie), names offered: Baloths 7,
 Phylath 7, Titan 6, Avenger 5, Omnath 5.
 
+## Stage 5j — ADDED to the suite: cost gate PASS 2.64x (2026-10-16 ~09:30, rebased onto origin 5f1db12ab)
+USER L1: *"let's add it with a slightly smaller set until the keep table is done."* Rows as proposed below,
+resized: smoke d0 1000 / d3 30 b10 / d5 15 b20; regression d0 1000, d3 2x40 b10, d5 2x20 b20 (s2002, s3003);
+overnight d0 4x2000, d3 4x250 b10, d5 4x150 b20 (s4004-s7007). Expand at the keep-table adoption
+(`regression-testing.md`, "Sizing a deck's overnight rows").
+- **Isolation, twice:** with the fetch rule (9d191ca1) on the pre-rebase tree, and again on the tree rebased
+  onto origin 5f1db12ab (272 commits), full smoke and full regression left every other case unchanged
+  (smoke 119 / regression 166 `configs changed: 0`, slower=faster=0); only the 8 Landfall keys are NEW.
+  Unit tests 1261/1261 on the rebased tree.
+- **Cost gate, re-measured from that one pooled regression run** (`suite_gate.py --measure-all --no-run`,
+  then `--cost decks/Landfall --no-run`): **landfall 6,899 ms/game (d3 s2002) / pd 2,611 = 2.64x, limit 3x
+  -> PASS.** Per searched case: d3 s2002 6,899; d5 s2002 5,802; d5 s3003 5,345; d3 s3003 2,653.
+  **NOT all of the drop from 4.30x is the prune.** The rows keep the same seeds with fewer games, and the
+  resize of d5 s2002 from 25 to 20 games drops gi20 (s2022) and gi22 (s2024) -- two of the three heaviest d5
+  games in the census above. The prune is 0.69-0.71x units on held-out play. The cost at the ORIGINAL
+  50/25 shape with the prune, pooled with the whole regression tier on the same binary copy
+  (`logs/lf_cost_fullshape/`): **landfall 9,234 ms/game (d5 s2002, 25 games) / pd 2,976 = 3.10x** -- d5
+  s2002's games 20-24 average ~23 s/game against ~5.8 s for its first 20. So the prune took that shape from
+  4.30x to ~3.1x, AT the line rather than under it (PD's own worst cell moved 2,611 -> 2,976 between the two
+  runs, ~14%), and the 2.64x PASS rests on the user's smaller rows. The user chose those rows knowing the
+  deck was over (L1), so this is reported, not a blocker. The bottoming trial games are still the bulk, and the keep
+  table still replaces them.
+- **Overnight rows** (`--overnight --deck=landfall`, alone on the box, PGO): 12 keys, makespan 5m9s, 7,105
+  core-s (d5 4x150 3,656; d3 4x250 3,448; d0 4x2000 0.6). d0 7.636-7.699, d3 5.816-5.988, d5 5.707-5.880.
+- All 20 keys accepted with `--deck=landfall` per tier; `check_gt_logs.py` 706 consistent, 0 stale.
+
 ## Stage 5j — RE-MEASURED: cost gate FAIL 4.30x (2026-10-16 ~05:00, tree b35f9f0e) — deck NOT added
 The 10-15 PASS below compared a fresh Landfall run against a STALE table (Snow listed at 7,162 ms/game;
 in the same pooled run Snow is 2,379). Re-measured the established way (PD's admission: "1.33x hinata in
@@ -631,7 +657,7 @@ preselected); every Karoo bounce, played OR put (`bounce`); the Terastodon K fan
 ## Decisions awaiting the user — CONSOLIDATED (2026-10-16 ~07:15; default taken in brackets)
 | # | decision | default taken | recommendation |
 |---|---|---|---|
-| L1 | **ANSWERED 2026-10-16 (USER): add Landfall to the suite now with a slightly smaller set until the keep table is done** (smoke d3 30 / d5 15; regression d3 2x40 / d5 2x20; overnight d3 4x250 / d5 4x150). Original question: **5j route.** Landfall is 4.30x PD in one pooled run; 92-99% of the cost is mulligan-bottoming trial games, which the keep table replaces. (1) lift the gate for Landfall (`MTG_ALLOW_UNTESTED_DECK=1`, user-only) to build the keep table + value leaf; (2) rule that 5j measures post-artifact cost; (3) cheaper bottoming | [nothing adopted; deck in NO tier; rows proposed only] | **(2) via (1)**, as recommended for PD. Not (3): Melira shape +0.036 turns (0.59x units), all-greedy +0.126 (0.19x) |
+| L1 | **ANSWERED 2026-10-16 (USER): add Landfall to the suite now with a slightly smaller set until the keep table is done** (smoke d3 30 / d5 15; regression d3 2x40 / d5 2x20; overnight d3 4x250 / d5 4x150). Original question: **5j route.** Landfall is 4.30x PD in one pooled run; 92-99% of the cost is mulligan-bottoming trial games, which the keep table replaces. (1) lift the gate for Landfall (`MTG_ALLOW_UNTESTED_DECK=1`, user-only) to build the keep table + value leaf; (2) rule that 5j measures post-artifact cost; (3) cheaper bottoming | [DONE 2026-10-16: added, 20 keys in all three tiers on the tree rebased onto origin 5f1db12ab; gate 2.64x at these rows, ~3.1x at the first-proposed 50/25 -- see 5j] | **(2) via (1)**, as recommended for PD. Not (3): Melira shape +0.036 turns (0.59x units), all-greedy +0.126 (0.19x) |
 | L2 | `search_leaf_depth: 0` in the profile (greedy horizon leaf, Melira precedent) | [ADOPTED 223cbba4: -0.141 turns, se 0.031, 62/23, 0.47-0.65x units] | Confirm |
 | L3 | Mulligan keep rule `curve_check: two_drop` (only RG/Khalni qualify; ~35% of 7s fail) | [kept] | Keep: `none` measured +0.218 turns worse (se 0.035) |
 | L4 | Cast order (user-owned): no Landfall order authored; generic = creatures before ramp. Also the Courser Q1 tie-break (watchers first within a rank) | [generic + Q1 tie-break] | Generic looks right for landfall payoffs (a later land pumps / adds tokens); the 5e ordering oracle found nothing better over 500 games |
