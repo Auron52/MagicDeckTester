@@ -49859,29 +49859,81 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
     }
-    // PART 2c (MTG_EDF_AURA_RANGE_HOSTS; see EdfAuraRangeHostsOn in EngineFlags.h). Where the host fold is in
-    // force (the land-Aura host is not in the signature), a plan that ALSO casts an untapper keeps every host
-    // variant: its key is the class signature plus the plan's (Aura, host) list. Untapper plans are where
-    // the host decides the turn -- the range moves an Aura behind the untapper only on some hosts, and the
-    // untap refreshes the host's bonus -- and only EldraziDisplacerFlicker holds an untapper
-    // (etb_untap_lands), so no other deck's menu changes. Additive: it only ever keeps a plan the fold
-    // would have dropped.
-    const bool range_hosts = !host_sig && !s_human_play_sig && EdfAuraRangeHostsOn();
-    std::unordered_set<std::string> rh_seen;
-    auto rh_host_key = [&](const TurnSolver::Plan& rp) -> std::string   // "" = not an untapper + host-Aura plan
+    // PART 2c (MTG_EDF_AURA_RANGE_HOSTS; see EdfAuraRangeHostsOn in EngineFlags.h). Only where the host fold
+    // is in force (the land-Aura host is not in the signature), and only for the shapes the EDF arrangement
+    // can move -- a host-declared land Aura with an untapper (the range), or two of them (the same-host
+    // stack). Two tiers, so the menu grows by a bounded factor:
+    //   * ONE Aura + an untapper: every host variant is kept (key = class signature + the Aura's host). The
+    //     provider proposes two hosts (LandAuraHostCandidates), so such a class keeps at most two members.
+    //   * two or more Auras: the class keeps its first rank-order member AND its first member the
+    //     arrangement MOVES (the arrangement computed lazily, only for a plan that collides with a kept one).
+    // Keeping every host of the multi-Aura classes too was measured and REJECTED: 2^k variants per class
+    // drove the batch's resident set from ~4.5 GB to the 35 GB cap (v4, 2026-10-16).
+    // Armed only when this enumeration's candidates hold a host-declared land Aura AND an untapper (one scan
+    // of `cands`): only EldraziDisplacerFlicker holds an untapper, so every other deck skips the whole
+    // block and its menu is unchanged. Additive: it only ever keeps a plan the fold would have dropped.
+    bool range_hosts = false;
+    if (!host_sig && !s_human_play_sig && EdfAuraRangeHostsOn())
     {
-        std::string k;
-        bool untapper = false;
+        bool rh_aura = false, rh_untapper = false;
+        for (const Action& c : cands)
+        {
+            if (c.kind != Action::Kind::CastFromHand || c.def == nullptr) { continue; }
+            if (c.def->params.is_land_aura && c.enchant_target > 0) { rh_aura = true; }
+            if (c.def->card.IsCreature() && c.def->params.etb_untap_lands > 0) { rh_untapper = true; }
+        }
+        range_hosts = rh_aura && rh_untapper;
+    }
+    struct RhShape { int n_aura = 0; bool untapper = false; std::string hosts; };
+    auto rh_shape = [&](const TurnSolver::Plan& rp) -> RhShape
+    {
+        RhShape s;
         for (const Action& a : rp.actions)
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d == nullptr) { continue; }
             if (d->params.is_land_aura && a.enchant_target > 0)
-            { k += a.card_name.str() + "@" + std::to_string(a.enchant_target) + ";"; }
-            if (d->card.IsCreature() && d->params.etb_untap_lands > 0) { untapper = true; }
+            { ++s.n_aura; s.hosts += a.card_name.str() + "@" + std::to_string(a.enchant_target) + ";"; }
+            if (d->card.IsCreature() && d->params.etb_untap_lands > 0) { s.untapper = true; }
         }
-        return untapper ? k : std::string();
+        return s;
+    };
+    // 0 the deck's arrangement keeps the rank order | 1 it moves it
+    auto rh_moved = [&](const TurnSolver::Plan& rp) -> int
+    {
+        std::vector<int> rk;
+        for (int i = 0; i < static_cast<int>(rp.actions.size()); ++i)
+        {
+            const Action& a = rp.actions[static_cast<std::size_t>(i)];
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { rk.push_back(i); }
+        }
+        std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
+        { return CastOrderLess(state, rp.actions[static_cast<std::size_t>(x)], rp.actions[static_cast<std::size_t>(y)]); });
+        std::vector<int> arr = rk;
+        ApplyDeckCastArrangement(state, rp.actions, arr);
+        return arr != rk ? 1 : 0;
+    };
+    std::unordered_set<std::string> rh_seen;   // one-Aura tier: class signature + host
+    // multi-Aura tier: class signature -> {index in `deduped` of the kept member, kept-mask: bit0
+    // rank-order, bit1 moved; -1 = not yet classified}
+    std::unordered_map<std::string, std::pair<std::size_t, int>> rh_class;
+    // Called for a plan whose class already has a kept member: true = keep this one too.
+    auto rh_keep = [&](const TurnSolver::Plan& rp, const std::string& sig) -> bool
+    {
+        auto it = rh_class.find(sig);
+        if (it == rh_class.end())
+        {
+            const RhShape s = rh_shape(rp);   // same names as the kept member, so the same tier
+            return s.n_aura == 1 && s.untapper && rh_seen.insert(sig + "|" + s.hosts).second;
+        }
+        int& mask = it->second.second;
+        if (mask < 0) { mask = rh_moved(deduped[it->second.first]) == 1 ? 2 : 1; }
+        if (mask == 3) { return false; }
+        const int bit = rh_moved(rp) == 1 ? 2 : 1;
+        if (mask & bit) { return false; }
+        mask |= bit;
+        return true;
     };
     for (std::size_t pi = 0; pi < plans.size(); ++pi)
     {
@@ -49893,16 +49945,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             const std::size_t keep = pick.empty() ? pi : pick[sig];
             if (range_hosts)
             {
-                const std::string hk = rh_host_key(plans[keep]);
-                if (!hk.empty()) { rh_seen.insert(sig + "|" + hk); }
+                const RhShape s = rh_shape(plans[keep]);
+                if (s.n_aura == 1 && s.untapper) { rh_seen.insert(sig + "|" + s.hosts); }
+                else if (s.n_aura >= 2) { rh_class.emplace(sig, std::make_pair(deduped.size(), -1)); }
             }
             deduped.push_back(std::move(plans[keep]));
+            continue;
         }
-        else if (const std::string hk = range_hosts ? rh_host_key(p) : std::string(); !hk.empty())
-        {
-            if (rh_seen.insert(sig + "|" + hk).second) { deduped.push_back(std::move(p)); }
-        }
-        else if (s_sig_x_audit)
+        if (range_hosts && rh_keep(p, sig)) { deduped.push_back(std::move(p)); continue; }
+        if (s_sig_x_audit)
         {
             const TurnSolver::Plan& kept = deduped[sig_first[sig]];
             for (const Action& da : p.actions)

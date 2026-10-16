@@ -288,7 +288,10 @@ Eladamri's Call.
 * TOTAL (`MTG_EDF_CAST_ORDER`): slots by params, the card name the last tie-break -- no two different
   cards fall to hand order. Untappers, outlets and finishers by mana value; tutors by strict pips.
 * The bracketed ranges (`MTG_EDF_AURA_RANGE`): an Aura that costs mana net this turn moves behind the
-  untappers only when the order is otherwise unpayable. Wild Growth never moves.
+  untappers only when the order is otherwise unpayable. Wild Growth never moves. Because the move makes
+  some HOSTS payable and not others, the plan dedup no longer folds the host variants of an untapper plan
+  to the first (`MTG_EDF_AURA_RANGE_HOSTS`, part 2c): a one-Aura plan keeps both hosts, a multi-Aura class
+  keeps one rank-order and one moved member.
 * Host rule (`MTG_EDF_SHROUD_STACK`): Trace goes behind every other land Aura on the SAME land.
 * The COMBO OFF route deploys Auras in this order (`MTG_EDF_ROUTE_AURA_ORDER`) and casts a second
   untapper whose loop nets more (`MTG_EDF_ROUTE_LOOP_UNTAPPER`).
