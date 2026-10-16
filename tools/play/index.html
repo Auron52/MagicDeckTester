@@ -1273,6 +1273,33 @@ function adventureSources() {
   return out;
 }
 function adventureCountFor(name) { return S.plan.filter(p => p.adventure && p.name === name).length; }
+// KICKER (CR 702.33 -- Saproling Migration). The adventure case above, EXACTLY: both modes are
+// ordinary casts of the same hand card under one name, splitting by no sub-key, so every gesture on
+// the thumb (click, double-click, drag) queues the UNKICKED cast and paying the kicker had no
+// gesture at all. USER-REPORTED 2026-10-16 on the adopted Fungus list: "Seed 5 I wasn't given the
+// option to Kicker" -- the SECOND time this class shipped, the adventure header above being the first.
+//
+// The engine enumerated both modes, main.cpp emitted `"kicked": true, "verb": "kick"` with
+// `kicked_cost_mv`, and linebuild's encodeLine already wrote the `kicked=` token; ONLY this
+// affordance was missing. No automated gate caught it because none of them drive the GUI -- unit
+// tests, scenario probes, smoke, regression and the whole reference corpus all pass with the badge
+// absent, which is why the check before calling a cast variant done is `grep -n "<verb>" index.html`.
+//
+// Maps card name -> the kicker's mana value (the ADDITIONAL cost, CR 601.2b), so the badge can read
+// "kicked (+4)" instead of leaving the human to work out which of two identical rows is the dear
+// one. An absent key means no kicked cast is on offer; the VALUE may legitimately be 0, so callers
+// must test membership rather than truthiness.
+function kickerSources() {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return {};
+  if (S._kickFor === d.decision_index && S._kick) return S._kick;
+  const out = {};
+  (d.plans || []).forEach(p => (p.actions || []).forEach(a => {
+    if (a && a.kicked && a.card) out[a.card] = a.kicked_cost_mv != null ? a.kicked_cost_mv : 0; }));
+  S._kickFor = d.decision_index; S._kick = out;
+  return out;
+}
+function kickedCountFor(name) { return S.plan.filter(p => p.kicked && p.name === name).length; }
 function digSources() {
   const d = S.decision;
   if (!d || d.type !== 'main_phase') return { cyc:{}, sac:{} };
@@ -2608,7 +2635,11 @@ function renderPlanbar() {
               : p.fuse==='clue'      ? ' 🔍 investigate → Clue'
               : p.fused==='clue'     ? ' 💎 crack the Clue (draw)'
               :                        ' ⟳ ability';
+    // A KICKED cast must say so on its chip. The kicked and unkicked modes share a NAME, so two
+    // Saproling Migration chips are otherwise indistinguishable and the human cannot see which of
+    // them they just paid four extra mana for -- nor spot that the badge toggled the wrong one.
     const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':act)
+              + (p.kicked?' ⊕ kicked':'')
               + (p.targetName?` → ${esc(p.targetName)}`:'');
     // An attachment chip -- an Aura (legal enchant targets) or a queued EQUIP -- is draggable onto a
     // creature to (re)aim it. Same .aura affordance for both: it is the same gesture.
@@ -2713,6 +2744,11 @@ function renderHand() {
     const suN    = canSu ? suspendCountFor(c.name) : 0;
     const advNm  = adventureSources()[c.name] || null;  // adventure half available -- badge to cast it
     const advN   = advNm ? adventureCountFor(c.name) : 0;
+    // Kicker on offer -- badge to PAY it. Membership, not truthiness: a 0-mana kicker is a legal
+    // entry and `|| null` would hide its badge (see kickerSources).
+    const kickMv  = kickerSources();
+    const canKick = Object.prototype.hasOwnProperty.call(kickMv, c.name);
+    const kickN   = canKick ? kickedCountFor(c.name) : 0;
     html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
       `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
@@ -2737,6 +2773,13 @@ function renderHand() {
       // that both modes are casts of this very card -- the thumb's own click already casts the
       // creature, so without this badge the adventure half has no gesture at all.
       (advNm?`<span class="landface" data-adventure="${esc(c.name)}" title="ADVENTURE — cast ${esc(advNm)} instead of the creature; ${esc(c.name)} is then exiled and castable later${advN?' (click again to take it back)':''}">🗺 ${esc(advNm)}${advN>1?` ×${advN}`:''}</span>`:'')+
+      // Kicker: the adventure badge's twin, required for the same reason -- the thumb's own click
+      // casts this card UNKICKED, so without the badge the kicked mode has no gesture at all. Unlike
+      // every badge above it does NOT add a second way to play the card: it toggles the kicker on the
+      // cast (see the handler), which is why it reads "kicked" rather than naming a second spell.
+      // ⊕ is the glyph because kicker is an ADDITIONAL cost (CR 601.2b) -- it adds, it does not
+      // replace -- and because ⚡/🗺/⌛ are taken by channel, adventure and suspend on this same thumb.
+      (canKick?`<span class="landface" data-kick="${esc(c.name)}" title="KICKER — pay ${esc(c.name)}'s additional cost${kickMv[c.name]?` (+${kickMv[c.name]} mana)`:''} for the bigger effect. An ordinary click casts it UNKICKED; this toggles the kicker on the queued cast${kickN?', click again to take the kicker back':''}">⊕ kicked${kickMv[c.name]?` (+${kickMv[c.name]})`:''}${kickN>1?` ×${kickN}`:''}</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
@@ -2815,6 +2858,25 @@ function renderHand() {
       if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back ${nm}'s adventure.`); }
       else { S.plan.push({ name: nm, kind: kd, adventure: true });
              flashHint(`Casting ${nm}'s adventure — ${adventureSources()[nm] || 'the adventure half'}. ${nm} is exiled and castable later.`); }
+      renderBoard(); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
+  // Kicker badge: TOGGLES THE KICKER ON A CAST rather than adding a second way to play the card --
+  // the one place this badge departs from the channel/suspend/adventure contract above, because a
+  // kicked cast is the SAME spell at a dearer cost, not a different way to play it. The plan edit
+  // itself is LB.toggleKicker (which documents the three branches and why it can never over-queue);
+  // this wrapper is the gesture and the hint, exactly as queueCard's wrapper is.
+  row.querySelectorAll('.landface[data-kick]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault();
+      const nm = b.dataset.kick;
+      const kd = (b.closest('.thumb') || {}).dataset ? b.closest('.thumb').dataset.kind : 'permanent';
+      const mv = kickerSources()[nm];
+      const paid = mv ? ` (+${mv} mana)` : '';
+      const r = LB.toggleKicker(S.plan, nm, kd);
+      S.plan = r.plan;
+      flashHint(r.action === 'kicked'   ? `Paying ${nm}'s kicker${paid} — the queued cast is now KICKED.`
+              : r.action === 'unkicked' ? `Took the kicker back off ${nm} — casting it unkicked.`
+              :                           `Casting ${nm} with its kicker paid${paid}.`);
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });

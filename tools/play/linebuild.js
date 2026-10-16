@@ -510,6 +510,39 @@
     return parts.length ? parts.join(';') : 'pass';
   }
 
+  // KICKER (CR 702.33 -- Saproling Migration): the pure state transition behind index.html's
+  // "⊕ kicked" badge. Same split queueCard uses below -- the GUI keeps the guards and the hint text,
+  // the plan edit lives HERE so a headless check can drive it (test/viewer_linebuild_check.js).
+  // That split is the point: the kicker shipped unusable on 2026-10-16 because its only missing
+  // piece was a GUI branch, and nothing in this repo's gates drives index.html.
+  //
+  // Kicking is NOT a second way to play the card, the way channel / suspend / adventure are: it is
+  // the SAME spell at a dearer cost (an ADDITIONAL cost, CR 601.2b -- it adds to the total, it does
+  // not replace it). So the badge toggles the kicker onto a cast rather than appending one:
+  //   * nothing of this name queued -> append a kicked cast, so one click works from an empty plan
+  //   * an UNKICKED queued cast     -> promote the LAST one IN PLACE ("kick the one I just queued")
+  //   * every queued cast kicked    -> WRAP to none
+  // Appending ONLY when nothing of this name is queued is what makes the gesture safe. The two modes
+  // share a hand slot, so with one copy in hand `cast=X;cast=X;kicked=X` matches no enumerated plan
+  // and the commit dead-ends with nothing for the human to act on; this cannot build that line.
+  //
+  // The last branch WRAPS rather than demoting one, which is not a detail: demoting the last kicked
+  // copy would leave the NEXT click re-promoting that very entry, so with two copies queued the plan
+  // oscillated between 2 and 1 kicked and an all-kicked line could never get back to unkicked. The
+  // count is therefore the gesture -- 0 -> 1 -> 2 -> 0 over n queued casts -- which is this GUI's
+  // standing idiom for a repeated click on one affordance, and reads off the badge's "xN".
+  // Returns { plan, action }, action being 'kicked' | 'unkicked' | 'queued' for the GUI's hint.
+  function toggleKicker(plan, name, kind) {
+    const idxs = plan.map((p, i) => ({ p, i }))
+                     .filter(x => x.p.name === name && isSpecCast(x.p) && lineVerb(x.p) === 'cast')
+                     .map(x => x.i);
+    if (!idxs.length) { plan.push({ name, kind, kicked: true }); return { plan, action: 'queued' }; }
+    const un = idxs.filter(i => !plan[i].kicked);
+    if (un.length) { plan[un[un.length - 1]].kicked = true; return { plan, action: 'kicked' }; }
+    idxs.forEach(i => { delete plan[i].kicked; });
+    return { plan, action: 'unkicked' };
+  }
+
   // Queue (or, for a land, toggle) one card into the plan. Returns the resulting plan array (the
   // land branch reassigns it, so callers must use the return value). The GUI's own main-phase /
   // busy guard stays in index.html's wrapper; this is the pure state transition.
@@ -687,6 +720,7 @@
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
+           toggleKicker,
            offersLandAfter, topLandOffered, landPosition,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the

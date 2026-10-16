@@ -30,20 +30,37 @@ const ROOT = path.resolve(__dirname, '..');
 const LB = require(path.join(ROOT, 'tools', 'play', 'linebuild.js'));
 const REFROOT = path.join(ROOT, 'references');
 
-// Collect references/<deck>/claude_s*_gi*.json, one level deep only (mirrors
-// viewer_protocol_check.py): the deeper references/suboptimal|optimal/... sets are
-// knowingly-beatable targets, not the verified benchmark, so they're excluded.
+// Collect claude_s*_gi*.json RECURSIVELY under references/, excluding the knowingly-beatable
+// suboptimal/ and optimal/ sets BY NAME (they are targets, not the verified benchmark, and would
+// permanently drift against a gate).
+//
+// RECURSIVE, not one level, and the distinction has bitten twice. CLAUDE.md's archive convention
+// files a superseded list's references at references/<Deck>/v<N>-<slug>/ -- a reference belongs to
+// the list it was PLAYED on -- which is the SAME depth the old one-level walk used to exclude the
+// suboptimal sets. So promoting a list silently dropped that list's whole reference set out of this
+// gate: 78 games across 7 folders were checked by nothing until 2026-10-02 (USER: "We should check
+// all of the references for all versions automatically" / "we want to leverage everything the user
+// has created to ensure the engine is solid"). viewer_protocol_check.py and viewer_validate_check.js
+// were fixed then; THIS walk was missed, and the Fungus v2 promotion on 2026-10-16 archived ten more
+// hand-played games straight back out of it. A depth test standing in for a semantic one is the bug;
+// excluding by NAME cannot go stale when someone files a reference deeper than a glob remembered.
+//
+// Nothing here needs the decklist: checkReference reads the reference's OWN recorded frames (hand,
+// plans, chosen index), so widening the walk is purely additive.
 function collectRefs() {
   const out = [];
-  if (!fs.existsSync(REFROOT)) return out;
-  for (const deck of fs.readdirSync(REFROOT)) {
-    if (deck === 'suboptimal' || deck === 'optimal') continue;
-    const dir = path.join(REFROOT, deck);
-    if (!fs.statSync(dir).isDirectory()) continue;
-    for (const f of fs.readdirSync(dir)) {
-      if (/^claude_s.*_gi.*\.json$/.test(f)) out.push(path.join(dir, f));
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) {
+        if (e.name === 'suboptimal' || e.name === 'optimal') continue;
+        walk(path.join(dir, e.name));
+      } else if (/^claude_s.*_gi.*\.json$/.test(e.name)) {
+        out.push(path.join(dir, e.name));
+      }
     }
-  }
+  };
+  if (!fs.existsSync(REFROOT)) return out;
+  walk(REFROOT);
   return out.sort();
 }
 
@@ -297,6 +314,90 @@ function checkActivationVerbs() {
   // A line made only of board activations must NOT collapse to 'pass' (CheckLine stage 0).
   const only = LB.encodeLine([{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip' }]);
   if (only === 'pass') fails.push('an activation-only line encoded as "pass"');
+  return fails;
+}
+
+// KICKER (CR 702.33 -- Saproling Migration). Two layers, and the SECOND is the one that matters:
+//   * the TOKEN -- a kicked cast emits `cast=<name>` AND `kicked=<name>`, since kicking is a real
+//     cast of that hand card and the extra token only says which MODE (encodeLine's own comment).
+//   * the GESTURE -- LB.toggleKicker, the plan edit behind index.html's "⊕ kicked" badge.
+// The gesture is here because of how the kicker shipped: engine, chooser, protocol emitter and the
+// `kicked=` token were all correct and the feature was still UNUSABLE, because the GUI had no branch
+// for it (USER 2026-10-16: "Seed 5 I wasn't given the option to Kicker"). Unit tests, scenarios,
+// smoke 119/119, regression 166/166 and the whole reference corpus passed throughout -- none of them
+// drives the GUI. So the transition was moved into linebuild.js to BE drivable, and this is the gate.
+// Synthetic and binary-free: no saved reference holds a kicked cast (none could be built until now).
+function checkKickerToken() {
+  const fails = [];
+  const K = { name: 'Saproling Migration', kind: 'nonpermanent' };
+  const enc = (plan) => LB.encodeLine(plan);
+
+  // ---- the token ----------------------------------------------------------------------------
+  // Unkicked: no stray token. This is the "absent means do not kick" half of the contract -- the
+  // engine compares the kicked set unconditionally, so a spurious token is a different line.
+  if (enc([{ ...K }]) !== 'cast=Saproling Migration')
+    fails.push(`an UNKICKED cast encoded "${enc([{ ...K }])}", expected "cast=Saproling Migration"`);
+  if (enc([{ ...K, kicked: true }]) !== 'cast=Saproling Migration;kicked=Saproling Migration')
+    fails.push(`a KICKED cast encoded "${enc([{ ...K, kicked: true }])}", expected both tokens`);
+  // Two copies, one kicked: the kicked set is a MULTISET beside the casts, so one `kicked=` against
+  // two `cast=` is exactly "cast both, kick one" -- the line a count-token design would have lost.
+  const mixed = enc([{ ...K }, { ...K, kicked: true }]);
+  if (mixed !== 'cast=Saproling Migration;cast=Saproling Migration;kicked=Saproling Migration')
+    fails.push(`cast+kicked of two copies encoded "${mixed}"`);
+  // Both kicked -> two tokens, and the land still leads the line.
+  const both = enc([{ name: 'Forest', kind: 'land' }, { ...K, kicked: true }, { ...K, kicked: true }]);
+  if (both !== 'land=Forest;cast=Saproling Migration;cast=Saproling Migration;'
+             + 'kicked=Saproling Migration;kicked=Saproling Migration')
+    fails.push(`land + two kicked casts encoded "${both}"`);
+
+  // ---- the gesture --------------------------------------------------------------------------
+  // From EMPTY one click queues a kicked cast (the badge is the only route to the mode, so it must
+  // work without queueing the card first).
+  let r = LB.toggleKicker([], K.name, K.kind);
+  if (r.action !== 'queued' || r.plan.length !== 1 || !r.plan[0].kicked)
+    fails.push(`toggle from empty gave action=${r.action}, plan=${JSON.stringify(r.plan)}`);
+  // An already-queued cast is PROMOTED IN PLACE, not duplicated. The duplicate is the real hazard:
+  // both modes share a hand slot, so a second entry builds `cast=X;cast=X;kicked=X`, which matches
+  // no plan with one copy in hand and dead-ends the commit.
+  r = LB.toggleKicker([{ ...K }], K.name, K.kind);
+  if (r.action !== 'kicked' || r.plan.length !== 1 || !r.plan[0].kicked)
+    fails.push(`toggle over a queued cast gave action=${r.action}, plan=${JSON.stringify(r.plan)}`);
+  // Clicking again TAKES THE KICKER BACK and leaves the cast queued (the badge toggles the kicker,
+  // not the cast -- the chip's ✕ removes the cast).
+  r = LB.toggleKicker(r.plan, K.name, K.kind);
+  if (r.action !== 'unkicked' || r.plan.length !== 1 || r.plan[0].kicked)
+    fails.push(`second toggle gave action=${r.action}, plan=${JSON.stringify(r.plan)}`);
+  if (enc(r.plan) !== 'cast=Saproling Migration')
+    fails.push(`a taken-back kicker still encoded "${enc(r.plan)}"`);
+  // The LAST unkicked copy is the one promoted, so clicking the badge twice with two copies queued
+  // kicks both rather than fighting over one.
+  r = LB.toggleKicker([{ ...K }, { ...K }], K.name, K.kind);
+  if (!(r.plan[1] || {}).kicked || (r.plan[0] || {}).kicked)
+    fails.push(`with two queued casts the promoted entry was ${JSON.stringify(r.plan)}`);
+  r = LB.toggleKicker(r.plan, K.name, K.kind);
+  if (!r.plan.every(p => p.kicked) || r.plan.length !== 2)
+    fails.push(`two toggles over two casts gave ${JSON.stringify(r.plan)}`);
+  // ...and the next click WRAPS to none rather than demoting one. Demoting would leave the FOLLOWING
+  // click re-promoting that same entry, so with two copies the plan oscillated between 2 and 1 kicked
+  // and an all-kicked line could never get back to unkicked (this assertion caught exactly that in
+  // the first cut of toggleKicker). The count is the gesture: 0 -> 1 -> 2 -> 0.
+  r = LB.toggleKicker(r.plan, K.name, K.kind);
+  if (r.action !== 'unkicked' || r.plan.length !== 2 || r.plan.some(p => p.kicked))
+    fails.push(`the wrap-around click gave action=${r.action}, plan=${JSON.stringify(r.plan)}`);
+  // The cycle is closed, so clicking on round-trips forever without ever growing the plan: the plan
+  // NEVER exceeds the casts the human queued, which is the safety property, not a convenience.
+  for (let i = 0; i < 7; i++) r = LB.toggleKicker(r.plan, K.name, K.kind);
+  if (r.plan.length !== 2) fails.push(`nine clicks grew the plan to ${JSON.stringify(r.plan)}`);
+  // A BOARD ACTIVATION of the same name is never a kicked cast -- it must not be promoted, and the
+  // badge must fall through to queueing a cast instead.
+  r = LB.toggleKicker([{ name: K.name, src: K.name, kind: 'activate' }], K.name, K.kind);
+  if (r.action !== 'queued' || r.plan.length !== 2 || !r.plan[1].kicked || r.plan[0].kicked)
+    fails.push(`a same-named activation was treated as a cast: ${JSON.stringify(r.plan)}`);
+  // ...as is a LAND of the same name (a nonsensical pairing, but isSpecCast is what rules it out and
+  // this pins that it is doing the work).
+  r = LB.toggleKicker([{ name: K.name, kind: 'land' }], K.name, K.kind);
+  if (r.action !== 'queued' || r.plan.length !== 2)
+    fails.push(`a same-named land was treated as a cast: ${JSON.stringify(r.plan)}`);
   return fails;
 }
 
@@ -783,9 +884,13 @@ function main() {
   posFails.forEach(m => console.log(`  FAIL  land position: ${m}`));
   console.log(`Viewer land position: ${posFails.length ? 'WRONG' : 'a land between two casts encodes landat=<k>, after all landafter='} ` +
               `(${posFails.length} FAIL)`);
+  const kickFails = checkKickerToken();
+  kickFails.forEach(m => console.log(`  FAIL  kicker: ${m}`));
+  console.log(`Viewer kicker: ${kickFails.length ? 'WRONG' : 'cast=+kicked= per kicked copy; the badge toggles in place and never over-queues'} ` +
+              `(${kickFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
-          + tapFails.length + topFails.length + posFails.length) ? 1 : 0;
+          + tapFails.length + topFails.length + posFails.length + kickFails.length) ? 1 : 0;
 }
 
 process.exit(main());
