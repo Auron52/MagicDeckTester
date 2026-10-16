@@ -40926,8 +40926,38 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
             && d->card.m_mana_cost.ManaValue() > d->params.land_aura_extra_mana) { movable.push_back(p); }
     }
     if (movable.empty()) { return; }
-    if (TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
-    if (TurnSolver::OrderPrepaysWholeTurn(s, acts, order)) { return; }
+    // MTG_EDF_RANGE_TRACE: one line per range decision (diagnostic only; prints nothing when unset).
+    static const bool s_trace = EnvOn("MTG_EDF_RANGE_TRACE");
+    auto names = [&](const std::vector<int>& o)
+    {
+        std::string r;
+        for (int i : o)
+        {
+            const Action& a = acts[static_cast<std::size_t>(i)];
+            if (!r.empty()) { r += ","; }
+            r += a.card_name.str();
+            if (a.enchant_target > 0) { r += "@" + std::to_string(a.enchant_target); }
+        }
+        return r;
+    };
+    auto board = [&]()
+    {
+        std::string r;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index || !p.card.IsLand()) { continue; }
+            r += p.card.m_name.str() + "#" + std::to_string(p.card.m_number) + (p.tapped ? "T " : "U ");
+        }
+        return r + "float=" + std::to_string(s.floating_mana.Total());
+    };
+    const bool seq_ok = TurnSolver::OrderPaysSequentially(s, acts, order);
+    const bool pre_ok = !seq_ok && TurnSolver::OrderPrepaysWholeTurn(s, acts, order);
+    if (s_trace)
+    {
+        std::fprintf(stderr, "[edf-range] t%d in=[%s] seq=%d prepay=%d board=[%s]\n", s.turn_number,
+                     names(order).c_str(), seq_ok ? 1 : 0, pre_ok ? 1 : 0, board().c_str());
+    }
+    if (seq_ok || pre_ok) { return; }
     const int k = std::min(static_cast<int>(movable.size()), 6);   // 63 candidates at most
     // Each action index's position in the given order, for the inversion count.
     std::vector<int> pos_of(acts.size(), 0);
@@ -40959,8 +40989,13 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
     for (const Cand& c : cands)
     {
         if (c.ord == order) { continue; }
-        if (TurnSolver::OrderPaysSequentially(s, acts, c.ord)) { order = c.ord; return; }
+        if (TurnSolver::OrderPaysSequentially(s, acts, c.ord))
+        {
+            if (s_trace) { std::fprintf(stderr, "[edf-range]   -> moved [%s]\n", names(c.ord).c_str()); }
+            order = c.ord; return;
+        }
     }
+    if (s_trace) { std::fprintf(stderr, "[edf-range]   -> no candidate pays; unchanged\n"); }
 }
 }   // namespace
 
