@@ -237,7 +237,8 @@ ceiling that the rollouts poll.
   is 4,276,948 units / 221 s in total.
 * **Not specific to trial games.** `--force-mulligan "2:13,50"` makes the REAL game keep the trial's
   hand: its turn-1 root is `root=1 probe=0`, **37,936,744 units, 1,410 s** (shared cores), and the game
-  does not win by turn 8. Same mechanism, real play.
+  does not win by turn 8. Same mechanism, real play. With the fix the whole game is 238,227 units
+  (that root 236,157, 6.4 s) and plays identically (turn-by-turn log equal).
 
 ### 6.5 The fix (`89dee2e2`)
 
