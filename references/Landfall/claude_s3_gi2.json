@@ -1,0 +1,452 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1, "karoo_float": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 44, "name": "Primeval Titan" }, { "num": 9, "name": "Evolving Wilds" }, { "num": 12, "name": "Forest" }, { "num": 33, "name": "Mountain" }, { "num": 1, "name": "Avenger of Zendikar" }, { "num": 2, "name": "Avenger of Zendikar" }, { "num": 55, "name": "Search for Tomorrow" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Khalni Heart Expedition" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Forest; cast: Search for Tomorrow (suspend)", "land": "Forest", "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 1, "kind": "suspend", "text": "⌛ Search for Tomorrow -- suspended (arrives T3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 3 }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 3 }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Rampant Growth" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Rampant Growth", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Khalni Heart Expedition", "land": "Mountain", "casts": ["Khalni Heart Expedition"], "actions": [{ "card": "Khalni Heart Expedition" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Rampant Growth", "land": "Mountain", "casts": ["Rampant Growth"], "actions": [{ "card": "Rampant Growth" }] },
+    { "index": 2, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 3, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 6, "num": 29, "is_land": false }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Rampant Growth", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 6, "num": 29, "is_land": false }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Rampant Growth", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "tutor_etb",
+  "source": "Search for Tomorrow -- basic land onto the battlefield",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "is_land": true, "taps": "G" }, { "name": "Khalni Heart Expedition", "idx": 6, "num": 29, "is_land": false }, { "name": "Mountain", "idx": 5, "num": 33, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Rampant Growth", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Mountain" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Genesis Wave" }],
+  "events": [{ "turn": 3, "kind": "suspend", "text": "⌛ Search for Tomorrow -- cast off suspend" }, { "turn": 3, "kind": "trigger", "text": "🌍 Khalni Heart Expedition (landfall: Forest): quest counter (1)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Search for Tomorrow: Forest onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 13, "is_land": true, "taps": "G" }, { "name": "Khalni Heart Expedition", "idx": 6, "num": 29, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 1 }] }, { "name": "Mountain", "idx": 5, "num": 33, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Rampant Growth", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Search for Tomorrow"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Evolving Wilds; cast: Rampant Growth, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Rampant Growth", "Evolving Wilds"], "actions": [{ "card": "Rampant Growth" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: Rampant Growth", "land": "Evolving Wilds", "casts": ["Rampant Growth"], "actions": [{ "card": "Rampant Growth" }] },
+    { "index": 2, "summary": "land=none; cast: Rampant Growth", "land": null, "casts": ["Rampant Growth"], "actions": [{ "card": "Rampant Growth" }] },
+    { "index": 3, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 4, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "tutor_etb",
+  "source": "Rampant Growth -- basic land onto the battlefield tapped",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Evolving Wilds", "idx": 10, "num": 9, "is_land": true }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 13, "is_land": true, "taps": "G" }, { "name": "Khalni Heart Expedition", "idx": 6, "num": 29, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 2 }] }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Mountain" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "🌍 Khalni Heart Expedition (landfall: Evolving Wilds): quest counter (2)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Khalni Heart Expedition (landfall: Forest): quest counter (3)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Rampant Growth: Forest onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Evolving Wilds", "idx": 10, "num": 9, "is_land": true }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 20, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 6, "num": 29, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 3 }] }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Rampant Growth", "Search for Tomorrow"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Khalni Heart Expedition: remove quest counters, sacrifice it: search for two basic lands, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": null, "casts": ["Khalni Heart Expedition", "Evolving Wilds"], "actions": [{ "card": "Khalni Heart Expedition", "src_num": 29, "activate": true, "act_label": "remove quest counters, sacrifice it: search for two basic lands", "verb": "landsearch", "x": 1 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Khalni Heart Expedition: remove quest counters, sacrifice it: search for two basic lands", "land": null, "casts": ["Khalni Heart Expedition"], "actions": [{ "card": "Khalni Heart Expedition", "src_num": 29, "activate": true, "act_label": "remove quest counters, sacrifice it: search for two basic lands", "verb": "landsearch", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": null, "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "tutor_etb",
+  "source": "Khalni Heart Expedition -- basic land onto the battlefield tapped (1 of up to 2)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Evolving Wilds", "idx": 9, "num": 9, "is_land": true }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 20, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Mountain" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "tutor_etb",
+  "source": "Khalni Heart Expedition -- basic land onto the battlefield tapped (2 of up to 2)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Evolving Wilds", "idx": 9, "num": 9, "is_land": true }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 20, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "sacrifice", "text": "🔪 Khalni Heart Expedition -- sacrificed (cost)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Khalni Heart Expedition: Mountain, Forest onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Evolving Wilds", "idx": 9, "num": 9, "is_land": true }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 11, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": null, "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "tutor_etb",
+  "source": "Evolving Wilds -- basic land onto the battlefield tapped",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "sacrifice", "text": "🔪 Evolving Wilds -- sacrificed (cost)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Evolving Wilds: Forest onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Primeval Titan" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 2, "num": 12, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 20, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 22, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 12, "num": 14, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 5, "num": 33, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 10, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Primeval Titan", "land": null, "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 1, "summary": "land=none; cast: Avenger of Zendikar", "land": null, "casts": ["Avenger of Zendikar"], "actions": [{ "card": "Avenger of Zendikar" }] },
+    { "index": 2, "summary": "land=none; cast: Genesis Wave (X=3)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 3, "summary": "land=none; cast: Genesis Wave (X=4)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 4 }] },
+    { "index": 4, "summary": "land=none; cast: Genesis Wave (X=1)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Genesis Wave (X=2)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Genesis Wave (X=0)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "etb", "text": "Avenger of Zendikar -- create 7 0/1 Plant token(s) (one per land you control)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "0/1 Plant Token", "idx": 15, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 16, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 17, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 18, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 19, "num": 1005, "is_land": false }, { "name": "0/1 Plant Token", "idx": 20, "num": 1006, "is_land": false }, { "name": "Avenger of Zendikar", "idx": 13, "num": 1, "is_land": false }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "0/1 Plant Token", "idx": 15, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 16, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 17, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 18, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 19, "num": 1005, "is_land": false }, { "name": "0/1 Plant Token", "idx": 20, "num": 1006, "is_land": false }, { "name": "Avenger of Zendikar", "idx": 13, "num": 1, "is_land": false }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "0/1 Plant Token", "idx": 15, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 16, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 17, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 18, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 19, "num": 1005, "is_land": false }, { "name": "0/1 Plant Token", "idx": 20, "num": 1006, "is_land": false }, { "name": "Avenger of Zendikar", "idx": 13, "num": 1, "is_land": false }, { "name": "Forest", "idx": 2, "num": 12, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 20, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 22, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 12, "num": 14, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 5, "num": 33, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 10, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 44, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 43, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Primeval Titan", "land": "Forest", "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 1, "summary": "land=none; cast: Primeval Titan", "land": null, "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 2, "summary": "land=Forest; cast: Avenger of Zendikar", "land": "Forest", "casts": ["Avenger of Zendikar"], "actions": [{ "card": "Avenger of Zendikar" }] },
+    { "index": 3, "summary": "land=Forest (after the casts); cast: Avenger of Zendikar", "land": "Forest", "land_after_casts": true, "casts": ["Avenger of Zendikar"], "actions": [{ "card": "Avenger of Zendikar" }] },
+    { "index": 5, "summary": "land=none; cast: Avenger of Zendikar", "land": null, "casts": ["Avenger of Zendikar"], "actions": [{ "card": "Avenger of Zendikar" }] },
+    { "index": 6, "summary": "land=Forest; cast: Genesis Wave (X=5)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 5 }] },
+    { "index": 7, "summary": "land=Forest; cast: Genesis Wave (X=2)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 8, "summary": "land=Forest; cast: Genesis Wave (X=3)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 9, "summary": "land=Forest; cast: Genesis Wave (X=4)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 4 }] },
+    { "index": 10, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=2)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 11, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=3)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 12, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=4)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 4 }] },
+    { "index": 16, "summary": "land=none; cast: Genesis Wave (X=2)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 17, "summary": "land=none; cast: Genesis Wave (X=3)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 18, "summary": "land=none; cast: Genesis Wave (X=4)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 4 }] },
+    { "index": 19, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=Forest; cast: Genesis Wave (X=0)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 21, "summary": "land=Forest; cast: Genesis Wave (X=1)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 22, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=0)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 23, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=1)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 26, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 27, "summary": "land=none; cast: Genesis Wave (X=0)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 28, "summary": "land=none; cast: Genesis Wave (X=1)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "tutor_etb",
+  "source": "Primeval Titan -- land onto the battlefield tapped (1 of up to 2)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 14, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 15, "num": 1001, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 16, "num": 1002, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 17, "num": 1003, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 18, "num": 1004, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 19, "num": 1005, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 20, "num": 1006, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Avenger of Zendikar", "idx": 13, "num": 1, "is_land": false }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 21, "num": 23, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }, { "name": "Primeval Titan", "idx": 22, "num": 44, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Evolving Wilds" }, { "index": 1, "name": "Forest" }, { "index": 2, "name": "Gruul Turf" }, { "index": 3, "name": "Haunted Fengraf" }, { "index": 4, "name": "Myriad Landscape" }, { "index": 5, "name": "Radiant Fountain" }, { "index": 6, "name": "Terramorphic Expanse" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 22,
+  "type": "tutor_etb",
+  "source": "Primeval Titan -- land onto the battlefield tapped (2 of up to 2)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 14, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 15, "num": 1001, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 16, "num": 1002, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 17, "num": 1003, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 18, "num": 1004, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 19, "num": 1005, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "0/1 Plant Token", "idx": 20, "num": 1006, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Avenger of Zendikar", "idx": 13, "num": 1, "is_land": false }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 21, "num": 23, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }, { "name": "Primeval Titan", "idx": 22, "num": 44, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "heuristic_default": 2,
+  "candidates": [{ "index": 0, "name": "Evolving Wilds" }, { "index": 1, "name": "Forest" }, { "index": 2, "name": "Gruul Turf" }, { "index": 3, "name": "Haunted Fengraf" }, { "index": 4, "name": "Myriad Landscape" }, { "index": 5, "name": "Radiant Fountain" }, { "index": 6, "name": "Terramorphic Expanse" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 23,
+  "type": "bounce",
+  "source": "Gruul Turf",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 14, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 15, "num": 1001, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 16, "num": 1002, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 17, "num": 1003, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 18, "num": 1004, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 19, "num": 1005, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 20, "num": 1006, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Avenger of Zendikar", "idx": 13, "num": 1, "is_land": false }, { "name": "Evolving Wilds", "idx": 23, "num": 10, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 21, "num": 23, "is_land": true, "taps": "G" }, { "name": "Gruul Turf", "idx": 24, "num": 27, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Primeval Titan", "idx": 22, "num": 44, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 41, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "heuristic_default": 8,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Forest", "label": "Forest" }, { "index": 1, "perm_index": 5, "tapped": true, "name": "Mountain", "label": "Mountain" }, { "index": 2, "perm_index": 8, "tapped": true, "name": "Forest", "label": "Forest" }, { "index": 3, "perm_index": 9, "tapped": true, "name": "Forest", "label": "Forest" }, { "index": 4, "perm_index": 10, "tapped": true, "name": "Mountain", "label": "Mountain" }, { "index": 5, "perm_index": 11, "tapped": true, "name": "Forest", "label": "Forest" }, { "index": 6, "perm_index": 12, "tapped": false, "name": "Forest", "label": "Forest" }, { "index": 7, "perm_index": 21, "tapped": false, "name": "Forest", "label": "Forest" }, { "index": 8, "perm_index": 23, "tapped": true, "name": "Evolving Wilds", "label": "Evolving Wilds" }, { "index": 9, "perm_index": 24, "tapped": true, "name": "Gruul Turf", "label": "Gruul Turf" }],
+  "note": "reply an option index -- the land to return to your hand. Default = the AI's pick. An UNTAPPED land you return is first tapped for mana in response (it floats until the phase ends), unless tapping it has a cost or side effect (pain, energy, a depletion counter) or its mana is spend-restricted."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 24,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "trigger", "text": "🌍 Avenger of Zendikar (landfall: Forest): +1/+1 counter on each Plant (7)" }, { "turn": 5, "kind": "trigger", "text": "🌍 Avenger of Zendikar (landfall: Evolving Wilds): +1/+1 counter on each Plant (7)" }, { "turn": 5, "kind": "trigger", "text": "🌍 Avenger of Zendikar (landfall: Gruul Turf): +1/+1 counter on each Plant (7)" }, { "turn": 5, "kind": "tutor", "text": "🔎 Primeval Titan: Evolving Wilds, Gruul Turf onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 14, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 15, "num": 1001, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 16, "num": 1002, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 17, "num": 1003, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 18, "num": 1004, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 19, "num": 1005, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "0/1 Plant Token", "idx": 20, "num": 1006, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Avenger of Zendikar", "idx": 13, "num": 1, "is_land": false }, { "name": "Forest", "idx": 2, "num": 12, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 21, "num": 23, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 14, "is_land": true, "taps": "G" }, { "name": "Gruul Turf", "idx": 23, "num": 27, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Primeval Titan", "idx": 22, "num": 44, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Avenger of Zendikar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 47, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Rampant Growth", "Search for Tomorrow"], "library_size": 41, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Avenger of Zendikar (5), 0/1 Plant Token (3), 0/1 Plant Token (3), 0/1 Plant Token (3), 0/1 Plant Token (3), 0/1 Plant Token (3), 0/1 Plant Token (3), 0/1 Plant Token (3) — 26 to opponent (20→-6)" }
+  ]
+}
