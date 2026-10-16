@@ -37229,18 +37229,27 @@ bool TurnSolver::DropOpenLandEnablesCast(const GameState& state, const std::stri
     }
     return false;
 }
+bool TurnSolver::CostPayableExact(const GameState& state, const ManaCost& cost, bool for_creature)
+{
+    GameState pay = state;
+    return TapForCostDirect(pay, cost, for_creature);
+}
+bool TurnSolver::CostPayableWithLand(const GameState& state, const std::string& land,
+                                     const ManaCost& cost, bool for_creature)
+{
+    const Player& ap = state.ActivePlayer();
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    GameState scratch = state;
+    if (!PlayLandByName(scratch, land)) { return false; }
+    return TapForCostDirect(scratch, cost, for_creature);
+}
 bool TurnSolver::DropLandEnablesCost(const GameState& state, const std::string& land,
                                      const ManaCost& cost, bool for_creature)
 {
     const Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
-    {
-        GameState pay = state;
-        if (TapForCostDirect(pay, cost, for_creature)) { return false; }   // already payable
-    }
-    GameState scratch = state;
-    if (!PlayLandByName(scratch, land)) { return false; }
-    return TapForCostDirect(scratch, cost, for_creature);
+    if (CostPayableExact(state, cost, for_creature)) { return false; }   // already payable
+    return CostPayableWithLand(state, land, cost, for_creature);
 }
 
 // ---- GREEDY LAND-DROP INSTRUMENT (MTG_LANDDROP_STATS, default off, zero cost when off) --------
