@@ -244,6 +244,18 @@ d3 s2002 18,512.
   --budget-ms 10 --ignore-play-profile`) ran **606 s and 38.6M units** at a 9,000-unit decision budget
   (the 25x overrun ceiling is 225k per decision). Without it the case is ~6.4 s/game and the deck's
   worst case is d5 s2002 at ~1.7x. Under investigation (below): a single decision runs for minutes.
+- **ROOT-CAUSED AND FIXED (2026-10-16, db77ee91 on this branch; analysis in `landfall-perf.md` §6).**
+  The runaway was a mulligan-bottoming TRIAL game's turn-1 fallback `SolveWithLookahead` (no verified
+  win to commit, so the executor re-solves on a fresh budget). That host never armed FullSearchLine's
+  25x proportional overrun ceiling, so ONE root candidate's depth-2 rollout (turn 7 x turn 8 re-solves
+  of 21-62k plans each: Titan attack pins x in-combat Khalni cracks x land-search pins) ran 37.9M units.
+  Every pass after the first now arms the same ceiling and rolls back to the last COMPLETED pass
+  (keeping a strictly better proven win); pass 0 is never armed. It only re-prices work: inert at an
+  unlimited budget, same constant. gi38: 38.6M -> 0.94M units, identical realised game. Unit 649/649,
+  scenarios 184/184, smoke 119/119 and regression 166/166 byte-identical. Not deck-specific and not
+  leaf-depth-specific: at leaf 1 a different trial ran a 79.5M-unit root, and the same hand forced in
+  the REAL game (probe=0) ran 37.9M units / 1,410 s. `MTG_LA_PASS_CEILING` (default ON, `=0` restores
+  the uncapped pass) is the A/B arm. The cost gate is re-measured after the remaining fixes land.
 - Rows and GT are NOT committed yet: GT is accepted once the two gap fixes (Search for Tomorrow mana,
   fetched-Karoo bounce) land, so the deck enters with the play it will keep.
 
@@ -334,3 +346,12 @@ default-on `MTG_LANDFALL_BUCKET_DISCARD` flag, then held to non-inferiority on a
   case). Researcher proposed a restricted main 2 behind a default-off lever; CLAUDE.md's "delete,
   don't lever" applies, so the default is to measure the capability and report, not ship it gated.
 - (Courser Q5) Saved log records top plays with their source plus a per-phase top snapshot — default YES.
+- (Runaway, perf proposal 1) Melira's mulligan trial settings for Landfall (`bottom_eval_depth: 0`,
+  `bottom_eval_topk: 5`): 0.56-0.69x units on the four searched regression cases; quality UNRESOLVED
+  (1 better / 2 worse over 150 paired games, net +1 turn, far too small; Melira's adoption used
+  2,000-3,000 paired games). Trial games are still ~99% of gi38's remaining cost. NOT adopted —
+  mulligan policy is the user's; default: unchanged.
+- (Runaway, perf proposal 2) A last-turn relevance collapse of land-search / attack / crack pins at the
+  horizon's final turn: needs a per-state soundness proof (not an identity fold), so NOT built.
+- (Runaway) SolveWithLookahead's start-gate estimate was ~7,300x low on the gi38 root; the estimator's
+  calibration is left alone (the ceiling now caps the damage at 25x).
