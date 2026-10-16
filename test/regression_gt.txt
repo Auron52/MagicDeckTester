@@ -9,12 +9,6 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-fungus_smoke_d0_s1001=5.6260/fdde68f65c349153
-fungus_smoke_d3_s1001=5.3667/5b107fec9a225812
-fungus_smoke_d5_s1001=5.3600/6add371310d1c305
-fungusb_smoke_d0_s1001=6.1820/0c537bb633efc2ca
-fungusb_smoke_d3_s1001=5.2133/40989e9ec85f45cc
-fungusb_smoke_d5_s1001=5.1750/5ee2ca9307a330f8
 slivers_smoke_d0_s1001=4.6530/48022af0fb5c16f4
 slivers_smoke_d3_s1001=4.2440/032dc5c7e1115fd2
 slivers_smoke_d5_s1001=4.1867/145078195f97d144
@@ -133,16 +127,6 @@ landfall_smoke_d3_s1001=6.0000/78d22e3633b409eb
 landfall_smoke_d5_s1001=5.8667/40d8bcd04aeee5ef
 
 # --- regression ---
-fungus_regression_d0_s2002=5.6900/9f01eccd8d496d04
-fungus_regression_d3_s2002=5.3900/b410bfc74c8ec252
-fungus_regression_d3_s3003=5.4450/64a8df791400d8b8
-fungus_regression_d5_s2002=5.4400/78c9f0687f0c3f9f
-fungus_regression_d5_s3003=5.4400/461889da47697bcd
-fungusb_regression_d0_s2002=6.1760/dd2ee505039725c9
-fungusb_regression_d3_s2002=5.0800/2e4ccd59c8744275
-fungusb_regression_d3_s3003=5.1700/b2f1fb3bcf5f29c6
-fungusb_regression_d5_s2002=4.9600/001c1b71e18e4a0b
-fungusb_regression_d5_s3003=5.1800/3e80308746e940a1
 slivers_regression_d0_s2002=4.6880/f65eab993476143d
 slivers_regression_d3_s2002=4.2200/954ce1d81cfffb5c
 slivers_regression_d3_s3003=4.2500/1c4f958c6afd149a
@@ -306,18 +290,6 @@ landfall_regression_d5_s2002=5.7500/2f089e97fe542e3c
 landfall_regression_d5_s3003=5.9000/eb1f083698b9b76b
 
 # --- overnight ---
-fungus_overnight_d0_s4004=5.6445/1d8f7891cc7454b7
-fungus_overnight_d0_s6006=5.6700/f83b187f034d39d7
-fungus_overnight_d0_s8008=5.6735/deceb53ce7fce606
-fungus_overnight_d0_s10010=5.6700/0f2f595586db5ec4
-fungus_overnight_d3_s4004=5.2775/cd0a96178a1b90d6
-fungus_overnight_d3_s5005=5.3875/f51d7266d3b231ff
-fungus_overnight_d3_s6006=5.3450/8419f1fb6ea523cb
-fungus_overnight_d3_s7007=5.3475/cba8e698c1b42941
-fungus_overnight_d5_s4004=5.2933/3315632270a5c4f0
-fungus_overnight_d5_s5005=5.3500/19cac5aa0fa5e316
-fungus_overnight_d5_s6006=5.2967/eb8a1af11d040c93
-fungus_overnight_d5_s7007=5.2967/c92cfe7aeeb9c3e2
 slivers_overnight_d0_s4004=4.6540/d6b7b03035b25cc2
 slivers_overnight_d0_s6006=4.6560/68c3140f15939660
 slivers_overnight_d0_s8008=4.6375/9f8e73a21b70f745

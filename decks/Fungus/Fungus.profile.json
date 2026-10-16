@@ -1,0 +1,76 @@
+{
+  "card_scores": {
+    "Ancient Tomb": [
+      0.28299453000737085,
+      -0.18441334550248456
+    ],
+    "Beastmaster Ascension": [
+      0.12826322626012043,
+      -0.14619044023257555
+    ],
+    "Brightcap Badger": [
+      -0.000658465774745487,
+      -0.08689784053156124
+    ],
+    "Concordant Crossroads": [
+      0.19121089893662013
+    ],
+    "Doubling Season": [
+      -0.15364750698185325
+    ],
+    "Forest": [
+      -0.012593984962406601,
+      -0.18478123018389336,
+      -0.27336150886267596,
+      -0.25988637629497546
+    ],
+    "Hickory Woodlot": [
+      0.11919605331625505,
+      -0.13795681063122878
+    ],
+    "Saproling Burst": [
+      0.13759328358208922,
+      -0.25624999999999964
+    ],
+    "Saproling Migration": [
+      0.06886898608531844,
+      0.06492369961166045
+    ],
+    "Shroofus Sproutsire": [
+      0.10837988826815703
+    ],
+    "Sol Ring": [
+      0.09257142857142853
+    ],
+    "Sporecrown Thallid": [
+      0.17509864177858692,
+      0.12050224887556293
+    ],
+    "Thallid": [
+      0.015291005291004467
+    ],
+    "Undercellar Myconid": [
+      0.05297049441786328,
+      -0.2241826156299842
+    ],
+    "Utopia Mycon": [
+      -0.04626848489288449
+    ],
+    "Wild Growth": [
+      0.024033404855063445,
+      -0.11321469140477092
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

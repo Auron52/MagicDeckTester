@@ -11,7 +11,15 @@ or performance tests to find any slow areas of the deck").
 
 ---
 
-## Decklist
+> **⚠ THE SHIPPED LIST CHANGED ON 2026-10-16.** Everything from "Decklist" down to the end of the
+> original run describes **v1**, which is now archived at
+> `decks/Fungus/v1-sporesower-shelldweller/` with its own profile, value sidecar and keep table.
+> The adopted list, its measurement and its own pipeline run are recorded in
+> **[v2 adoption](#v2-adoption--2026-10-16)** at the end of this file. The card-implementation,
+> provider, viewer and Stage-6a disclosure sections above remain valid for both lists wherever
+> they concern a card BOTH lists play; the v2 section states exactly which of them it re-ran.
+
+## Decklist (v1 — ARCHIVED 2026-10-16)
 
 ```
 4  Thallid Shell-Dweller       4  Sporecrown Thallid
