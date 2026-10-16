@@ -256,6 +256,16 @@ byte-identical to GT, then `suite_gate.py --measure-all --no-run` (table refresh
   leaf; (2) rule that 5j measures post-artifact cost; (3) ship cheaper bottoming (`bottom_eval_*`, lossy;
   measured below). Recommendation: (2) via (1), as for PD.
 
+- **Option (3) measured (2026-10-16, held-out seeds 1.0M-1.3M x 250 = 1,000 paired games, PLAY settings
+  d5 b20, tree b35f9f0e, one pooled batch with the 5c2 check):**
+  | arm | turns vs shipped | worse / better | units vs shipped |
+  |---|---|---|---|
+  | `bottom_eval_depth 0, topk 5` (Melira shape) | **+0.036 (se 0.0067)** | 37 / 3 | 0.59x |
+  | `bottom_eval_depth 0` (all-greedy trials) | **+0.126 (se 0.0122)** | 118 / 4 | 0.19x |
+  Both cost quality clearly, in one direction (the trials are an oracle on the true draws), as on PD.
+  The Melira shape would land near the 3x line (~0.6x of 22,919) at a cost of +0.036 turns/game. NOT
+  recommended; NOT adopted.
+
 ## Stage 5j — suite membership: cost gate PASS (2026-10-15 ~23:00, tree 223cbba4) — SUPERSEDED above
 Rows written in all three tiers (smoke d0 1001x1000, d3 1001x50 b10, d5 1001x25 b20; regression d0
 2002x1000, d3 2002/3003x50 b10, d5 2002/3003x25 b20; overnight ENTRY set: d0 4x2000, d3 4x400 b10,
@@ -291,6 +301,15 @@ the gate on the final tree.
   5.84 -- d5 <= d3 on every seed; d0 (regression s2002) 7.667. Monotone, and a T5-T6 clock is the
   deck's realistic ramp-into-Titan/Avenger line.
 - Slowest games (d5): s2002 gi38 115 s / 3.5M units, gi22 97 s; all under the pass ceiling now.
+
+## Stage 5c2 — horizon-honest tie-break: NO SIGN at this sample (2026-10-16, tree b35f9f0e)
+`leaf_tiebreak_check.py`'s manifest (4 blocks x 250 at PLAY settings d5 b20, both arms per-job, pooled
+with the bottoming A/B): **2 changed games of 1,000 paired (0.2%), both BETTER with the tie-break (net
+-2), 0 worse.** Below the 20-change floor, so no direction is claimed; the script asks for ~21 blocks
+(~5,250 paired games at d5). Landfall wins well inside the horizon (T5-T6 at d5), so the leaf rarely
+binds. Default ON stays (a lever that does not fire costs nothing). The decisive run is DEFERRED to after
+the keep table, when the bottoming trial games (92-99% of today's cost) are a table read and the sample
+is ~20x cheaper -- recorded, not skipped.
 
 ## Mulligan keep rule — `curve_check: two_drop` measured (2026-10-16 ~03:00, input for the USER's decision)
 The Stage 4 profile keeps the engine-default `two_drop` curve check: at mulligan 0/1 a hand needs >= 2
