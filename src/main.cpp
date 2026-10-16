@@ -439,6 +439,20 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     const CardDefinition* xd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
                     if (xd && xd->card.m_mana_cost.has_x) { tag += " (X=" + std::to_string(a.chosen_x) + ")"; }
                 }
+                // Terastodon's destroy count K rides chosen_x with no {X} in the cost, and the K fan is
+                // the whole difference between its variants (claude-play sweep gi5: four plans read
+                // "cast: Terastodon" and differed only in actions[].x). The victims themselves are
+                // picked on the board at resolution.
+                if (a.tutor_target.empty())
+                {
+                    const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    if (td && td->params.etb_destroy_own_noncreature_max > 0)
+                    {
+                        if (a.chosen_x == kEtbKxHeuristic)  { tag += " (destroy: count decided on resolution)"; }
+                        else if (a.chosen_x <= 0)           { tag += " (destroy none)"; }
+                        else { tag += " (destroy " + std::to_string(a.chosen_x) + ")"; }
+                    }
+                }
                 // AuraHostLabel, not EnchantTargetName: two same-named candidate hosts (one in play,
                 // one being played this turn) otherwise render this plan and its sibling identically.
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
