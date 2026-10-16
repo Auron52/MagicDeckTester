@@ -239,7 +239,7 @@ Cells are shipped / d3 / d0 in turns against the committed tree, negative = fast
 | KittyEquipment | the order (Equipment split by cost, then name; Sram main 1) | 75,000 games net +8: six cells > 0 (kitty d3, kittyv3 ship, kitty2hg ship +1 each; kittyv3 d3 +2; kittyv2 / kittyv3 d0 +4 each) | 0 of 16 | accept with six cells > 0, or build E32's fix first; Adelbert Steiner main 1? |
 | burn | the order + conditional `MTG_BURN_BLOOD_FIRST` + the broad main-2 rule + `MTG_SPECTACLE_PLAN_CREDIT` + `MTG_KILL_TRIGGER_COMBO` (all as the agent shipped) | -6 / -10 / -565; 2HG -1 / -14 / -298 | 1 (2HG d0 gi8716; the committed tree is also T6 there at d8 b0) | conditional Blood-first; Eidolon last in both mains (not built); the broad "played off" reading; gi8716 pre-existing OK?; the search-only credit (OFF) |
 | Fluctuator | the order + `MTG_FLUCT_ORDER_FUNDED` + the drawn-land drop + keep-untapped + `MTG_FLUCT_KEEP_NEEDED` + `MTG_DIG_HOOK_BPALL_EXEMPT`; OFF: `MTG_DIG_DRAWN_LAND_D0`, `MTG_NO_REDUNDANT_REDUCER` | -26 / -24 / -588; 2HG -15 / -11 / -325 | 0 of 260 | FUNDED; cast a free Hollow One rather than cycle it; `MTG_NO_REDUNDANT_REDUCER`; the Capital City double count (E38); the drawn-land hook for other dig decks (default no); KEEP_NEEDED as the reading of "occasionally an untapped land" |
-| EldraziDisplacerFlicker | (agent still measuring) | | | A/B size; part 2 via ArrangeCastOrder; part 5 as extra attempts; all parts ON |
+| EldraziDisplacerFlicker | parts 1, 2, 2b, 2c, 3, 3b, 4, 4b, 5 (as the agent shipped); `MTG_EDF_TUTOR_LIBRARY_FIRST` OFF | -4 / -11 / -662 on 1,000 / 1,500 / 10,000 games (not a suite deck) | 1 of 200 (d3 gi4: E40) | part 1 loses 10 turns at d0, partly the tutor order: LIBRARY_FIRST (Eladamri's Call before Living Wish) wins back 3 but reverses your order; parts 1 / 2b / 3 each fail the per-lever bar in one cell (agent recommends all ON); A/B size, part 2 through ArrangeCastOrder, part 5 as extra route attempts (the agreed defaults) |
 
 ## Start here: eight answers that unblock most of the rest
 
@@ -1229,6 +1229,13 @@ Genesis Wave's X sizing (~23110), or in `CreditCastOutput` (~2885).
 - Parallel branches landed `CastOrderTotalByName` + `CastOrderNameTieLess` (also read by the enumeration's
   sequential walk) and CritterLifegain's `CastOrderTiesByName`. Both sit in `CastOrderLessRanked` (ManaPayment.cpp),
   exactly as measured, with an integration note. Unify them into one hook with a per-deck identity check.
+
+**E40. EldraziDisplacerFlicker: the land-Aura host fold inside the go-off's turn.**
+- The plan dedup folds plans that differ only in which land an Aura goes on and keeps the first. Part 2c keeps
+  every host of a one-Aura untapper plan and one rank-order + one moved member above that, which recovers gi1457 and
+  gi201. d3 gi4 (seed-relative; not clairvoyant: holding Cloud is at least as good on every T4 draw) needs the
+  go-off's 5+-Aura plans kept distinct by host; keeping every host of every plan recovers it but took the batch from
+  ~4.5 GB to the 35 GB cap. Needs a cheaper representation of host choice. Detail: `edf-cast-order-2026-10-14.md`.
 
 **Tooling.**
 - `mtg` loads `cards.json` relative to the working directory, and with no file it silently plays with no cards
