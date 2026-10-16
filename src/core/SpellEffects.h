@@ -1877,11 +1877,18 @@ struct ScriptedLandSearch
     const std::vector<int>* saved;
     int saved_cursor;
 };
+// The put-bounce fold's in-plan ORDINAL witness (TurnSolver.cpp PutBounceFold, in-plan mode): every
+// consumption below -- pinned or not -- numbers itself on this thread's running count, and the
+// PerformLandSearch it feeds reads (and clears) `g_in_plan_ls_last`. Measurement only: no game logic
+// reads either.
+inline thread_local int g_in_plan_ls_count = 0;
+inline thread_local int g_in_plan_ls_last  = -1;
 // The ONE consumption rule, shared by every in-plan land-search site (spell resolution, Titan ETB,
 // the two activations). Consumed UNCONDITIONALLY, even by a search that finds nothing, so the plan's
 // j-th entry always steers the plan's j-th land search.
 inline int ConsumeScriptedLandSearchPin()
 {
+    g_in_plan_ls_last = g_in_plan_ls_count++;
     if (g_scripted_land_search_pins != nullptr
         && g_scripted_land_search_cursor < static_cast<int>(g_scripted_land_search_pins->size()))
     {
@@ -28993,6 +29000,37 @@ struct ScriptedPutBounce
     ScriptedPutBounce& operator=(const ScriptedPutBounce&) = delete;
     int saved;
 };
+// THE PUT-BOUNCE PROBE (the put-bounce fold, TurnSolver.cpp PutBounceFold). A search candidate loop
+// ARMS it around one candidate's combat (attack mode) or main-phase apply (in-plan mode), bound to
+// that state object (`target`), so a projection on a copy (CountAttackLandSearchPump), a nested search
+// and every search off that object are never recorded. ATTACK mode: only a FireAttackLandSearch on the
+// target names the attack-stream ORDINAL it is resolving (so the in-combat Khalni cracks are never
+// recorded). IN-PLAN mode: the in-plan ordinal is the consumption count since the arm
+// (g_in_plan_ls_last); a credited cast (its pin indexes a restricted list) is not recorded.
+// PerformLandSearch takes the ordinal, makes the first Karoo of the resolved pick LIVE for its bounce,
+// and BounceKarooLand reports the narrowed width it saw and the index it resolved. Read back by the
+// loop right after. Measurement of a search candidate only: no game logic reads it.
+struct PutBounceObs
+{
+    int ordinal = -1;            // attack-stream ordinal (the Titan, in attacker order)
+    int w = 0;                   // the pick list's size at resolution
+    std::vector<int> karoo;      // ...and its Karoo picks (the extended list's tail, landsearchmemo::Slot)
+    int pick = -1;               // the pick the pin resolved to
+    int width = -1;              // BounceSearchCandidates' width at the bounce
+    int index = -1;              // the candidate index the bounce took (0 = the front)
+};
+struct PutBounceProbe
+{
+    const GameState* target = nullptr;   // the combat's (attack mode) / the apply's (in-plan) state object
+    int ordinal = -1;                    // attack mode: the ordinal FireAttackLandSearch is resolving
+    bool in_plan = false;                // in-plan mode: the ordinal is g_in_plan_ls_last - count0
+    int count0 = 0;
+    std::vector<PutBounceObs> obs;
+};
+inline thread_local PutBounceProbe* g_put_bounce_probe = nullptr;
+inline thread_local bool g_put_bounce_live  = false;   // this bounce is the probed one
+inline thread_local int  g_put_bounce_width = -1;      // ...BounceKarooLand's report
+inline thread_local int  g_put_bounce_index = -1;
 // The put pin a plan carries: its bounce_choice when its own land drop cannot consume it.
 inline int PutBouncePinOf(int bounce_choice, bool land_decided, const std::string& land_to_play)
 {

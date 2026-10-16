@@ -432,6 +432,64 @@ TEST_CASE("Put Karoo bounce: Primeval Titan's ATTACK trigger reaches both lands 
     CHECK(returned == std::set<std::string>{ "Forest", "Mountain" });
 }
 
+TEST_CASE("Put-bounce fold: the probe records the attack ordinal's pick, bounce width and index -- on its bound state only")
+{
+    LoadCardsGaps();
+    GameState s = TurfBoard();
+    const int t = PutG(s, "Primeval Titan", 10, false);
+    LibG(s, "Gruul Turf", 50); LibG(s, "Mountain", 51);   // the one pick: {Gruul Turf, Mountain}
+    const LandSearchSpec titan = LandSearchSpecOf(DG("Primeval Titan").params);
+    const int w = static_cast<int>(LandSearchMemoSlot(s, 0, titan).picks.size());
+    REQUIRE(w == 1);
+    // The front (no pin), and both bounce sub-choices: the narrowed width at the bounce is 2 (the tapped
+    // Forest, the tapped Mountains folded), so b = 2 CLAMPS onto index 1 -- the duplicate the fold drops.
+    const std::pair<int, int> cases[] = { { -1, 0 }, { LandSearchBouncePinValue(w, 0, 1), 1 },
+                                          { LandSearchBouncePinValue(w, 0, 2), 1 } };
+    for (const auto& c : cases)
+    {
+        GameState g = s;
+        g.scripted_attack_land_search = c.first;
+        PutBounceProbe probe;
+        probe.target = &g;
+        g_put_bounce_probe = &probe;
+        std::vector<int> atk{ t };
+        FireAttackLandSearch(g, 0, atk);
+        g_put_bounce_probe = nullptr;
+        REQUIRE(probe.obs.size() == 1);
+        const PutBounceObs& o = probe.obs[0];
+        CHECK(o.ordinal == 0);
+        CHECK(o.w == w);
+        CHECK(o.karoo == std::vector<int>{ 0 });
+        CHECK(o.pick == 0);
+        CHECK(o.width == 2);
+        CHECK(o.index == c.second);
+        CHECK(probe.ordinal == -1);
+        CHECK_FALSE(g_put_bounce_live);
+    }
+    // A probe bound to ANOTHER state object -- a projection's copy, a nested search -- records nothing.
+    {
+        GameState g = s;
+        PutBounceProbe other;
+        other.target = &s;
+        g_put_bounce_probe = &other;
+        std::vector<int> atk{ t };
+        FireAttackLandSearch(g, 0, atk);
+        g_put_bounce_probe = nullptr;
+        CHECK(other.obs.empty());
+    }
+    // ...and neither does a land search outside the attack trigger, even on the bound state (the ETB).
+    {
+        GameState e = s;
+        PutBounceProbe etb;
+        etb.target = &e;
+        g_put_bounce_probe = &etb;
+        PerformLandSearch(e, 0, titan, "Primeval Titan", -1);
+        g_put_bounce_probe = nullptr;
+        CHECK(etb.obs.empty());
+        CHECK(CountBf(e, "Gruul Turf") == 1);
+    }
+}
+
 TEST_CASE("Put Karoo bounce: a Genesis Wave's put Turf reaches both lands through the plan's put pin")
 {
     LoadCardsGaps();

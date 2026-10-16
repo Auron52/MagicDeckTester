@@ -2317,13 +2317,21 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
         {
             const bool census = bouncestats::Enabled() && g_bounce_searched_site;
             const bool probe  = g_bounce_probe.live;
-            const bool want   = g_scripted_bounce_choice >= 1 || census || probe;
+            const bool put_probe = g_put_bounce_live;   // the put-bounce fold's probe (SpellEffects.h)
+            const bool want   = g_scripted_bounce_choice >= 1 || census || probe || put_probe;
             if (want)
             {
                 int why = -1;
                 const std::vector<int> cands = ResolveProvider(state).BounceSearchCandidates(
                     state, controller, self_index, legal, &why);
                 if (census) { bouncestats::Record(cands.size(), why, g_real_resolution); }
+                if (put_probe)
+                {
+                    g_put_bounce_width = static_cast<int>(cands.size());
+                    g_put_bounce_index = (g_scripted_bounce_choice >= 1 && !cands.empty())
+                        ? std::min(g_scripted_bounce_choice, static_cast<int>(cands.size()) - 1) : 0;
+                    g_put_bounce_live  = false;   // this bounce only
+                }
                 if (probe && !cands.empty())
                 {
                     g_bounce_probe.width = static_cast<int>(cands.size());

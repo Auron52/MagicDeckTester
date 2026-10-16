@@ -620,6 +620,26 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     t_credit_idx.clear();
     // The put Karoo's searched bounce (land-search gap 3, the extended pick list); -1 = the front.
     int bounce_pin = -1;
+    // The put-bounce fold's probe (SpellEffects.h PutBounceProbe): armed, and naming an attack-stream
+    // ordinal, only around a search candidate's combat. What the observation needs from the list.
+    PutBounceProbe* probe = nullptr;
+    PutBounceObs probe_obs;
+    if (g_put_bounce_probe != nullptr && g_put_bounce_probe->target == &state && !credited)
+    {
+        PutBounceProbe* pr = g_put_bounce_probe;
+        if (!pr->in_plan && pr->ordinal >= 0)
+        {
+            probe = pr;
+            probe_obs.ordinal = pr->ordinal;
+            pr->ordinal = -1;   // this search only (a nested one is never the probed ordinal)
+        }
+        else if (pr->in_plan && g_in_plan_ls_last >= pr->count0)
+        {
+            probe = pr;
+            probe_obs.ordinal = g_in_plan_ls_last - pr->count0;
+        }
+    }
+    g_in_plan_ls_last = -1;   // consumed by THIS search (an unpinned later one never inherits it)
     // The source's display label ("Primeval Titan (attack)"), built only where something shows it --
     // the human prompt and the play-event line -- never on the autonomous path.
     auto label = [&]() { return source_suffix != nullptr ? source + source_suffix : source; };
@@ -699,6 +719,12 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                 k          = static_cast<std::size_t>(pp.pick);
                 bounce_pin = pp.bounce;
             }
+            if (probe != nullptr)
+            {
+                probe_obs.w       = static_cast<int>(ms.picks.size());
+                probe_obs.karoo   = ms.karoo_picks;
+                probe_obs.pick    = static_cast<int>(k);
+            }
             // Copied at once: the memo reference is valid only until its next call.
             const std::vector<const CardDefinition*>& pd = ms.pick_defs[k];
             reserve_chosen(pd.size());
@@ -757,6 +783,10 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                 && state.battlefield[static_cast<std::size_t>(j)].controller_index == controller)
             { slot = j; break; }
         }
+        // The probed bounce (put-bounce fold): the pick's FIRST Karoo, whatever its pin.
+        const bool probed = probe != nullptr && probe_obs.pick >= 0 && slot >= 0
+                          && bf_defs[i]->params.etb_bounce_land;
+        if (probed) { g_put_bounce_live = true; g_put_bounce_width = -1; g_put_bounce_index = -1; }
         if (slot >= 0 && bounce_pin >= 1 && bf_defs[i]->params.etb_bounce_land)
         {
             // The searched bounce sub-choice binds the pick's FIRST Karoo (a second Karoo of the same
@@ -775,6 +805,17 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
         else if (slot >= 0) { ResolveLandEnterEtbExtras(state, *bf_defs[i], slot); }
         else if (bf_defs[i]->params.etb_lifegain > 0)
         { GainLife(state, state.active_player_index, bf_defs[i]->params.etb_lifegain); }
+        if (probed)
+        {
+            g_put_bounce_live = false;
+            if (g_put_bounce_width >= 0)
+            {
+                probe_obs.width = g_put_bounce_width;
+                probe_obs.index = g_put_bounce_index;
+                probe->obs.push_back(probe_obs);
+            }
+            probe_obs.pick = -1;   // the first Karoo only
+        }
     }
     // Hand entries (Cultivate). EnterHand(Tutor) arms the put-in-hand breakpoint (site 10), so the
     // fetched basic can still be the turn's land drop.
@@ -895,6 +936,7 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
         { any = true; }
     }
     if (!any) { return; }
+    int attack_ordinal = 0;   // the packed stream's ordinal (the put-bounce probe's key)
     for (std::size_t ai = 0; ai < nums.size(); ++ai)
     {
         const std::vector<int> now = RefindByNumberInOrder(state, nums);
@@ -906,8 +948,13 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
         if (d == nullptr || !d->params.land_search_on_enter_or_attack || d->params.land_search_count <= 0)
         { continue; }
         const int pin = ConsumePackedLandSearchPin(state.scripted_attack_land_search);
+        PutBounceProbe* const probe = (g_put_bounce_probe != nullptr && g_put_bounce_probe->target == &state)
+                                    ? g_put_bounce_probe : nullptr;
+        if (probe != nullptr) { probe->ordinal = attack_ordinal; }
         PerformLandSearch(state, controller, LandSearchSpecOf(d->params),
                           d->card.m_name.str(), pin, " (attack)");
+        if (probe != nullptr) { probe->ordinal = -1; }
+        ++attack_ordinal;
     }
     // Repair the attacker indices (a Karoo bounce erased a slot; appended lands shifted nothing
     // before them, but the erase may have).

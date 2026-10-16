@@ -846,6 +846,23 @@ static std::atomic<long long> g_combat_pin_folded[2]{{0}, {0}};
 // COMBAT-PIN MAIN-PHASE SHARE firing counters (SolveWithLookahead; printed with the rollout stats):
 // base applies cached, variant applies replaced by the cached state.
 static std::atomic<long long> g_cpshare_cached{0}, g_cpshare_used{0};
+// The put-bounce fold (PutBounceFold): attack bounce variants declined before their unit charge.
+// DEFAULT ON (an exact fold, the MTG_BOUNCE_FOLD shape); =0 is the A/B hatch. MTG_PUT_BOUNCE_FOLD_VERIFY=1
+// (diagnostic) declines nothing: each candidate the fold WOULD decline runs on, and the combat-pin fold
+// is asked whether it skips it after the combat -- the claim the fold rests on (ok must be every one).
+static bool PutBounceFoldOn()
+{
+    static const bool env = EnvOn("MTG_PUT_BOUNCE_FOLD", true);
+    return heurarm::Flag(heurarm::PUT_BOUNCE_FOLD, env);
+}
+static bool PutBounceFoldVerifyOn()
+{
+    static const bool env = EnvOn("MTG_PUT_BOUNCE_FOLD_VERIFY");
+    return heurarm::Flag(heurarm::PUT_BOUNCE_FOLD_VERIFY, env);
+}
+static std::atomic<long long> g_put_bounce_folded{0}, g_put_bounce_folded_fs{0};
+static std::atomic<long long> g_etb_bounce_folded{0}, g_etb_bounce_folded_fs{0};
+static std::atomic<long long> g_put_bounce_verify_ok{0}, g_put_bounce_verify_bad{0};
 // MTG_EQUIP_INERT_FOLD's firing counter (see DropInertHasteShroudEquips): equip actions dropped.
 static std::atomic<long long> g_equip_inert_dropped{0};
 static std::atomic<long long> g_equip_idle_release_rejects{0};   // ...and subsets its subset half refused
@@ -1843,7 +1860,13 @@ namespace
                       << " folded_postcombat la_cand=" << g_combat_pin_folded[0].load()
                       << " fslinewin=" << g_combat_pin_folded[1].load()
                       << " share_cached=" << g_cpshare_cached.load()
-                      << " share_used=" << g_cpshare_used.load() << "\n";
+                      << " share_used=" << g_cpshare_used.load()
+                      << " put_bounce_folded la_cand=" << g_put_bounce_folded.load()
+                      << " fslinewin=" << g_put_bounce_folded_fs.load()
+                      << " in_plan la_cand=" << g_etb_bounce_folded.load()
+                      << " fslinewin=" << g_etb_bounce_folded_fs.load()
+                      << " (verify ok=" << g_put_bounce_verify_ok.load()
+                      << " bad=" << g_put_bounce_verify_bad.load() << ")\n";
             std::cerr << "[rollout-stats] plan_axes etbcounter_variants=" << g_axis_etbcounter_vars.load()
                       << " sweep_variants=" << g_axis_sweep_vars.load()
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
@@ -17322,6 +17345,351 @@ struct BounceFoldMemo
     }
     static void CountVerify(bool ok)
     { (ok ? bouncestats::g_fold_ok : bouncestats::g_fold_bad).fetch_add(1, std::memory_order_relaxed); }
+};
+
+// ---- THE PUT-BOUNCE FOLD (land-search gap 3, 2026-10-15) -------------------------------------------
+// Primeval Titan's ETB and ATTACK triggers carry a put Gruul Turf's bounce as extended values of the
+// pick's own pin (core/LandSearch.h LandSearchPinDecode). The fan sizes them by an UPPER bound
+// (PutKarooBounceBound), and on a Landfall board the true width at the bounce is almost always 1 (the
+// USER rule / tapped-clean rule decide it from which lands are tapped THEN) -- measured: 99% of the
+// pinned put bounces CLAMPED onto an index a sibling had resolved (MTG_BOUNCE_STATS, 240 games), i.e.
+// variants reaching exactly a sibling's state. The combat-pin fold / post-apply dedup refused to SCORE
+// them, but only after the unit charge, the apply and (attack) the combat: gap 3 cost +2.4% to +10%
+// units over gap 2 alone on Landfall with no play change. With this fold (ATTACK mode below, IN-PLAN
+// mode at BuildInPlan) gap 2+3 plays byte-identically to gap 2 alone on those 240 games, at +0.2% to
+// +5.1% units; verify mode: 4,875,783 would-be declines, every one skipped by the fold it pre-empts.
+// The residual is mostly the BREAKPOINT-NODE children of a pending attack variant (fs_bp_node), which
+// host every continuation per variant with no pin fold -- docs/design/land-search-cluster.md, gap 3.
+//
+// THE FOLD IS EXACT (it skips only what the combat-pin fold would skip). It runs only where the
+// combat-pin MAIN-PHASE SHARE does, so every candidate it reasons about starts its combat from ONE
+// state: the base's cached post-apply state (cp_cache; the share's conditions prove a variant's main
+// phase is its base's), plus the variant's own attack pin. A variant here deviates from that base at
+// exactly ONE attack ordinal j (one non-zero packed slot): before j it takes pick 0 with the front
+// bounce, as the base does (pin 0 == no pin, LandSearchPinDecode); after j the stream is spent, as
+// the base's is. The attackers are the same (DeclareAttackerIndices reads no pin). So the state at
+// ordinal j's trigger is the same for the base and every variant deviating at j, and the variant's
+// whole combat is decided by the (pick, bounce index) its pin resolves to there. A probe
+// (PutBounceProbe, bound to THIS combat's state object so no projection or nested search can feed it)
+// records, in each such candidate's combat, the list's shape at ordinal j, the pick, the bounce width
+// and the index taken. A later variant whose value decodes -- against that recorded shape, so exactly
+// as its own resolution would -- to a (pick, min(b, width - 1)) a sibling already resolved has that
+// sibling's post-combat state, which the sibling already put in pin_fold_seen, so the combat-pin fold
+// would skip it: the loop declines it before the unit charge instead. Per pass, like pin_fold_seen.
+// Only EXTENDED (bounce) values are folded; a plain pick is left to the post-combat fold as before.
+//
+// A budget re-price (the declined variant no longer pays its la_cand unit), inert at an unlimited
+// budget: the set of states scored is unchanged, and so are the walker's records (the skip writes
+// what the share path's no-apply would have; see the call site).
+//
+// FSLineWin's TWIN (BuildMasked) has no main-phase share to stand on, so it proves the same fact the
+// share's conditions prove, per base, from the base's OWN apply: no pending node, no combat-pin read
+// (combatpin::t_reads unmoved), no work unit, no breakpoint of any kind -- then the apply never saw
+// the pins and spent nothing a later apply could see differently, so every variant's apply is the
+// base's (`clean`). The skip there also writes what the variant's apply would have left: its post-
+// apply key (the base's pin-free prefix plus its own pins -- `base_info`) into the post-apply dedup
+// set, and the walker/stillborn records of a no-breakpoint apply.
+struct PutBounceFold
+{
+    bool on = false;
+    bool in_plan = false;       // IN-PLAN mode (BuildInPlan): the ETB / in-plan pins, probed over the APPLY
+    std::vector<int>  base_of;  // per candidate: its attack-pin base's index (-1 = none)
+    std::vector<char> is_base;  // per candidate: some variant names it as base
+    std::vector<char> clean;    // per candidate (FSLineWin): its apply was proven pin-blind (header)
+    struct BaseInfo { TranspositionTable::Key prefix; int upkeep = -1; int crack = -1; };
+    std::unordered_map<int, BaseInfo> base_info;   // FSLineWin: a clean base's post-apply key parts
+    std::vector<int> dev_ord;   // per candidate: the one attack ordinal it deviates at (-1 = none)
+    std::vector<int> dev_val;   // ...and the packed slot's value there
+    // In-plan mode: what the recorded apply measured that the walker's records read (the breakpoint
+    // counters' deltas and the searched-only suppression), so a declined variant -- whose apply IS
+    // that apply -- leaves exactly those records.
+    struct ApplyTrace
+    {
+        std::uint64_t any = 0, classon = 0, latent9 = 0, truncasym = 0;
+        bool sup = false;
+    };
+    struct Entry
+    {
+        int w = 0;
+        std::vector<int> karoo;
+        std::vector<std::pair<int, int>> width;   // (pick, bounce width)
+        std::vector<std::pair<int, int>> seen;    // (pick, resolved bounce index)
+        std::vector<ApplyTrace> trace;            // ...per seen key: the apply that resolved it
+    };
+    std::map<std::pair<int, int>, Entry> memo;   // (base index, ordinal)
+    PutBounceProbe probe;
+    PutBounceProbe* saved = nullptr;
+    int armed = -1;   // the candidate whose combat the probe is listening to
+
+    // The one ordinal an attack variant deviates at, or false (a multi-ordinal or crack variant).
+    static bool SingleDeviation(const TurnSolver::Plan& v, int& ord, int& val)
+    {
+        if (v.attack_land_search_choice <= 0 || v.combat_crack_choice >= 0 || v.bounce_group != 0) { return false; }
+        int cnt = 0;
+        ord = -1; val = 0;
+        for (int j = 0; j < kLandSearchPinOrdinals; ++j)
+        {
+            const int slot = (v.attack_land_search_choice >> (kLandSearchPinBits * j)) & kLandSearchPinMask;
+            if (slot != 0) { ++cnt; ord = j; val = slot; }
+        }
+        return cnt == 1;
+    }
+    void Reset(std::size_t n)
+    {
+        memo.clear();
+        base_info.clear();
+        armed = -1;
+        base_of.assign(n, -1);
+        is_base.assign(n, 0);
+        clean.assign(n, 0);
+        dev_ord.assign(n, -1);
+        dev_val.assign(n, 0);
+    }
+    // SolveWithLookahead: `cp_base_of` is the combat-pin share's map (per candidate, its base or -1).
+    void Build(const std::vector<TurnSolver::Plan>& cands, const std::vector<int>& cp_base_of, bool enabled)
+    {
+        on = false;
+        if (!enabled || cp_base_of.size() != cands.size() || !KarooBounceSearchOn()) { return; }
+        Reset(cands.size());
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            int ord = -1, val = 0;
+            if (cp_base_of[i] < 0 || !SingleDeviation(cands[i], ord, val)) { continue; }
+            base_of[i] = cp_base_of[i];
+            dev_ord[i] = ord;
+            dev_val[i] = val;
+            on = true;
+        }
+    }
+    // The one in-plan ordinal an in-plan variant deviates at (one pin > 0, every other at the front).
+    static bool SingleDeviationInPlan(const TurnSolver::Plan& v, int& ord, int& val)
+    {
+        if (v.land_search_pins.empty() || v.bounce_group != 0 || v.bp_choice >= 0) { return false; }
+        int cnt = 0;
+        ord = -1; val = 0;
+        for (std::size_t j = 0; j < v.land_search_pins.size(); ++j)
+        { if (v.land_search_pins[j] > 0) { ++cnt; ord = static_cast<int>(j); val = v.land_search_pins[j]; } }
+        return cnt == 1;
+    }
+    // A bucketing hash over everything but the two combat land-search pins (equality decides).
+    // `with_pins` = false also leaves out the in-plan pins (the in-plan mode's mask).
+    static std::uint64_t MaskedHash(const TurnSolver::Plan& p, bool with_pins = true)
+    {
+        std::uint64_t h = 0x9B0F11ull + p.actions.size();
+        auto mix = [&h](std::uint64_t v) { h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); };
+        for (const Action& a : p.actions)
+        {
+            mix(static_cast<std::uint64_t>(a.kind));
+            mix(static_cast<std::uint64_t>(a.hand_index + 7));
+            mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(a.card_name.c_str())));
+            mix(static_cast<std::uint64_t>(a.chosen_x));
+            mix(static_cast<std::uint64_t>(a.sac_source_id));
+        }
+        mix(static_cast<std::uint64_t>(p.land_slot + 300));
+        mix(static_cast<std::uint64_t>(p.land_search_act_slot + 300));
+        if (with_pins)
+        {
+            mix(p.land_search_pins.size());
+            for (int v : p.land_search_pins) { mix(static_cast<std::uint64_t>(v + 7)); }
+        }
+        mix(static_cast<std::uint64_t>(p.bp_choice + 7));
+        mix(static_cast<std::uint64_t>(p.landfall_target_choice + 7));
+        mix(std::hash<std::string>{}(p.land_to_play));
+        return h;
+    }
+    // IN-PLAN mode: the base (no in-plan pins) of each single-deviation in-plan variant -- Primeval
+    // Titan's ETB put and its bounce sub-choices above all -- by Plan::operator== with the in-plan pins
+    // masked (and bp_self / bp_wave0, as below). The probe listens to each family member's APPLY; an
+    // entry is recorded only from an apply that spent NO work unit and did not stop at a breakpoint
+    // node (the caller's test) -- so no budgeted search ran inside it, and a breakpoint it passed took
+    // the base continuation every member takes (none carries a bp_choice). That apply is a function of
+    // the state, the plan and the one (pick, bounce index) its deviating ordinal resolves to, so a
+    // variant resolving to a recorded one IS that sibling's apply: same post-apply key (already in the
+    // post-apply dedup set, which would skip it) and the same breakpoint-counter deltas (ApplyTrace,
+    // which the skip replays into the walker's records).
+    void BuildInPlan(std::vector<TurnSolver::Plan>& cands, bool enabled)
+    {
+        on = false;
+        in_plan = true;
+        if (!enabled || !KarooBounceSearchOn()) { return; }
+        bool any = false;
+        for (const TurnSolver::Plan& p : cands)
+        {
+            int ord = -1, val = 0;
+            if (SingleDeviationInPlan(p, ord, val)) { any = true; break; }
+        }
+        if (!any) { return; }
+        Reset(cands.size());
+        std::unordered_multimap<std::uint64_t, int> bases;
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            const TurnSolver::Plan& p = cands[i];
+            if (p.land_search_pins.empty() && p.bounce_group == 0 && p.bp_choice < 0)
+            { bases.emplace(MaskedHash(p, false), static_cast<int>(i)); }
+        }
+        std::vector<int> saved_pins;
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            TurnSolver::Plan& v = cands[i];
+            int ord = -1, val = 0;
+            if (!SingleDeviationInPlan(v, ord, val)) { continue; }
+            saved_pins.swap(v.land_search_pins);
+            const int vs = v.bp_self;
+            const bool w0 = v.bp_wave0;
+            int b = -1;
+            const auto rng = bases.equal_range(MaskedHash(v, false));
+            for (auto it = rng.first; it != rng.second; ++it)
+            {
+                const TurnSolver::Plan& q = cands[static_cast<std::size_t>(it->second)];
+                v.bp_self  = q.bp_self;
+                v.bp_wave0 = q.bp_wave0;
+                if (q == v) { b = it->second; break; }
+            }
+            v.land_search_pins.swap(saved_pins);
+            v.bp_self  = vs;
+            v.bp_wave0 = w0;
+            if (b < 0) { continue; }
+            base_of[i] = b;
+            is_base[static_cast<std::size_t>(b)] = 1;
+            dev_ord[i] = ord;
+            dev_val[i] = val;
+            on = true;
+        }
+    }
+    // In-plan mode: listen to candidate i's APPLY on `target` (a base or a single-deviation variant).
+    void ArmApply(std::size_t i, const GameState* target)
+    {
+        if (!on || (is_base[i] == 0 && dev_ord[i] < 0)) { return; }
+        probe.obs.clear();
+        probe.ordinal = -1;
+        probe.in_plan = true;
+        probe.count0  = g_in_plan_ls_count;
+        probe.target  = target;
+        saved = g_put_bounce_probe;
+        g_put_bounce_probe = &probe;
+        armed = static_cast<int>(i);
+    }
+    // ...and read it back: `clean` = the caller's test on that apply; anything else records nothing.
+    void RecordApply(std::size_t i, bool clean, const ApplyTrace& tr)
+    {
+        if (armed != static_cast<int>(i)) { return; }
+        if (!clean) { g_put_bounce_probe = saved; armed = -1; return; }
+        Record(i, dev_ord[i] >= 0 ? base_of[i] : static_cast<int>(i), tr);
+    }
+    // FSLineWin: the base of each single-deviation attack variant, by Plan::operator== with the attack
+    // pin masked (the combat-pin share's rule). Breakpoint variants are left alone (bp_choice < 0 only),
+    // so the walker / stillborn records the skip must mirror are the no-breakpoint ones.
+    void BuildMasked(std::vector<TurnSolver::Plan>& cands, bool enabled)
+    {
+        on = false;
+        if (!enabled || !KarooBounceSearchOn()) { return; }
+        bool any = false;
+        for (const TurnSolver::Plan& p : cands)
+        {
+            int ord = -1, val = 0;
+            if (p.bp_choice < 0 && SingleDeviation(p, ord, val)) { any = true; break; }
+        }
+        if (!any) { return; }
+        Reset(cands.size());
+        std::unordered_multimap<std::uint64_t, int> bases;
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            const TurnSolver::Plan& p = cands[i];
+            if (p.attack_land_search_choice < 0 && p.combat_crack_choice < 0 && p.bounce_group == 0
+                && p.bp_choice < 0)
+            { bases.emplace(MaskedHash(p), static_cast<int>(i)); }
+        }
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            TurnSolver::Plan& v = cands[i];
+            int ord = -1, val = 0;
+            if (v.bp_choice >= 0 || !SingleDeviation(v, ord, val)) { continue; }
+            // ...and Plan::bp_self, FSLineWin's permutation witness (each plan's own pre-sort index,
+            // never read by play), which differs between ANY two plans of the list; and Plan::bp_wave0,
+            // wave 0's fan-out marker, which an axis clone never inherits (MTG_BP_AXIS_W0_CLEAR) and the
+            // apply reads only AT a class-on breakpoint -- which a clean base never reaches.
+            const int a = v.attack_land_search_choice;
+            const int vs = v.bp_self;
+            const bool w0 = v.bp_wave0;
+            v.attack_land_search_choice = -1;
+            int b = -1;
+            const auto rng = bases.equal_range(MaskedHash(v));
+            for (auto it = rng.first; it != rng.second; ++it)
+            {
+                const TurnSolver::Plan& q = cands[static_cast<std::size_t>(it->second)];
+                v.bp_self  = q.bp_self;
+                v.bp_wave0 = q.bp_wave0;
+                if (q == v) { b = it->second; break; }
+            }
+            v.attack_land_search_choice = a;
+            v.bp_self  = vs;
+            v.bp_wave0 = w0;
+            if (b < 0) { continue; }
+            base_of[i] = b;
+            is_base[static_cast<std::size_t>(b)] = 1;
+            dev_ord[i] = ord;
+            dev_val[i] = val;
+            on = true;
+        }
+    }
+    // Would candidate i's combat repeat a sibling's? `shared`: its base's post-apply state is cached,
+    // i.e. the share would start its combat from it (see the header).
+    bool Skip(std::size_t i, int base, bool shared) const { return SkipTrace(i, base, shared) != nullptr; }
+    // ...and the matched sibling's apply trace (in-plan mode), or nullptr when it would not.
+    const ApplyTrace* SkipTrace(std::size_t i, int base, bool shared) const
+    {
+        if (!on || !shared || dev_ord[i] < 0) { return nullptr; }
+        const auto it = memo.find({ base, dev_ord[i] });
+        if (it == memo.end()) { return nullptr; }
+        const Entry& e = it->second;
+        const int ext = e.w + static_cast<int>(e.karoo.size()) * kLandSearchBounceStride;
+        const int p = std::min(dev_val[i], ext - 1);   // LandSearchPinDecode's clamp
+        if (p < e.w) { return nullptr; }              // a plain pick: the post-combat fold's
+        const int x = p - e.w;
+        const int pick = e.karoo[static_cast<std::size_t>(x / kLandSearchBounceStride)];
+        const int b = x % kLandSearchBounceStride + 1;
+        int width = -1;
+        for (const auto& pw : e.width) { if (pw.first == pick) { width = pw.second; break; } }
+        if (width <= 0) { return nullptr; }
+        const std::pair<int, int> key{ pick, std::min(b, width - 1) };
+        const auto sit = std::find(e.seen.begin(), e.seen.end(), key);
+        if (sit == e.seen.end()) { return nullptr; }
+        return &e.trace[static_cast<std::size_t>(sit - e.seen.begin())];
+    }
+    // Listen to candidate i's combat on `target`: a base whose apply was cached, or a variant that
+    // started from that cache. Anything else (an uncached base, an unshared variant) records nothing.
+    void Arm(std::size_t i, bool cached_base, bool shared, const GameState* target)
+    {
+        if (!on || !(cached_base || (shared && dev_ord[i] >= 0))) { return; }
+        probe.obs.clear();
+        probe.ordinal = -1;
+        probe.in_plan = false;
+        probe.target  = target;
+        saved = g_put_bounce_probe;
+        g_put_bounce_probe = &probe;
+        armed = static_cast<int>(i);
+    }
+    void Record(std::size_t i, int base) { Record(i, base, ApplyTrace{}); }
+    void Record(std::size_t i, int base, const ApplyTrace& tr)
+    {
+        if (armed != static_cast<int>(i)) { return; }
+        g_put_bounce_probe = saved;
+        armed = -1;
+        for (const PutBounceObs& o : probe.obs)
+        {
+            // A variant's combat differs from its base's from its own ordinal on: only that one counts.
+            if (dev_ord[i] >= 0 && o.ordinal != dev_ord[i]) { continue; }
+            Entry& e = memo[{ base, o.ordinal }];
+            e.w = o.w;
+            e.karoo = o.karoo;
+            bool have = false;
+            for (const auto& pw : e.width) { if (pw.first == o.pick) { have = true; break; } }
+            if (!have) { e.width.emplace_back(o.pick, o.width); }
+            const std::pair<int, int> key{ o.pick, o.index };
+            if (std::find(e.seen.begin(), e.seen.end(), key) == e.seen.end())
+            { e.seen.push_back(key); e.trace.push_back(tr); }
+        }
+    }
 };
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
 // cands list contains an apply-empty entry, so the host's explicit EMPTY arm (kBpEmptyChoice)
@@ -51532,8 +51900,10 @@ static const bool s_legacy_land_sig    = !s_complete_land_sig;
 // lands, and the bounce is searched (DecisionProvider::BounceSearchCandidates on the state AT THE
 // BOUNCE; the land-search pin's extended pick list, Plan::bounce_choice for the Wave). The fan sizes
 // it here: an UPPER BOUND on the narrowed width -- never below the truth (so no candidate is lost:
-// above it, the clamped variant lands on a sibling's state and the post-apply dedup drops it), as
-// tight as the board proves cheaply. The rules mirrored, from BounceSearchCandidates:
+// above it, the clamped variant lands on a sibling's state and the post-apply dedup drops it -- for
+// the ATTACK trigger, whose bounce is decided by which lands main 1 tapped and so cannot be bounded
+// tightly here, the put-bounce fold drops it before its unit charge: PutBounceFold), as tight as the
+// board proves cheaply. The rules mirrored, from BounceSearchCandidates:
 //   * the Karoo itself, another Karoo and an enchanted land are excluded while anything else is
 //     returnable; identical names fold -- so the distinct returnable names bound it (+ one per
 //     depletion-land name, whose counter count splits a name);
@@ -57811,17 +58181,22 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
 // pick, the in-combat Khalni crack): pending and future-determining like every pin above, and a
 // land-search variant IS skippable on this key (PlanIsAxisVariant). Value-gated, own slots. LAST, so
 // the prefix above is shareable (see BuildDedupKeyBeforeLandSearchPins).
-static void FoldLandSearchStatePins(TranspositionTable::Key& k, const GameState& state)
+// ...from the three pin VALUES (the put-bounce fold finishes a variant's key it never applied).
+static void FoldLandSearchPinValues(TranspositionTable::Key& k, int attack, int upkeep, int crack)
 {
-    ++combatpin::t_reads;   // reads the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
-    const int lpins[] = { state.scripted_attack_land_search, state.scripted_upkeep_land_search,
-                          state.scripted_combat_land_search_crack };
+    const int lpins[] = { attack, upkeep, crack };
     for (int i = 0; i < 3; ++i)
     {
         if (lpins[i] != -1)
         { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 48) << 40)
                      ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(lpins[i]))); }
     }
+}
+static void FoldLandSearchStatePins(TranspositionTable::Key& k, const GameState& state)
+{
+    ++combatpin::t_reads;   // reads the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
+    FoldLandSearchPinValues(k, state.scripted_attack_land_search, state.scripted_upkeep_land_search,
+                            state.scripted_combat_land_search_crack);
 }
 static TranspositionTable::Key BuildDedupKey(const GameState& state)
 {
@@ -61684,6 +62059,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const bool fsw_w0_here    = fsw_nobp_here || fsw_unif_here || fsw_chain_here;
     const bool fsw_verify     = fsw_nobp_here && w0collapse::FswVerifyOn();
     w0collapse::Memo fsw_w0;
+    // THE PUT-BOUNCE FOLD, this frontier's twin (see PutBounceFold: BuildMasked, `clean`). Where the
+    // combat-pin fold runs; off under the diagnostic verify modes that key a variant's own apply.
+    PutBounceFold put_fold;
+    put_fold.BuildMasked(pre, pin_fold_here && state.deck_has_land_search && !HumanPlayActive()
+                              && PutBounceFoldOn() && !BounceFoldVerifyOn() && !ArmNewVerifyOn()
+                              && !fsw_verify);
+    const bool put_fold_verify = put_fold.on && PutBounceFoldVerifyOn();
+    // ...and its IN-PLAN mode (PutBounceFold::BuildInPlan): the ETB / in-plan sub-choices, declined
+    // where the post-apply dedup they repeat runs.
+    PutBounceFold etb_fold;
+    etb_fold.BuildInPlan(pre, bp_variants_here && state.deck_has_land_search && !HumanPlayActive()
+                              && PutBounceFoldOn() && !BounceFoldVerifyOn() && !ArmNewVerifyOn()
+                              && !fsw_verify);
+    const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
     // MTG_BP_NSKIP_GLOBAL only: this node's state dedup key, the cross-node half of the length
     // memo's key (see BpNSkipGlobalMode). Computed ONCE per node and only when the flag is on, so
     // the default path pays nothing and stays byte-identical.
@@ -61912,6 +62301,96 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 continue;
             }
         }
+        // ---- THE PUT-BOUNCE FOLD (see PutBounceFold) --------------------------------------------
+        // An attack bounce variant of a CLEAN base whose resolution a sibling already ran is that
+        // sibling's combat, which the combat-pin fold below would skip. Declined before ConsumeAt,
+        // leaving what its apply and that skip would have left: its post-apply key in the dedup set
+        // (the clean base's pin-free prefix plus its own pins), the walker's and the stillborn test's
+        // records of a no-breakpoint apply, the probe's no-win value and the beam refund.
+        bool put_fold_expect = false;   // verify mode: the combat-pin fold must skip this one
+        if (put_fold.on)
+        {
+            const std::size_t pf_i = static_cast<std::size_t>(&p - pre.data());
+            const int pf_b = put_fold.base_of[pf_i];
+            if (pf_b >= 0 && put_fold.clean[static_cast<std::size_t>(pf_b)] != 0
+                && put_fold.Skip(pf_i, pf_b, true))
+            {
+                if (put_fold_verify) { put_fold_expect = true; }
+                else
+                {
+                    const PutBounceFold::BaseInfo& bi = put_fold.base_info[pf_b];
+                    TranspositionTable::Key vkey = bi.prefix;
+                    FoldLandSearchPinValues(vkey, p.attack_land_search_choice, bi.upkeep, bi.crack);
+                    if (BpWaveNSkipOn()) { g_bp_cands_last = 0; }
+                    if (fsw_chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
+                    if (fsw_nobp_here) { g_bp_searchonly_suppressed = false; }
+                    g_bp_base_lens.clear();
+                    if (fsw_w0_here)
+                    {
+                        w0collapse::Record(fsw_w0, p, static_cast<int>(pf_i), g_bp_any_last,
+                                           g_bp_classon_last, fsw_nobp_here, fsw_unif_here, fsw_chain_here);
+                    }
+                    if (ArmNewDupAll(p, 0, 0, 0, 0)) { armnew_dup_all.emplace(pf_i, TranspositionTable::Key{}); }
+                    if (node_host_here || bp_variants_here)
+                    {
+                        const bool fresh = bp_seen_states.insert(vkey).second;
+                        if (bp_variants_here && BpWaveProbeOn())
+                        {
+                            g_bp_wave_probe.pre_seen.fetch_add(1);
+                            if (!fresh) { g_bp_wave_probe.pre_dup.fetch_add(1); }
+                        }
+                    }
+                    g_put_bounce_folded_fs.fetch_add(1, std::memory_order_relaxed);
+                    if (rec_vals) { node_vals.push_back(max_turns + 1); }
+                    if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+                    FswDeclinedTrace(state, depth, p, "put-bounce-fold", {}, state, -1, best.win_turn);
+                    continue;
+                }
+            }
+        }
+        // ...its IN-PLAN mode: a single-deviation in-plan variant (Primeval Titan's ETB pick + bounce)
+        // whose (pick, bounce index) a CLEAN sibling apply already resolved is that sibling's apply, whose
+        // post-apply key bp_seen_states already holds -- the post-apply dedup below would skip it.
+        // Declined before ConsumeAt, leaving what that skip leaves: the walker's and the stillborn
+        // test's records of a no-breakpoint apply, the probe's no-win value and the beam refund.
+        bool etb_fold_expect = false;   // verify mode: the post-apply dedup must skip this one
+        if (etb_fold.on)
+        {
+            const std::size_t ef_i = static_cast<std::size_t>(&p - pre.data());
+            const int ef_b = etb_fold.base_of[ef_i];
+            const PutBounceFold::ApplyTrace* ef_tr =
+                ef_b >= 0 ? etb_fold.SkipTrace(ef_i, ef_b, true) : nullptr;
+            if (ef_tr != nullptr)
+            {
+                if (etb_fold_verify) { etb_fold_expect = true; }
+                else
+                {
+                    // The records of the apply it repeats: that apply's counter deltas replayed.
+                    if (BpWaveNSkipOn()) { g_bp_cands_last = 0; }
+                    if (fsw_chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
+                    if (fsw_nobp_here) { g_bp_searchonly_suppressed = ef_tr->sup; }
+                    g_bp_base_lens.clear();
+                    if (fsw_w0_here)
+                    {
+                        w0collapse::Record(fsw_w0, p, static_cast<int>(ef_i), g_bp_any_last - ef_tr->any,
+                                           g_bp_classon_last - ef_tr->classon,
+                                           fsw_nobp_here, fsw_unif_here, fsw_chain_here);
+                    }
+                    if (ArmNewDupAll(p, ef_tr->classon, ef_tr->any, ef_tr->latent9, ef_tr->truncasym))
+                    { armnew_dup_all.emplace(ef_i, TranspositionTable::Key{}); }
+                    if (BpWaveProbeOn())
+                    {
+                        g_bp_wave_probe.pre_seen.fetch_add(1);
+                        g_bp_wave_probe.pre_dup.fetch_add(1);
+                    }
+                    g_etb_bounce_folded_fs.fetch_add(1, std::memory_order_relaxed);
+                    if (rec_vals) { node_vals.push_back(max_turns + 1); }
+                    if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+                    FswDeclinedTrace(state, depth, p, "etb-bounce-fold", {}, state, -1, best.win_turn);
+                    continue;
+                }
+            }
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
@@ -61948,7 +62427,42 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const std::uint64_t latent9_before = g_bp_latent9_last;
         const std::uint64_t truncasym_before = g_bp_truncasym_last;
         bounce_fold.Arm(p);
+        const unsigned long long pf_reads0 = combatpin::t_reads;
+        const long long pf_units0 = budget != nullptr ? budget->Used() : 0;
+        etb_fold.ArmApply(static_cast<std::size_t>(&p - pre.data()), &s);
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        // The in-plan probe records only an apply that spent no unit and stopped at no breakpoint node
+        // (see BuildInPlan), with what the walker's records read from it.
+        if (etb_fold.armed == static_cast<int>(&p - pre.data()))
+        {
+            PutBounceFold::ApplyTrace tr;
+            tr.any       = g_bp_any_last - any_before;
+            tr.classon   = g_bp_classon_last - classon_before;
+            tr.latent9   = g_bp_latent9_last - latent9_before;
+            tr.truncasym = g_bp_truncasym_last - truncasym_before;
+            tr.sup       = g_bp_searchonly_suppressed;
+            etb_fold.RecordApply(static_cast<std::size_t>(&p - pre.data()),
+                                 !node_snap.pending && (budget == nullptr || budget->Used() == pf_units0), tr);
+        }
+        // The put-bounce fold's CLEAN test (see PutBounceFold): this apply never read a combat pin,
+        // spent no unit and reached no breakpoint, so a variant's apply is this one.
+        const bool pf_apply_clean = put_fold.on && !node_snap.pending
+            && combatpin::t_reads == pf_reads0 && (budget == nullptr || budget->Used() == pf_units0)
+            && g_bp_any_last == any_before && g_bp_classon_last == classon_before
+            && g_bp_latent9_last == latent9_before && g_bp_truncasym_last == truncasym_before
+            && !g_bp_searchonly_suppressed;
+        if (pf_apply_clean)
+        {
+            const std::size_t pf_i = static_cast<std::size_t>(&p - pre.data());
+            if (put_fold.is_base[pf_i] != 0)
+            {
+                put_fold.clean[pf_i] = 1;
+                PutBounceFold::BaseInfo& bi = put_fold.base_info[static_cast<int>(pf_i)];
+                bi.prefix = BuildDedupKeyBeforeLandSearchPins(s);
+                bi.upkeep = s.scripted_upkeep_land_search;
+                bi.crack  = s.scripted_combat_land_search_crack;
+            }
+        }
         bounce_fold.Record(p, static_cast<int>(&p - pre.data()), !node_snap.pending,
                            [&] { return BuildDedupKey(s); });
         if (bounce_expect != nullptr) { BounceFoldMemo::CountVerify(BuildDedupKey(s) == *bounce_expect); }
@@ -62219,6 +62733,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             const TranspositionTable::Key mk = BuildDedupKey(s);
             const bool fresh = bp_seen_states.insert(mk).second;
+            if (etb_fold_expect)
+            { (fresh ? g_put_bounce_verify_bad : g_put_bounce_verify_ok).fetch_add(1, std::memory_order_relaxed); }
             if (BpWaveProbeOn() && p.bp_choice < 0)
             {
                 g_bp_wave_probe.pre_seen.fetch_add(1);
@@ -62302,7 +62818,22 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         GameState s_rel;
         if (dork_contested) { s_rel = s; }   // pre-combat snapshot for the release variant
+        // The put-bounce fold listens to THIS combat: a clean base, or a variant of one whose own apply
+        // was clean too. Not under a contested dork attack -- the combat-pin fold neither records nor
+        // folds there.
+        const std::size_t pf_ci = static_cast<std::size_t>(&p - pre.data());
+        if (put_fold.on && !dork_contested)
+        {
+            const int pf_b = put_fold.base_of[pf_ci];
+            put_fold.Arm(pf_ci, put_fold.clean[pf_ci] != 0,
+                         pf_apply_clean && pf_b >= 0 && put_fold.clean[static_cast<std::size_t>(pf_b)] != 0, &s);
+        }
         SimulateCombat(s);
+        if (put_fold.on && !dork_contested)
+        {
+            const int pf_b = put_fold.base_of[pf_ci];
+            put_fold.Record(pf_ci, pf_b >= 0 ? pf_b : static_cast<int>(pf_ci));
+        }
         if (OpponentHasLost(s))  // win this turn -> floor
         {
             // RESIDUAL OUTCOME (see g_res_win): the enumeration found a this-turn kill the seeds
@@ -62346,6 +62877,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (pin_fold_here && !dork_contested)
         {
             const bool fresh = pin_fold_seen.insert(BuildDedupKey(s)).second;
+            if (put_fold_expect)
+            { (fresh ? g_put_bounce_verify_bad : g_put_bounce_verify_ok).fetch_add(1, std::memory_order_relaxed); }
             if (!fresh && PlanHasCombatPin(p))
             {
                 g_combat_pin_folded[1].fetch_add(1, std::memory_order_relaxed);
@@ -67413,6 +67946,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         if (is_pre_combat && CombatPinFoldOn())
         { for (const Plan& p : candidates) { if (PlanHasCombatPin(p)) { pin_fold_here = true; break; } } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pin_fold_seen;
+        // The put-bounce fold (see PutBounceFold): rides the combat-pin share and the fold above.
+        PutBounceFold put_fold;
+        put_fold.Build(candidates, cp_base_of, pin_fold_here && !HumanPlayActive() && PutBounceFoldOn());
+        const bool put_fold_verify = put_fold.on && PutBounceFoldVerifyOn();
         // EXACT-REPEAT census: the same plan, nothing erased -- full BpCandFingerprint plus the two
         // fields it does not fold (hand_index, bp_choice). `census_names` answers "would a
         // COPY-BLIND skip be sound" and the answer is measured no (copy_FALSE). This answers the
@@ -67434,6 +67971,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         BounceFoldMemo bounce_fold;
         bounce_fold.on     = bp_variants_here && BounceFoldOn();
         bounce_fold.verify = bounce_fold.on && BounceFoldVerifyOn();
+        // ...and the put-bounce fold's IN-PLAN mode (see PutBounceFold::BuildInPlan): the ETB / in-plan
+        // sub-choices, declined where the post-apply dedup they repeat runs.
+        PutBounceFold etb_fold;
+        etb_fold.BuildInPlan(candidates, is_pre_combat && bp_variants_here && state.deck_has_land_search
+                                         && !HumanPlayActive() && PutBounceFoldOn());
+        const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
         // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
         // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
         // runs every rollout turn and is where the doc says the searched-breakpoint gain actually
@@ -67644,6 +68187,68 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
             }
 
+            // THE PUT-BOUNCE FOLD (see PutBounceFold): an attack bounce variant whose resolution a sibling
+            // already ran from the same shared state is that sibling's combat, which the combat-pin fold
+            // would skip after it. Declined before the unit charge, leaving what the share path leaves
+            // behind before its combat: the per-apply resets and the walker's records for an apply-free
+            // candidate (w0len_record), and the candidate counted for the overrun guard. The census-only
+            // sets (DedupCensusOn, candcensus) do not see it, and neither does the post-apply dedup: a
+            // later candidate reaching this one's post-apply state reaches its sibling's combat and is
+            // folded there instead.
+            bool put_fold_expect = false;   // verify mode: the combat-pin fold must skip this one
+            if (put_fold.on && !cp_base_of.empty())
+            {
+                const std::size_t pf_i = static_cast<std::size_t>(&plan - candidates.data());
+                const int pf_b = cp_base_of[pf_i];
+                const bool pf_skip = pf_b >= 0 && put_fold.Skip(pf_i, pf_b, cp_cache.count(pf_b) != 0);
+                if (pf_skip && put_fold_verify)
+                { put_fold_expect = true; }   // verify: run it, and ask the combat-pin fold below
+                else if (pf_skip)
+                {
+                    if (w0len_here) { g_bp_cands_last = 0; }
+                    if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
+                    cand_index = pf_i;
+                    any_before = g_bp_any_last;
+                    classon_before = g_bp_classon_last;
+                    if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = false; }
+                    latent9_before = g_bp_latent9_last;
+                    if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }
+                    w0len_record(plan);
+                    g_put_bounce_folded.fetch_add(1, std::memory_order_relaxed);
+                    ++candidates_done;
+                    continue;
+                }
+            }
+            // ...its IN-PLAN mode: a single-deviation in-plan variant whose (pick, bounce index) a clean
+            // sibling apply already resolved is that sibling's apply, whose post-apply key the dedup
+            // below already holds. Declined here, leaving the same per-apply resets and walker record a
+            // clean (no-breakpoint) apply leaves, and the candidate counted for the overrun guard.
+            bool etb_fold_expect = false;   // verify mode: the post-apply dedup must skip this one
+            if (etb_fold.on)
+            {
+                const std::size_t ef_i = static_cast<std::size_t>(&plan - candidates.data());
+                const int ef_b = etb_fold.base_of[ef_i];
+                const PutBounceFold::ApplyTrace* ef_tr =
+                    ef_b >= 0 ? etb_fold.SkipTrace(ef_i, ef_b, true) : nullptr;
+                if (ef_tr != nullptr && etb_fold_verify) { etb_fold_expect = true; }
+                else if (ef_tr != nullptr)
+                {
+                    // The walker's record of the apply it repeats: that apply's counter deltas replayed.
+                    if (w0len_here) { g_bp_cands_last = 0; }
+                    if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
+                    cand_index = ef_i;
+                    any_before     = g_bp_any_last - ef_tr->any;
+                    classon_before = g_bp_classon_last - ef_tr->classon;
+                    latent9_before = g_bp_latent9_last - ef_tr->latent9;
+                    if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = ef_tr->sup; }
+                    if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }
+                    w0len_record(plan);
+                    g_etb_bounce_folded.fetch_add(1, std::memory_order_relaxed);
+                    ++candidates_done;
+                    continue;
+                }
+            }
+
             // One work unit for this candidate's inline first turn (combat + post
             // main); the remaining turns are counted inside SimulateToEnd.
             ConsumeAt(budget, unitsite::kLookaheadCand);
@@ -67705,7 +68310,19 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     const bool cp_rec = !cp_is_base.empty() && cp_is_base[cp_i] != 0;
                     const unsigned long long cp_reads0 = combatpin::t_reads;
                     const long long cp_units0 = budget != nullptr ? budget->Used() : 0;
+                    etb_fold.ArmApply(cp_i, &copy);
                     ApplyPlanDirect(copy, plan, true);
+                    // The in-plan probe records only an apply that spent no unit (see BuildInPlan), with
+                    // what the walker's records read from it.
+                    if (etb_fold.armed == static_cast<int>(cp_i))
+                    {
+                        PutBounceFold::ApplyTrace tr;
+                        tr.any     = g_bp_any_last - any_before;
+                        tr.classon = g_bp_classon_last - classon_before;
+                        tr.latent9 = g_bp_latent9_last - latent9_before;
+                        tr.sup     = g_bp_searchonly_suppressed;
+                        etb_fold.RecordApply(cp_i, budget == nullptr || budget->Used() == cp_units0, tr);
+                    }
                     if (cp_rec && combatpin::t_reads == cp_reads0
                         && (budget == nullptr || budget->Used() == cp_units0)
                         && g_bp_any_last == any_before && g_bp_classon_last == classon_before
@@ -67873,6 +68490,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // that inflates the per-candidate average ~2.8x, which feeds `projected` and makes the
                 // guard abort passes it should have finished. A dedup that silently bought truncation
                 // would defeat its own purpose. (Same reasoning as the dominance prune below.)
+                if (etb_fold_expect)
+                {
+                    const TranspositionTable::Key ek = BuildDedupKey(copy);
+                    ((reframe_seen.count(ek) != 0 || bp_seen_states.count(ek) != 0)
+                         ? g_put_bounce_verify_ok : g_put_bounce_verify_bad).fetch_add(1, std::memory_order_relaxed);
+                }
                 if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
                 { ++candidates_done; continue; }
                 // The post-apply key, through the combat-pin share's prefix cache when it can be: a
@@ -67908,7 +68531,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
 
                 // Combat this turn
+                // The put-bounce fold listens to THIS combat (a cached base, or a variant started from it).
+                put_fold.Arm(cp_i, put_fold.on && cp_cache.count(static_cast<int>(cp_i)) != 0,
+                             cp_shared != nullptr, &copy);
                 SimulateCombat(copy);
+                put_fold.Record(cp_i, cp_shared != nullptr ? cp_base_of[cp_i] : static_cast<int>(cp_i));
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 // DIAGNOSTIC (MTG_DUP_DIFF): post-COMBAT duplicate rate, split by whether the
                 // candidate carries a combat pin (Bruna gather / Wings combat swap).
@@ -67928,6 +68555,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 {
                     const bool fresh = pin_fold_seen.insert(BuildDedupKey(copy)).second;
                     if (dupdiff::On() && PlanHasCombatPin(plan)) { dupdiff::PinClass(state, plan, !fresh); }
+                    if (put_fold_expect)
+                    { (fresh ? g_put_bounce_verify_bad : g_put_bounce_verify_ok).fetch_add(1, std::memory_order_relaxed); }
                     if (!fresh && PlanHasCombatPin(plan))
                     {
                         g_combat_pin_folded[0].fetch_add(1, std::memory_order_relaxed);
