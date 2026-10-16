@@ -601,6 +601,11 @@ measurement and the drawn-land work it came with: `docs/design/fluctuator-cast-o
 * **CYCLING is the [LAST] row** -- never a rank, structurally after every cast of its window at every site (the
   rollout's dig loop, the executor's DigDraw replay, the reactive d0 dig, the searched dig axis, human play).
 * **Single main:** every card is m1 (`MainPhaseOverride`); the column is inert on this deck.
+* **FUNDED (`MTG_FLUCT_ORDER_FUNDED`, default ON -- USER question open):** the order above holds whenever the exact
+  payer can pay the whole cast set in it; when it cannot (the pool over-credits Capital City's net-zero filter, so
+  the d0 greedy and the playouts pick sets like {Fluctuator, Unearth} of which only one is payable), Unearth and
+  Enlightened Tutor move after Hollow One, so the casts that survive are the Stinger and the Fluctuator. Without it
+  the order alone measured +204 / +67 net at d0. `=0` is the order exactly as approved.
 
 ```
 # Cast order -- decks/Fluctuator/Fluctuator.cod
