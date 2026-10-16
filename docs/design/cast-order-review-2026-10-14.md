@@ -218,6 +218,29 @@ Unexpectedly Absent are never cast (USER 10-04).
 - Agent defaults taken with it (surfaced, not contested): delete the unused MTG_KE_ORDER_FULL; fix the report's tier
   labels (decode the class from the composite key).
 
+### INTEGRATION ROUND (2026-10-15/16): what the integration tree plays, pending the USER
+
+One implementation agent per settled deck built its order and measured it against the committed tree (paired, loss
+= 9; every slower game re-played at `--depth W --budget-ms 100`, then `--depth 8 --budget-ms 0`). The branches were
+then cherry-picked into ONE integration tree, `work/integ-2026-10-14`, which builds and passes every unit test. No
+smoke or regression has run on it yet. Nothing is pushed. Every setting below is the USER's to confirm or overturn.
+Cells are shipped / d3 / d0 in turns against the committed tree, negative = faster.
+
+| deck | ON in the integration tree | net (20-life; 2HG) | slower games not recovered | open for the USER |
+|---|---|---|---|---|
+| CritterLifegain | the order | -26 total; 2HG -13 | 0 of 8 | `MTG_CRITTER_HELIOD_FIRST` (built OFF; d0 20 faster / 0 slower; agent recommends ON) |
+| Soldiers | the order | ship -19, d0 -295; 2HG -28 / -57 / -186 | 0 (no slower game) | Protege copy pick (E37); unlisted cards rank after the listed ones, then by name (agent default) |
+| BreachingDragonstorm | the order | no searched game moves | 0 | -- |
+| Auras | the order | order 0 / 0 / 0, 2HG -2 / 0 / 0 | 2 (auras2hg gi1665, gi8546: the Light-Paws fetch rule) | Q20: `MTG_LP_FETCH_MV_AWARE` (OFF; ON leaves only gi1863); Q19 order search (rec no); gi1863 last-chance scaler |
+| Angels | the order + `MTG_ANGELS_GIADA_M2` + `MTG_LINE_SPARE_TIGHT` | -162 / -277 / -284; 2HG -75 / -123 / -229 | 3 (d3 gi873, 2HG gi2425 / gi1165: Giada's counters lost to Righteous / Lyra first) | `MTG_ANGELS_GIADA_SEARCH` (OFF; recovers all 3 at +0.1-0.2% work); the "help pay for" reading; `MTG_LINE_SPARE_TIGHT` is ENGINE-WIDE (moves Dragonstorm digests: 1 faster at d3, 0 slower) |
+| breakpoint options (BP) | F1-F4; `MTG_BP_NEW_LAST` deleted (agent default) | 9 mover decks net <= 0 | 0 (6 of 6 at stage 1) | F5 `MTG_BP_NEW_ONLY_DEMOTE` OFF (= Q140, staged-reopen proposal); A3 |
+| Hinata2 | the order + `MTG_HINATA_ORDER_FULL` + `MTG_HINATA_GAMBLE_SEARCHED` -- **both set ON by the integrator** (the agent left them OFF) | -3 / -6 / -20; 2HG 0 / -5 / -29 | 4 of 1,335; 2 real: ship gi82 (Preordain before Ponder, E36), d3 gi1538 (Soulfire before Opus) | the Gamble fan (+2-7% work); Preordain vs Ponder (`MTG_HINATA_PP_STRICT` swaps gi82 for 2HG gi626, 2HG ship +5); accept gi1538?; the 09-01 waste gate and Irencrag second-last |
+| StompySurprise | the order + `MTG_HOLD_RELEASE_YIELD` + `MTG_HOLD_PRODUCER_FIRST` + `MTG_SAC_VICTIM_SAME_NAME` + `MTG_EXEC_PUT_DEFERRED` -- **all set ON by the integrator** (the agent left them OFF); `MTG_STOMPY_NO_TARGET_RANK` OFF | -53 / -94 / -2,537; 2HG -74 / -126 / -1,177 | 2 of 598 (d3 gi8441, 2HG d3 gi4296: E35); the levers alone, order OFF: 0 of 35 | the four levers (agent recommends ON); the order before or after E35's fix; TOP_RESOLVE (1.9x work for -9 / -11); NO_TARGET_RANK adopt or drop; the tie-break list; Terastodon / Hulk |
+| KittyEquipment | the order (Equipment split by cost, then name; Sram main 1) | 75,000 games net +8: six cells > 0 (kitty d3, kittyv3 ship, kitty2hg ship +1 each; kittyv3 d3 +2; kittyv2 / kittyv3 d0 +4 each) | 0 of 16 | accept with six cells > 0, or build E32's fix first; Adelbert Steiner main 1? |
+| burn | the order + conditional `MTG_BURN_BLOOD_FIRST` + the broad main-2 rule + `MTG_SPECTACLE_PLAN_CREDIT` + `MTG_KILL_TRIGGER_COMBO` (all as the agent shipped) | -6 / -10 / -565; 2HG -1 / -14 / -298 | 1 (2HG d0 gi8716; the committed tree is also T6 there at d8 b0) | conditional Blood-first; Eidolon last in both mains (not built); the broad "played off" reading; gi8716 pre-existing OK?; the search-only credit (OFF) |
+| Fluctuator | the order + `MTG_FLUCT_ORDER_FUNDED` + the drawn-land drop + keep-untapped + `MTG_FLUCT_KEEP_NEEDED` + `MTG_DIG_HOOK_BPALL_EXEMPT`; OFF: `MTG_DIG_DRAWN_LAND_D0`, `MTG_NO_REDUNDANT_REDUCER` | -26 / -24 / -588; 2HG -15 / -11 / -325 | 0 of 260 | FUNDED; cast a free Hollow One rather than cycle it; `MTG_NO_REDUNDANT_REDUCER`; the Capital City double count (E38); the drawn-land hook for other dig decks (default no); KEEP_NEEDED as the reading of "occasionally an untapped land" |
+| EldraziDisplacerFlicker | (agent still measuring) | | | A/B size; part 2 via ArrangeCastOrder; part 5 as extra attempts; all parts ON |
+
 ## Start here: eight answers that unblock most of the rest
 
 There are 141 questions below. Each has a default, but a default is not an adoption: until you answer, the
@@ -1152,6 +1175,60 @@ Genesis Wave's X sizing (~23110), or in `CreditCastOutput` (~2885).
   (DecisionProviders.cpp:18522). AL's colour-coverage `FetchCandidates` and your AL discard buckets are live on both
   decks.
 - Implementing Hydras' fetch spells with `tutor_to_hand` or `fetch_land_types` would move that deck the same way.
+
+**E32. KittyEquipment: the equip-route certificate breaks plan ties by battlefield position.**
+- `EquipRouteTrial`'s MostCasts playout (at d0 its Search rung is skipped) orders its plan ties by enumeration
+  position, which follows battlefield order. Identical cards and counts, only the sequence of same-cost Equipment
+  differs: kittyv2 gi3990 T4 answers "LETHAL after 4 links" on the old order and "no win: 3 links" on the new one.
+- **Cost:** a cast-order change that only reorders identical-content permanents flips a d0 go-off -- all 10 of the
+  Kitty order's d0 slower games, and its 1 faster d0 game per list the other way.
+- **Proposed:** a canonical plan tie-break, independent of the order of identical-content permanents; its own A/B.
+
+**E33. KittyEquipment: a pooled batch result is not always the fresh-process result.**
+- Same binary, game and settings: the committed binary's kittyv3 shipped gi1849 is T6 in a 20-thread batch and T7
+  as a one-game job. Three of the Kitty order's six searched slower games do not reproduce outside the batch.
+- **Suspect:** worker state that outlives a game. The breakpoint enum cache is documented as never epoch- or
+  game-cleared (TurnSolver.cpp, `BpEnumEpochScoped`).
+- **Cost:** rare (5,400 other games matched game for game across two differently scheduled batches), but it puts a
+  floor under any paired A/B, and it is a determinism defect in its own right.
+
+**E34. KittyEquipment v2: the reference `claude_s8_gi7` is too heavy to replay.**
+- About 420k plans at its T3; each replay step takes tens of minutes on the committed binary as well. Two agents
+  (Kitty, Fluctuator) left it out of their reference sweeps; it was never compared old vs new.
+
+**E35. StompySurprise: the real payer spends floating green on a generic pip.**
+- stompy d3 gi8441 T3 (Forest, Llanowar Elves, Sol Ring, Priest of Titania): Priest floats {G}{G}{G}, the first
+  Archdruid pays its {1} from that floating green instead of Sol Ring, and the second Archdruid is unpayable
+  (`paid=0 pool=3` with Sol Ring untapped). The rollout realises the same, so the line scores T5 at every depth and
+  budget. stompy2hg d3 gi4296 is the same shape. The order exposes it by casting the 1-drop Elves first.
+- **Proposed (payment, the permitted greedy area; one payer, so lockstep by construction):** pay a generic pip from
+  colourless before floating coloured mana the rest of the plan still needs -- the real payer's twin of
+  `PayFromPoolLineAware`. Behind its own lever; held-out A/B on every deck that taps a rock beside a scaled dork.
+  Detail: `stompy-order-2026-10-14.md` §4f.
+
+**E36. Hinata2: the Preordain / Ponder order inside breakpoint continuations.**
+- hinata ship gi82 wants Ponder first, hinata2hg gi626 wants Preordain first. The kill runs through the
+  Soulfire-exile chain's breakpoint continuations, which a plan-level ordering candidate (`MTG_HINATA_PP_SEARCHED`)
+  does not reach. A searched fix has to branch the order inside those continuations. Detail:
+  `hinata-cast-order.md`.
+
+**E37. BreachingDragonstorm: Sakashima's Protege's copy pick at depth > 0.**
+- Scenario `breaching_protege_after_dragonstorm`: at depth 0 Dragonstorm resolves, its walk free-casts Boarding
+  Party and the Protege copies it (T6). At depth 3 b200 and depth 5 b0 the search's own line has the Protege enter
+  as itself (T7 line). The copy source is a per-plan variant fixed at enumeration time, and the entrant that
+  matters only exists after Dragonstorm's walk. The fixture is pinned at depth 0 meanwhile. Detail:
+  `soldiers-breaching-cast-order-2026-10-15.md`.
+
+**E38. Fluctuator: the Capital City double count.**
+- The pool and the colour-exact test credit a fed any-colour filter's colour on top of the land that feeds it, so
+  the d0 order plays a Stinger it cannot pay. `MTG_FLUCT_ORDER_FUNDED` works around it for Fluctuator only. The
+  real fix is in the shared payment core and also touches Snow's Arcum's Astrolabe; it needs a measurement on both
+  decks. Detail: `fluctuator-cast-order-2026-10-14.md` §6.2.
+
+**E39. Two name-tie hooks for one rule.**
+- Parallel branches landed `CastOrderTotalByName` + `CastOrderNameTieLess` (also read by the enumeration's
+  sequential walk) and CritterLifegain's `CastOrderTiesByName`. Both sit in `CastOrderLessRanked` (ManaPayment.cpp),
+  exactly as measured, with an integration note. Unify them into one hook with a per-deck identity check.
 
 **Tooling.**
 - `mtg` loads `cards.json` relative to the working directory, and with no file it silently plays with no cards
