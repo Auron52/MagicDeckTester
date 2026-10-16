@@ -364,6 +364,18 @@ pruned" and gave it (verbatim in `LandfallProvider`'s .cpp block), then the boun
   lands that re-enter untapped (tapped, or floatable): colourless first, then the most SPARE colour (our
   lands making it, less the most pips of it on one of our nonland cards -- G 3 Genesis Wave, R 2 Omnath,
   the targets the fetch rule builds toward), then tapped, then copies. One land, no search.
+- **Never a basic** (same day, `LandSearchAdmitsLand`): *"Primeval Titan must never search for a basic"* --
+  *"basics are a resource in the deck. You don't want to waste them when being able to choose any land."*
+  Titan's list is built without basics (one nonbasic alone, or nothing, when fewer than two remain).
+  Held-out A/B vs the Titan + bounce rules (`logs/nobasic`, 5,500 paired games): **0 outcomes changed**
+  at d0 / d3 / PLAY; units 0.97x / 0.98x -- the rule had almost never reached a basic; this is the
+  "never" guarantee and a small saving. Tiers: four Titan scenario fixtures held only basics (Titan now
+  finds nothing there) -- given Radiant Fountain + Haunted Fengraf, 200/200; smoke / regression: only the
+  Landfall d0 keys' digests moved (24 / 16 games play-changed, 0 slower, 0 faster), searched byte-identical,
+  every other case unchanged; accepted with `--deck=landfall`.
+- **Viewer default fix** (s5 gi4): the second Titan prompt defaulted to a Forest -- the pick names the
+  Wilds CLASS, the prompt offers real names, and with the last Evolving Wilds taken the lookup fell to
+  entry 0. Defaults now match by identity class and follow the human's earlier answers.
 - **Interpretations taken (reported to the user):** "no land drop" = no land card in hand; the colour
   counts are the fetch rule's (a Mountain in hand is red); a colour's "requirement" is the deck's own
   most-pips card.
@@ -385,6 +397,22 @@ pruned" and gave it (verbatim in `LandfallProvider`'s .cpp block), then the boun
   706 consistent. Overnight left to the periodic run (a play change).
 - **Cost gate, same regression run:** landfall **2,881 ms/game (d5 s3003) / pd 2,695 = 1.07x** (was 2.64x
   at these rows this morning, 4.30x before the fetch rule); the deck's regression total 605 -> 220 core-s.
+
+## Screening input — stalls and running out of threats (USER 2026-10-16, DEFERRED to deck screening)
+After hand-playing 10 references (s1-s10): *"Surprisingly there were some really bad games in there
+where the deck stalled. This might be where it needs some updates in future screening arms. The deck's
+owner also mentioned running out of threats which I would like to patch up in those screens."* and
+*"if it happens here, it will be even worse in a real game where your opponent can bring in removal"*;
+with the caveat *"I may have poorly mulliganed in some of those games, but kept getting what seemed like
+bad hands."*
+- Human: 2 of 10 at T8 (s6 after a mulligan to 4, s7). Search on the same games: T7 on both.
+- Shipped search, 1,000 held-out PLAY games (`logs/titanrule`, f6a913a06 code): T5 31.6%, T6 60.2%,
+  T7 6.6%, T8 1.3%, unwon 0.3% -- **T7+ 8.2%, T8+ 1.6%**. Clairvoyance hides some of the stall a human
+  meets (the search plays around its own draws), so the human rate is the more honest read.
+- **To do at the screening stage** (`deck-screening.md`, after the value leaf + keep table so every arm
+  shares the apparatus): threat-density arms (more payoffs for ramp/lands); measure the T7+/unwon tail,
+  not only the average; note that goldfish cannot price removal, so a threat-count arm's real value is
+  understated here -- report that, do not fold it away.
 
 ## Stage 5c2 — horizon-honest tie-break: NO SIGN at this sample (2026-10-16, tree b35f9f0e)
 `leaf_tiebreak_check.py`'s manifest (4 blocks x 250 at PLAY settings d5 b20, both arms per-job, pooled
