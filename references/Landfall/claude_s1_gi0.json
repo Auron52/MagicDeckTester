@@ -1,0 +1,601 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [44] }, "combat_swap_timing": 1, "karoo_float": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 35, "name": "Myriad Landscape" }, { "num": 1, "name": "Avenger of Zendikar" }, { "num": 7, "name": "Cultivate" }, { "num": 51, "name": "Rampant Growth" }, { "num": 44, "name": "Primeval Titan" }, { "num": 25, "name": "Genesis Wave" }, { "num": 28, "name": "Haunted Fengraf" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 50, "name": "Rampaging Baloths" }, { "num": 29, "name": "Khalni Heart Expedition" }, { "num": 45, "name": "Primeval Titan" }, { "num": 44, "name": "Primeval Titan" }, { "num": 13, "name": "Forest" }, { "num": 43, "name": "Phylath, World Sculptor" }, { "num": 35, "name": "Myriad Landscape" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 50, "name": "Rampaging Baloths", "win_optimal": true }, { "num": 29, "name": "Khalni Heart Expedition", "win_optimal": true }, { "num": 45, "name": "Primeval Titan", "win_optimal": true }, { "num": 44, "name": "Primeval Titan", "win_optimal": true }, { "num": 13, "name": "Forest", "win_optimal": true }, { "num": 43, "name": "Phylath, World Sculptor", "win_optimal": true }, { "num": 35, "name": "Myriad Landscape", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 50, "name": "Rampaging Baloths" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 35, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Myriad Landscape; cast: (nothing)", "land": "Myriad Landscape", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Myriad Landscape", "idx": 0, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Myriad Landscape", "idx": 0, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Evolving Wilds" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Myriad Landscape", "idx": 0, "num": 35, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Khalni Heart Expedition", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Khalni Heart Expedition", "land": "Forest", "casts": ["Khalni Heart Expedition"], "actions": [{ "card": "Khalni Heart Expedition" }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 13, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 2, "num": 29, "is_land": false }, { "name": "Myriad Landscape", "idx": 0, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 13, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 2, "num": 29, "is_land": false }, { "name": "Myriad Landscape", "idx": 0, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Genesis Wave" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 13, "is_land": true, "taps": "G" }, { "name": "Khalni Heart Expedition", "idx": 2, "num": 29, "is_land": false }, { "name": "Myriad Landscape", "idx": 0, "num": 35, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Myriad Landscape: sacrifice it: search for land(s), put them onto the battlefield", "land": "Forest", "casts": ["Myriad Landscape"], "actions": [{ "card": "Myriad Landscape", "src_num": 35, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "type": "tutor_etb",
+  "source": "Myriad Landscape -- basic land onto the battlefield tapped (1 of up to 2)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 19, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 1, "num": 29, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Myriad Landscape"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 1,
+  "candidates": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Mountain" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "type": "tutor_etb",
+  "source": "Myriad Landscape -- basic land onto the battlefield tapped (2 of up to 2)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 19, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 1, "num": 29, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Myriad Landscape"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Mountain" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "🌍 Khalni Heart Expedition (landfall: Forest): quest counter (1)" }, { "turn": 3, "kind": "sacrifice", "text": "🔪 Myriad Landscape -- sacrificed (cost)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Khalni Heart Expedition (landfall: Mountain): quest counter (2)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Khalni Heart Expedition (landfall: Mountain): quest counter (3)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Myriad Landscape: Mountain, Mountain onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 2, "num": 19, "tapped": true, "is_land": true }, { "name": "Khalni Heart Expedition", "idx": 1, "num": 29, "is_land": false, "counters": [{ "kind": "quest", "label": "quest", "count": 3 }] }, { "name": "Mountain", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Myriad Landscape"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Khalni Heart Expedition: remove quest counters, sacrifice it: search for two basic lands", "land": null, "casts": ["Khalni Heart Expedition"], "actions": [{ "card": "Khalni Heart Expedition", "src_num": 29, "activate": true, "act_label": "remove quest counters, sacrifice it: search for two basic lands", "verb": "landsearch", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "type": "tutor_etb",
+  "source": "Khalni Heart Expedition -- basic land onto the battlefield tapped (1 of up to 2)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "tutor_etb",
+  "source": "Khalni Heart Expedition -- basic land onto the battlefield tapped (2 of up to 2)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "sacrifice", "text": "🔪 Khalni Heart Expedition -- sacrificed (cost)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Khalni Heart Expedition: Forest, Forest onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 21, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 22, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 5, "num": 24, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 33, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 3, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Evolving Wilds; cast: Rampaging Baloths, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Rampaging Baloths", "Evolving Wilds"], "actions": [{ "card": "Rampaging Baloths" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: Primeval Titan, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Primeval Titan", "Evolving Wilds"], "actions": [{ "card": "Primeval Titan" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 2, "summary": "land=Evolving Wilds (after Rampaging Baloths); cast: Rampaging Baloths, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Rampaging Baloths", "Evolving Wilds"], "actions": [{ "card": "Rampaging Baloths" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 3, "summary": "land=Evolving Wilds; cast: Rampaging Baloths", "land": "Evolving Wilds", "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 4, "summary": "land=Evolving Wilds; cast: Primeval Titan", "land": "Evolving Wilds", "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 5, "summary": "land=Evolving Wilds (after the casts); cast: Rampaging Baloths", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 7, "summary": "land=Forest; cast: Rampaging Baloths", "land": "Forest", "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 8, "summary": "land=Forest; cast: Primeval Titan", "land": "Forest", "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 9, "summary": "land=Forest (after the casts); cast: Rampaging Baloths", "land": "Forest", "land_after_casts": true, "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 11, "summary": "land=none; cast: Rampaging Baloths", "land": null, "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 12, "summary": "land=none; cast: Primeval Titan", "land": null, "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 13, "summary": "land=Evolving Wilds; cast: Phylath, World Sculptor, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Phylath, World Sculptor", "Evolving Wilds"], "actions": [{ "card": "Phylath, World Sculptor" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 14, "summary": "land=Evolving Wilds (after Phylath, World Sculptor); cast: Phylath, World Sculptor, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Phylath, World Sculptor", "Evolving Wilds"], "actions": [{ "card": "Phylath, World Sculptor" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 15, "summary": "land=Evolving Wilds; cast: Phylath, World Sculptor", "land": "Evolving Wilds", "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 16, "summary": "land=Evolving Wilds (after the casts); cast: Phylath, World Sculptor", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 18, "summary": "land=Forest; cast: Phylath, World Sculptor", "land": "Forest", "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 19, "summary": "land=Forest (after the casts); cast: Phylath, World Sculptor", "land": "Forest", "land_after_casts": true, "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 21, "summary": "land=none; cast: Phylath, World Sculptor", "land": null, "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 22, "summary": "land=Forest; cast: Genesis Wave (X=4)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 4 }] },
+    { "index": 23, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=3), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 3 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 24, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=3), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 3 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 25, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=3)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 26, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=3)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 28, "summary": "land=Forest; cast: Genesis Wave (X=3)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 29, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=3)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 31, "summary": "land=none; cast: Genesis Wave (X=3)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 32, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=2), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 2 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 33, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=2), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 2 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 34, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=2)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 35, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=2)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 37, "summary": "land=Forest; cast: Genesis Wave (X=2)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 38, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=2)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 40, "summary": "land=none; cast: Genesis Wave (X=2)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 41, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 42, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=0), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 43, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=1), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 44, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=0), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 45, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=1), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 46, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 47, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=0)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 48, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=1)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 49, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=0)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 50, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=1)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 53, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 54, "summary": "land=Forest; cast: Genesis Wave (X=0)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 55, "summary": "land=Forest; cast: Genesis Wave (X=1)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 56, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=0)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 57, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=1)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 60, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 61, "summary": "land=none; cast: Genesis Wave (X=0)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 62, "summary": "land=none; cast: Genesis Wave (X=1)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "etb", "text": "Phylath, World Sculptor -- create 6 0/1 Plant token(s) (one per basic land you control)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Phylath, World Sculptor" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Forest", "idx": 0, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 22, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 5, "num": 24, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 33, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 3, "num": 34, "is_land": true, "taps": "R" }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Evolving Wilds", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Evolving Wilds; cast: Rampaging Baloths, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Rampaging Baloths", "Evolving Wilds"], "actions": [{ "card": "Rampaging Baloths" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Evolving Wilds; cast: Primeval Titan, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Primeval Titan", "Evolving Wilds"], "actions": [{ "card": "Primeval Titan" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 2, "summary": "land=Evolving Wilds (after Rampaging Baloths); cast: Rampaging Baloths, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Rampaging Baloths", "Evolving Wilds"], "actions": [{ "card": "Rampaging Baloths" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 3, "summary": "land=Evolving Wilds; cast: Rampaging Baloths", "land": "Evolving Wilds", "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 4, "summary": "land=Evolving Wilds; cast: Primeval Titan", "land": "Evolving Wilds", "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 5, "summary": "land=Evolving Wilds (after the casts); cast: Rampaging Baloths", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 7, "summary": "land=Forest; cast: Rampaging Baloths", "land": "Forest", "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 8, "summary": "land=Forest; cast: Primeval Titan", "land": "Forest", "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 9, "summary": "land=Forest (after the casts); cast: Rampaging Baloths", "land": "Forest", "land_after_casts": true, "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 11, "summary": "land=none; cast: Rampaging Baloths", "land": null, "casts": ["Rampaging Baloths"], "actions": [{ "card": "Rampaging Baloths" }] },
+    { "index": 12, "summary": "land=none; cast: Primeval Titan", "land": null, "casts": ["Primeval Titan"], "actions": [{ "card": "Primeval Titan" }] },
+    { "index": 13, "summary": "land=Evolving Wilds; cast: Phylath, World Sculptor, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Phylath, World Sculptor", "Evolving Wilds"], "actions": [{ "card": "Phylath, World Sculptor" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 14, "summary": "land=Evolving Wilds (after Phylath, World Sculptor); cast: Phylath, World Sculptor, Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Phylath, World Sculptor", "Evolving Wilds"], "actions": [{ "card": "Phylath, World Sculptor" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 15, "summary": "land=Evolving Wilds; cast: Phylath, World Sculptor", "land": "Evolving Wilds", "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 16, "summary": "land=Evolving Wilds (after the casts); cast: Phylath, World Sculptor", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 18, "summary": "land=Forest; cast: Phylath, World Sculptor", "land": "Forest", "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 19, "summary": "land=Forest (after the casts); cast: Phylath, World Sculptor", "land": "Forest", "land_after_casts": true, "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 21, "summary": "land=none; cast: Phylath, World Sculptor", "land": null, "casts": ["Phylath, World Sculptor"], "actions": [{ "card": "Phylath, World Sculptor" }] },
+    { "index": 22, "summary": "land=Forest; cast: Genesis Wave (X=4)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 4 }] },
+    { "index": 23, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=3), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 3 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 24, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=3), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 3 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 25, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=3)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 26, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=3)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 28, "summary": "land=Forest; cast: Genesis Wave (X=3)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 29, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=3)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 31, "summary": "land=none; cast: Genesis Wave (X=3)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 3 }] },
+    { "index": 32, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=2), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 2 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 33, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=2), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 2 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 34, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=2)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 35, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=2)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 37, "summary": "land=Forest; cast: Genesis Wave (X=2)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 38, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=2)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 40, "summary": "land=none; cast: Genesis Wave (X=2)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 2 }] },
+    { "index": 41, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=1), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 42, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=1), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave", "x": 1 }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 43, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=1)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 44, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=1)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 46, "summary": "land=Forest; cast: Genesis Wave (X=1)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 47, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=1)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 49, "summary": "land=none; cast: Genesis Wave (X=1)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave", "x": 1 }] },
+    { "index": 50, "summary": "land=Evolving Wilds; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 51, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=0), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 52, "summary": "land=Evolving Wilds (after Genesis Wave); cast: Genesis Wave (X=0), Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": "Evolving Wilds", "land_slot": 1, "casts": ["Genesis Wave", "Evolving Wilds"], "actions": [{ "card": "Genesis Wave" }, { "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 53, "summary": "land=Evolving Wilds; cast: (nothing)", "land": "Evolving Wilds", "casts": [], "actions": [] },
+    { "index": 54, "summary": "land=Evolving Wilds; cast: Genesis Wave (X=0)", "land": "Evolving Wilds", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 55, "summary": "land=Evolving Wilds (after the casts); cast: Genesis Wave (X=0)", "land": "Evolving Wilds", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 57, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 58, "summary": "land=Forest; cast: Genesis Wave (X=0)", "land": "Forest", "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 59, "summary": "land=Forest (after the casts); cast: Genesis Wave (X=0)", "land": "Forest", "land_after_casts": true, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] },
+    { "index": 61, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 62, "summary": "land=none; cast: Genesis Wave (X=0)", "land": null, "casts": ["Genesis Wave"], "actions": [{ "card": "Genesis Wave" }] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "target",
+  "source": "Phylath, World Sculptor (landfall)",
+  "turn": 5,
+  "loyalty": "given 4 +1/+1 counters (permanently)",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Evolving Wilds", "idx": 13, "num": 9, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 22, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 5, "num": 24, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 33, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 3, "num": 34, "is_land": true, "taps": "R" }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Primeval Titan", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "legal_targets": [{ "kind": "permanent", "index": 7, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 8, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 9, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 10, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 11, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 12, "label": "0/1 Plant Token (0/1) (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 1, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 2, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 3, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 4, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 11 }] }, { "index": 5, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }],
+  "note": "reply an option index -- the permanent this ability (Phylath, World Sculptor (landfall)) targets. It is given 4 +1/+1 counters (permanently). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "tutor_etb",
+  "source": "Primeval Titan -- land onto the battlefield tapped (1 of up to 2)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Evolving Wilds", "idx": 13, "num": 9, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 14, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Evolving Wilds" }, { "index": 1, "name": "Forest" }, { "index": 2, "name": "Gruul Turf" }, { "index": 3, "name": "Haunted Fengraf" }, { "index": 4, "name": "Myriad Landscape" }, { "index": 5, "name": "Radiant Fountain" }, { "index": 6, "name": "Terramorphic Expanse" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "tutor_etb",
+  "source": "Primeval Titan -- land onto the battlefield tapped (2 of up to 2)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Evolving Wilds", "idx": 13, "num": 9, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 14, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Evolving Wilds" }, { "index": 1, "name": "Forest" }, { "index": 2, "name": "Gruul Turf" }, { "index": 3, "name": "Haunted Fengraf" }, { "index": 4, "name": "Myriad Landscape" }, { "index": 5, "name": "Radiant Fountain" }, { "index": 6, "name": "Terramorphic Expanse" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 24,
+  "type": "target",
+  "source": "Phylath, World Sculptor (landfall)",
+  "turn": 5,
+  "loyalty": "given 4 +1/+1 counters (permanently)",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Evolving Wilds", "idx": 13, "num": 9, "is_land": true }, { "name": "Evolving Wilds", "idx": 15, "num": 11, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 14, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "legal_targets": [{ "kind": "permanent", "index": 7, "label": "0/1 Plant Token (4/5) (yours)" }, { "kind": "permanent", "index": 8, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 9, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 10, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 11, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 12, "label": "0/1 Plant Token (0/1) (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "0/1 Plant Token (4/5) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 1, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 2, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 3, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 4, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 11 }] }, { "index": 5, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }],
+  "note": "reply an option index -- the permanent this ability (Phylath, World Sculptor (landfall)) targets. It is given 4 +1/+1 counters (permanently). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "type": "target",
+  "source": "Phylath, World Sculptor (landfall)",
+  "turn": 5,
+  "loyalty": "given 4 +1/+1 counters (permanently)",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 8 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "Evolving Wilds", "idx": 16, "num": 10, "tapped": true, "is_land": true }, { "name": "Evolving Wilds", "idx": 15, "num": 11, "tapped": true, "is_land": true }, { "name": "Evolving Wilds", "idx": 13, "num": 9, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 14, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "legal_targets": [{ "kind": "permanent", "index": 7, "label": "0/1 Plant Token (8/9) (yours)" }, { "kind": "permanent", "index": 8, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 9, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 10, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 11, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 12, "label": "0/1 Plant Token (0/1) (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "0/1 Plant Token (8/9) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 1, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 2, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 3, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 4, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 11 }] }, { "index": 5, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }],
+  "note": "reply an option index -- the permanent this ability (Phylath, World Sculptor (landfall)) targets. It is given 4 +1/+1 counters (permanently). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 26,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "trigger", "text": "🌍 Phylath, World Sculptor (landfall): +4/+4 counters on 0/1 Plant Token" }, { "turn": 5, "kind": "trigger", "text": "🌍 Phylath, World Sculptor (landfall): +4/+4 counters on 0/1 Plant Token" }, { "turn": 5, "kind": "trigger", "text": "🌍 Phylath, World Sculptor (landfall): +4/+4 counters on 0/1 Plant Token" }, { "turn": 5, "kind": "tutor", "text": "🔎 Primeval Titan: Evolving Wilds, Evolving Wilds onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 12 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "Evolving Wilds", "idx": 16, "num": 10, "tapped": true, "is_land": true }, { "name": "Evolving Wilds", "idx": 15, "num": 11, "tapped": true, "is_land": true }, { "name": "Evolving Wilds", "idx": 13, "num": 9, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 14, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Khalni Heart Expedition", "Myriad Landscape"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Evolving Wilds: sacrifice it: search for land(s), put them onto the battlefield", "land": null, "casts": ["Evolving Wilds"], "actions": [{ "card": "Evolving Wilds", "src_num": 9, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 27,
+  "type": "tutor_etb",
+  "source": "Evolving Wilds -- basic land onto the battlefield tapped",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 12 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "Evolving Wilds", "idx": 14, "num": 11, "tapped": true, "is_land": true }, { "name": "Evolving Wilds", "idx": 15, "num": 10, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 13, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Myriad Landscape"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 28,
+  "type": "target",
+  "source": "Phylath, World Sculptor (landfall)",
+  "turn": 5,
+  "loyalty": "given 4 +1/+1 counters (permanently)",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 12 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "Evolving Wilds", "idx": 15, "num": 10, "tapped": true, "is_land": true }, { "name": "Evolving Wilds", "idx": 14, "num": 11, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 16, "num": 21, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 13, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Myriad Landscape"], "library_size": 42, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "legal_targets": [{ "kind": "permanent", "index": 7, "label": "0/1 Plant Token (12/13) (yours)" }, { "kind": "permanent", "index": 8, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 9, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 10, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 11, "label": "0/1 Plant Token (0/1) (yours)" }, { "kind": "permanent", "index": 12, "label": "0/1 Plant Token (0/1) (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "0/1 Plant Token (12/13) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 1, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 2, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 3, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 4, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 11 }] }, { "index": 5, "label": "0/1 Plant Token (0/1) (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }],
+  "note": "reply an option index -- the permanent this ability (Phylath, World Sculptor (landfall)) targets. It is given 4 +1/+1 counters (permanently). Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 29,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "sacrifice", "text": "🔪 Evolving Wilds -- sacrificed (cost)" }, { "turn": 5, "kind": "trigger", "text": "🌍 Phylath, World Sculptor (landfall): +4/+4 counters on 0/1 Plant Token" }, { "turn": 5, "kind": "tutor", "text": "🔎 Evolving Wilds: Forest onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/1 Plant Token", "idx": 12, "num": 1005, "is_land": false }, { "name": "0/1 Plant Token", "idx": 11, "num": 1004, "is_land": false }, { "name": "0/1 Plant Token", "idx": 10, "num": 1003, "is_land": false }, { "name": "0/1 Plant Token", "idx": 7, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 16 }] }, { "name": "0/1 Plant Token", "idx": 8, "num": 1001, "is_land": false }, { "name": "0/1 Plant Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "Evolving Wilds", "idx": 15, "num": 10, "tapped": true, "is_land": true }, { "name": "Evolving Wilds", "idx": 14, "num": 11, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 16, "num": 21, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 24, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 22, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 33, "tapped": true, "is_land": true }, { "name": "Phylath, World Sculptor", "idx": 6, "num": 43, "is_land": false }, { "name": "Primeval Titan", "idx": 13, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Genesis Wave", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 41, "name": "Phylath, World Sculptor", "cost": "{4}{R}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Rampaging Baloths", "cost": "{4}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Evolving Wilds", "Khalni Heart Expedition", "Myriad Landscape"], "library_size": 42, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Phylath, World Sculptor (5), 0/1 Plant Token (16) — 21 to opponent (20→-1)" }
+  ]
+}
