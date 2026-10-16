@@ -302,6 +302,27 @@ the gate on the final tree.
   deck's realistic ramp-into-Titan/Avenger line.
 - Slowest games (d5): s2002 gi38 115 s / 3.5M units, gi22 97 s; all under the pass ceiling now.
 
+## USER fetch rule — colour sequence + prune (2026-10-16, 9d191ca1)
+The user asked to "double check to make sure that land searches are reasonable" and then specified the
+rule over several messages (verbatim in `LandfallProvider`'s .cpp block): every BASIC search takes the
+sequence green, green, red, green, red (g = our green-making permanents; r = red-making permanents plus
+Mountains in HAND -- a Gruul Turf in hand is NOT counted, it enters tapped); Myriad Landscape takes the
+Mountain pair when >= 2 remain and g >= 2, else Forests; when an on-board Myriad is the only search left
+(and >= 2 Mountains remain) the others take green so Myriad "fetches the reds together"; and "the
+important thing here is to make the searches cheap here by pruning": each basic search is PRUNED to the
+rule's one pick (new hook `LandSearchPickWidth`; human play unpruned; `MTG_UNPRUNE=landpick` lifts it).
+Primeval Titan's any-land pick is untouched and still searched.
+- The literal first version (Mountains first, no green guard) measured **+0.044 turns at d0** (se 0.010)
+  -- green starvation: a T2 Mountain beside a colourless land stranded Rampant Growth / Avenger (gi66,
+  gi115). The user then amended to green first.
+- **Final, paired vs b35f9f0e (held-out):** d0 4,000 games -0.011 (se 0.007); d3 b10 500 games **-0.030**
+  (se 0.011, 24 better / 9 worse), 0.71x units; PLAY d5 b20 1,000 games **-0.051** (se 0.010, 75/24),
+  0.69x units. Order-only (prune lifted) +0.002 (neutral): **the prune itself is the gain** (-0.052 vs
+  order-only) -- the freed budget goes to better lines.
+- 6a: a new Source 3 row -- `LandfallProvider::LandSearchPickOrder` + `LandSearchPickWidth`: **Pruning,
+  USER-owned rule** (a basic search can no longer deviate from the sequence's pick at any budget; the
+  human keeps every pick).
+
 ## Stage 5c2 — horizon-honest tie-break: NO SIGN at this sample (2026-10-16, tree b35f9f0e)
 `leaf_tiebreak_check.py`'s manifest (4 blocks x 250 at PLAY settings d5 b20, both arms per-job, pooled
 with the bottoming A/B): **2 changed games of 1,000 paired (0.2%), both BETTER with the tie-break (net
@@ -610,7 +631,7 @@ preselected); every Karoo bounce, played OR put (`bounce`); the Terastodon K fan
 ## Decisions awaiting the user — CONSOLIDATED (2026-10-16 ~07:15; default taken in brackets)
 | # | decision | default taken | recommendation |
 |---|---|---|---|
-| L1 | **5j route.** Landfall is 4.30x PD in one pooled run; 92-99% of the cost is mulligan-bottoming trial games, which the keep table replaces. (1) lift the gate for Landfall (`MTG_ALLOW_UNTESTED_DECK=1`, user-only) to build the keep table + value leaf; (2) rule that 5j measures post-artifact cost; (3) cheaper bottoming | [nothing adopted; deck in NO tier; rows proposed only] | **(2) via (1)**, as recommended for PD. Not (3): Melira shape +0.036 turns (0.59x units), all-greedy +0.126 (0.19x) |
+| L1 | **ANSWERED 2026-10-16 (USER): add Landfall to the suite now with a slightly smaller set until the keep table is done** (smoke d3 30 / d5 15; regression d3 2x40 / d5 2x20; overnight d3 4x250 / d5 4x150). Original question: **5j route.** Landfall is 4.30x PD in one pooled run; 92-99% of the cost is mulligan-bottoming trial games, which the keep table replaces. (1) lift the gate for Landfall (`MTG_ALLOW_UNTESTED_DECK=1`, user-only) to build the keep table + value leaf; (2) rule that 5j measures post-artifact cost; (3) cheaper bottoming | [nothing adopted; deck in NO tier; rows proposed only] | **(2) via (1)**, as recommended for PD. Not (3): Melira shape +0.036 turns (0.59x units), all-greedy +0.126 (0.19x) |
 | L2 | `search_leaf_depth: 0` in the profile (greedy horizon leaf, Melira precedent) | [ADOPTED 223cbba4: -0.141 turns, se 0.031, 62/23, 0.47-0.65x units] | Confirm |
 | L3 | Mulligan keep rule `curve_check: two_drop` (only RG/Khalni qualify; ~35% of 7s fail) | [kept] | Keep: `none` measured +0.218 turns worse (se 0.035) |
 | L4 | Cast order (user-owned): no Landfall order authored; generic = creatures before ramp. Also the Courser Q1 tie-break (watchers first within a rank) | [generic + Q1 tie-break] | Generic looks right for landfall payoffs (a later land pumps / adds tokens); the 5e ordering oracle found nothing better over 500 games |
