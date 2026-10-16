@@ -31950,10 +31950,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // to its own class (StackEntry::land_put_credit / apply_one's cast_land_put), so the variants
     // PARTITION the picks: no pick is lost and no colour is promised that the pick cannot make. A
     // rollout leaf (estimating -- the phyrexian precedent) keeps the front class only, which resolves
-    // exactly the provider-front pick the playout always took. Human play: no credit -- the basic is
-    // the human's prompt, and the segment re-prompt casts off it (the CheckLine Crop Rotation note).
+    // exactly the provider-front pick the playout always took.
+    //
+    // HUMAN PLAY GETS THE CREDIT TOO, every class (USER, Landfall seed 6 gi5 T6: "trying to cast Search
+    // Search Myriad activation fails"). Human play used to carry NO credit, on the theory that the
+    // basic is the human's prompt and the segment re-prompt casts off it. That made every line needing
+    // the fetched basic's mana in the SAME frame unenumerable for the human -- "Search for Tomorrow,
+    // Search for Tomorrow, Myriad Landscape's {2},{T}" is 8 mana of cost on 7 mana of board plus two
+    // untapped Forests, so CheckLine could only grade it legal_not_enumerated and the full-enum override
+    // re-enumerated the same 93 plans -- and the segment route did not survive either: committing
+    // "Search, Search" alone holds nothing for an activation the plan does not contain, so the
+    // whole-turn prepay tapped Myriad Landscape for {C} and the activation was gone. With the credit the
+    // human's line is one plan, exactly as the autonomous search has it (its {T} source held by
+    // MTG_ACT_LINE_HOLD). The human's prompt is still unrestricted (PerformLandSearch's human branch):
+    // the matched variant's credit only sets the prompt's DEFAULT pick. The class variants share
+    // CheckLine's sub-decision signature, so they collapse to one representative there.
     // Gated on the deck stamp -> byte-identical for every deck without a land search.
-    if (state.deck_has_land_search && !HumanPlayActive())
+    if (state.deck_has_land_search)
     {
         const bool lp_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
         const std::size_t lp_n = actions.size();

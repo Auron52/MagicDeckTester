@@ -110,8 +110,34 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
      cast carries no credit at all.
    * **Scope.** Decision space (searched collect, executor) emits every class; a rollout leaf keeps the
      front class only (the phyrexian precedent), which resolves the provider-front pick the playout
-     always took. Human play carries no credit: the basic is the human's prompt (its default is the
-     credited pick), and the segment re-prompt casts off the fetched land.
+     always took. **Human play carries the same credit, every class** (changed 2026-10-16). It used to
+     carry none ("the basic is the human's prompt, and the segment re-prompt casts off the fetched
+     land"), which made every line needing the fetched basic's mana in the same frame unenumerable for
+     the human. USER, Landfall seed 6 gi5 T6 (`references/Landfall/claude_s6_gi5.json`, decision 27):
+     *"trying to cast Search Search Myriad activation fails"* -- Search for Tomorrow x2 + Myriad
+     Landscape's `{2},{T}` is 8 mana on 7 of board (Myriad's own {T} excluded) plus two untapped
+     Forests. CheckLine graded it `legal_not_enumerated`, the full-enum override re-enumerated the same
+     93 plans, and the segment route failed too: committing "Search, Search" alone holds nothing for an
+     activation the plan does not contain, so the whole-turn prepay tapped Myriad for {C}. The autonomous
+     search had the line all along (enumerated, and realised by both apply worlds). The human's prompt is
+     still unrestricted; the matched variant's credit only sets its default pick, and the class variants
+     share CheckLine's sub-decision signature, so they collapse to one representative there. Pinned by
+     `test/scenarios/landsearch_sft_sft_myriad_{validate,human_line}.json` (human) and
+     `test_land_search_gaps.cpp` "Search for Tomorrow x2 then Myriad Landscape" (autonomous).
+   * **Residual, CheckLine's fallback (disclosed 2026-10-16, not fixed).** When stage 1 does not match a
+     plan, the affordability fallback (`TurnSolver::CheckLine`, after the plan loop) does not charge a
+     `landsearch=` activation at all: the verb lives in `LineSpec::land_searches`, never in `pending`,
+     so Myriad Landscape's `{2}` and `{T}` are free there, and its `real_pays` walk does not reserve a
+     `cast=`/`act=` activation's `{T}` source before the earlier casts pay (`SubsetPayableWithFilters`
+     taps every such source first). It also credits no land-put. That is why the pre-fix verdict on the
+     line above read "rules-legal in your cast order (the real payment pays every cast in turn)": the
+     right conclusion, reached by not charging the activation. Charging it without also crediting the
+     land-put would turn the same line into a false `illegal` whenever stage 1 misses it, so the fix is
+     all three together.
+   * **Residual, the segment route.** A human who commits "Search for Tomorrow, Search for Tomorrow"
+     WITHOUT the activation still gets Myriad Landscape tapped for {C} by the prepay when it is the
+     payer's pick (a tap-order choice, not a rules error; the `tap=` manual-pay verb overrides it). The
+     one-plan line is the supported route now.
    * **Residual (disclosed).** The classes are read off the enumeration-time library: two land
      searches in one plan racing for the LAST copy of a class can leave the second one's restriction
      empty, which then falls back to the unrestricted pick (never a whiff) and the enumerated credit was

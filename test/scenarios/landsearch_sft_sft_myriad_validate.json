@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "USER, Landfall seed 6 gi5 T6 (references/Landfall/claude_s6_gi5.json, decision 27): 'trying to cast",
+    "Search Search Myriad activation fails'. The board: Forest x3, Mountain x2, Gruul Turf ({R}{G}), Myriad",
+    "Landscape, Courser of Kruphix, Primeval Titan; hand Evolving Wilds + Search for Tomorrow x2; no Mountain",
+    "left in the library. Excluding Myriad (its {T} is part of its own cost) the board makes 7 mana; the line",
+    "costs 3 + 3 + 2 = 8 and each Search for Tomorrow puts an UNTAPPED Forest (+1 each), so it is legal only",
+    "with the hard casts' land-put credit. Human play used to carry no credit, so the line was never in the",
+    "viewer's menu: CheckLine graded it legal_not_enumerated and the full-enum override could not help.",
+    "Must be ACCEPTED (matched to an enumerated plan). Sibling: landsearch_sft_sft_myriad_human_line.json."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 23,
+  "opponent_life": 18,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Myriad Landscape" },
+    { "name": "Forest" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Forest" },
+    { "name": "Courser of Kruphix" },
+    { "name": "Forest" },
+    { "name": "Primeval Titan" },
+    { "name": "Gruul Turf" }
+  ],
+  "hand": ["Evolving Wilds", "Search for Tomorrow", "Search for Tomorrow"],
+  "library_top": ["Cultivate"],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": ["Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest"],
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "validate_line": "cast=Search for Tomorrow;cast=Search for Tomorrow;landsearch=Myriad Landscape",
+  "expect_verdict": "accept"
+}

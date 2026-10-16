@@ -315,6 +315,113 @@ TEST_CASE("Land-put credit: a one-class library credits one action, and the reso
     CHECK(FindSftAndRampant(plans, 1) != nullptr);
 }
 
+// ---- TWO credited Search for Tomorrow casts, then Myriad Landscape's {2},{T} activation ----------
+// USER, Landfall seed 6 gi5 T6 (references/Landfall/claude_s6_gi5.json, decision 27): "trying to cast
+// Search Search Myriad activation fails". The board: Forest x3, Mountain x2, Gruul Turf ({R}{G}),
+// Myriad Landscape, Courser of Kruphix and Primeval Titan; hand Evolving Wilds + Search for Tomorrow x2,
+// the land drop unspent. No Mountain is left in the library, so both searches fetch a Forest.
+// Excluding Myriad (its {T} is part of its own cost) the board makes 7 mana; each Search for Tomorrow
+// costs 3 and puts an UNTAPPED Forest (+1), and the activation costs {2}: 3 + 3 + 2 = 8 <= 7 + 2. The
+// line is legal only with the searches' land-put credits funding the activation.
+//
+// This pins the AUTONOMOUS half: the search enumerates the line and both apply worlds realise it (it
+// held before the fix too -- the search was never missing it). The defect was HUMAN-PLAY only: the
+// LAND-PUT CREDIT post-pass skipped human play, so the viewer's menu never held the line. That half is
+// pinned by test/scenarios/landsearch_sft_sft_myriad_{validate,human_line}.json, because
+// HumanPlayActive() is a process-static MTG_HUMAN_PLAY read that a unit test cannot switch on.
+namespace
+{
+GameState SftMyriadBoard()
+{
+    GameState s = FreshG(6);
+    PutG(s, "Myriad Landscape", 37, false);
+    PutG(s, "Forest", 12, false);
+    PutG(s, "Mountain", 33, false);
+    PutG(s, "Mountain", 34, false);
+    PutG(s, "Forest", 21, false);
+    PutG(s, "Courser of Kruphix", 5, false);
+    PutG(s, "Forest", 16, false);
+    PutG(s, "Primeval Titan", 44, false);
+    PutG(s, "Gruul Turf", 27, false);
+    HandG(s, "Evolving Wilds", 10);
+    HandG(s, "Search for Tomorrow", 55);
+    HandG(s, "Search for Tomorrow", 58);
+    LibG(s, "Cultivate", 7);   // the top (Courser reveals it; not a land)
+    for (int i = 0; i < 10; ++i) { LibG(s, "Forest", 80 + i); }
+    for (int i = 0; i < 20; ++i) { LibG(s, "Avenger of Zendikar", 100 + i); }
+    return s;
+}
+// The plan "land=none; Search for Tomorrow, Search for Tomorrow (both HARD-cast), Myriad Landscape's
+// sacrifice-search" -- or nullptr.
+const TurnSolver::Plan* FindSftSftMyriad(const std::vector<TurnSolver::Plan>& plans)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.land_decided && !p.land_to_play.empty()) { continue; }
+        int sft = 0, myriad = 0, other = 0;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && !a.alt_cost
+                && a.card_name.str() == "Search for Tomorrow") { ++sft; }
+            else if (TurnSolver::IsLandSearchActivation(a) && a.card_name.str() == "Myriad Landscape") { ++myriad; }
+            else { ++other; }
+        }
+        if (sft == 2 && myriad == 1 && other == 0) { return &p; }
+    }
+    return nullptr;
+}
+}   // namespace
+
+TEST_CASE("Land-put credit: Search for Tomorrow x2 then Myriad Landscape's activation is enumerated and realised (Landfall s6 T6)")
+{
+    LoadCardsGaps();
+    const GameState s = SftMyriadBoard();
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = FindSftSftMyriad(plans);
+    REQUIRE_MESSAGE(line != nullptr, "Search for Tomorrow, Search for Tomorrow, Myriad Landscape was not enumerated");
+    for (const Action& a : line->actions)
+    {
+        if (a.card_name.str() != "Search for Tomorrow") { continue; }
+        CHECK(a.rock_mana.green == 1);       // each cast carries its own Forest's credit
+        CHECK(a.rock_mana.Total() == 1);
+    }
+
+    // ROLLOUT and EXECUTOR both realise the whole line: two Forests from the casts, two from Myriad.
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *line, /*is_pre_combat=*/true);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *line, true);
+    GameState exec = s;
+    // GameEngine::MainPhase's shape: each cast resolves before the next (the land it puts is mana).
+    auto resolver = [](GameState& st)
+    {
+        while (!st.stack.empty())
+        {
+            const StackEntry e = st.stack.back();
+            st.stack.pop_back();
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+            if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+        }
+    };
+    eng.TakeTurn(exec, true, resolver);
+    for (const GameState* g : { &roll, &exec })
+    {
+        INFO("world: " << std::string(g == &roll ? "rollout (ApplyPlan)" : "executor (AIEngine::TakeTurn)"));
+        CHECK_FALSE(InHandG(*g, "Search for Tomorrow"));
+        CHECK(g->stack.empty());
+        CHECK(CountBf(*g, "Myriad Landscape") == 0);           // sacrificed by its own activation
+        CHECK(CountBf(*g, "Forest") == 3 + 2 + 2);
+        int gy_sft = 0, gy_myriad = 0;
+        for (const Card& c : g->players[0].graveyard)
+        {
+            if (c.m_name.str() == "Search for Tomorrow") { ++gy_sft; }
+            if (c.m_name.str() == "Myriad Landscape")    { ++gy_myriad; }
+        }
+        CHECK(gy_sft == 2);
+        CHECK(gy_myriad == 1);
+    }
+}
+
 // ---- GAP 3 ---------------------------------------------------------------------------------------
 namespace
 {

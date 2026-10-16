@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "Sibling of landsearch_sft_sft_myriad_validate.json (USER, Landfall seed 6 gi5 T6: 'trying to cast Search",
+    "Search Myriad activation fails'): the human's line is COMMITTED through the external-chooser path the viewer",
+    "uses and must be REALISED -- both Search for Tomorrow casts fetch an untapped Forest that pays for the rest,",
+    "and Myriad Landscape keeps its {T} for its own {2},{T} activation (the plan holds it; before the fix the",
+    "line was not in the menu at all, and the 'Search, Search' segment's prepay tapped Myriad for {C})."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 23,
+  "opponent_life": 18,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Myriad Landscape"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Courser of Kruphix"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Primeval Titan"
+    },
+    {
+      "name": "Gruul Turf"
+    }
+  ],
+  "hand": [
+    "Evolving Wilds",
+    "Search for Tomorrow",
+    "Search for Tomorrow"
+  ],
+  "library_top": [
+    "Cultivate"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest"
+  ],
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "human_lines": [
+    "cast=Search for Tomorrow;cast=Search for Tomorrow;landsearch=Myriad Landscape"
+  ],
+  "expect_human_summary_contains": "cast: Search for Tomorrow, Search for Tomorrow, Myriad Landscape: sacrifice it",
+  "expect_history_contains": [
+    "Search for Tomorrow: Forest onto the battlefield",
+    "Myriad Landscape -- sacrificed (cost)",
+    "Myriad Landscape: Forest, Forest onto the battlefield tapped"
+  ]
+}
