@@ -66,6 +66,43 @@ letters), `landfall_counters_each` + `_subtype` (Avenger; the "may" resolved YES
   plan-order tie-break moves, never a provider rank), so "Khalni, land, Rampant Growth" is reachable
   whichever card the hand listed first. Gated on `deck_has_landfall` + a watcher cast in the plan, so
   every other deck is byte-identical. Line verbs `landafter=` (-1) and `landat=<k>` / `landat=all`.
+  * **An unpayable prefix is not emitted (claude-play sweep flag 1, 2026-10-16; 13 of 16 games).** A k
+    clone inherits casts enumerated WITH the land's mana, so "Khalni Heart Expedition, then the Forest"
+    was offered with one Forest in play. Applied, BOTH worlds drop the unpayable cast and play the land
+    anyway -- the slot hook counts the dispatch ATTEMPT in `ApplyPlanDirect` and in `AIEngine::TakeTurn`
+    alike, so the search never scored a phantom quest counter (unit-tested on the rollout's apply) --
+    and the rest of the plan runs (gi10: Phylath dropped, the Khalni crack still cracked). The
+    enumeration now applies each land-first base plan ONCE at its last position under a
+    `SlotPrefixProbe`: the watchers dispatched before its first failed prefix cast (`s`) bound every
+    position at once (positions 1..s dispatch exactly that prefix with no land yet; any position above
+    s drops the same cast before its land), so positions above s are not emitted. Sound: the dropped
+    line realises "casts minus the dropped ones, land after the same watcher attempt", which is the
+    position variant (or the land-first plan) over the smaller cast set, enumerated in its own right;
+    its trailing activations (a crack) run after the land in both; the only possible difference is
+    WHICH lands it tapped -- the payment allocation, not a searched decision anywhere (the standing
+    mana-payment exemption). Kept as before (every position emitted, the degenerate ones merely wasted
+    and honestly scored) where a later fan-out could buy the missing mana back
+    (`PositionPrefixChoiceMayAddMana`: an untapped land-search put such as Search for Tomorrow, a
+    Treasure minter, a sac-land cast under the sac axis, the TapReserve audit, any breakpoint the plan
+    opens) and inside a breakpoint continuation's derivation (`g_bp_enum_depth > 0`: applied there by
+    `apply_continuation_plan`, which has no whole-turn prepay, so the top-level probe is not that
+    world's answer). A new mana-adding resolution choice must join that predicate.
+  * **k == -1 twins fold at the post-apply dedup (sweep flag 2; 7 of 16 games).** "Land after the
+    LAST watcher" and "land after all the casts" over one cast list reach byte-identical states when
+    nothing after that watcher can see the position, yet their fingerprints (`LSLOT k` / `LAFTE`) and
+    human signatures (`|at<k>` / `|at-1`) rightly differ, because they are only SOMETIMES the same
+    line: a trailing activation (a crack the land filled), a land-search activation's position, a
+    site-9 continuation or a land the apply made activatable all sit between the k-th cast and the -1
+    point, and the -1 clone does not apply the watchers-first tie-break, so even the dispatch order
+    (and with it every sub-axis pin ordinal) can differ. An enumeration-time "nothing follows the k-th
+    cast" judgement is therefore unsound; the fold is the post-apply STATE identity instead:
+    `PlanDupSkippable` now covers every `land_slot != 0` plan, so a positioned plan that lands on an
+    earlier sibling's exact state costs one apply and no rollout (the same key-completeness stake
+    every axis variant makes), per candidate, children included. The human menu hides the positioned
+    twin of an after-all plan with the identical post-apply state (`TurnSolver::
+    PositionedLandTwinIndex`, a `hide_bundle` collapse in `WriteDecisionJson`): hidden, not removed,
+    so indices, `landat=<k>` matching and the uncapped reference checker are unchanged; the survivor
+    is the after-all plan, the label the viewer's `landafter=` builds.
 * `Plan::landfall_target_choice` -- a whole-turn rank policy into the provider-ordered,
   identity-folded targets of a targeted landfall trigger (`LandfallTargetFoldKey`,
   `DecisionProvider::LandfallCounterTargetOrder`). Turn-scoped, folded into the solve memo key while
@@ -157,3 +194,14 @@ record of what was built.
    `DigSecondMainLive` (a deck constant + a per-turn stamp from the attack-trigger shuffle + the drop
    open + a newly playable top), measured, and adopted only by the user. Do not add the deck to
    `DeckUsesSecondMain` for it (a full main 2 every turn cost Snow 1.96x / Fungus 4.25x).
+7. **Unpayable-prefix positions inside a breakpoint continuation (residual waste of sweep flag 1).** The
+   prefix probe runs at `g_bp_enum_depth == 0` only. A continuation's positioned land is applied by
+   `apply_continuation_plan`, which has no whole-turn batch prepay, so the top-level probe is not that
+   world's answer and a continuation's degenerate positions are still enumerated (honestly scored,
+   merely wasted). Closing it needs a probe through the continuation's own section (or a proof that the
+   two payers agree on a dropped cast), measured like any other collapse.
+8. **A PUT Terastodon's K for the human (sweep flag 3 follow-up).** The human now picks WHICH
+   permanents Terastodon destroys, but a Terastodon PUT by Genesis Wave / Natural Order resolves
+   K = the provider's projection (`EtbDestroyK`); only a cast fans K in the menu. "Up to three" for a
+   put would need either a K prompt or a stop option in the per-target pick (the loyalty board-pick has
+   no decline: a `-1` there means "the default"). USER question; default: K stays the projection.
