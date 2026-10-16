@@ -314,7 +314,16 @@ it later. Mulligan policy is the user's — surfaced, unchanged.
      identical; the "one simultaneous event" comment refers to the lands' OWN enter triggers.
   7. KNOWN gaps met: (1) SfT hard-cast mana (gi4, gi15) — fix in flight; (2) Titan-put Turf bounce — the
      HUMAN side was verified correct (gi1, gi12, gi15); the gap is autonomous-only, fix in flight.
-- flags: 5 unresolved
+- RESOLUTIONS (2026-10-16, cherry-picked d4e6a424..8aebcaab): (1) unpayable-prefix positions not emitted
+  (`SlotPrefixProbe`; kept where a later choice can add mana back and inside breakpoint continuations;
+  CheckLine grades such a `landat=<k>` line Illegal); rollout and executor verified to agree (both drop
+  the cast and still play the land; no phantom quest counter). (2) the k==-1 twin folds at the
+  post-apply dedup, and the human menu hides the exact twin. (3) the human picks each Terastodon victim
+  (`target`, default = the user's Forests-first order; the SEARCH rule is unchanged). (4) "(destroy K)"
+  in summaries. (5) the crack prompt defaults to keep, with crack wording. Smoke byte-identical for every
+  other deck; Landfall A/B 160 games, all tied, 0.968x units. Residuals deferred in
+  `landfall-trigger-infrastructure.md` (items 7-8).
+- flags: 0 unresolved
 
 ## Stage 5i — discard BUCKET policy (AUTHORED, NOT ADOPTED — presented to the user)
 Evidence first: the deck sheds at cleanup ~once per 44 games and every observed shed was a tie, so the
