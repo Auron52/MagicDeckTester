@@ -416,12 +416,14 @@ the deck's Stinger (in hand, else in the library) and the land, dropped, would -
 without the City's filter); a land that buys nothing is fodder again, as before. All five seeds return to the old
 win turn at d8/b0 (3845 3, 4461 4, 7063 4, 7623 3, 4306 7); with the amendment off, all five stay a turn slower.
 
-**(b) The bp_all policy reached the hook sites (2 seeds).** gi 7885 T5 (and 5294 T4): without the hook the kill is the
-`bp_all` k=1 variant (Plan::bp_all: "candidate k at EVERY breakpoint" -- here, cycle on and cast nothing, including the
-free Hollow One). With the hook, the chain's Capital City draw (drop open; the City would pay Enlightened Tutor's {W})
-is a new breakpoint whose list leads with land lines, and bp_all applied its k there too: it dropped the City, and
-the kill was gone. A walk of the T5 line one cycle at a time confirms it: handed to the search after the second cycle
-(before the City draw) the final arm reads T6; after the third (City in hand, its site passed) it finds T5.
+**(b) The bp_all policy reached the hook sites (2 seeds).** gi 7885 T5 (and 5294 T4): without the hook the root's
+winning child at T5 is a `bp_all` variant (Plan::bp_all: "candidate k at EVERY breakpoint" -- here, cycle on and cast
+nothing, the free Hollow One included; the root dump shows it returning a verified win where the final arm's twin is
+declined). With the hook, the chain's Capital City draw (drop open; the City would pay Enlightened Tutor's {W}) is a
+new breakpoint whose list leads with land lines, and bp_all applied its k there too: it dropped the City, and the
+kill was gone. A walk of the T5 line one cycle at a time (`--choices-then-auto` at each frame) agrees: handed to the
+search before the City draw the final arm reads T6; once the City has been drawn (its site passed) it finds T5. The
+fix below restores both seeds, and turning it off alone loses both again -- the attribution test.
 **Fix (`MTG_DIG_HOOK_BPALL_EXEMPT`, default ON):** a hook site is exempt from the bp_all policy -- it takes its EMPTY
 default (the pre-hook line exactly) and its land lines stay bp_at-targeted variants. Every pre-hook bp_all line is
 therefore reachable again; nothing the hook added is lost. Byte-identical wherever the hook is off (the predicate
@@ -429,14 +431,71 @@ reads the hook-site flag).
 
 Measured in round 5 (§6.8).
 
+### 6.8 Round 5 (binary `7d1c7f80`): the shipped defaults, every cell -- THE BAR IS MET
+
+ONE pooled batch (143 jobs, 273,260 games, 20/20 workers busy), three arms per cell on the same seeds: `old` (every
+lever off = 16dfb7e4's play), `r4` (round 4's defaults: the two amendments off) and `final` (this binary's defaults).
+
+| deck | cell | games | old avg | final avg | faster | slower | **net** | play changed | units | r4 net (slower) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| fluctuator | d0 | 40,000 | 5.1582 | 5.1435 | 563 | 135 | **-588** | 6,452 | -- | -585 (139) |
+| fluctuator | d3 | 12,000 | 3.5756 | 3.5736 | 61 | 37 | **-24** | 1,149 | 1.053 | -28 (49) |
+| fluctuator | shipped | 8,000 | 3.5594 | 3.5561 | 36 | 10 | **-26** | 743 | 1.140 | -23 (20) |
+| fluctuator2hg | d0 | 20,000 | 5.0484 | 5.0322 | 291 | 52 | **-325** | 2,949 | -- | -324 (54) |
+| fluctuator2hg | d3 | 6,000 | 3.5260 | 3.5242 | 32 | 21 | **-11** | 603 | 1.051 | -15 (24) |
+| fluctuator2hg | shipped | 4,000 | 3.5017 | 3.4980 | 20 | 5 | **-15** | 384 | 1.161 | -16 (5) |
+
+* **Net <= 0 in every deck x cell** (d0 here includes the order + funded + keep-needed; the d0 runner's drop stays OFF).
+* **Recovery: all 260 slower games recover at stage 1** (`--depth W --budget-ms 100`, W = max(5, old win turn));
+  stage 2 had nothing left to run. Per cell: 135/135, 37/37, 10/10, 52/52, 21/21, 5/5.
+* The `r4` arm reproduces round 4's numbers exactly on the new binary (-28 / -23 / -15 / -16, same faster/slower
+  counts), so the amendments are the whole difference: they remove 12 + 10 + 3 slower games at the searched cells and
+  cut the search work (units 1.061 -> 1.053, 1.160 -> 1.140, 1.056 -> 1.051, 1.184 -> 1.161).
+* **Identity:** 125 / 125 jobs of every other deck (d0, d3, shipped) play-digest identical to 16dfb7e4.
+* **Census** (`MTG_LANDDRAW_CENSUS`, real turns whose dig drew a land with the drop open): the drawn land is played
+  on 96 of 1,464 such turns at d3 (old: 23 of 1,390) and 69 of 980 at shipped (old: 18 of 936); 2HG 42 / 34 (old 9 /
+  10). d0 is unchanged by construction (the d0 runner's drop is OFF): 0 used in either arm.
+* **Cost.** Search units +5% at d3 and +14% / +16% at shipped: the hook's new breakpoints are searched work (the
+  budget is deterministic, so this is what the drawn-land lines cost, not a wall artefact). Wall, summed per job in
+  the one pooled batch (indicative only -- a shared box): shipped old 469 s / r4 712 s / final 669 s; d3 old 1,685 s /
+  r4 2,130 s / final 2,603 s. The d3 final-over-r4 step (+22% wall on -1% units) pointed at the keep-needed
+  payability reads (two GameState copies per candidate land per cycle); round 6 memoises them (§6.9) -- and shows
+  the wall step was noise.
+
+### 6.9 Round 6 (`85b5b9c5`, the memoised keep-needed reads): identical games; wall sums are noise
+
+`FluctKeepPayable` caches the two reads (Stinger payable now; payable with the land dropped) on the active player's
+battlefield signature, which is all they depend on -- between cycles the chain changes only hand, library and
+graveyard. Round 5's manifest re-run unchanged on that binary: **143 / 143 jobs game-for-game identical** (win turn
+and play digest), units identical. The per-job wall sums, however, moved by 0.58x-1.51x between the two runs --
+including the `old` arm, whose code path the change never touches (shipped old 469 s -> 317 s, 2HG d0 old 51 s ->
+68 s) -- and the within-batch ratios flipped (d3 final / r4: 1.22 in round 5, 0.87 in round 6; shipped: 0.94, 1.30).
+So summed per-game wall in a pooled batch on this shared box cannot attribute a 20% step either way, and this
+document makes no wall claim; units (deterministic) are the cost measure above. A clean wall A/B would be its own
+measurement (both arms `MTG_PGO=0`, an otherwise idle box).
+
 ## 7. Defaults as shipped and open USER questions
 
-TBD (after round 2).
+| lever | shipped | why |
+|---|---|---|
+| `MTG_FLUCT_ORDER` | ON | Part 1, the USER's order; with FUNDED it meets the bar at every cell (§6.4, §6.8) |
+| `MTG_FLUCT_ORDER_FUNDED` | ON | the documented default (USER question 1); the order alone fails d0 (+204 / +67) |
+| `MTG_FLUCT_DRAWN_LAND` | ON | Part 2, the drawn land considerable as the drop (search side); meets the bar with the two amendments (§6.8) |
+| `MTG_FLUCT_KEEP_UNTAPPED` | ON | the USER's protection, as an order (§3.3) |
+| `MTG_FLUCT_KEEP_NEEDED` | ON | its amendment (§6.7a; USER question 6) |
+| `MTG_DIG_HOOK_BPALL_EXEMPT` | ON | a representation fix for the hook (§6.7b); inert without it |
+| `MTG_DIG_DRAWN_LAND_D0` | **OFF** | the d0 runner's greedy drop: measured worse (§6.4) -- beyond the USER's words |
+| `MTG_NO_REDUNDANT_REDUCER` | **OFF** | report-only arm (USER question 3) |
+
+Round 5 (§6.8) is the adoption measurement: net <= 0 in every deck x cell, every slower game recovers at stage 1,
+125 / 125 identity, 566 / 566 references (179 ok, 387 repaired, 0 drift of any kind; KittyEquipment v2 excluded, see
+§6.7). Units 1066 / 1066, scenarios 162 / 162 (both §4.3 scenarios win T3 at d3 / b10).
 
 ### Open USER questions (surfaced, not settled; the documented default is taken meanwhile)
 
 1. **Adopt `MTG_FLUCT_ORDER_FUNDED`?** It keeps your order whenever the cast set can be paid, and only decides
-   which casts survive a set the pool over-credited. Default as coded: OFF; the measured recommendation is in §7.
+   which casts survive a set the pool over-credited. Default as coded: ON (the documented default, so the order meets
+   the d0 bar); `=0` is your order exactly as approved. Without it the order alone is +204 / +67 net at d0 (§6.1).
 2. **Cast a free Hollow One rather than cycle it when no Stinger is out?** (§4: a turn-to-win tie the search
    breaks toward cycling; your §7.7(c) remark -- "hollow one should not be held the vast majority of the time" --
    reads as "cast it".) Not built. Default: unchanged (the search decides).
@@ -447,3 +506,7 @@ TBD (after round 2).
    (the FUNDED amendment works around it for Fluctuator only).
 5. **Open `DigUsesDrawnLandDrop` for other dig decks** (treasure_hunt, FiveColour's Triome cycling, Auras' Horizon
    Canopy, Dragons' Mind Stone)? Default: no -- base false, each would need its own A/B.
+6. **Is "occasionally an untapped land" = "while that land is what pays the Stinger"?** That is how
+   `MTG_FLUCT_KEEP_NEEDED` reads your rule (§6.7a): kept while the untapped battlefield cannot pay Drannith Stinger
+   and the land would; otherwise ordinary fodder. Built because the literal "always keep one" cost five seeds a turn
+   at any budget. Default as coded: ON; `=0` is the literal reading.
