@@ -1,0 +1,30 @@
+{
+ "_comment": "MTG_EDF_AURA_RANGE_HOSTS (part 2c of the USER-approved EDF cast-order package, 2026-10-14; docs/design/edf-cast-order-2026-10-14.md). Seed 11311458 gi 1457 (the A/B's d3 cell), turn 3: Conservatory and Brushland + Trace of Abundance in play, hand [Eldrazi Displacer, Cloud of Faeries, Eladamri's Call, Overgrowth, Conservatory, Yavimaya Coast]. The kill: drop the Coast, Overgrowth ON THE COAST paid by Conservatory + Brushland/Trace, the Coast taps {U}{G}{G} for Cloud with one to spare, Cloud untaps Brushland and the Coast, the Displacer resolves with three floating for the first blink. The plan dedup folds land-Aura host variants to the class's first member; part 2 (the range) made the Overgrowth-on-CONSERVATORY variant payable Cloud-first, it sorted first (host 1 < host 9) and the fold dropped the Coast variant, so no win at any budget (--depth 8 --budget-ms 0 included). 2c keeps the class's first rank-order member beside its first moved one. MTG_EDF_AURA_RANGE_HOSTS=0: no win; MTG_EDF_AURA_RANGE=0: win (the Conservatory variant is unpayable, the Coast one is the only member).",
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 19,
+ "opponent_life": 20,
+ "energy_counters": 0,
+ "opponent_library_size": 50,
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 3,
+ "battlefield": [
+  {"name": "Conservatory", "controller": 0, "tapped": false},
+  {"name": "Brushland", "controller": 0, "tapped": false},
+  {"name": "Trace of Abundance", "controller": 0, "tapped": false, "equips": "Brushland"}
+ ],
+ "hand": ["Eldrazi Displacer", "Cloud of Faeries", "Eladamri's Call", "Overgrowth", "Conservatory", "Yavimaya Coast"],
+ "library_filler": "Brushland",
+ "library_size": 0,
+ "library": ["Fertile Ground", "Mariposa Military Base", "Conservatory", "Eldrazi Displacer", "Emiel the Blessed",
+             "Cloud of Faeries", "Mariposa Military Base", "Brushland", "Adarkar Wastes", "Living Wish", "Aether Hub",
+             "Fertile Ground", "Brushland", "Eldrazi Displacer", "Trace of Abundance", "Living Wish", "Peregrine Drake",
+             "Overgrowth", "Emiel the Blessed", "Adarkar Wastes", "Fertile Ground", "Brushland", "Brushland",
+             "Brushland", "Brushland", "Brushland", "Brushland", "Brushland", "Brushland", "Brushland", "Brushland",
+             "Brushland", "Brushland", "Brushland", "Brushland", "Brushland", "Brushland", "Brushland", "Brushland",
+             "Brushland", "Brushland"],
+ "expect_win_turn": 3
+}
