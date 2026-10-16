@@ -279,6 +279,22 @@ that clause alone. Paired A/B, `two_drop` vs `none`, held-out seeds 51000-54000 
 bottoming trial games). Recommendation: KEEP `two_drop`; the keep table (mulligan generation) supersedes
 it later. Mulligan policy is the user's — surfaced, unchanged.
 
+## Land-search gaps 2 and 3 CLOSED (2026-10-16 ~04:00, cherry-picked 0ee8f5c5..1528ebc7)
+- **Gap 2 (Search for Tomorrow hard-cast):** the untapped basic now funds later casts in the same main
+  phase, identically in the search's apply and in the executor (`Action::rock_mana` ->
+  `StackEntry::land_put_credit`); nothing is offered when no basic is left.
+- **Gap 3 (a PUT Karoo's bounce):** searched for Primeval Titan ETB / attack and Genesis Wave (an
+  extended land-search pick list + `Plan::bounce_choice` as the Wave's pin, sized by
+  `PutKarooBounceBound`). Plus the put-bounce fold (`MTG_PUT_BOUNCE_FOLD`, default ON, exact: a
+  check-only mode verified 4,875,783 would-be skips were all skipped by the existing fold too, and the
+  verify run matched fold-off exactly).
+- Agent-side validation: unit 662/662, scenarios 184/184, smoke 119/119 byte-identical for every other
+  deck; SelesnyaLifegain (Genesis Wave + Selesnya Sanctuary) identical results. Landfall, 240 paired games
+  (s8008/s9009, d3 b10 + d5 b20): 5.9250 -> 5.9167, 4 better / 2 worse, units 1.020x, wall 1.100x.
+  The one slower game (s8008 gi20, 6 -> 7 at d3 and d5) recovers to T6 at depth 8 unbudgeted. These are
+  capability additions (lines that were unfindable at any budget), not narrowings.
+- Integrated tree (runaway + sweep flags + gaps): unit 671/671.
+
 ## Claude-play sweep
 - commit: `223cbba4` (frozen checkout `.claude/worktrees/landfall-sweep`, binary copied before any later
   rebuild), benchmark d5 b20 with the shipped profile (search_leaf_depth 0)
@@ -382,5 +398,18 @@ default-on `MTG_LANDFALL_BUCKET_DISCARD` flag, then held to non-inferiority on a
   mulligan policy is the user's; default: unchanged.
 - (Runaway, perf proposal 2) A last-turn relevance collapse of land-search / attack / crack pins at the
   horizon's final turn: needs a per-state soundness proof (not an identity fold), so NOT built.
+- (Gaps) Human play gets no Search for Tomorrow credit (the human picks the basic and is re-prompted) —
+  kept. Crop Rotation does not share the mechanism (Creature Giving unchanged) — separate item with its
+  own rebaseline. The remaining gap-3 cost (+10% wall, up to +5% units over gap A alone; mostly breakpoint
+  continuations of pending Titan-attack variants) — the per-continuation fold is DEFERRED in
+  `land-search-cluster.md`; building it is the user's call. Known representation limits listed there
+  (one bounce sub-choice per pick, one Wave bounce pin per plan, the 6-bit packed-pin cap, sizing off the
+  library at enumeration, two searches racing for the last basic).
+- (Sweep fixes) A Genesis Wave / Natural Order PUT Terastodon: the human picks the victims but not K (K is
+  the provider's projection) — default kept, deferred item 8. The human's K menu still caps at the count
+  of OWN noncreature permanents although victims may now be the opponent's — unchanged. Unpayable
+  positions inside breakpoint continuations are still enumerated (wasted, not wrong) — deferred item 7.
+  Unchecked: a menu label "(after <card>)" may name the wrong watcher when cast-order rank reorders casts
+  (human GUI lines pin the clicked order, so they are unaffected).
 - (Runaway) SolveWithLookahead's start-gate estimate was ~7,300x low on the gi38 root; the estimator's
   calibration is left alone (the ceiling now caps the damage at 25x).
