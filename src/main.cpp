@@ -8098,12 +8098,27 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
               << "\n# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste"
                  " access, a scaling attacker) can move a creature m2 -> m1 in an actual game.\n"
               << "#\n# rank  range      main  n  mv  card\n";
-    std::cout << "#\n# [LAND] LAND DROP: "
-              << (deck_has_promoted_cantrip
-                    ? "this deck HAS a cantrip, so \"draw before the land\" is a live question"
-                    : "no cantrip in the deck, so nothing wants to precede it -> FIRST")
-              << "\n  land    -   m1    -  -   (the turn's land drop)"
-                 "   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0\n";
+    // A deck with the SPOTS rule (DecisionProvider::LandEntrySpotsRule, Landfall) places its land and
+    // its activations by that rule, not by the cantrip question, so print the rule play follows.
+    if (prov.LandEntrySpotsRule(state))
+    {
+        std::cout << "#\n# [LAND] LAND DROP: the deck's SPOTS rule -- searched in two spots, the one AFTER"
+                     " the landfall sources preferred on a tie (USER)"
+                     "\n  land    -   m1    -  -   (the turn's land drop)"
+                     "   -- right after the last source the turn can pay for (preferred), and FIRST when"
+                     " the sources need its mana; also after every cast; before every cast at depth 0\n"
+                  << "#\n# [ACT] ACTIVATIONS (Khalni Heart Expedition, Myriad Landscape, the fetch lands):"
+                     " at the END, after every cast and the land (USER)\n";
+    }
+    else
+    {
+        std::cout << "#\n# [LAND] LAND DROP: "
+                  << (deck_has_promoted_cantrip
+                        ? "this deck HAS a cantrip, so \"draw before the land\" is a live question"
+                        : "no cantrip in the deck, so nothing wants to precede it -> FIRST")
+                  << "\n  land    -   m1    -  -   (the turn's land drop)"
+                     "   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0\n";
+    }
     int last = -999;
     for (const Row& r : rows)
     {

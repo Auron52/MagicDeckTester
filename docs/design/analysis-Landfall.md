@@ -398,6 +398,68 @@ pruned" and gave it (verbatim in `LandfallProvider`'s .cpp block), then the boun
 - **Cost gate, same regression run:** landfall **2,881 ms/game (d5 s3003) / pd 2,695 = 1.07x** (was 2.64x
   at these rows this morning, 4.30x before the fetch rule); the deck's regression total 605 -> 220 core-s.
 
+## USER cast order + land spots + 5i discard buckets (2026-10-16, branch `landfall-cast-order`)
+The deck had no order of its own (row 3.1: generic creatures-before-spells). The user's rule:
+*"you need to actually play lands, cast acceleration spells and activate abilities intentionally after the
+landfall creatures (or Khalni Heart) drop to get as much landfall as possible. That said, if mana is
+insufficient and the mana source must be played first you play it the other way around"*; *"activations of
+Khalni Heart and Myriad Landscape would go at the end. Similarily cards like Rampant Growth and Search for
+Tomorrow suspend can go late. Cultivate, Search for Tomorrow Cast and land plays want to go late, but may be
+forced to go earlier for mana reasons (if they play or allow playing an untapped land)"*; *"it isn't that
+they move earlier, it is that we test them in two spots and we prefer the one after the landfall sources"*;
+*"They do move earlier than other spells though (and abilities)"*; and a full order, *"with all of the cards
+with a distinct number in case we choose to do condemnation later"*.
+- **The order** (`LandfallProvider::CastOrderRank` = 100·tier + 10·MV + k; `--cast-order-report` prints it):
+  sources 120 Khalni, 130 Courser, 161 Phylath, 162 Baloths, 171 Avenger, 172 Omnath; mana-making land entry
+  231 Search for Tomorrow (cast), 232 Cultivate; 380 Terastodon; 430 Genesis Wave (its lands reach the
+  sources already cast); tapped land entry 520 Rampant Growth, 560 Primeval Titan. Total by name
+  (`CastOrderTotalByName`). `MTG_LANDFALL_ORDER` (default ON).
+- **Two spots for the mana-making casts** (`CastOrderingCandidates`): a plan holding a tier-2 cast AND a
+  source is searched in the order above and with the tier-2 casts first (for their untapped mana); the order
+  above is listed first, so it wins a tie.
+- **Two spots for the land** (`LandEntrySpotsRule`, `MTG_LANDFALL_SPOTS`, default ON): first, and right after
+  the last source the turn can pay for without it (the prefix probe); the after-casts spot stays. The
+  after-sources spot takes the land-first plan's place in the list, so a tie keeps it (the whole-turn leaf
+  ties often). Activations (Khalni, Myriad, the fetch lands -- every one puts its lands tapped) run at the
+  end: no activation position twins. Pruned like the land pick (human play and `MTG_UNPRUNE=landpick` keep
+  every spot). The user's Cultivate case (*"They just don't play it and then play after the breakpoint"*)
+  needs no rule: the deferred-drop plans plus the put-in-hand breakpoint find it.
+- **Fixtures:** `landfall_cultivate_hold_drop_for_fetched_basic` (hold the Forest, play the Mountain
+  Cultivate put in hand, Lava Spike: the only T6 kill) and `landfall_spots_tie_prefers_after_source` (Courser
+  + Forest: both win T7, 21 life with the land after Courser; spots off ends at 20). Units 1267/1267,
+  scenarios 204/204.
+- **5i discard buckets** (`LandfallProvider::CleanupDiscardCandidates`, `MTG_LANDFALL_BUCKET_DISCARD`,
+  default ON; supersedes the AUTHORED table under Stage 5i). USER rulings: *"As always, there should be a
+  bucketed policy"*; *"2 threats sounds fine, though no more than 1 titan ... I would actually keep Phylath
+  first as it seems to be the fastest"*; *"The order of the others could be based on castability. If we
+  can't cast the threat we should use another"*; *"Same with acceleration. Search is good early. Others like
+  Cultivate are better later"*; *"the multiple landfall cards like Evolving Wilds/Terramorphic are good late,
+  but poor early. Myriad Landscape is good unless we need untapped mana"*; *"Keeping 2 lands of different
+  types could still be okay later for flexibility"* (*"or we can do it based on need"* -- the alternative,
+  not built). Shape: dead (a legend whose namesake is on the battlefield) and capped (a second Titan, a
+  second legend, net of board) shed first; the mana keep covers missing colours, then land drops (2 while
+  under 4 lands or when the hand holds two land kinds, else 1), then ramp up to 7 mana sources; threats
+  floor 2, Phylath first, then castability (`discard_dist::CastFactorFor`), then rank Avenger > Titan >
+  Baloths > Wave > Omnath > Terastodon > Courser. Land value: needing an untapped land, basics > colourless
+  > Myriad > Turf > Wilds; otherwise Myriad > Wilds (late; last early) > basic > Turf > colourless. Ramp:
+  early (under 3 lands) SfT > Rampant Growth > Khalni > Cultivate, later Cultivate first. One index
+  (`CleanupDiscardRankingWithOrder`); `MTG_LANDFALL_DISCARD_FAN=1` fans the ranking for a test.
+- **Held-out A/B, ONE pooled batch, per-job flags** (`logs/castorder/`, 28,000 games, fresh seeds 2.0M-2.2M,
+  paired, unwon = 9). Arms: gen (generic), ord (+ order), full (+ spots), all (+ discard).
+
+  | setting | ord vs gen | full vs ord | all vs full | **all vs gen** | units all/gen |
+  |---|---|---|---|---|---|
+  | d0, 4,000 | **-0.0063** (se .0029) 42/17 | 0 (identical) | -0.0008 3/2 | **-0.0070** (se .0031) 45/19 | -- |
+  | d3 b10, 1,000 | -0.0030 4/1 | 0.0000 1/1 | **-0.0040** (se .0020) 4/0 | **-0.0070** (se .0033) 9/2 | 0.963x |
+  | PLAY d5 b20, 2,000 | +0.0005 4/5 | +0.0015 (se .0009) 0/3 | 0.0000 3/4 | +0.0020 (se .0022) 6/11 | 0.995x |
+
+  (better/worse = games faster/slower.) **The 3 PLAY games the spots prune lost** (s2001150, s2003199,
+  s2007107, all T6 -> T7): ord's line is still offered under the prune in each; the arms part at T2-T3 on
+  different cast choices and the shuffles (Wilds, SfT, Terramorphic) then deal different draws. Replayed at
+  **d5 unbudgeted, all three win T6 under the prune, as under ord** -- budget allocation at b20, not a lost
+  line. **s2001057** (gen T8, every ordered arm unwon by the T8 cap): parts at T4 on which cards to cast
+  (Wilds + Khalni + crack vs SfT + Fengraf), then the same shuffle divergence.
+
 ## Hand-played references s1-s10 — bench before the value leaf (2026-10-16, de730cadf)
 `ref_bench.py` at the shipped play setting (d5 b20, no value leaf, no keep table): human 6.000, search
 **5.800**; 1 short (s5 gi4, T6 -> T7), 3 faster (s2, s6, s7), 6 equal. Protocol replay: 9 ok, s6 repaired
@@ -554,7 +616,7 @@ it later. Mulligan policy is the user's — surfaced, unchanged.
   `landfall-trigger-infrastructure.md` (items 7-8).
 - flags: 0 unresolved
 
-## Stage 5i — discard BUCKET policy (AUTHORED, NOT ADOPTED — presented to the user)
+## Stage 5i — discard BUCKET policy (first draft; SUPERSEDED 2026-10-16 by the USER's rulings, built as `MTG_LANDFALL_BUCKET_DISCARD` -- see "USER cast order + land spots + 5i discard buckets")
 Evidence first: the deck sheds at cleanup ~once per 44 games and every observed shed was a tie, so the
 measurable prize is ~0; the policy is doctrine quality plus rollout fidelity. Proposed shape (USER
 doctrine 2026-08-21: quota-first, net of board, fungible upward, distance-to-playable, one index):
@@ -666,7 +728,7 @@ hooks; `OfferDuplicateLegendCast`, see 3.11.)
 
 | # | Hook (inherited) | Source (file:line) | Classification | What it decides / lines it could miss |
 |---|---|---|---|---|
-| 3.1 | **`CastOrderRank` (Generic)**. Within a main phase, casts are stable-sorted by rank: creatures 10 (Baloths, Avenger, Titan, Phylath, Omnath, Courser, Terastodon) before noncreature spells 20 (Rampant Growth, SfT, Cultivate, Khalni, Genesis Wave). Ties keep plan (hand) order, except that a positioned-land plan puts landfall watchers first (`LandSlotWatchersFirst`, ledger Courser Q1). Cast-ORDER search is off for this deck. | `DecisionProviders.cpp:2978-3150`; `ManaPayment.cpp:2456-2516` (`CastOrderLessRanked`); `TurnSolver.cpp:44670-44682` (`OrderingSearchEnabled`: `WantsCastOrderingSearch` false); `TurnSolver.cpp:19597-19601` | **Pruning — USER-OWNED cast order, none authored for this deck yet** | **Misses "ramp spell, THEN a land-counting ETB" in one main phase.** Examples: Rampant Growth / Cultivate / SfT before Avenger (one more Plant per land) or before Phylath (one more Plant per basic). Only land-search ACTIVATIONS got position twins (1b.4). Spells did not. The reverse order (creature first, so its Plants get the landfall counters) is the only one played. UNVERIFIED: whether a Cultivate put-in-hand (site 10) continuation can re-admit an Avenger after Cultivate. |
+| 3.1 | **UPDATE 2026-10-16: the USER's order is built (`LandfallProvider::CastOrderRank`, two-spot search, land spots; section "USER cast order + land spots + 5i discard buckets").** Was: **`CastOrderRank` (Generic)**. Within a main phase, casts are stable-sorted by rank: creatures 10 (Baloths, Avenger, Titan, Phylath, Omnath, Courser, Terastodon) before noncreature spells 20 (Rampant Growth, SfT, Cultivate, Khalni, Genesis Wave). Ties keep plan (hand) order, except that a positioned-land plan puts landfall watchers first (`LandSlotWatchersFirst`, ledger Courser Q1). Cast-ORDER search is off for this deck. | `DecisionProviders.cpp:2978-3150`; `ManaPayment.cpp:2456-2516` (`CastOrderLessRanked`); `TurnSolver.cpp:44670-44682` (`OrderingSearchEnabled`: `WantsCastOrderingSearch` false); `TurnSolver.cpp:19597-19601` | **Pruning — USER-OWNED cast order, none authored for this deck yet** | **Misses "ramp spell, THEN a land-counting ETB" in one main phase.** Examples: Rampant Growth / Cultivate / SfT before Avenger (one more Plant per land) or before Phylath (one more Plant per basic). Only land-search ACTIVATIONS got position twins (1b.4). Spells did not. The reverse order (creature first, so its Plants get the landfall counters) is the only one played. UNVERIFIED: whether a Cultivate put-in-hand (site 10) continuation can re-admit an Avenger after Cultivate. |
 | 3.2 | **`XCandidates` max-X (Generic)**, applied to Genesis Wave: one variant, X = max affordable from the WHOLE pool. | `DecisionProviders.cpp:3183-3197`; `TurnSolver.cpp:22415-22465` | **Pruning** (`MTG_UNPRUNED=xspell` is the A/B) | **Misses "cast a creature, then a smaller Wave" in one main phase**, because max-X leaves no mana for anything else. Phylath (4) then Wave X=3, where each Wave land puts +4 on a Plant, or Avenger then Wave: never enumerated. In-code justification: "a bigger X is strictly deeper"; the counter-argument ("holding mana for a second spell") is named in code and untested. |
 | 3.3 | **`GenesisWavePutPicks` (base)**. Put every legal revealed permanent except a creature whose MANDATORY ETB destroys our own permanent. A duplicate legend IS put (2026-10-15). A Karoo IS put. | `DecisionProvider.h:2638-2694` | Decision rule, not searched (a searched subset is 2^X) | Misses deliberately leaving a permanent in the graveyard. For this pool, everything is weakly better on the battlefield. Terastodon is put, and its K projection may choose 0. Ledger Review Q3 (default YES). |
 | 3.4 | **`EtbDestroyK` = `ProjectEtbDestroyK` (base, USER rule 2026-08-20/21)**. ONE projected K at resolution, for the cast and every put: the earliest lethal horizon, then the smallest K. No searched fan (human play / `MTG_UNPRUNED=terak` fan 0..cap). | `DecisionProviders.cpp:699-702`; `SpellEffects.h:15025-15182`; emission `TurnSolver.cpp:24086-24104`; resolution `SpellEffects.h:8790-8818` | **Pruning — USER-owned rule, KEPT** (ledger Review Q2) | Here the h=0 / h=1' windows are dead (no Craterhoof). The projection ignores next-turn landfall growth (Plants, Beasts, Elementals) and Elephant-vs-landfall trade-offs. Ledger plan: measure `MTG_UNPRUNED=terak` in 5e. |
@@ -677,7 +739,7 @@ hooks; `OfferDuplicateLegendCast`, see 3.11.)
 | 3.9 | **`TopLandSourceFirstOnTie` (base, default true)**. On an EXACT tie, the Courser top land sorts before the same-name hand land. | `DecisionProvider.h:1414-1426` | Order only (exact ties) | Ledger Courser Q3, default YES. A top play keeps the hand copy. |
 | 3.10 | **`LegendKeepIndex` (base)**: keep the OLDEST copy (Phylath ×4, Omnath ×1). | `DecisionProvider.h:2591-2595`; `SpellEffects.h:17233-17260` | Correctness shortcut | The oldest is the un-sick body. The ETB is banked before the SBA. The binned copy's death still feeds Omnath. Not surfaced to the human (4.8). |
 | 3.11 | **`OfferDuplicateLegendCast` (base, `MTG_PRUNE_DUP_LEGEND`)** | `DecisionProviders.cpp:742-806` | Pruning, **inert here** | Prunes only `vanilla_creature` / `lord_effect` legends. Phylath and Omnath are `custom`, so they are always offered. |
-| 3.12 | **Cleanup discard: `CleanupDiscardCandidates` = base `CleanupDiscardRanking`**, with `DiscardLandsFirst` false (generic: highest MV, not lands). At a REAL cleanup at depth > 0, every candidate in the hand is trial-rolled and the earliest win kept, with the heuristic breaking ties. Inside rollouts, the heuristic alone decides. | `DecisionProviders.cpp:564-567`, `808-812`; `SpellEffects.h:589`; `AIEngine.cpp:8094-8135` | Searched at the real decision; heuristic in rollouts | Stage 4: 0.0225 sheds/game, every observed shed a tie (`STATUS_QUO_OK`). The Stage 5i bucket policy is AUTHORED, NOT ADOPTED (user decision). |
+| 3.12 | **UPDATE 2026-10-16: the USER's bucket policy is built (`LandfallProvider::CleanupDiscardCandidates`, `MTG_LANDFALL_BUCKET_DISCARD`).** Was: **Cleanup discard: `CleanupDiscardCandidates` = base `CleanupDiscardRanking`**, with `DiscardLandsFirst` false (generic: highest MV, not lands). At a REAL cleanup at depth > 0, every candidate in the hand is trial-rolled and the earliest win kept, with the heuristic breaking ties. Inside rollouts, the heuristic alone decides. | `DecisionProviders.cpp:564-567`, `808-812`; `SpellEffects.h:589`; `AIEngine.cpp:8094-8135` | Searched at the real decision; heuristic in rollouts | Stage 4: 0.0225 sheds/game, every observed shed a tie (`STATUS_QUO_OK`). The Stage 5i bucket policy is AUTHORED, NOT ADOPTED (user decision). |
 | 3.13 | **`ShouldAttackWith` (Generic) = attack with everything** | `DecisionProviders.cpp:2466-2469` | Standing attack exemption | No blockers. 0/1 Plants attack for 0 harmlessly. Titan always attacks, so its trigger always fires. |
 | 3.14 | **`ManaSourceRank` (Generic) tap order** | `DecisionProviders.cpp:3330` | Standing mana-payment exemption | Picks WHICH legal payment, never whether one exists. |
 | 3.15 | **Unpruned A/B hatches that apply**: `terak` (3.4), `xspell` (3.2), `KarooBounce` (3.8), `SearchOrder` (3.1). | `DecisionUnpruned(UnprunedGate::…)` at the cited sites | Measurement hatches | None measured for this deck yet. |

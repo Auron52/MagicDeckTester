@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Landfall 2026-10-16, the SPOTS rule's preference (USER: \"we test them in two spots and we prefer the one",
+    "after the landfall sources\"). Three untapped Forests; hand Courser of Kruphix + Forest; opponent at 2; a",
+    "library with no lands. Courser pays without the land, so the land is searched FIRST and right AFTER",
+    "Courser. Both win T7 (Courser attacks for 2), so the win turn ties; only the after-Courser spot gains the",
+    "landfall life, and the game ends at 21. Land first would end at 20."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 2,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Courser of Kruphix",
+    "Forest"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "expect_active_life": 21,
+  "expect_win_turn": 7
+}

@@ -57742,8 +57742,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         //     past a cast that neither watches landfall nor counts lands changes nothing it reads.
         //     Composes with the land's own position (a land_slot plan is a base here): at the same k
         //     the land goes first. Outer plans only (a continuation's activations keep the trailing
-        //     order).
-        if (!cont_axes_only)
+        //     order). A deck whose USER rule puts the activations at the END emits no twin
+        //     (DecisionProvider::LandEntrySpotsRule -- Landfall; pruned like the land pick: human play
+        //     and MTG_UNPRUNE=landpick keep every position).
+        const bool acts_at_end = ResolveProvider(state).LandEntrySpotsRule(state)
+                              && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LandPick);
+        if (!cont_axes_only && !acts_at_end)
         {
             std::vector<TurnSolver::Plan> twins;
             for (const TurnSolver::Plan& p : all)
@@ -59241,6 +59245,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // is not that world's answer; the memo's own g_bp_enum_depth == 0 gate keeps the two lists
         // apart).
         const bool slot_probe_on = g_bp_enum_depth == 0;
+        // THE DECK'S SPOTS (DecisionProvider::LandEntrySpotsRule, Landfall's USER rule: the land is
+        // tested "in two spots and we prefer the one after the landfall sources"). Where the prefix probe
+        // ran, only the LATEST payable position is emitted beside the land-first base -- after every
+        // source when the casts pay without the land, else after as many as they can pay for. Unprobed
+        // plans keep every position (the probe is what makes "latest payable" known). Pruned like the
+        // land pick: human play and MTG_UNPRUNE=landpick keep every position.
+        const bool two_spots = ResolveProvider(state).LandEntrySpotsRule(state)
+                            && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LandPick);
         std::size_t n_slot_pruned = 0;
         for (std::size_t i = 0; i < defer_begin; ++i)
         {
@@ -59270,10 +59282,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             TRACE("landslot", "T%d base land=%s casts=%zu watchers=%d probed=%d payable=%d",
                   state.turn_number, p.land_to_play.c_str(), p.actions.size(), w,
                   probed ? 1 : 0, payable);
-            for (int k = 1; k <= payable; ++k)
+            const bool prefer_late = two_spots && probed;
+            for (int k = prefer_late ? std::max(payable, 1) : 1; k <= payable; ++k)
             {
                 TurnSolver::Plan v = p;
                 v.land_slot = static_cast<int8_t>(k);
+                if (prefer_late)
+                {
+                    // "...and we prefer the one after the landfall sources" (USER): the after-sources
+                    // spot takes the land-first plan's place in the list and the land-first plan joins
+                    // the variants. Both stay searched; SolveWithLookahead keeps the FIRST of equally
+                    // scored candidates, and a whole-turn leaf ties often, so the list order IS the
+                    // preference.
+                    after.push_back(std::move(all[i]));
+                    all[i] = std::move(v);
+                    break;
+                }
                 after.push_back(std::move(v));
             }
         }

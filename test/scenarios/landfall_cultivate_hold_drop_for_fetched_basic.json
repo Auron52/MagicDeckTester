@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Landfall 2026-10-16, the USER's Cultivate case (\"the land drop might sometimes want to go after",
+    "cultivate, because the lands in hand may not serve your needs as well as the land you get ... They just",
+    "don't play it and then play after the breakpoint\"). Four untapped Forests; hand Cultivate + Forest +",
+    "Lava Spike; opponent at 3; the library's basics are Mountains. The only T6 kill HOLDS the Forest: Cultivate",
+    "(three Forests) puts a Mountain onto the battlefield tapped and one into hand, the put-in-hand breakpoint",
+    "plays that Mountain untapped, and Lava Spike deals 3. Playing the Forest at any spot spends the drop, the",
+    "battlefield Mountain is tapped, and no red is left."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main1",
+  "battlefield": [
+    {"name": "Forest", "tapped": false},
+    {"name": "Forest", "tapped": false},
+    {"name": "Forest", "tapped": false},
+    {"name": "Forest", "tapped": false}
+  ],
+  "hand": ["Cultivate", "Forest", "Lava Spike"],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": ["Mountain", "Mountain", "Mountain"],
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 6,
+  "expect_win_turn": 6
+}

@@ -2949,6 +2949,24 @@ public:
     // what the deck's costs need -- with no search.
     int BounceUserRulePick(const GameState& s, int controller, const std::vector<int>& legal,
                            const std::vector<int>& order, int* qualifying_names = nullptr) const override;
+    // THE CAST ORDER (USER 2026-10-16): landfall sources first, then the mana-making land entries
+    // (Search for Tomorrow cast, Cultivate; the land drop by Plan::land_slot), then the other spells,
+    // then the abilities. The mana-making entries are also SEARCHED in a second spot, before the sources
+    // ("we test them in two spots and we prefer the one after the landfall sources").
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotalByName() const override;
+    bool        WantsCastOrderingSearch() const override;
+    bool        CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                       const std::vector<Action>& reorder,
+                                       std::vector<std::vector<int>>& out) const override;
+    // The land drop's two spots and the abilities at the END (USER 2026-10-16; MTG_LANDFALL_SPOTS).
+    bool        LandEntrySpotsRule(const GameState& s) const override;
+    // The analyze-deck 5i BUCKET discard (PROVISIONAL, MTG_LANDFALL_BUCKET_DISCARD): dead legends, lands over
+    // a 2/1 quota, ramp at 6+ lands, threats over a floor of 2 -- see the .cpp.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool        CleanupDiscardShedStable() const override;
 };
 
 // Melira Pod (persist combo / creature toolbox: Melira / Vizier of Remedies + Kitchen Finks /

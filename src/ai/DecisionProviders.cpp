@@ -3022,6 +3022,453 @@ int LandfallProvider::BounceUserRulePick(const GameState& s, int controller, con
     return best->idx;
 }
 
+// ---- LandfallProvider::CastOrderRank -- THE USER'S LANDFALL ORDER (2026-10-16) ------------------------
+//
+// USER, in order: "the tricky part about this deck is that you need to actually play lands, cast
+// acceleration spells and activate abilities intentionally after the landfall creatures (or Khalni
+// Heart) drop to get as much landfall as possible. That said, if mana is insufficient and the mana source
+// must be played first you play it the other way around." -- "activations of Khalni Heart and Myriad
+// Landscape would go at the end. Similarily cards like Rampant Growth and Search for Tomorrow suspend can
+// go late. Cultivate, Search for Tomorrow Cast and land plays want to go late, but may be forced to go
+// earlier for mana reasons (if they play or allow playing an untapped land)." -- "it isn't that they
+// move earlier, it is that we test them in two spots and we prefer the one after the landfall sources."
+// -- "They do move earlier than other spells though (and abilities)."
+//
+// So, per main phase: landfall sources, then the MANA-MAKING land entries (the land drop, the Search
+// for Tomorrow cast, Cultivate), then the other spells, then the abilities. Tiers, all read off params:
+//    1 a landfall WATCHER (CardDefinition::landfall_watcher -- Khalni, Baloths, Omnath, Avenger, Phylath,
+//      Courser): first, so every land that enters this main triggers it.
+//    2 a land-entering spell that makes MANA this turn: an untapped basic (Search for Tomorrow cast,
+//      LandSearchPutsUntapped) or a basic to HAND, i.e. a land drop (Cultivate). Ahead of the other
+//      spells it can fund; its SECOND spot, before the watchers, is searched (CastOrderingCandidates).
+//    3 a cast that puts NO land (Terastodon).
+//    4 a REVEAL-AND-PUT spell (Genesis Wave): its lands trigger the watchers already cast.
+//    5 the other land-entering spells (Primeval Titan's ETB, Rampant Growth): their lands enter tapped.
+// The rest of the rule is not a cast rank: the land drop's two spots are Plan::land_slot (first, or after
+// the watchers), the land-search activations run in the main's trailing pass (Khalni's crack, Myriad,
+// Evolving Wilds), and the Search for Tomorrow SUSPEND is a pre-cast action that puts no land this turn.
+// Ties keep plan order. MTG_LANDFALL_ORDER=0 -> the generic rank, no ordering search (heurarm
+// LANDFALL_ORDER, per job).
+static bool LandfallOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_LANDFALL_ORDER", true);   // DEFAULT ON (the USER's rule); =0 -> generic
+    return heurarm::Flag(heurarm::LANDFALL_ORDER, on);
+}
+
+static bool LandfallManaLandEntry(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    return p.land_search_on_resolve && (LandSearchPutsUntapped(def) || p.land_search_to_hand > 0);
+}
+
+// THE FULL ORDER (USER: "we should actually make it a full order with all of the cards with a distinct
+// number in case we choose to do condemnation later"). rank = 100 * tier + 10 * mana value + k: the tier
+// from params (above), cheapest first inside a tier, and k the reviewed sequence where one tier holds two
+// cards of one mana value -- Phylath before Rampaging Baloths, Avenger before Omnath (neither pair
+// triggers the other: by name), Search for Tomorrow before Cultivate (its untapped basic can pay for
+// Cultivate; Cultivate's basic only pays as the land drop). The deck's twelve spells then read:
+//   120 Khalni Heart Expedition   130 Courser of Kruphix   161 Phylath   162 Rampaging Baloths
+//   171 Avenger of Zendikar       172 Omnath               231 Search for Tomorrow   232 Cultivate
+//   380 Terastodon                430 Genesis Wave         520 Rampant Growth        560 Primeval Titan
+// A card off this list ties only on (tier, mana value) and then goes by NAME (CastOrderTotalByName).
+static int LandfallTier(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    if (def.landfall_watcher)                                         { return 1; }
+    if (LandfallManaLandEntry(def))                                   { return 2; }
+    if (p.reveal_x_put_permanents)                                    { return 4; }
+    if (p.land_search_on_resolve || p.land_search_on_enter_or_attack) { return 5; }
+    return 3;
+}
+
+int LandfallProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!LandfallOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
+    const int mv = std::min(def.card.m_mana_cost.ManaValue(), 9);
+    static const std::pair<const char*, int> kWithinManaValue[] = {
+        {"Phylath, World Sculptor", 1}, {"Rampaging Baloths", 2},
+        {"Avenger of Zendikar", 1},     {"Omnath, Locus of Rage", 2},
+        {"Search for Tomorrow", 1},     {"Cultivate", 2},
+    };
+    int k = 0;
+    for (const auto& [name, kk] : kWithinManaValue) { if (def.card.m_name == name) { k = kk; break; } }
+    return 100 * LandfallTier(def) + 10 * mv + k;
+}
+
+bool LandfallProvider::CastOrderTotalByName() const { return LandfallOrderEnabled(); }
+
+const char* LandfallProvider::CastOrderTierName(int rank) const
+{
+    if (!LandfallOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
+    switch (rank / 100)
+    {
+        case 1:  return "LANDFALL SOURCE (Khalni, Courser, Phylath, Baloths, Avenger, Omnath): first -- every land after it triggers it (USER)";
+        case 2:  return "MANA-MAKING LAND ENTRY (Search for Tomorrow cast, Cultivate): after the sources, before the other spells; the spot BEFORE the sources is also searched (USER)";
+        case 3:  return "PUTS NO LAND (Terastodon)";
+        case 4:  return "REVEAL-AND-PUT (Genesis Wave): its lands reach the sources already cast";
+        case 5:  return "TAPPED LAND ENTRY (Rampant Growth, Primeval Titan): late (USER)";
+        default: return nullptr;
+    }
+}
+
+// THE SECOND SPOT (USER: "we test them in two spots and we prefer the one after the landfall sources").
+// A plan casting a tier-2 spell (Search for Tomorrow, Cultivate) AND a landfall source gets two
+// orderings through the engine's cast-ordering search: the approved order FIRST (so it survives the
+// end-state dedup and wins an exact tie), then the same order with the tier-2 casts moved ahead of the
+// sources -- what pays for a source the approved order cannot, or counts one more land for Avenger /
+// Phylath. Every other plan returns no candidates and is left exactly as it was (no searched_order, no
+// extra apply).
+// ---- LandfallProvider::CleanupDiscardCandidates -- the analyze-deck 5i BUCKET policy -----------------------
+//
+// Authored 2026-10-16 (ledger Stage 5i) on the USER's "Can you work on the discard heuristic?" -- "As always,
+// there should be a bucketed policy". PROVISIONAL until the USER signs it off; default ON,
+// MTG_LANDFALL_BUCKET_DISCARD=0 restores the generic max-MV ranking. Cleanup is the only discard this deck
+// meets (~1 shed per 44 games, every observed one a tie), so the value is doctrine and rollout fidelity.
+//
+// THE BUCKETS (quota-first, net of board, sub-quotas fungible upward, distance-to-playable, ONE index):
+//   MANA      parent quota P = max(Lq, 7 - board lands): enough mana cards to reach the curve top (Avenger,
+//             Omnath at 7), never fewer than the land quota.
+//     LANDS   sub-quota Lq = colour coverage + 2 while the board holds < 4 lands, else + 1 (+ 2 when the hand
+//             holds two land KINDS -- USER: "2 lands of different types could still be okay later") -- never 0: every
+//             land is a landfall trigger. COLOUR COVERAGE first: for each colour the hand's spells need
+//             (green; red for Phylath / Omnath) that no battlefield land makes, the best hand land making it
+//             (a basic-fetcher counts while a basic of that colour is in the library). Then by stage (USER:
+//             "Evolving Wilds/Terramorphic are good late, but poor early. Myriad Landscape is good unless we
+//             need untapped mana"): needing an untapped drop next turn, basic > colourless > Myriad > Gruul
+//             Turf > Wilds; else Myriad first, Wilds second LATE (4+ lands or a landfall source out) and
+//             last EARLY, then basic > Gruul Turf > colourless.
+//     RAMP    sub-quota P - Lq (Rampant Growth, Search for Tomorrow, Cultivate, Khalni Heart Expedition):
+//             castability first, then by stage (USER: "Search is good early. Others like Cultivate are
+//             better later") -- under 3 lands out Search > Rampant Growth > Khalni > Cultivate, later
+//             Cultivate > Search > Rampant Growth > Khalni. Fungible upward: a hand short of ramp keeps more
+//             lands, a hand short of lands more ramp, up to P.
+//   THREATS   the catch-all, FLOOR 2 (USER: "2 threats sounds fine"). PHYLATH FIRST (USER: "it seems to be the
+//             fastest"), the rest by CASTABILITY (USER: "If we can't cast the threat we should use another"),
+//             the shared discard_dist factor (Genesis Wave priced at X = 3); exact ties by the author's rank
+//             Avenger > Primeval Titan > Rampaging Baloths > Genesis Wave > Omnath > Terastodon > Courser.
+//             AT MOST ONE Primeval Titan (USER: no kill potential in this list) and one copy of a legend,
+//             net of board.
+//   CAPPED    a copy beyond its cap: shed right after a dead card.
+//   DEAD      a legendary whose namesake is on our battlefield (Phylath, Omnath): no quota, shed first.
+// Keep order: colour coverage, lands to Lq, ramp to its sub-quota, the fungible fill to P, the threat floor,
+// the rest of the threats ("extra spells should always be threats"), the mana overflow, a capped copy, then
+// the dead. The
+// shed is the LAST of that order, returned as ONE index (5i rule 5) through CleanupDiscardRankingWithOrder;
+// MTG_LANDFALL_DISCARD_FAN=1 (testing only) returns the whole order for the rule-vs-searched check.
+static bool LandfallBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_LANDFALL_BUCKET_DISCARD", true);   // DEFAULT ON (provisional); =0 -> generic
+    return heurarm::Flag(heurarm::LANDFALL_BUCKET_DISCARD, on);
+}
+
+std::vector<int> LandfallProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!LandfallBucketDiscardEnabled()) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto makes = [](const CardDefinition* d, Color col)
+    { return d != nullptr && std::find(d->params.produces.begin(), d->params.produces.end(), col)
+                             != d->params.produces.end(); };
+    auto is_fetcher = [](const CardDefinition* d)
+    { return d != nullptr && d->card.IsLand() && d->params.land_search_count > 0 && d->params.land_search_basic_only; };
+    bool basic_in_library[2] = { false, false };   // [0] green (Forest), [1] red (Mountain)
+    for (const Card& c : ap.library)
+    {
+        const CardDefinition* d = def_of(c);
+        if (d == nullptr || !IsBasicLandCard(*d)) { continue; }
+        if (makes(d, Color::Green)) { basic_in_library[0] = true; }
+        if (makes(d, Color::Red))   { basic_in_library[1] = true; }
+    }
+    const Color kCols[2] = { Color::Green, Color::Red };
+    auto source_of = [&](const CardDefinition* d, int k)   // makes colour k now, or fetches a basic of it
+    { return makes(d, kCols[k]) || (is_fetcher(d) && basic_in_library[k]); };
+
+    // ---- board census (net of board) -------------------------------------------------------------
+    int board_lands = 0, board_src[2] = { 0, 0 };
+    std::vector<std::string> board_legends;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(perm.card);
+        if (perm.card.IsLand())
+        {
+            ++board_lands;
+            for (int k = 0; k < 2; ++k) { if (source_of(d, k)) { ++board_src[k]; } }
+        }
+        if (perm.card.HasSupertype(Supertype::Legendary)) { board_legends.push_back(perm.card.m_name.str()); }
+    }
+
+    // ---- roles -----------------------------------------------------------------------------------
+    auto pips = [](const CardDefinition* d, int k)
+    { return d == nullptr ? 0 : static_cast<int>(k == 0 ? d->card.m_mana_cost.green : d->card.m_mana_cost.red); };
+    auto is_ramp = [](const CardDefinition* d)
+    { return d != nullptr && !d->card.IsLand() && !d->card.IsCreature()
+             && (d->params.land_search_on_resolve || d->params.landfall_quest_counters > 0); };
+    // LANDS by stage (USER: "the multiple landfall cards like Evolving Wilds/Terramorphic are good late, but
+    // poor early. Myriad Landscape is good unless we need untapped mana."). NEED UNTAPPED: a spell in hand
+    // costs exactly board lands + 1, so next turn casts it only off an untapped drop -- then the untapped
+    // lands lead (basic > colourless) and the tapped ones trail (Myriad > Gruul Turf > Wilds). Otherwise
+    // Myriad leads; Wilds / Terramorphic follow it LATE (4+ lands out, or a landfall source already on our
+    // battlefield) and go to the back EARLY, behind the basics, Gruul Turf and the colourless lands.
+    bool source_on_board = false, needs_untapped = false;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(perm.card);
+        if (d != nullptr && d->landfall_watcher) { source_on_board = true; break; }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d != nullptr && !d->card.IsLand() && d->card.m_mana_cost.ManaValue() == board_lands + 1)
+        { needs_untapped = true; break; }
+    }
+    const bool land_late = board_lands >= 4 || source_on_board;
+    auto land_value = [&](const CardDefinition* d)   // higher = kept first
+    {
+        if (d == nullptr) { return 0; }
+        const bool myriad = d->params.land_search_count >= 2;
+        const bool wilds  = !myriad && d->card.IsLand() && d->params.land_search_count > 0;
+        const bool turf   = d->params.etb_bounce_land;
+        const bool basic  = !myriad && !wilds && !turf && IsBasicLandCard(*d);
+        if (needs_untapped) { return basic ? 5 : (!myriad && !wilds && !turf) ? 4 : myriad ? 3 : turf ? 2 : 1; }
+        if (myriad) { return 5; }
+        if (wilds)  { return land_late ? 4 : 1; }
+        if (basic)  { return 3; }
+        if (turf)   { return 2; }
+        return land_late ? 1 : 2;                              // colourless utility (Fountain, Fengraf)
+    };
+    // RAMP by stage (USER: "Same with acceleration. Search is good early. Others like Cultivate are better
+    // later."): castability first, as for the threats, then -- EARLY, under 3 lands out, while a {G} suspend
+    // still lands the basic on curve -- Search for Tomorrow > Rampant Growth > Khalni > Cultivate; LATER
+    // Cultivate (two lands, one a card) > Search for Tomorrow > Rampant Growth > Khalni.
+    const bool early = board_lands < 3;
+    auto ramp_value = [early](const CardDefinition* d)   // higher = kept first
+    {
+        const bool cultivate = d->params.land_search_to_hand > 0;
+        const bool search    = !cultivate && LandSearchPutsUntapped(*d);
+        const bool growth    = !cultivate && !search && d->params.land_search_on_resolve;
+        if (early) { return search ? 4 : growth ? 3 : cultivate ? 1 : 2; }
+        return cultivate ? 4 : search ? 3 : growth ? 2 : 1;
+    };
+    // USER 2026-10-16: "I would actually keep Phylath first as it seems to be the fastest. (low mana + can
+    // pump creatures that are not summoning sick next turn)".
+    static const std::pair<const char*, int> kThreatRank[] = {   // higher = kept first
+        {"Phylath, World Sculptor", 8}, {"Avenger of Zendikar", 7}, {"Primeval Titan", 6},
+        {"Rampaging Baloths", 5}, {"Genesis Wave", 4}, {"Omnath, Locus of Rage", 3},
+        {"Terastodon", 2}, {"Courser of Kruphix", 1},
+    };
+    auto threat_rank = [&](const Card& c)
+    { for (const auto& [name, r] : kThreatRank) { if (c.m_name == name) { return r; } } return 0; };
+    // USER 2026-10-16: "no more than 1 titan because Titan does not have the kill potential in the current
+    // list". A per-card cap, net of board: a copy beyond it is no threat and sheds right after a dead legend.
+    static const std::pair<const char*, int> kThreatCap[] = { {"Primeval Titan", 1} };
+    auto threat_cap = [&](const Card& c)
+    {
+        for (const auto& [name, cap] : kThreatCap) { if (c.m_name == name) { return cap; } }
+        return c.HasSupertype(Supertype::Legendary) ? 1 : -1;   // the legend rule: a 2nd copy is a blank here
+    };
+    std::vector<std::pair<std::string, int>> capped_seen;   // name -> copies counted (board first)
+    auto over_cap = [&](const Card& c)
+    {
+        const int cap = threat_cap(c);
+        if (cap < 0) { return false; }
+        auto it = std::find_if(capped_seen.begin(), capped_seen.end(),
+                               [&](const auto& e) { return c.m_name == e.first.c_str(); });
+        if (it == capped_seen.end())
+        {
+            int on_board = 0;
+            for (const Permanent& perm : s.battlefield)
+            { if (perm.controller_index == me && perm.card.m_name == c.m_name) { ++on_board; } }
+            capped_seen.emplace_back(c.m_name.str(), on_board);
+            it = capped_seen.end() - 1;
+        }
+        return ++it->second > cap;
+    };
+
+    std::vector<int> dead, capped, lands, ramp, threats;
+    bool need[2] = { false, false };
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        if (CleanupDiscardIsLand(c)) { lands.push_back(i); continue; }
+        if (c.HasSupertype(Supertype::Legendary)
+            && std::find(board_legends.begin(), board_legends.end(), c.m_name.str()) != board_legends.end())
+        { dead.push_back(i); continue; }
+        if (over_cap(c)) { capped.push_back(i); continue; }
+        for (int k = 0; k < 2; ++k) { if (pips(d, k) > 0) { need[k] = true; } }
+        (is_ramp(d) ? ramp : threats).push_back(i);
+    }
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)
+    { return land_value(def_of(ap.hand[a])) > land_value(def_of(ap.hand[b])); });
+    // Castability (the shared discard_dist factor; every hand land as a drop, best first, since the land
+    // quota is not settled yet): Search for Tomorrow priced at its {G} suspend while early.
+    const discard_dist::Census census = discard_dist::BuildCensus(s, me);
+    std::vector<discard_dist::LandDrop> hand_drops;
+    for (int i : lands) { hand_drops.push_back(discard_dist::LandDropOf(def_of(ap.hand[i]))); }
+    std::vector<double> ramp_fac(static_cast<std::size_t>(n), 0.0);
+    for (int i : ramp)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        const bool suspend = early && d->params.land_search_to_hand == 0 && LandSearchPutsUntapped(*d);
+        ramp_fac[static_cast<std::size_t>(i)] = discard_dist::CastFactorFor(census, *d, hand_drops, suspend ? 1 : -1);
+    }
+    std::stable_sort(ramp.begin(), ramp.end(), [&](int a, int b)
+    {
+        const double fa = ramp_fac[static_cast<std::size_t>(a)], fb = ramp_fac[static_cast<std::size_t>(b)];
+        if (fa != fb) { return fa > fb; }
+        return ramp_value(def_of(ap.hand[a])) > ramp_value(def_of(ap.hand[b]));
+    });
+
+    // ---- MANA: colour coverage, the land sub-quota, the ramp sub-quota, the fungible fill to P ----
+    std::vector<int> keep;
+    std::vector<char> kept(static_cast<std::size_t>(n), 0);
+    auto take = [&](int i) { keep.push_back(i); kept[static_cast<std::size_t>(i)] = 1; };
+    int cover = 0;
+    for (int k = 0; k < 2; ++k)
+    {
+        if (!need[k] || board_src[k] > 0) { continue; }
+        for (int i : lands)
+        {
+            if (!kept[static_cast<std::size_t>(i)] && source_of(def_of(ap.hand[i]), k)) { take(i); ++cover; break; }
+        }
+    }
+    // Two land drops early; later one -- or two when the hand holds two land KINDS (USER: "Keeping 2 lands of
+    // different types could still be okay later for flexibility"). Kinds: Myriad, a basic-fetcher (Wilds /
+    // Terramorphic, one class), Gruul Turf, a green basic, a red basic, a colourless land.
+    auto land_kind = [&](const CardDefinition* d)
+    {
+        if (d == nullptr)                        { return 0; }
+        if (d->params.land_search_count >= 2)    { return 1; }
+        if (d->params.land_search_count > 0)     { return 2; }
+        if (d->params.etb_bounce_land)           { return 3; }
+        if (makes(d, Color::Green))              { return 4; }
+        if (makes(d, Color::Red))                { return 5; }
+        return 6;
+    };
+    bool two_kinds = false;
+    for (std::size_t x = 0; x < lands.size() && !two_kinds; ++x)
+        for (std::size_t y = x + 1; y < lands.size(); ++y)
+            if (land_kind(def_of(ap.hand[lands[x]])) != land_kind(def_of(ap.hand[lands[y]]))) { two_kinds = true; break; }
+    const int land_quota  = cover + ((board_lands < 4 || two_kinds) ? 2 : 1);
+    const int mana_parent = std::max(land_quota, 7 - board_lands);
+    int kept_lands = cover, kept_ramp = 0;
+    for (int i : lands)
+    { if (kept_lands < land_quota && !kept[static_cast<std::size_t>(i)]) { take(i); ++kept_lands; } }
+    for (int i : ramp)
+    { if (kept_lands + kept_ramp < mana_parent) { take(i); ++kept_ramp; } }
+    for (int i : lands)   // fungible upward: a hand short of ramp keeps more lands, up to the parent
+    { if (kept_lands + kept_ramp < mana_parent && !kept[static_cast<std::size_t>(i)]) { take(i); ++kept_lands; } }
+
+    // ---- THREATS: Phylath first, then CASTABILITY, then the rank -----------------------------------
+    // USER: "keep Phylath first as it seems to be the fastest" and "The order of the others could be based on
+    // castability. If we can't cast the threat we should use another." Castability is the shared model
+    // (discard_dist, docs/design/discard-distance-model.md; USER 2026-10-10 "a smarter model"): P(castable)
+    // over our next four turns from the board's mana, the KEPT hand lands played one per turn, and the
+    // library's land / colour density, discounted per turn of delay. Genesis Wave is priced at X = 3, the
+    // least worth casting. The rank (the author's) breaks exact ties only.
+    std::vector<discard_dist::LandDrop> kept_drops;
+    for (int i : keep)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d != nullptr && d->card.IsLand()) { kept_drops.push_back(discard_dist::LandDropOf(d)); }
+    }
+    std::vector<double> fac(static_cast<std::size_t>(n), 0.0);
+    for (int i : threats)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d == nullptr) { continue; }
+        const int cost = d->params.reveal_x_put_permanents ? d->card.m_mana_cost.ManaValue() + 3 : -1;
+        fac[static_cast<std::size_t>(i)] = discard_dist::CastFactorFor(census, *d, kept_drops, cost);
+    }
+    auto phylath_first = [&](int i) { return ap.hand[i].m_name == "Phylath, World Sculptor"; };
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    {
+        const bool pa = phylath_first(a), pb = phylath_first(b);
+        if (pa != pb) { return pa; }
+        const double fa = fac[static_cast<std::size_t>(a)], fb = fac[static_cast<std::size_t>(b)];
+        if (fa != fb) { return fa > fb; }
+        const int ra = threat_rank(ap.hand[a]), rb = threat_rank(ap.hand[b]);
+        if (ra != rb) { return ra > rb; }
+        return CleanupDiscardManaValue(ap.hand[a]) < CleanupDiscardManaValue(ap.hand[b]);
+    });
+    for (int i : threats) { take(i); }   // the floor (2) and the catch-all share one order: best first
+
+    // ---- overflow: the mana beyond its parent, then a capped copy, then the dead ------------------
+    for (int i : ramp)  { if (!kept[static_cast<std::size_t>(i)]) { take(i); } }
+    for (int i : lands) { if (!kept[static_cast<std::size_t>(i)]) { take(i); } }
+    for (int i : capped) { take(i); }
+    for (int i : dead)  { take(i); }
+
+    // The floor matters when the quotas over-fill the hand: a shed then comes out of the mana quota
+    // before it reaches the two best threats. Re-rank so the threat floor sits above the mana quota.
+    constexpr int kThreatFloor = 2;
+    std::vector<int> order;   // keep order, best first, with the floor moved ahead of the mana quotas
+    {
+        const std::size_t n_floor = std::min<std::size_t>(kThreatFloor, threats.size());
+        for (std::size_t k = 0; k < n_floor; ++k) { order.push_back(threats[k]); }
+        for (int i : keep)
+        { if (std::find(order.begin(), order.end(), i) == order.end()) { order.push_back(i); } }
+    }
+    std::vector<int> shed(order.rbegin(), order.rend());
+    std::vector<int> ranked = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    static const bool s_fan = EnvOn("MTG_LANDFALL_DISCARD_FAN");   // TESTING ONLY: the whole order
+    if (!s_fan && ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
+// ONE index per consultation, and the next one moves with the hand (the land quota and the threats'
+// castability read the hand's lands): a multi-card shed re-asks after every shed.
+bool LandfallProvider::CleanupDiscardShedStable() const { return !LandfallBucketDiscardEnabled(); }
+
+// THE SPOTS (USER: the land drop is tested "in two spots and we prefer the one after the landfall
+// sources"; "activations of Khalni Heart and Myriad Landscape would go at the end"). The engine also
+// tried the land BETWEEN two sources and the land-search activations before an Avenger / Phylath; this
+// drops those spots (TurnSolver's land_slot / land_search_act_slot emission). MTG_LANDFALL_SPOTS=0 keeps
+// every spot (heurarm LANDFALL_SPOTS).
+static bool LandfallSpotsEnabled()
+{
+    static const bool on = EnvOn("MTG_LANDFALL_SPOTS", true);   // DEFAULT ON (the USER's rule); =0 -> every spot
+    return heurarm::Flag(heurarm::LANDFALL_SPOTS, on);
+}
+
+bool LandfallProvider::LandEntrySpotsRule(const GameState& s) const { (void)s; return LandfallSpotsEnabled(); }
+
+bool LandfallProvider::WantsCastOrderingSearch() const { return LandfallOrderEnabled(); }
+
+bool LandfallProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                              const std::vector<Action>& reorder,
+                                              std::vector<std::vector<int>>& out) const
+{
+    (void)plan_actions;
+    out.clear();
+    if (!LandfallOrderEnabled()) { return true; }
+    auto def_of = [](const Action& a) -> const CardDefinition*
+    { return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name); };
+    std::vector<int> canon(reorder.size());
+    for (std::size_t i = 0; i < canon.size(); ++i) { canon[i] = static_cast<int>(i); }
+    std::stable_sort(canon.begin(), canon.end(), [&](int x, int y) { return CastOrderLess(s, reorder[x], reorder[y]); });
+    std::vector<int> early, rest;
+    bool source = false;
+    for (int i : canon)
+    {
+        const CardDefinition* d = def_of(reorder[static_cast<std::size_t>(i)]);
+        if (d != nullptr && d->landfall_watcher) { source = true; }
+        (d != nullptr && LandfallManaLandEntry(*d) ? early : rest).push_back(i);
+    }
+    if (early.empty() || !source) { return true; }
+    out.push_back(canon);
+    early.insert(early.end(), rest.begin(), rest.end());
+    out.push_back(std::move(early));
+    return true;
+}
+
 std::vector<int> DecisionProvider::BounceSearchCandidates(
     const GameState& s, int controller, int self_index, const std::vector<int>& legal,
     int* why) const

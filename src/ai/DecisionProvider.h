@@ -2802,6 +2802,14 @@ public:
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
       (void)land; return true; }
 
+    // LandEntrySpotsRule -- does this deck rule WHERE its land entries go around its landfall sources?
+    // When true (and the land-pick prune is in force: not human play, not MTG_UNPRUNE=landpick), the plan
+    // enumeration emits the land drop only FIRST or at its LATEST payable position up to after the last
+    // landfall source (Plan::land_slot; the in-between positions are dropped, and only where the
+    // payable-prefix probe ran), and no land-search ACTIVATION position twins (Plan::land_search_act_slot)
+    // -- the activations stay in the trailing pass. Landfall's USER rule. Base: false (every spot).
+    virtual bool LandEntrySpotsRule(const GameState& s) const { (void)s; return false; }
+
     // BounceSearchCandidates -- the SEARCHED Karoo bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice):
     // the subset of BounceLandCandidates the search branches over, in THAT order, so element 0 is
     // always its front (the d0 / beyond-horizon pick and the human prompt's default). Evaluated on
