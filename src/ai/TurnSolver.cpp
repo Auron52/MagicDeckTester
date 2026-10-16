@@ -66950,17 +66950,24 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (v.bounce_group != 0) { continue; }
                 const int a = v.attack_land_search_choice;
                 const int c = v.combat_crack_choice;
+                const bool w0 = v.bp_wave0;
                 v.attack_land_search_choice = -1;
                 v.combat_crack_choice       = -1;
                 int b = -1;
                 const auto rng = bases.equal_range(masked_hash(v));
                 for (auto it = rng.first; it != rng.second; ++it)
                 {
-                    if (it->second < static_cast<int>(i) && candidates[static_cast<std::size_t>(it->second)] == v)
-                    { b = it->second; break; }
+                    // ...and Plan::bp_wave0, wave 0's fan-out marker, which an axis clone never inherits
+                    // (MTG_BP_AXIS_W0_CLEAR). The apply reads it only AT a class-on breakpoint, and a
+                    // base whose apply reached one is never cached (the conditions above), so a variant
+                    // differing only there still applies exactly as its base did.
+                    const Plan& q = candidates[static_cast<std::size_t>(it->second)];
+                    v.bp_wave0 = q.bp_wave0;
+                    if (it->second < static_cast<int>(i) && q == v) { b = it->second; break; }
                 }
                 v.attack_land_search_choice = a;
                 v.combat_crack_choice       = c;
+                v.bp_wave0                  = w0;
                 if (b >= 0) { cp_base_of[i] = b; cp_is_base[static_cast<std::size_t>(b)] = 1; }
             }
         }
