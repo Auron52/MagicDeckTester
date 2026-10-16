@@ -2929,7 +2929,10 @@ public:
     // sequence green, green, red, green, red (Myriad Landscape: the red pair once two green are out;
     // the reds left for an on-board Myriad when it is the only search left), and is PRUNED to that one
     // pick -- "make the searches cheap here by pruning". Order + width hooks; human play keeps the full
-    // list. Primeval Titan's any-land pick is untouched. See the .cpp for the user's words.
+    // list. PRIMEVAL TITAN (USER, same day): its any-land pick is narrowed to Gruul Turf (no land in
+    // hand, or short of green / red) beside Evolving Wilds or Myriad Landscape, else to the Wilds /
+    // Myriad pairs, and with no basic left to a fixed order (Turf, Myriad, Radiant Fountain, Haunted
+    // Fengraf, Wilds). See the .cpp for the user's words.
     void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
                              bool basic_only, bool share_land_type,
                              std::vector<std::vector<std::string>>& picks) const override;
@@ -2937,6 +2940,11 @@ public:
                              bool basic_only, bool share_land_type,
                              const std::vector<std::vector<std::string>>& picks) const override;
     bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    // THE KAROO BOUNCE (USER 2026-10-16): Gruul Turf returns a land that re-enters untapped "in reverse
+    // order from colour requirements" -- colourless first, then the colour with the most to spare over
+    // what the deck's costs need -- with no search.
+    int BounceUserRulePick(const GameState& s, int controller, const std::vector<int>& legal,
+                           const std::vector<int>& order, int* qualifying_names = nullptr) const override;
 };
 
 // Melira Pod (persist combo / creature toolbox: Melira / Vizier of Remedies + Kitchen Finks /

@@ -1777,7 +1777,23 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
 //     splash basics remain -- then MAIN throughout, so Myriad fetches the reds together.
 //   * Myriad Landscape (share_land_type): the splash PAIR when >= 2 splash basics remain in the library
 //     and g >= 2; otherwise the main pair.
-//   * Primeval Titan (any land) keeps the base order and is NOT pruned: the rule speaks to basics.
+//   * Primeval Titan (any land, two per trigger) -- the user's rule, same day: "you usually want one of
+//     three: 1. Evolving Wilds/Terramorphic ... For additional landfall. 2. Gruul Turf - If you have no
+//     land drop it gives you one. It also produces both colours. 3. Myriad Landscape - For additional
+//     landfall, at the cost of mana." "Gruul turf is a one-of and I would make it automatic if you
+//     don't have a land drop." "If we are out of basics in the deck search Gruul Turf followed by
+//     Myriad Landscape, followed by Radiant Fountain and Haunted Fengraf. Evolving Wilds and
+//     Terramorphic are poor in this case, but you would still search them at the end." "The only
+//     other case for Gruul Turf would be if you are low on Green or Red mana ... if you have less than
+//     3 total ... if you have 1 or less red". Otherwise "it would be Evolving Wilds/Terramorphic vs
+//     Myriad Landscape but it depends on what mana you will have next turn and what you need to cast.
+//     We might be able to get away with searching this". So (LandfallTitanAllowed): with no basic left
+//     in the library, the one pick the fixed order gives; else, when Turf is wanted (no land card in
+//     hand, g < 3 or r <= 1) the picks holding the Karoo; and among what is left the picks holding the
+//     MOST Wilds / Myriad -- SEARCHED among those (up to Wilds+Wilds, Wilds+Myriad, Myriad+Myriad).
+//     Wilds and Terramorphic are one class already (LandSearch.h's identity fold). A slot the rule's
+//     lands cannot fill stays open (searched); a board with no Turf to want and no Wilds / Myriad left
+//     is not narrowed at all.
 // The resolving source is never counted as an "other" one: a fetch land / Myriad / Khalni is
 // sacrificed as the cost and a spell is off the hand before it resolves (AIEngine::CastSpellFromHand
 // erases it before the effect; the rollout's apply_one is its lockstep twin).
@@ -1932,6 +1948,103 @@ void LandfallColourNames(const std::vector<std::vector<std::string>>& picks, int
         }
     }
 }
+
+// Primeval Titan's land classes, read off the definition: the Karoo (Gruul Turf), the Myriad
+// (a shared-type land search), the fetch (Evolving Wilds / Terramorphic Expanse), a basic, or other.
+enum class TitanLand { Karoo, Myriad, Fetch, Basic, Other };
+
+TitanLand TitanLandOf(const CardDefinition* d)
+{
+    if (d == nullptr)                         { return TitanLand::Other; }
+    if (IsBasicLandCard(*d))                  { return TitanLand::Basic; }
+    if (d->params.etb_bounce_land)            { return TitanLand::Karoo; }
+    if (d->params.land_search_count > 0)
+    { return d->params.land_search_share_land_type ? TitanLand::Myriad : TitanLand::Fetch; }
+    return TitanLand::Other;
+}
+
+bool HandHasLand(const GameState& s, int controller)
+{
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { return true; }
+    }
+    return false;
+}
+
+// The user's Titan rule (see the block above): the indices of `picks` it keeps, in list order; EMPTY
+// means "no narrowing" (every pick stays). Reads the pick list (a function of the library multiset),
+// whether a land card is in hand, and g / r -- exactly what LandSearchPickOrderKey keys.
+std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller,
+                                              const std::vector<std::vector<std::string>>& picks)
+{
+    std::vector<std::size_t> out;
+    if (picks.size() < 2) { return out; }
+    std::vector<std::vector<TitanLand>> cls(picks.size());
+    bool basics_left = false;
+    for (std::size_t i = 0; i < picks.size(); ++i)
+    {
+        for (const std::string& nm : picks[i])
+        {
+            const TitanLand t = TitanLandOf(CardDatabase::Instance().Lookup(nm));
+            cls[i].push_back(t);
+            if (t == TitanLand::Basic) { basics_left = true; }
+        }
+    }
+    if (!basics_left)
+    {
+        // Out of basics: Turf, Myriad, Radiant Fountain, Haunted Fengraf, any other land, Wilds -- the
+        // pick whose lands rank best (sorted ranks compared lexicographically); ties keep list order.
+        auto rank = [&](const std::string& nm, TitanLand t)
+        {
+            switch (t)
+            {
+                case TitanLand::Karoo:  return 0;
+                case TitanLand::Myriad: return 1;
+                case TitanLand::Fetch:  return 5;
+                default: break;
+            }
+            return nm == "Radiant Fountain" ? 2 : nm == "Haunted Fengraf" ? 3 : 4;
+        };
+        std::size_t best = 0;
+        std::vector<int> best_key;
+        for (std::size_t i = 0; i < picks.size(); ++i)
+        {
+            std::vector<int> key;
+            for (std::size_t j = 0; j < picks[i].size(); ++j) { key.push_back(rank(picks[i][j], cls[i][j])); }
+            std::sort(key.begin(), key.end());
+            // A longer pick (more lands) first: the maximal-pick fold leaves only full picks here anyway.
+            key.insert(key.begin(), -static_cast<int>(key.size()));
+            if (i == 0 || key < best_key) { best = i; best_key = std::move(key); }
+        }
+        out.push_back(best);
+        return out;
+    }
+    std::vector<std::size_t> pool;
+    for (std::size_t i = 0; i < picks.size(); ++i) { pool.push_back(i); }
+    const LandfallColourState r = ReadLandfallColours(s, controller);
+    const bool short_colour = r.splash >= 0 && (r.g < 3 || r.r <= 1);
+    bool turf_pool = false;
+    if (!HandHasLand(s, controller) || short_colour)
+    {
+        std::vector<std::size_t> turf;
+        for (std::size_t i : pool)
+        { if (std::find(cls[i].begin(), cls[i].end(), TitanLand::Karoo) != cls[i].end()) { turf.push_back(i); } }
+        if (!turf.empty()) { pool = std::move(turf); turf_pool = true; }
+    }
+    auto wm = [&](std::size_t i)
+    {
+        int n = 0;
+        for (TitanLand t : cls[i]) { if (t == TitanLand::Fetch || t == TitanLand::Myriad) { ++n; } }
+        return n;
+    };
+    int most = 0;
+    for (std::size_t i : pool) { most = std::max(most, wm(i)); }
+    if (most == 0) { return turf_pool ? pool : out; }
+    for (std::size_t i : pool) { if (wm(i) == most) { out.push_back(i); } }
+    return out;
+}
 }   // namespace
 
 bool LandfallProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
@@ -1943,7 +2056,9 @@ bool LandfallProvider::LandSearchPickOrderKey(const GameState& s, int controller
     key |= static_cast<std::uint64_t>(std::min(r.g, 3)) << 11;
     key |= static_cast<std::uint64_t>(std::min(r.r, 2)) << 13;
     key |= static_cast<std::uint64_t>(r.myriad_situation ? 1 : 0) << 15;
-    // lib_main / lib_splash are functions of the library multiset, which the memo key holds exactly.
+    key |= static_cast<std::uint64_t>(HandHasLand(s, controller) ? 1 : 0) << 16;   // Titan's Turf test
+    // lib_main / lib_splash, and whether any basic is left for Titan, are functions of the library
+    // multiset, which the memo key holds exactly.
     return true;
 }
 
@@ -1952,7 +2067,21 @@ void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, i
                                            std::vector<std::vector<std::string>>& picks) const
 {
     DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, picks);
-    if (!basic_only || picks.size() < 2) { return; }
+    if (!basic_only)
+    {
+        // Titan: the rule's picks to the front, each part keeping the base order.
+        const std::vector<std::size_t> keep = LandfallTitanAllowed(s, controller, picks);
+        if (keep.empty() || keep.size() == picks.size()) { return; }
+        std::vector<char> in(picks.size(), 0);
+        for (std::size_t i : keep) { in[i] = 1; }
+        std::vector<std::vector<std::string>> out;
+        out.reserve(picks.size());
+        for (std::size_t i = 0; i < picks.size(); ++i) { if (in[i])  { out.push_back(std::move(picks[i])); } }
+        for (std::size_t i = 0; i < picks.size(); ++i) { if (!in[i]) { out.push_back(std::move(picks[i])); } }
+        picks = std::move(out);
+        return;
+    }
+    if (picks.size() < 2) { return; }
     const LandfallColourState r = ReadLandfallColours(s, controller);
     if (r.splash < 0) { return; }
     std::string main_name, splash_name;
@@ -1968,7 +2097,16 @@ int LandfallProvider::LandSearchPickWidth(const GameState& s, int controller, in
                                           bool basic_only, bool share_land_type,
                                           const std::vector<std::vector<std::string>>& picks) const
 {
-    if (!basic_only || picks.size() < 2) { return static_cast<int>(picks.size()); }
+    if (!basic_only)
+    {
+        // Titan: keep the rule's picks -- LandSearchPickOrder put them first, so they are a prefix; a
+        // list the rule does not narrow (or one that is not in that shape) keeps the full fan.
+        const std::vector<std::size_t> keep = LandfallTitanAllowed(s, controller, picks);
+        for (std::size_t i = 0; i < keep.size(); ++i)
+        { if (keep[i] != i) { return static_cast<int>(picks.size()); } }
+        return keep.empty() ? static_cast<int>(picks.size()) : static_cast<int>(keep.size());
+    }
+    if (picks.size() < 2) { return static_cast<int>(picks.size()); }
     const LandfallColourState r = ReadLandfallColours(s, controller);
     if (r.splash < 0) { return static_cast<int>(picks.size()); }
     std::string main_name, splash_name;
@@ -2747,6 +2885,108 @@ int HinataProvider::BounceUserRulePick(const GameState& s, int controller, const
     for (const Key& k : keys)
     {
         const auto rank = [](const Key& x) { return std::make_tuple(x.colours, -x.copies, x.need, x.pos); };
+        if (rank(k) < rank(*best)) { best = &k; }
+    }
+    return best->idx;
+}
+
+// THE USER'S LANDFALL KAROO RULE (2026-10-16), for every Gruul Turf bounce (the land drop and a
+// Titan-fetched Turf alike): "I would bounce in reverse order from colour requirements. So bounce any
+// come-into-play-untapped land starting with the unnecessary first and then progressively more
+// necessary. Colourless producing lands can go first, then extra red or green." The candidates are
+// Hinata's: a land that re-enters untapped, already tapped or with its mana floated (the adopted
+// tap-in-response model), never another Karoo or an enchanted land while another is returnable. The
+// REQUIREMENT of a colour is the most pips of it on one nonland card we own in the game (Genesis Wave
+// GGG, Omnath RR here -- the 3 green / 2 red the fetch rule builds toward); a land's SPARE is our lands
+// making its colour, less that requirement (a two-colour land: its scarcer colour). Order: colourless,
+// then the most spare, then tapped before untapped, then more copies, then the provider's order. The
+// pick is returned with NO search (BounceSearchCandidates' user-rule tier); MTG_UNPRUNE=karoobounce
+// reopens the search. No candidate -> the base rule.
+int LandfallProvider::BounceUserRulePick(const GameState& s, int controller, const std::vector<int>& legal,
+                                         const std::vector<int>& order, int* qualifying_names) const
+{
+    if (qualifying_names != nullptr) { *qualifying_names = 0; }
+    int req[5] = { 0, 0, 0, 0, 0 };
+    auto add_req = [&](const Card& c) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { return; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        req[0] = std::max(req[0], static_cast<int>(mc.white)); req[1] = std::max(req[1], static_cast<int>(mc.blue));
+        req[2] = std::max(req[2], static_cast<int>(mc.black)); req[3] = std::max(req[3], static_cast<int>(mc.red));
+        req[4] = std::max(req[4], static_cast<int>(mc.green));
+    };
+    const Player& me = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& c : me.library)   { add_req(c); }
+    for (const Card& c : me.hand)      { add_req(c); }
+    for (const Card& c : me.graveyard) { add_req(c); }
+    for (const StagedCard& c : me.staged_cards)       { add_req(c.card); }
+    for (const SuspendedCard& c : me.suspended_cards) { add_req(c.card); }
+    for (const Permanent& p : s.battlefield) { if (p.owner_index == controller && !p.is_token) { add_req(p.card); } }
+    // The colours a land makes, WUBRG bits 0..4 (colourless makes none).
+    auto colours = [&](const Permanent& p) -> unsigned {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { return 0u; }
+        unsigned m = static_cast<unsigned>(LandAuraColorMask(s, p)) & 31u;
+        for (Color c : EffectiveProducesFor(s, controller, *d, &p))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5) { m |= 1u << ci; }
+        }
+        return m;
+    };
+    int sources[5] = { 0, 0, 0, 0, 0 };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        const unsigned m = colours(p);
+        for (int c = 0; c < 5; ++c) { if (m & (1u << c)) { ++sources[c]; } }
+    }
+    auto karoo_at = [&](int i) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
+        return d != nullptr && d->params.etb_bounce_land;
+    };
+    bool non_karoo = false;
+    for (int i : legal) { if (!karoo_at(i)) { non_karoo = true; break; } }
+    struct Key { int tier; int spare_neg; int untapped; int copies_neg; int pos; int idx; };
+    std::vector<Key> keys;
+    std::vector<std::string> names;
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const int i = order[static_cast<std::size_t>(pos)];
+        if (std::find(legal.begin(), legal.end(), i) == legal.end()) { continue; }
+        if (non_karoo && karoo_at(i)) { continue; }
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        bool enchanted = false;   // the Aura exemption: never return an enchanted land
+        for (const Permanent& a : s.battlefield)
+        { if (a.aura_attached_to != 0 && a.aura_attached_to == p.card.m_number) { enchanted = true; break; } }
+        if (enchanted) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !BounceReplayEntersUntapped(s, controller, i, *d)) { continue; }
+        if (!p.tapped && !(KarooFloatModelled() && KarooBounceFloatable(s, p, *d))) { continue; }
+        const unsigned m = colours(p);
+        int spare = 0;
+        bool coloured = false;
+        for (int c = 0; c < 5; ++c)
+        {
+            if (!(m & (1u << c))) { continue; }
+            const int v = sources[c] - req[c];
+            spare = coloured ? std::min(spare, v) : v;
+            coloured = true;
+        }
+        int copies = 0;
+        for (const Permanent& o : s.battlefield)
+        { if (o.controller_index == controller && o.card.IsLand() && o.card.m_name == p.card.m_name) { ++copies; } }
+        keys.push_back({ coloured ? 1 : 0, coloured ? -spare : 0, p.tapped ? 0 : 1, -copies, pos, i });
+        const std::string nm = p.card.m_name.str();
+        if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+    }
+    if (keys.empty()) { return DecisionProvider::BounceUserRulePick(s, controller, legal, order, qualifying_names); }
+    if (qualifying_names != nullptr) { *qualifying_names = static_cast<int>(names.size()); }
+    const Key* best = &keys.front();
+    for (const Key& k : keys)
+    {
+        const auto rank = [](const Key& x)
+        { return std::make_tuple(x.tier, x.spare_neg, x.untapped, x.copies_neg, x.pos); };
         if (rank(k) < rank(*best)) { best = &k; }
     }
     return best->idx;

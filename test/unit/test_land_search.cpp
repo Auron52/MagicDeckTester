@@ -687,7 +687,7 @@ TEST_CASE("Landfall fetch rule: the Myriad situation leaves the reds for an on-b
     CHECK(front(one2) == M);                                 // a lone Mountain is never Myriad's: take it
 }
 
-TEST_CASE("Landfall fetch rule: two-land searches walk the sequence; Titan keeps the base order unpruned")
+TEST_CASE("Landfall fetch rule: two-land searches walk the sequence")
 {
     LoadCards();
     const LandSearchSpec cu = LandSearchSpecOf(D("Cultivate").params);
@@ -699,13 +699,127 @@ TEST_CASE("Landfall fetch rule: two-land searches walk the sequence; Titan keeps
     CHECK(LandSearchPicks(g1, 0, kh)[0] == std::vector<std::string>{ "Forest", "Mountain" });  // green then red
     GameState g0 = LfState(4, 2, 0);
     CHECK(LandSearchPicks(g0, 0, cu)[0] == std::vector<std::string>{ "Forest", "Forest" });
-    GameState tl = LfState(4, 2, 1);
-    Lib(tl, "Evolving Wilds", 60); Lib(tl, "Gruul Turf", 61);
-    GameState tb = tl;
-    tb.m_provider = nullptr;   // DefaultProvider
+}
+
+// ---- LandfallProvider: Primeval Titan's pick (USER 2026-10-16) -----------------------------------
+// "you usually want one of three": Evolving Wilds / Terramorphic, Gruul Turf (automatic with no land
+// drop, or when short of green / red), Myriad Landscape; with no basic left a fixed order.
+namespace
+{
+// A library holding every nonbasic the list plays: 2 Wilds-class (Evolving Wilds + Terramorphic,
+// one identity class), 2 Myriad, the Turf, Radiant Fountain, Haunted Fengraf.
+void TitanLib(GameState& s, bool turf = true, int myriads = 2, int wilds = 2)
+{
+    int n = 70;
+    if (wilds >= 1) { Lib(s, "Evolving Wilds", n++); }
+    if (wilds >= 2) { Lib(s, "Terramorphic Expanse", n++); }
+    for (int i = 0; i < myriads; ++i) { Lib(s, "Myriad Landscape", n++); }
+    if (turf) { Lib(s, "Gruul Turf", n++); }
+    Lib(s, "Radiant Fountain", n++);
+    Lib(s, "Haunted Fengraf", n++);
+}
+using Pick = std::vector<std::string>;
+bool Holds(const std::vector<Pick>& picks, const Pick& p)
+{ return std::find(picks.begin(), picks.end(), p) != picks.end(); }
+}   // namespace
+
+TEST_CASE("Landfall Titan rule: Gruul Turf with no land in hand or when short of a colour, beside Wilds or Myriad")
+{
+    LoadCards();
     const LandSearchSpec ti = LandSearchSpecOf(D("Primeval Titan").params);
-    CHECK(LandSearchPicks(tl, 0, ti) == LandSearchPicks(tb, 0, ti));
-    CHECK(LandSearchPicks(tl, 0, ti).size() > 1);
+    // g3, r2 on board (three Forests, two Mountains), nothing in hand: no land drop -> Turf.
+    GameState nh = LfState(4, 0, 3); Put(nh, "Mountain", 30, true); Put(nh, "Mountain", 31, true);
+    TitanLib(nh);
+    const std::vector<Pick> a = LandSearchPicks(nh, 0, ti);
+    CHECK(a.size() == 2);
+    CHECK(Holds(a, Pick{ "Evolving Wilds", "Gruul Turf" }));
+    CHECK(Holds(a, Pick{ "Gruul Turf", "Myriad Landscape" }));
+    // The same board with a land in hand: no Turf; the Wilds / Myriad pairs, searched.
+    GameState lh = nh; Hand(lh, "Forest", 44);
+    const std::vector<Pick> b = LandSearchPicks(lh, 0, ti);
+    CHECK(b.size() == 3);
+    CHECK(Holds(b, Pick{ "Evolving Wilds", "Evolving Wilds" }));
+    CHECK(Holds(b, Pick{ "Evolving Wilds", "Myriad Landscape" }));
+    CHECK(Holds(b, Pick{ "Myriad Landscape", "Myriad Landscape" }));
+    // A land in hand but short of green (g2) or of red (r1): Turf again.
+    GameState g2 = LfState(4, 0, 2); Put(g2, "Mountain", 30, true); Put(g2, "Mountain", 31, true);
+    TitanLib(g2); Hand(g2, "Forest", 44);
+    CHECK(LandSearchPicks(g2, 0, ti).size() == 2);
+    CHECK(LandSearchPicks(g2, 0, ti)[0].size() == 2);
+    for (const Pick& p : LandSearchPicks(g2, 0, ti)) { CHECK(std::count(p.begin(), p.end(), "Gruul Turf") == 1); }
+    GameState r1 = LfState(4, 1, 3); Put(r1, "Mountain", 30, true);
+    TitanLib(r1); Hand(r1, "Forest", 44);
+    for (const Pick& p : LandSearchPicks(r1, 0, ti)) { CHECK(std::count(p.begin(), p.end(), "Gruul Turf") == 1); }
+    // A Mountain in hand is red (r2): with g3 the Turf is not wanted.
+    GameState rh = LfState(4, 0, 3); Put(rh, "Mountain", 30, true);
+    TitanLib(rh); Hand(rh, "Mountain", 44);
+    CHECK(LandSearchPicks(rh, 0, ti).size() == 3);
+    // Turf wanted but gone: the Wilds / Myriad pairs.
+    GameState nt = LfState(4, 0, 3); Put(nt, "Mountain", 30, true); Put(nt, "Mountain", 31, true);
+    TitanLib(nt, false);
+    CHECK(LandSearchPicks(nt, 0, ti).size() == 3);
+    // One Wilds-class card and no Myriad left, Turf not wanted: that card plus an open, searched slot.
+    GameState one = LfState(1, 0, 3); Put(one, "Mountain", 30, true); Put(one, "Mountain", 31, true);
+    Hand(one, "Forest", 44);
+    Lib(one, "Evolving Wilds", 70); Lib(one, "Gruul Turf", 71); Lib(one, "Radiant Fountain", 72);
+    const std::vector<Pick> c = LandSearchPicks(one, 0, ti);
+    CHECK(c.size() == 3);
+    for (const Pick& p : c) { CHECK(std::count(p.begin(), p.end(), "Evolving Wilds") == 1); }
+    // The base (DefaultProvider) list is not narrowed.
+    GameState base = lh; base.m_provider = nullptr;
+    CHECK(LandSearchPicks(base, 0, ti).size() > 3);
+}
+
+TEST_CASE("Landfall Titan rule: out of basics -- Turf, Myriad, Radiant Fountain, Haunted Fengraf, Wilds; one pick")
+{
+    LoadCards();
+    const LandSearchSpec ti = LandSearchSpecOf(D("Primeval Titan").params);
+    GameState s = LfState(0, 0, 3); Hand(s, "Forest", 44);
+    TitanLib(s);
+    CHECK(LandSearchPicks(s, 0, ti) == std::vector<Pick>{ Pick{ "Gruul Turf", "Myriad Landscape" } });
+    GameState nt = LfState(0, 0, 3); TitanLib(nt, false);
+    CHECK(LandSearchPicks(nt, 0, ti) == std::vector<Pick>{ Pick{ "Myriad Landscape", "Myriad Landscape" } });
+    GameState m1 = LfState(0, 0, 3); TitanLib(m1, false, 1);
+    CHECK(LandSearchPicks(m1, 0, ti) == std::vector<Pick>{ Pick{ "Myriad Landscape", "Radiant Fountain" } });
+    GameState w = LfState(0, 0, 3); TitanLib(w, false, 0);
+    CHECK(LandSearchPicks(w, 0, ti) == std::vector<Pick>{ Pick{ "Haunted Fengraf", "Radiant Fountain" } });
+    // The land-in-hand bit is part of the memo key.
+    std::uint64_t k0 = 0, k1 = 0;
+    GameState h0 = LfState(4, 2, 3); GameState h1 = h0; Hand(h1, "Forest", 44);
+    CHECK(LfProv().LandSearchPickOrderKey(h0, 0, k0));
+    CHECK(LfProv().LandSearchPickOrderKey(h1, 0, k1));
+    CHECK(k0 != k1);
+}
+
+TEST_CASE("Landfall Karoo rule: bounce colourless first, then the colour with the most to spare")
+{
+    LoadCards();
+    // Requirements from the deck's costs: Genesis Wave GGG, Omnath RR.
+    auto board = [](int forests, int mountains, bool fountain, std::vector<int>& legal, int& turf)
+    {
+        GameState s = LfState(0, 0, 0);
+        Lib(s, "Genesis Wave", 80); Lib(s, "Omnath, Locus of Rage", 81);
+        int n = 10;
+        for (int i = 0; i < forests; ++i)   { Put(s, "Forest", n++, true); }
+        for (int i = 0; i < mountains; ++i) { Put(s, "Mountain", n++, true); }
+        if (fountain) { Put(s, "Radiant Fountain", n++, true); }
+        turf = Put(s, "Gruul Turf", n++, false);
+        legal.clear();
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i) { if (i != turf) { legal.push_back(i); } }
+        return s;
+    };
+    auto picked = [](const GameState& s, const std::vector<int>& legal)
+    {
+        const int i = LfProv().BounceUserRulePick(s, 0, legal, legal);
+        REQUIRE(i >= 0);
+        return s.battlefield[static_cast<std::size_t>(i)].card.m_name.str();
+    };
+    std::vector<int> legal; int turf = -1;
+    GameState a = board(3, 1, true, legal, turf);  CHECK(picked(a, legal) == "Radiant Fountain");
+    GameState b = board(3, 1, false, legal, turf); CHECK(picked(b, legal) == "Forest");     // G 4/3 spare 1, R 2/2 spare 0
+    GameState c = board(2, 2, false, legal, turf); CHECK(picked(c, legal) == "Mountain");   // G 3/3 spare 0, R 3/2 spare 1
+    GameState d = board(2, 1, false, legal, turf); CHECK(picked(d, legal) == "Forest");     // both spare 0: more copies
+    GameState e = board(1, 1, false, legal, turf); CHECK(picked(e, legal) == "Mountain");   // G 2/3 short, R 2/2 spare 0
 }
 
 TEST_CASE("Landfall fetch rule: basic searches are PRUNED to the rule's one pick; the key separates every input")
