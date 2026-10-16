@@ -1,0 +1,25 @@
+{
+  "keep_apart": [
+    {
+      "cards": [
+        "Ancient Tomb",
+        "Beastmaster Ascension",
+        "Brightcap Badger",
+        "Concordant Crossroads",
+        "Doubling Season",
+        "Forest",
+        "Hickory Woodlot",
+        "Saproling Burst",
+        "Saproling Migration",
+        "Shroofus Sproutsire",
+        "Sol Ring",
+        "Sporecrown Thallid",
+        "Thallid",
+        "Undercellar Myconid",
+        "Utopia Mycon",
+        "Wild Growth"
+      ],
+      "why": "USER RULING 2026-10-16, for the adopted v2 list: 'The bucketing I believe is just no merges with K=16.' Every distinct card in the deck is named here, so every PAIR is vetoed and each card takes its own hand dimension -- K = 16 = the deck's distinct card count, which is why the number is 16. A bucket ruling is the user's alone to make (CLAUDE.md), so this file is the ruling, not a derivation: discovery's threshold, a card-data edit or a play change must not move it. ACHIEVABILITY WAS CHECKED, NOT ASSUMED -- keep_apart only vetoes the DIRECT union, and the inert / fetchland merges in EquivalenceDiscovery.cpp run AFTERWARDS and would make the conflict check THROW if either could fire; none of these 16 cards has goldfish_inert or fetch_land_types, so no by-construction merge is possible and K=16 is exactly reachable. Feasibility: C(16+6,7) = 170,544 distinct hands, between the mulligan skill's K=15 (114k) and K=24 (~1M) guide rows. THIS DELIBERATELY REPLACES THE SCREEN'S BUCKETING, which was K=17 WITH merges -- the 39-round screen shared ONE apparatus across arms holding different cards, so it merged {Peat Bog, Hickory Woodlot}, {Forest, Blooming Marsh} and {Shroofus Sproutsire, Brightcap Badger} to stop an arm's card dropping the table; the shipped list has no such constraint. It also discharges an amendment the screen's own bucket file recorded as owed: that the {Shroofus, Brightcap Badger} group 'should be the FIRST group revisited if these cards survive into the final list' -- both did survive (Shroofus 1, Badger 4), and the keep table is presence-gated, so carrying the merge forward would silently have made it the shipped policy."
+    }
+  ]
+}
