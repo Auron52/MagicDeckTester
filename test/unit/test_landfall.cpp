@@ -711,3 +711,41 @@ TEST_CASE("Land position: the EXECUTOR realises an unpayable-prefix position exa
         CHECK(g->stack.empty());
     }
 }
+
+// ---- THE k == -1 TWIN (Landfall claude-play sweep flag 2, 2026-10-16) ------------------------------
+// "land right after the LAST watcher" and "land after the casts" over one cast list are one line when
+// nothing after that watcher can see the land's position. The human menu hides the positioned twin
+// only on an identical post-apply state; a position that matters is never a twin.
+
+TEST_CASE("Land position twin: 'after Baloths' == 'after the casts' for a lone Baloths; mid-sequence is not")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    for (int i = 0; i < 9; ++i) { PutLf(s, "Forest", 10 + i); }
+    s.players[0].hand.push_back(HandLf(kBaloths, 1));
+    s.players[0].hand.push_back(HandLf(kKhalni, 2));
+    s.players[0].hand.push_back(HandLf("Forest", 3));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    int lone_twin = 0, mid_twin = 0, last_twin = 0, lone = 0, mid = 0, last = 0;
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        const TurnSolver::Plan& p = plans[i];
+        if (p.land_slot <= 0 || p.land_to_play != "Forest") { continue; }
+        int watchers = 0;
+        for (const Action& a : p.actions) { if (TurnSolver::PutsLandfallWatcher(a)) { ++watchers; } }
+        const int twin = TurnSolver::PositionedLandTwinIndex(s, plans, i, true);
+        if (twin >= 0)
+        {
+            CHECK(plans[static_cast<std::size_t>(twin)].land_slot == TurnSolver::kLandSlotAfterCasts);
+            CHECK(plans[static_cast<std::size_t>(twin)].actions.size() == p.actions.size());
+        }
+        if (watchers == 1)                       { ++lone; if (twin >= 0) { ++lone_twin; } }
+        else if (p.land_slot < watchers)         { ++mid;  if (twin >= 0) { ++mid_twin; } }
+        else                                     { ++last; if (twin >= 0) { ++last_twin; } }
+    }
+    REQUIRE(lone >= 1);
+    CHECK(lone_twin == lone);   // one watcher, nothing after it: the twin of the after-all plan
+    REQUIRE(mid >= 1);
+    CHECK(mid_twin == 0);       // the second watcher never sees the land: a different line
+    CHECK(last_twin == last);   // after the last of two watchers, nothing after: the twin again
+}

@@ -1536,6 +1536,22 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (plans[i].bp_choice >= 0) { hide_bundle[i] = 1; }
             }
         }
+        // LAND-POSITION TWIN COLLAPSE (Landfall claude-play sweep flag 2, 2026-10-16). "land=X (after
+        // <the last watcher>)" and "land=X (after the casts)" over one cast list are byte-identical
+        // lines whenever nothing the apply does after that watcher can see the land's position (7 of
+        // 16 sweep games read the pair); the positioned twin is hidden only when its apply reaches the
+        // after-all plan's exact state (TurnSolver::PositionedLandTwinIndex). Hidden, not removed (the
+        // REAL index stays pickable; the search folds the same pair at its post-apply dedup). Only a
+        // deck with a landfall card ever enumerates a positioned plan.
+        if (HumanPlayActive() && s.deck_has_landfall)
+        {
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                if (hide_bundle[i] || plans[i].land_slot <= 0) { continue; }
+                if (TurnSolver::PositionedLandTwinIndex(s, plans, i, is_pre_combat, &hide_bundle) >= 0)
+                { hide_bundle[i] = 1; }
+            }
+        }
     }
     // DIVERSITY-AWARE display cap. With variant-heavy enumerations (tutor-target cross products)
     // the FIRST n_emit plans can all be variants of one cast set, hiding whole SPELLS from the

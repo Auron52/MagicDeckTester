@@ -1809,6 +1809,14 @@ public:
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+    // HUMAN-MENU twin test for a POSITIONED land plan (plans[i].land_slot >= 1): the index of a plan
+    // in the same list that plays the same land after ALL its casts (land_slot -1) over the same
+    // actions and reaches the identical post-apply state (BuildDedupKey), or -1. `hidden` (optional,
+    // parallel to `plans`) skips twins the menu already hides. The search folds the same pair at the
+    // post-apply dedup (PlanDupSkippable); this is the menu's half (Landfall sweep flag 2).
+    static int PositionedLandTwinIndex(const GameState& state, const std::vector<Plan>& plans,
+                                       std::size_t i, bool is_pre_combat,
+                                       const std::vector<char>* hidden = nullptr);
     // The post-apply state identity every candidate dedup keys on (BuildDedupKey), folded to 64 bits.
     // Tests only: it is how a unit case checks that two states collide (or do not) in that key.
     static std::uint64_t     DedupKeyOf(const GameState& state);

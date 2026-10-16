@@ -17182,8 +17182,23 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
 // axes ask the ExceptOrder form.
 static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
 { return PlanIsAxisVariantExceptOrder(p) || p.land_search_act_slot != -1; }
-// SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above).
-static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p); }
+// SKIPPABLE ON AN EXACT POST-APPLY DUPLICATE: every axis variant (above) -- and every POSITIONED
+// land plan (Plan::land_slot != 0; Landfall claude-play sweep flag 2, 2026-10-16). A land_slot clone
+// differs from its sibling only in WHEN the land is played, and that position is often inert: "land
+// right after the k-th watcher" when that watcher is the plan's LAST dispatched cast lands on exactly
+// the state of the "land after all the casts" (-1) clone of the same cast list (7 of 16 sweep games
+// saw the byte-identical pair; their fingerprints, `LSLOT k` vs `LAFTE`, and the human-play
+// signatures, `|at<k>` vs `|at-1`, rightly differ, because the two are only SOMETIMES the same line).
+// Whether they are is decided by everything between that cast and the after-all point -- trailing
+// activations (a Khalni crack the land filled first), a land-search activation's position, a site-9
+// continuation, a land the apply itself made activatable -- which only the apply sees, so the fold is
+// the post-apply STATE identity (a node's value is a function of its state; the same key-completeness
+// stake every axis variant already makes), per candidate: the twin is scored once, a position that
+// matters is never folded, and no plan is dropped before it is applied. It does NOT need a prior
+// enumeration-time judgement of "nothing follows the k-th cast", which the dispatch order (the
+// watchers-first tie-break the -1 clone does not apply) and the sub-axis children (whose pin ordinals
+// follow that order) make unsound. Only a deck with a landfall card ever has such a plan.
+static bool PlanDupSkippable(const TurnSolver::Plan& p) { return PlanIsAxisVariant(p) || p.land_slot != 0; }
 
 // ---- THE BOUNCE FOLD (MTG_BOUNCE_FOLD; see BounceFoldOn) --------------------------------------
 // One candidate loop's memo of each bounce fan (Plan::bounce_group): the bounce width its first
@@ -73826,6 +73841,67 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
 void TurnSolver::ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat)
 {
     ApplyPlanDirect(state, plan, is_pre_combat);
+}
+
+// The human menu's half of the land_slot twin fold (Landfall claude-play sweep flag 2; the search's
+// half is PlanDupSkippable). "Land right after the k-th watcher" and "land after all the casts" over
+// the same actions are the same line exactly when the apply reaches the same state, so the menu shows
+// one entry: the after-all-casts plan (the label the viewer's `landafter=` builds), and hides the
+// positioned twin -- hidden, not removed, so every plan keeps its REAL engine index, CheckLine still
+// matches `landat=<k>` exactly, and the uncapped reference checker sees the full list. The candidate
+// twins must play the same land option over the same action multiset; the applies are quiet (every
+// chooser and sink paused) and run the human world's own apply.
+int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vector<Plan>& plans,
+                                         std::size_t i, bool is_pre_combat,
+                                         const std::vector<char>* hidden)
+{
+    if (i >= plans.size() || plans[i].land_slot <= 0) { return -1; }
+    const Plan& p = plans[i];
+    auto action_keys = [](const Plan& pl)
+    {
+        std::vector<std::string> ks;
+        ks.reserve(pl.actions.size());
+        for (const Action& a : pl.actions)
+        {
+            std::string k = std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str()
+                + "|" + a.tutor_target.str() + "|" + a.chosen_float_color.str() + "|" + a.victim_name.str()
+                + "|" + a.land_face.str() + "|" + a.land_fetch_target.str() + "|" + a.trick_hand_target;
+            const int f[] = { a.chosen_x, a.splice_count, a.replicate_count, a.devour_count,
+                              a.enchant_target, a.sac_source_id, a.sac_victim_id, a.sac_count,
+                              static_cast<int>(a.ability_mode), a.alt_cost ? 1 : 0, a.alt_lifegain,
+                              a.sacrifice_land ? 1 : 0, a.discard_lands, a.free_cast ? 1 : 0,
+                              a.phyrexian_life, a.twobrid_colored, a.convoke_green, a.convoke_other,
+                              a.soulfire_own_targets, a.crackle_targets, a.ponder_keep, a.evoke ? 1 : 0,
+                              a.adventure ? 1 : 0, a.bestow ? 1 : 0, a.gy_exile_mode, a.loyalty_ability,
+                              a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0 };
+            for (int v : f) { k += "|" + std::to_string(v); }
+            ks.push_back(std::move(k));
+        }
+        std::sort(ks.begin(), ks.end());
+        return ks;
+    };
+    auto post_key = [&](const Plan& pl)
+    {
+        RevealLogPause quiet;   // every human chooser and sink paused: the default resolution
+        GameState g = state;
+        ApplyPlanDirect(g, pl, is_pre_combat);
+        return BuildDedupKey(g);
+    };
+    const std::vector<std::string> pk = action_keys(p);
+    std::optional<TranspositionTable::Key> p_state;
+    for (std::size_t j = 0; j < plans.size(); ++j)
+    {
+        const Plan& q = plans[j];
+        if (j == i || q.land_slot != kLandSlotAfterCasts) { continue; }
+        if (hidden != nullptr && j < hidden->size() && (*hidden)[j]) { continue; }
+        if (q.land_to_play != p.land_to_play || q.fetch_target != p.fetch_target
+            || q.land_face != p.land_face || q.land_from_top != p.land_from_top
+            || q.bp_choice != p.bp_choice || q.actions.size() != p.actions.size()) { continue; }
+        if (action_keys(q) != pk) { continue; }
+        if (!p_state) { p_state = post_key(p); }
+        if (post_key(q) == *p_state) { return static_cast<int>(j); }
+    }
+    return -1;
 }
 
 // #10 cast-order: the CANONICAL execution order of a plan's non-sacrifice hand casts -- what the
