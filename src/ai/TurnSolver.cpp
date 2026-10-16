@@ -10359,6 +10359,12 @@ static bool DigManaLastOn()
     return heurarm::Flag(heurarm::DIG_MANA_LAST, env);
 }
 
+static bool EvalCastTokensOn()
+{
+    static const bool env = EnvOn("MTG_EVAL_CAST_TOKENS");
+    return heurarm::Flag(heurarm::EVAL_CAST_TOKENS, env);
+}
+
 // Estimate how many times a creature placed NOW will attack before the game ends.
 // Uses the current turn number against an assumed 6-turn average game length for
 // aggressive decks, so creatures placed early score higher than late-game drops.
@@ -10702,6 +10708,44 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         }
         if (best > 0) { return best; }
         return std::max(3 * DMG / 4, ExpectedAttacks(state) * DMG - state.turn_number * 30);
+    }
+
+    // "Create N tokens" as a SPELL's resolution (cast_creates_tokens -- Saproling Migration, Spore
+    // Swarm, Fungus Frolic). WITHOUT THIS the spell falls straight through to `return DMG` below --
+    // a CANTRIP's score -- so a card making two 1/1s for {1}{G}, four when kicked, or 32 under four
+    // Doubling Seasons, ranks identically to a spell that does nothing. One-way AGAINST every token
+    // spell in the pool, and cards.json has disclosed it as a known PARTIAL for as long as those
+    // cards have been screened, which is why their screen deltas are reported as LOWER BOUNDS.
+    //
+    // Deliberately the SAME arithmetic the creature branch above uses (power x attacks x DMG, with
+    // its `-(haste ? 1 : 2)` summoning-sickness term), so the two cannot drift: a token made by a
+    // sorcery is summoning-sick exactly as a cast creature is, and this deck's Concordant Crossroads
+    // is precisely the card that lifts it.
+    //
+    // DOUBLING SEASON IS READ LIVE, through the same DoublerShift chokepoint the RESOLUTION uses
+    // (CR 614.1c), so the ranking cannot promise a different body count than the cast will make.
+    // That term dominates the base value: under four Seasons it is 16x.
+    //
+    // An ORDERING/SCORING change only -- nothing is removed, so no line becomes unfindable and this
+    // is inert at an unlimited budget. Flagged DEFAULT OFF because it is a heuristic adoption, not a
+    // card-modelling fix: measured, reported, adopted only on the user's approval.
+    if (EvalCastTokensOn() && def.params.cast_creates_tokens > 0)
+    {
+        const CardParams& p = def.params;
+        const int bodies = p.cast_creates_tokens
+                           << DoublerShift(state, state.active_player_index, /*for_tokens=*/true);
+        // A 0/0 token would be an unmodelled CDA; floor the body at 1 power so a token spell is
+        // never scored at zero for a card-data gap.
+        const int power = std::max(1, p.cast_created_token_power);
+        // The token carries no CardDefinition, so build the Card the cascade would and ask the
+        // shared haste oracle -- the only honest way to see Concordant Crossroads from here.
+        Card probe;
+        probe.m_power = power;
+        for (const std::string& st : p.cast_created_token_subtypes) { probe.m_subtypes.push_back(st); }
+        probe.AddType(CardType::Creature);
+        const bool haste = HasHasteFromLords(probe, state.battlefield, state.active_player_index);
+        const int attacks = std::max(1, ExpectedAttacks(state) - (haste ? 1 : 2));
+        return bodies * power * attacks * DMG;
     }
 
     return DMG;  // fallback for other spell types
