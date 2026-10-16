@@ -137,6 +137,14 @@ inline int LandSearchBattlefieldCount(const LandSearchSpec& spec, int picked)
     return std::min(picked, std::max(0, spec.count - spec.to_hand));
 }
 
+// Whether the provider's pick NARROWING applies (DecisionProvider::LandSearchPickWidth): never under
+// human play (the human answers every tutor_etb prompt over the full legal set), never with the
+// standing A/B gate MTG_UNPRUNE=landpick open. Part of the memo key: one process can hold both lists.
+inline bool LandSearchPickPruned()
+{
+    return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LandPick);
+}
+
 // Every legal COMPLETE pick, provider-ordered. Each entry is a list of class-representative names:
 // the battlefield entries first (sorted), then the hand entries (sorted). See the header for the two
 // sound folds. Never empty unless nothing legal exists (then the search simply finds nothing).
@@ -223,7 +231,15 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         }
         for (auto& v : splits) { out.push_back(std::move(v)); }
     }
-    ResolveProvider(s).LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, out);
+    const DecisionProvider& prov = ResolveProvider(s);
+    prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type, out);
+    // The provider's NARROWING (LandSearchPickWidth): autonomous play only; see LandSearchPickPruned.
+    if (LandSearchPickPruned())
+    {
+        const int w = prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
+                                               spec.share_land_type, out);
+        if (w >= 1 && w < static_cast<int>(out.size())) { out.resize(static_cast<std::size_t>(w)); }
+    }
     return out;
 }
 
@@ -252,13 +268,15 @@ struct Key
     std::uint64_t         prov_key  = 0;
     int                   count = 0, to_hand = 0;
     bool                  basic_only = false, share = false;
+    bool                  pruned = false;   // LandSearchPickPruned() -- the provider's narrowing applied
     int                   n = 0;
     const CardDefinition* defs[kMaxDefs] = {};
     int                   copies[kMaxDefs] = {};
     bool operator==(const Key& o) const
     {
         if (prov_type != o.prov_type || prov_key != o.prov_key || count != o.count
-            || to_hand != o.to_hand || basic_only != o.basic_only || share != o.share || n != o.n)
+            || to_hand != o.to_hand || basic_only != o.basic_only || share != o.share
+            || pruned != o.pruned || n != o.n)
         { return false; }
         for (int i = 0; i < n; ++i)
         { if (defs[i] != o.defs[i] || copies[i] != o.copies[i]) { return false; } }
@@ -275,7 +293,7 @@ struct Key
         };
         mix(prov_type); mix(prov_key);
         mix(static_cast<std::uint64_t>(count) | (static_cast<std::uint64_t>(to_hand) << 8)
-            | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull));
+            | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull) | (pruned ? 1ull << 18 : 0ull));
         for (int i = 0; i < n; ++i)
         {
             mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(defs[i])));
@@ -336,6 +354,7 @@ inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ct
     k.to_hand    = spec.to_hand;
     k.basic_only = spec.basic_only;
     k.share      = spec.share_land_type;
+    k.pruned     = LandSearchPickPruned();
     bool ok = true;
     if (spec.count > 0)
     {

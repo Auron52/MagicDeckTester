@@ -129,8 +129,13 @@ enum class UnprunedGate
     KarooBounce,  // Karoo bounce (Plan::bounce_choice) candidate set opened to every returnable land
                   // instead of DecisionProvider::BounceSearchCandidates' narrowed set (the easy-case
                   // dominance folds). Human play never fans it: the human answers the bounce prompt.
+    LandPick,     // land-search pick PRUNE lifted: the search branches every pick of a land search
+                  // instead of DecisionProvider::LandSearchPickWidth's leading entries (Landfall's
+                  // colour-sequence rule prunes a basic search to ONE pick, USER 2026-10-16). Human
+                  // play never prunes: the human answers the tutor_etb prompts.
     _Count
 };
+static_assert(static_cast<int>(UnprunedGate::_Count) <= 32, "UnprunedGate masks are 32-bit");
 
 // True if `g` should be un-pruned for this run: the global MTG_UNPRUNED opens all gates,
 // else MTG_UNPRUNE=<list> opens the named subset. Same human-play suppression as the no-arg
@@ -2920,6 +2925,18 @@ public:
                "winless-this-turn bound must price those, plus the land drop played AFTER a payoff "
                "(Plan::land_slot) and from the library top (Courser of Kruphix)." }; }
     const char* Name() const override { return "Landfall"; }
+    // THE COLOUR-SEQUENCE FETCH RULE (USER 2026-10-16): every basic land search fetches by the
+    // sequence green, green, red, green, red (Myriad Landscape: the red pair once two green are out;
+    // the reds left for an on-board Myriad when it is the only search left), and is PRUNED to that one
+    // pick -- "make the searches cheap here by pruning". Order + width hooks; human play keeps the full
+    // list. Primeval Titan's any-land pick is untouched. See the .cpp for the user's words.
+    void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                             bool basic_only, bool share_land_type,
+                             std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                             bool basic_only, bool share_land_type,
+                             const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
 };
 
 // Melira Pod (persist combo / creature toolbox: Melira / Vizier of Remedies + Kitchen Finks /

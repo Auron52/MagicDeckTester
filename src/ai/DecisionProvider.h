@@ -2762,7 +2762,11 @@ public:
     // first -- "need" = the coloured pips of the nonland cards in hand, "lack" = no permanent we
     // control produces that colour -- then the picks with more lands, then the generator's own
     // (name) order. A disclosed heuristic for the DEFAULT only; it decides nothing the search sees.
+    // `basic_only` / `share_land_type` are the search's own spec flags (LandSearchSpec), so a provider
+    // can tell a Myriad Landscape pair (share_land_type) or a Primeval Titan pick (any land) from a
+    // plain basic fetch; both are already in the memo key (core/LandSearch.h, landsearchmemo::Key).
     virtual void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                     bool basic_only, bool share_land_type,
                                      std::vector<std::vector<std::string>>& picks) const;
     // LandSearchPickOrderKey -- EVERYTHING LandSearchPickOrder reads from the STATE (beyond the pick
     // list it is handed), folded into one 64-bit key, so core/LandSearch.h can MEMOIZE the ordered list
@@ -2774,6 +2778,18 @@ public:
     // memo key also carries the provider's dynamic type, so two providers never share an entry.
     // Base rule: the order reads only the colours we NEED and LACK (see LandSearchPickOrder).
     virtual bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const;
+    // LandSearchPickWidth -- the land-search NARROWING the contract above reserves for its own named
+    // hook: how many LEADING entries of the ordered pick list the AUTONOMOUS world keeps (the search's
+    // pins, the d0 runner, rollouts, the executor). core/LandSearch.h truncates the list to it, so
+    // every consumer -- in-plan / attack / upkeep pins, the land-put credit classes, the Karoo picks --
+    // narrows in lockstep. Human play never narrows (the human answers the tutor_etb prompts) and
+    // MTG_UNPRUNE=landpick lifts it for the standing pruned-vs-unpruned A/B. It may read ONLY what
+    // LandSearchPickOrderKey keys (the result is memoized with the list). Base: no narrowing.
+    virtual int LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                                    bool basic_only, bool share_land_type,
+                                    const std::vector<std::vector<std::string>>& picks) const
+    { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
+      return static_cast<int>(picks.size()); }
 
     // BounceSearchCandidates -- the SEARCHED Karoo bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice):
     // the subset of BounceLandCandidates the search branches over, in THAT order, so element 0 is

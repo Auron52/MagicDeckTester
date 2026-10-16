@@ -88,6 +88,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"digchain",   UnprunedGate::DigChain},
     {"devourcount",UnprunedGate::DevourCount},
     {"karoobounce",UnprunedGate::KarooBounce},
+    {"landpick",   UnprunedGate::LandPick},
 };
 
 const char* GateName(UnprunedGate g)
@@ -130,7 +131,8 @@ static uint32_t ParseUnpruneMask()
         std::string tok = s.substr(pos, end - pos);
         pos = end;
         if (tok.empty()) { continue; }
-        if (tok == "all") { mask = (1u << static_cast<int>(UnprunedGate::_Count)) - 1u; continue; }
+        if (tok == "all")
+        { mask = static_cast<uint32_t>((std::uint64_t{1} << static_cast<int>(UnprunedGate::_Count)) - 1u); continue; }
         for (const auto& n : kGateNames) { if (tok == n.first) { mask |= bit(n.second); break; } }
     }
     return mask;
@@ -1714,9 +1716,10 @@ bool DecisionProvider::LandSearchPickOrderKey(const GameState& s, int controller
 }
 
 void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                           bool basic_only, bool share_land_type,
                                            std::vector<std::vector<std::string>>& picks) const
 {
-    (void)count; (void)to_hand;
+    (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
     if (picks.size() < 2) { return; }
     // Colours we NEED (a coloured pip on a nonland card in hand) and LACK (no permanent we control
     // produces it) -- LandSearchLackMask, shared with the memo key above.
@@ -1745,6 +1748,235 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
     out.reserve(picks.size());
     for (std::size_t i : order) { out.push_back(std::move(picks[i])); }
     picks = std::move(out);
+}
+
+// ---- LandfallProvider: the COLOUR-SEQUENCE fetch rule (USER 2026-10-16) -------------------------
+// The user's rule for the Landfall list (13 Forest, 2 Mountain), built up over one exchange:
+//   "Myriad landscape should search for Mountains unless there is only one left in the deck or we have
+//    fewer than 2 green." ... "getting 2 green first makes sense as a general rule" ... "a common rule
+//    might be to get 2 green then one red then another green then the final red in priority order
+//    unless we have the myriad situation and need to fetch the reds together" ... "searching additional
+//    green early is unlikely to hurt that much" ... "if the myriad landscape is on board and your only
+//    remaining search effect you can work around it" ... "If one of the mountains is already in hand
+//    we can count that also." ... and the point of it: "make the searches cheap here by pruning. This
+//    should avoid wasted effort figuring out which land to get."
+// So it is an ORDER (the front pick, LandSearchPickOrder) AND a PRUNE (LandSearchPickWidth = 1 for
+// every basic search): the search no longer branches over which basic to fetch. Human play keeps the
+// full list; MTG_UNPRUNE=landpick restores the autonomous fan for the standing A/B.
+// Read generically off the deck rather than by name: MAIN = the colour with the most basic lands in our
+// card pool (library + hand + battlefield + graveyard), SPLASH = the colour with the fewest (at least
+// one) -- Forest / Mountain here. A pool with fewer than two basic colours keeps the base order and
+// is not pruned. Sources: g = our permanents that make MAIN, r = our permanents that make SPLASH plus
+// the splash BASICS in hand (a Mountain in hand will be played; a Gruul Turf in hand is NOT counted --
+// it enters tapped -- though one on the battlefield is).
+//   * Every BASIC search except Myriad, land by land (battlefield entries first, then hand): the next
+//     colour of the sequence MAIN, MAIN, SPLASH, MAIN, SPLASH (g < 2 -> main; else r < 1 -> splash;
+//     else g < 3 -> main; else r < 2 -> splash; else main), counting each land just fetched. A colour
+//     the library no longer holds yields the other. THE MYRIAD SITUATION: a Myriad Landscape on our
+//     battlefield is the only land-search source we have left (hand, battlefield, suspended) and >= 2
+//     splash basics remain -- then MAIN throughout, so Myriad fetches the reds together.
+//   * Myriad Landscape (share_land_type): the splash PAIR when >= 2 splash basics remain in the library
+//     and g >= 2; otherwise the main pair.
+//   * Primeval Titan (any land) keeps the base order and is NOT pruned: the rule speaks to basics.
+// The resolving source is never counted as an "other" one: a fetch land / Myriad / Khalni is
+// sacrificed as the cost and a spell is off the hand before it resolves (AIEngine::CastSpellFromHand
+// erases it before the effect; the rollout's apply_one is its lockstep twin).
+namespace
+{
+struct LandfallColourState
+{
+    int  main = -1, splash = -1;      // WUBRG index, -1 = none (rule off)
+    int  lib_main = 0, lib_splash = 0;
+    int  g = 0, r = 0;                // MAIN / SPLASH sources (r includes splash BASICS in hand)
+    bool myriad_situation = false;    // an on-board Myriad is the only search left, >= 2 splash in library
+};
+
+int BasicColourOf(const CardDefinition* d)
+{
+    if (d == nullptr || !IsBasicLandCard(*d) || d->params.produces.size() != 1) { return -1; }
+    const int ci = static_cast<int>(d->params.produces.front());
+    return (ci >= 0 && ci < 5) ? ci : -1;
+}
+
+bool MakesColour(const CardDefinition* d, int ci)
+{
+    if (d == nullptr) { return false; }
+    for (Color c : d->params.produces) { if (static_cast<int>(c) == ci) { return true; } }
+    return false;
+}
+
+LandfallColourState ReadLandfallColours(const GameState& s, int controller)
+{
+    LandfallColourState r;
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    int basics[5] = { 0, 0, 0, 0, 0 };
+    int lib_by[5] = { 0, 0, 0, 0, 0 };
+    for (std::size_t i = 0; i < pl.library.size(); ++i)
+    {
+        const int ci = BasicColourOf(CardDatabase::Instance().LookupCached(pl.library[i]));
+        if (ci >= 0) { ++basics[ci]; ++lib_by[ci]; }
+    }
+    for (const Card& c : pl.hand)
+    { const int ci = BasicColourOf(CardDatabase::Instance().LookupCached(c)); if (ci >= 0) { ++basics[ci]; } }
+    for (const Card& c : pl.graveyard)
+    { const int ci = BasicColourOf(CardDatabase::Instance().LookupCached(c)); if (ci >= 0) { ++basics[ci]; } }
+    std::vector<const CardDefinition*> mine;
+    int sources = 0, myriads = 0, myriad_on_bf = 0;
+    auto note_source = [&](const CardDefinition* d)
+    {
+        if (d == nullptr || d->params.land_search_count <= 0) { return false; }
+        ++sources;
+        if (d->params.land_search_share_land_type) { ++myriads; return true; }
+        return false;
+    };
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        const int ci = BasicColourOf(d);
+        if (ci >= 0) { ++basics[ci]; }
+        mine.push_back(d);
+        if (note_source(d)) { ++myriad_on_bf; }
+    }
+    for (const Card& c : pl.hand) { note_source(CardDatabase::Instance().LookupCached(c)); }
+    for (const SuspendedCard& sc : pl.suspended_cards) { note_source(CardDatabase::Instance().LookupCached(sc.card)); }
+    for (int i = 0; i < 5; ++i)
+    {
+        if (basics[i] == 0) { continue; }
+        if (r.main < 0 || basics[i] > basics[r.main]) { r.main = i; }
+    }
+    for (int i = 0; i < 5; ++i)
+    {
+        if (basics[i] == 0 || i == r.main) { continue; }
+        if (r.splash < 0 || basics[i] < basics[r.splash]) { r.splash = i; }
+    }
+    if (r.splash < 0) { return r; }
+    r.lib_main   = lib_by[r.main];
+    r.lib_splash = lib_by[r.splash];
+    for (const CardDefinition* d : mine)
+    {
+        if (MakesColour(d, r.main))   { ++r.g; }
+        if (MakesColour(d, r.splash)) { ++r.r; }
+    }
+    // A splash BASIC in hand counts (it will be played untapped); a Gruul Turf in hand does NOT -- USER:
+    // "I wouldn't count gruul turf just in case. The come into play tapped effect might slow us down.
+    // Unless it is on the field already." (on the battlefield it is counted above, like any source).
+    for (const Card& c : pl.hand)
+    {
+        if (BasicColourOf(CardDatabase::Instance().LookupCached(c)) == r.splash) { ++r.r; }
+    }
+    r.myriad_situation = myriad_on_bf > 0 && myriads == sources && r.lib_splash >= 2;
+    return r;
+}
+
+// The rule's ONE pick for a basic search, in the pick list's representation (battlefield entries
+// sorted, then hand entries sorted). Empty when the rule is off.
+std::vector<std::string> LandfallRulePick(const LandfallColourState& r, int count, int to_hand,
+                                          bool share_land_type, const std::string& main_name,
+                                          const std::string& splash_name)
+{
+    std::vector<std::string> out;
+    if (r.splash < 0) { return out; }
+    if (share_land_type)
+    {
+        const bool splash = r.lib_splash >= 2 && r.g >= 2;
+        const int  have   = splash ? r.lib_splash : r.lib_main;
+        const int  n      = std::min(count, have);
+        if (n <= 0)
+        {
+            const int m = std::min(count, splash ? r.lib_main : r.lib_splash);
+            for (int i = 0; i < m; ++i) { out.push_back(splash ? main_name : splash_name); }
+            return out;
+        }
+        for (int i = 0; i < n; ++i) { out.push_back(splash ? splash_name : main_name); }
+        return out;
+    }
+    int g = r.g, rr = r.r, lm = r.lib_main, ls = r.lib_splash;
+    std::vector<std::string> bf, hand;
+    const int bf_slots = std::max(0, count - to_hand);
+    for (int k = 0; k < count; ++k)
+    {
+        bool want_splash;
+        if (r.myriad_situation) { want_splash = false; }
+        else if (g < 2)         { want_splash = false; }
+        else if (rr < 1)        { want_splash = true; }
+        else if (g < 3)         { want_splash = false; }
+        else if (rr < 2)        { want_splash = true; }
+        else                    { want_splash = false; }
+        if (want_splash && ls == 0) { want_splash = false; }
+        if (!want_splash && lm == 0) { want_splash = true; }
+        if (want_splash && ls == 0) { break; }   // nothing left to find
+        if (want_splash) { --ls; ++rr; } else { --lm; ++g; }
+        (k < bf_slots ? bf : hand).push_back(want_splash ? splash_name : main_name);
+    }
+    std::sort(bf.begin(), bf.end());
+    std::sort(hand.begin(), hand.end());
+    out = bf;
+    out.insert(out.end(), hand.begin(), hand.end());
+    return out;
+}
+
+// The class-representative NAME of each colour's basic among the picks (the list is built from
+// library classes, so the names are the ones the list itself uses).
+void LandfallColourNames(const std::vector<std::vector<std::string>>& picks, int main, int splash,
+                         std::string& main_name, std::string& splash_name)
+{
+    for (const auto& pk : picks)
+    {
+        for (const std::string& nm : pk)
+        {
+            const int ci = BasicColourOf(CardDatabase::Instance().Lookup(nm));
+            if (ci == main && main_name.empty())     { main_name = nm; }
+            if (ci == splash && splash_name.empty()) { splash_name = nm; }
+        }
+    }
+}
+}   // namespace
+
+bool LandfallProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
+{
+    DecisionProvider::LandSearchPickOrderKey(s, controller, key);   // the base lack mask (5 bits)
+    const LandfallColourState r = ReadLandfallColours(s, controller);
+    key |= static_cast<std::uint64_t>(r.main + 1) << 5;
+    key |= static_cast<std::uint64_t>(r.splash + 1) << 8;
+    key |= static_cast<std::uint64_t>(std::min(r.g, 3)) << 11;
+    key |= static_cast<std::uint64_t>(std::min(r.r, 2)) << 13;
+    key |= static_cast<std::uint64_t>(r.myriad_situation ? 1 : 0) << 15;
+    // lib_main / lib_splash are functions of the library multiset, which the memo key holds exactly.
+    return true;
+}
+
+void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                           bool basic_only, bool share_land_type,
+                                           std::vector<std::vector<std::string>>& picks) const
+{
+    DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, picks);
+    if (!basic_only || picks.size() < 2) { return; }
+    const LandfallColourState r = ReadLandfallColours(s, controller);
+    if (r.splash < 0) { return; }
+    std::string main_name, splash_name;
+    LandfallColourNames(picks, r.main, r.splash, main_name, splash_name);
+    const std::vector<std::string> want =
+        LandfallRulePick(r, count, to_hand, share_land_type, main_name, splash_name);
+    auto it = std::find(picks.begin(), picks.end(), want);
+    if (it == picks.end() || it == picks.begin()) { return; }
+    std::rotate(picks.begin(), it, it + 1);   // the rule's pick to the front; the rest keep their order
+}
+
+int LandfallProvider::LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                                          bool basic_only, bool share_land_type,
+                                          const std::vector<std::vector<std::string>>& picks) const
+{
+    if (!basic_only || picks.size() < 2) { return static_cast<int>(picks.size()); }
+    const LandfallColourState r = ReadLandfallColours(s, controller);
+    if (r.splash < 0) { return static_cast<int>(picks.size()); }
+    std::string main_name, splash_name;
+    LandfallColourNames(picks, r.main, r.splash, main_name, splash_name);
+    // Prune to the rule's pick only when it IS the front (LandSearchPickOrder put it there); a state the
+    // rule cannot express in this list keeps the full fan rather than pruning to an arbitrary entry.
+    return picks.front() == LandfallRulePick(r, count, to_hand, share_land_type, main_name, splash_name)
+        ? 1 : static_cast<int>(picks.size());
 }
 
 // ---- Base rules for the remaining ported built-ins -------------------------------------------

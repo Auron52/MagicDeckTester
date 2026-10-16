@@ -592,3 +592,141 @@ TEST_CASE("Land search: the human's in-combat Khalni prompt defaults to KEEP and
     CHECK(seen_source.find("(combat crack)") != std::string::npos);
     CHECK(CountIn(s.players[0].graveyard, "Khalni Heart Expedition") == 0);   // kept
 }
+
+// ---- LandfallProvider: the splash-basic fetch rule (USER 2026-10-16) ------------------------------
+// "Myriad landscape should search for Mountains unless there is only one left in the deck or we have
+// fewer than 2 green. The others are trickier because you want to search for mountains unless our only
+// other search source is myriad landscape." ORDER only: entry 0 is the default; every pick stays.
+namespace
+{
+const LandfallProvider& LfProv()
+{
+    static const LandfallProvider p;
+    return p;
+}
+
+GameState LfState(int lib_forests, int lib_mountains, int bf_forests)
+{
+    GameState s = Fresh();
+    s.m_provider = &LfProv();
+    int n = 50;
+    for (int i = 0; i < lib_forests; ++i)   { Lib(s, "Forest", n++); }
+    for (int i = 0; i < lib_mountains; ++i) { Lib(s, "Mountain", n++); }
+    for (int i = 0; i < bf_forests; ++i)    { Put(s, "Forest", 10 + i, false); }
+    return s;
+}
+
+void Hand(GameState& s, const std::string& name, int number)
+{
+    Card c = D(name).card;
+    c.m_number = number;
+    s.players[0].hand.push_back(c);
+}
+}   // namespace
+
+TEST_CASE("Landfall fetch rule: Myriad takes the Mountain pair only with >= 2 Mountains left and >= 2 green")
+{
+    LoadCards();
+    const LandSearchSpec sp = LandSearchSpecOf(D("Myriad Landscape").params);
+    GameState s = LfState(4, 2, 2);
+    CHECK(LandSearchPicks(s, 0, sp)[0] == std::vector<std::string>{ "Mountain", "Mountain" });
+    GameState g1 = LfState(4, 2, 1);                       // fewer than 2 green
+    CHECK(LandSearchPicks(g1, 0, sp)[0] == std::vector<std::string>{ "Forest", "Forest" });
+    GameState m1 = LfState(4, 1, 2);                       // only one Mountain left
+    Put(m1, "Mountain", 30, false);
+    CHECK(LandSearchPicks(m1, 0, sp)[0] == std::vector<std::string>{ "Forest", "Forest" });
+    GameState t = LfState(4, 2, 1);                        // Gruul Turf makes green too
+    Put(t, "Gruul Turf", 31, false);
+    CHECK(LandSearchPicks(t, 0, sp)[0] == std::vector<std::string>{ "Mountain", "Mountain" });
+}
+
+TEST_CASE("Landfall fetch rule: basic searches follow green, green, red, green, red")
+{
+    LoadCards();
+    const LandSearchSpec rg = LandSearchSpecOf(D("Rampant Growth").params);
+    auto front = [&](GameState& st) { return LandSearchPicks(st, 0, rg)[0]; };
+    const std::vector<std::string> F{ "Forest" }, M{ "Mountain" };
+    GameState a = LfState(4, 2, 0); CHECK(front(a) == F);   // g0
+    GameState b = LfState(4, 2, 1); CHECK(front(b) == F);   // g1
+    GameState c = LfState(4, 2, 2); CHECK(front(c) == M);   // g2 r0 -> the first red
+    GameState d = LfState(4, 1, 2); Put(d, "Mountain", 30, false);
+    CHECK(front(d) == F);                                    // g2 r1 -> the third green
+    GameState e = LfState(4, 1, 3); Put(e, "Mountain", 30, false);
+    CHECK(front(e) == M);                                    // g3 r1 -> the final red
+    GameState f = LfState(4, 0, 3); Put(f, "Mountain", 30, false); Put(f, "Mountain", 31, false);
+    CHECK(LandSearchPicks(f, 0, rg).size() == 1);            // no Mountain left: Forest only
+    // A Mountain in HAND counts as a red source; a Gruul Turf in hand does not (it enters tapped),
+    // though one on the battlefield does.
+    GameState h = LfState(4, 1, 2); Hand(h, "Mountain", 44);
+    CHECK(front(h) == F);                                    // g2, r1 (in hand) -> green
+    GameState ht = LfState(4, 2, 2); Hand(ht, "Gruul Turf", 45);
+    CHECK(front(ht) == M);                                   // the Turf in hand is not counted
+    GameState bt = LfState(4, 2, 1); Put(bt, "Gruul Turf", 46, false);
+    CHECK(front(bt) == F);                                   // on board: g2 r1 -> the third green
+}
+
+TEST_CASE("Landfall fetch rule: the Myriad situation leaves the reds for an on-board Myriad that is the only search left")
+{
+    LoadCards();
+    const LandSearchSpec rg = LandSearchSpecOf(D("Rampant Growth").params);
+    auto front = [&](GameState& st) { return LandSearchPicks(st, 0, rg)[0]; };
+    const std::vector<std::string> F{ "Forest" }, M{ "Mountain" };
+    GameState onb = LfState(4, 2, 2); Put(onb, "Myriad Landscape", 41, false);
+    CHECK(front(onb) == F);
+    GameState inh = LfState(4, 2, 2); Hand(inh, "Myriad Landscape", 40);
+    CHECK(front(inh) == M);                                  // in hand: not planned around
+    GameState other = LfState(4, 2, 2); Put(other, "Myriad Landscape", 41, false); Hand(other, "Evolving Wilds", 42);
+    CHECK(front(other) == M);
+    GameState sfx = LfState(4, 2, 2); Put(sfx, "Myriad Landscape", 41, false);
+    SuspendedCard sc; sc.card = D("Search for Tomorrow").card; sc.card.m_number = 43; sc.arrive_turn = 6;
+    sfx.players[0].suspended_cards.push_back(sc);
+    CHECK(front(sfx) == M);
+    GameState one = LfState(4, 1, 2); Put(one, "Myriad Landscape", 41, false); Put(one, "Mountain", 30, false);
+    CHECK(front(one) == F);                                  // g2 r1: the sequence's green anyway
+    GameState one2 = LfState(4, 1, 3); Put(one2, "Myriad Landscape", 41, false); Put(one2, "Mountain", 30, false);
+    CHECK(front(one2) == M);                                 // a lone Mountain is never Myriad's: take it
+}
+
+TEST_CASE("Landfall fetch rule: two-land searches walk the sequence; Titan keeps the base order unpruned")
+{
+    LoadCards();
+    const LandSearchSpec cu = LandSearchSpecOf(D("Cultivate").params);
+    const LandSearchSpec kh = LandSearchSpecOf(D("Khalni Heart Expedition").params);
+    GameState s = LfState(4, 2, 2);
+    CHECK(LandSearchPicks(s, 0, cu)[0] == std::vector<std::string>{ "Mountain", "Forest" });   // red into play, green to hand
+    CHECK(LandSearchPicks(s, 0, kh)[0] == std::vector<std::string>{ "Forest", "Mountain" });   // both into play (sorted)
+    GameState g1 = LfState(4, 2, 1);
+    CHECK(LandSearchPicks(g1, 0, kh)[0] == std::vector<std::string>{ "Forest", "Mountain" });  // green then red
+    GameState g0 = LfState(4, 2, 0);
+    CHECK(LandSearchPicks(g0, 0, cu)[0] == std::vector<std::string>{ "Forest", "Forest" });
+    GameState tl = LfState(4, 2, 1);
+    Lib(tl, "Evolving Wilds", 60); Lib(tl, "Gruul Turf", 61);
+    GameState tb = tl;
+    tb.m_provider = nullptr;   // DefaultProvider
+    const LandSearchSpec ti = LandSearchSpecOf(D("Primeval Titan").params);
+    CHECK(LandSearchPicks(tl, 0, ti) == LandSearchPicks(tb, 0, ti));
+    CHECK(LandSearchPicks(tl, 0, ti).size() > 1);
+}
+
+TEST_CASE("Landfall fetch rule: basic searches are PRUNED to the rule's one pick; the key separates every input")
+{
+    LoadCards();
+    const LandfallProvider& lp = LfProv();
+    const LandSearchSpec rg = LandSearchSpecOf(D("Rampant Growth").params);
+    const LandSearchSpec kh = LandSearchSpecOf(D("Khalni Heart Expedition").params);
+    GameState s = LfState(4, 2, 2);
+    CHECK(LandSearchPicks(s, 0, rg).size() == 1);
+    CHECK(LandSearchPicks(s, 0, kh).size() == 1);
+    // The base (DefaultProvider) list is unpruned: both basics.
+    GameState b = s; b.m_provider = nullptr;
+    CHECK(LandSearchPicks(b, 0, rg).size() == 2);
+    std::uint64_t k0 = 0, k1 = 0, k2 = 0, k3 = 0;
+    GameState myr = LfState(4, 2, 2); Put(myr, "Myriad Landscape", 41, false);
+    GameState g1  = LfState(4, 2, 1);
+    GameState mh  = LfState(4, 2, 2); Hand(mh, "Mountain", 44);
+    CHECK(lp.LandSearchPickOrderKey(s, 0, k0));
+    CHECK(lp.LandSearchPickOrderKey(myr, 0, k1));
+    CHECK(lp.LandSearchPickOrderKey(g1, 0, k2));
+    CHECK(lp.LandSearchPickOrderKey(mh, 0, k3));
+    CHECK(k0 != k1); CHECK(k0 != k2); CHECK(k0 != k3);
+}
