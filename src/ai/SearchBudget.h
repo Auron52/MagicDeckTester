@@ -90,6 +90,8 @@ public:
     // unlimited budgets are byte-identical to before). Normal passes finish far under any
     // sane ceiling, so the guard never fires for them (parity preserved).
     void SetOverrunLimit(long long abs_units) { m_overrun_limit = abs_units; }
+    // The armed ceiling (0 = disarmed), so a host that arms its own can restore an enclosing one.
+    long long OverrunLimit() const { return m_overrun_limit; }
     // Also true once the per-GAME meter has been spent, so the recursion unwinds promptly instead of
     // finishing a search whose result is about to be discarded. This is only the UNWIND: the game is
     // marked void by the meter's own flag (gamework::Abandoned), which RunGame reads. The two are

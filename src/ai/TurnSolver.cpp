@@ -66102,6 +66102,14 @@ namespace candcensus
 
 // ---- Public API ----
 
+// SolveWithLookahead's PASS CEILING (see PassCeiling there). DEFAULT ON (2026-10-15); =0 restores the
+// uncapped pass. Per-job (heurarm) so the before/after arms pool into ONE batch.
+static bool LaPassCeilingOn()
+{
+    static const bool env = EnvOn("MTG_LA_PASS_CEILING", true);
+    return heurarm::Flag(heurarm::LA_PASS_CEILING, env);
+}
+
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
                                                   SearchBudget* budget, bool enforce_budget,
@@ -66427,6 +66435,47 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool      pass_aborted     = false;
         long long candidates_done  = 0;
         std::vector<EscEntry> esc_pool;   // this pass's evaluated candidates (escalation)
+
+        // ---- THE PROPORTIONAL OVERRUN CEILING, ARMED IN THIS HOST TOO (2026-10-15) -------------
+        // FullSearchLine arms `used_before + kOverrunBudgetMult x EffectiveLimit()` around every pass
+        // (MTG_OVERRUN_PROP, adopted 2026-09-09) and SimulateToEndImpl polls budget->Overrun() at every
+        // rollout turn-step, so a pass that blows it bails out and rolls back. This host never armed
+        // it. Its only guard was the between-candidate test in the loop below, which cannot interrupt
+        // ONE candidate -- and a sub_depth >= 1 candidate's rollout re-solves EVERY later turn at
+        // sub_depth (nested, enforce_budget=false, run to completion), so a single candidate is
+        // unbounded. Landfall s2040 gi38 (a bottoming trial game, turn 1, the executor's
+        // no-verified-win fallback): pass 2 started on a 5,184-unit estimate and its second of four
+        // candidates ran 37.7M units / 665 s -- each turn-7 depth-2 re-solve scoring, per candidate,
+        // a 24-43k-plan turn-8 list (Titan attack pins x in-combat cracks x land-search pins x the
+        // land-search activations). 4,200x the 9,000-unit budget, where FullSearchLine stops at 25x.
+        //
+        // Same ceiling, same constant, same rollback and the same anytime rescue (a strictly better
+        // win the pass had already PROVEN is kept) as FullSearchLine, so this RE-PRICES work and
+        // nothing else: inert at an unlimited budget (EffectiveLimit() = LLONG_MAX saturates the
+        // ceiling), a fixed multiple of the budget below that -- so a larger budget completes every
+        // pass a smaller one cut -- and the rollback commits the last COMPLETED pass, i.e. every root
+        // candidate ranked at the shallower fidelity (turn-complete). Pass 0 (greedy rollouts, the
+        // ranking every later pass falls back to) is never armed: cutting it would leave the root
+        // with no completed ranking at all. An enclosing ceiling (nothing arms one around this host
+        // today) is restored on exit and never loosened. MTG_LA_PASS_CEILING=0 (LaPassCeilingOn) is
+        // the escape hatch: the uncapped pass, byte-identical to the tree before this change.
+        struct PassCeiling
+        {
+            SearchBudget* b    = nullptr;   // non-null = armed by this pass
+            long long     prev = 0;
+            ~PassCeiling() { if (b != nullptr) { b->SetOverrunLimit(prev); } }
+        } pass_ceiling;
+        if (gate && sub_depth > 0 && LaPassCeilingOn())
+        {
+            long long lim = SearchBudget::SatAdd(
+                used_before, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()));
+            pass_ceiling.prev = budget->OverrunLimit();
+            if (pass_ceiling.prev > 0 && pass_ceiling.prev < lim) { lim = pass_ceiling.prev; }
+            pass_ceiling.b = budget;
+            budget->SetOverrunLimit(lim);
+            if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
+        }
+        bool pass_ceiling_tripped = false;   // a candidate's rollout ran into it: the scores are partial
 
         // Trace T1 top-level decisions (enforce_budget=true) AND T2 rollout decisions
         // where depth==3 (fired from the sub_depth=3 pass inside SimulateToEnd).
@@ -66918,6 +66967,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         { candcensus::g_nodes[census_slot].fetch_add(1, std::memory_order_relaxed); }
         for (const Plan& plan : candidates)
         {
+            // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
+            // returns a no-win at its first turn-step, so the rest of the list would only re-pay applies.
+            if (pass_ceiling.b != nullptr && budget->Overrun()) { pass_ceiling_tripped = true; break; }
             // --- Overrun guard: finish if almost done, else abort + roll back ---
             if (gate && budget->Exhausted() && candidates_done > 0)
             {
@@ -67603,6 +67655,44 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             esc_pool.push_back(EscEntry{static_cast<int>(&plan - candidates.data()), win_turn,
                                         g_condemn_drops != esc_drops_before});
             ++candidates_done;
+        }
+
+        // The pass ceiling (see PassCeiling): tripped inside the candidate loop -- including inside
+        // the LAST candidate's rollout -- means some candidate was scored on a cut rollout, so the
+        // pass is not a complete ranking. Roll back to the last completed pass, keeping a strictly
+        // better win this pass had already proven (FullSearchLine's anytime rule: a cut rollout only
+        // ever returns a no-win, so a win in pass_best is a line that was really played out). A trip
+        // during the waves below is NOT this case: the candidate loop finished uncut, and the waves
+        // only ever take a strictly better win, so a cut there leaves the pass exactly as complete.
+        if (pass_ceiling.b != nullptr && !pass_ceiling_tripped && budget->Overrun())
+        { pass_ceiling_tripped = true; }
+        if (pass_ceiling_tripped)
+        {
+            const bool better_proven = pass_has_best && pass_best_win < committed_win;
+            const bool rescued       = s_id_anytime && better_proven;
+            ++g_fs_trunc_events;
+            if (s_rollout_stats)
+            {
+                g_idwaste_passes.fetch_add(1, std::memory_order_relaxed);
+                g_idwaste_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+                if (better_proven) { g_idwaste_rescuable.fetch_add(1, std::memory_order_relaxed); }
+            }
+            if (trace_this)
+            {
+                std::cerr << "  [T" << state.turn_number << " sub_depth=" << sub_depth
+                          << " OVERRUN ceiling (used=" << budget->Used() << ") -> "
+                          << (rescued ? "anytime rescue " : "keeping pass ")
+                          << (rescued ? sub_depth : sub_depth - 1) << "]\n";
+            }
+            if (rescued)
+            {
+                best_plan           = pass_best;
+                committed_win       = pass_best_win;
+                committed_sub_depth = sub_depth;
+                m2yield::RecordCommit(sub_depth);
+                committed_esc_pool  = std::move(esc_pool);
+            }
+            pass_aborted = true;   // skips the waves; the abort below ends the ladder
         }
 
         // ---- DEFERRED CONTINUATION WAVES (see BpWaveWalker) --------------------------------------
