@@ -341,6 +341,19 @@ FAIL, each explained:
   rendered (`tutorPanelHtml`) but had no row in the `tools/play/DECISIONS.md` registry; row added, the
   static re-run passes (bounce, dragon, target, tutor_etb wired).
 
+## Stage 5g — earliest-win miner: GAUGED, full run DEFERRED (2026-10-16, tree e05b38c2)
+`GAMES=10 SEED=2002 scripts/mine_heuristics.sh` at the skill's defaults (d5 b3000, MTG_SEARCH_ORDER=1,
+every turn), with a MINING-ONLY profile copy setting `bottom_eval_depth 0` (the trial games at b3000
+would dwarf the mining; it shifts only WHICH hands get mined, never how a decision is scored): **76 min
+wall for 10 games / 58 decisions** (tail-bound by one game). Earliest-win ties are WIDE (median 6
+candidates per decision, max 546 -- the land-search pin space), so ORDER rules need a large sample: the
+skill's minimum (2 seeds x several hundred games) extrapolates to well over 10 h. Preliminary signals at
+n=58 (NOT trusted, no rule proposed): ORDER -- none with support; INCLUSION -- Khalni -0.60 and Phylath
+-0.58 (cast them), Terastodon +1.00 early (0 help / 3 hurt; leave to the search), Avenger +0.40
+situational; LAND -- Forest dominates the earliest-win lines, then Gruul Turf, Radiant Fountain, Myriad.
+The 5e cast-order oracle already found nothing over the generic order on 500 games. DEFERRED to after
+the value leaf (the O(1) leaf removes most of each candidate's rollout cost) -- recorded, not skipped.
+
 ## Mulligan keep rule — `curve_check: two_drop` measured (2026-10-16 ~03:00, input for the USER's decision)
 The Stage 4 profile keeps the engine-default `two_drop` curve check: at mulligan 0/1 a hand needs >= 2
 lands AND a nonland of MV <= 2 (`AIEngine.cpp` KeepHand). In this 60 only Rampant Growth and Khalni
