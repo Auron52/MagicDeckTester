@@ -186,8 +186,10 @@ record of what was built.
 5. ~~**A PUT Karoo's bounce** (Genesis Wave, a ramp put) takes the provider's front pick with no plan
    pin.~~ CLOSED 2026-10-15 (branch `landfall-gaps`): a land-search put (Primeval Titan's ETB / attack)
    carries the bounce as a sub-choice of its pick (the extended pick list), a Genesis Wave put as
-   `Plan::bounce_choice` (`ScriptedPutBounce`); both searched, provider-narrowed, both worlds. See
-   `land-search-cluster.md`, known gap 3, for the mechanism and its disclosed residuals.
+   `Plan::bounce_choice` (`ScriptedPutBounce`); both searched, provider-narrowed, both worlds. The
+   attack trigger's clamped sub-choices are declined before their unit charge by the exact put-bounce
+   fold (`PutBounceFold`). See `land-search-cluster.md`, known gap 3, for the mechanism, its cost and
+   its disclosed residuals.
 6. **Courser + Primeval Titan's ATTACK shuffle -- no autonomous main-2 drop (KNOWN GAP, USER Q4).**
    Titan's attack trigger searches and shuffles during combat; with Courser out and the drop unused in
    main 1, the post-combat top can be a newly playable land whose landfall triggers pay off next turn.

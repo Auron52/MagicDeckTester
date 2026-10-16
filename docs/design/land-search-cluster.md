@@ -145,6 +145,50 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
      source can cover). `PlanMayHoldLandAtBounce` is the "land may be in hand" superset.
    * **Human play** was already right: every Karoo bounce, put or played, reaches the ordinary `bounce`
      chooser (`BounceKarooLand`), in main phase and in combat; unit-pinned for a Titan put.
+   * **Cost, and the put-bounce fold** (`PutBounceFold`, TurnSolver.cpp; `MTG_PUT_BOUNCE_FOLD`,
+     default ON, an exact fold). The width a put bounce really has is decided by which lands are TAPPED
+     at the bounce -- for the attack trigger, by main 1's payments -- so the fan cannot size it tightly,
+     and on Landfall it is almost always 1 (the USER rule or the tapped-clean rule decides it): measured
+     over 240 games (`MTG_BOUNCE_STATS`), 99% of the pinned put bounces CLAMPED onto an index a sibling
+     had already resolved, and gap 3 cost **+2.4% to +10% units over gap 2 alone with no play change**.
+     The combat-pin fold and the post-apply dedup did refuse to SCORE those variants, but only after
+     each had paid its unit, its apply and (attack) its combat. The fold declines them BEFORE the unit:
+     a probe bound to the candidate's own state object records, at each family member's resolution,
+     the pick list's shape, the pick, the narrowed bounce width and the index taken; a later variant
+     whose value decodes against that shape to a (pick, min(b, width - 1)) a sibling already resolved
+     IS that sibling's combat / apply.
+     - **Attack mode**: in `SolveWithLookahead` it rides the combat-pin MAIN-PHASE SHARE (every member
+       starts combat from the cached base state); in `FSLineWin` it proves its base's apply pin-blind
+       (no pending node, no combat-pin read, no unit, no breakpoint) and finishes the skipped variant's
+       post-apply key from the base's pin-free prefix (`FoldLandSearchPinValues`).
+     - **In-plan mode** (the Titan ETB sub-choice): members whose apply spent no unit and stopped at no
+       breakpoint node; the recorded apply's breakpoint-counter deltas (`ApplyTrace`) are replayed into
+       the walker's records by the skip.
+     - The skip leaves exactly what the skip it pre-empts left (the per-apply resets, the walker / NOBP
+       / stillborn records, the probe's no-win value, the beam refund, the overrun guard's count), so
+       the only change is the unit no longer charged -- a budget RE-PRICE, inert at unlimited budget.
+     - **Measured** (Landfall, one pooled batch with per-job flags: d3/b10 and d5/b20 x seeds 8008 /
+       9009 x 60 games, plus d2/b0 x 8). Verify mode: 4,875,783 would-be declines, every one skipped
+       by the fold it pre-empts (bad = 0), and the verify arm equals the off arm in digest and units.
+       On vs off: 0 better / 0 worse, 1 play-changed game (same win turn), units **0.946** (0.927 -
+       0.956); the unbudgeted d2 digest is identical. With the fold, gap 2+3 reproduces the gap-2-only
+       digests on all four budgeted configs (gap 3 changed no Landfall play there: the put width was
+       1 nearly every time), so the units it still adds over gap 2 alone are pure overhead:
+       **+0.2% / +2.1% / +2.6% / +5.1%** (d5 s8008 / d3 s8008 / d5 s9009 / d3 s9009), down from
+       +5.0% / +7.2% / +9.9% / +10.0% (before the fold the waste re-routed one d5 s9009 game, same win
+       turn; the fold restores it).
+     - **Residual, attributed** (d3 s9009, identical play, gap 2 vs gap 2+3+fold, +533k units):
+       `fs_bp_node` +347k, `fs_pre` +160k, the wave sites +27k, `la_cand` +1k. The node share is the
+       BREAKPOINT-NODE children of a PENDING attack variant: its pending key carries its attack pin, so
+       every variant hosts the whole continuation list, and the children loop has no combat-pin fold,
+       so a clamped variant's children are scored in full. DEFERRED: a per-child twin of this fold
+       (record each child k's resolution at the attack ordinal, decline a variant's child k that
+       decodes onto a sibling's) would close it; it needs the pending prefix proven pin-blind as the
+       FSLineWin base test does.
+     - Not covered (still dropped after their unit by the old mechanisms): members whose apply consumed
+       a unit, stopped at a breakpoint node, or (attack, FSLineWin) reached a breakpoint; variants
+       deviating at two ordinals at once; a Genesis Wave's put pin (`Plan::bounce_choice` with no
+       `bounce_group`, so `BounceFoldMemo` -- the drop bounce's fold -- does not see it either).
    * **Residual (disclosed).** One sub-choice per pick (a pick holding two Karoos returns the second's
      front); one Wave put pin per plan (a second non-search put Karoo, or a Wave beside a Karoo DROP,
      takes the front); sizing reads the enumeration-time library / top X (the Titan-via-Wave caveat);
