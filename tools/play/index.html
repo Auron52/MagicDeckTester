@@ -4097,6 +4097,21 @@ function lookPanelHtml(d, dec){
 // dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
 // enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
 function digPanelHtml(d){
+  // Khalni Heart Expedition's IN-COMBAT crack window reuses this modal ("(combat crack)" in the
+  // source): the tiles are Expeditions on the battlefield to CRACK, not cards to dig, and the
+  // default is to keep it (the engine cracks in combat only when its search committed to it).
+  if (/\(combat crack\)/.test(d.source||'')) {
+    let h=`<h3>Khalni Heart Expedition — crack it now, before combat damage?</h3>`;
+    h+=`<div class="sub">Remove three quest counters and sacrifice it: search for up to two basic lands and put them onto the battlefield tapped. Their landfall triggers resolve before combat damage, so attacking Plants get Avenger / Phylath counters. You are asked again after each crack.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — crack it">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em></span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Keep it (the AI's default)</button></div>`;
+    return h;
+  }
   // Destination-aware wording: the shared dig chooser serves into-hand ETB digs (Acclaimed
   // Contender) AND onto-the-battlefield puts (Skyhunter "(attack dig)", Turntimber "(put)").
   const toBf = /\((attack dig|put)\)/.test(d.source||'');

@@ -559,3 +559,36 @@ TEST_CASE("Land search: Plan::land_search_act_slot is fanned at 0 and between wa
     CHECK_FALSE(both_2);             // == the trailing pass: an identity fold, not a twin
     CHECK_FALSE(baloths_only_twin);  // no land-counting ETB -> cast-then-crack is the only order
 }
+
+TEST_CASE("Land search: the human's in-combat Khalni prompt defaults to KEEP and says what it does")
+{
+    // Landfall claude-play sweep gi10 (2026-10-16): the prompt's heuristic_default was 0 ("crack now"),
+    // labelled the AI's pick, while the engine HOLDS an unpinned Expedition -- and its source read as a
+    // generic dig. The default is now -1 (keep), and the source carries the "(combat crack)" tag the
+    // emitter and the viewer key their crack wording on.
+    LoadCards();
+    GameState s = Fresh();
+    Put(s, "Forest", 9, true);
+    const int t = Put(s, "Primeval Titan", 10, false);
+    Put(s, "Khalni Heart Expedition", 11, false);
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 11) { p.quest_counters = 3; } }
+    Lib(s, "Forest", 50); Lib(s, "Forest", 51);
+    std::vector<int> atk{ t };
+    int asked = 0, seen_default = 99;
+    std::string seen_source;
+    DigChooser fn = [&](const GameState&, int, const std::string& source, const std::vector<Card>& examined,
+                        const std::vector<int>&, int def) -> int
+    {
+        ++asked; seen_default = def; seen_source = source;
+        CHECK(examined.size() == 1);
+        return def;   // the default: keep
+    };
+    DigChooser* saved = g_play_dig_chooser;
+    g_play_dig_chooser = &fn;
+    FireCombatLandSearchCracks(s, 0, atk);
+    g_play_dig_chooser = saved;
+    CHECK(asked == 1);
+    CHECK(seen_default == -1);
+    CHECK(seen_source.find("(combat crack)") != std::string::npos);
+    CHECK(CountIn(s.players[0].graveyard, "Khalni Heart Expedition") == 0);   // kept
+}

@@ -3184,6 +3184,18 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply an examined index to put that card onto the battlefield, or -1 to put "
                "nothing; the rest go to the bottom. Default = the AI's pick.");
     }
+    else if (source.find("(combat crack)") != std::string::npos)
+    {
+        // Khalni Heart Expedition's in-combat window (LandSearch.h FireCombatLandSearchCracks) reuses
+        // this modal: nothing is dug -- the pick is an Expedition on the battlefield to CRACK. The
+        // default is -1 (keep), the engine's own unpinned behaviour (Landfall sweep gi10).
+        d.Note("reply an examined index to crack that Khalni Heart Expedition now -- remove three quest "
+               "counters and sacrifice it, search your library for up to two basic land cards and put "
+               "them onto the battlefield tapped (their landfall triggers resolve before combat damage, "
+               "so the attacking Plants get Avenger's / Phylath's counters) -- or -1 to keep it. You are "
+               "asked again after each crack. Default = keep it (the AI cracks in combat only when its "
+               "search committed to it; without that it holds).");
+    }
     else
     {
         d.Note("reply an examined index to put that card into your hand, or -1 to take nothing. "

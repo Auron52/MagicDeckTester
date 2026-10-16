@@ -837,10 +837,15 @@ inline void FireCombatLandSearchCracks(GameState& state, int controller, std::ve
             if (examined.empty()) { break; }
             std::vector<int> legal(examined.size());
             for (std::size_t k = 0; k < legal.size(); ++k) { legal[k] = static_cast<int>(k); }
+            // DEFAULT = KEEP (-1), which is what the engine does with no pin: it cracks in combat only
+            // when its search pinned the crack (Plan::combat_crack_choice), so an unpinned window holds
+            // -- the old default 0 ("crack now") was labelled the AI's pick while the AI held (Landfall
+            // claude-play sweep gi10, 2026-10-16). The "(combat crack)" tag selects the emitter's
+            // accurate wording (main.cpp WriteDigDecisionJson) and the viewer's (digPanelHtml).
             const int picked = (*g_play_dig_chooser)(
                 state, controller,
-                "Khalni Heart Expedition -- crack it NOW, before combat damage (-1 = keep it)",
-                examined, legal, 0);
+                "Khalni Heart Expedition (combat crack) -- crack it NOW, before combat damage",
+                examined, legal, -1);
             if (picked < 0 || picked >= static_cast<int>(nums.size())) { break; }
             if (!crack(nums[static_cast<std::size_t>(picked)])) { break; }
             any = true;
