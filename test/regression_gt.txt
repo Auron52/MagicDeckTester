@@ -1,4 +1,4 @@
-# Regression ground truth -- commit ee9a9c657  date 2026-10-16
+# Regression ground truth -- commit 9c12cebe8  date 2026-10-16
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
@@ -128,6 +128,9 @@ bruna_smoke_d5_s1001=4.9200/b46b1507da4cf508
 snow_smoke_d0_s1001=6.1710/72d36f9ec29bf8da
 snow_smoke_d3_s1001=5.8400/8d858cde51d5832a
 snow_smoke_d5_s1001=5.8000/51401cf5b384e6fc
+landfall_smoke_d0_s1001=7.6170/85e48418e0ae3d45
+landfall_smoke_d3_s1001=6.0000/fd57d4bc85ac2c80
+landfall_smoke_d5_s1001=5.8667/6139fcc20c97fc1a
 
 # --- regression ---
 fungus_regression_d0_s2002=5.6900/9f01eccd8d496d04
@@ -296,6 +299,11 @@ snow_regression_d3_s2002=5.7000/9ed8505f65cfbc52
 snow_regression_d3_s3003=5.7000/34f95b27767ff9d4
 snow_regression_d5_s2002=5.6667/672a8d6ba4950919
 snow_regression_d5_s3003=5.7667/6cc882e78899ed4a
+landfall_regression_d0_s2002=7.6300/3dd3c291bd85112f
+landfall_regression_d3_s2002=5.8750/90a0aef26e666b84
+landfall_regression_d3_s3003=5.8750/e3c35064c104d1dd
+landfall_regression_d5_s2002=5.7500/f3ffc5f29388dd0b
+landfall_regression_d5_s3003=5.9000/15ed7f36dfc77603
 
 # --- overnight ---
 fungus_overnight_d0_s4004=5.6445/1d8f7891cc7454b7
@@ -699,3 +707,15 @@ snow_overnight_d5_s4004=5.7400/4831b1fa1398e40a
 snow_overnight_d5_s5005=5.6200/82879c7551d30292
 snow_overnight_d5_s6006=5.7500/ab63ce916b60e452
 snow_overnight_d5_s7007=5.6900/f705d10ca21d0806
+landfall_overnight_d0_s4004=7.6630/19c464e470fe04ba
+landfall_overnight_d0_s6006=7.6360/6f423889f32587db
+landfall_overnight_d0_s8008=7.6410/bd65b9cac35339d4
+landfall_overnight_d0_s10010=7.6985/048e21bfd53c13a6
+landfall_overnight_d3_s4004=5.9880/e4239ed65c3f8399
+landfall_overnight_d3_s5005=5.8720/3c74e88406991955
+landfall_overnight_d3_s6006=5.8760/3330d994dffbb094
+landfall_overnight_d3_s7007=5.8160/a60477487603efa1
+landfall_overnight_d5_s4004=5.8800/7e2c95f12a98ec1a
+landfall_overnight_d5_s5005=5.7667/dbf227613e90fb32
+landfall_overnight_d5_s6006=5.7867/bece7d473059b3d0
+landfall_overnight_d5_s7007=5.7067/bc50a6ae67129671

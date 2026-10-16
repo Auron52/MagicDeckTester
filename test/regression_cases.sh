@@ -65,6 +65,7 @@ declare -A DECK_FILE=(
   [soldiers]=decks/Soldiers/soldiers.cod
   [pd]="decks/Prevent Damage/Prevent Damage.cod"
   [bruna]=decks/Bruna/Bruna.cod
+  [landfall]=decks/Landfall/Landfall.cod
 )
 declare -A DECK_PROF=(
   [fungus]=decks/Fungus/Fungus.profile.json
@@ -98,6 +99,7 @@ declare -A DECK_PROF=(
   [soldiers]=decks/Soldiers/soldiers.profile.json
   [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
   [bruna]=decks/Bruna/Bruna.profile.json
+  [landfall]=decks/Landfall/Landfall.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -477,6 +479,18 @@ SMOKE_CASES=(
   "snow 0 1001 1000 0"
   "snow 3 1001  100 10"
   "snow 5 1001   50 20"
+  # landfall: ADDED 2026-10-16 on the USER's decision (docs/design/analysis-Landfall.md, L1), all three
+  # tiers at once (the all-or-none rule). Before its artifacts it was 4.30x PD in one pooled run; with the
+  # USER's fetch-rule prune it is ~3.1x at the first-proposed 50/25 rows and 2.64x at these (92-99% of the
+  # cost is mulligan-bottoming trial games, which the keep table replaces). The USER chose "a slightly
+  # smaller set until the keep table is done": counts are ~PD's admission shape
+  # (d3 30/40, d5 15/20; overnight d3 4x250, d5 4x150). Grow them back at the keep-table adoption. Profile
+  # ships `search_leaf_depth: 0` (the greedy horizon leaf). No value leaf and no keep table yet, so
+  # GT WILL move when they land. No 2HG row: the deck has no "each opponent" effect or
+  # starting-life-relative card for a second head to scale.
+  "landfall 0 1001 1000 0"
+  "landfall 3 1001   30 10"
+  "landfall 5 1001   15 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -715,6 +729,12 @@ REGRESSION_CASES=(
   "snow 3 3003   60 10"
   "snow 5 2002   30 20"
   "snow 5 3003   30 20"
+  # landfall: see the SMOKE block.
+  "landfall 0 2002 1000 0"
+  "landfall 3 2002   40 10"
+  "landfall 3 3003   40 10"
+  "landfall 5 2002   20 20"
+  "landfall 5 3003   20 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -1272,4 +1292,19 @@ OVERNIGHT_CASES=(
   "snow 5 5005  100 20"
   "snow 5 6006  100 20"
   "snow 5 7007  100 20"
+  # landfall: see the SMOKE block. A SMALLER-than-entry set (USER 2026-10-16: d3 4x250, d5 4x150 where
+  # Hinata's entry shape is 400/300); it expands to the FULL set just before a keep table is adopted
+  # (regression-testing.md "Sizing a deck's overnight rows").
+  "landfall 0 4004 2000 0"
+  "landfall 0 6006 2000 0"
+  "landfall 0 8008 2000 0"
+  "landfall 0 10010 2000 0"
+  "landfall 3 4004  250 10"
+  "landfall 3 5005  250 10"
+  "landfall 3 6006  250 10"
+  "landfall 3 7007  250 10"
+  "landfall 5 4004  150 20"
+  "landfall 5 5005  150 20"
+  "landfall 5 6006  150 20"
+  "landfall 5 7007  150 20"
 )
