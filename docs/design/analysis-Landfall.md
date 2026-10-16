@@ -349,6 +349,43 @@ Primeval Titan's any-land pick is untouched and still searched.
   USER-owned rule** (a basic search can no longer deviate from the sequence's pick at any budget; the
   human keeps every pick).
 
+## USER Titan pick + Karoo bounce rules — both pruned (2026-10-16, 73e30dd3f)
+Asked whether Primeval Titan's pick should get a rule too, the user answered "Primeval Titan should be
+pruned" and gave it (verbatim in `LandfallProvider`'s .cpp block), then the bounce rule in a follow-up:
+- **Titan** (`LandfallTitanAllowed`): "you usually want one of three" -- Evolving Wilds / Terramorphic
+  (one identity class already), Gruul Turf, Myriad Landscape. Turf is automatic with **no land card in
+  hand**, or when short of a colour (**g < 3 or r <= 1**, the fetch rule's counts), beside Wilds or Myriad;
+  otherwise the Wilds / Myriad pairs, **searched** among those ("We might be able to get away with
+  searching this"). With **no basic left** in the library: Turf, Myriad, Radiant Fountain, Haunted
+  Fengraf, Wilds -- one pick. A slot those lands cannot fill stays searched; with no Turf wanted and no
+  Wilds / Myriad left, Titan is not narrowed.
+- **Karoo bounce** (`LandfallProvider::BounceUserRulePick`, every Turf bounce): "bounce in reverse order
+  from colour requirements ... Colourless producing lands can go first, then extra red or green." Among
+  lands that re-enter untapped (tapped, or floatable): colourless first, then the most SPARE colour (our
+  lands making it, less the most pips of it on one of our nonland cards -- G 3 Genesis Wave, R 2 Omnath,
+  the targets the fetch rule builds toward), then tapped, then copies. One land, no search.
+- **Interpretations taken (reported to the user):** "no land drop" = no land card in hand; the colour
+  counts are the fetch rule's (a Mountain in hand is red); a colour's "requirement" is the deck's own
+  most-pips card.
+- **Held-out A/B vs d380133bf** (fresh seeds, paired, unwon = 9; `logs/titanrule/`):
+
+  | setting | turns | better / worse | units | wall |
+  |---|---|---|---|---|
+  | d0, 4,000 games | **-0.014** (se 0.005) | 143 / 127 | -- | -- |
+  | d3 b10, 500 | 0.000 (se 0.008) | 6 / 7 | **0.33x** | 0.52x |
+  | PLAY d5 b20, 1,000 | **-0.005** (se 0.003) | 6 / 1 | **0.36x** | 0.41x |
+
+  The one slower play game (s1400000 gi39, T6 -> T7) shares the kept 7 with the base. At turn 1 the
+  search sees no win in its horizon and breaks the tie by skipping the land drop (then discards Titan at
+  cleanup). It wins on T6 again at 2x budget, so the line is still findable. With the bounce rule off on
+  both binaries it is T6 on both, so the Titan rule is clean there.
+- **Tiers** (full smoke + full regression, 73e30dd3f): every other case unchanged (smoke 119 / regression
+  166); Landfall's 8 keys moved -- searched cases 0 slower in both tiers (1 faster), d0 churn 35/39 and
+  39/28 slower/faster (regression d0 7.6300 -> 7.6290). Accepted with `--deck=landfall`; `check_gt_logs`
+  706 consistent. Overnight left to the periodic run (a play change).
+- **Cost gate, same regression run:** landfall **2,881 ms/game (d5 s3003) / pd 2,695 = 1.07x** (was 2.64x
+  at these rows this morning, 4.30x before the fetch rule); the deck's regression total 605 -> 220 core-s.
+
 ## Stage 5c2 — horizon-honest tie-break: NO SIGN at this sample (2026-10-16, tree b35f9f0e)
 `leaf_tiebreak_check.py`'s manifest (4 blocks x 250 at PLAY settings d5 b20, both arms per-job, pooled
 with the bottoming A/B): **2 changed games of 1,000 paired (0.2%), both BETTER with the tie-break (net
