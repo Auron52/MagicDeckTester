@@ -429,8 +429,8 @@ static_assert(sizeof(Player) == 200,
 // and never written again; it only skips FireEtbWatchers' subtype-enter draw walk that provably finds
 // no watcher -- identical across every pair of states Build() compares, nothing to fold.
 // +16 bytes (2026-10-15, burn): GameState::m2_stage_turn + m2_prestaged_mask (folded value-gated above).
-// REBASE 2026-10-16: both +16s (land-search cluster, burn) landed on 1080 independently -- PROVISIONAL, set
-// from the compiler once the rebased tree builds.
+// Both +16s (the land-search cluster above, burn here) were made against 1080 on parallel branches; together
+// 1112, measured (the static_assert compiles) on the rebased tree, 2026-10-16.
 static_assert(sizeof(GameState) == 1112,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
