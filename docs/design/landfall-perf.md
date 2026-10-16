@@ -269,6 +269,11 @@ AUDIT smoke   (old = committed gt_logs   new = test/logs/smoke/wins)
   [d0      ] slower=0  faster=0  play-changed=0  (slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)
 ```
 
+Regression tier too (not required, run for the cadence rule): 166/166 byte-identical, audit `configs
+changed: 0   unchanged: 166`, viewer protocol `195 ok, 385 repaired, 0 play-drift, 0 shuffle-dead, 0
+board-diverged, 0 enum-gap, 0 mull-drift, 0 contract-fail (580 refs)`. So no suite deck's decision ever
+reaches the ceiling at the shipped budgets; only a runaway does.
+
 **Pooled Landfall A/B** -- ONE `mtg --batch` (`89dee2e2` binary, 6 threads on 6 shared cores), both
 arms interleaved per case; "off" = the per-job `MTG_LA_PASS_CEILING: false` hatch:
 
