@@ -269,6 +269,16 @@ the gate on the final tree.
   deck's realistic ramp-into-Titan/Avenger line.
 - Slowest games (d5): s2002 gi38 115 s / 3.5M units, gi22 97 s; all under the pass ceiling now.
 
+## Mulligan keep rule — `curve_check: two_drop` measured (2026-10-16 ~03:00, input for the USER's decision)
+The Stage 4 profile keeps the engine-default `two_drop` curve check: at mulligan 0/1 a hand needs >= 2
+lands AND a nonland of MV <= 2 (`AIEngine.cpp` KeepHand). In this 60 only Rampant Growth and Khalni
+Heart Expedition qualify (8 cards; Search for Tomorrow is MV 3), so ~34.6% of 7-card hands fail it on
+that clause alone. Paired A/B, `two_drop` vs `none`, held-out seeds 51000-54000 x 125, d3 b10, tree
+6d08ec65: **`none` is WORSE by +0.218 turns (se 0.035), 104 games worse / 36 better / 360 tied**
+(two_drop 5.94 avg vs none 6.16). It is also ~3-4x the search cost (each mulligan runs the lookahead
+bottoming trial games). Recommendation: KEEP `two_drop`; the keep table (mulligan generation) supersedes
+it later. Mulligan policy is the user's — surfaced, unchanged.
+
 ## Claude-play sweep
 - commit: `223cbba4` (frozen checkout `.claude/worktrees/landfall-sweep`, binary copied before any later
   rebuild), benchmark d5 b20 with the shipped profile (search_leaf_depth 0)
