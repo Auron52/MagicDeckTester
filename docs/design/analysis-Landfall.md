@@ -233,7 +233,30 @@ diagnostic `NO_COST_INTERACTIONS`; discard evidence (400 games d3) `STATUS_QUO_O
 in 400 games (0.0225/game), multi-optimal rate 1.0 (every shed a tie), names offered: Baloths 7,
 Phylath 7, Titan 6, Avenger 5, Omnath 5.
 
-## Stage 5j — suite membership: cost gate PASS (2026-10-15 ~23:00, tree 223cbba4)
+## Stage 5j — RE-MEASURED: cost gate FAIL 4.30x (2026-10-16 ~05:00, tree b35f9f0e) — deck NOT added
+The 10-15 PASS below compared a fresh Landfall run against a STALE table (Snow listed at 7,162 ms/game;
+in the same pooled run Snow is 2,379). Re-measured the established way (PD's admission: "1.33x hinata in
+ONE pooled batch"): the full regression tier on the integrated tree, THREADS=24, every other case
+byte-identical to GT, then `suite_gate.py --measure-all --no-run` (table refreshed, 09ba5608) and
+`--cost decks/Landfall --no-run`: **landfall 22,919 ms/game (d5 s2002) = 4.30x the reference, PD at
+5,335 -> FAIL** (budget 16,006). Per case: d5 s2002 22,919; d3 s2002 12,758; d5 s3003 11,518; d3 s3003
+8,237 (the gi38 runaway is gone: d3 s2002 48.4M -> 10.6M units). Rows NOT added (proposed diff kept at
+`logs/landfall_suite_rows.proposed.diff`; shape as recorded below).
+- **WHERE THE COST IS: mulligan-bottoming trial games, 92-99%.** Turn census on the three heaviest d5
+  games (s2024 gi22, s3013 gi10, s2022 gi20): probe (trial-game) units 99.0% / 97.1% / 92.5%; the real
+  game 1.0-7.5%. Corroborated by the curve-check A/B: with `curve_check none` (far fewer mulligans) the
+  same games cost ~0.25x units. This is the PD / Bruna / FiveColour / Fluctuator shape (68-92%), where
+  every prior analysis found no lossless reduction (PD P4: the cost is in candidates that TIE the best).
+- **The remedy every reference deck already has** is the exhaustive keep/bottom table (it replaces these
+  rollouts outright: `AIEngine::BottomCards`' table path runs first) plus the value leaf -- and both
+  generators refuse a deck outside the suite. The gate therefore compares Landfall's PRE-artifact cost
+  with the peers' POST-artifact cost; play alone is ~1-7% of these games.
+- **USER DECISION (PD's D1 shape; default taken: nothing adopted that costs quality, deck in NO tier):**
+  (1) lift the gate for Landfall (`MTG_ALLOW_UNTESTED_DECK=1`, user-only) to build the keep table + value
+  leaf; (2) rule that 5j measures post-artifact cost; (3) ship cheaper bottoming (`bottom_eval_*`, lossy;
+  measured below). Recommendation: (2) via (1), as for PD.
+
+## Stage 5j — suite membership: cost gate PASS (2026-10-15 ~23:00, tree 223cbba4) — SUPERSEDED above
 Rows written in all three tiers (smoke d0 1001x1000, d3 1001x50 b10, d5 1001x25 b20; regression d0
 2002x1000, d3 2002/3003x50 b10, d5 2002/3003x25 b20; overnight ENTRY set: d0 4x2000, d3 4x400 b10,
 d5 4x300 b20). No 2HG row (no per-opponent or starting-life-relative card). `suite_gate.py --cost`
