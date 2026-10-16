@@ -52256,39 +52256,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
     }
-    // PART 2c (MTG_EDF_AURA_RANGE_HOSTS; see EdfAuraRangeHostsOn in EngineFlags.h). Only where the host
-    // fold is in force (the host is not in the signature) and only for a plan holding a land Aura with a
-    // declared host plus an untapper or a second land Aura -- the shapes EldraziFlickerProvider::
-    // ArrangeCastOrder can move (the range needs an untapper, the same-host stack two Auras). Every other
-    // deck's ArrangeCastOrder leaves the order as given, so nothing is ever tagged moved there.
+    // PART 2c (MTG_EDF_AURA_RANGE_HOSTS; see EdfAuraRangeHostsOn in EngineFlags.h). Where the host fold is in
+    // force (the land-Aura host is not in the signature), a plan that ALSO casts an untapper keeps every host
+    // variant: its key is the class signature plus the plan's (Aura, host) list. Untapper plans are where
+    // the host decides the turn -- the range moves an Aura behind the untapper only on some hosts, and the
+    // untap refreshes the host's bonus -- and only EldraziDisplacerFlicker holds an untapper
+    // (etb_untap_lands), so no other deck's menu changes. Additive: it only ever keeps a plan the fold
+    // would have dropped.
     const bool range_hosts = !host_sig && !s_human_play_sig && EdfAuraRangeHostsOn();
-    // class signature -> {index in `deduped` of the kept member, kept-mask: bit0 rank-order, bit1 moved}
-    std::unordered_map<std::string, std::pair<std::size_t, int>> rh_class;
-    // -1 not a shape the arrangement can move | 0 the deck's arrangement keeps the rank order | 1 it moves it
-    auto rh_moved = [&](const TurnSolver::Plan& rp) -> int
+    std::unordered_set<std::string> rh_seen;
+    auto rh_host_key = [&](const TurnSolver::Plan& rp) -> std::string   // "" = not an untapper + host-Aura plan
     {
-        int n_aura = 0;
+        std::string k;
         bool untapper = false;
         for (const Action& a : rp.actions)
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d == nullptr) { continue; }
-            if (d->params.is_land_aura && a.enchant_target > 0) { ++n_aura; }
+            if (d->params.is_land_aura && a.enchant_target > 0)
+            { k += a.card_name.str() + "@" + std::to_string(a.enchant_target) + ";"; }
             if (d->card.IsCreature() && d->params.etb_untap_lands > 0) { untapper = true; }
         }
-        if (n_aura == 0 || (!untapper && n_aura < 2)) { return -1; }
-        std::vector<int> rk;
-        for (int i = 0; i < static_cast<int>(rp.actions.size()); ++i)
-        {
-            const Action& a = rp.actions[static_cast<std::size_t>(i)];
-            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { rk.push_back(i); }
-        }
-        std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
-        { return CastOrderLess(state, rp.actions[static_cast<std::size_t>(x)], rp.actions[static_cast<std::size_t>(y)]); });
-        std::vector<int> arr = rk;
-        ApplyDeckCastArrangement(state, rp.actions, arr);
-        return arr != rk ? 1 : 0;
+        return untapper ? k : std::string();
     };
     for (std::size_t pi = 0; pi < plans.size(); ++pi)
     {
@@ -52297,28 +52287,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (seen.insert(sig).second)
         {
             if (s_sig_x_audit) { sig_first[sig] = deduped.size(); }
-            if (range_hosts) { rh_class.emplace(sig, std::make_pair(deduped.size(), -1)); }
             const std::size_t keep = pick.empty() ? pi : pick[sig];
+            if (range_hosts)
+            {
+                const std::string hk = rh_host_key(plans[keep]);
+                if (!hk.empty()) { rh_seen.insert(sig + "|" + hk); }
+            }
             deduped.push_back(std::move(plans[keep]));
         }
-        else if (range_hosts)
+        else if (const std::string hk = range_hosts ? rh_host_key(p) : std::string(); !hk.empty())
         {
-            auto it = rh_class.find(sig);
-            if (it == rh_class.end()) { continue; }
-            int& mask = it->second.second;   // -1 = the kept member not yet classified
-            if (mask < 0)
-            {
-                const int rep = rh_moved(deduped[it->second.first]);
-                // 4: the kept member is not a movable shape, so the class folds exactly as before.
-                mask = rep < 0 ? 4 : (rep == 1 ? 2 : 1);
-            }
-            if (mask == 4 || mask == 3) { continue; }
-            const int mine = rh_moved(p);
-            if (mine < 0) { continue; }
-            const int bit = mine == 1 ? 2 : 1;
-            if (mask & bit) { continue; }
-            mask |= bit;
-            deduped.push_back(std::move(p));
+            if (rh_seen.insert(sig + "|" + hk).second) { deduped.push_back(std::move(p)); }
         }
         else if (s_sig_x_audit)
         {

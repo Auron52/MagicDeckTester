@@ -194,59 +194,102 @@ prefix (100) all 0. Every one of the 76 slower games was re-played with each par
   instead of the outlet (gi 220 / 993 / 1022 / 1283 / 1308 / 1899 / 3038 / 3282). That is the greedy's choice
   with the capability the USER asked for; no amendment.
 
-### Slices 2 and 3 (binary `mtg.new2` = commit 305cab78; arms v2 = the seven above plus `no3b`, `no4b`,
-### `no2b` and `tutor` = MTG_EDF_TUTOR_LIBRARY_FIRST=1) and `s1p` (slice 1's seeds, `new` only, on mtg.new2)
+### Slices 2 and 3, and the whole A/B on the amended binary (`mtg.new2` = commit 305cab78)
 
-IN FLIGHT.
+Slices 2 (2026-10-15 20:27-22:14 UTC) and 3 (22:59-01:00) pooled every v2 arm: the seven above plus
+`no3b`, `no4b`, `no2b` (MTG_EDF_AURA_RANGE_SOLVE=0) and `tutor` (MTG_EDF_TUTOR_LIBRARY_FIRST=1). `s1p`
+(22:20-22:48) replayed slice 1's games with `new` on mtg.new2, so the whole A/B is old vs the amended
+binary. `old` is the same in both binaries (all parts OFF; identity-checked). Merged:
+`build/scratch/edf-order/ab/final.{out,err,analysis.txt}`.
 
-## RESUME (2026-10-14 night stop, coordinator: the box goes to a value-leaf generation)
+| cell | n | old | new | faster | slower | net | units new/old |
+|---|---|---|---|---|---|---|---|
+| shipped (d5/b20) | 1000 | 4.2360 | 4.2320 | 7 | 3 | **-4** | 1.018 |
+| d3/b10 | 1500 | 4.3093 | 4.3027 | 18 | 8 | **-10** | 1.018 |
+| d0 | 10000 | 5.5809 | 5.5147 | 757 | 189 | **-662** | (no search) |
 
-* **Base commit** `ff3e205b` (tip of `work/integ-2026-10-14`). Branch `worktree-agent-a2c348fc11430e668`,
-  worktree `/workspaces/MagicDeckTester/.claude/worktrees/agent-a2c348fc11430e668`. Nothing pushed.
-* **Built:** the BASE binary only -- `/workspaces/MagicDeckTester/build/scratch/edf-order/bin/mtg.base`
-  (+ `mtg-test.base`). The NEW tree (this WIP commit) has **never finished compiling**: the build was stopped
-  at 114/119 (`DecisionProviders.cpp` compiled clean; `TurnSolver.cpp` was mid-compile). So nothing below is
-  compile-verified beyond DecisionProviders.cpp, and no unit test / scenario / probe has run on it.
-* **Code state (all five parts written, all default ON pending measurement):** see the table at the top.
-  Unit tests in `test/unit/test_edf_cast_order.cpp` (added to CMakeLists). Still TODO in code: extend
-  `test/scenarios/edf_shroud_blocks_second_aura.json` (or a sibling fixture) with the Overgrowth-then-Trace
-  same-land stack, and a `validate_line` fixture for aura_drake (`cast=Peregrine Drake;cast=Fertile Ground`,
-  `expect_verdict accept`).
-* **Measured so far (base binary only):** per-game cost probe `build/scratch/edf-order/cost.{json,out,err}`
-  (NOTE: that probe's chunks reused one seed -- the chunk seed must be base + game_index; the generator is
-  fixed): shipped = d5/b20 (EDF has no value_play; `source=default`), ~82k units/game, ~95 s wall/game on the
-  loaded box; d3/b10 ~30k units/game, ~55 s/game; d0 ~0.7 s/game. Identity batch on base was STARTED and
-  KILLED within minutes (`build/scratch/edf-order/ident/base.*` is PARTIAL -- discard, re-run).
-* **What is left, in order:**
-  1. `bash /workspaces/MagicDeckTester/build/scratch/build2.sh` from the worktree root; fix any compile error;
-     `build/Release/mtg-test` (all unit tests incl. test_edf_cast_order); `MTG_BIN=build/Release/mtg bash
-     test/scenarios.sh`; copy the binary to `build/scratch/edf-order/bin/mtg.new`.
-  2. Probes on new: `python3 logs/edf-order/probes.py /workspaces/MagicDeckTester/build/scratch/edf-order/bin/mtg.new new`
-     (expect t4_drake_first T4 win; aura_drake Drake;FG line `accept`).
-  3. Identity: `python3 logs/edf-order/mkmanifest.py ident <dir>/base.json base` and `... new.json new`
-     (34 suite decks x d0 40 / d3b10 20 / shipped 20, seed 11500001; plus EDF with all five parts OFF on
-     seed 11600001, which must equal base game for game); run each with its own binary
-     (`env -C <worktree> MTG_PGO=0 MTG_DUMP_WINS=1 <bin> --batch <manifest> --threads N`), compare digests by
-     job name.
-  4. The pooled A/B (ONE batch, new binary): `python3 logs/edf-order/mkmanifest.py ab <out> <ship> <d3> <d0>
-     <chunk> <part_ship> <part_d3>`. Arms: old (all five OFF), new (defaults), no1..no5 (one part OFF).
-     Seeds: shipped 11300001 + gi, d3/b10 11310001 + gi, d0 11320001 + gi; loss = 9 (max_turns 8);
-     `MTG_DUMP_WINS=1`. Planned sizing at today's per-game cost: old/new shipped 1000, d3 1500, d0 10000;
-     the part-OFF arms on the same seeds' prefix shipped 300, d3 500, d0 10000 (~12 h at 16 threads on the
-     loaded box; the USER's aims of 2000 / 3000 / 10000 were ~55 h for seven arms at full size). Analysis:
-     `python3 logs/edf-order/analyze_ab.py <batch.out> <batch.err> --slower-list <tsv>`.
-  5. Every slower game: stage 1 `--depth W --budget-ms 100` (W = max(5, old win turn)), stage 2 `--depth 8
-     --budget-ms 0`; root-cause the rest.
-  6. References (24): `MTG_PGO=0 MTG_BIN=<bin> python3 scripts/ref_bench.py --deck EldraziDisplacerFlicker`,
-     `python3 scripts/ref_handoff_sweep.py --deck EldraziDisplacerFlicker --log-root <dir>` and
-     `MTG_BIN=<bin> python3 test/viewer_protocol_check.py --strict --only EldraziDisplacerFlicker`, on base and
-     new; report every change; never modify a reference.
-  7. Update the EDF section of `docs/design/cast-order-rankings.md` (stale: "No implemented non-land cards")
-     and this doc; set each part's default from the bar.
-* Helper scripts (host drive, gitignored): `logs/edf-order/{probes.py, mkmanifest.py, analyze_ab.py,
-  refactor_walk.py, dumpcards.py}` in the worktree.
-* **Findings so far the USER should hear:** none measured yet. One design call made and stated here: part 2
-  takes Q2's second route (an EDF `ArrangeCastOrder` with the enumeration's own sequential walk as the
-  projection) rather than crediting untappers in the shared `FirstUnpayablePos`, so no other deck's
-  payable-order fallback moves; and part 5 is implemented as extra route attempts that can add a kill but
-  never displace one (its stated rule is above).
+Per-lever marginal, lever OFF vs `new` (+ = the lever helps; the turns the lever saves). Shipped and d3:
+the v2 prefixes (200 / 333 games) PLUS the census (every game the package changed outside the prefix --
+9 shipped, 18 d3 -- replayed with each lever OFF, `logs/edf-order/census_eval.py`). d0: the v2 prefix
+(6667 games).
+
+| lever | shipped | d3 | d0 |
+|---|---|---|---|
+| 1 `MTG_EDF_CAST_ORDER` | +1 | +2 | **-10** |
+| 2 `MTG_EDF_AURA_RANGE` (all of it) | 0 | +1 | +380 |
+| 2b `MTG_EDF_AURA_RANGE_SOLVE` | -1 | -1 | +379 |
+| 3 `MTG_EDF_SHROUD_STACK` | -1 | -1 | +4 |
+| 3b `MTG_EDF_SHROUD_STACK_PAYS` | 0 | 0 | +5 |
+| 4 `MTG_EDF_ROUTE_AURA_ORDER` | +2 | +5 | +51 |
+| 4b `MTG_EDF_ROUTE_AURA_PERMS` | +3 | +4 | +38 |
+| 5 `MTG_EDF_ROUTE_LOOP_UNTAPPER` | 0 | 0 | +7 |
+| tutor proposal (ON vs OFF) | 0 | 0 | +3 |
+
+### Recovery of every slower game (v2)
+
+200 slower games (shipped 3, d3 8, d0 189), one pooled batch per stage (box lock):
+`build/scratch/edf-order/rec/final_stage{1,2}.*`, `logs/edf-order/rec_eval.py`. Stage 1 (`--depth W
+--budget-ms 100`, W = max(5, old win turn)) recovers **196**; stage 2 (`--depth 8 --budget-ms 0`)
+recovers d0 gi 6739. **Three d3 games recovered at neither**: gi 4 (old 4, new 5), gi 201 (4, 5),
+gi 1457 (3, 4). At d8/b0 each is restored by part 2 OFF (gi 4 also by part 3 OFF).
+
+### Root cause of the three, and amendment 2c (`MTG_EDF_AURA_RANGE_HOSTS`, default ON)
+
+The plan dedup folds land-Aura HOST variants into one class -- `MTG_EDF_AURA_HOST_SIG_KAROO` puts the host
+in the signature only on the karoo-drop branch -- and keeps the class's first member. That assumes the
+host variants are copies of one line. On a plan that casts an UNTAPPER they are not:
+
+* **gi 1457, T3** (Conservatory, Brushland + Trace; hand Displacer, Cloud, Eladamri's Call, Overgrowth,
+  Conservatory, Yavimaya Coast). The kill drops the Coast and puts Overgrowth ON THE COAST, paid by
+  Conservatory + Brushland/Trace; the Coast taps {U}{G}{G} for Cloud with one to spare, Cloud untaps
+  Brushland and the Coast, and the Displacer resolves with three floating for the first blink. With
+  Overgrowth on Conservatory the plan pays only Cloud-first and leaves nothing for the blink. The range
+  made that Conservatory variant payable (it moves Overgrowth behind Cloud), it sorted first (host 1 <
+  host 9), it won the class -- and the Coast variant, the only kill, was gone from the menu at every
+  budget. Found with `MTG_DBG_MULTI` (the Coast variant is OFFERED by the gate) plus `MTG_EDF_RANGE_TRACE`
+  (it never reaches an apply) and confirmed by `MTG_EDF_AURA_HOST_SIG_KAROO=0` (every host distinct: T3
+  win in every arm). gi 201 is restored by the same lever; at d8/b0 its arms already part at the opening
+  (the bottoming playouts search the same folded menus: new bottomed Overgrowth, part 2 OFF bottomed
+  Fertile Ground).
+* **gi 4, T3/T4** (two Kitchens; T3 hand Fertile Ground, Cloud, Overgrowth, Trace, 2 Drakes, 2 Displacers;
+  the T4 draw is Aether Hub). The range adds {Cloud, Fertile Ground} at T3 (FG behind Cloud), and the
+  search took it; the old line cast FG alone, kept Cloud and killed T4 off the Hub: Overgrowth on the Hub,
+  Cloud, Drake, Displacer. At the cell that alone is the clairvoyant shape (holding Cloud only pays if
+  T4 brings a land), but at d8/b0 the T4 kill was UNFINDABLE from the FG-only board: the earliest-win
+  census (`MTG_DUMP_EWINS`, through a `--claude-play --choices-then-auto` hand-off) lists {Overgrowth,
+  Cloud, Drake, Displacer} at T4 with win 5 only, where part 3 OFF lists a member that wins 4. The kill
+  variant and the kept member both pay in rank order, so 2c's first form (keep one rank-order and one
+  moved member, commit d10057cf) still folded it.
+
+**2c, as shipped:** where the host fold is in force, a plan that also casts an untapper keeps EVERY land-Aura
+host variant (key = class signature + its (Aura, host) list). Only EDF holds an untapper
+(`etb_untap_lands`), so no other deck's menu changes; additive (it only keeps plans the fold dropped).
+All three games then win on their OLD turn at the d3 cell itself (gi 4: 4, gi 201: 4, gi 1457: 3) and at
+d8/b0. Fixture `test/scenarios/edf_aura_range_keeps_rank_order_host.json` (gi 1457's T3 board, d3/b0:
+T3 win; `MTG_EDF_AURA_RANGE_HOSTS=0` no win; `MTG_EDF_AURA_RANGE=0` win). gi 4's board cannot be a
+`--scenario` fixture: the scenario harness numbers cards battlefield-first, and EDF's
+`LandAuraHostCandidates` breaks a host-score tie on the card number, so the reconstructed board offers
+the bare Kitchen where the game offered the Aether Hub (a reconstruction gap worth knowing:
+`board_from_log.py` boards are NOT faithful for EDF host choices).
+
+### The re-measure on 2c (`mtg.new4`)
+
+IN FLIGHT (`build/scratch/edf-order/ab3/v4.*`, started 2026-10-16 03:11 UTC): `new4` on every A/B game
+(1000 / 1500 / 10000, the same seeds), `no3v4` on the v2 prefixes (200 / 333 / 6667), and the identity
+jobs (every suite deck + EDF all-off). 2c is inert with part 2 OFF, so `no2` (v2) stands; 2c OFF = v2 `new`.
+
+## Verdicts (the bar: per cell net <= 0 against old, every slower game recovers at stage 1 or 2)
+
+PENDING the v4 numbers; the v2 standing, lever by lever, is in the table above. Every part ships at the
+default the USER approved (ON) until the USER rules: cast order, ranges and the route's order are USER
+decisions (CLAUDE.md), so an agent does not switch one off on a measurement.
+
+## Status (2026-10-16)
+
+* Branch `worktree-agent-a2c348fc11430e668`, base `ff3e205b`. Nothing pushed.
+* Binaries on the build volume: `build/scratch/edf-order/bin/mtg.{base,new,new2,new3,new4}` (+ `mtg-test.*`).
+* Units 1070/1070 and scenarios 163/163 on the 2c binary; references and identity as above (v2); the v4
+  identity jobs re-check every suite deck on the 2c binary.
+* Diagnostics added (env-gated, print nothing unset): `MTG_EDF_RANGE_TRACE` (one line per range
+  decision: the order in, whether the walk / the prepay pays it, the board, the order out) and the Aura
+  host / land card numbers in `MTG_DBG_SEQ`.

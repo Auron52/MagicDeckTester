@@ -834,16 +834,17 @@ inline bool EdfAuraRangeSolveOn()
 // MTG_EDF_AURA_RANGE_HOSTS (part 2c; DEFAULT ON, inert unless MTG_EDF_AURA_RANGE is on). The plan dedup
 // folds land-Aura HOST variants into one class (MTG_EDF_AURA_HOST_SIG_KAROO: the host is in the signature
 // only on the karoo-drop branch) and keeps the class's FIRST member. That fold assumes the variants are
-// copies of one line. The range breaks the assumption: it makes a host variant payable by MOVING its Aura
-// behind an untapper, which is a different line from the variant that pays in rank order -- and the moved
-// one sorts first (lower host number), so the fold deleted the line that kills. Seed 11311458 gi 1457,
-// T3: {Overgrowth, Cloud of Faeries, Eldrazi Displacer} with the Overgrowth on the fresh Yavimaya Coast
-// (rank order: Overgrowth, then Cloud off the Coast's {U}{G}{G}, then the Displacer with three to spare)
-// kills; on Conservatory it pays only Cloud-first and leaves nothing for the first blink. The range made
-// the Conservatory variant payable, it won the class, and the kill became unfindable at --depth 8
-// --budget-ms 0. With 2c the class keeps its first rank-order member AND its first moved member. Additive
-// (it only ever keeps a plan the fold would have dropped) and lazy (the arrangement is computed only for a
-// plan that collides with a kept one). See docs/design/edf-cast-order-2026-10-14.md.
+// copies of one line, and on a plan that casts an untapper they are not: the range makes a host variant
+// payable by MOVING its Aura behind the untapper, and the untap refreshes whichever host carries the bonus.
+// Seed 11311458 gi 1457, T3: {Overgrowth, Cloud of Faeries, Eldrazi Displacer} with the Overgrowth on the
+// fresh Yavimaya Coast kills (Overgrowth, then Cloud off the Coast's {U}{G}{G}, the Displacer with three to
+// spare); on Conservatory it pays only Cloud-first and strands the first blink. The range made the
+// Conservatory variant payable, it sorted first and won the class, and the kill was unfindable at --depth 8
+// --budget-ms 0. Seed 11310005 gi 4, T4: the kill {Overgrowth on Aether Hub, Cloud, Drake, Displacer} and
+// the kept member pay in the same order, so keeping one rank-order and one moved member (this lever's
+// first form) still lost it. 2c therefore keeps EVERY host variant of a plan that casts an untapper (only
+// EDF holds one). Additive: it only ever keeps a plan the fold would have dropped.
+// See docs/design/edf-cast-order-2026-10-14.md.
 inline bool EdfAuraRangeHostsOn()
 {
     static const bool env_on = EnvOn("MTG_EDF_AURA_RANGE_HOSTS", true);   // DEFAULT ON; =0 disables
