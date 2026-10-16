@@ -136,6 +136,18 @@
    "shortfalls": [],
    "src": "043f3ef3d1e75e3246324721a7ff5b08b808e40a"
   },
+  "fungus": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.8,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.5,
+   "short": 0,
+   "shortfalls": [],
+   "src": "55191e63d008670c1871b03a48d5961cfce448c6"
+  },
   "goblins": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
