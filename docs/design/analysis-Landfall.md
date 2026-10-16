@@ -398,6 +398,22 @@ pruned" and gave it (verbatim in `LandfallProvider`'s .cpp block), then the boun
 - **Cost gate, same regression run:** landfall **2,881 ms/game (d5 s3003) / pd 2,695 = 1.07x** (was 2.64x
   at these rows this morning, 4.30x before the fetch rule); the deck's regression total 605 -> 220 core-s.
 
+## Hand-played references s1-s10 — bench before the value leaf (2026-10-16, de730cadf)
+`ref_bench.py` at the shipped play setting (d5 b20, no value leaf, no keep table): human 6.000, search
+**5.800**; 1 short (s5 gi4, T6 -> T7), 3 faster (s2, s6, s7), 6 equal. Protocol replay: 9 ok, s6 repaired
+(a stale index, 2 -> 5).
+- **s5 gi4, the one shortfall** (`ref_handoff_sweep.py`, `logs/handoff_s5`): of 18 hand-off frames only
+  the very first loses. Given the human's T1 Forest, the search wins T6 from every later frame.
+- At T1 the search plays and cracks Evolving Wilds where the human played Forest and suspended Search for
+  Tomorrow. b30 makes the same T1 crack and still wins T6, so the two budgets part only at **T3**: b20
+  cracks the second Wilds (T4 draws Forest), b30 plays Myriad Landscape (T4 draws Courser of Kruphix).
+- The search sees its own library (clairvoyant, shuffles included), so this is not draw luck. It reads as
+  two places the shipped search falls short. At T1 the choice rests on how the search scores the end of
+  its window (the greedy horizon leaf), which is what the value leaf replaces. At T3, on its own line,
+  b20 does not reach the T6 win that b30 finds.
+- **Owed after the value leaf:** re-bench all 10. If s5 still loses a turn, census the T3 decision on
+  the search's own line (budget waste vs ordering) -- no probe could run alongside the generation.
+
 ## Screening input — stalls and running out of threats (USER 2026-10-16, DEFERRED to deck screening)
 After hand-playing 10 references (s1-s10): *"Surprisingly there were some really bad games in there
 where the deck stalled. This might be where it needs some updates in future screening arms. The deck's

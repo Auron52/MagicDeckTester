@@ -1,0 +1,18 @@
+{
+ "merge": [
+  {
+   "cards": [
+    "Evolving Wilds",
+    "Terramorphic Expanse"
+   ],
+   "why": "USER RULING 2026-10-16: 'I think K=18 for this deck in the bucketing. The colourless lands should merge and so should Evolving Wilds + Terramorphic Expanse.' Same card for this deck (sacrifice: a basic onto the battlefield tapped); play already folds them into one identity class, and the user's Titan rule treats them as one ('they are the same so just choose one that is in the deck')."
+  },
+  {
+   "cards": [
+    "Radiant Fountain",
+    "Haunted Fengraf"
+   ],
+   "why": "USER RULING 2026-10-16: 'The colourless lands should merge' (same message as above; K=18 = 20 distinct names less these two merges). Both are colourless-mana lands that enter untapped and add no landfall beyond the land drop; the user's out-of-basics Titan order lists them together."
+  }
+ ]
+}
