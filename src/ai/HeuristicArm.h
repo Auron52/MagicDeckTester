@@ -518,7 +518,7 @@ enum Slot : int
     EDF_ROUTE_AURA_PERMS,     // MTG_EDF_ROUTE_AURA_PERMS   part 4b: when the route's deploy in the USER's Aura order kills nothing, it tries the other Aura orders (the USER's always first)
     EDF_AURA_RANGE_SOLVE,     // MTG_EDF_AURA_RANGE_SOLVE   part 2b: Solve's (d0 runner + horizon playouts) rescue of a range-arranged subset; =0 keeps part 2 in the window and the applies only
     EDF_TUTOR_LIBRARY_FIRST,  // MTG_EDF_TUTOR_LIBRARY_FIRST PROPOSED (default OFF, a USER decision): Eladamri's Call before Living Wish -- the sideboard-only Wish goes last, so the library tutor fills the shared need first
-    EDF_AURA_RANGE_HOSTS,     // MTG_EDF_AURA_RANGE_HOSTS   part 2c: the plan dedup's land-Aura host fold keeps every host variant of a plan that casts an untapper (different lines, not copies); =0 folds them to the first as before
+    EDF_AURA_RANGE_HOSTS,     // MTG_EDF_AURA_RANGE_HOSTS   part 2c: the plan dedup's land-Aura host fold, on a plan that casts an untapper, keeps every host of a one-Aura plan and one rank-order + one moved member of a multi-Aura class (different lines, not copies); =0 folds them to the first as before
     COUNT
 };
 

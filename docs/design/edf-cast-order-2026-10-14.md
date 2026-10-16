@@ -254,42 +254,62 @@ host variants are copies of one line. On a plan that casts an UNTAPPER they are 
 * **gi 4, T3/T4** (two Kitchens; T3 hand Fertile Ground, Cloud, Overgrowth, Trace, 2 Drakes, 2 Displacers;
   the T4 draw is Aether Hub). The range adds {Cloud, Fertile Ground} at T3 (FG behind Cloud), and the
   search took it; the old line cast FG alone, kept Cloud and killed T4 off the Hub: Overgrowth on the Hub,
-  Cloud, Drake, Displacer. At the cell that alone is the clairvoyant shape (holding Cloud only pays if
-  T4 brings a land), but at d8/b0 the T4 kill was UNFINDABLE from the FG-only board: the earliest-win
-  census (`MTG_DUMP_EWINS`, through a `--claude-play --choices-then-auto` hand-off) lists {Overgrowth,
-  Cloud, Drake, Displacer} at T4 with win 5 only, where part 3 OFF lists a member that wins 4. The kill
-  variant and the kept member both pay in rank order, so 2c's first form (keep one rank-order and one
-  moved member, commit d10057cf) still folded it.
+  Cloud, Drake, Displacer, then the blink loop. Holding Cloud is weakly better on every T4 draw (casting it
+  at T3 leaves no T4 kill even with the land), so this is not a clairvoyant loss: the two T3 lines TIE in
+  the search because the T4 kill is UNFINDABLE from the FG-only board. The earliest-win census
+  (`MTG_DUMP_EWINS`, through a `--claude-play --choices-then-auto` hand-off at T3) lists {Overgrowth,
+  Cloud, Drake, Displacer} at T4 with win 5 only; part 3 OFF lists a member that wins 4. The kill is lost
+  INSIDE the T4 go-off continuation (the blink loop draws the library and re-solves), whose plans deploy
+  five or more land Auras: their host variants fold to one representative, and with part 3 ON (the legal
+  same-host stack) the representative is not the one that kills. With part 3 OFF the old behaviour -- the
+  illegal second Aura on a shrouded host, silently re-homed at resolution -- happens to land the kill.
 
-**2c, as shipped:** where the host fold is in force, a plan that also casts an untapper keeps EVERY land-Aura
-host variant (key = class signature + its (Aura, host) list). Only EDF holds an untapper
-(`etb_untap_lands`), so no other deck's menu changes; additive (it only keeps plans the fold dropped).
-All three games then win on their OLD turn at the d3 cell itself (gi 4: 4, gi 201: 4, gi 1457: 3) and at
-d8/b0. Fixture `test/scenarios/edf_aura_range_keeps_rank_order_host.json` (gi 1457's T3 board, d3/b0:
-T3 win; `MTG_EDF_AURA_RANGE_HOSTS=0` no win; `MTG_EDF_AURA_RANGE=0` win). gi 4's board cannot be a
-`--scenario` fixture: the scenario harness numbers cards battlefield-first, and EDF's
-`LandAuraHostCandidates` breaks a host-score tie on the card number, so the reconstructed board offers
-the bare Kitchen where the game offered the Aether Hub (a reconstruction gap worth knowing:
-`board_from_log.py` boards are NOT faithful for EDF host choices).
+**2c (`MTG_EDF_AURA_RANGE_HOSTS`, default ON), as shipped -- two tiers**, armed only when the candidates
+hold a host-declared land Aura and an untapper (only EDF holds an untapper, `etb_untap_lands`; every other
+deck skips the block):
 
-### The re-measure on 2c (`mtg.new4`)
+* a ONE-Aura plan that casts an untapper keeps every host variant (the provider proposes two hosts, so at
+  most two members per class) -- this is what recovers gi 1457 and gi 201;
+* a plan with two or more host-declared Auras keeps its first rank-order member AND its first member the
+  arrangement MOVES (computed lazily, only for a plan colliding with a kept one).
 
-IN FLIGHT (`build/scratch/edf-order/ab3/v4.*`, started 2026-10-16 03:11 UTC): `new4` on every A/B game
-(1000 / 1500 / 10000, the same seeds), `no3v4` on the v2 prefixes (200 / 333 / 6667), and the identity
+Additive: it only ever keeps a plan the fold would have dropped. gi 1457 and gi 201 then win on their OLD
+turn at the d3 cell itself (3 and 4) and at d8/b0. Fixture `test/scenarios/edf_aura_range_keeps_rank_order_host.json`
+(gi 1457's T3 board, d3/b0: T3 win; `MTG_EDF_AURA_RANGE_HOSTS=0` no win; `MTG_EDF_AURA_RANGE=0` win), and
+`edf_aura_range_drake_first.json` now reads `choose` (two hosts offered) where it read `accept`.
+
+**Measured and REJECTED: keeping every host variant of every untapper plan.** It recovers gi 4 (4 at the d3
+cell and at d8/b0), but the 2^k host variants of the go-off's many-Aura plans blew the pooled batch's
+resident set from ~4.5 GB (v2) to the 35 GB cap: `build/scratch/edf-order/ab3/v4.*` (`mtg.new4`, commit
+ab2c4699) was ABORTED by the RSS guard after 45 min (2439 of 22680 games; shipped 995 games: net -3 vs
+old, 2c's own marginal -1). A ceiling sweep on gi 4 (full hosts for plans of up to N Auras, lazy above):
+N = 1, 2, 3, 4 all leave it at 5; only "every class" finds T4. **gi 4 stays OPEN** -- the remedy needs a
+cheaper way to keep the go-off continuation's host assignments distinct (a sound identity fold over the
+continuation's Aura hosts, or a host rule for the continuation), not a wider fold exception.
+
+A reconstruction gap worth knowing: `logs/edf-order/board_from_log.py` boards are NOT faithful for EDF host
+choices. The scenario harness numbers cards battlefield-first, and `LandAuraHostCandidates` breaks a
+host-score tie on the card number, so gi 4's reconstructed T4 offers the bare Kitchen where the game
+offered the Aether Hub (no arm wins it as a scenario). The `--claude-play --choices-then-auto` hand-off
+reproduces the real board.
+
+### The re-measure on 2c (`mtg.new5`, the two-tier form)
+
+IN FLIGHT (`build/scratch/edf-order/ab3/v5.*`, started 2026-10-16 04:16 UTC): `new5` on every A/B game
+(1000 / 1500 / 10000, the same seeds), `no3v5` on the v2 prefixes (200 / 333 / 6667), and the identity
 jobs (every suite deck + EDF all-off). 2c is inert with part 2 OFF, so `no2` (v2) stands; 2c OFF = v2 `new`.
 
 ## Verdicts (the bar: per cell net <= 0 against old, every slower game recovers at stage 1 or 2)
 
-PENDING the v4 numbers; the v2 standing, lever by lever, is in the table above. Every part ships at the
+PENDING the v5 numbers; the v2 standing, lever by lever, is in the table above. Every part ships at the
 default the USER approved (ON) until the USER rules: cast order, ranges and the route's order are USER
 decisions (CLAUDE.md), so an agent does not switch one off on a measurement.
 
 ## Status (2026-10-16)
 
 * Branch `worktree-agent-a2c348fc11430e668`, base `ff3e205b`. Nothing pushed.
-* Binaries on the build volume: `build/scratch/edf-order/bin/mtg.{base,new,new2,new3,new4}` (+ `mtg-test.*`).
-* Units 1070/1070 and scenarios 163/163 on the 2c binary; references and identity as above (v2); the v4
-  identity jobs re-check every suite deck on the 2c binary.
+* Binaries on the build volume: `build/scratch/edf-order/bin/mtg.{base,new,new2,new3,new4,new5}` (+ `mtg-test.*`).
+* Units 1070/1070 and scenarios 163/163 on the two-tier 2c binary (`mtg.new5`).
 * Diagnostics added (env-gated, print nothing unset): `MTG_EDF_RANGE_TRACE` (one line per range
   decision: the order in, whether the walk / the prepay pays it, the board, the order out) and the Aura
   host / land card numbers in `MTG_DBG_SEQ`.

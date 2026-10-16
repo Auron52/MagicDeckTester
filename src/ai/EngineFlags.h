@@ -840,10 +840,13 @@ inline bool EdfAuraRangeSolveOn()
 // fresh Yavimaya Coast kills (Overgrowth, then Cloud off the Coast's {U}{G}{G}, the Displacer with three to
 // spare); on Conservatory it pays only Cloud-first and strands the first blink. The range made the
 // Conservatory variant payable, it sorted first and won the class, and the kill was unfindable at --depth 8
-// --budget-ms 0. Seed 11310005 gi 4, T4: the kill {Overgrowth on Aether Hub, Cloud, Drake, Displacer} and
-// the kept member pay in the same order, so keeping one rank-order and one moved member (this lever's
-// first form) still lost it. 2c therefore keeps EVERY host variant of a plan that casts an untapper (only
-// EDF holds one). Additive: it only ever keeps a plan the fold would have dropped.
+// --budget-ms 0. 2c's two tiers: a ONE-Aura plan with an untapper keeps every host variant (the provider
+// proposes two hosts, so at most two members); a plan with two or more host-declared Auras keeps its
+// first rank-order member and its first MOVED member. Armed only when the candidates hold an untapper
+// (only EDF). Additive: it only ever keeps a plan the fold would have dropped. NOT covered: seed 11310005
+// gi 4, whose T4 kill needs a host assignment inside the go-off continuation's five-plus-Aura plans --
+// keeping every host of every class recovers it, but 2^k variants drove the pooled batch's resident set
+// from ~4.5 GB to the 35 GB cap, and a ceiling of up to four Auras does not recover it.
 // See docs/design/edf-cast-order-2026-10-14.md.
 inline bool EdfAuraRangeHostsOn()
 {
