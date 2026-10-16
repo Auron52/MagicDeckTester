@@ -139,7 +139,7 @@ random graveyard return is `gy_return_at_random` (ApplyGraveyardReturnAbility).
      the breakpoint prefix snapshot carries its consumption). Fanned in the bounce block of
      `AppendSubdecisionAxes` (base plans, one axis).
    * **Sizing** (`PutKarooBounceBound`): an upper bound on the narrowed width that mirrors
-     `BounceSearchCandidates` -- distinct returnable names (+ depletion names), tightened to "one per
+     `BounceSearchCandidates` -- distinct returnable names (+ one per depletion land), tightened to "one per
      tapped clean name, or ONE with no land in hand" when a tapped land that certainly re-enters
      untapped is proved present (Titan's forced-tapped partner; for the Wave, a cost no non-clean
      source can cover). `PlanMayHoldLandAtBounce` is the "land may be in hand" superset.

@@ -39613,14 +39613,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     int replicate_count, int convoke_green, int convoke_other, int phyrexian_life,
                     bool evoke, bool adventure)
     {
-        // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
-        // the continuation has already decided everything after it, so every remaining cast of this
-        // plan is not ours to make. One guard here rather than in each of the seven cast loops.
-        // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
         // The land-put credit (Search for Tomorrow): consumed FIRST, before any early return, so a
         // skipped cast can never hand its credit to a later apply_one call that does not set it.
         const ManaPool cast_put_credit = cast_land_put;
         cast_land_put = ManaPool{};
+        // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
+        // the continuation has already decided everything after it, so every remaining cast of this
+        // plan is not ours to make. One guard here rather than in each of the seven cast loops.
+        // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
         if (bp_truncate) { return; }
         // Diagnostic only (default OFF -> byte-identical), and deliberately BEFORE the karoo hold
         // below so the trace records every cast that ENTERS apply_one, including one the hold defers.
@@ -51565,7 +51565,8 @@ static int PutKarooBounceBound(const GameState& state, int me,
     const int cap = static_cast<int>(DecisionProvider::kBounceSearchWidth);
     if (!KarooBounceSearchOn()) { return 1; }
     if (DecisionUnpruned(UnprunedGate::KarooBounce)) { return cap; }   // the pin stride's own cap
-    std::vector<std::string> all, plain, clean, dep;
+    std::vector<std::string> all, plain, clean;
+    int dep = 0;   // depletion-land PERMANENTS: one name splits by counter count (BounceSearchCandidates' key)
     auto add_u = [](std::vector<std::string>& v, const std::string& n)
     { if (std::find(v.begin(), v.end(), n) == v.end()) { v.push_back(n); } };
     bool witness = spend_witness;
@@ -51580,7 +51581,7 @@ static int PutKarooBounceBound(const GameState& state, int me,
         { if (q.aura_attached_to != 0 && q.aura_attached_to == bp.card.m_number) { aura = true; break; } }
         if ((bd != nullptr && bd->params.etb_bounce_land) || aura) { continue; }
         add_u(plain, nm);
-        if (bd != nullptr && bd->params.enters_tapped_with_depletion > 0) { add_u(dep, nm); }
+        if (bd != nullptr && bd->params.enters_tapped_with_depletion > 0) { ++dep; }
         if (BouncePossiblyClean(bd)) { add_u(clean, nm); }
     }
     for (const CardDefinition* d : co_put)
@@ -51593,12 +51594,11 @@ static int PutKarooBounceBound(const GameState& state, int me,
         if (co_put_tapped && BouncePossiblyClean(d)) { add_u(clean, nm); }
         if (co_put_tapped && BounceCertainlyClean(d)) { witness = true; }
     }
-    const int d_all = static_cast<int>((plain.empty() ? all : plain).size() + dep.size());
+    const int d_all = static_cast<int>((plain.empty() ? all : plain).size()) + dep;
     int w = std::max(1, d_all);
     if (witness)
     {
-        w = (hand_land_possible ? std::max<int>(static_cast<int>(clean.size()), 1) : 1)
-          + static_cast<int>(dep.size());
+        w = (hand_land_possible ? std::max<int>(static_cast<int>(clean.size()), 1) : 1) + dep;
     }
     return std::max(1, std::min({ w, std::max(1, d_all), cap }));
 }
