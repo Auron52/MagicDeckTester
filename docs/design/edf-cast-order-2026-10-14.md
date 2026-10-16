@@ -16,7 +16,12 @@ pooled batch measures every arm.
 | 4 | `MTG_EDF_ROUTE_AURA_ORDER` | the COMBO OFF route deploys land Auras in the cast order | `comboroute::PickDeployAura` (DeployPieces step 2) |
 | 5 | `MTG_EDF_ROUTE_LOOP_UNTAPPER` | the route casts a second untapper whose LOOP nets more, though its cast refund is short | `comboroute::DeployPieces` step 3, `Run` attempts C/D |
 
-(Defaults as shipped and the measurement: see "Measurement" below.)
+Amendments from the A/B, each its own lever and heurarm slot, all default ON: 2b `MTG_EDF_AURA_RANGE_SOLVE`
+(Solve's rescue of a range-arranged subset), 2c `MTG_EDF_AURA_RANGE_HOSTS` (the plan dedup keeps the land-Aura
+host variants of an untapper plan), 3b `MTG_EDF_SHROUD_STACK_PAYS` (the stack only when it pays), 4b
+`MTG_EDF_ROUTE_AURA_PERMS` (the route tries the other Aura orders after the USER's). Proposed, default OFF (a
+USER decision): `MTG_EDF_TUTOR_LIBRARY_FIRST`. Defaults as shipped and the measurement: "Measurement" and
+"Verdicts" below.
 
 ## The order (part 1)
 
@@ -293,23 +298,69 @@ host-score tie on the card number, so gi 4's reconstructed T4 offers the bare Ki
 offered the Aether Hub (no arm wins it as a scenario). The `--claude-play --choices-then-auto` hand-off
 reproduces the real board.
 
-### The re-measure on 2c (`mtg.new5`, the two-tier form)
+### The re-measure on 2c (`mtg.new5` = commit 72da81ba, byte-identical rebuild)
 
-IN FLIGHT (`build/scratch/edf-order/ab3/v5.*`, started 2026-10-16 04:16 UTC): `new5` on every A/B game
-(1000 / 1500 / 10000, the same seeds), `no3v5` on the v2 prefixes (200 / 333 / 6667), and the identity
-jobs (every suite deck + EDF all-off). 2c is inert with part 2 OFF, so `no2` (v2) stands; 2c OFF = v2 `new`.
+One pooled batch, 2026-10-16 04:16-05:55 UTC (`build/scratch/edf-order/ab3/v5.*`, analysis
+`v5.analysis.txt`, merged with the v2 `old` by `logs/edf-order/merge_vn.py`): `new5` on every A/B game,
+`no3v5` on prefixes (shipped [0,200) less the one game still running when the batch was stopped -- seed
+11300034 gi 33, the box's slowest -- d3 [0,333), d0 [0,6667)), and the identity jobs.
+
+| cell | n | old | new (shipped package) | faster | slower | net | units new/old |
+|---|---|---|---|---|---|---|---|
+| shipped (d5/b20) | 1000 | 4.2360 | 4.2320 | 8 | 4 | **-4** | 1.044 |
+| d3/b10 | 1500 | 4.3093 | 4.3020 | 18 | 7 | **-11** | 1.056 |
+| d0 | 10000 | 5.5809 | 5.5147 | 757 | 189 | **-662** | (no search) |
+
+2c's own marginal (v2 `new` = 2c OFF vs `new5`): shipped 0 (helps gi 955, costs gi 239), d3 **+1** (helps
+gi 201 / 757 / 1457, costs gi 204 / 1421), d0 0 (byte-identical in all 10000 games: the d0 runner never
+reaches the dedup). Part 3 on the 2c binary (no3 vs new5): shipped 0 (199), d3 -1 (gi 4, the open game),
+d0 **+8** (12 helped, 4 hurt). Units: +2.6% shipped / +3.7% d3 over the v2 binary, the extra host
+variants. Single-game peak RSS of the box's heaviest game (shipped gi 33): 2.35 GB vs 2.11 GB on v2 (the
+all-hosts form: 1.9 GB after 7 minutes, still climbing; the pooled batch hit 35 GB).
+
+**Identity (v5 batch): 114 of 114 jobs digest-identical with the base binary** -- every suite deck (33
+lists) x d0 / d3b10 / shipped, FiveColour 2HG, and EDF with all five parts OFF.
+
+**Recovery of the v5 slower games** (200: shipped 4 -- 239, 240, 609, 988; d3 7 -- 4, 60, 204, 488, 1301,
+1421, 1435; d0 189), one pooled batch per stage on `mtg.new5` (`rec/v5_stage{1,2}.*`): **198 recover at
+stage 1, d0 gi 6739 at stage 2, and d3 gi 4 at neither** (the open game above). The two d3 games 2c newly
+slows (204, 1421) and the shipped one (239) recover at stage 1.
+
+**References on `mtg.new5`** (`refs/new5/`, box lock): `ref_bench` identical to base game for game (4.208,
+0/24 short); `viewer_protocol_check --strict` 3 ok / 21 repaired / 0 drift, every replay on its recorded win
+turn (human play does not reach 2c; one reference, s17_gi16, repairs a different menu index than on
+`mtg.new`); `ref_handoff_sweep` the same table as `mtg.new` (7 of 637 frames short vs base's 8; 636 frames
+identical to base, `claude_s5_gi4` T4 post_main one turn FASTER). No reference file was touched.
 
 ## Verdicts (the bar: per cell net <= 0 against old, every slower game recovers at stage 1 or 2)
 
-PENDING the v5 numbers; the v2 standing, lever by lever, is in the table above. Every part ships at the
-default the USER approved (ON) until the USER rules: cast order, ranges and the route's order are USER
-decisions (CLAUDE.md), so an agent does not switch one off on a measurement.
+The PACKAGE as shipped meets the net bar in every cell (-4 / -11 / -662), and 199 of its 200 slower games
+recover (198 at stage 1, 1 at stage 2); d3 gi 4 does not (root cause above, open). Per lever (lever OFF vs the
+package; + = the lever helps; shipped / d3 from the v2 prefixes + census, d0 from the v2 prefix, 2c and
+part 3 from v5):
+
+| lever | shipped | d3 | d0 | verdict |
+|---|---|---|---|---|
+| 1 cast order | +1 | +2 | -10 | **fails at d0** (-10 over 6667 games, 0.0015 t/game). Root causes above (the tutors' order; the d0 runner's choice once {Cloud, Drake} pays). Every slower game it causes recovers at stage 1. Kept ON (the USER's order); the tutor proposal recovers 3 of the 10 -- USER question |
+| 2 range | 0 | +1 | +380 | passes (+380 is the d0 runner reaching the range's lines) |
+| 2b Solve rescue | -1 | -1 | +379 | fails shipped / d3 by one turn each (shipped gi 609; d3 costs 60 / 488 / 1301, saves 299 / 1222) -- those recovered at stage 1 on v2; +379 at d0. Kept ON |
+| 2c host fold | 0 | +1 | 0 | passes |
+| 3 shroud stack | 0 | -1 | +8 | fails d3 by one game: gi 4, the open game above. A rules fix (the old order cast a second Aura at a shrouded host and re-homed it silently). Kept ON |
+| 3b stack only when it pays | 0 | 0 | +5 | passes |
+| 4 route Aura order | +2 | +5 | +51 | passes |
+| 4b route Aura permutations | +3 | +4 | +38 | passes |
+| 5 route loop untapper | 0 | 0 | +7 | passes |
+| tutor proposal (OFF) | 0 | 0 | +3 | would pass; reverses the USER's approved Wish > Call pair, so OFF pending the USER |
+
+Every part ships at the default the USER approved (ON) until the USER rules: cast order, ranges and the
+route's order are USER decisions (CLAUDE.md), so an agent does not switch one off on a measurement.
 
 ## Status (2026-10-16)
 
 * Branch `worktree-agent-a2c348fc11430e668`, base `ff3e205b`. Nothing pushed.
-* Binaries on the build volume: `build/scratch/edf-order/bin/mtg.{base,new,new2,new3,new4,new5}` (+ `mtg-test.*`).
-* Units 1070/1070 and scenarios 163/163 on the two-tier 2c binary (`mtg.new5`).
+* Binaries on the build volume: `build/scratch/edf-order/bin/mtg.{base,new,new2,new3,new4,new5}` (+ `mtg-test.*`);
+  `mtg.new5` is the tip's binary.
+* Units 1070/1070 and scenarios 163/163 on `mtg.new5`.
 * Diagnostics added (env-gated, print nothing unset): `MTG_EDF_RANGE_TRACE` (one line per range
   decision: the order in, whether the walk / the prepay pays it, the board, the order out) and the Aura
   host / land card numbers in `MTG_DBG_SEQ`.
