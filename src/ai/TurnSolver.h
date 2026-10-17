@@ -1820,6 +1820,19 @@ public:
     // committed plan and for a breakpoint re-solve's plan. The cleanup discard and the Vial charge are
     // NOT here: the rollout keeps them on the state, the executor in AIEngine members.
     static void WritePostApplyStatePins(GameState& s, const Plan& p);
+    // THE EXECUTOR'S READING OF A BREAKPOINT OCCURRENCE (lockstep with ApplyPlanDirect's bp_searched_plan).
+    // `idx` is the occurrence's class-on ordinal, counted only while the plan carries a choice (-1 otherwise):
+    //  * Target     -- the occurrence the plan's searched continuation is for (bp_at, or every one: bp_all);
+    //  * PreTarget  -- an earlier occurrence: the rollout played its canon there ON THE LINE that chose the
+    //                  target's continuation;
+    //  * Untargeted -- a later one; None -- the plan targets nothing.
+    enum class BpOccurrence : std::int8_t { None, Target, PreTarget, Untargeted };
+    static BpOccurrence ClassifyBpOccurrence(const Plan& p, int idx);
+    // At an occurrence the executor does not replay, does it MIRROR the rollout's canon (true) or re-solve
+    // (false)? A verified committed line mirrors every one; an unverified (estimate) commit mirrors only up
+    // to the plan's own target -- after it, the estimate re-solve is the designed behaviour (the search
+    // never saw past the find).
+    static bool ExecMirrorsUnreplayedBp(BpOccurrence o, bool committed, bool verified);
 
     // THE OPEN LAND DROP, read the way the dig loop needs it (DecisionProvider::DigUsesDrawnLandDrop):
     // is this turn's land drop still open, and would playing a land in hand (`only_land` = that one
