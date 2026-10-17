@@ -33710,6 +33710,8 @@ struct Ctx
     std::vector<const std::vector<std::string>*> rec_orders;
     std::vector<int> rec_idx;
     std::uint64_t rec_aura_mask = 0;
+    // MTG_EDF_ROUTE_AURA_TWIN (see Run): DeployPieces' step 2 put an Aura on the battlefield this deploy.
+    bool        step2_cast = false;
     int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
     std::string blink_label;
     std::string log;
@@ -34937,6 +34939,7 @@ static bool DeployPieces(Ctx& cx, bool auras_first)
 static bool DeployPiecesBody(Ctx& cx, bool auras_first)
 {
     Player& ap = cx.s.players[cx.me];
+    cx.step2_cast = false;
     DeployDemand(cx);
     // 1. the land drop
     {
@@ -34993,7 +34996,7 @@ static bool DeployPiecesBody(Ctx& cx, bool auras_first)
             bool cast = false;
             for (const std::pair<int, int>& hh : hosts)
             {
-                if (CastEnchantment(cx, pick, hh.second, /*float_only=*/false)) { cast = true; break; }
+                if (CastEnchantment(cx, pick, hh.second, /*float_only=*/false)) { cast = true; cx.step2_cast = true; break; }
                 if (HandIndexByName(cx, ad->card.m_name.str()) < 0) { break; }
             }
             if (!cast) { break; }
@@ -35707,6 +35710,78 @@ struct RepeatPredictVerifyPrinter
 };
 inline RepeatPredictVerifyPrinter g_rp_printer;
 struct RepeatRec { bool done = false; bool loop_fired = false; std::uint64_t aura_mask = 0; };
+// ---- THE AURAS-LAST TWIN (MTG_EDF_ROUTE_AURA_TWIN, DEFAULT ON; =0 deploys and loops it again) ------------
+// "Auras last" (attempts 1 / 3) is "auras first" (0 / 2) with DeployPieces' step 2 left out -- nothing
+// else reads `auras_first`, and there is no later Aura step. Step 2 changes the state only through a
+// CastEnchantment that SUCCEEDS (a failing one rolls back: Pay is atomic, and the cast restores its
+// pre_cast copy); its DeployDemand rewrites only cx.demand / reserve, which step 3 rewrites again at the
+// top of its first round before anything reads them. So when the auras-first twin's step 2 cast nothing,
+// the auras-last attempt replays the twin's deploy and loop exactly -- and the twin's loop already
+// returned whatever Run would act on (it did not kill, or Run would have returned; a held DEVELOP from
+// it is the one Run already holds) -- so Run skips it. It needs the twin deployed in THIS Run (not
+// skipped as a predicted repeat, not behind the hand path's held DEVELOP). MTG_EDF_ROUTE_AURA_TWIN_VERIFY=1
+// deploys and loops every skipped twin anyway and compares its state after the deploy (RouteSig) and its
+// verdict with the auras-first twin's.
+inline bool AuraTwinOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_AURA_TWIN", true); return v; }
+inline bool AuraTwinVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_AURA_TWIN_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_tw_skip{0}, g_tw_bad{0};
+struct AuraTwinVerifyPrinter
+{
+    ~AuraTwinVerifyPrinter()
+    {
+        if (!AuraTwinVerify()) { return; }
+        std::fprintf(stderr, "[route-twin] verify: %llu auras-last twins skipped, %llu MISMATCHES\n", g_tw_skip.load(), g_tw_bad.load());
+    }
+};
+inline AuraTwinVerifyPrinter g_tw_printer;
+class AuraTwins
+{
+public:
+    AuraTwins(const std::vector<Attempt>& at, bool on) : m_at(at), m_on(on)
+    { if (m_on) { m_rec.resize(at.size()); } }
+    // The auras-first attempt that attempt k (auras last) would replay, if its step 2 cast nothing; -1 else.
+    int TwinOf(int k) const
+    {
+        if (!m_on) { return -1; }
+        const Attempt& a = m_at[static_cast<std::size_t>(k)];
+        if (a.auras_first) { return -1; }
+        for (int c = 0; c < static_cast<int>(m_at.size()); ++c)
+        {
+            const Attempt& b = m_at[static_cast<std::size_t>(c)];
+            if (!b.auras_first || b.loop != a.loop || b.aura_order != a.aura_order) { continue; }
+            const Rec& r = m_rec[static_cast<std::size_t>(c)];
+            return (r.done && !r.step2_cast) ? c : -1;
+        }
+        return -1;
+    }
+    // After attempt k's deploy (and, when it ran, its loop: r; -1 = no loop ran).
+    void RecordDeploy(const Ctx& cx, int k)
+    {
+        if (!m_on) { return; }
+        Rec& r = m_rec[static_cast<std::size_t>(k)];
+        r.done = true; r.step2_cast = cx.step2_cast; r.r = -1;
+        if (AuraTwinVerify()) { RouteSig(cx.s, r.sig); }
+    }
+    void RecordLoop(int k, int r) { if (m_on) { m_rec[static_cast<std::size_t>(k)].r = r; } }
+    // Verify: attempt k (deployed anyway) against its twin.
+    void Check(const Ctx& cx, int k, int twin, int r) const
+    {
+        g_tw_skip.fetch_add(1, std::memory_order_relaxed);
+        const std::vector<long long>& sig = m_rec[static_cast<std::size_t>(k)].sig;   // after ITS deploy
+        const Rec& t = m_rec[static_cast<std::size_t>(twin)];
+        if (sig != t.sig || r != t.r)
+        {
+            g_tw_bad.fetch_add(1, std::memory_order_relaxed);
+            std::fprintf(stderr, "[route-twin] MISMATCH t%d: attempt %d vs twin %d (state %s, r %d vs %d)\n",
+                         cx.s.turn_number, k, twin, sig == t.sig ? "equal" : "DIFFERS", r, t.r);
+        }
+    }
+private:
+    struct Rec { bool done = false; bool step2_cast = false; int r = -1; std::vector<long long> sig; };
+    const std::vector<Attempt>& m_at;
+    bool                        m_on;
+    std::vector<Rec>            m_rec;
+};
 class RepeatPredictor
 {
 public:
@@ -35789,18 +35864,22 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
             if (direct == 2) { direct_state = cx.s; direct_ctx.emplace(cx); }
         }
         RepeatPredictor rp(at, forced < 0 && RepeatPredictOn());
+        AuraTwins       tw(at, forced < 0 && AuraTwinOn());
         for (int attempt = 0; attempt < attempts; ++attempt)
         {
             if (forced >= 0 && attempt != forced) { continue; }
             const Attempt& a = at[static_cast<std::size_t>(attempt)];
             const bool predicted = rp.PredictRepeat(attempt);   // MTG_EDF_ROUTE_REPEAT_PREDICT (see above)
             if (predicted && !RepeatPredictVerify()) { continue; }
+            const int twin = predicted ? -1 : tw.TwinOf(attempt);   // MTG_EDF_ROUTE_AURA_TWIN (see above)
+            if (twin >= 0 && !AuraTwinVerify()) { continue; }
             RestoreCtx(cx, snapshot, saved);
             ArmAttempt(cx, a);
             rp.Arm(cx, attempt);
             const Snap before = TakeSnap(cx);
             DeployPieces(cx, a.auras_first);
             rp.Record(cx, attempt);
+            tw.RecordDeploy(cx, attempt);
             // Nothing deployed: this is the loop that already failed above -- do not pay for it twice.
             const bool nothing = forced < 0 && SameSnap(TakeSnap(cx), before)
                 && cx.s.players[cx.me].lands_played_this_turn
@@ -35816,10 +35895,12 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
                 }
                 continue;
             }
-            if (repeat) { continue; }
+            if (repeat) { if (twin >= 0) { tw.Check(cx, attempt, twin, -1); } continue; }
             cx.protect_blink = true;
             const int r = Loop(cx);
             cx.protect_blink = false;
+            tw.RecordLoop(attempt, r);
+            if (twin >= 0) { tw.Check(cx, attempt, twin, r); continue; }
             if (r == 1 || (forced >= 0 && r != 0))
             {
                 CR_DBG(cx, std::string("board deploy ") + AttemptName(at, attempt) + " kills");
@@ -35844,6 +35925,7 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
     GameState          held_state;
     std::optional<Ctx> held_ctx;
     RepeatPredictor rp(at, forced < 0 && RepeatPredictOn());
+    AuraTwins       tw(at, forced < 0 && AuraTwinOn());
     for (int attempt = 0; attempt < attempts; ++attempt)
     {
         if (forced >= 0 && attempt != forced) { continue; }
@@ -35851,11 +35933,14 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
         const Attempt& a = at[static_cast<std::size_t>(attempt)];
         const bool predicted = rp.PredictRepeat(attempt);   // MTG_EDF_ROUTE_REPEAT_PREDICT (see above)
         if (predicted && !RepeatPredictVerify()) { continue; }
+        const int twin = predicted ? -1 : tw.TwinOf(attempt);   // MTG_EDF_ROUTE_AURA_TWIN (see above)
+        if (twin >= 0 && !AuraTwinVerify()) { continue; }
         if (attempt > 0) { RestoreCtx(cx, snapshot, saved); }
         ArmAttempt(cx, a);
         rp.Arm(cx, attempt);
         const bool deployed = DeployPieces(cx, a.auras_first);
         rp.Record(cx, attempt);
+        tw.RecordDeploy(cx, attempt);
         if (predicted)
         {
             g_rp_pred.fetch_add(1, std::memory_order_relaxed);
@@ -35866,10 +35951,13 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
             }
             continue;
         }
+        if (twin >= 0 && (!deployed || (forced < 0 && AttemptIsRepeat(cx, a)))) { tw.Check(cx, attempt, twin, -1); continue; }
         if (deployed)
         {
             if (forced < 0 && AttemptIsRepeat(cx, a)) { continue; }
             const int r = Loop(cx);
+            tw.RecordLoop(attempt, r);
+            if (twin >= 0) { tw.Check(cx, attempt, twin, r); continue; }
             if (r == 1 || (r != 0 && (forced >= 0 || attempts == 2)))
             { cx.attempt_used = attempt; return r; }
             if (r == 2 && held == 0)
