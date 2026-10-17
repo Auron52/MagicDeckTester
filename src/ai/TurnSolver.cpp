@@ -61443,22 +61443,87 @@ static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<Tu
     if (!s_on) { return; }
     const int active = state.active_player_index;
     bool gate_known = false, gate = false;   // SoulbondOnlyWeakPartners, computed once per call
+    // THE COMBO-PARTNER GATE (Tandem Lookout, NivMizzetCombo 2026-10-17). A soulbond creature whose
+    // payload is the damage->draw grant (soulbond_damage_trigger_draw) wants a Niv (draw_trigger_damage)
+    // as its partner above everything else: that pair IS the draw/ping loop. Without a Niv to pair
+    // with, pairing NOW with whatever enters or is up (a 2/1 Generator Servant, a Goblin Guide) can be
+    // worse than waiting -- the pair locks the Lookout away from a Niv cast on a LATER turn unless that
+    // partner leaves first (CR 702.46b: an UNPAIRED Lookout pairs with the next creature to enter, so a
+    // Niv arriving later pairs on its own). Power says nothing about that, so the weak-partner gate
+    // cannot see it; this one makes "wait" a SEARCHED option in exactly the two shapes where some
+    // pairing would otherwise happen and no Niv is available to take it:
+    //   (a) the plan CASTS the Lookout, no legal partner on the board is a Niv, and there is a partner
+    //       to pair with (one on the board, or another creature this plan casts -- Trigger A / B);
+    //   (b) an UNPAIRED Lookout is already on the battlefield, the plan casts a creature (Trigger B
+    //       would pair them), and no Niv is on our battlefield at all (with one there, the Lookout can
+    //       never pair with it -- Trigger B only offers the ENTERING creature -- so pairing with the
+    //       newcomer forecloses nothing and is pure upside).
+    // A plan that also casts a Niv is excluded for the reason casts_strong is: the decline would refuse
+    // THAT pairing too. Deck-gated (deck_has_draw_ping) -> byte-identical for every other deck.
+    bool board_known = false, niv_up = false, niv_on_bf = false, free_lookout_on_bf = false;
+    int  board_legal = 0;
+    auto scan_board = [&]()
+    {
+        if (board_known) { return; }
+        board_known = true;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& c = state.battlefield[static_cast<std::size_t>(i)];
+            if (c.controller_index != active) { continue; }
+            if (!c.card.IsCreature() && !c.is_animated) { continue; }
+            const CardDefinition* cd = c.def_absent ? nullptr : CardDatabase::Instance().LookupCached(c.card);
+            const bool pings = cd != nullptr && cd->params.draw_trigger_damage > 0;
+            if (pings) { niv_on_bf = true; }
+            if (cd != nullptr && cd->params.soulbond_damage_trigger_draw && SoulbondPairOf(state, i) < 0)
+            { free_lookout_on_bf = true; }
+            // The pairing's own legality filter (try_pair's legal_partners).
+            if (SoulbondNumberIsClaimed(state, active, c.card.m_number)) { continue; }
+            if (SoulbondPartnerIndex(c, state) >= 0) { continue; }
+            ++board_legal;
+            if (pings) { niv_up = true; }
+        }
+    };
     std::vector<TurnSolver::Plan> extra;
     for (const TurnSolver::Plan& p : all)
     {
         if (p.soulbond_decline) { continue; }
         bool casts_soulbond = false, casts_strong = false;
+        bool casts_dd_soulbond = false, casts_ping = false, casts_other = false, casts_creature = false;
         for (const Action& a : p.actions)
         {
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
             if (!d || !d->card.IsCreature()) { continue; }
-            if (d->params.soulbond) { casts_soulbond = true; }
-            else if (d->card.m_power.value_or(0) >= 2) { casts_strong = true; }
+            casts_creature = true;
+            if (d->params.draw_trigger_damage > 0) { casts_ping = true; }
+            if (d->params.soulbond)
+            {
+                if (casts_soulbond) { casts_other = true; }   // a second soulbond body is a partner too
+                casts_soulbond = true;
+                if (d->params.soulbond_damage_trigger_draw) { casts_dd_soulbond = true; }
+            }
+            else
+            {
+                casts_other = true;
+                if (d->card.m_power.value_or(0) >= 2) { casts_strong = true; }
+            }
         }
-        if (!casts_soulbond || casts_strong) { continue; }
-        if (!gate_known) { gate = SoulbondOnlyWeakPartners(state, active, /*min_power=*/2); gate_known = true; }
-        if (!gate) { return; }
+        if (!casts_creature) { continue; }
+        bool want = false;
+        // (A false weak-partner gate used to `return` here: it is board-level, so no later plan could
+        // get its twin either. Folding it into `want` is the same outcome for every plan.)
+        if (casts_soulbond && !casts_strong)
+        {
+            if (!gate_known) { gate = SoulbondOnlyWeakPartners(state, active, /*min_power=*/2); gate_known = true; }
+            want = gate;
+        }
+        if (!want && !casts_ping && state.deck_has_draw_ping)
+        {
+            scan_board();
+            if (casts_dd_soulbond && !niv_up && (board_legal > 0 || casts_other)) { want = true; }   // (a)
+            if (free_lookout_on_bf && !niv_on_bf)                                 { want = true; }   // (b)
+        }
+        if (!want) { continue; }
         TurnSolver::Plan v = p;
         v.soulbond_decline = true;
         v.bp_wave0 = false;   // a clone does not inherit wave 0's fan-out (MTG_BP_AXIS_W0_CLEAR)

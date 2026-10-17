@@ -32913,6 +32913,14 @@ inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
 struct AuraHostKey
 {
     bool lethal     = false;
+    // The NIV LOOP term (NivMizzetCombo 2026-10-17; ranked right after `lethal`): damage->draw Auras
+    // (Curiosity, aura_damage_trigger_draw) placed on a creature that pings on every draw
+    // (draw_trigger_damage, Niv-Mizzet). Such a host turns ANY draw into the draw/ping loop -- the
+    // deck's kill -- where every other host draws at most once per its own combat damage, and a
+    // Curiosity adds no power, so the damage terms below cannot tell the hosts apart (they all tie and
+    // the old order kept whichever host was enumerated first). 0 for every Aura without the grant, so
+    // every other deck's comparison is unchanged.
+    int  combo      = 0;
     int  dmg        = -1;
     int  now        = 0;    // tie-break 1: this turn's share of `dmg` (damage sooner is never worse)
     int  dork_hosts = 0;    // tie-break 2: Auras placed on creature MANA sources (fewer is better)
@@ -32927,6 +32935,7 @@ struct AuraHostKey
 inline bool AuraHostKeyBetter(const AuraHostKey& a, const AuraHostKey& b)
 {
     if (a.lethal != b.lethal) { return a.lethal; }
+    if (a.combo != b.combo) { return a.combo > b.combo; }   // the Niv loop term (see the field)
     if (a.dmg != b.dmg) { return a.dmg > b.dmg; }
     if (a.now != b.now) { return a.now > b.now; }
     if (a.dork_hosts != b.dork_hosts) { return a.dork_hosts < b.dork_hosts; }
@@ -33027,6 +33036,24 @@ inline AuraHostKey AuraHostBoardKey(GameState& t, int controller, bool attack_wi
                                     const std::vector<int>* mana_tapped = nullptr)
 {
     AuraHostKey k;
+    // The Niv loop term: damage->draw Auras on a pinging host (deck-gated: a deck without the loop
+    // never walks this).
+    if (t.deck_has_draw_ping)
+    {
+        for (const Permanent& a : t.battlefield)
+        {
+            if (a.controller_index != controller || a.def_absent || a.aura_attached_to == 0) { continue; }
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+            if (ad == nullptr || !ad->params.aura_damage_trigger_draw) { continue; }
+            for (const Permanent& h : t.battlefield)
+            {
+                if (h.card.m_number != a.aura_attached_to || h.def_absent) { continue; }
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
+                if (hd != nullptr && hd->params.draw_trigger_damage > 0) { ++k.combo; }
+                break;
+            }
+        }
+    }
     const int now = attack_window ? AuraHostKeyTeamDamage(t, controller, true) : 0;
     if (attack_window && now >= t.players[static_cast<std::size_t>(1 - controller)].life)
     {

@@ -1707,11 +1707,25 @@ int DecisionProvider::SoulbondPartner(
     const std::vector<int>& candidate_bf_indices) const
 {
     int best_num = 0, best_pw = -1;
+    // TANDEM LOOKOUT (soulbond_damage_trigger_draw, NivMizzetCombo 2026-10-17): its payload is
+    // "whenever this creature deals damage to an opponent, draw a card", so a partner that pings on
+    // every draw (draw_trigger_damage, Niv-Mizzet) turns the pair into the unbounded draw/ping loop --
+    // every other partner draws at most once per its own combat damage. The Niv ranks first, power
+    // only breaks ties among the rest. Read from the SOURCE's definition, so every other soulbond
+    // creature (Silverblade Paladin) keeps the pure power order -- byte-identical. ORDER only: the
+    // caller's legal set is unchanged and a human still picks from all of it.
+    const CardDefinition* sdef = source.def_absent ? nullptr : CardDatabase::Instance().LookupCached(source.card);
+    const bool combo_pair = sdef != nullptr && sdef->params.soulbond_damage_trigger_draw;
     for (int idx : candidate_bf_indices)
     {
         if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
         const Permanent& c = s.battlefield[idx];
         if (c.card.m_number == source.card.m_number) { continue; }   // "ANOTHER unpaired creature"
+        if (combo_pair)
+        {
+            const CardDefinition* cd = c.def_absent ? nullptr : CardDatabase::Instance().LookupCached(c.card);
+            if (cd != nullptr && cd->params.draw_trigger_damage > 0) { return c.card.m_number; }
+        }
         // Effective power as the board really sees it: printed + until-EOT bonuses, plus lords and
         // anthems, plus the characteristic-defining term. Adeline is printed 0/4 with
         // power_equals_creature_count, so DynamicBasePower is what stops her being valued at 0 --
