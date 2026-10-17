@@ -12142,6 +12142,218 @@
    "parameters": {
     "scry_reveal_land_to_battlefield": true
    }
+  },
+  {
+   "name": "Clifftop Retreat",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control a Mountain or a Plains.\n{T}: Add {R} or {W}. [Check land: enters untapped iff a controlled land has subtype Mountain or Plains (checkland_subtypes, evaluated in the shared LandWouldEnterTapped predicate so enumeration pricing and the real drop agree). Furycalm Snarl has no land types, so it does not enable this land.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W"
+    ],
+    "checkland_subtypes": [
+     "Mountain",
+     "Plains"
+    ]
+   }
+  },
+  {
+   "name": "Furycalm Snarl",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As this land enters, you may reveal a Mountain or Plains card from your hand. If you don't, this land enters tapped.\n{T}: Add {R} or {W}. [Reveal land: etb_untap_reveal_subtypes (Mountain, Plains) -- enters untapped iff a Mountain or Plains card is in hand (LandCanReveal reads the printed subtypes, so a Clifftop Retreat in hand does not count), evaluated in the shared LandWouldEnterTapped predicate so enumeration pricing and the real drop agree. The reveal is taken whenever able (base LandEntersUntapped hook): entering untapped dominates in a goldfish, and the revealed information has no reader (the opponent makes no decisions). Human play: the land_entry decision.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W"
+    ],
+    "etb_untap_reveal_subtypes": [
+     "Mountain",
+     "Plains"
+    ]
+   }
+  },
+  {
+   "name": "Steelshaper's Gift",
+   "mana_cost": "{W}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for an Equipment card, reveal that card, put it into your hand, then shuffle. [tutor_to_hand + tutor_types [Equipment] -- Equipment is a SUBTYPE, matched by CardMatchesTypeName's subtype fallback against the card DEFINITION, so an Artifact Creature -- Equipment Lizard (Lizard Blades) is a legal target exactly as printed; on the Colossus Hammer list the legal set is Colossus Hammer / Loxodon Warhammer / Dragonfire Blade / Lizard Blades. The target is the SEARCHED tutor axis (one plan variant per distinct library Equipment name; the default width 6 covers all four); human play: one cast variant, then the resolution-time tutor dialog over every legal library name (HumanPlayDefersTutorTarget; -1 = fail to find, CR 701.19b). 'Reveal that card' is unobservable vs the passive opponent. The shuffle is PerformTutor's unconditional deterministic ShuffleAfterSearch (CR 701.19). Searches the LIBRARY only. Open the Armory's shape minus the Aura half.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [
+     "Equipment"
+    ],
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Swiftblade Vindicator",
+   "mana_cost": "{R}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [
+    "Vigilance",
+    "Trample",
+    "Double strike"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Double strike (This creature deals both first-strike and regular combat damage.)\nVigilance (Attacking doesn't cause this creature to tap.)\nTrample (This creature can deal excess combat damage to the player or planeswalker it's attacking.) [DOUBLE STRIKE MODELED: the printed Keyword::DoubleStrike is read by CreatureHasDoubleStrike, the single oracle shared by Combat.cpp ResolveCombatDamage (executor + rollout) and TurnSolver's PendingAttackDamage projections; double strike = power x2 in the collapsed combat model, so under Colossus Hammer it deals (1+10) x 2 = 22. The equip-host rankers read the printed keyword off the card DEFINITION for a host still in hand (a hand Card is a bare placeholder whose keyword mask is empty). VIGILANCE MODELED: CreatureHasVigilance reads the printed keyword at the one combat tap site (shared executor + rollout). PARTIAL: TRAMPLE is parsed (Keyword::Trample) but structurally INERT -- no engine site reads it and Combat.cpp has no blocker path, so all of the attacker's power already reaches the player; approved-deferred 2026-08-13 (Loxodon Warhammer / Armadillo Cloak precedent). Colours derive from the pips (R+W), so Dragonfire Blade's per-colour discount equips it for {2}.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Lizard Blades",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Equipment",
+    "Lizard"
+   ],
+   "keywords": [
+    "Double strike",
+    "Reconfigure"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Double strike\nEquipped creature has double strike.\nReconfigure {2} ({2}: Attach to target creature you control; or unattach from a creature. Reconfigure only as a sorcery. While attached, this isn't a creature.) [Modeled: printed double strike while it is a creature; 'Equipped creature has double strike' = equip_grants_double_strike, read by HasDoubleStrikeFromEquipment at every combat/projection/ranker ds site. RECONFIGURE (CR 702.151): the attach half rides Action::Kind::Equip at reconfigure_cost {2} (sorcery-speed; TARGETS, so shroud hosts are illegal; never itself, CR 301.5c) and is NOT an equip ability (2022-02-18 ruling) -- the first-equip {0} waivers (Forge Anew / Kili) and Forge Anew's instant-speed equip never apply and it does not spend equip_activated_this_turn; Puresteel's granted equip {0} does apply (CR 301.5c). Unattach = PermAbilityMode::ReconfigureUnattach ({2}, only while attached). Attached by ANY effect (reconfigure, Sigarda's Aid, Ardenn, Magnetic Theft, Raubahn) it is not a creature and loses its creature subtype (RefreshReconfigureCreatures toggles CardType::Creature on the permanent's Card -- the Heliod precedent), and Equipment attached to it falls off (CR 704.5n); unattached it is a creature again, summoning-sick only if it came under your control this turn (CR 302.6).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_grants_double_strike": true,
+    "reconfigure_cost": "{2}"
+   }
+  },
+  {
+   "name": "Magnetic Theft",
+   "mana_cost": "{R}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Attach target Equipment to target creature. (Control of the Equipment doesn't change.) [attach_target_equipment: a real CAST ({R}, to the graveyard, counts as a spell) whose two targets are a SEARCHED plan axis: one CastFromHand variant per legal (Equipment, creature) pair -- Equipment on Action::attach_equip_id, creature on enchant_target (the solo-trick precedent) -- keyed into the autonomous plan signature (#MT) so the dedup cannot collapse pairs (the devour lesson). Either target may be a same-plan cast still in hand (cast the Hammer, then steal it onto the Duelist); the subset filter requires the co-cast and the cast order puts the Theft after every Equipment and creature. No legal pair -> not castable (CR 601.2c). Resolved by the shared ResolveAttachTargetEquipment in BOTH worlds (EffectHandler + apply_one) through ApplyEquip: equip costs bypassed; NOT an equip ability, so it never consumes a first-equip waiver (Forge Anew / Kili); equip_min_power still binds. Equipment: ours, attached ones move; one that is currently a creature only with reconfigure (CR 301.5c; Lizard Blades 2022-02-18 ruling), and it then stops being a creature; never itself. Creature: ours incl. tokens and summoning-sick ones; shroud / protection-from-everything excluded because it TARGETS (CR 702.18b); ward and hexproof-from-monocolored restrict only opponents. An already-attached pair is not offered (CR 701.3b). Human play: both targets are board clicks at resolution (target decision, loyalty-chooser shape; the searched pair preselected). PROVISIONAL folds: (1) targets collapsed to OUR Equipment and OUR creatures -- the passive opponent holds no Equipment and our Equipment on its creature only removes our bonus (Ardenn precedent); (2) instant timing outside the main phases unmodeled -- the engine casts only in a main phase, and every other window is dominated vs a passive goldfish (no blocks, nothing to respond to, end step / opponent turn = post-combat main, and no first-strike-only creature makes the damage-step split worth anything). The post-combat re-host for next turn is REAL and rides the deck's searched second main when enabled (2c-bis).]",
+   "template": "custom",
+   "parameters": {
+    "attach_target_equipment": true
+   }
+  },
+  {
+   "name": "Forge Anew",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "template": "custom",
+   "oracle_text": "When this enchantment enters, return target Equipment card from your graveyard to the battlefield.\nDuring your turn, you may activate equip abilities any time you could cast an instant.\nYou may pay {0} rather than pay the equip cost of the first equip ability you activate during each of your turns. [CLAUSE 1 (etb_return_equipment_from_gy): targeted with no 'up to', so MANDATORY when our graveyard holds an Equipment card and removed otherwise (CR 603.3d); fired from the shared own-ETB cascade in both worlds. The card enters UNATTACHED with its per-copy number kept and runs the full enter cascade, so Sigarda's Aid's attach-on-enter fires for it. WHICH card is SEARCHED: one cast variant per distinct graveyard Equipment NAME (tutor_target, #A in the plan signature; same-name copies are interchangeable, so the fold is lossless); the unpinned base takes DecisionProvider::GyEquipmentReturnPick (largest equip power bonus, then cheapest equip, then lowest number); human play asks the dig chooser over the graveyard's Equipment only. Lizard Blades is an Equipment card and a legal target (it returns as a creature). A returned piece is a NEW equip option mid-phase, so the phase re-solves (breakpoint site 10, the Courser route). Graveyard reader: GyR_EquipmentNames. In this list an Equipment reaches the graveyard only through the cleanup discard. CLAUSE 2 PROVISIONAL DEFERRAL (instant-speed equip) -- WHY inert: the engine enumerates equips only in a main phase and resolves double strike as one damage event; every pre-combat instant window has main 1's mana and board, and a free attach followed by an equip is never better than the equip in main 1 followed by the attach; between damage steps a +P piece adds P per step its holder deals damage, so moving it off a double striker ties at best and moving it off a lone-equipped Kor Duelist strips its double strike; a strict gain needs a first-strike-only holder and this list has none. Residual: moving Loxodon Warhammer's lifelink between steps changes life, never damage, which reaches only Speaker of the Heavens' 7-life Angel. CLAUSE 3 (first_equip_free): an ALTERNATIVE cost (replaces the whole equip cost; not a reduction), using Kili's machinery: Player::equip_activated_this_turn (reset at both untap sites); the per-plan MAX-COST waiver, a sound dominance fold (equip costs here are pure generic and the attaches are fixed, so waiving the most expensive minimises mana); credited at the affordability gate AND the scalar mana bound; consumed at both payment sites via StoriedWaivedCost. Also credited when the SAME plan casts Forge Anew, because casts resolve before the trailing equip pass in both worlds. Any number of waiver sources (a second Forge Anew, Kili) still give ONE free equip: they all name the same first activation. Neither waived nor consuming the waiver: Lizard Blades' reconfigure (2023-06-16 ruling) and the Sigarda's Aid / Ardenn / Raubahn / Magnetic Theft attaches. The 'may' is auto-taken ({0} instead of N with an identical board is never worse vs a passive opponent), so there is no viewer decision.]",
+   "parameters": {
+    "etb_return_equipment_from_gy": true,
+    "first_equip_free": true
+   }
+  },
+  {
+   "name": "Raubahn, Bull of Ala Mhigo",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Warrior"
+   ],
+   "keywords": [
+    "Ward"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Ward—Pay life equal to Raubahn's power.\nWhenever Raubahn attacks, attach up to one target Equipment you control to target attacking creature. [attack_attach_equipment: fired by FireAttackAttachEquipment at declare-attackers in BOTH worlds (GameEngine::CombatPhase + the rollout's SimulateCombat, immediately before FireAttackDigAttach), only for a DECLARED Raubahn (CR 508), resolving before damage, so the moved Equipment pumps THIS combat; the attack PROJECTION prices it through PendingAttackDamage's copy-and-diff addend CountAttackAttachPump (the Dwalin/Bruna lesson). WHICH Equipment and WHICH attacker is a SEARCHED combat pin (Plan::attack_attach_choice -> GameState::scripted_attack_attach, the bruna_gather route): the engine builds every rules-legal (Equipment, attacking creature) pair plus 'attach nothing' (up to one), folding only no-ops (already attached there; an illegal attach -- 2025-06-06 ruling, CR 701.3b; an Equipment onto itself, CR 301.5c) and interchangeable copies; provider AttackAttachCandidates ORDERS it (front = this combat's damage max, ties to declining) and is the only narrower; past the horizon and in the d0 runner the front is taken. The trigger TARGETS: a shroud attacker is excluded (CR 702.18b). An Equipment attached elsewhere MOVES; attach is not Equip (equip costs bypassed, Forge Anew's free first equip not consumed), equip_min_power still binds (ApplyEquip). Raubahn may target himself. Lizard Blades (Equipment creature with reconfigure) is a legal target: once attached it is not a creature, is removed from combat (CR 506.4) and sheds its own attachments. Human play: two attach_host board-clicks -- the Equipment (-1 = none, always asked) then the attacking creature (provider pick preselected). [PARTIAL: Ward -- PROVISIONAL deferral. WHY inert: ward triggers only when Raubahn becomes the target of a spell or ability an OPPONENT controls (CR 702.21a); the goldfish opponent casts and activates nothing, and our own Path to Exile / Magnetic Theft / this trigger never trigger it. Kept as the inert Keyword::Ward tag.] Legend rule engine-enforced. Simultaneous declare-attackers triggers resolve in battlefield order (approved collapse; unobservable on this list).]",
+   "template": "custom",
+   "parameters": {
+    "attack_attach_equipment": true
+   }
+  },
+  {
+   "name": "Speaker of the Heavens",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Cleric"
+   ],
+   "keywords": [
+    "Vigilance",
+    "Lifelink"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Vigilance, lifelink (Attacking doesn't cause this creature to tap. Damage dealt by this creature also causes you to gain that much life.)\n{T}: Create a 4/4 white Angel creature token with flying. Activate only if you have at least 7 life more than your starting life total and only as a sorcery. [The ability rides Sliver Hive's tap_token_* family (Action::Kind::TapForTokenPay, verb taptoken=) with an ALL-ZERO cost: the {T} is the whole cost. Summoning sickness applies (CanTapNow at enumeration and in both applies). The life gate is RELATIVE: life >= gamesetup::StartingLife() + tap_token_min_life_above_start (7), so a 2HG job (team life 30) needs 37, per the 2020-06-23 ruling. It is checked at enumeration and re-checked before tapping, in the executor and the rollout alike. 'Only as a sorcery' holds by construction (CollectActions runs only in main phases). The token is a 4/4 white Angel with Flying (inert: nothing blocks; populated for faithfulness) and enters summoning sick. Vigilance and lifelink are printed keywords read by the shared combat core. A double striker's lifelink is ONE gain of 2xP rather than two events of P: same life total, which is all this card reads; event-count inert because the deck has no 'whenever you gain life' card. Life is gained IN COMBAT, so the useful window is the post-combat main: Speaker attacks (vigilance keeps it untapped) and then taps, and the Angel can attack next turn. A main-1 activation forfeits Speaker's own attack and gives a token that is just as summoning sick. See the deck provider's restricted second main.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_token_cost": "{0}",
+    "tap_token_power": 4,
+    "tap_token_toughness": 4,
+    "tap_token_subtypes": [
+     "Angel"
+    ],
+    "tap_token_color": "W",
+    "tap_token_keywords": [
+     "Flying"
+    ],
+    "tap_token_min_life_above_start": 7
+   }
+  },
+  {
+   "name": "Path to Exile",
+   "mana_cost": "{W}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle. [Removal (damage:1 = exile branch) + land_search_for_removal_controller: the EXILED creature's CONTROLLER searches through the shared PerformLandSearch (1 basic, tapped, optional; no shuffle when declined -- ruling). SELF-TARGET IS SEARCHED: one cast variant per own-creature class (enchant_target), the basic rides land_search_pins; the human picks the target by board click (target) and the basic via tutor_etb (-1 declines). Exiling equipment's host unattaches it (CR 301.5c). PROVISIONAL deferrals: (1) the opponent's 'may search' is a no-op -- the passive opponent has no library unless the deck reaches it (opponentdeck::Deal), never taps a land, and nothing here reads opponent lands; (2) instant timing -- casts are enumerated only in a main phase with an empty stack, and every later window equals main 2 vs a passive opponent; (3) the autonomous search always searches (a basic is never worse; land_search_optional precedent). Removing an opponent spawn has no payoff (spawns never attack/block).]",
+   "template": "removal",
+   "parameters": {
+    "damage": 1,
+    "targeting": "creature",
+    "allow_self_target": true,
+    "land_search_for_removal_controller": true,
+    "land_search_count": 1,
+    "land_search_basic_only": true,
+    "land_search_tapped": true,
+    "land_search_optional": true
+   }
   }
  ]
 }

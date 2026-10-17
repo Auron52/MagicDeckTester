@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp>Fri Oct 16 18:59:48 2026</lastLoadedTimestamp>
+    <deckname></deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="1" name="Ardenn, Intrepid Archaeologist"/>
+        <card number="4" name="Swiftblade Vindicator"/>
+        <card number="1" name="Raubahn, Bull of Ala Mhigo"/>
+        <card number="4" name="Kor Duelist"/>
+        <card number="1" name="Forge Anew"/>
+        <card number="4" name="Sigarda's Aid"/>
+        <card number="2" name="Loxodon Warhammer"/>
+        <card number="4" name="Colossus Hammer"/>
+        <card number="1" name="Dragonfire Blade"/>
+        <card number="4" name="Magnetic Theft"/>
+        <card number="2" name="Path to Exile"/>
+        <card number="4" name="Steelshaper's Gift"/>
+        <card number="3" name="Open the Armory"/>
+        <card number="3" name="Clifftop Retreat"/>
+        <card number="4" name="Furycalm Snarl"/>
+        <card number="5" name="Mountain"/>
+        <card number="9" name="Plains"/>
+        <card number="3" name="Speaker of the Heavens"/>
+        <card number="1" name="Lizard Blades"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Adelbert Steiner"/>
+        <card number="1" name="Beloved Princess"/>
+        <card number="1" name="Danitha Capashen, Paragon"/>
+        <card number="1" name="Outlaw Medic"/>
+        <card number="1" name="Giott, King of the Dwarves"/>
+        <card number="1" name="Rabbit Battery"/>
+    </zone>
+</cockatrice_deck>

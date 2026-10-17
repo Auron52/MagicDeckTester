@@ -18837,6 +18837,7 @@ namespace
     const GenericProvider        g_generic;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
+    const ColossusHammerProvider g_colossus_hammer;
     const BreachingDragonstormProvider g_breaching_dragonstorm;
     const KnightsProvider        g_knights;
     const WhiteKnightsProvider   g_white_knights;
@@ -20786,6 +20787,16 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // archetype-neutral misroute class). Signature = Bruna, Light of Alabaster's own
     // attack_gather_auras -- carried by no other card, and the card IS the archetype.
     bool bruna = false;
+    // COLOSSUS HAMMER (R/W equip-cheat voltron, 2026-10-17). MUST return ABOVE `equipment` (Kor
+    // Duelist's double_strike_while_equipped, Sigarda's Aid's attach_equipment_on_etb and Ardenn's
+    // begin_combat_attach_all each set it alone) and ABOVE `anti` (Steelshaper's Gift's and Open the
+    // Armory's tutor_to_hand). Signature = the three attach routes new in this onboarding, OR'd across
+    // THREE different cards (Raubahn, Magnetic Theft x4, Lizard Blades) and carried by no other card in
+    // cards.json, so one deckbuilding swap cannot lose the routing. Deliberately EXCLUDES Forge Anew's
+    // first-equip waiver and Speaker of the Heavens' token ability: both are white cards a mono-white
+    // equipment or lifegain-Angels list would plausibly add, which is the misroute class this block
+    // keeps recording.
+    bool colossus = false;
     // SOLDIERS (W/x Human Soldiers on Aether Vial, 2026-10-04). MUST return ABOVE `goblin`
     // (Ranger-Captain of Eos / Jirina / King Darien carry sac_creature_outlet) and ABOVE `anti`
     // (Recruiter of the Guard / Ranger-Captain carry tutor_to_hand) -- the archetype-neutral
@@ -20847,6 +20858,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardParams& p = def->params;
         if (p.attack_gather_auras) { bruna = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
+        if (p.attack_attach_equipment || p.attach_target_equipment || p.reconfigure_cost.has_value())
+        { colossus = true; }
 
         if (p.landfall_creates_tokens > 0 || p.landfall_counters_each > 0
             || p.landfall_target_counters > 0 || p.landfall_quest_counters > 0)
@@ -21299,6 +21312,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Galadriel: its signature is carried by no other card, so the position is free.
     if (galadriel)   { return g_galadriel; }
     if (bruna)       { return g_bruna; }
+    // Colossus Hammer: above `equipment` and `anti` (see the flag). Its signature is carried by no
+    // other deck, so the position is free.
+    if (colossus)    { return g_colossus_hammer; }
     if (prevent_damage) { return g_prevent_damage; }
     // SelesnyaLifegain ABOVE BOTH `stompy` and `critter`, and that position is load-bearing twice
     // over -- below EITHER one this deck would silently ride another deck's judgement hooks. It was
