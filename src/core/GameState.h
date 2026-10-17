@@ -689,6 +689,26 @@ struct GameState
     // Galadriel is cast starts a reveal chain, one played before it does not (LandOrderMatters).
     // Stamped from the param, mainboard + sideboard, Garth holding it open. DEFAULT TRUE == walk.
     bool                     deck_has_scry_watcher           = true;  // Galadriel of Lothlorien
+    // AND 2026-10-17 -- the NIV-MIZZET DRAW/DAMAGE LOOP (CardParams::draw_trigger_damage,
+    // cast_trigger_instant_sorcery_draw, aura_damage_trigger_draw, soulbond_damage_trigger_draw).
+    // Gates ResolveDrawTriggers' flush (called after every draw-producing resolution in both worlds)
+    // and OnCreatureDealtDamageToOpponent's combat hook, so every deck without such a card pays one
+    // bool test per flush point. Stamped from the four params, mainboard + sideboard, Garth holding it
+    // open, so a clear bit PROVES no permanent can carry either trigger (dead-code elimination, no
+    // lever). DEFAULT TRUE == run the flush (an unstamped GameState -- the scenario harness, a unit
+    // test -- keeps every trigger), the only-err-true rule.
+    bool                     deck_has_draw_ping              = true;
+    // The draw-trigger WATERMARK: how many of the ACTIVE player's cards_drawn_this_turn have already
+    // had their "whenever you draw" triggers resolved. ResolveDrawTriggers processes exactly the
+    // draws in (draw_trigger_mark, cards_drawn_this_turn] and advances it, which makes every flush
+    // IDEMPOTENT -- a nested flush (an activation inside a resolution, a cascade apply inside an
+    // apply) can never double-ping, and a flush site that was missed only DELAYS the triggers to the
+    // next flush, it cannot drop them. Reset with cards_drawn_this_turn at BOTH untap sites (lockstep).
+    // TRANSIENT: it equals cards_drawn_this_turn at every point a state key is built (every apply /
+    // resolution boundary flushes), and cards_drawn_this_turn is already folded, so it needs no fold of
+    // its own; it stays 0 forever on a deck that is stamped false. int16_t in the bool padding before
+    // casts_remaining_this_turn, so sizeof(GameState) does not move (measured).
+    std::int16_t             draw_trigger_mark               = 0;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

@@ -279,7 +279,12 @@ void GameEngine::UntapStep(GameState& state)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;
+    // Backstop for the Niv loop's watermark, which resets just below: a draw no earlier flush saw
+    // (none exists today) still resolves its triggers instead of being forgotten. Lockstep w/ the
+    // rollout's reset. No-op without the loop.
+    if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
+    state.draw_trigger_mark      = 0;   // ...and the Niv draw-trigger watermark with it (same lockstep)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
     ap.equip_activated_this_turn = false;         // Kili's waiver is per TURN (same lockstep)
@@ -537,6 +542,9 @@ void GameEngine::DrawStep(GameState& state)
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::DrawStep);
+    // The Niv draw/damage loop: the draw step's draw pings here, in the draw step, before the Saga
+    // lore counter below (lockstep with the rollout's draw step). No-op without the loop.
+    if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
     // SAGA (CR 714.2b): "after your draw step, add a lore counter" -- each Saga we control gains
     // one and the chapter it reaches resolves, the final one sacrificing it (CR 714.4). Lockstep
     // with the rollout's identical call after its draw. Param-gated -> byte-identical for every

@@ -236,6 +236,20 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
             && heurarm::Flag(heurarm::SL_SECOND_MAIN, s_sl_m2))
         { return true; }
 
+        //   * CURIOSITY / TANDEM LOOKOUT (combat-damage draw; NivMizzetCombo 2026-10-17): "whenever
+        //     <creature> deals damage to an opponent, (you may) draw a card" fires off COMBAT damage
+        //     too, so a connecting host draws in the combat-damage step -- a resource GENERATED DURING
+        //     COMBAT (2c-bis), castable only in a post-combat main (a drawn Curiosity onto a Niv plus a
+        //     cantrip is a same-turn kill). Without the second main that line is unfindable at ANY
+        //     budget, which is why this is DEFAULT ON (the completeness rule) rather than a measured
+        //     adoption. Its cost is NOT measured yet: MTG_NIV_SECOND_MAIN=0 is the A/B hatch (the
+        //     SelesnyaLifegain precedent above measured a deck-wide m2 at 2.15x for 0.000 turns), and
+        //     the cheaper shape -- a provider-owned per-turn main 2 opened only when combat DREW
+        //     (DecisionProvider::RestrictedSecondMainLive, the Giada shape) -- is the deck's call.
+        static const bool s_niv_m2 = EnvOn("MTG_NIV_SECOND_MAIN", true);   // DEFAULT ON; =0 disables
+        if (s_niv_m2 && (def->params.aura_damage_trigger_draw || def->params.soulbond_damage_trigger_draw))
+        { return true; }
+
         //   * MAELSTROM ARCHANGEL (combat-damage free cast): connecting banks a free cast
         //     (free_casts_available) that is only spendable in the post-combat main -- without the
         //     second main the resource silently evaporates each turn.
@@ -1304,6 +1318,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool first_equip_waiver = false;
         // Raubahn's attack attach: the axis fan-out + projection scans (GameState::deck_has_attack_attach).
         bool attack_attach = false;
+        // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
+        // shared hooks (ResolveDrawTriggers, OnCreatureDealtDamageToOpponent) test.
+        bool draw_ping = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1341,6 +1358,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.first_equip_free || d->params.storied_first_equip_free)
                 { first_equip_waiver = true; }
                 if (d->params.attack_attach_equipment)        { attack_attach = true; }
+                if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
+                    || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
+                { draw_ping = true; }
                 if (d->params.storied_permanents > 0)      { storied = true; }
                 // HasEndStepTokenTrigger, not `endstep_lifegain_tokens > 0`: The Mycotyrant's count
                 // is dynamic (endstep_tokens_equal_descend) so it leaves that field at 0, and this
@@ -1398,6 +1418,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no Raubahn can exist, so the attack-attach axis
         // scan and the projection's CountAttackAttachPump scan are provably empty.
         state.deck_has_attack_attach       = garth || attack_attach;
+        // Same reasoning, no lever: a clear bit proves no permanent can carry a draw trigger or a
+        // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
+        state.deck_has_draw_ping           = garth || draw_ping;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

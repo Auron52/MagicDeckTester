@@ -2115,6 +2115,22 @@ inline int DoublerShift(const GameState& state, int controller, bool for_tokens)
 // The shared draw primitive; defined further down but needed by the sac-outlet draw payload
 // (Psychotrope Thallid), which resolves above it.
 inline void TrickDraw(GameState& state, int controller, int n);
+// The Niv-Mizzet draw/damage loop (defined beside TrickDraw; see the block there). Forward-declared
+// because FireOnCastTriggers (Niv-Mizzet, Parun's cast-trigger draw) and the activation helpers
+// above that block flush it.
+inline void ResolveDrawTriggers(GameState& state);
+// RAII form of the flush: declared at the top of a shared resolution helper, it resolves every
+// pending draw trigger on EVERY exit path -- i.e. after the helper's whole effect has finished, which
+// is when CR 603.3 puts those triggers on the stack. One bool test for a deck stamped without the
+// loop (GameState::deck_has_draw_ping).
+struct DrawTriggerFlushScope
+{
+    GameState& s;
+    explicit DrawTriggerFlushScope(GameState& st) : s(st) {}
+    ~DrawTriggerFlushScope() { if (s.deck_has_draw_ping) { ResolveDrawTriggers(s); } }
+    DrawTriggerFlushScope(const DrawTriggerFlushScope&)            = delete;
+    DrawTriggerFlushScope& operator=(const DrawTriggerFlushScope&) = delete;
+};
 
 // Add N +1/+1 counters to a permanent and refresh the counter-threshold keywords. The merge into an
 // existing +1/+1 entry is now CounterList::Add's job for EVERY put (canonical storage, see
@@ -4121,6 +4137,17 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
         // nothing is auto-resolved here. NOTE the subtype test is an inline loop rather than a
         // call to CardHasSubtype: that helper is defined BELOW this function, which is why the
         // cast_trigger_creates_tokens clause above open-codes the same walk.
+        // Niv-Mizzet, Parun: "Whenever a player casts an instant or sorcery spell, you draw a card."
+        // ANY player's cast (the passive opponent casts nothing, so only ours ever reach here), drawn by
+        // the PERMANENT's controller. Mandatory: TrickDraw flags a draw from an empty library. The pings
+        // that draw starts resolve at the flush at the end of this function -- ABOVE the spell, which
+        // has not resolved yet (CR 603.3). A copy is never cast, so it never reaches here (CR 707.10).
+        if (def->params.cast_trigger_instant_sorcery_draw > 0
+            && (cast_def.card.IsInstant() || cast_def.card.IsSorcery()))
+        {
+            TrickDraw(state, p.controller_index, def->params.cast_trigger_instant_sorcery_draw);
+        }
+
         bool sram_subtype_hit = false;
         if (!def->params.draw_on_cast_subtypes.empty() && p.controller_index == active)
         {
@@ -4152,6 +4179,10 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
     { CreateTokens(state, active, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
     // After the loop: CreateClueTokens push_backs onto the battlefield (would invalidate `p`).
     if (clues > 0) { CreateClueTokens(state, active, clues); }
+    // Every cast trigger above has resolved (they sit above the spell); the draw triggers of any card
+    // one of them drew (Parun, Kor Spiritdancer, Sram) resolve now, still before the spell -- the Niv
+    // loop. One bool test for every deck without it. Shared by every cast site in both worlds.
+    if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
 }
 
 // Returns the total {power_bonus, toughness_bonus} granted to `creature` by all
@@ -9917,6 +9948,7 @@ inline int GarthNameBit(const std::string& name)
 inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
                                const std::string& name, int braingeyser_x)
 {
+    DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     const int bit = GarthNameBit(name);
     if (bit < 0) { return; }
     Permanent* garth = nullptr;
@@ -10073,6 +10105,7 @@ inline std::string LoyaltyActionLabel(const std::string& walker_name, int abilit
 inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index,
                                 int elk_target = 0)
 {
+    DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     int wi = -1;
     const CardDefinition* d = nullptr;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -14060,6 +14093,7 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
 inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id,
                                    const std::string& any_color_float = std::string())
 {
+    DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     const CardParams* op = nullptr;
     for (const Permanent& p : state.battlefield)
     {
@@ -15181,6 +15215,7 @@ inline void ApplyBattleCry(GameState& state, int controller,
 inline void ApplyAttackDrawTriggers(GameState& state, int controller,
                                     const std::vector<int>& attacker_indices)
 {
+    DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
     Player& pl = state.players[controller];
@@ -18125,6 +18160,233 @@ inline void TrickDraw(GameState& state, int controller, int n)
     {
         for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
         { g_reveal_logger->LogDraw(pl.hand[hi].m_number, pl.hand[hi].m_name); }
+    }
+}
+
+// ============================================================================
+// NIV-MIZZET DRAW/DAMAGE LOOP (NivMizzetCombo, 2026-10-17)
+// ============================================================================
+// Two trigger families make the combo, and both resolve HERE, in one iterative loop shared by the
+// executor and the rollout (lockstep by construction -- neither world has a private copy):
+//
+//   DRAW -> DAMAGE   "Whenever you draw a card, Niv-Mizzet deals 1 damage to any target"
+//                    (CardParams::draw_trigger_damage). One trigger per card drawn, per such
+//                    permanent: two Nivs = two pings per draw.
+//   DAMAGE -> DRAW   "Whenever <creature> deals damage to an opponent, (you may) draw a card" --
+//                    granted by Curiosity to its host (aura_damage_trigger_draw, "you may") and by
+//                    a paired Tandem Lookout to BOTH halves of its pair (soulbond_damage_trigger_draw,
+//                    mandatory). One trigger per damage EVENT, never per point: a 1-damage ping and a
+//                    5-damage swing each draw once. Curiosity + Lookout on one Niv = two draws per ping.
+//
+// WHEN the draw triggers resolve. CR 603.3: a trigger is put on the stack the next time a player
+// would receive priority, so the triggers of draws made DURING a resolution wait until that
+// resolution has finished -- a Brainstorm puts its two cards back, a Ponder reorders, Fists of Flame
+// counts its pump, and only then do the pings resolve. The engine resolves triggers immediately, so
+// the flush is placed AFTER each draw-producing resolution rather than inside the draw primitive:
+// end of EffectHandler::Resolve and of apply_one (the two spell-resolution sites), end of
+// FireOnCastTriggers (Parun's cast trigger resolves above its spell), the shared activation helpers
+// (DrawTriggerFlushScope), both draw steps, the combat-damage hook below, every breakpoint decision
+// point (bp_searched_plan / exec_section_reset -- so a re-solve plans on the post-ping hand), and the
+// end of every plan application. The WATERMARK (GameState::draw_trigger_mark) makes all of these
+// idempotent: each flush resolves exactly the draws since the last one, so nesting cannot double-ping
+// and a missed site only delays a trigger to the next flush, never drops it.
+//
+// ITERATIVE, NOT RECURSIVE. A ping that draws appends to cards_drawn_this_turn; the watermark loop
+// simply keeps consuming until it catches up. No recursion, no depth limit to hit.
+//
+// TERMINATION / THE KILL. The loop stops the instant OpponentHasLost() -- the game is over at that
+// state-based-action check, so no later trigger resolves -- which is what keeps Lookout's MANDATORY
+// draws from decking us after the kill. A mandatory draw from an empty library sets
+// player_lost_on_draw (CR 704.5b) and also stops the loop (we lose at the same SBA check, before any
+// remaining ping resolves). A flush that starts with player_lost_on_draw already set resolves nothing.
+//
+// SOUND FOLDS (stated per the no-greedy rule; none is a search decision):
+//   * "any target" -> the opponent's FACE. In the goldfish no other target can matter, and hitting the
+//     face is exactly what lets a Curiosity / Lookout on the pinging Niv fire (damage TO AN OPPONENT).
+//     Precedent: etb_damage_any, Pashalik Mons, Mana Cannons. NOT asked of a human (disclosed).
+//     Single-target, so x1 regardless of gamesetup::OpponentHeads() (the etb_damage_any rule).
+//   * Simultaneous-trigger ORDER: the controller orders them, and every order deals the same damage
+//     and draws the same cards until the kill or the library runs out; MANDATORY draws are resolved
+//     before optional ones within one event, the order that never makes a "may" draw take the card a
+//     "must" draw then misses.
+//   * Curiosity's "you MAY draw" -> draw iff the library is non-empty. PROVISIONAL (user sign-off
+//     owed). Drawing is weakly dominant whenever it cannot deck us: it adds a card and, on a Niv,
+//     another ping. Declining only ever matters near library exhaustion with a live loop that cannot
+//     kill (library smaller than the remaining life): keeping cards back could buy turns. Declining
+//     from an EMPTY library is forced (a draw would lose).
+//
+// NOT MODELLED (disclosed): non-combat damage from a creature OTHER than a draw-trigger permanent
+// (an ETB ping by a Curiosity host) does not fire the damage->draw grants -- the engine has no damage
+// source tracking there and no such creature exists in any list running these cards. The armed
+// damage-event model (dmg_events_armed) is not consulted, like etb_damage_any.
+
+// Draws owed by ONE damage event dealt to an opponent by the creature at battlefield index `src`:
+// Curiosity copies attached to it (optional, the AURA's controller draws) and live Lookout grants on
+// it (mandatory, the CREATURE's controller draws -- the grant is the creature's own ability).
+struct DamageDrawsOwed
+{
+    int may = 0, may_ctrl = 0;
+    int must = 0, must_ctrl = 0;
+};
+
+// The other half of `idx`'s live soulbond pair from EITHER side, or -1. Permanent::paired_with lives
+// on the soulbond side only (SoulbondPartnerIndex), so the partner side needs the scan.
+inline int SoulbondPairOf(const GameState& state, int idx)
+{
+    const Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
+    const int direct = SoulbondPartnerIndex(p, state);
+    if (direct >= 0) { return direct; }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (i == idx) { continue; }
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.paired_with != p.card.m_number || q.paired_with == 0) { continue; }
+        if (SoulbondPartnerIndex(q, state) == idx) { return i; }
+    }
+    return -1;
+}
+
+inline DamageDrawsOwed DamageDrawsOwedBy(const GameState& state, int src)
+{
+    DamageDrawsOwed out;
+    if (src < 0 || src >= static_cast<int>(state.battlefield.size())) { return out; }
+    const Permanent& host = state.battlefield[static_cast<std::size_t>(src)];
+    out.may_ctrl = out.must_ctrl = host.controller_index;
+    const int host_num = host.card.m_number;
+    // Curiosity: every Aura with the grant attached to THIS creature (aura_attached_to is the host's
+    // per-copy m_number; the orphan sweep removes an Aura whose host left, so a match is live).
+    if (host_num != 0)
+    {
+        for (const Permanent& a : state.battlefield)
+        {
+            if (a.aura_attached_to != host_num || a.def_absent) { continue; }
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+            if (ad == nullptr || !ad->params.aura_damage_trigger_draw) { continue; }
+            ++out.may;
+            out.may_ctrl = a.controller_index;
+        }
+    }
+    // Tandem Lookout: one instance per Lookout in the live pair this creature is half of -- the
+    // creature itself if it is a Lookout, and its partner if THAT is one (two Lookouts paired together
+    // each grant both, so each draws twice).
+    if (host.card.IsCreature() || host.is_animated)
+    {
+        const int partner = SoulbondPairOf(state, src);
+        if (partner >= 0)
+        {
+            auto grants = [&state](int i)
+            {
+                const Permanent& g = state.battlefield[static_cast<std::size_t>(i)];
+                if (g.def_absent) { return false; }
+                const CardDefinition* gd = CardDatabase::Instance().LookupCached(g.card);
+                return gd != nullptr && gd->params.soulbond_damage_trigger_draw;
+            };
+            if (grants(src))     { ++out.must; }
+            if (grants(partner)) { ++out.must; }
+        }
+    }
+    return out;
+}
+
+// Resolve the draws ONE damage event owes (see DamageDrawsOwedBy). Mandatory first (the fold above).
+// Each draw goes through TrickDraw -- a real CR-121 draw: counts cards_drawn_this_turn (so the
+// watermark loop picks it up), feeds the viewer draw sink and the saved log, and flags a draw from an
+// empty library. Returns false once the game is over for us (decked).
+inline bool ResolveDamageDraws(GameState& state, int src)
+{
+    const DamageDrawsOwed owed = DamageDrawsOwedBy(state, src);
+    for (int k = 0; k < owed.must; ++k)
+    {
+        TrickDraw(state, owed.must_ctrl, 1);
+        if (state.player_lost_on_draw) { return false; }
+    }
+    for (int k = 0; k < owed.may; ++k)
+    {
+        if (state.players[owed.may_ctrl].library.empty()) { break; }   // "may": decline, never deck
+        TrickDraw(state, owed.may_ctrl, 1);
+    }
+    return true;
+}
+
+// THE FLUSH. Resolves every draw trigger owed for the active player's draws since the watermark,
+// including the draws the pings themselves cause, until the watermark catches up, the opponent has
+// lost, or we have. Only the ACTIVE player's draws are tracked: the passive opponent never controls a
+// draw-trigger permanent (its permanents are scheduled spawns and gifted tokens), so its draws can
+// trigger nothing of ours ("whenever YOU draw") -- a phase-2 opponent would need a per-player mark.
+inline void ResolveDrawTriggers(GameState& state)
+{
+    if (!state.deck_has_draw_ping) { return; }
+    const int me = state.active_player_index;
+    Player&   pl = state.players[me];
+    auto catch_up = [&state, &pl]()
+    { state.draw_trigger_mark = static_cast<std::int16_t>(std::min(pl.cards_drawn_this_turn, 32767)); };
+    if (pl.cards_drawn_this_turn <= state.draw_trigger_mark) { catch_up(); return; }
+    // The draw-trigger permanents, battlefield order (the house CR 603.3b convention). Drawing never
+    // adds or removes a permanent, so these indices stay valid for the whole loop. A fixed array: both
+    // Nivs are legendary, so the legend rule keeps at most one per NAME -- 8 is far above any count a
+    // board can reach, and no allocation per flush.
+    int ping_idx[8];
+    int n_ping = 0;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()) && n_ping < 8; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.draw_trigger_damage > 0) { ping_idx[n_ping++] = i; }
+    }
+    if (n_ping == 0) { catch_up(); return; }
+    const int opp = 1 - me;
+    const int life_before = state.players[opp].life;
+    int pings = 0;
+    bool over = OpponentHasLost(state) || state.player_lost_on_draw;
+    while (!over && state.draw_trigger_mark < pl.cards_drawn_this_turn)
+    {
+        ++state.draw_trigger_mark;   // this draw's triggers resolve now
+        for (int k = 0; k < n_ping && !over; ++k)
+        {
+            const int idx = ping_idx[k];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+            state.players[opp].life -= d->params.draw_trigger_damage;   // "any target" -> face (fold)
+            state.opponent_lost_life_this_turn = true;
+            ++pings;
+            if (OpponentHasLost(state)) { over = true; break; }
+            // The ping is damage dealt TO AN OPPONENT by this creature: Curiosity / Lookout on it draw.
+            if (!ResolveDamageDraws(state, idx)) { over = true; }
+        }
+    }
+    catch_up();
+    // Play-viewer history: one line per flush (a 20-ping loop would otherwise be 20 lines of the same
+    // text). The draws themselves reach the viewer through TrickDraw's draw sink. Nulled in every
+    // search / rollout scope (RevealLogPause) -> autonomous play is byte-identical.
+    if (pings > 0 && g_play_event_sink != nullptr && !g_tap_speculating)
+    {
+        std::string who;
+        for (int k = 0; k < n_ping; ++k)
+        {
+            if (k > 0) { who += " + "; }
+            who += state.battlefield[static_cast<std::size_t>(ping_idx[k])].card.m_name.str();
+        }
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xF0\x9F\x94\xA5 " + who + " (whenever you draw): " + std::to_string(pings)
+                      + " ping" + (pings == 1 ? "" : "s") + " to opponent ("
+                      + std::to_string(life_before) + "\xE2\x86\x92"
+                      + std::to_string(state.players[opp].life) + ")"
+                      + (OpponentHasLost(state) ? " -- lethal" : ""));
+    }
+}
+
+// THE DAMAGE HOOK for a damage event that is not a draw-trigger ping (combat damage today): the
+// creature at battlefield index `src` dealt damage to an opponent `events` times (2 for a double
+// striker's two damage steps). Resolves the Curiosity / Lookout draws it owes, each followed by the
+// ping loop those draws start. Shared by both worlds through ResolveCombatDamage.
+inline void OnCreatureDealtDamageToOpponent(GameState& state, int src, int events)
+{
+    if (!state.deck_has_draw_ping) { return; }
+    for (int e = 0; e < events; ++e)
+    {
+        if (OpponentHasLost(state) || state.player_lost_on_draw) { return; }
+        if (!ResolveDamageDraws(state, src)) { return; }
+        ResolveDrawTriggers(state);
     }
 }
 
@@ -21668,6 +21930,7 @@ bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creatu
 inline bool PingAllSelfSafe(const GameState& state, int controller, const CardDefinition& def);   // below
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
 {
+    DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     int idx = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {

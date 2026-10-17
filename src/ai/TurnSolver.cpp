@@ -43921,6 +43921,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             int caller_line)
 {
     g_apply_caller_line = caller_line;
+    // The Niv draw/damage loop: whatever this apply drew outside a flushed resolution (a land's ETB
+    // draw) pings before the plan's outcome is read. Executor twin: AIEngine::TakeTurn's scope.
+    DrawTriggerFlushScope _dtf_apply(state);
     struct ApdDepth { ApdDepth() { ++g_apd_depth; } ~ApdDepth() { --g_apd_depth; } } _apd_depth;
     // The dig fold's channel (g_apd_last_dug): set the moment THIS apply's dig loop first changes the
     // state (a successful cost payment), published on every exit.
@@ -44742,6 +44745,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     bool dbg_bp_eligible = false, dbg_bp_class_on = false;
     auto bp_searched_plan = [&](int site, TurnSolver::Plan& out) -> bool
     {
+        // A breakpoint is a decision point on the hand AS IT STANDS, so the Niv loop's pending draw
+        // triggers resolve first -- the continuation must be enumerated on the cards the pings drew,
+        // and an INLINE re-solve (inside apply_one, before its own exit flush) would otherwise plan
+        // on the pre-ping hand while the executor's replay sees the post-ping one. Executor twin:
+        // exec_section_reset. No-op without the loop.
+        if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
         // bp_seen counts only breakpoints of an ENABLED class, and only for a plan that carries a
         // choice -- exactly the original short-circuit. Counting disabled-class breakpoints too
         // would shift every later index and silently change play, which is why BpSiteMask is one
@@ -45292,6 +45301,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     int replicate_count, int convoke_green, int convoke_other, int phyrexian_life,
                     bool evoke, bool adventure, bool kicked)
     {
+        // THE ROLLOUT'S SPELL-RESOLUTION FLUSH for the Niv draw/damage loop (SpellEffects.h): every
+        // draw this cast's resolution made pings once it has finished (CR 603.3). The normal path
+        // flushes explicitly just before the site-10 arming at the end of this lambda (so that check
+        // reads the post-ping hand, as the executor's put_in_hand_armed does after
+        // EffectHandler::Resolve's flush); this scope covers every early return. Executor twin:
+        // EffectHandler::Resolve. One bool test for every deck without the loop.
+        DrawTriggerFlushScope _dtf_cast(state);
         // The cast's riders (CastRiders): TAKEN FIRST, before any early return, so a skipped cast can
         // never hand one to a later apply_one call that arms none (the karoo-held Aura release, the
         // Aura recast, the alt-payload loop, a cascade hit).
@@ -47561,6 +47577,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // land on top while the drop is open (a shuffle, a draw, Genesis Wave, Courser itself
         // entering) has created a new option just as a card entering hand does -- same site,
         // same window, same shared predicate (TopLandNewlyPlayable; executor twin put_in_hand_armed).
+        if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop -- see _dtf_cast
         if (BpPutInHandEnabled() && !s_human_play && sink_stack.empty()
             && !deferred_cantrip_resolve
             && !TurnSolver::ParamKeyedDrawClass(state, def)
@@ -48167,6 +48184,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
                 EnterHand(state, state.active_player_index, std::move(drawn),
                           HandEntryReason::Draw);
+                if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (executor twin: PerformDig)
             }
         }
 
@@ -49668,6 +49686,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             EnterHand(state, state.active_player_index, std::move(drawn),
                       HandEntryReason::Draw);
+            if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (executor twin: PerformDig)
             if (!dig_census_counted)
             {
                 dig_census_counted = true;
@@ -50350,7 +50369,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
+    if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // Niv watermark backstop (lockstep w/ UntapStep)
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
+    state.draw_trigger_mark       = 0;             // ...and the Niv draw-trigger watermark with it (same lockstep)
     ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
     ap.equip_activated_this_turn = false;          // Kili's waiver is per TURN (same lockstep)
@@ -50621,6 +50642,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     if (ap.library.empty()) { return false; }
     EnterHand(state, state.active_player_index, ap.library.DrawTop(), HandEntryReason::DrawStep);
     ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (lockstep w/ DrawStep)
+    // The Niv draw/damage loop: the draw step's draw pings here, before the Saga lore counter
+    // (lockstep with GameEngine::DrawStep). No-op without the loop.
+    if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
     // SAGA lore counter + chapter, CR 714.2b -- the lockstep twin of GameEngine::DrawStep's call.
     // Must stay on THIS side of the draw: a chapter that reads the hand (chapter I's free cast)
     // would otherwise see a different hand in the two worlds.

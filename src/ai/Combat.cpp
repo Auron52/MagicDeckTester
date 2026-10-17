@@ -124,6 +124,11 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // fact of connecting -- and it must be the post-lord / post-anthem / post-Jitte `power` below,
     // which is what actually left the opponent's life total.
     std::vector<int> damaging_pw;
+    // ...and how many combat-damage EVENTS each dealt (2 for a double striker -- two damage steps,
+    // CR 510.4), for the Curiosity / Tandem Lookout damage->draw grants. Filled only for a deck that
+    // runs the Niv loop (GameState::deck_has_draw_ping), so every other deck allocates nothing.
+    std::vector<int> damaging_events;
+    std::vector<int> damaging_num;   // ...keyed by per-copy m_number, re-found at the hook (see there)
     // Lifelink gains, ONE ENTRY PER LIFELINKING ATTACKER, applied AFTER the damage loop. Combat
     // damage is simultaneous (CR 510.2) and lifelink's gain is part of that damage event
     // (CR 702.15b), so nothing it causes -- Serra Ascendant's 30-life +5/+5 switching on, an
@@ -198,6 +203,11 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             state.opponent_lost_life_this_turn = true;
             damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
             damaging_pw.push_back(power);  // Shroofus Sproutsire: "create THAT MANY" tokens
+            if (state.deck_has_draw_ping)
+            {
+                damaging_events.push_back(ds ? 2 : 1);
+                damaging_num.push_back(p.card.m_number);
+            }
             // Maelstrom Archangel: connecting banks one free cast for the post-combat main
             // (user-approved banking model; see GameState::free_casts_available). Shared combat
             // core -> executor and rollout bank identically.
@@ -270,6 +280,26 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
             ap.hand.erase(ap.hand.begin() + hi);
         }
+    }
+
+    // Curiosity ("whenever enchanted creature deals damage to an opponent, you may draw a card") and
+    // Tandem Lookout's pair grant ("...draw a card"): once per combat-damage EVENT per connecting
+    // creature, then the Niv ping loop those draws start (OnCreatureDealtDamageToOpponent, the shared
+    // hook the ping itself also feeds). Last among the combat-damage triggers -- the controller orders
+    // them, and drawing after Neheb's discard is the order that keeps the drawn card. Nothing fires if
+    // combat damage already killed (the hook's OpponentHasLost guard). Executor + rollout share this.
+    // Re-found by m_number rather than trusting the recorded index: the hooks above only append today,
+    // but a creature that left (or a shifted index) must not hand its draws to a different body.
+    for (std::size_t k = 0; k < damaging_events.size(); ++k)
+    {
+        // (damaging_events is filled iff the deck-constant gate is on, so it is aligned with
+        // damaging_idx; an unnumbered permanent -- m_number 0, a hand-built test board -- keeps its
+        // recorded index.)
+        int src = -1;
+        if (damaging_num[k] == 0) { src = damaging_idx[k]; }
+        for (int i = 0; src < 0 && i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == damaging_num[k]) { src = i; } }
+        if (src >= 0) { OnCreatureDealtDamageToOpponent(state, src, damaging_events[k]); }
     }
     return out;
 }

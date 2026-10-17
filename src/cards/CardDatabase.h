@@ -2491,6 +2491,37 @@ struct CardParams
     // cascade target) -- a future search-decision candidate. false => no trigger.
     bool aura_cast_tutor_attach = false;
 
+    // ================= Niv-Mizzet draw/damage loop (NivMizzetCombo, 2026-10-17) =================
+    // The combo is "every draw pings, every ping by the right creature draws". Two trigger families,
+    // resolved by ONE shared iterative loop (ResolveDrawTriggers / OnCreatureDealtDamageToOpponent,
+    // core/SpellEffects.h) that both worlds call, gated per GAME on GameState::deck_has_draw_ping.
+    //
+    // "Whenever you draw a card, this deals N damage to any target" (Niv-Mizzet, the Firemind; Niv-
+    // Mizzet, Parun). One trigger PER CARD DRAWN by the controller, resolved after the effect that drew
+    // finishes (CR 603.3 -- a Brainstorm's put-back / Ponder's reorder come first). "Any target" is
+    // folded to the opponent's FACE (the etb_damage_any / Pashalik Mons precedent: in the goldfish
+    // nothing else is worth hitting, and the face hit is what a Curiosity/Lookout on this creature
+    // needs). 0 = no draw trigger -> byte-identical.
+    int  draw_trigger_damage = 0;
+    // "Whenever a player casts an instant or sorcery spell, you draw N cards" (Niv-Mizzet, Parun).
+    // Fired from FireOnCastTriggers (both worlds), so a COPY never triggers it (CR 707.10 -- copies are
+    // not cast). Mandatory: a draw from an empty library sets player_lost_on_draw. 0 = inert.
+    int  cast_trigger_instant_sorcery_draw = 0;
+    // Curiosity: "Enchant creature. Whenever enchanted creature deals damage to an opponent, you may
+    // draw a card." An Aura (is_aura) whose HOST carries the trigger; the Aura's controller draws. One
+    // trigger per damage EVENT (a Niv ping, one combat-damage step), never per point. The "may" is a
+    // PROVISIONAL dominance fold: draw iff the library is non-empty (see OnCreatureDealtDamageToOpponent).
+    bool aura_damage_trigger_draw = false;
+    // Tandem Lookout: soulbond (the `soulbond` pairing below) + "As long as this is paired with another
+    // creature, each of those creatures has 'Whenever this creature deals damage to an opponent, draw
+    // a card.'" Granted to BOTH halves of the live pair; MANDATORY draw (a draw from an empty library
+    // loses), stopped the instant the opponent has lost.
+    bool soulbond_damage_trigger_draw = false;
+    // Niv-Mizzet, Parun: "This spell can't be countered." Only the JSON key lives on this branch; the
+    // reader (a self-targeted Remand fails against it) is the niv-remand branch's. Parsed here as a
+    // plain bool so the field exists whichever branch lands first.
+    bool cant_be_countered = false;
+
     // ================= Goblins tribal (mono-red aggro/sacrifice) =================
     // Every field below is gated (0/false/empty = inert) so decks that don't run Goblins
     // stay byte-identical. See docs/design/analysis-goblins.md for the per-card mapping.

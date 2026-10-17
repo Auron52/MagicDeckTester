@@ -467,6 +467,12 @@ static_assert(sizeof(Player) == 200,
 // class (set by the main-1 plan, read at THIS turn's declare-attackers), FOLDED in Build(), value-gated.
 // Galadriel's +24 and the Colossus padding-only fields above were made on parallel branches; together
 // 1136, measured (the static_assert compiles) on the rebased tree, 2026-10-17.
+// +0 bytes (2026-10-17, NivMizzetCombo; measured 1136 -> 1136, both in the bool padding before
+// casts_remaining_this_turn): `deck_has_draw_ping` (bool) and `draw_trigger_mark` (int16_t).
+// Classification: the bool is a DECK CONSTANT stamped once in StampDeckTraits that only skips a
+// provably-empty flush -- nothing to fold. The mark is TRANSIENT: every resolution / apply boundary
+// flushes, after which it equals the active player's cards_drawn_this_turn (folded above), so two
+// states Build() compares can only differ in it if they already differ in that count -- nothing to fold.
 static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

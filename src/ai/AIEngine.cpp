@@ -2426,6 +2426,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ExecPhaseScope(bool& f_, bool v) : f(f_), saved(f_) { f = v; }
         ~ExecPhaseScope() { f = saved; }
     } _exec_phase(m_exec_post_combat, !is_pre_combat_main);
+    // The Niv draw/damage loop: whatever this pass drew outside a flushed resolution (a land's ETB
+    // draw) pings before the pass hands the state back. Rollout twin: ApplyPlanDirect's scope.
+    DrawTriggerFlushScope _dtf_pass(state);
     m_le_fire_pin = -1;   // a phase whose plan pins nothing fires the provider's count
     // UNBUDGETED-PLAY LATCH (EngineFlags.h). THE one frame that holds the real play budget, so it
     // is the only honest place to decide "is this decision unbudgeted". Everything the latch arms
@@ -2502,6 +2505,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::vector<int> exec_gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
     auto exec_section_reset = [&]()
     {
+        // A breakpoint is a decision point on the hand AS IT STANDS, so the Niv loop's pending draw
+        // triggers resolve first -- the re-solve must see the cards the pings drew (twin of
+        // bp_searched_plan's flush). No-op without the loop.
+        if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
         exec_top_at_section = PlayableTopLandNumber(state);
         exec_gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
         if (!BpHandEntryEnabled()) { return; }
@@ -7842,6 +7849,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     if (m_logger) { m_logger->LogDraw(drawn.m_number, drawn.m_name); }
     const int drawn_num = drawn.m_number;
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::Draw);
+    if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (rollout twins: both dig loops)
     LandDrawCensusAfterDig(state, drew_land, drawn_num);   // MTG_LANDDRAW_CENSUS (diagnostic only)
     return drew_land;
 }

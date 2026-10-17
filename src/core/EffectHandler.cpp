@@ -227,6 +227,11 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    // THE EXECUTOR'S SPELL-RESOLUTION FLUSH for the Niv draw/damage loop (SpellEffects.h, "NIV-MIZZET
+    // DRAW/DAMAGE LOOP"): every draw this resolution made pings once it has FINISHED (CR 603.3) --
+    // after Brainstorm's put-back, Ponder's reorder. Rollout twin: apply_one's flush. One bool test
+    // for every deck without the loop.
+    DrawTriggerFlushScope _dtf(state);
     // Real-stack trigger entries (cascade / Breaching Dragonstorm ETB / demonstrate) dispatch
     // to their own resolvers -- they are abilities, not the spell itself, so none of the
     // spell machinery below (legend rule, graveyard placement inside ResolveImpl) applies.

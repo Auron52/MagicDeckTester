@@ -1407,6 +1407,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
                                                std::vector<std::string>{});
     p.aura_cast_tutor_attach    = params.value("aura_cast_tutor_attach", false);
 
+    // --- Niv-Mizzet draw/damage loop (see CardParams) ---
+    p.draw_trigger_damage                = params.value("draw_trigger_damage", 0);
+    p.cast_trigger_instant_sorcery_draw  = params.value("cast_trigger_instant_sorcery_draw", 0);
+    p.aura_damage_trigger_draw           = params.value("aura_damage_trigger_draw", false);
+    p.soulbond_damage_trigger_draw       = params.value("soulbond_damage_trigger_draw", false);
+    p.cant_be_countered                  = params.value("cant_be_countered", false);
+
     // --- Goblins tribal ---
     p.reduces_spell_subtype     = params.value("reduces_spell_subtype", std::string());
     p.reduces_spell_subtype_amount = params.value("reduces_spell_subtype_amount", 1);
