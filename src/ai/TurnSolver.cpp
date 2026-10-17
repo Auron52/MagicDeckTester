@@ -15727,7 +15727,281 @@ struct SubsetFilterPre
     // Equip candidate attaches -- the filter's exact necessary condition (it needs both in one
     // selection). Same placement / lowering contract as attach_spell.
     bool equip_onto_piece = true;
+    // MTG_EQUIP_HOST_FOLD (SubsetHasNonCanonicalEquipHost): per candidate, the interchangeable-host CLASS
+    // of an Equip's host (-1 = none) and its member RANK, plus a BLOCK bit for a candidate whose presence
+    // makes a subset unfoldable. EMPTY = not built -> the filter never runs. Exact (the fold's own inputs,
+    // not a weaker precondition), so it is built on the instruments-armed path too.
+    std::vector<int>  host_cls;
+    std::vector<int>  host_rank;
+    std::vector<char> host_block;
 };
+
+// ---- Interchangeable equip HOSTS (MTG_EQUIP_HOST_FOLD) -- a canonical relabelling, not a pick -------
+// Two creatures of ours in the same state are the same HOST: Colossus Hammer on Speaker of the Heavens
+// #1 or on Speaker #2 reaches one board, up to which physical card is which (claude-play sweep, Colossus
+// Hammer seed 2100003 T5: every "equip X -> Speaker" and "reconfigure Lizard Blades -> Speaker" plan came
+// in pairs). The Theft's creature side already folds exactly these (AttachHostClassKey); the Equip block
+// never did -- it offers one Equip per (source, host), so the subset walk expressed each line once per
+// ARRANGEMENT of the identical hosts.
+//
+// WHY NOT "KEEP ONE HOST" (the shape of MTG_AURA_HOST_FOLD's first-k cut). With two sources, "both on one
+// Speaker" and "one on each" are DIFFERENT boards, and a per-source host cut keeps only the first: it
+// would delete the spread line. The fold is therefore made on the SUBSET, as a canonical form: a class's
+// members are ranked (battlefield order), the subset's equips onto that class are read in SOURCE order
+// (the Equipment's card number -- untouched by any relabelling of the hosts), and each must use an
+// already-used member or the NEXT unused one (a restricted-growth string). Every assignment of sources to
+// identical hosts has exactly one such relabelling, and it is an assignment the walk enumerates (below),
+// so one subset per class of mirror images survives -- the spread line included.
+//
+// THE IDENTITY ARGUMENT. Let sigma permute the members of a class C. For a subset S the fold may drop,
+// sigma(S) -- the same actions with each host replaced by sigma(host) -- realises sigma of S's board:
+//   * the members are interchangeable at this node. EquipHostFoldKey: the same card content
+//     (HandCardContentHash), AttachHostClassKey (attack eligibility, tapped, until-EOT bonuses and
+//     keywords, counters, what it wears) and RemovalSelfTargetFoldKey (every per-permanent flag, damage
+//     marked, type/keyword/P-T/subtype edits, and any other permanent naming it by number); plus
+//     refusals for what a key cannot make symmetric: LEGENDARY, anything ATTACHED to or by it (so an
+//     Equipment that is itself a host -- Lizard Blades -- and the pieces sitting on a member are never
+//     permuted along with it), soulbond / linked exile, an animated permanent, and a mana creature the
+//     payer could tap this turn (BatchPrepayMainCasts taps dorks by ORDER, so "the dork that paid" and
+//     "the one that did not" are different lines -- MTG_AURA_HOST_FOLD's refusal);
+//   * every Equip onto C in S has a twin onto every other member with the same cost and eval (SOURCE
+//     SYMMETRY, checked per (source, class) over the candidate list; an asymmetric source -- one the
+//     Equip block's width policy offered onto some members only -- BLOCKS any subset that uses it on C),
+//     so sigma(S) is an enumerated subset at the same mana, and every other filter in the chain is blind
+//     to which member is which;
+//   * nothing else in S reads a member: a candidate that NAMES a member (a Theft onto it, a Path at it,
+//     its own tap, an Aura on it) blocks the subset, and so does any candidate whose resolution may PICK
+//     among our creatures while the members are still identical, or RE-SOLVE the turn mid-plan (a
+//     breakpoint continuation can cast anything) -- every kind not on a short whitelist: an Equip, a
+//     reconfigure-unattach, an Equipment spell (no Sigarda's Aid, Puresteel Paladin or Sram out), a
+//     Magnetic Theft on a pinned pair. Creatures (soulbond, ETB counters, entering triggers), draws,
+//     tutors, Forge Anew, removal, Auras and tricks are not on it, nor is a cast that convokes; a
+//     landfall trigger that targets a creature turns the fold off for the frame;
+//   * the trailing pass runs S and sigma(S) in the same order (sources keep their relative order; only
+//     hosts change), and the first-equip waiver is assigned by source (StoriedWaivedEquipId), not host.
+// So S and sigma(S) differ by the identity of interchangeable permanents and nothing else; S is the same
+// line, not a choice. The search's own LATER heuristics (a combat attach, a pump) that break ties by
+// battlefield order are not relabelling-invariant -- the residual every identity fold in this file
+// (Theft / Path / Aura host classes, the copy and act-source folds) shares; it moves a tie-break, never a
+// rules outcome.
+//
+// THE WALK MUST ENUMERATE THE CANONICAL TWIN, so the fold refuses where it would not: only on an ODOMETER
+// position (a constructed go-off / route / hold line has no twin -- the canonical-prefix fold's fence),
+// never for a provider that consolidates equips (the AUTO-EQUIP collapse pins ONE host into every
+// position), and never on a source that is a fungible COPY of another (the copy fold canonicalises
+// those digits by its own order; the two forms are only known to compose when they touch disjoint
+// digits). Human play and MTG_UNPRUNED keep every host (MTG_AURA_HOST_FOLD's precedent: the viewer and
+// the claude-play oracle offer every option, and a saved reference replays by card number).
+static bool EquipHostFoldEnabled()
+{
+    static const bool env = EnvOn("MTG_EQUIP_HOST_FOLD", true);   // DEFAULT ON; =0 restores every host
+    return heurarm::Flag(heurarm::EQUIP_HOST_FOLD, env);
+}
+
+// The member key, or "" when `p` can never share a class.
+static std::string EquipHostFoldKey(const GameState& state, const Permanent& p)
+{
+    const int me = state.active_player_index;
+    if (p.controller_index != me || !p.card.IsCreature() || p.is_animated) { return std::string(); }
+    if (p.card.HasSupertype(Supertype::Legendary)) { return std::string(); }
+    if (p.equipped_to != 0 || p.aura_attached_to != 0) { return std::string(); }
+    if (p.paired_with != 0 || p.linked_exile_number != 0) { return std::string(); }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d != nullptr && (d->params.is_equipment || d->params.reconfigure_cost.has_value())) { return std::string(); }
+    if (AuraHostIsManaCreature(p) && !p.tapped && CanTapNow(p, state.battlefield)) { return std::string(); }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.equipped_to == p.card.m_number || q.aura_attached_to == p.card.m_number) { return std::string(); }
+    }
+    std::string k = AttachHostClassKey(state, p, me);
+    k += '\x1f';
+    k += RemovalSelfTargetFoldKey(state, p);
+    k += "|h" + std::to_string(HandCardContentHash(p.card)) + "|cb" + std::to_string(p.created_by_number)
+       + "|dm" + std::to_string(p.damage);
+    return k;
+}
+
+// Builds SubsetFilterPre::host_cls / host_rank / host_block (see the struct). Leaves them EMPTY -- the
+// filter inert -- unless some class has a symmetric source.
+static void BuildEquipHostFold(const GameState& state, const std::vector<Action>& cands, SubsetFilterPre& pre)
+{
+    pre.host_cls.clear(); pre.host_rank.clear(); pre.host_block.clear();
+    if (!EquipHostFoldEnabled() || HumanPlayActive() || DecisionUnpruned()) { return; }
+    const int me = state.active_player_index;
+    // Cheap pre-pass (this runs once per enumeration, rollouts included): the distinct Equip HOSTS, and
+    // whether two of them are battlefield creatures of ours sharing a NAME (interned: a pointer test).
+    // Only those can ever share a class, and only they get a key below.
+    std::vector<const Permanent*> pair_hosts;
+    {
+        int hosts[32];
+        int nh = 0;
+        for (const Action& a : cands)
+        {
+            if (a.kind != Action::Kind::Equip || a.sac_victim_id <= 0) { continue; }
+            bool seen = false;
+            for (int i = 0; i < nh; ++i) { if (hosts[i] == a.sac_victim_id) { seen = true; break; } }
+            if (!seen) { if (nh == 32) { return; } hosts[nh++] = a.sac_victim_id; }
+        }
+        if (nh < 2) { return; }
+        std::vector<const Permanent*> hp;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            for (int i = 0; i < nh; ++i) { if (hosts[i] == p.card.m_number) { hp.push_back(&p); break; } }
+        }
+        for (std::size_t x = 0; x < hp.size(); ++x)
+        {
+            bool twin = false;
+            for (std::size_t y = 0; y < hp.size() && !twin; ++y)
+            {
+                if (y != x && &hp[x]->card.m_name.str() == &hp[y]->card.m_name.str()
+                    && hp[x]->tapped == hp[y]->tapped && hp[x]->entered_this_turn == hp[y]->entered_this_turn)
+                { twin = true; }
+            }
+            if (twin) { pair_hosts.push_back(hp[x]); }
+        }
+        if (pair_hosts.empty()) { return; }
+    }
+    if (ResolveProvider(state).ConsolidatesEquips()) { return; }   // AUTO-EQUIP pins one host per family
+    // An Equipment cast is member-blind only while nothing it sets off can PICK among our creatures or
+    // RE-SOLVE the turn: Sigarda's Aid picks a host on entry; Puresteel Paladin's / Sram's draw opens a
+    // breakpoint, and a continuation can cast anything (whose own choices would see identical members).
+    bool equip_cast_unsafe = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.landfall_target_counters > 0) { return; }     // the land drop may pick a member
+        if (d->params.attach_equipment_on_etb || d->params.draw_on_equipment_etb
+            || !d->params.draw_on_cast_subtypes.empty())
+        { equip_cast_unsafe = true; }
+    }
+    // Classes over the Equip hosts on our battlefield, members ranked by battlefield order.
+    struct Member { int num; int cls; int rank; };
+    std::vector<Member> mem;
+    {
+        std::vector<std::string> keys;
+        std::vector<int> cls_size;
+        for (const Permanent* pp : pair_hosts)   // battlefield order, as collected above
+        {
+            const Permanent& p = *pp;
+            std::string k = EquipHostFoldKey(state, p);
+            if (k.empty()) { continue; }
+            int c = -1;
+            for (std::size_t i = 0; i < keys.size(); ++i) { if (keys[i] == k) { c = static_cast<int>(i); break; } }
+            if (c < 0) { c = static_cast<int>(keys.size()); keys.push_back(std::move(k)); cls_size.push_back(0); }
+            mem.push_back({ p.card.m_number, c, cls_size[static_cast<std::size_t>(c)]++ });
+        }
+        std::vector<Member> kept;
+        for (const Member& m : mem) { if (cls_size[static_cast<std::size_t>(m.cls)] >= 2) { kept.push_back(m); } }
+        mem.swap(kept);
+    }
+    if (mem.empty()) { return; }
+    auto member_of = [&](int num) -> const Member*
+    {
+        if (num <= 0) { return nullptr; }
+        for (const Member& m : mem) { if (m.num == num) { return &m; } }
+        return nullptr;
+    };
+    const std::size_t n = cands.size();
+    std::vector<int>  cls(n, -1), rank(n, -1);
+    std::vector<char> block(n, 0);
+    // A source with a same-name / same-behaviour twin among the Equip sources is a fungible-copy
+    // candidate (the copy fold's territory) -- never relabelled here.
+    auto copy_prone = [&](const Action& e) -> bool
+    {
+        const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().Lookup(e.card_name);
+        for (const Action& o : cands)
+        {
+            if (o.kind != Action::Kind::Equip || o.sac_source_id == e.sac_source_id) { continue; }
+            if (o.card_name == e.card_name) { return true; }
+            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+            if (ed != nullptr && od != nullptr && ed->behaviour_identity != 0
+                && ed->behaviour_identity == od->behaviour_identity) { return true; }
+        }
+        return false;
+    };
+    bool any_fold = false;
+    for (std::size_t j = 0; j < n; ++j)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::Equip)
+        {
+            if (member_of(a.sac_source_id) != nullptr) { block[j] = 1; continue; }
+            const Member* h = member_of(a.sac_victim_id);
+            if (h == nullptr) { continue; }                          // onto a non-member: member-blind
+            // SOURCE SYMMETRY: a twin onto every member of the class, same cost and eval.
+            bool sym = !copy_prone(a);
+            for (const Member& m : mem)
+            {
+                if (!sym) { break; }
+                if (m.cls != h->cls || m.num == h->num) { continue; }
+                bool twin = false;
+                for (const Action& b : cands)
+                {
+                    if (b.kind == Action::Kind::Equip && b.sac_source_id == a.sac_source_id
+                        && b.sac_victim_id == m.num && b.cost == a.cost && b.eval == a.eval)
+                    { twin = true; break; }
+                }
+                sym = twin;
+            }
+            if (!sym) { block[j] = 1; continue; }
+            cls[j] = h->cls; rank[j] = h->rank;
+            any_fold = true;
+            continue;
+        }
+        // Everything else: member-blind or a BLOCK.
+        if (member_of(a.sac_source_id) || member_of(a.sac_victim_id) || member_of(a.enchant_target)
+            || member_of(a.attach_equip_id))
+        { block[j] = 1; continue; }
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && a.ability_mode == Action::AbilityMode::ReconfigureUnattach) { continue; }
+        if (a.kind != Action::Kind::CastFromHand) { block[j] = 1; continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || a.convoke_green > 0 || a.convoke_other > 0 || a.sac_victim_id != 0
+            || a.enchant_target == kTrickBestOwnTarget)
+        { block[j] = 1; continue; }
+        // THE WHITELIST. An Equipment spell (unless equip_cast_unsafe) and Magnetic Theft on a pinned pair
+        // naming no member. Deliberately NOT on it: a creature (soulbond, ETB counters, entering triggers),
+        // any draw / tutor / Forge Anew / land search (each can open a breakpoint, and the continuation can
+        // cast anything), a removal, an Aura, a trick -- each either picks among our creatures or lets
+        // something that does into the turn.
+        const bool ok = (d->params.is_equipment && !d->card.IsCreature() && !equip_cast_unsafe
+                         && d->params.cast_draw == 0)
+                     || (a.attach_equip_id != 0 && d->params.attach_target_equipment);
+        if (!ok) { block[j] = 1; }
+    }
+    if (!any_fold) { return; }
+    pre.host_cls.swap(cls); pre.host_rank.swap(rank); pre.host_block.swap(block);
+}
+
+// The fold's per-subset test: true = this subset is a mirror image of the canonical one (drop it).
+static bool SubsetHasNonCanonicalEquipHost(const std::vector<int>& sel, const SubsetFilterPre& pre,
+                                           const std::vector<Action>& cands)
+{
+    struct E { int cls; int src; int rank; };
+    E buf[16];
+    int nb = 0;
+    for (int j : sel)
+    {
+        const std::size_t u = static_cast<std::size_t>(j);
+        if (pre.host_block[u]) { return false; }
+        if (pre.host_cls[u] < 0) { continue; }
+        if (nb == 16) { return false; }                  // past the bound: simply not folded
+        buf[nb++] = { pre.host_cls[u], cands[u].sac_source_id, pre.host_rank[u] };
+    }
+    if (nb == 0) { return false; }
+    std::sort(buf, buf + nb, [](const E& x, const E& y) { return x.cls != y.cls ? x.cls < y.cls : x.src < y.src; });
+    int cur = -1, next = 0;
+    for (int i = 0; i < nb; ++i)
+    {
+        if (buf[i].cls != cur) { cur = buf[i].cls; next = 0; }
+        if (buf[i].rank > next) { return true; }
+        if (buf[i].rank == next) { ++next; }
+    }
+    return false;
+}
 
     // Aura-target shroud grantors (see the struct / SubsetHasShroudBlockedAura). Grantors first, so a
     // board with no attached shroud Equipment pays one battlefield walk and nothing else.
@@ -15824,6 +16098,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
         BuildEquipReleaseOnly(state, cands, p.equip_release_only);
         BuildReplicatePending(state, cands, p.rep_pending);
+        BuildEquipHostFold(state, cands, p);
         return p;
     }
 
@@ -16027,6 +16302,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
     if (p.equip) { BuildEquipReleaseOnly(state, cands, p.equip_release_only); }
     BuildReplicatePending(state, cands, p.rep_pending);
+    if (p.equip) { BuildEquipHostFold(state, cands, p); }
 
     // The sac-source table (see the struct). Built only when a filter that reads it can actually
     // run -- otherwise the walk below is itself the waste it exists to remove.
@@ -38298,6 +38574,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject an Equip onto a reconfigure piece the same subset attaches away first (no legal
         // target), or whose attach it strips again (dominated). Lockstep twin in the other walker.
         if (pre.equip_onto_piece && SubsetHasEquipOntoAttachedPiece(state, cands, sel)) { return; }
+        // Reject the mirror image of an interchangeable-host assignment (MTG_EQUIP_HOST_FOLD) -- on an
+        // ODOMETER position only: a constructed line has no enumerated twin. Lockstep twin below.
+        if (!pre.host_cls.empty() && fold_from_odometer && SubsetHasNonCanonicalEquipHost(sel, pre, cands)) { return; }
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
@@ -51615,6 +51894,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject an Equip onto a reconfigure piece the same subset attaches away first (no legal
         // target), or whose attach it strips again (dominated). Lockstep twin in the other walker.
         if (pre.equip_onto_piece && SubsetHasEquipOntoAttachedPiece(state, cands, sel)) { return; }
+        // Reject the mirror image of an interchangeable-host assignment (MTG_EQUIP_HOST_FOLD) -- on an
+        // odometer position only (`sat_bypass` marks the constructed go-off / route / hold lines, which have
+        // no enumerated twin; the flat fallback's positions arrive with fold_from_odometer). Lockstep twin
+        // in Solve::consider.
+        if (!pre.host_cls.empty() && (fold_from_odometer || !sat_bypass)
+            && SubsetHasNonCanonicalEquipHost(sel, pre, cands)) { return; }
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }

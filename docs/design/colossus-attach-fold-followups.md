@@ -24,13 +24,18 @@ on and are recorded here per the deferred-work rule.
 
 ## Open items
 
-1. **Equip / reconfigure HOSTS are not identity-folded.** Battlefield equip hosts are deliberately not
-   deduped by NAME (two Kor Duelists can differ), but nothing dedupes them by an identity CLASS either,
-   so two class-identical Speakers of the Heavens double every "equip X -> Speaker" and "reconfigure
-   Lizard Blades -> Speaker" plan (seed 2100003 T5 shows them in pairs). Magnetic Theft's creature side
-   already folds exactly these with `AttachHostClassKey` (SpellEffects.h); the same key on the Equip
-   host loop would be a sound identity fold. It interacts with the Equip block's host rankings and
-   width policies, so it needs its own enumeration-width measurement.
+1. **Equip / reconfigure HOSTS -- DONE 2026-10-17 for the autonomous search (MTG_EQUIP_HOST_FOLD).**
+   A canonical relabelling on the subset (a restricted-growth string over the identical hosts, sources
+   read in card-number order), so "both on one Speaker" and "one on each" both survive and only their
+   mirror images are dropped; see BuildEquipHostFold / SubsetHasNonCanonicalEquipHost in TurnSolver.cpp
+   for the identity argument and every refusal. STILL OPEN: (a) the HUMAN menu (viewer / claude-play)
+   keeps every host, on the MTG_AURA_HOST_FOLD precedent -- a saved reference replays by card number,
+   so folding there would need the reference checker to map a recorded host onto its canonical twin;
+   (b) the fold refuses any subset holding a creature cast, a draw / tutor / Forge Anew, a removal or a
+   Speaker's own tap (each can pick among the hosts while they are still identical, or re-solve the turn
+   mid-plan); a per-card "provably picks no creature" classification would widen it; (c) the Equip
+   block's width policy already offers the Hammer onto one Speaker only, so most of the remaining
+   doubling it removes is the reconfigure's.
 2. **Clause (c) of SubsetHasStrandedAttachSpell, battlefield pieces, is a "never better" fold, not an
    identity.** A Theft of an Equipment that is ATTACHED elsewhere onto a loose Lizard the plan then
    reconfigures ends with the Equipment unattached, where the plan without the Theft leaves it on its
@@ -52,3 +57,10 @@ on and are recorded here per the deferred-work rule.
    provider's activation rank). A human who reorders "equip E -> Lizard" before "reconfigure Lizard ->
    X", with E attached elsewhere, could have expressed "move E off its host for nothing"; the menu no
    longer offers that set when its canonical order is the illegal one.
+6. **Magnetic Theft's creature-class fold is a keep-one-host cut, and that can lose the SPREAD line.**
+   BuildAttachSpellPairs offers a Theft onto ONE member of each creature identity class. With two Thefts
+   and two identical hosts, "one Equipment onto each" is then unexpressible by Thefts alone (both name
+   the same representative), although it is a different board from "both onto one". It stays reachable
+   when an Equip can do the second move, which is why nothing in the suite has shown it. The
+   restricted-growth form MTG_EQUIP_HOST_FOLD uses for Equip hosts is the sound replacement: offer the
+   Theft onto every member and fold the mirror images on the subset.
