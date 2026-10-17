@@ -1,0 +1,15 @@
+{
+  "_comment": "Niv-Mizzet, Parun's CAST trigger starts the loop before the spell even resolves. Mid-turn frame (resume_at main1, land drop spent): a summoning-sick Niv-Mizzet, Parun wearing Curiosity, one Island; hand Ponder. Casting Ponder triggers Parun (draw a card, FireOnCastTriggers), that draw pings, Curiosity draws, and the loop kills from 20 while Ponder is still on the stack. Fails if the cast trigger stops drawing or the cast-trigger flush stops resolving the pings.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" },
+    { "name": "Niv-Mizzet, Parun", "sick": true },
+    { "name": "Curiosity", "equips": "Niv-Mizzet, Parun" }
+  ],
+  "hand": [ "Ponder" ],
+  "library_filler": "Island", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 4,
+  "expect_win_turn": 4
+}

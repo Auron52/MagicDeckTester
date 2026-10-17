@@ -1,0 +1,15 @@
+{
+  "_comment": "Curiosity's HOST is a searched plan variant, and the loop starts from a cantrip in the same main phase. Mid-turn frame (resume_at main1, land drop spent): a SUMMONING-SICK Niv-Mizzet, the Firemind (it can neither attack nor tap to draw) beside a Goblin Guide, two Islands, and Curiosity + Preordain in hand. The only same-turn kill is Curiosity on the NIV (not the Guide), then Preordain: its draw pings, Curiosity draws, and the loop runs to 0. Curiosity on the Guide only draws off the Guide's combat damage (one card, one ping) -- no kill. Fails if the host stops being searched, if the cast's resolution stops flushing the draw triggers, or if Curiosity's damage->draw grant breaks.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" },
+    { "name": "Goblin Guide" },
+    { "name": "Niv-Mizzet, the Firemind", "sick": true }
+  ],
+  "hand": [ "Curiosity", "Preordain" ],
+  "library_filler": "Island", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 4,
+  "expect_win_turn": 4
+}

@@ -1,0 +1,15 @@
+{
+  "_comment": "Tandem Lookout's soulbond pairs with the NIV (draw_trigger_damage) over the other legal partner, and its MANDATORY grant runs the loop to the kill without decking us. Mid-turn frame (resume_at main1, land drop spent): a summoning-sick Niv-Mizzet, the Firemind, a Goblin Guide, four Islands; hand Tandem Lookout + Preordain. Lookout ({2}{U}) enters and pairs with the Niv, Preordain ({U}) draws, the draw pings, the pinging Niv draws (Lookout's grant), ... until the opponent is at 0. Library exactly 40 -- the loop must stop at the kill (20 draws), not run on. Fails if the pairing lands on the Guide, if the grant breaks, or if the loop overruns into a deck-out.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Goblin Guide" },
+    { "name": "Niv-Mizzet, the Firemind", "sick": true }
+  ],
+  "hand": [ "Tandem Lookout", "Preordain" ],
+  "library_filler": "Island", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 4,
+  "expect_win_turn": 4
+}

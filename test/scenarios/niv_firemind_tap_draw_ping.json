@@ -1,0 +1,18 @@
+{
+  "_comment": "HUMAN-PLAY path (the viewer / --claude-play external chooser commits through TurnSolver::ApplyPlan). The human casts Curiosity onto Niv-Mizzet, the Firemind -- the host is the surfaced enchant-target variant -- then activates the Firemind's '{T}: Draw a card' (tap_draw_cost {0}, a plan activation). The activation's draw pings, Curiosity draws off that damage, and the loop runs to the kill INSIDE the committed line, mid-plan. Asserts the win this turn and the viewer history line the loop emits (one narration line per flush, ending 'lethal'). Fails if the activation stops being offered, if its draw stops pinging, if the host stops being a choice, or if a mid-plan win breaks the human path.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" },
+    { "name": "Niv-Mizzet, the Firemind" }
+  ],
+  "hand": [ "Curiosity" ],
+  "library_filler": "Island", "library_size": 40,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "human_lines": [ "cast=Curiosity;act=Niv-Mizzet, the Firemind" ],
+  "human_variants": [ "Curiosity → Niv-Mizzet, the Firemind" ],
+  "expect_history_contains": [ "(whenever you draw)", "lethal" ],
+  "expect_win_turn": 4
+}

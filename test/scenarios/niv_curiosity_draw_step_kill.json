@@ -1,0 +1,14 @@
+{
+  "_comment": "Niv-Mizzet draw/damage loop through the DRAW STEP (GameEngine::DrawStep / the rollout's twin). Niv-Mizzet, the Firemind already wears Curiosity; the turn-5 draw-step draw pings (19), Curiosity draws off that damage, the drawn card pings, ... -- the shared iterative loop (ResolveDrawTriggers) runs until the opponent is dead, inside the draw step, before main 1. Library 40 Islands, so the 20 draws a 20-ping kill needs are there. If the draw-step flush or the Curiosity grant breaks, the win slips to combat or later and this fails.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 5, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Niv-Mizzet, the Firemind" },
+    { "name": "Curiosity", "equips": "Niv-Mizzet, the Firemind" }
+  ],
+  "hand": [],
+  "library_filler": "Island", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 5,
+  "expect_win_turn": 5
+}

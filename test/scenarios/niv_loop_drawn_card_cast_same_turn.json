@@ -1,0 +1,16 @@
+{
+  "_comment": "SEARCH COMPLETENESS for cards the loop draws: a Curiosity loop that STOPS SHORT (the library runs dry) has drawn a castable card, and the search must cast it the same turn. Mid-turn frame (resume_at main1, land drop spent): a summoning-sick Niv-Mizzet, the Firemind wearing Curiosity (it can neither attack nor tap), Island + Mountain; hand Preordain; the whole library is five cards with one Lightning Bolt among them; opponent at 8. Preordain draws, that draw pings, Curiosity draws the rest of the library -- 5 pings (8 -> 3), Curiosity's 'may' declines on the empty library so we are never decked -- and the Bolt the loop drew is cast off the Mountain for the last 3. Without the post-ping re-solve the Bolt waits in hand, the turn ends at 3 and the next draw step decks us. Fails if the breakpoint stops seeing the loop's draws or the loop overdraws.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 8,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Mountain" },
+    { "name": "Niv-Mizzet, the Firemind", "sick": true },
+    { "name": "Curiosity", "equips": "Niv-Mizzet, the Firemind" }
+  ],
+  "hand": [ "Preordain" ],
+  "library_top": [ "Island", "Island", "Lightning Bolt", "Island", "Island" ],
+  "library_filler": "Island", "library_size": 0,
+  "depth": 3, "budget_ms": 0, "max_turns": 4,
+  "expect_win_turn": 4
+}
