@@ -548,6 +548,50 @@ TEST_CASE("Path: human play -- the board click defaults to our lowest-power crea
     g_play_tutor_chooser  = saved_u;
 }
 
+TEST_CASE("Path: human play -- the default ranks by REAL power, so a Colossus Hammer carrier is never the 'cheapest body'")
+{
+    // Claude-play sweep, Colossus Hammer seeds 2100005 / 2100017: the target decision listed
+    // "Lizard Blades (13/13)" with heuristic_default 0 -- the default ranked by EffectivePower(), which
+    // omits Equipment, so the 11/11 Hammer carrier tied the bare 1/1 and won on battlefield order.
+    GameState s = BoardPe(1, { kPath }, /*hammer_provider=*/false);
+    const int carrier_idx = PutPe(s, "Kor Duelist", 50);           // FIRST in battlefield order
+    PutPe(s, "Colossus Hammer", 51);
+    ApplyEquip(s, 0, 51, 50);
+    const int bare_idx = PutPe(s, "Swiftblade Vindicator", 52);     // a printed 1/1, nothing attached
+    const int spawn = SpawnPe(s);
+    REQUIRE(s.battlefield[static_cast<std::size_t>(carrier_idx)].EffectivePower()
+            == s.battlefield[static_cast<std::size_t>(bare_idx)].EffectivePower());   // the old tie
+    CHECK(EquipGatePowerOf(s.battlefield[static_cast<std::size_t>(carrier_idx)], s) == 11);
+    CHECK(RemovalHumanDefaultTarget(s, 0) == bare_idx);
+
+    // ...and it is the board click's PRESELECTED default (the rollout / human apply's chooser path).
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const std::vector<const TurnSolver::Plan*> opp = SolePathPlans(plans, 0);
+    REQUIRE(opp.size() == 1);
+    int target_default = -1;
+    TargetChooser tc = [&](const GameState& g, const CardDefinition&, int, int, int,
+                           const std::vector<ChosenTarget>& heur) -> std::vector<ChosenTarget>
+    {
+        REQUIRE(heur.size() == 1);
+        target_default = g.battlefield[static_cast<std::size_t>(heur[0].index)].card.m_number;
+        return heur;
+    };
+    TutorChooser tu = [&](const GameState&, int, const std::string&, const std::vector<std::string>&, int,
+                          const std::vector<int>&) -> int { return -1; };
+    TargetChooser* saved_t = g_play_target_chooser;
+    TutorChooser*  saved_u = g_play_tutor_chooser;
+    g_play_target_chooser = &tc;
+    g_play_tutor_chooser  = &tu;
+    GameState a = s;
+    TurnSolver::ApplyPlan(a, *opp[0], true);
+    g_play_target_chooser = saved_t;
+    g_play_tutor_chooser  = saved_u;
+    CHECK(target_default == 52);
+    CHECK(FindPe(a, 52) == nullptr);                                // the bare body went
+    CHECK(FindPe(a, 50) != nullptr);                                // the lethal attacker stayed
+    CHECK(FindPe(a, spawn) != nullptr);
+}
+
 TEST_CASE("Path: the attack projection drops the creature a self-target Path exiles (and its Equipment)")
 {
     // Kor Duelist + Colossus Hammer = 11 power, double strike while equipped -> 22; Swiftblade 1/1

@@ -5427,7 +5427,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // StoriedWaivedEquipId reads `equip_activated_this_turn` and the first equip below flips it.
     // Computed from the SAME list in the SAME position in both worlds, so the executor and the
     // rollout cannot disagree about which equip is free. 0 = no waiver applies.
-    const int _storied_waived = TurnSolver::StoriedWaivedEquipId(state, trailing_acts);
+    // Not const: an equip with no legal target is never activated, so when the one the waiver was
+    // assigned to is refused the waiver moves on to the equips still to come (lockstep twin in
+    // ApplyPlanDirect; see EquipTargetNotACreatureNow).
+    int _storied_waived = TurnSolver::StoriedWaivedEquipId(state, trailing_acts);
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
@@ -6191,6 +6194,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Reconfigure (Lizard Blades) is not an equip ability: it neither spends the turn's first
             // equip nor reads as "equip" in the log. Decided BEFORE the apply, from the predicate the
             // rollout reads (lockstep twin in TurnSolver's ApplyPlanDirect).
+            // NO LEGAL TARGET -> NOT ACTIVATED (CR 702.6a, 602.2b): a host that is on the battlefield
+            // but no longer a creature -- a Lizard Blades this same pass reconfigured onto something --
+            // is never targeted, so nothing is paid, nothing is logged, the turn's first equip stays
+            // unspent, and a waiver assigned to this equip moves on to the rest of the pass.
+            // Unconditional (a rules fix, not the MTG_EQUIP_PAY_GUARD lever); lockstep twin in
+            // ApplyPlanDirect.
+            if (EquipTargetNotACreatureNow(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
+            {
+                if (_storied_waived != 0 && a.sac_source_id == _storied_waived)
+                {
+                    const std::size_t at = static_cast<std::size_t>(&a - trailing_acts.data());
+                    _storied_waived = TurnSolver::StoriedWaivedEquipId(
+                        state, std::vector<Action>(trailing_acts.begin() + static_cast<std::ptrdiff_t>(at) + 1,
+                                                   trailing_acts.end()));
+                }
+                continue;
+            }
             const bool reconf = IsReconfigureAttach(state, state.active_player_index, a.sac_source_id);
             const char* attach_verb = reconf ? "reconfigure -> " : "equip -> ";
             if (m_logger

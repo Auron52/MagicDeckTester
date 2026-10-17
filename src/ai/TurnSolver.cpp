@@ -15179,33 +15179,166 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     return false;
 }
 
-// Magnetic Theft subset legality + one sound fold (CardParams::attach_target_equipment; the creature
-// side of a same-plan hand target is SubsetHasMissingTrickTarget's job via trick_hand_target).
+// ---- ATTACH FOLDS: shared helpers -----------------------------------------------------------------
+// Every fold below drops a subset in which one ATTACH of a piece is undone by a later event of the same
+// plan -- a second attach of that piece, or its host ceasing to be a creature (CR 704.5n) -- or in which
+// an attach has no legal target when it would happen. THE PROOF SHAPE, shared by all of them: let A1
+// precede A2 in REALISATION order (casts resolve in cast order; the board activations run after every
+// cast, in the trailing pass's order). If both take effect, A1's attachment is overwritten and the
+// subset reaches the board of (subset - A1); if either takes no effect (an illegal target, a fizzle, a
+// refused attach), the subset reaches the board of (subset - that one). Either way some SMALLER subset
+// -- enumerated, because every Theft and every Equip is an optional digit -- reaches the same board for
+// no more mana and no fewer cards, so dropping this one is a dominance fold, never a narrowing. Two
+// premises, both checked by the caller:
+//   * nothing READS the intermediate attachment (AttachIntermediateObservable below), and
+//   * nothing pays off the CAST of a Theft itself (no prowess-style reader on a Theft deck -- the
+//     PROVISIONAL card-note assumption the CR 701.3b no-op fold at emission already makes).
+// And the attach effects themselves must not be observed as EVENTS: no card in this engine triggers on
+// "becomes attached" (the Equipment readers are static: Kor Duelist's / Balan's double strike, the
+// Gauntlets / Omnitool scalers, Kemba's upkeep count -- all read at combat or upkeep, after the plan).
+
+// Can something observe the INTERMEDIATE attachment? Declines the fold (returns true) when:
+//   * the moved piece grants HASTE (an intermediate host can tap for mana -- the mana-unlock hoist),
+//     SHROUD (it blocks a target in between), or carries a RE-HOST SACRIFICE (Grafted Wargear kills a
+//     host on the move -- and, unmodelled, on falling off);
+//   * any min-power-gated Equipment is on our battlefield or in hand (an intermediate +power could
+//     admit an O-Naginata attach that then stays);
+//   * any FEROCIOUS cast is in hand (Feed the Clan reads "a creature with power 4 or greater" as it
+//     resolves, so a Hammer that sits on a body across one later cast is visible to it);
+//   * `any_haste_shroud`: ANY haste- or shroud-granting Equipment on our battlefield or in hand -- the
+//     strict form the folds added 2026-10-17 use. The Greaves dance has its own co-selection filters
+//     (SubsetHasShroudBlockedEquip, SubsetHasIdleReleaseMove) that can reject the smaller subset the
+//     proof above relies on, so a fold is not attempted wherever one of those pieces exists. The
+//     original (b)-(d) clauses keep their piece-local form (false), unchanged.
+static bool AttachIntermediateObservable(const GameState& state, const CardDefinition* piece,
+                                         bool any_haste_shroud)
+{
+    if (piece != nullptr
+        && (piece->params.equip_grants_haste || piece->params.equip_grants_shroud
+            || piece->params.equip_sacrifices_prior_host)) { return true; }
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.is_equipment) { continue; }
+        if (d->params.equip_min_power > 0) { return true; }
+        if (any_haste_shroud && (d->params.equip_grants_haste || d->params.equip_grants_shroud)) { return true; }
+    }
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.cast_lifegain_ferocious > 0) { return true; }
+        if (!d->params.is_equipment) { continue; }
+        if (d->params.equip_min_power > 0) { return true; }
+        if (any_haste_shroud && (d->params.equip_grants_haste || d->params.equip_grants_shroud)) { return true; }
+    }
+    return false;
+}
+
+// An Equipment entering this plan can be ATTACHED ON ENTRY (Sigarda's Aid on our battlefield, or cast
+// by this subset), so a same-plan hand piece cannot be assumed to start the turn's trailing pass
+// unattached. The folds whose end state is "the piece fell off and stays unattached" need that start.
+static bool EtbAttachLive(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.attach_equipment_on_etb) { return true; }
+    }
+    for (int k : sel)
+    {
+        const Action& c = cands[k];
+        if (c.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        if (d != nullptr && d->params.attach_equipment_on_etb) { return true; }
+    }
+    return false;
+}
+
+static const Permanent* OwnPermanentByNumber(const GameState& state, int num)
+{
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == state.active_player_index && p.card.m_number == num) { return &p; } }
+    return nullptr;
+}
+
+static const Card* OwnHandCardByNumber(const GameState& state, int num)
+{
+    for (const Card& c : state.ActivePlayer().hand) { if (c.m_number == num) { return &c; } }
+    return nullptr;
+}
+
+// Can something in this subset FREE an attached reconfigure piece before a later activation targets it
+// -- take its host `host` off the battlefield (a removal cast at it, a sacrifice paid on a cast or by
+// devour, a sac / blink / Pod / counter-mode activation in the trailing pass), which unattaches the
+// piece and makes it a creature again (CR 702.151b) and so makes an Equip onto it LEGAL after all?
+// The folds whose argument is "this piece is no creature by the time the later Equip would target it"
+// ((d), and the reconfigure-first half of SubsetHasEquipOntoAttachedPiece) need a NO. A WHITELIST of
+// trailing kinds that cannot remove a creature, so an unforeseen kind errs toward not folding. A
+// removal cast counts only when it names `host` (Path's searched self-target), or names nothing in
+// human play, where the person picks its target at resolution.
+static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vector<int>& sel, int host)
+{
+    for (int k : sel)
+    {
+        const Action& c = cands[k];
+        if (c.kind == Action::Kind::CastFromHand)
+        {
+            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+            if (d == nullptr) { return true; }
+            if (d->tmpl == CardTemplate::Removal
+                && (c.enchant_target == host || (c.enchant_target <= 0 && HumanPlayActive()))) { return true; }
+            if (d->params.devour > 0 || c.sac_victim_id != 0) { return true; }
+            continue;
+        }
+        if (c.kind == Action::Kind::SacForMana) { return true; }
+        if (!TurnSolver::IsTrailingActivation(c.kind)) { continue; }
+        if (c.kind == Action::Kind::Equip || c.kind == Action::Kind::TapForTokenPay) { continue; }
+        if (c.kind == Action::Kind::ActivatePermAbility
+            && c.ability_mode == Action::AbilityMode::ReconfigureUnattach) { continue; }
+        return true;
+    }
+    return false;
+}
+
+// Magnetic Theft subset legality + its sound folds (CardParams::attach_target_equipment; the creature
+// side of a same-plan hand target is SubsetHasMissingTrickTarget's job via trick_hand_target). The
+// folds all follow the proof shape above.
 //   (a) STRANDED EQUIPMENT: a Theft whose Equipment target is a same-plan HAND cast (attach_equip_hand)
 //       needs this subset to cast an Equipment of that NAME -- a targeted spell cannot be cast without
 //       its target (CR 601.2c). By name, because copies are fungible (the resolver's name fallback).
-//   (b) REDUNDANT ATTACH: the same BATTLEFIELD Equipment is the subject of a second attach in this
-//       subset (another Theft of it, or an Equip of it). Only the later attach survives -- the
-//       trailing Equip pass runs after every cast, and two Thefts resolve in cast order -- so the
-//       earlier one spends a card and mana for a board the subset WITHOUT it reaches exactly, and that
-//       subset is enumerated (a Theft and an Equip are optional digits). A dominance fold, and sound
-//       only where the INTERMEDIATE attachment cannot be observed, so it is skipped when either piece
-//       could make it matter: a HASTE granter (a mid-plan host can tap for mana -- the mana-unlock
-//       hoist), a SHROUD granter (it blocks a target in between), a RE-HOST SACRIFICE (Grafted
-//       Wargear kills the intermediate host), or any min-power-gated Equipment on our board / in hand
-//       (an intermediate +power could admit an O-Naginata attach that then stays). Like the CR 701.3b
-//       no-op fold at emission it assumes nothing pays off the CAST itself (no prowess-style reader on
-//       a Theft deck) -- PROVISIONAL, card note. A same-plan HAND piece is never folded here: with two
-//       copies cast, two Thefts can genuinely take two different copies.
+//   (b) REDUNDANT ATTACH: the same Equipment is the subject of a second attach in this subset (another
+//       Theft of it, or an Equip of it). The trailing Equip pass runs after every cast, and two Thefts
+//       resolve in cast order, so only the later attach can survive.
 //   (c) ONTO A PIECE THAT IS ATTACHED ITSELF: a Theft whose CREATURE target is a loose reconfigure
 //       piece (Lizard Blades) that this subset also attaches (an Equip/reconfigure of it, or another
 //       Theft of it). However the casts interleave, the piece stops being a creature and whatever was
-//       attached to it falls off (CR 704.5n) -- or, attached first, it is no longer a legal target --
-//       so the Theft at best re-reaches the board of the subset without it, and that subset is
-//       enumerated. Same observability guards as (b).
-//   (d) ...and the mirror: an Equip whose HOST is such a piece a Theft in this subset attaches. The
-//       trailing Equip pass finds a non-creature host and declines before paying (CanAttachEquip), so
-//       the subset realises exactly the subset without that Equip -- an identity fold.
+//       attached to it falls off (CR 704.5n) -- or, attached first, it is no longer a legal target.
+//   (d) ...and the mirror: an Equip whose HOST is such a piece a Theft in this subset attaches. The Theft
+//       resolves before the trailing pass, the host is then no creature, and the Equip is not activated
+//       at all (EquipTargetNotACreatureNow: nothing paid, no waiver spent) -- an identity fold. Only
+//       while nothing in the subset can take the piece's new host away first (SubsetMayFreeHost): a
+//       Path at that host, or a trailing sacrifice, would make the piece a creature again and the
+//       Equip a real move (tightened 2026-10-17; before, (d) folded those too).
+//   (f) THEFT THEN UNATTACH: a Theft of a battlefield reconfigure piece plus that piece's own
+//       "reconfigure: unattach" in the trailing pass. The unattach leaves the piece a loose creature
+//       whichever host it was on, so the subset reaches the board of the unattach alone (or, the
+//       unattach unaffordable, the board of the Theft alone).
+// A SAME-PLAN HAND PIECE (attach_equip_hand) is folded by (b) / (c) / (d) only when its IDENTITY is
+// pinned: the subset casts exactly ONE Equipment of that name and no own battlefield permanent of that
+// name entered this turn. Then every Theft naming it resolves to the one copy this plan casts
+// (ResolveAttachSpellPiece: the pinned number, else the name fallback, which prefers the copy that
+// ENTERED THIS TURN), and an Equip of a hand copy of that name either moves that same copy or -- its
+// copy not being the one cast -- refuses (a stranded no-op, dominated by the subset without it). With
+// two copies cast, two Thefts can genuinely take two different copies, so nothing is folded there.
+// (c) additionally needs the hand piece to start UNATTACHED (its end state is "fell off, unattached",
+// which equals the smaller subset's only from an unattached start): no Sigarda's Aid live (EtbAttachLive).
+// The new hand-piece clauses and (f) use the strict observability guard (any haste / shroud Equipment
+// anywhere declines); the original battlefield-piece (b)-(d) keep the piece-local guard they shipped with.
 // Lockstep: called from both subset walkers (Solve::consider and EnumeratePlans::eval_and_push) behind
 // SubsetFilterPre::attach_spell. Inert for every deck without the card.
 static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vector<Action>& cands,
@@ -15215,60 +15348,192 @@ static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vect
     {
         const Action& a = cands[j];
         if (a.kind != Action::Kind::CastFromHand || a.attach_equip_id == 0) { continue; }
+        bool twice = false;
+        bool strict = false;                       // which observability guard (see the header)
+        const CardDefinition* piece = nullptr;     // the moved piece's definition, for the guard
         if (!a.attach_equip_hand.empty())
         {
-            bool found = false;
+            // (a), and the cast count that pins the piece's identity.
+            int casts = 0;
             for (int k : sel)
             {
                 if (k == j || cands[k].kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* kd = cands[k].def;
                 if (kd != nullptr && kd->params.is_equipment && cands[k].card_name == a.attach_equip_hand)
-                { found = true; break; }
+                { ++casts; }
             }
-            if (!found) { return true; }
-            continue;
+            if (casts == 0) { return true; }
+            if (casts != 1) { continue; }
+            bool fresh_twin = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == state.active_player_index && p.entered_this_turn
+                    && p.card.m_name == a.attach_equip_hand) { fresh_twin = true; break; }
+            }
+            if (fresh_twin) { continue; }
+            // "A hand copy of THIS piece's name" -- the identity test for an Equip's source or host.
+            auto is_hand_copy = [&](int num) -> bool
+            {
+                if (num <= 0 || OwnPermanentByNumber(state, num) != nullptr) { return false; }
+                const Card* hc = OwnHandCardByNumber(state, num);
+                return hc != nullptr && hc->m_name == a.attach_equip_hand;
+            };
+            int etb_attach = -1;                   // EtbAttachLive, computed only when (c) needs it
+            for (int k : sel)
+            {
+                if (k == j) { continue; }
+                const Action& c = cands[k];
+                // (b) another Theft of the same hand piece, or an Equip of a hand copy of it.
+                if (c.kind == Action::Kind::CastFromHand && c.attach_equip_id != 0
+                    && c.attach_equip_hand == a.attach_equip_hand)
+                { twice = true; break; }
+                if (c.kind == Action::Kind::Equip && is_hand_copy(c.sac_source_id))
+                { twice = true; break; }
+                // (d) an Equip ONTO the hand piece (a reconfigure piece cast as a creature) that this
+                // Theft attaches first.
+                if (c.kind == Action::Kind::Equip && is_hand_copy(c.sac_victim_id)
+                    && !SubsetMayFreeHost(cands, sel, a.enchant_target))
+                { twice = true; break; }
+                // (c) the Theft's battlefield creature target is a piece another action attaches.
+                const int c_attaches = c.kind == Action::Kind::Equip ? c.sac_source_id
+                                     : (c.kind == Action::Kind::CastFromHand && c.attach_equip_hand.empty()
+                                        ? c.attach_equip_id : 0);
+                if (a.trick_hand_target.empty() && c_attaches != 0 && c_attaches == a.enchant_target)
+                {
+                    if (etb_attach < 0) { etb_attach = EtbAttachLive(state, cands, sel) ? 1 : 0; }
+                    if (etb_attach == 0) { twice = true; break; }
+                }
+            }
+            if (!twice) { continue; }
+            piece  = CardDatabase::Instance().Lookup(a.attach_equip_hand);
+            strict = true;
         }
-        bool twice = false;
-        for (int k : sel)
+        else
         {
-            if (k == j) { continue; }
-            const Action& c = cands[k];
-            if ((c.kind == Action::Kind::CastFromHand && c.attach_equip_id == a.attach_equip_id
-                 && c.attach_equip_hand.empty())
-                || (c.kind == Action::Kind::Equip && c.sac_source_id == a.attach_equip_id))
-            { twice = true; break; }
-            // (c)/(d): the Theft's creature is a battlefield piece another action attaches, or this
-            // Theft attaches the creature another action equips. enchant_target / sac_victim_id are
-            // m_numbers; a reconfigure piece is the only Equipment that is also a creature host.
-            const int c_attaches = c.kind == Action::Kind::Equip ? c.sac_source_id
-                                 : (c.kind == Action::Kind::CastFromHand && c.attach_equip_hand.empty()
-                                    ? c.attach_equip_id : 0);
-            if (a.trick_hand_target.empty() && c_attaches != 0 && c_attaches == a.enchant_target)
-            { twice = true; break; }
-            if (c.kind == Action::Kind::Equip && c.sac_victim_id == a.attach_equip_id)
-            { twice = true; break; }
+            for (int k : sel)
+            {
+                if (k == j) { continue; }
+                const Action& c = cands[k];
+                if ((c.kind == Action::Kind::CastFromHand && c.attach_equip_id == a.attach_equip_id
+                     && c.attach_equip_hand.empty())
+                    || (c.kind == Action::Kind::Equip && c.sac_source_id == a.attach_equip_id))
+                { twice = true; break; }
+                // (c)/(d): the Theft's creature is a battlefield piece another action attaches, or this
+                // Theft attaches the creature another action equips. enchant_target / sac_victim_id are
+                // m_numbers; a reconfigure piece is the only Equipment that is also a creature host.
+                const int c_attaches = c.kind == Action::Kind::Equip ? c.sac_source_id
+                                     : (c.kind == Action::Kind::CastFromHand && c.attach_equip_hand.empty()
+                                        ? c.attach_equip_id : 0);
+                if (a.trick_hand_target.empty() && c_attaches != 0 && c_attaches == a.enchant_target)
+                { twice = true; break; }
+                if (c.kind == Action::Kind::Equip && c.sac_victim_id == a.attach_equip_id
+                    && !SubsetMayFreeHost(cands, sel, a.enchant_target))
+                { twice = true; break; }
+                // (f) the moved piece's own reconfigure UNATTACH in this subset.
+                if (c.kind == Action::Kind::ActivatePermAbility
+                    && c.ability_mode == Action::AbilityMode::ReconfigureUnattach
+                    && c.sac_source_id == a.attach_equip_id)
+                { twice = true; strict = true; break; }
+            }
+            if (!twice) { continue; }
+            const Permanent* pp = OwnPermanentByNumber(state, a.attach_equip_id);
+            piece = pp != nullptr ? CardDatabase::Instance().LookupCached(pp->card) : nullptr;
         }
-        if (!twice) { continue; }
-        // The observability guards (see the header) -- read only once a double attach is found.
-        bool observable = false;
-        for (const Permanent& p : state.battlefield)
+        if (!AttachIntermediateObservable(state, piece, strict)) { return true; }
+    }
+    return false;
+}
+
+// Does the action at `sel` position `px` run before the one at `py` in the trailing pass? The plan's
+// actions are materialised in `sel` order (Solve::consider sorts `sel` ascending first;
+// EnumeratePlans' odometer builds it auto-equips, then groups, then independents -- either way the plan
+// vector IS `sel`, and the plan sorts after it move only casts), and OrderTrailingActivations then
+// stable-sorts the pass by ActivationOrderRankFor. So: rank first, `sel` position second.
+static bool TrailingRunsFirst(const GameState& state, const std::vector<Action>& cands,
+                              const std::vector<int>& sel, std::size_t px, std::size_t py)
+{
+    const DecisionProvider& prov = ResolveProvider(state);
+    auto rank_of = [&](const Action& a) -> int
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
+    };
+    const int rx = rank_of(cands[static_cast<std::size_t>(sel[px])]);
+    const int ry = rank_of(cands[static_cast<std::size_t>(sel[py])]);
+    return rx != ry ? rx < ry : px < py;
+}
+
+// THE EQUIP-ONTO-A-PIECE-THE-PLAN-ATTACHES fold (claude-play sweep, Colossus Hammer seed 2100003 T5:
+// `cast: Colossus Hammer, reconfigure Lizard Blades -> Kor Duelist, equip Colossus Hammer -> Lizard
+// Blades`, and many T5 plans of that shape). An Equip `e` onto a loose reconfigure piece H, in a subset
+// that ALSO attaches H (`r`: H's reconfigure, or Puresteel's granted equip of it). Which one happens
+// first is fixed: the trailing pass runs the plan's activations in plan order -- the order of `sel`,
+// which is NOT always candidate order (EnumeratePlans' odometer lays it out auto-equips, then groups --
+// which the group-cap / wave machinery may re-rank -- then independents) -- after
+// OrderTrailingActivations' STABLE sort on the provider's ActivationOrderRankFor
+// (every equip of a deck with no opinion ranks 0). This test reproduces exactly that order
+// (TrailingRunsFirst) rather than assuming one. (A HUMAN-declared order, Plan::human_action_order,
+// reorders after the menu is built; the menu's plans are the canonical ones, and the human's order is
+// held to the same rules at apply by EquipTargetNotACreatureNow.)
+//   * r FIRST: H is attached, so no longer a creature, when e would be activated -- e has no legal
+//     target (CR 702.6a / 602.2b), is never activated (EquipTargetNotACreatureNow: nothing paid, the
+//     first-equip waiver not spent), and the subset realises the board of (subset - e). The plan as
+//     offered was illegal; it is not emitted. (r itself refused -> H stays a creature and the subset
+//     realises (subset - r).) Unless something in the subset can take H's new host away in between
+//     (SubsetMayFreeHost) -- then H is a creature again and e a real attach, so it is kept.
+//   * e FIRST: the attach is legal, and then r strips it (CR 704.5n) -- E ends UNATTACHED. That equals
+//     the board of (subset - e) exactly when E was unattached before e: a loose battlefield E, or a
+//     same-plan hand cast with no on-entry attach (EtbAttachLive), no attach-all activation in the pass,
+//     and no Theft of E in the subset (that pairing is SubsetHasStrandedAttachSpell's). An E attached
+//     elsewhere would end differently -- moved off its host for nothing -- and is NOT folded: that is a
+//     worse line, not a provably identical one.
+// Both under the strict observability guard (AttachIntermediateObservable). Lockstep: both subset
+// walkers, behind SubsetFilterPre::equip_onto_piece. Inert for every deck without a reconfigure piece.
+static bool SubsetHasEquipOntoAttachedPiece(const GameState& state, const std::vector<Action>& cands,
+                                            const std::vector<int>& sel)
+{
+    for (std::size_t pj = 0; pj < sel.size(); ++pj)
+    {
+        const Action& e = cands[static_cast<std::size_t>(sel[pj])];
+        if (e.kind != Action::Kind::Equip || e.sac_victim_id <= 0) { continue; }
+        for (std::size_t pk = 0; pk < sel.size(); ++pk)
         {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d == nullptr || !d->params.is_equipment) { continue; }
-            if (d->params.equip_min_power > 0) { observable = true; break; }
-            if (p.card.m_number == a.attach_equip_id
-                && (d->params.equip_grants_haste || d->params.equip_grants_shroud
-                    || d->params.equip_sacrifices_prior_host))
-            { observable = true; break; }
+            if (pk == pj) { continue; }
+            const Action& r = cands[static_cast<std::size_t>(sel[pk])];
+            if (r.kind != Action::Kind::Equip || r.sac_source_id != e.sac_victim_id) { continue; }
+            const CardDefinition* hd = r.def ? r.def : CardDatabase::Instance().Lookup(r.card_name);
+            if (hd == nullptr || !hd->params.reconfigure_cost.has_value()) { continue; }
+            const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().Lookup(e.card_name);
+            if (AttachIntermediateObservable(state, ed, /*any_haste_shroud=*/true)) { continue; }
+            if (TrailingRunsFirst(state, cands, sel, pk, pj))
+            {
+                if (!SubsetMayFreeHost(cands, sel, r.sac_victim_id)) { return true; }
+                continue;
+            }
+            // e first: fold only from an unattached start (see the header) -- which an attach-ALL
+            // activation earlier in the pass (Balan; the human "equip all free") would break.
+            const Permanent* ep = OwnPermanentByNumber(state, e.sac_source_id);
+            if (ep != nullptr ? ep->equipped_to != 0 : EtbAttachLive(state, cands, sel)) { continue; }
+            bool attach_all = false;
+            for (int t : sel)
+            {
+                const Action::Kind tk = cands[static_cast<std::size_t>(t)].kind;
+                if (tk == Action::Kind::AttachAllEquipment || tk == Action::Kind::AttachAllFreeEquipment)
+                { attach_all = true; break; }
+            }
+            if (attach_all) { continue; }
+            const Card* ehc = ep == nullptr ? OwnHandCardByNumber(state, e.sac_source_id) : nullptr;
+            bool thefted = false;
+            for (int t : sel)
+            {
+                const Action& c = cands[static_cast<std::size_t>(t)];
+                if (c.kind != Action::Kind::CastFromHand || c.attach_equip_id == 0) { continue; }
+                if (c.attach_equip_hand.empty() ? c.attach_equip_id == e.sac_source_id
+                                                : (ehc != nullptr && c.attach_equip_hand == ehc->m_name))
+                { thefted = true; break; }
+            }
+            if (!thefted) { return true; }
         }
-        for (const Card& c : state.ActivePlayer().hand)
-        {
-            if (observable) { break; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d != nullptr && d->params.is_equipment && d->params.equip_min_power > 0) { observable = true; }
-        }
-        if (!observable) { return true; }
     }
     return false;
 }
@@ -15432,6 +15697,10 @@ struct SubsetFilterPre
     // purpose: it keeps its TRUE initialiser (unoptimised) on the instruments-armed path, and the
     // builder below lowers it explicitly before raising it per candidate.
     bool attach_spell = true;
+    // SubsetHasEquipOntoAttachedPiece: some Equip candidate's HOST is a reconfigure piece that another
+    // Equip candidate attaches -- the filter's exact necessary condition (it needs both in one
+    // selection). Same placement / lowering contract as attach_spell.
+    bool equip_onto_piece = true;
 };
 
     // Aura-target shroud grantors (see the struct / SubsetHasShroudBlockedAura). Grantors first, so a
@@ -15538,6 +15807,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     p = SubsetFilterPre{ false, false, false, false, false, false, false, false, false,
                          false, false, false, false, false, false, false, false, false };
     p.attach_spell = false;
+    p.equip_onto_piece = false;
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
     bool best_target = false;   // a kTrickBestOwnTarget cand (MTG_MINT_CREDIT_EXACT, Mirrorwing)
     for (const Action& a : cands)
@@ -15593,6 +15863,23 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         { p.gift_damage = true; }
     }
     p.sac_fodder = (sac_actions >= 2);
+    // An Equip onto a reconfigure piece that another Equip candidate attaches (Lizard Blades' own
+    // reconfigure). Only a deck with such a piece can raise it; the pair scan runs only when it could.
+    if (p.equip && state.deck_has_reconfigure)
+    {
+        for (const Action& r : cands)
+        {
+            if (r.kind != Action::Kind::Equip) { continue; }
+            const CardDefinition* rd = r.def ? r.def : CardDatabase::Instance().Lookup(r.card_name);
+            if (rd == nullptr || !rd->params.reconfigure_cost.has_value()) { continue; }
+            for (const Action& e : cands)
+            {
+                if (e.kind == Action::Kind::Equip && e.sac_victim_id == r.sac_source_id)
+                { p.equip_onto_piece = true; break; }
+            }
+            if (p.equip_onto_piece) { break; }
+        }
+    }
     // The cast-time target's board fact, once per enumeration (the board is frozen for its whole
     // length). A board read, unlike the bits above -- but it is the exact answer the filter would
     // compute per subset, not a weaker precondition, so it cannot err in either direction.
@@ -37979,6 +38266,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the
         // other walker. Inert without an attach-spell candidate -> byte-identical.
         if (pre.attach_spell && SubsetHasStrandedAttachSpell(state, cands, sel)) { return; }
+        // Reject an Equip onto a reconfigure piece the same subset attaches away first (no legal
+        // target), or whose attach it strips again (dominated). Lockstep twin in the other walker.
+        if (pre.equip_onto_piece && SubsetHasEquipOntoAttachedPiece(state, cands, sel)) { return; }
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
@@ -46904,7 +47194,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // StoriedWaivedEquipId reads `equip_activated_this_turn` and the first equip below flips it.
     // Computed from the SAME list in the SAME position in both worlds, so the executor and the
     // rollout cannot disagree about which equip is free. 0 = no waiver applies.
-    const int _storied_waived = TurnSolver::StoriedWaivedEquipId(state, trailing_acts);
+    // Not const: an equip with no legal target is never activated, so when the one the waiver was
+    // assigned to is refused the waiver moves on to the equips still to come (lockstep twin in
+    // AIEngine's executor pass; see EquipTargetNotACreatureNow).
+    int _storied_waived = TurnSolver::StoriedWaivedEquipId(state, trailing_acts);
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
@@ -47608,6 +47901,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // make the search project a mana cost the real game does not pay).
             // Reconfigure (Lizard Blades) is not an equip ability -- decided BEFORE the apply, from
             // the same predicate the executor reads (lockstep twin in AIEngine's Equip branch).
+            // NO LEGAL TARGET -> NOT ACTIVATED (CR 702.6a, 602.2b): a host on the battlefield that is
+            // no longer a creature (a Lizard Blades this pass already reconfigured away) is never
+            // targeted -- nothing paid, the turn's first equip unspent, and a waiver assigned to this
+            // equip moves on to the rest of the pass. Unconditional (a rules fix, not the
+            // MTG_EQUIP_PAY_GUARD lever); lockstep twin in AIEngine's Equip branch.
+            if (EquipTargetNotACreatureNow(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
+            {
+                if (_storied_waived != 0 && a.sac_source_id == _storied_waived)
+                {
+                    const std::size_t at = static_cast<std::size_t>(&a - trailing_acts.data());
+                    _storied_waived = TurnSolver::StoriedWaivedEquipId(
+                        state, std::vector<Action>(trailing_acts.begin() + static_cast<std::ptrdiff_t>(at) + 1,
+                                                   trailing_acts.end()));
+                }
+                continue;
+            }
             const bool reconf = IsReconfigureAttach(state, state.active_player_index, a.sac_source_id);
             if ((!EquipPayGuardEnabled()
                  || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
@@ -51250,6 +51559,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the
         // other walker. Inert without an attach-spell candidate -> byte-identical.
         if (pre.attach_spell && SubsetHasStrandedAttachSpell(state, cands, sel)) { return; }
+        // Reject an Equip onto a reconfigure piece the same subset attaches away first (no legal
+        // target), or whose attach it strips again (dominated). Lockstep twin in the other walker.
+        if (pre.equip_onto_piece && SubsetHasEquipOntoAttachedPiece(state, cands, sel)) { return; }
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
