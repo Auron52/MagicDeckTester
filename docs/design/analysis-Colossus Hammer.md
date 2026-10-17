@@ -8,24 +8,23 @@ primary checkout (untracked there) on 2026-10-17 and asked to analyze it. Work h
 viewer and is shared by other sessions, so nothing is edited there). The deck file was COPIED into the
 worktree; the user's original stays in place.
 
-**State (2026-10-17 ~08:45 UTC):** all 10 cards integrated, chains merged. `colossus-b` rebased onto
-Raubahn and `colossus-analysis` fast-forwarded to it (`225538213`; smoke on the merged tip ALL PASS 120/120,
-play-changed=0, scenarios 209/209). Since then on `colossus-analysis`:
-`795642c39` the DRAFT cast order + 5i buckets (both DEFAULT OFF, levers `MTG_COLOSSUS_ORDER` /
-`MTG_COLOSSUS_BUCKET_DISCARD`), `5e32c4d96` Stage 4 profile, `0f3c56499` FIX: a Magnetic Theft cast inside a
-breakpoint continuation replayed with no Equipment (the bp cast RECORD lacked `attach_equip_id`; found by the
-5b depth check, s1001 gi64 d0 T3 vs searched T5 at every budget; scenario
-`colossus_theft_in_tutor_continuation`). IN FLIGHT: a second commit recording the OTHER consume-once/tail
-fields in the bp record (devour, twobrid, land-put, loyalty, replicate, convoke, phyrexian, evoke, adventure,
-kicked) -- same defect class, latent for other decks -> needs a full smoke + regression to attribute.
-Uncommitted: suite rows in all 3 tiers (`test/regression_cases.sh`, smoke shape d0 1000 / d3 150 b10 / d5 75
-b20, regression x2 seeds, overnight ENTRY set, `colossus2hg` smoke canary) -- smoke probe: d3 1.21 s/game,
-d5 1.93 s/game (~1x Hinata); Scryfall snapshot +4 cards (6 deck cards still 429'd: re-run
-`audit_card_fields.py --update --throttle 1.0`). Provider audit `--check` rc=0 (ColossusHammer). Discard
-evidence: 7 cleanup decisions / 400 games, all ties (STATUS_QUO_OK).
-NEXT: smoke + regression on the record fix; accept the colossus GT in all three tiers; `suite_gate --cost`;
-cast-order/discard A/B (`build/scratch/colossus/order_ab/make_ab.py`); Stage 5 (verify_deck, nonconv /
-fd-diverge, leaf_tiebreak, 5h viewer audit, claude-play sweep ~18 Opus agents).
+**State (2026-10-17 ~10:00 UTC; USER: "hold off on pushing ... stabilize everything" -- NOTHING PUSHED):**
+`colossus-analysis` tip `e176abb82`. Done and committed: all 10 cards; the two bp cast-record fixes
+(`0f3c56499` Magnetic Theft's Equipment pin, `0d410db07` ten more fields); Stage 4 profile (`5e32c4d96`); Scryfall
+snapshot (`7088c2f86`); ALL THREE TIERS with accepted GT (`8c1de4465`; suite_gate 0.43x PASS); the cast-order +
+discard DRAFTS implemented OFF (`795642c39`) and MEASURED (`ac2095d02`: order -0.053 play / -0.056 d3 / -0.048 d0,
+every slower game recovers; buckets neutral); viewer-audit state-gated class (5h now PASS); cost audit 435/435;
+verify_deck: coverage/regression_tiers/viewer_wiring/mismatch (nonconv+fd-diverge clean)/play_invariants/suite PASS,
+card_fields FAIL on OTHER decks' cards only (Saproling Migration kicker, Kili storied -- pre-existing);
+claude-play sweep 18/18 recorded below.
+IN FLIGHT (three Opus fix agents, each in its own worktree, branch off `ac2095d02`, commit locally, no push):
+`colossus-pay` (human-play multi-cast line payment, flag 3), `colossus-aid` (Sigarda's Aid host as a SEARCHED axis,
+flag 2 -- changes Kitty play too), `colossus-fold` (reconfigure-then-equip illegal + waiver, dominated attach folds
+incl. the double-Theft, Path human default; flags 4-6). NEXT: rebase each onto `colossus-analysis` (rebase, never
+merge), build, units, scenarios, smoke + regression (`env -C`), per-deck verdicts on every play change, accept GT
+with `--deck` filters (carry provenance notes), update the sweep flag count, then `leaf_tiebreak_check.py` (5c2) on
+the final engine, verify_deck again, final report. Open USER questions: below + cast-order adoption, discard
+buckets, human main-2 asymmetry, Ardenn's human pick.
 GOTCHA: run `test/regression.sh` ONLY as `env -C <tree> bash test/regression.sh` — it uses the CWD's
 binary/cards.json/results (a smoke run from the primary's cwd at 06:33 zeroed the primary's
 `test/results/smoke.env`, a 10-14 leftover). Research drafts + integrator reports: `logs/colossus/drafts/`.
