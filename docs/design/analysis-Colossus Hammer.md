@@ -27,9 +27,12 @@ consume-once CastRiders + the rollout free-cast bank; free-cast hits with no leg
 702.85a); USER-ruled Sigarda's Aid host heuristic. Colossus SMOKE GT accepted twice (`ac44130d8`, `78c864df6`);
 every later commit measured byte-identical on smoke. Deferred (docs/design/free-cast-target-followups.md): the
 executor's targeted free cast, the rollout's template graveyard card.
-FINAL VALIDATION DONE (smoke + regression accepted, `953d30538`); 5c2 DONE (keep ON, net -8 over 40k pairs); verify_deck (17:36): every gate PASS except claude_sweep = 1
-unresolved (flag 1, the USER's cast-order call). RE-CHECK of the 7 flagged sweep seeds on the final engine IN FLIGHT
-(7 Opus agents, scratch `build/scratch/colossus/sweep2/`), then the final report.
+ANALYSIS COMPLETE (2026-10-17 ~18:50 UTC), engine `56937ba8a` + GT `768be587d`, branch `colossus-analysis`, NOTHING
+PUSHED (USER hold). Final: units 1411/1411, scenarios 216/216, smoke + regression accepted (only colossus + one snow
+cell moved; 0 slower anywhere), refs 600 / 0 drift, 5c2 keep ON (net -8 / 40k pairs), verify_deck all PASS except
+claude_sweep = 1 (the USER's cast-order call), flagged-seed recheck confirmed every fix. Overnight GT for the moved
+cells is left to the periodic overnight run. When the USER lifts the push hold: rebase onto origin, rebuild, smoke,
+push, watch CI (Windows).
 Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
 keep-table cache keying, autonomous hand-aware batch prepay, the d0 greedy's self-Path valuation, a lossy
 combat-landfall top-pick prune (all listed in the final report).
