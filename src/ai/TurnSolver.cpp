@@ -26,6 +26,7 @@
 #include <array>
 #include <atomic>
 #include <bit>                      // std::countr_zero -- portable; MSVC has no __builtin_ctz
+#include <charconv>                 // std::to_chars (PlanSignatureFast)
 #include <chrono>
 #include <deque>
 #include <cstdio>
@@ -54073,6 +54074,215 @@ static void EnumAuraSortSkipVerify(const std::vector<Action>& acts, Less less)
     if (!same) { aurasortskip::g_changed.fetch_add(1, std::memory_order_relaxed); }
 }
 
+// MTG_PLAN_SIG_FAST (DEFAULT ON; =0 restores the string-vector builder). EnumeratePlans' autonomous
+// dedup key, `plan_signature`, built every per-action token as its own std::string (most card names
+// are past the 15-char SSO, so one heap allocation per token, more for the `+` chains), pushed it into
+// one of seven std::vector<std::string> buckets, sorted each bucket and concatenated -- ~3% of the
+// EDF generation probe's instructions over ~2.1M emitted plans. This builder writes every token into
+// ONE reused thread_local arena, sorts (bucket, span) pairs with the same lexicographic order
+// std::string's operator< uses (both are char_traits<char>::compare), and concatenates in the same
+// bucket order with the same separator letters -- so it returns the IDENTICAL STRING, not merely an
+// equivalent key. That matters: the old concatenation is not injective (a token may contain a later
+// bucket's letter), and a "cleaner" key would split plans the shipped dedup merges. The human-play
+// signature (sub-decision keys, land/fetch suffix) is not hot and stays on the legacy builder.
+//
+// LOCKSTEP: every token below mirrors one line of the legacy `plan_signature` lambda in EnumeratePlans,
+// field for field, in the same order. A marker added there and not here is the silent "the feature is
+// undone" defect (the devour #D / kicker #KI history) -- so after ANY edit to either, run
+// MTG_PLAN_SIG_FAST_VERIFY=1 (builds both, returns the LEGACY string so play is the old play, counts a
+// difference; printed at exit, must be 0) over a batch that exercises the changed card.
+static bool PlanSigFastOn()       { static const bool v = EnvOn("MTG_PLAN_SIG_FAST", true); return v; }
+static bool PlanSigFastVerifyOn() { static const bool v = EnvOn("MTG_PLAN_SIG_FAST_VERIFY"); return v; }
+namespace plansigfast
+{
+inline std::atomic<long long> g_checked{0}, g_mismatch{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!PlanSigFastVerifyOn()) { return; }
+        std::fprintf(stderr, "[plan-sig-fast] verified=%lld MISMATCH=%lld\n", g_checked.load(), g_mismatch.load());
+    }
+};
+inline Dump g_dump;
+struct Span { std::uint32_t off; std::uint32_t len; std::uint8_t bucket; };
+struct Scratch
+{
+    std::string       arena;
+    std::vector<Span> spans;
+    std::uint32_t     open = 0;
+    std::uint8_t      bucket = 0;
+    void Begin(std::uint8_t b) { bucket = b; open = static_cast<std::uint32_t>(arena.size()); }
+    void End() { spans.push_back(Span{ open, static_cast<std::uint32_t>(arena.size()) - open, bucket }); }
+    void Put(std::string_view s) { arena.append(s.data(), s.size()); }
+    void Put(const InternedName& n) { const std::string& s = n.str(); arena.append(s.data(), s.size()); }
+    void Put(char c) { arena.push_back(c); }
+    void Int(int v)   // the same decimal std::to_string(int) prints
+    {
+        char buf[16];
+        const auto r = std::to_chars(buf, buf + sizeof buf, v);
+        arena.append(buf, static_cast<std::size_t>(r.ptr - buf));
+    }
+};
+inline thread_local Scratch t_scratch;
+}
+// Bucket indices, in the legacy concatenation order; kPlanSigLetters[b] is the separator letter.
+enum : std::uint8_t { kSigV = 0, kSigS, kSigA, kSigG, kSigL, kSigU, kSigM };
+static constexpr char kPlanSigLetters[] = { 'V', 'S', 'A', 'G', 'L', 'U', 'M' };
+static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_bestow_sig, bool host_sig,
+                                     bool cre_host_sig, bool rep_sig)
+{
+    plansigfast::Scratch& w = plansigfast::t_scratch;
+    w.arena.clear();
+    w.spans.clear();
+    for (const Action& act : p.actions)
+    {
+        switch (act.kind)
+        {
+            case Action::Kind::ActivateVial: w.Begin(kSigV); w.Put(act.card_name); w.End(); break;
+            case Action::Kind::CastFromHand:
+            {
+                const CardDefinition* d = act.def;
+                w.Begin(act.sacrifice_land ? kSigA : kSigS);
+                w.Put(act.card_name);
+                if (!act.chosen_float_color.empty()) { w.Put('#'); w.Put(act.chosen_float_color); }
+                if (act.free_cast) { w.Put("#FREE"); }
+                if (d && d->params.modal_choose_n > 0) { w.Put("#S"); w.Int(act.chosen_x); }
+                if (d && !d->params.sac_additional_creature_color.empty()) { w.Put("#V"); w.Int(act.soulfire_own_targets); }
+                if (d && d->params.look_top_put_creature_count > 0) { w.Put("#T"); w.Put(act.tutor_target); }
+                if (d && d->params.etb_destroy_own_noncreature_max > 0) { w.Put("#K"); w.Int(act.chosen_x); }
+                if (d && d->params.bestow_cost.has_value() && !legacy_bestow_sig) { w.Put(act.bestow ? "#B1" : "#B0"); }
+                if (d && !d->params.adventure_face_name.empty()) { w.Put(act.adventure ? "#A1" : "#A0"); }
+                if (d && d->params.kicker_cost.has_value()) { w.Put(act.kicked ? "#KI1" : "#KI0"); }
+                if (d && (d->params.convoke || d->params.tutor_mv_max_is_x))
+                {
+                    w.Put("#X"); w.Int(act.chosen_x); w.Put("#T"); w.Put(act.tutor_target);
+                    w.Put("#C"); w.Int(act.convoke_green); w.Put('/'); w.Int(act.convoke_other);
+                }
+                if (d && d->params.etb_blink_permanent) { w.Put("#F"); w.Int(act.chosen_x); }
+                if (d && d->params.etb_treasurify_each_player) { w.Put("#L"); w.Int(act.chosen_x); }
+                if (act.devour_count >= 0) { w.Put("#D"); w.Int(act.devour_count); }
+                if (rep_sig && act.replicate_count >= 0) { w.Put("#R"); w.Int(act.replicate_count); }   // human play is legacy-only
+                if (act.enchant_target == kTrickBestOwnTarget) { w.Put("#B"); }
+                if (d && d->params.loyalty_start > 0 && act.loyalty_ability >= 0) { w.Put("#L"); w.Int(act.loyalty_ability); }
+                if (act.phyrexian_life > 0) { w.Put("#P"); w.Int(act.phyrexian_life); }
+                if (act.twobrid_colored > 0) { w.Put("#W"); w.Int(act.twobrid_colored); }
+                if (d && d->params.x_damage_each_creature_and_player) { w.Put("#Q"); w.Int(act.chosen_x); }
+                if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
+                if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
+                if (d && d->params.is_land_aura && act.enchant_target > 0 && host_sig) { w.Put("#H"); w.Int(act.enchant_target); }
+                if (cre_host_sig && d && d->params.is_aura && !d->params.is_land_aura && act.enchant_target > 0)
+                { w.Put("#A"); w.Int(act.enchant_target); }
+                if (d && act.rock_mana.Total() > 0 && LandSearchPutsUntapped(*d))
+                {
+                    const ManaPool& rm = act.rock_mana;
+                    w.Put("#LP"); w.Int(rm.white); w.Put('.'); w.Int(rm.blue); w.Put('.'); w.Int(rm.black);
+                    w.Put('.'); w.Int(rm.red); w.Put('.'); w.Int(rm.green); w.Put('.'); w.Int(rm.colorless);
+                    w.Put('.'); w.Int(rm.snow_units);
+                }
+                w.End();
+                break;
+            }
+            case Action::Kind::CastFromGraveyard: w.Begin(kSigG); w.Put(act.card_name); w.End(); break;
+            case Action::Kind::DiscardToLandsEdge:
+                w.Begin(kSigL); w.Put(act.card_name); w.Put('#'); w.Int(act.discard_lands); w.End(); break;
+            case Action::Kind::Suspend: w.Begin(kSigU); w.Put(act.card_name); w.End(); break;
+            case Action::Kind::SacForMana:
+                w.Begin(kSigM); w.Put(act.card_name); w.Put('#'); w.Put(act.chosen_float_color);
+                w.Put('#'); w.Int(act.sac_source_id); w.Put('#'); w.Int(act.ritual_float); w.End(); break;
+            case Action::Kind::DigDraw:  break;
+            case Action::Kind::PlayLand: break;
+            case Action::Kind::TapForTokens:
+                w.Begin(kSigU); w.Put("KRENKO#"); w.Int(act.sac_source_id); w.End(); break;
+            case Action::Kind::SacCreatureOutlet:
+                w.Begin(kSigM); w.Put("SAC#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
+                w.Put('x'); w.Int(act.sac_count); w.End(); break;
+            case Action::Kind::ActivatePod:
+                w.Begin(kSigM); w.Put("POD#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
+                w.Put(':'); w.Put(act.tutor_target);
+                if (act.phyrexian_life > 0) { w.Put("#P"); w.Int(act.phyrexian_life); }
+                w.End(); break;
+            case Action::Kind::GraveyardExileGrow:
+                w.Begin(kSigM); w.Put("OOZE#"); w.Int(act.sac_source_id); w.Put(':'); w.Put(act.tutor_target);
+                w.End(); break;
+            case Action::Kind::Eternalize:
+                w.Begin(kSigU); w.Put("ETERNALIZE#"); w.Put(act.card_name); w.End(); break;
+            case Action::Kind::Channel:
+                w.Begin(kSigS); w.Put("CHANNEL#"); w.Put(act.card_name);
+                if (!act.tutor_target.str().empty()) { w.Put('>'); w.Put(act.tutor_target); }
+                w.End(); break;
+            case Action::Kind::GraveyardExileAbility:
+                w.Begin(kSigM); w.Put("DRE#"); w.Int(act.sac_source_id); w.Put('m'); w.Int(act.gy_exile_mode);
+                w.End(); break;
+            case Action::Kind::GraveyardReturnAbility:
+                w.Begin(kSigM); w.Put("GYR#"); w.Int(act.sac_source_id); w.Put('>'); w.Put(act.tutor_target);
+                w.End(); break;
+            case Action::Kind::GraveyardPlayAbility:
+                w.Begin(kSigM); w.Put("GYP#"); w.Int(act.sac_source_id); w.Put('>'); w.Put(act.tutor_target);
+                w.End(); break;
+            case Action::Kind::Equip:
+                w.Begin(kSigM); w.Put("EQ#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
+                w.End(); break;
+            case Action::Kind::ActivateLoyalty:
+                w.Begin(kSigM); w.Put("PW#"); w.Int(act.sac_source_id); w.Put('a'); w.Int(act.loyalty_ability);
+                w.Put('t'); w.Int(act.enchant_target); w.End(); break;
+            case Action::Kind::GarthActivate:
+                w.Begin(kSigM); w.Put("GARTH#"); w.Int(act.sac_source_id); w.Put('#'); w.Put(act.tutor_target);
+                w.End(); break;
+            case Action::Kind::AttachAllEquipment:
+                w.Begin(kSigM); w.Put("BALAN#"); w.Int(act.sac_source_id); w.End(); break;
+            case Action::Kind::AttachAllFreeEquipment:
+                w.Begin(kSigM); w.Put("EQALLFREE#"); w.Int(act.sac_victim_id); w.End(); break;
+            case Action::Kind::PutFromHandAbility:
+                w.Begin(kSigM); w.Put("SFPUT#"); w.Int(act.sac_source_id); w.Put('#'); w.Put(act.card_name);
+                w.End(); break;
+            case Action::Kind::AuraSwap:
+                w.Begin(kSigM); w.Put("AURASWAP#"); w.Int(act.sac_source_id); w.Put('#'); w.Put(act.card_name);
+                if (act.chosen_x > 1) { w.Put('x'); w.Int(act.chosen_x); }
+                w.End(); break;
+            case Action::Kind::JitteModeAbility:
+                w.Begin(kSigM); w.Put("JITTE#"); w.Int(act.sac_source_id); w.Put('m'); w.Int(act.gy_exile_mode);
+                w.Put('>'); w.Int(act.sac_victim_id); w.End(); break;
+            case Action::Kind::ActivateRevealTop:
+                w.Begin(kSigM); w.Put("CWILD#"); w.Int(act.sac_source_id); w.Put('x'); w.Int(act.chosen_x);
+                w.End(); break;
+            case Action::Kind::UntapCreature:
+                w.Begin(kSigM); w.Put("WWL#"); w.Int(act.sac_source_id); w.End(); break;
+            case Action::Kind::AnimateLand:
+                w.Begin(kSigM); w.Put("ANIM#"); w.Int(act.sac_source_id); w.End(); break;
+            case Action::Kind::TapForTokenPay:
+                w.Begin(kSigM); w.Put("TTOK#"); w.Int(act.sac_source_id); w.End(); break;
+            case Action::Kind::ActivatePump:
+                w.Begin(kSigM); w.Put("APUMP#"); w.Int(act.sac_source_id); w.Put('m'); w.Int(act.gy_exile_mode);
+                w.Put('x'); w.Int(act.chosen_x); w.End(); break;
+            case Action::Kind::ActivateBlink:
+                w.Begin(kSigM); w.Put("BLINK#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
+                w.Put('x'); w.Int(act.chosen_x); w.End(); break;
+            case Action::Kind::ActivatePermAbility:
+                w.Begin(kSigM); w.Put("PABIL#"); w.Int(act.sac_source_id); w.Put('m');
+                w.Int(static_cast<int>(act.ability_mode)); w.Put('x'); w.Int(act.chosen_x); w.End(); break;
+        }
+    }
+    const char* base = w.arena.data();
+    // Bucket order first, then each bucket's tokens in std::string order (memcmp then length -- exactly
+    // basic_string::compare). Equal tokens are interchangeable, so std::sort's instability is invisible.
+    std::sort(w.spans.begin(), w.spans.end(), [base](const plansigfast::Span& x, const plansigfast::Span& y)
+    {
+        if (x.bucket != y.bucket) { return x.bucket < y.bucket; }
+        return std::string_view(base + x.off, x.len) < std::string_view(base + y.off, y.len);
+    });
+    std::size_t total = 0;
+    for (const plansigfast::Span& s : w.spans) { total += 1 + s.len; }
+    std::string sig;
+    sig.reserve(total);
+    for (const plansigfast::Span& s : w.spans)
+    {
+        sig.push_back(kPlanSigLetters[s.bucket]);
+        sig.append(base + s.off, s.len);
+    }
+    return sig;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -57092,7 +57302,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
     const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
     const bool rep_sig = ReplicateSigEnabled();   // the #R key below (MTG_REPLICATE_SIG)
-    auto plan_signature = [s_human_play_sig, host_sig, cre_host_sig, rep_sig](const TurnSolver::Plan& p) -> std::string
+    // LOCKSTEP with PlanSignatureFast (MTG_PLAN_SIG_FAST, the default autonomous builder): every token
+    // this legacy builder emits is mirrored there field for field. Edit both, then run
+    // MTG_PLAN_SIG_FAST_VERIFY=1 (see PlanSigFastOn).
+    auto plan_signature_legacy = [s_human_play_sig, host_sig, cre_host_sig, rep_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l, u, msf;
         for (const Action& act : p.actions)
@@ -57504,6 +57717,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (p.land_from_top)           { sig += "|top"; }
         }
         return sig;
+    };
+    // The autonomous signature goes through the arena builder (identical string, see PlanSigFastOn);
+    // human play keeps the legacy builder for its sub-decision suffix. Verify mode builds both and
+    // returns the LEGACY string, so a mismatch is counted without moving play.
+    const bool sig_fast = PlanSigFastOn() && !s_human_play_sig;
+    auto plan_signature = [&plan_signature_legacy, sig_fast, host_sig, cre_host_sig, rep_sig]
+                          (const TurnSolver::Plan& p) -> std::string
+    {
+        if (!sig_fast) { return plan_signature_legacy(p); }
+        std::string f = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
+        if (!PlanSigFastVerifyOn()) { return f; }
+        std::string old = plan_signature_legacy(p);
+        plansigfast::g_checked.fetch_add(1, std::memory_order_relaxed);
+        if (f != old) { plansigfast::g_mismatch.fetch_add(1, std::memory_order_relaxed); }
+        return old;
     };
     std::unordered_set<std::string> seen;
     seen.reserve(plans.size() * 2);
