@@ -33671,6 +33671,9 @@ struct Ctx
     // then spent that float on the finisher and stranded the next blink. Set, the finish keeps the
     // next blink's mana unless the lands can pay it or the float finishes the kill outright.
     bool        protect_blink = false;
+    // MTG_EDF_ROUTE_PERIODIC_VERIFY only: Loop's periodic-state proof fired on this Loop call (the
+    // verify run keeps going and the wrapper checks the verdict really was 0).
+    bool        periodic_pred = false;
     // MTG_EDF_ROUTE_LOOP_UNTAPPER's deploy attempts only (see Run): DeployPieces step 3 casts a second
     // untapper whose LOOP nets more than the payload already down, even when its cast refund is below
     // its cost. `loop_untapper_fired` records that the rule changed a deploy (else the attempt is the
@@ -33728,6 +33731,120 @@ static const std::function<bool(const ManaCost&)>& DeclinePayer()
     return f;
 }
 
+// ---- THE STATE SIGNATURE ------------------------------------------------------------------------
+// RouteSig: every field of GameState, both Players and every Permanent (with its Card's identity, types,
+// colours, keywords, P/T and cost) that a resolution can write, transcribed into a flat vector, so two
+// states can be compared EXACTLY (element for element, no hash). Deck-constant stamps that cannot change
+// inside a trial (deck_has_*, the provider / evaluator / spawn pointers, the combat and second-main deck
+// flags) are left out. A FIELD ADDED to GameState / Player / Permanent / Card that a resolution can
+// change MUST be added here (see MTG_EDF_ROUTE_PERIODIC_VERIFY below for how to check).
+static void SigCost(std::vector<long long>& v, const ManaCost& c)
+{
+    v.push_back(c.generic); v.push_back(c.white); v.push_back(c.blue); v.push_back(c.black); v.push_back(c.red);
+    v.push_back(c.green); v.push_back(c.colorless); v.push_back(c.has_x); v.push_back(c.x_pips);
+    v.push_back(c.twobrid_count); v.push_back(c.hybrid_count); v.push_back(c.phyrexian_count);
+    for (int i = 0; i < 4; ++i) { v.push_back(c.hybrid_pair[i]); }
+    for (int i = 0; i < 2; ++i) { v.push_back(c.phyrexian_color[i]); }
+    for (int i = 0; i < 3; ++i) { v.push_back(c.twobrid_color[i]); }
+}
+static void SigPool(std::vector<long long>& v, const ManaPool& f)
+{
+    v.push_back(f.white); v.push_back(f.blue); v.push_back(f.black); v.push_back(f.red); v.push_back(f.green);
+    v.push_back(f.colorless); v.push_back(f.wild); v.push_back(f.wild_c); v.push_back(f.wild_phantom); v.push_back(f.snow_units);
+}
+static void SigCard(std::vector<long long>& v, const Card& c)
+{
+    v.push_back(c.m_number); v.push_back(static_cast<long long>(c.m_name_hash)); v.push_back(c.m_type_mask);
+    v.push_back(c.m_supertype_mask); v.push_back(c.m_color_mask); v.push_back(static_cast<long long>(c.m_keyword_mask));
+    v.push_back(c.m_power.has_value() ? *c.m_power : -100000); v.push_back(c.m_toughness.has_value() ? *c.m_toughness : -100000);
+    v.push_back(c.m_is_staged); v.push_back(c.m_impulse_no_land); v.push_back(c.m_staged_expiry);
+    SigCost(v, c.m_mana_cost);
+}
+static void SigCards(std::vector<long long>& v, const std::vector<Card>& cs)
+{
+    v.push_back(static_cast<long long>(cs.size()));
+    for (const Card& c : cs) { v.push_back(c.m_number); }
+}
+static void RouteSig(const GameState& s, std::vector<long long>& v)
+{
+    v.clear();
+    for (const Player& p : s.players)
+    {
+        v.push_back(p.life); v.push_back(p.gy_size_at_turn_start); v.push_back(p.lands_played_this_turn);
+        v.push_back(p.bonus_land_drops_this_turn); v.push_back(p.cards_drawn_this_turn); v.push_back(p.life_gained_this_turn);
+        v.push_back(p.cards_cycled_or_discarded_this_turn); v.push_back(p.has_city_blessing); v.push_back(p.has_enduring_story);
+        v.push_back(p.equip_activated_this_turn); v.push_back(p.emblem_team_pump); v.push_back(p.poison_counters);
+        v.push_back(p.rad_counters); v.push_back(p.energy_counters);
+        SigCards(v, p.hand);
+        v.push_back(static_cast<long long>(p.library.size()));
+        for (const Card& c : p.library) { v.push_back(c.m_number); }
+        SigCards(v, p.graveyard); SigCards(v, p.sideboard);
+        v.push_back(static_cast<long long>(p.staged_cards.size()));
+        for (const StagedCard& c : p.staged_cards) { v.push_back(c.card.m_number); v.push_back(c.expiry_turn); }
+        v.push_back(static_cast<long long>(p.suspended_cards.size()));
+        for (const SuspendedCard& c : p.suspended_cards) { v.push_back(c.card.m_number); v.push_back(c.arrive_turn); }
+    }
+    {
+        const PayRollbackLedger& l = s.pay_ledger;
+        v.push_back(l.n); v.push_back(l.player); v.push_back(l.rollbacks); v.push_back(l.untap_effect); v.push_back(l.turn);
+        for (int i = 0; i < l.n && i < PayRollbackLedger::kMax; ++i)
+        { v.push_back(l.e[i].source_num); v.push_back(l.e[i].produced); v.push_back(l.e[i].generic); }
+    }
+    v.push_back(s.active_player_index); v.push_back(s.priority_player_index);
+    v.push_back(static_cast<int>(s.phase)); v.push_back(static_cast<int>(s.step));
+    v.push_back(static_cast<long long>(s.stack.size()));
+    SigCards(v, s.exile);
+    v.push_back(s.next_token_number); v.push_back(s.next_opp_spawn_number); v.push_back(s.consecutive_passes);
+    v.push_back(s.turn_number); v.push_back(s.player_lost_on_draw); v.push_back(s.proven_no_win);
+    v.push_back(s.opponent_lost_life_this_turn); v.push_back(s.opponent_library_dealt); v.push_back(s.opponent_decked);
+    v.push_back(s.inf_life_turn); v.push_back(s.inf_life_possible); v.push_back(s.top_stacked_turn);
+    v.push_back(s.top_stacked_card_number);
+    SigPool(v, s.floating_mana); SigPool(v, s.floating_creature_mana); SigPool(v, s.floating_bigspell_mana);
+    v.push_back(static_cast<long long>(reinterpret_cast<std::uintptr_t>(s.floating_bigspell_pp)));
+    v.push_back(s.spells_cast_this_turn); v.push_back(s.mv_cast_this_turn);
+    v.push_back(s.dmg_events_armed); v.push_back(s.own_death_live);
+    v.push_back(s.casts_remaining_this_turn); v.push_back(s.hand_size_at_combat); v.push_back(s.battlefield_at_combat);
+    v.push_back(static_cast<long long>(s.m1start_hand_mask[0])); v.push_back(static_cast<long long>(s.m1start_hand_mask[1]));
+    v.push_back(s.m1start_hand_turn); v.push_back(s.m2_stage_turn);
+    v.push_back(static_cast<long long>(s.m2_prestaged_mask[0])); v.push_back(static_cast<long long>(s.m2_prestaged_mask[1]));
+    v.push_back(static_cast<long long>(s.game_seed)); v.push_back(static_cast<long long>(s.search_count));
+    v.push_back(static_cast<long long>(s.shuffle_salt)); v.push_back(static_cast<long long>(s.shuffle_salt_opening));
+    v.push_back(static_cast<long long>(s.shuffle_salt_search));
+    v.push_back(s.m1_hand_n); for (int x : s.m1_hand) { v.push_back(x); } v.push_back(s.m1_hand_turn);
+    for (std::uint8_t x : s.combat_hand) { v.push_back(x); } v.push_back(s.combat_hand_turn);
+    v.push_back(s.dep_enabler_main1); v.push_back(s.dep_castpayoff_main1); v.push_back(s.day_night);
+    v.push_back(s.free_casts_available); v.push_back(s.vial_target_mv);
+    v.push_back(s.scripted_cheat_choice); v.push_back(s.scripted_fling_victim); v.push_back(s.scripted_tectonic_mode);
+    v.push_back(s.scripted_tectonic_keep); v.push_back(s.scripted_bruna_gather); v.push_back(s.scripted_combat_aura_swap);
+    v.push_back(s.scripted_combat_aura_swap_in); v.push_back(s.scripted_discard_choice); v.push_back(s.scripted_vial_charge);
+    v.push_back(s.scripted_saga_target); v.push_back(s.scripted_attack_land_search); v.push_back(s.scripted_upkeep_land_search);
+    v.push_back(s.scripted_combat_land_search_crack);
+    v.push_back(static_cast<long long>(s.battlefield.size()));
+    for (const Permanent& p : s.battlefield)
+    {
+        SigCard(v, p.card);
+        v.push_back(p.controller_index); v.push_back(p.owner_index); v.push_back(p.tapped); v.push_back(p.def_absent);
+        v.push_back(p.is_token); v.push_back(p.entered_this_turn); v.push_back(p.fresh_hold_exempt);
+        v.push_back(p.gained_control_this_turn); v.push_back(p.marked_for_destruction); v.push_back(p.is_animated);
+        v.push_back(p.animated_printed_types); v.push_back(p.temp_haste); v.push_back(p.temp_lifelink);
+        v.push_back(p.temp_double_strike); v.push_back(p.skip_next_untap); v.push_back(p.etb_tap_pending);
+        v.push_back(p.exile_at_end); v.push_back(p.pay_sac_eaten); v.push_back(p.mana_tap_mark); v.push_back(p.echo_resolved);
+        v.push_back(p.storage_hold_this_turn); v.push_back(p.loyalty_activated_this_turn);
+        v.push_back(p.colored_cast_lifegain_used_this_turn); v.push_back(p.storied_draw_used_this_turn);
+        v.push_back(p.lifegain_counters_used_this_turn); v.push_back(p.chosen_color); v.push_back(p.garth_chosen_mask);
+        v.push_back(p.chosen_keyword_mask); v.push_back(p.chosen_subtype_id); v.push_back(p.paired_with);
+        v.push_back(p.damage); v.push_back(p.temp_power_bonus); v.push_back(p.temp_tough_bonus); v.push_back(p.equipped_to);
+        v.push_back(p.aura_attached_to); v.push_back(p.pending_death_trigger); v.push_back(p.charge_counters);
+        v.push_back(p.verse_counters); v.push_back(p.lore_counters); v.push_back(p.storage_counters); v.push_back(p.loyalty);
+        v.push_back(p.ice_counters); v.push_back(p.age_counters); v.push_back(p.spore_counters); v.push_back(p.fade_counters);
+        v.push_back(p.created_by_number); v.push_back(p.quest_counters); v.push_back(p.hone_counters);
+        v.push_back(p.linked_exile_number);
+        v.push_back(static_cast<long long>(std::hash<std::string>{}(p.copy_printed_name.str())));
+        v.push_back(static_cast<long long>(p.counters.size()));
+        for (std::size_t i = 0; i < p.counters.size(); ++i)
+        { v.push_back(static_cast<int>(p.counters[i].type)); v.push_back(p.counters[i].count); }
+    }
+}
 // ---- mana: explicit allocation ------------------------------------------------------------------
 // ROLLBACK DOCTRINE. Every primitive below is ATOMIC: it either completes or leaves the state
 // exactly as it found it. Tapping is not free -- a painland pays life, an energy land spends {E},
@@ -34896,6 +35013,123 @@ static bool Develop(Ctx& cx)
     if (casts > 0) { cx.Note("developed: " + std::to_string(casts) + " creature(s) cast off the loop"); }
     return casts > 0;
 }
+// ---- THE PERIODIC-STATE EXIT (MTG_EDF_ROUTE_PERIODIC, DEFAULT ON; =0 restores the full stall walk) ----
+// A SOUND, BYTE-IDENTICAL early exit for the stalled loop. At the mulligan-generation shape 20,276 Loop
+// calls ended "stalled" (60+ blinks without a step) and spent 1.57M blinks doing it -- the largest single
+// block of route time -- and 14,791 of them were EXACTLY PERIODIC by their 2nd-3rd blink: the blink's
+// cost and its untaps' refund cancel, so the board comes back to the same state every blink or two and
+// the walk then repeats that cycle until the stall counter runs out.
+//
+// THE PROOF. Between two steps (every step resets `stall` to 0; a WINDOW here is the run of iterations
+// with no step), one iteration is a deterministic function of the GAME STATE (cx.s) and of the Ctx
+// fields it reads: ScanBoard / ScanHand / Decide / SetDemand read only cx.s; the step attempts that fail
+// leave the state as they found it (they test FloatPays first or roll back atomically); the untap set
+// and the blink read cx.s and cx.demand / reserve / paying -- but none of those three carries anything
+// from one iteration to the next: SetDemand rewrites demand and reserve from the state before anything
+// in the iteration reads them (only Develop, at guard 0, comes earlier, and it sets them itself), and
+// every TapLand caller (Pay, Blink's tap-ahead, CastCreature's tap-ahead) sets `paying` before tapping.
+// cx.protect_blink is constant within a Loop call. The loop-local control is
+// guard, stall, last_target and prev, and they reach the VERDICT only through exits that return 0:
+//   * the stall exit and the iteration cap (whose RouteWon is false: the state it would need won
+//     repeats a state that was not), "no progress" (prev), "route would kill us", "loop broke",
+//     "blink unpayable" and "no finisher route" -- all 0;
+//   * guard matters only through `guard == 0 && Develop(...)`, and a window that has blinked is past 0;
+//   * the only nonzero outcomes (the RouteWon tops, the finisher's kill) need a STEP or a won state.
+// So if the state after blink j of a window equals the state after an earlier blink i of the same
+// window, every later iteration replays an earlier one: no step fires that did not fire between i and j
+// (none did -- it is one window), the opponent is never dead, and Loop's verdict is 0. Returning 0 at j
+// is the answer the walk would have reached; what it skips is only narration (cx.log, the trace) and
+// the blink counters, none of which a trial returns (Run's outputs are the verdict and attempt_used,
+// and a 0 sets no attempt; Run restores the snapshot before the next attempt). The LIVE apply (cx.emit)
+// never takes the exit: it replays the attempt its trial found nonzero, and leaving it the full walk
+// keeps its narration untouched by construction.
+//
+// "EQUALS" IS EXACT, NOT A HASH. A hash of what a blink moves (PeriodicNominator) only NOMINATES a
+// candidate period p, from an earlier blink of the window; the proof compares the FULL state signature
+// (RouteSig, above TapLand) at blink j and again at j + p, element for element. A FIELD ADDED to
+// GameState / Player / Permanent / Card that a blink can change MUST be added to
+// RouteSig: MTG_EDF_ROUTE_PERIODIC_VERIFY=1 runs every loop out after the proof fires and reports any
+// verdict that was not 0, which is how to check that after such a change.
+inline bool PeriodicOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_PERIODIC", true); return v; }
+inline bool PeriodicVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_PERIODIC_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_per_fired{0}, g_per_bad{0};
+struct PeriodicVerifyPrinter
+{
+    ~PeriodicVerifyPrinter()
+    {
+        if (!PeriodicVerify()) { return; }
+        std::fprintf(stderr, "[route-periodic] verify: %llu proofs, %llu MISMATCHES\n", g_per_fired.load(), g_per_bad.load());
+    }
+};
+inline PeriodicVerifyPrinter g_per_printer;
+// The NOMINATOR: a hash over the fields a blink actually moves (the float, life, energy, zone contents,
+// every permanent's id / tapped / counters in battlefield order). Equal signatures imply equal
+// nominators, so a mismatch rules a period out; a match only nominates -- the proof is RouteSig's.
+static std::uint64_t PeriodicNominator(const Ctx& cx)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    auto mx = [&](long long v) { h ^= static_cast<std::uint64_t>(v) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+    const GameState& s = cx.s;
+    const ManaPool& f = s.floating_mana;
+    mx(f.white); mx(f.blue); mx(f.black); mx(f.red); mx(f.green); mx(f.colorless); mx(f.wild); mx(f.wild_c);
+    mx(f.wild_phantom); mx(s.next_token_number); mx(static_cast<long long>(s.exile.size()));
+    for (const Player& p : s.players)
+    {
+        mx(p.life); mx(p.energy_counters); mx(static_cast<long long>(p.library.size()));
+        for (const Card& c : p.hand) { mx(c.m_number); }
+        mx(-1); mx(static_cast<long long>(p.graveyard.size()));
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        mx(p.card.m_number); mx(p.tapped); mx(p.aura_attached_to);
+        for (std::size_t i = 0; i < p.counters.size(); ++i) { mx(static_cast<int>(p.counters[i].type)); mx(p.counters[i].count); }
+        mx(-3);
+    }
+    return h;
+}
+// One window's watch (see the proof above). Step() after each blink: true = the state is proven periodic.
+// The bounds (blinks watched, failed nominations) only limit how hard it looks -- a window past them
+// simply walks on exactly as before.
+struct PeriodicWatch
+{
+    static constexpr int kHorizon = 32, kCands = 4;
+    bool          armed = false;
+    int           wb = 0, nk = 0, cand_at = -1, period = 0, cands = 0;
+    std::uint64_t keys[kHorizon] = {};
+    void Reset(bool on) { armed = on; wb = 0; nk = 0; cand_at = -1; period = 0; cands = 0; }
+    static std::vector<long long>& SigA() { static thread_local std::vector<long long> v; return v; }
+    static std::vector<long long>& SigB() { static thread_local std::vector<long long> v; return v; }
+    bool Step(const Ctx& cx)
+    {
+        if (!armed) { return false; }
+        ++wb;
+        if (wb > kHorizon && cand_at < 0) { armed = false; return false; }
+        if (cand_at >= 0 && wb == cand_at + period)
+        {
+            RouteSig(cx.s, SigB());
+            if (SigB() == SigA()) { return true; }
+            cand_at = -1;   // the nomination was wrong (a nominator collision): keep looking
+            if (++cands >= kCands) { armed = false; return false; }
+        }
+        if (wb > kHorizon) { return false; }
+        const std::uint64_t k = PeriodicNominator(cx);
+        if (cand_at < 0)
+        {
+            for (int i = nk - 1; i >= 0; --i)
+            {
+                if (keys[i] == k)
+                {
+                    period = nk - i; cand_at = wb;   // keys[i] is blink i + 1, this one is blink nk + 1 == wb
+                    RouteSig(cx.s, SigA());
+                    break;
+                }
+            }
+        }
+        keys[nk++] = k;
+        return false;
+    }
+};
+
 // MTG_EDF_ROUTE_DIAG: a wide state hash for the periodicity census (print-only).
 static std::uint64_t DiagLoopHash(const Ctx& cx)
 {
@@ -34934,9 +35168,12 @@ static int LoopBody(Ctx& cx)
     // target without a step firing, and the route says so.
     int stall = 0, last_target = 0;
     std::vector<std::uint64_t> dhist; int drep = -1;
+    const bool per_on = PeriodicOn() && !cx.emit;
+    PeriodicWatch pw;
     for (int guard = 0; guard < MaxIter(); ++guard)
     {
         if (RouteDiagOn() && stall == 0) { dhist.clear(); drep = -1; }
+        if (per_on && stall == 0) { pw.Reset(!cx.periodic_pred); }
         if (RouteWon(cx)) { cx.exit_why = 1; return 1; }
         if (cx.s.players[cx.me].life <= 0) { cx.Note("route would kill us"); cx.exit_why = 2; return 0; }
         Board b = ScanBoard(cx);
@@ -35083,12 +35320,38 @@ static int LoopBody(Ctx& cx)
             }
             cx.Note("stalled: " + std::to_string(stall) + " blinks without a step firing"); cx.exit_why = 11; return 0;
         }
+        // THE PERIODIC-STATE EXIT (see PeriodicWatch): this blink's state repeats one of this window's.
+        if (per_on && pw.Step(cx))
+        {
+            if (!PeriodicVerify()) { cx.Note("periodic: the loop repeats a state without a step"); cx.exit_why = 13; return 0; }
+            cx.periodic_pred = true;   // verify: run the walk out, the wrapper checks the 0
+            pw.armed = false;
+        }
     }
     cx.Note("iteration cap"); cx.exit_why = 12;
     return RouteWon(cx) ? 1 : 0;
 }
 
+static int LoopTimed(Ctx& cx);
 static int Loop(Ctx& cx)
+{
+    if (!PeriodicVerify()) { return LoopTimed(cx); }
+    cx.periodic_pred = false;
+    const int r = LoopTimed(cx);
+    if (cx.periodic_pred)
+    {
+        g_per_fired.fetch_add(1, std::memory_order_relaxed);
+        if (r != 0)
+        {
+            g_per_bad.fetch_add(1, std::memory_order_relaxed);
+            std::fprintf(stderr, "[route-periodic] MISMATCH t%d: proved periodic, the walk answered %d | %s\n",
+                         cx.s.turn_number, r, cx.log.c_str());
+        }
+    }
+    cx.periodic_pred = false;
+    return r;
+}
+static int LoopTimed(Ctx& cx)
 {
     if (!RouteDiagOn()) { return LoopBody(cx); }
     const int it0 = cx.iters;
@@ -35487,13 +35750,13 @@ struct RouteDiagPrinter
     ~RouteDiagPrinter()
     {
         if (!RouteDiagOn()) { return; }
-        static const char* why[13] = { "?", "won-entry", "kills-us", "loop-broke", "develop", "no-finisher",
+        static const char* why[14] = { "?", "won-entry", "kills-us", "loop-broke", "develop", "no-finisher",
                                        "gorge-fail", "finisher-kill", "blink-unpayable", "no-progress", "stalled",
-                                       "", "iter-cap" };
+                                       "", "iter-cap", "periodic" };
         why[11] = "stalled"; why[9] = "blink-unpayable"; why[10] = "no-progress"; why[8] = "dead-lethal";
         std::fprintf(stderr, "[route-diag] run n=%llu ms=%.1f | deploy n=%llu ms=%.1f\n", g_run_n.load(), g_run_ns.load() / 1e6,
                      g_dep_n.load(), g_dep_ns.load() / 1e6);
-        for (int w = 0; w < 13; ++w)
+        for (int w = 0; w < 14; ++w)
         {
             if (g_lx_n[w].load() == 0) { continue; }
             std::fprintf(stderr, "[route-diag] loop exit %-16s n=%llu blinks=%llu ms=%.1f\n", why[w], g_lx_n[w].load(),
