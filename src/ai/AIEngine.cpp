@@ -1662,6 +1662,22 @@ int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_tu
     // (lookahead bottoming, on at depth > 0), then play the game out clairvoyantly. The result
     // is the same win turn the deck would realise if it kept this hand -- so a label derived
     // from it (keep iff this beats the expected value of mulliganing) matches real play.
+    //
+    // ONE CALL IS ONE WHOLE GAME, so it gets the game-start cache clear HandleMulligan gives a real
+    // game (TurnSolver::ClearPerGameCaches -- every thread_local plan memo, the bp-enum cache, the
+    // combo-route memo, the payable-mana cache, the hybrid's learned R/G). Every caller is a
+    // generator that hands this function many rollouts on one reused worker thread -- the exhaustive
+    // keep generator (run_batch / run_one / MTG_KEEP_BENCH), equivalence discovery, the
+    // keep-model trainer and the comp scorer (MTG_SCORE_*) -- and none of them goes through
+    // HandleMulligan, so before this clear a rollout's caches held whatever the previous rollouts on
+    // the same thread left there, and the work-stealing item order decided which rollouts shared a
+    // thread. That is the cross-game channel docs/design/batch-run-to-run-nondeterminism.md forbids:
+    // a label must be a pure function of its (hand, seed, settings), the same at 1 thread as at 32.
+    // Measured 2026-10-17 (docs/design/edf-round3-2026-10-17.md). NEVER call this from inside a game
+    // (it would wipe that game's caches mid-play); in-game trial games use RolloutWinTurn directly.
+    // MTG_LEGACY_ROLLOUT_KEEP_CACHE_CARRY=1 restores the carry (A/B only).
+    static const bool s_legacy_carry = EnvOn("MTG_LEGACY_ROLLOUT_KEEP_CACHE_CARRY");
+    if (!s_legacy_carry) { TurnSolver::ClearPerGameCaches(); }
     SetMaxTurns(max_turns);
     if (mulligan_count > 0) { BottomCards(trial, mulligan_count, max_turns); }
     // Execution-trace: if a touch index + output vector are supplied, record which cards' effects run
