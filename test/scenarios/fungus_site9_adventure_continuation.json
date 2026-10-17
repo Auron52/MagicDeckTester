@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Fungus/Fungus.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 17,
+  "library_top": ["Forest"],
+  "library_filler": "Doubling Season",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "_comment": "Fungus v2 seed 7021 T4, the board of docs/design/fungus-v2-fd-diverge-7021.md (2026-10-17). The kill: Forest, Utopia Mycon, Saproling Burst; Burst's entry opens BREAKPOINT SITE 9 (post-entry activation), whose searched continuation casts Brightcap Badger AS ITS ADVENTURE Fungus Frolic ({2}{G}, two Saprolings) and pops the Burst three times -- every body hasted by Concordant Crossroads, 17 damage exactly. The executor's site-9 twin (AIEngine::TakeTurn, pe_cast) dropped the adventure flag when it cast the continuation, so it tried the {3}{G} creature, could not pay, and the two tokens never existed: the search proved T4 and the game won T5. Asserts the realised T4. Filler is a card the deck cannot cast before T5 off this board's spare mana, so the draw adds nothing.",
+  "battlefield": [
+    { "name": "Forest", "tapped": false },
+    { "name": "Wild Growth", "equips": "Forest" },
+    { "name": "Concordant Crossroads" },
+    { "name": "Hickory Woodlot", "depletion_counters": 1 },
+    { "name": "Hickory Woodlot", "depletion_counters": 2 },
+    { "name": "Brightcap Badger", "sick": false },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Saproling"], "color": "G", "sick": false }
+  ],
+  "hand": [ "Saproling Burst", "Utopia Mycon", "Forest", "Brightcap Badger" ],
+  "expect_win_turn": 4
+}

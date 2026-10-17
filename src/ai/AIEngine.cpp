@@ -5672,7 +5672,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                      ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
                                      ca.splice_count, ca.chosen_float_color, ca.enchant_target,
                                      ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
-                                     ca.convoke_other, ca.phyrexian_life, ca.evoke);
+                                     ca.convoke_other, ca.phyrexian_life, ca.evoke, ca.adventure, ca.kicked);
                         resolve_now();
                         pod_unlock->Fire();
                         exec_cont_land_hook(pod_land, ca);   // a positioned continuation land after its watcher
@@ -5685,7 +5685,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                          ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
                                          ca.splice_count, ca.chosen_float_color, ca.enchant_target,
                                          ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
-                                         ca.convoke_other, ca.phyrexian_life, ca.evoke);
+                                         ca.convoke_other, ca.phyrexian_life, ca.evoke, ca.adventure, ca.kicked);
                             resolve_now();
                             exec_cont_land_hook(pod_land, ca);
                         }
@@ -7104,11 +7104,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             auto pe_cast = [&](const Action& ca)
             {
+                // ADVENTURE / KICKER must ride through, as every other cast site here passes them.
+                // This call stopped at `evoke`, so the defaulted `adventure = false` re-cast a
+                // continuation's Fungus Frolic as the {3}{G} Brightcap Badger creature: it failed
+                // to pay, the two Saprolings never existed, and Fungus v2 seed 7021's proven T4
+                // kill realised T5 (docs/design/fungus-v2-fd-diverge-7021.md;
+                // test/scenarios/fungus_site9_adventure_continuation.json). The pod twin above had
+                // the same truncated call.
                 m_pending_devour_count = ca.devour_count; m_pending_twobrid = ca.twobrid_colored; m_pending_land_put = ca.rock_mana; cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
                              ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
                              ca.splice_count, ca.chosen_float_color, ca.enchant_target,
                              ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
-                             ca.convoke_other, ca.phyrexian_life, ca.evoke);
+                             ca.convoke_other, ca.phyrexian_life, ca.evoke, ca.adventure, ca.kicked);
                 resolve_now();
                 walker_cast_activation(ca);
             };

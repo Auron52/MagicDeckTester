@@ -367,7 +367,9 @@ def gate_mismatch(deck_path, profile, seeds, games, no_sweep):
     (rollout-vs-real) across seeds. A single flagged line is a real defect (analyze-deck 5a).
 
     TWO arms, because both are selected by PROCESS-WIDE env vars (MTG_FLAG_NONCONV vs
-    MTG_FULL_DEPTH+MTG_FD_ORACLE) and so cannot share one process. That is the floor, not a
+    MTG_FD_ORACLE) and so cannot share one process. (The fd arm once also set MTG_FULL_DEPTH;
+    that opt-in was deleted when full-depth search became the default, and the engine warns
+    that it reads no such flag -- so it was dropped here, 2026-10-17. Full depth IS what runs.) That is the floor, not a
     wave: within each arm every seed is pooled into ONE `mtg --batch` queue at full threads.
     The old shape was the opposite on both counts -- one invocation per (seed, arm), each
     pinned to `--threads 1`, which is why a 2-seed run took long enough to look hung.
@@ -381,9 +383,19 @@ def gate_mismatch(deck_path, profile, seeds, games, no_sweep):
                     disclose=["mismatch SKIPPED (--no-sweep) -- nonconv/fd-diverge not exercised"])
     if not Path(BIN).exists():
         return Gate("mismatch", ERROR, True, f"engine binary not built at {BIN}")
+    # DISJOINT SEED RANGES. The runner seeds game gi at `base + gi`, so a job covers
+    # [base, base + games). Two bases closer than `games` overlap, and an overlapping game is
+    # played (and flagged) twice -- the old default `7001 7002` x 60 games reported one
+    # divergent game (seed 7021) as two findings. Same rule as the overnight tier's bases.
+    srt = sorted(seeds)
+    for a, b in zip(srt, srt[1:]):
+        if b - a < games:
+            return Gate("mismatch", ERROR, True,
+                        f"seed bases {a} and {b} overlap at {games} games per seed (runner seeds "
+                        f"game gi at base+gi) -- space bases at least --games apart")
     scratch = ROOT / "logs/verify" / deck_stem(deck_path)
     arms = [("nonconv", 3, {"MTG_FLAG_NONCONV": "1"}),
-            ("fd_oracle", 5, {"MTG_FULL_DEPTH": "1", "MTG_FD_ORACLE": "1"})]
+            ("fd_oracle", 5, {"MTG_FD_ORACLE": "1"})]
     flagged = []
     for arm, depth, env in arms:
         man = _write_mismatch_manifest(scratch / f"mismatch_{arm}.json", deck_path, profile,
@@ -680,7 +692,9 @@ def main():
     ap = argparse.ArgumentParser(description="Deck-onboarding enforcement spine (workstream 3).")
     ap.add_argument("deck", help="Path to the .cod/.txt decklist")
     ap.add_argument("--profile", default=None, help="profile.json (default: auto-detect sibling)")
-    ap.add_argument("--seeds", default="7001 7002", help="mismatch-harness seeds (space-separated)")
+    ap.add_argument("--seeds", default="7001 8001",
+                    help="mismatch-harness seed BASES (space-separated); each covers base..base+games-1, "
+                         "so bases must be at least --games apart")
     ap.add_argument("--games", type=int, default=60, help="games per mismatch-harness seed")
     ap.add_argument("--no-network", action="store_true", help="skip the Scryfall cost audit")
     ap.add_argument("--no-sweep", action="store_true", help="skip runtime gates (viewer sweep, mismatch)")

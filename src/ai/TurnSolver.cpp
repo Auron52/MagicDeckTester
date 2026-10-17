@@ -8091,6 +8091,13 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         // A tutor's TARGET is a searched variant too (one plan per wish target at the tutor
         // width): without it eight "Living Wish" lines read as one plan scanned eight times.
         if (!a.tutor_target.empty()) { s += ">" + a.tutor_target; }
+        // CAST MODES are searched variants sharing hand_index (the bestow idiom): without them the
+        // adventure and the hard cast of one Brightcap Badger read as one plan listed twice
+        // (fungus-v2-fd-diverge-7021.md).
+        if (a.adventure) { s += "[adv]"; }
+        if (a.kicked)    { s += "[kick]"; }
+        if (a.bestow)    { s += "[bestow]"; }
+        if (a.evoke)     { s += "[evoke]"; }
     }
     // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
     // so print it too -- a T1/T2 root on a land-only turn is otherwise five identical blank lines.
@@ -8120,7 +8127,7 @@ void TurnSolver::Site9Trace(const char* world, const GameState& state, const Pla
                  state.turn_number, g_rollout_nest, plan.bp_choice, plan.bp_at, FsPlanText(plan).c_str(),
                  state.floating_mana.Total(), bf.c_str(), hs.c_str());
     const std::vector<Plan>& cands = EnumerateBreakpointPlansRef(state, is_pre_combat);
-    for (std::size_t ci = 0; ci < cands.size() && ci < 6; ++ci)
+    for (std::size_t ci = 0; ci < cands.size() && ci < 16; ++ci)
     { std::fprintf(stderr, "[site9]   #%zu %s\n", ci, FsPlanText(cands[ci]).c_str()); }
 }
 static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
@@ -43389,6 +43396,29 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // re-cast the same card as a CREATURE and realise a different board (the fd-diverge
             // class the chosen_float_color note above documents).
             rec.bestow             = bestow;
+            // ...AND EVERY OTHER CAST MODE replay_recorded feeds back into cast_by_name. Same
+            // defect, same shape, one field further: the record copied bestow but not the
+            // ADVENTURE flag, so a continuation that cast Brightcap Badger as Fungus Frolic
+            // ({2}{G}, two Saprolings) replayed as the {3}{G} creature, failed to pay, and the two
+            // tokens never existed. Fungus v2 seed 7021: proven T4 kill, realised T5
+            // (docs/design/fungus-v2-fd-diverge-7021.md). The rest of the list is the same gap on
+            // the cards that reach it (kicker = Saproling Migration, evoke = Reveillark, convoke,
+            // phyrexian, replicate) plus the four values apply_one consumes from its same-cast
+            // globals (devour count, twobrid pips, the land-put credit, a walker's cast-time
+            // loyalty activation), each of which the replay already installs from the record.
+            // NOT recorded: free_cast -- apply_one sees only cascade_free, which a real cascade
+            // also sets, so the record cannot tell a banked Archangel cast from a cascade.
+            rec.replicate_count    = replicate_count;
+            rec.convoke_green      = convoke_green;
+            rec.convoke_other      = convoke_other;
+            rec.phyrexian_life     = phyrexian_life;
+            rec.evoke              = evoke;
+            rec.adventure          = adventure;
+            rec.kicked             = kicked;
+            rec.devour_count       = cast_devour;
+            rec.twobrid_colored    = cast_twobrid;
+            rec.rock_mana          = cast_put_credit;
+            rec.loyalty_ability    = cast_loyalty;
             // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
             // the executor's replay traits (ComputePlanTraits over the records) count the same mana
             // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0
