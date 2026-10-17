@@ -694,6 +694,20 @@ public:
     // board, so it spends {W} and a card for no effect (a sound prune; PROVISIONAL until the USER
     // signs it off). Human play and MTG_UNPRUNE=uacast still see it. DecisionProviders.cpp.
     bool OffersRemovalCast(const GameState& s, const CardDefinition& def, bool self_target) const override;
+    // CAST ORDER: the AI-DRAFTED order (docs/design/colossus-hammer-cast-order-draft.md), behind
+    // MTG_COLOSSUS_ORDER (heurarm COLOSSUS_ORDER), DEFAULT OFF until the USER reviews it -- off, every
+    // hook below returns the generic answer. DecisionProviders.cpp, "Cast order".
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotalByName() const override;
+    bool        OrderOpaqueCastsByRank() const override;
+    int         LandDropCastOrderRank() const override;
+    // CLEANUP DISCARD: the AI-DRAFTED 5i buckets (docs/design/colossus-hammer-discard-policy-proposal.md),
+    // behind MTG_COLOSSUS_BUCKET_DISCARD (heurarm COLOSSUS_BUCKET_DISCARD), DEFAULT OFF until the USER
+    // reviews them. ONE index; re-asked after every shed while on.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other

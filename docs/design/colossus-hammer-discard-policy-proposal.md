@@ -2,7 +2,7 @@
 
 **Status: PROPOSAL** (analyze-deck 5i: the AI authors its best shot, the USER amends and approves before
 anything ships). Implemented as `ColossusHammerProvider::CleanupDiscardCandidates` behind
-`MTG_COLOSSUS_BUCKET_DISCARD`, **default OFF** until approved; off = `GenericProvider`'s max-MV
+`MTG_COLOSSUS_BUCKET_DISCARD` (heurarm `COLOSSUS_BUCKET_DISCARD`), **default OFF** until approved; off = `GenericProvider`'s max-MV
 fallback. The evidence pass (`scripts/analyze_deck.py --discard-analysis`) result is appended when run.
 
 ## How this deck wins, which is what the buckets protect
@@ -17,13 +17,20 @@ them. Everything else is redundancy or a backup plan (Loxodon Warhammer + Speake
 | bucket | members | quota (hand owes, after the board) |
 |---|---|---|
 | **MANA** | lands | lands on board + hand up to **4** (curve tops at 3: Forge Anew, Ardenn, Open the Armory + a 1-drop); colour first: at least one R source and two W sources counting the board. A 5th land is soft (Loxodon Warhammer's equip {3}). |
-| **HAMMER** | Colossus Hammer; Steelshaper's Gift / Open the Armory stand in for it | **1** unless a Hammer is on the battlefield (then 0). A tutor fills the slot only when no Hammer is in hand. |
-| **CHEAT** | Sigarda's Aid, Magnetic Theft, Forge Anew (Raubahn / Ardenn ON THE BOARD count) | **1** unless an Aid / Raubahn / Ardenn is already on the battlefield (then 0). Preference inside: Sigarda's Aid ({W}, permanent) > Magnetic Theft ({R}, once) > Forge Anew ({2}{W}). |
+| **HAMMER** | Colossus Hammer (keyed as the Equipment with `equip_power_bonus >= 10`); Steelshaper's Gift / Open the Armory stand in for it | **1** unless a Hammer is on the battlefield (then 0). A tutor fills the slot only when no Hammer is in hand. |
+| **CHEAT** | Sigarda's Aid, Magnetic Theft, Forge Anew; Raubahn / Ardenn only as a fallback (below) | **1** unless a PERMANENT cheat is already on the battlefield — Sigarda's Aid, Forge Anew (its first-equip waiver works every turn), Raubahn, Ardenn (then 0). Preference inside: Sigarda's Aid ({W}, permanent) > Magnetic Theft ({R}, once) > Forge Anew ({2}{W}); Raubahn > Ardenn fill the slot only when the hand holds none of those three. |
 | **HOST** | Swiftblade Vindicator, Kor Duelist, Lizard Blades | **1** double striker, net of the board's double strikers. Preference: Swiftblade (native) > Kor Duelist ({W}) > Lizard Blades. |
 | **OVERFLOW** (shed first → last) | everything past its quota | Path to Exile → Dragonfire Blade → Speaker of the Heavens → Loxodon Warhammer → lands past the quota → a second tutor → Raubahn → Ardenn → a second cheat → a second host → a second Hammer |
 
-Distance-to-playable orders the shed inside an over-full bucket (the doctrine's rule 4): a card whose
-colour the board + hand cannot produce sheds before a castable twin.
+Distance-to-playable orders every pick and shed inside one role (the doctrine's rule 4): a card whose
+COLOURS the board plus the kept lands cannot make loses to one whose colours they can; then the role's
+preference above; then the shared `discard_dist` castability factor; then the cheaper card. Colour
+coverage is "reachable", not a castability race, on purpose: a pure factor sort would always keep Kor
+Duelist ({W}) over Swiftblade Vindicator ({R}{W}) and erase the preference.
+
+**Implementation:** `ColossusHammerProvider::CleanupDiscardCandidates` (ONE index through
+`CleanupDiscardRankingWithOrder`, re-asked after every shed; `MTG_COLOSSUS_DISCARD_FAN=1`, testing only,
+returns the whole order). A card off this list sheds before every listed card.
 
 ## Why this order, in the places it is a judgement call
 

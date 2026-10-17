@@ -44439,3 +44439,337 @@ bool ColossusHammerProvider::OffersRemovalCast(const GameState& s, const CardDef
     (void)s; (void)def;
     return self_target;
 }
+
+// ---- Cast order: the AI-DRAFTED order (MTG_COLOSSUS_ORDER, DEFAULT OFF) ------------------------
+//
+// docs/design/colossus-hammer-cast-order-draft.md, drafted 2026-10-17 under the USER's standing ask
+// ("The generic order is never a good option ... It should be edited by you and then presented to me
+// for additional feedback"). Cast order is USER-owned, so this ships OFF until the USER answers; off,
+// every hook returns the generic answer (creatures 10, everything else 20, ties by plan order).
+//
+// Every line that matters is "Colossus Hammer onto a double striker without paying equip {8}", and
+// two of the cheats are order-sensitive inside one main: Sigarda's Aid attaches an Equipment only AS
+// IT ENTERS (so the Aid and a host must already be out), and Forge Anew's graveyard return enters
+// through the same trigger. Classes, all read off params (never names):
+//   1 an Equipment TUTOR to hand (Steelshaper's Gift, Open the Armory) -- the found card re-solves the
+//     rest of the phase at site 10, so first leaves the most phase to spend on it.
+//   2 attach_equipment_on_etb (Sigarda's Aid) -- out before any Equipment enters.
+//   3 a non-Equipment creature with double strike, printed or while equipped (Swiftblade, Kor Duelist).
+//   4 every other non-Equipment creature (Raubahn, Ardenn, Speaker).
+//   5 an Equipment that is a creature (Lizard Blades): after the hosts, so the Aid can put it ON one;
+//     before the Hammer, so a Lizard left a creature can carry it.
+//   6 the graveyard-Equipment return / first-equip waiver (Forge Anew): after the Aid and the hosts.
+//   7 every other Equipment (Colossus Hammer, Dragonfire Blade, Loxodon Warhammer).
+//   8 attach_target_equipment (Magnetic Theft): after every Equipment and creature (structural anyway,
+//     ApplyAttachSpellDependencyOrder).
+//   9 the rest (Path to Exile).
+// Inside a class: cheapest first, then the card NAME (CastOrderTotalByName) -- plan order never
+// decides. Activations (equip, reconfigure, Speaker's token) stay in the trailing pass.
+namespace
+{
+bool ColossusOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_ORDER");   // DEFAULT OFF (an AI draft awaiting the USER)
+    return heurarm::Flag(heurarm::COLOSSUS_ORDER, on);
+}
+
+constexpr int kColossusClassScale = 4096;
+constexpr int kColossusMvScale    = 256;
+
+bool IsEquipmentTutor(const CardParams& p)
+{
+    return p.tutor_to_hand
+        && std::find(p.tutor_types.begin(), p.tutor_types.end(), std::string("Equipment")) != p.tutor_types.end();
+}
+
+int ColossusOrderClass(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    if (IsEquipmentTutor(p))                    { return 1; }
+    if (p.attach_equipment_on_etb)              { return 2; }
+    if (def.card.IsCreature() && !p.is_equipment)
+    {
+        return (def.card.HasKeyword(Keyword::DoubleStrike) || p.double_strike_while_equipped) ? 3 : 4;
+    }
+    if (p.is_equipment && def.card.IsCreature()) { return 5; }
+    if (p.etb_return_equipment_from_gy || p.first_equip_free) { return 6; }
+    if (p.is_equipment)                         { return 7; }
+    if (p.attach_target_equipment)              { return 8; }
+    return 9;
+}
+}   // namespace
+
+int ColossusHammerProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!ColossusOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
+    return ColossusOrderClass(def) * kColossusClassScale
+         + (def.card.m_mana_cost.ManaValue() & 0xF) * kColossusMvScale;
+}
+
+const char* ColossusHammerProvider::CastOrderTierName(int rank) const
+{
+    if (!ColossusOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
+    switch (rank / kColossusClassScale)
+    {
+        case 1:  return "EQUIPMENT TUTOR (Steelshaper's Gift, Open the Armory): first -- the found card re-solves the rest of the phase (AI DRAFT)";
+        case 2:  return "SIGARDA'S AID: before every Equipment it attaches as it enters (AI DRAFT)";
+        case 3:  return "DOUBLE-STRIKE HOST (Swiftblade Vindicator, Kor Duelist): on the battlefield when the Aid picks a host (AI DRAFT)";
+        case 4:  return "OTHER CREATURE (Raubahn, Ardenn, Speaker of the Heavens) (AI DRAFT)";
+        case 5:  return "CREATURE EQUIPMENT (Lizard Blades): after the hosts, before the Hammer (AI DRAFT)";
+        case 6:  return "FORGE ANEW: after the Aid and the hosts, so the returned piece is attached as it enters (AI DRAFT)";
+        case 7:  return "EQUIPMENT (Colossus Hammer, Dragonfire Blade, Loxodon Warhammer): after every host and the Aid (AI DRAFT)";
+        case 8:  return "MAGNETIC THEFT: after every Equipment and creature (AI DRAFT)";
+        case 9:  return "THE REST (Path to Exile) (AI DRAFT)";
+        default: return nullptr;
+    }
+}
+
+bool ColossusHammerProvider::CastOrderTotalByName() const { return ColossusOrderEnabled(); }
+
+bool ColossusHammerProvider::OrderOpaqueCastsByRank() const { return ColossusOrderEnabled(); }
+
+// The land drop FIRST (rank 0, before every site). The two conditions DecisionProvider::
+// LandDropCastOrderRank names both hold: holding the drop never pays (no landfall, no Karoo, no
+// storage land; a check land or Snarl played later only enters tapped more often), and nothing in the
+// list forces the defer branch (no flood gate removes the land-first plans).
+int ColossusHammerProvider::LandDropCastOrderRank() const { return ColossusOrderEnabled() ? 0 : -1; }
+
+// ---- Cleanup discard: the AI-DRAFTED 5i buckets (MTG_COLOSSUS_BUCKET_DISCARD, DEFAULT OFF) ------
+//
+// docs/design/colossus-hammer-discard-policy-proposal.md, drafted 2026-10-17 (analyze-deck 5i: the AI
+// gives it its best shot, the USER amends and approves before it ships). A hand is live when it holds
+// -- or the board already has -- ONE Hammer (or a tutor for it), ONE way to attach it cheaply and ONE
+// double-strike host, plus the mana to cast them. Quota-first, every permanent quota NET OF THE BOARD,
+// sub-quotas filled in this keep order:
+//   MANA     the colour coverage first (one red and two white sources, board + hand), then lands up to
+//            FOUR counting the board (the curve tops at 3).
+//   HAMMER   1 (the Equipment carrying the kill bonus, equip_power_bonus >= 10) unless one is on our
+//            battlefield; an Equipment tutor stands in only when no Hammer is in hand.
+//   CHEAT    1 unless a permanent cheat is on our battlefield (Sigarda's Aid, Forge Anew's waiver,
+//            Raubahn, Ardenn). Sigarda's Aid > Magnetic Theft > Forge Anew; Raubahn > Ardenn fill it
+//            only when the hand holds none of those three.
+//   HOST     1 double striker net of the board's (printed, while-equipped, or granted right now):
+//            Swiftblade Vindicator > Kor Duelist > Lizard Blades.
+//   OVERFLOW the rest, shed first -> last: Path to Exile, Dragonfire Blade, Speaker of the Heavens,
+//            Loxodon Warhammer, lands past the quota, a spare tutor, Raubahn, Ardenn, a spare cheat, a
+//            spare host, a spare Hammer. A card off the list sheds before all of them.
+// Distance-to-playable (5i rule 4) orders every pick and shed inside one role: a card whose COLOURS the
+// board plus the kept lands cannot make loses to one whose colours they can, then the role preference,
+// then the shared discard_dist castability factor, then the cheaper card. ONE index (5i rule 5) through
+// CleanupDiscardRankingWithOrder; MTG_COLOSSUS_DISCARD_FAN=1 (testing only) returns the whole order.
+namespace
+{
+bool ColossusBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_BUCKET_DISCARD");   // DEFAULT OFF (an AI draft awaiting the USER)
+    return heurarm::Flag(heurarm::COLOSSUS_BUCKET_DISCARD, on);
+}
+
+bool IsKillEquipment(const CardParams& p) { return p.is_equipment && p.equip_power_bonus >= 10; }
+
+// A cheat that keeps working from the battlefield.
+bool IsPermanentCheat(const CardParams& p)
+{
+    return p.attach_equipment_on_etb || p.first_equip_free || p.attack_attach_equipment
+        || p.begin_combat_attach_all;
+}
+
+// CHEAT preference (higher = kept first): the three spells, then the two creatures as a fallback.
+int CheatPreference(const CardParams& p)
+{
+    if (p.attach_equipment_on_etb)                              { return 5; }
+    if (p.attach_target_equipment)                              { return 4; }
+    if (p.etb_return_equipment_from_gy || p.first_equip_free)   { return 3; }
+    if (p.attack_attach_equipment)                              { return 2; }
+    if (p.begin_combat_attach_all)                              { return 1; }
+    return 0;
+}
+
+// HOST preference (higher = kept first); 0 = not a double-strike host.
+int HostPreference(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    if (d.card.IsCreature() && !p.is_equipment && d.card.HasKeyword(Keyword::DoubleStrike)) { return 3; }
+    if (d.card.IsCreature() && !p.is_equipment && p.double_strike_while_equipped)          { return 2; }
+    if (p.is_equipment && p.equip_grants_double_strike)                                    { return 1; }
+    return 0;
+}
+
+// OVERFLOW position (higher = kept longer). 0 = a card this list does not know: shed first.
+enum ColossusShed
+{
+    kShedUnknown = 0, kShedPath, kShedDragonfire, kShedSpeaker, kShedLoxodon, kShedLand, kShedTutor,
+    kShedRaubahn, kShedArdenn, kShedCheat, kShedHost, kShedHammer,
+};
+
+ColossusShed OverflowPosition(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    if (d.card.IsLand())                     { return kShedLand; }
+    if (IsKillEquipment(p))                  { return kShedHammer; }
+    if (HostPreference(d) > 0)               { return kShedHost; }
+    if (IsEquipmentTutor(p))                 { return kShedTutor; }
+    if (p.attack_attach_equipment)           { return kShedRaubahn; }
+    if (p.begin_combat_attach_all)           { return kShedArdenn; }
+    if (CheatPreference(p) > 0)              { return kShedCheat; }
+    if (p.is_equipment && p.equip_grants_lifelink) { return kShedLoxodon; }
+    if (p.tap_token_cost.has_value())        { return kShedSpeaker; }
+    if (p.is_equipment)                      { return kShedDragonfire; }
+    if (d.tmpl == CardTemplate::Removal)     { return kShedPath; }
+    return kShedUnknown;
+}
+}   // namespace
+
+std::vector<int> ColossusHammerProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!ColossusBucketDiscardEnabled()) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    constexpr int kW = static_cast<int>(Color::White), kR = static_cast<int>(Color::Red);
+
+    // ---- board census (net of board) -------------------------------------------------------------
+    const discard_dist::Census census = discard_dist::BuildCensus(s, me);
+    int board_lands = 0, board_hosts = 0;
+    bool board_hammer = false, board_cheat = false;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(perm.card);
+        if (perm.card.IsLand()) { ++board_lands; continue; }
+        if (d == nullptr) { continue; }
+        if (IsKillEquipment(d->params)) { board_hammer = true; }
+        if (IsPermanentCheat(d->params)) { board_cheat = true; }
+        if (perm.card.IsCreature()
+            && (perm.card.HasKeyword(Keyword::DoubleStrike) || d->params.double_strike_while_equipped
+                || CreatureHasDoubleStrike(perm, s)))
+        { ++board_hosts; }
+    }
+
+    // ---- MANA: colour coverage, then lands to four counting the board -----------------------------
+    std::vector<int> keep;
+    std::vector<char> kept(static_cast<std::size_t>(n), 0);
+    auto take = [&](int i) { keep.push_back(i); kept[static_cast<std::size_t>(i)] = 1; };
+    std::vector<int> lands;
+    for (int i = 0; i < n; ++i)
+    { if (!ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i])) { lands.push_back(i); } }
+    auto land_bits = [&](int i) { return discard_dist::LandDropOf(def_of(ap.hand[i])).colours; };
+    // Duals first (they cover both colours), then hand order.
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)
+    {
+        const int ca = std::popcount(land_bits(a) & ((1u << kW) | (1u << kR)));
+        const int cb = std::popcount(land_bits(b) & ((1u << kW) | (1u << kR)));
+        return ca > cb;
+    });
+    int src_w = census.board_src[static_cast<std::size_t>(kW)];
+    int src_r = census.board_src[static_cast<std::size_t>(kR)];
+    int kept_lands = 0;
+    auto take_land = [&](int i)
+    {
+        take(i); ++kept_lands;
+        const unsigned b = land_bits(i);
+        if (b & (1u << kW)) { ++src_w; }
+        if (b & (1u << kR)) { ++src_r; }
+    };
+    for (int i : lands)   // colour coverage: one red, two white
+    {
+        const unsigned b = land_bits(i);
+        if ((src_r < 1 && (b & (1u << kR))) || (src_w < 2 && (b & (1u << kW)))) { take_land(i); }
+    }
+    const int land_quota = std::max(0, 4 - board_lands);
+    for (int i : lands) { if (kept_lands < land_quota && !kept[static_cast<std::size_t>(i)]) { take_land(i); } }
+
+    // Distance-to-playable, read against the board plus the KEPT lands.
+    std::vector<discard_dist::LandDrop> kept_drops;
+    for (int i : keep) { kept_drops.push_back(discard_dist::LandDropOf(def_of(ap.hand[i]))); }
+    auto colours_ok = [&](const CardDefinition* d)
+    {
+        if (d == nullptr) { return false; }
+        return (d->card.m_mana_cost.white == 0 || src_w > 0) && (d->card.m_mana_cost.red == 0 || src_r > 0);
+    };
+    std::vector<double> fac(static_cast<std::size_t>(n), 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d != nullptr && !d->card.IsLand())
+        { fac[static_cast<std::size_t>(i)] = discard_dist::CastFactorFor(census, *d, kept_drops); }
+    }
+    // The shared within-role comparator: colours reachable, then the role's preference, then the
+    // castability factor, then the cheaper card.
+    auto better = [&](int a, int b, int pref_a, int pref_b)
+    {
+        const bool oa = colours_ok(def_of(ap.hand[a])), ob = colours_ok(def_of(ap.hand[b]));
+        if (oa != ob) { return oa; }
+        if (pref_a != pref_b) { return pref_a > pref_b; }
+        const double fa = fac[static_cast<std::size_t>(a)], fb = fac[static_cast<std::size_t>(b)];
+        if (fa != fb) { return fa > fb; }
+        return CleanupDiscardManaValue(ap.hand[a]) < CleanupDiscardManaValue(ap.hand[b]);
+    };
+    // The best unkept hand card whose preference under `pref` is > 0, or -1.
+    auto best_of = [&](auto pref)
+    {
+        int best = -1;
+        for (int i = 0; i < n; ++i)
+        {
+            if (kept[static_cast<std::size_t>(i)] || ap.hand[i].m_is_staged) { continue; }
+            const CardDefinition* d = def_of(ap.hand[i]);
+            if (d == nullptr || pref(*d) <= 0) { continue; }
+            if (best < 0 || better(i, best, pref(*d), pref(*def_of(ap.hand[best])))) { best = i; }
+        }
+        return best;
+    };
+
+    // ---- HAMMER, CHEAT, HOST (each 1, net of the board) -----------------------------------------
+    if (!board_hammer)
+    {
+        int h = best_of([](const CardDefinition& d) { return IsKillEquipment(d.params) ? 1 : 0; });
+        if (h < 0) { h = best_of([](const CardDefinition& d) { return IsEquipmentTutor(d.params) ? 1 : 0; }); }
+        if (h >= 0) { take(h); }
+    }
+    if (!board_cheat)
+    {
+        int c = best_of([](const CardDefinition& d) { return CheatPreference(d.params) >= 3 ? CheatPreference(d.params) : 0; });
+        if (c < 0) { c = best_of([](const CardDefinition& d) { return CheatPreference(d.params); }); }
+        if (c >= 0) { take(c); }
+    }
+    if (board_hosts < 1)
+    {
+        const int h = best_of([](const CardDefinition& d) { return HostPreference(d); });
+        if (h >= 0) { take(h); }
+    }
+
+    // ---- OVERFLOW: everything else, kept longest -> shed first ------------------------------------
+    std::vector<int> rest;
+    for (int i = 0; i < n; ++i) { if (!kept[static_cast<std::size_t>(i)]) { rest.push_back(i); } }
+    auto overflow_of = [&](int i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        return d == nullptr ? kShedUnknown : OverflowPosition(*d);
+    };
+    auto role_pref = [&](int i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d == nullptr) { return 0; }
+        return std::max(CheatPreference(d->params), HostPreference(*d));
+    };
+    std::stable_sort(rest.begin(), rest.end(), [&](int a, int b)
+    {
+        const int pa = overflow_of(a), pb = overflow_of(b);
+        if (pa != pb) { return pa > pb; }
+        return better(a, b, role_pref(a), role_pref(b));
+    });
+    for (int i : rest) { take(i); }
+
+    std::vector<int> shed(keep.rbegin(), keep.rend());
+    std::vector<int> ranked = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    static const bool s_fan = EnvOn("MTG_COLOSSUS_DISCARD_FAN");   // TESTING ONLY: the whole order
+    if (!s_fan && ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
+// ONE index per consultation, and the next one moves with the hand (the colour coverage and the
+// castability factor read the kept lands): a multi-card shed re-asks after every shed.
+bool ColossusHammerProvider::CleanupDiscardShedStable() const { return !ColossusBucketDiscardEnabled(); }
