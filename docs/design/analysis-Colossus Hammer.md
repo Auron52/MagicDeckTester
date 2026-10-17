@@ -24,10 +24,12 @@ incl. the double-Theft, Path human default; flags 4-6) -- these three off `ac209
 `colossus-idle` (an empty-handed pre-combat PASS gets no combat-pin variants -- Bruna gather / Primeval Titan /
 Arcanum Wings, Raubahn already closed: a greedy pick in the window that moves OTHER decks) and `colossus-depskip`
 (radix jump past equip-dependency-violated positions in the subset odometers; byte-identical, see Stage 5).
-PLANNED: Ardenn's begin-combat attach is ONE provider pick (`DecisionProvider::BeginCombatAttach`, a greedy ascent
-on this combat's damage) with search depth remaining -- the same no-greedy defect as the Aid (Raubahn's attach is
-already a searched combat pin), so it becomes a searched axis after `colossus-aid` lands (same agent). This
-supersedes the "should Ardenn be searched?" half of USER question 4.
+Ardenn searched axis: CANCELLED (USER ruling 2026-10-17, host picks may be heuristic -- see Standing decisions).
+`colossus-idle` LANDED (idle pass through the sub-decision fan-out, 15 post-apply pins covered, smoke byte-identical;
+gap fires only on mid-turn starts) and CONTINUED on (1) the executor dropping a breakpoint re-solve's after-apply pins
+(lockstep) and (2) combat landfall targets always taking the front (no-greedy). `colossus-aid` REDIRECTED to the
+heuristic host per the ruling. `colossus-fold` CONTINUED on the equip/reconfigure host identity fold;
+`colossus-depskip` CONTINUED on the mana-walk cut.
 NEXT: rebase each onto `colossus-analysis` (rebase, never
 merge), build, units, scenarios, smoke + regression (`env -C`), per-deck verdicts on every play change, accept GT
 with `--deck` filters (carry provenance notes), update the sweep flag count, then `leaf_tiebreak_check.py` (5c2) on
@@ -38,6 +40,16 @@ binary/cards.json/results (a smoke run from the primary's cwd at 06:33 zeroed th
 `test/results/smoke.env`, a 10-14 leftover). Research drafts + integrator reports: `logs/colossus/drafts/`.
 
 ## Standing decisions (pass to every subagent)
+
+* **USER RULING 2026-10-17 -- Sigarda's Aid host is a provider HEURISTIC.** *"The host should be handled the same way
+  as kitty. Prefer doublestrike and creatures without summoning sickness."* / *"And just drop it on something."* /
+  *"It can be done heuristically."* / *"Lizard Blades is also a creature replacement as needed."* Read as: ONE
+  provider pick (no searched axis); rank double-strike POTENTIAL (native DS, Kor Duelist's while-equipped, a Lizard
+  Blades wearer) first, then can-attack-this-turn; an entering Equipment always attaches (no decline); an unattached
+  Lizard Blades is an ordinary (DS-tier) host candidate, and an entering Lizard Blades attaches only when some host
+  gains double strike, otherwise stays a creature. Colossus provider only; Kitty keeps the base hook (diagnostic
+  count of what the rule would move there is being collected). Answers Q7 and Q1's host half. The planned searched
+  Ardenn axis is CANCELLED under the same ruling (Ardenn stays the provider's pick).
 
 * No user strategy brief was given. Inferred plan: put **Colossus Hammer** (+10/+10, equip {8}) on a
   **double striker** (Swiftblade Vindicator natively; Kor Duelist while equipped; anything wearing
@@ -187,7 +199,8 @@ Flags, verified against cards.json + the code:
    at any budget (T3 vs T2). The AI-drafted order (default OFF, USER's call) restores it. See the cast-order draft.
 2. **CONFIRMED, autonomous** (2100011): Sigarda's Aid's host is ONE provider pick (`EquipmentEtbAttachHost`) that
    ignores whether the host can attack -- Hammer onto a sick Lizard Blades over a ready Swiftblade, T4 kill lost. A
-   greedy pick in the search window. IN FLIGHT: a searched host axis (branch `colossus-aid`).
+   greedy pick in the search window. USER RULING 2026-10-17: a heuristic pick is fine -- rank DS potential, then
+   can-attack, always attach (Standing decisions). IN FLIGHT on `colossus-aid` as that heuristic.
 3. **CONFIRMED, human play** (2100016, 2100017): committing a multi-cast line taps the only source of a colour the
    rest of the hand needs (Snarl for {1}{R} while a Mountain stays up; the only Mountain for a generic {1}).
    **FIXED `9674c1cb6`** (MTG_HUMAN_PREPAY_DEMAND, default ON, human play only): the whole-line batch prepay
@@ -236,6 +249,7 @@ Flags, verified against cards.json + the code:
 4. **Raubahn** — Ward PROVISIONAL deferral (only an opponent's spell triggers it). The attack attach is a
    FULL-WIDTH searched combat pin (Bruna route), not a provider single pick. Should Ardenn's existing
    single-pick begin-combat attach get the same searched axis?
+   -> ANSWERED by the 2026-10-17 host ruling (read as covering Ardenn's target too): Ardenn stays a provider pick.
 5. **Magnetic Theft** — PROVISIONAL folds: targets collapsed to our own Equipment / creatures; instant
    timing outside the main phases collapsed. Post-combat re-host (move the Hammer onto a summoning-sick
    host for next turn) needs a second main — not enabled.
@@ -243,6 +257,8 @@ Flags, verified against cards.json + the code:
    `MTG_SPEAKER_M2`, default ON provisionally (main-1 vs main-2 is the USER's call).
 7. **Lizard Blades** — reconfigure stays main 1 (no second main); Sigarda's Aid DECLINES to attach an
    entering Lizard Blades when no host gains (keeps its double-strike body) — a provider heuristic.
+   -> ANSWERED 2026-10-17 (*"Lizard Blades is also a creature replacement as needed"*): keep the decline for an
+   entering Lizard Blades when no host gains; every other entering Equipment always attaches.
 8. **Cast order** — to be AI-drafted and presented (USER 2026-10-14: the generic order is never OK).
 9. **Discard buckets** — to be AI-drafted and presented (analyze-deck 5i).
 
