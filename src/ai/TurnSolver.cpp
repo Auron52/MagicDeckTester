@@ -8204,6 +8204,185 @@ inline void Record(int fn, const GameState& s, const std::vector<Action>& acts, 
 }
 }   // namespace paycensus
 
+// ---- MTG_PAY_PROBE_MEMO (DEFAULT ON; =0 restores the re-probe-every-time path) ----------------------
+// The two ORDER probes (OrderPaysSequentially, OrderPrepaysWholeTurn -- the walks behind the EDF range
+// projection) are each a pure verdict on (board, the asked actions in the asked order, the payment
+// context globals). (The three SUBSET probes were memoised too in the first cut and measured 400 hits
+// in 5.1M SubsetPayableWithFilters calls and none at all for SubsetPayableSequential /
+// SubsetPayableAsExecuted -- their census repeats are interchangeable COPIES at different indices --
+// so they are not consulted: the table cost more than it saved.) MTG_PAY_CENSUS measured on EDF at the
+// mulligan-generation shape (24 openers x R=4): OrderPaysSequentially 6.24M calls, 3.21M of them an
+// exact repeat inside the same decision and 3.15M of those on the SAME GameState object -- i.e. the
+// same enumerator re-asking its own question: subsets that differ only in an activation or a land
+// sacrifice arrange to the same cast order, the EDF range projection (EldraziFlickerProvider::
+// ArrangeCastOrder) walks the same orders for each of them, and SubsetPayableSequential re-arranges the
+// order the range rescue just arranged.
+//
+// THE SCOPE IS WHAT MAKES IT SOUND, not a key. An enumerator (SolveUncached, EnumeratePlans) opens a
+// Scope over ITS `state` and ITS candidate vector once both are fixed; a probe consults the memo only
+// when it is asked about exactly that GameState object and exactly that action vector (pointer
+// identity), while the scope is the innermost one on this thread, and while the payment-context
+// globals a probe reads (line hold, plan context / traits, the plan's reserved sources, the
+// activation-line ledger, the human untap need) still hold the values they had when the scope
+// opened. Inside the enumerator the board is a const reference and the candidates are not resized,
+// so an answer cannot go stale; anything else -- an apply's mutating board, a probe nested under
+// another probe's own LineUnpaidCostScope (SubsetPayableAsExecuted -> SubsetPayableWithFilters), a
+// nested enumeration on another board -- falls through to the real probe. Entries die with the
+// scope (one enumeration), so no state crosses a decision, a game, or a worker's job switch
+// (docs/design/batch-run-to-run-nondeterminism.md). The key is the EXACT asked id sequence (stored
+// and compared, never a bare hash). No probe charges a budget unit, so a hit cannot move units.
+// MTG_PAY_PROBE_MEMO_VERIFY=1 re-runs the real probe on every hit and counts verdict mismatches
+// (must be 0; printed at exit with the hit counts).
+namespace paymemo
+{
+inline bool On()       { static const bool v = EnvOn("MTG_PAY_PROBE_MEMO", true); return v; }
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_PAY_PROBE_MEMO_VERIFY"); return v; }
+inline bool StatsOn()  { static const bool v = VerifyOn() || EnvOn("MTG_PAY_PROBE_MEMO_STATS"); return v; }
+struct Ctx
+{
+    const void* plan_ctx = nullptr;
+    const void* plan_traits = nullptr;
+    ManaCost    line_unpaid{};
+    ManaCost    act_paid{};
+    ManaCost    act_current{};
+    int         untap_need = 0;
+    std::vector<int> reserved;
+    void Capture()
+    {
+        plan_ctx    = CurrentPlanContext();
+        plan_traits = CurrentPlanTraits();
+        line_unpaid = g_line_unpaid_cost;
+        act_paid    = g_act_line_paid;
+        act_current = g_act_line_current;
+        untap_need  = g_human_untap_need;
+        reserved    = g_plan_reserved_sources;
+    }
+    bool Same() const
+    {
+        return plan_ctx == CurrentPlanContext() && plan_traits == CurrentPlanTraits()
+            && line_unpaid == g_line_unpaid_cost && act_paid == g_act_line_paid
+            && act_current == g_act_line_current && untap_need == g_human_untap_need
+            && reserved == g_plan_reserved_sources;
+    }
+};
+// An answered question: the probe, its verdict, and the EXACT asked id sequence (compared on every hit,
+// never trusted to the hash). Inline storage -- a heap vector per entry cost more than the memo saved on
+// the decks where it rarely hits; a question longer than kMaxIds is simply not memoised.
+constexpr int kMaxIds = 14;
+struct Entry
+{
+    std::uint64_t h = 0;
+    std::uint8_t  used = 0, fn = 0, n = 0, verdict = 0;
+    std::int16_t  ids[kMaxIds] = {};
+    bool Same(int f, const std::vector<int>& q) const
+    {
+        if (fn != f || n != q.size()) { return false; }
+        for (std::size_t i = 0; i < q.size(); ++i) { if (ids[i] != q[i]) { return false; } }
+        return true;
+    }
+};
+struct Scope;
+inline thread_local Scope* t_top = nullptr;
+inline std::atomic<long long> g_hits[paycensus::kN]{}, g_misses[paycensus::kN]{},
+                              g_bypass[paycensus::kN]{}, g_mismatch[paycensus::kN]{};
+struct Scope
+{
+    const GameState*           s;
+    const std::vector<Action>* acts;
+    Scope*                     prev;
+    bool                       armed;
+    Ctx                        ctx;
+    std::vector<Entry>         table;   // open addressing, linear probing, power-of-two size
+    std::size_t                live = 0;
+    Scope(const GameState& st, const std::vector<Action>& a)
+        : s(&st), acts(&a), prev(t_top), armed(On())
+    {
+        if (armed) { ctx.Capture(); t_top = this; }
+    }
+    ~Scope() { if (armed) { t_top = prev; } }
+    Scope(const Scope&)            = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+inline std::uint64_t IdsHash(int fn, const std::vector<int>& ids)
+{
+    std::uint64_t h = 0x9E3779B97F4A7C15ull ^ static_cast<std::uint64_t>(fn + 1);
+    for (int j : ids) { h ^= static_cast<std::uint64_t>(j) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); }
+    return h ^ (static_cast<std::uint64_t>(ids.size()) << 56);
+}
+template <class F>
+inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, const std::vector<int>& ids,
+                  F&& compute)
+{
+    Scope* sc = t_top;
+    if (sc == nullptr || sc->s != &s || sc->acts != &acts || !sc->ctx.Same())
+    {
+        if (sc != nullptr && StatsOn()) { g_bypass[fn].fetch_add(1, std::memory_order_relaxed); }
+        return compute();
+    }
+    if (ids.size() > static_cast<std::size_t>(kMaxIds)) { return compute(); }
+    for (int j : ids) { if (j < 0 || j > 32767) { return compute(); } }
+    const std::uint64_t h = IdsHash(fn, ids);
+    if (!sc->table.empty())
+    {
+        const std::size_t mask = sc->table.size() - 1;
+        for (std::size_t i = static_cast<std::size_t>(h) & mask;; i = (i + 1) & mask)
+        {
+            const Entry& e = sc->table[i];
+            if (!e.used) { break; }
+            if (e.h == h && e.Same(fn, ids))
+            {
+                const bool v = e.verdict != 0;
+                if (StatsOn()) { g_hits[fn].fetch_add(1, std::memory_order_relaxed); }
+                if (VerifyOn() && compute() != v) { g_mismatch[fn].fetch_add(1, std::memory_order_relaxed); }
+                return v;
+            }
+        }
+    }
+    const bool r = compute();
+    if (StatsOn()) { g_misses[fn].fetch_add(1, std::memory_order_relaxed); }
+    // A probe may open a nested scope (an enumeration under an apply) and close it before returning, so
+    // `sc` is still this scope and the table is re-read here, after compute(). Grow at half load.
+    if (2 * (sc->live + 1) > sc->table.size())
+    {
+        std::vector<Entry> old;
+        old.swap(sc->table);
+        sc->table.assign(old.empty() ? 64 : old.size() * 2, Entry{});
+        const std::size_t m2 = sc->table.size() - 1;
+        for (const Entry& e : old)
+        {
+            if (!e.used) { continue; }
+            std::size_t i = static_cast<std::size_t>(e.h) & m2;
+            while (sc->table[i].used) { i = (i + 1) & m2; }
+            sc->table[i] = e;
+        }
+    }
+    const std::size_t mask = sc->table.size() - 1;
+    std::size_t i = static_cast<std::size_t>(h) & mask;
+    while (sc->table[i].used) { i = (i + 1) & mask; }
+    Entry& e = sc->table[i];
+    e.used = 1; e.h = h; e.fn = static_cast<std::uint8_t>(fn); e.verdict = r ? 1 : 0;
+    e.n = static_cast<std::uint8_t>(ids.size());
+    for (std::size_t k = 0; k < ids.size(); ++k) { e.ids[k] = static_cast<std::int16_t>(ids[k]); }
+    ++sc->live;
+    return r;
+}
+struct Dump
+{
+    ~Dump()
+    {
+        if (!StatsOn()) { return; }
+        for (int f = 0; f < paycensus::kN; ++f)
+        {
+            std::fprintf(stderr, "[pay-memo] %-26s hits=%lld misses=%lld bypass=%lld%s%lld\n",
+                         paycensus::FnName(f), g_hits[f].load(), g_misses[f].load(), g_bypass[f].load(),
+                         VerifyOn() ? " VERIFY_MISMATCH=" : " (verify off) ",
+                         VerifyOn() ? g_mismatch[f].load() : 0LL);
+        }
+    }
+};
+inline Dump g_dump;
+}   // namespace paymemo
+
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel, bool tap_sources)
 {
@@ -9289,10 +9468,20 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
 // See TurnSolver.h. The EDF land-Aura range's projection (MTG_EDF_AURA_RANGE): the apply worlds try the
 // whole-turn prepay first and fall to the per-cast payer in the realised order only when it declines,
 // so an order is "otherwise unpayable" exactly when both of these say no.
+static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& order);
 bool TurnSolver::OrderPrepaysWholeTurn(const GameState& state, const std::vector<Action>& acts,
                                        const std::vector<int>& order)
 {
     const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
+    const bool r = paymemo::Probe(paycensus::OPWT, state, acts, order,
+                                  [&] { return OrderPrepaysWholeTurnImpl(state, acts, order); });
+    if (paycensus::On()) { paycensus::Record(paycensus::OPWT, state, acts, order, r, _pc_t0); }
+    return r;
+}
+static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& order)
+{
     std::vector<Action> sub;
     sub.reserve(order.size());
     for (int i : order) { sub.push_back(acts[static_cast<std::size_t>(i)]); }
@@ -9303,9 +9492,7 @@ bool TurnSolver::OrderPrepaysWholeTurn(const GameState& state, const std::vector
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, sub); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
-    const bool r = TurnSolver::BatchPrepayMainCasts(cp, sub);
-    if (paycensus::On()) { paycensus::Record(paycensus::OPWT, state, acts, order, r, _pc_t0); }
-    return r;
+    return TurnSolver::BatchPrepayMainCasts(cp, sub);
 }
 
 static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<Action>& acts,
@@ -9314,7 +9501,8 @@ bool TurnSolver::OrderPaysSequentially(const GameState& state, const std::vector
                                        const std::vector<int>& order)
 {
     const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
-    const bool r = OrderPaysSequentiallyImpl(state, acts, order);
+    const bool r = paymemo::Probe(paycensus::OPS, state, acts, order,
+                                  [&] { return OrderPaysSequentiallyImpl(state, acts, order); });
     if (paycensus::On()) { paycensus::Record(paycensus::OPS, state, acts, order, r, _pc_t0); }
     return r;
 }
@@ -40232,6 +40420,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     g_search_candidate_enum = false;
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     g_search_candidate_enum = saved_sce;
+    // MTG_PAY_PROBE_MEMO: this enumeration's payability questions about (state, cands) -- see paymemo.
+    paymemo::Scope _pay_memo(state, cands);
     // Does any candidate need the deck's order check (a restrictor or a spliced cast)? One pass, so a
     // deck without either never even scans the subset (see OrderedSubsetRealisable in consider).
     bool order_check_cands = false;
@@ -53773,6 +53963,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Also: a plain Aura targeting a creature CAST this same turn (its stable number). No-op unless the
     // hand holds both an Aura and a creature -> byte-identical for every other deck/state.
     AppendCreatureTargetAuraCandidates(state, cands);
+    // MTG_PAY_PROBE_MEMO: this enumeration's payability questions about (state, cands) -- see paymemo.
+    // Opened only once `cands` is final in size (the two appends above may reallocate it).
+    paymemo::Scope _pay_memo(state, cands);
     // Does any candidate need the deck's order check (a restrictor or a spliced cast)? Twin of Solve's.
     bool order_check_cands = false;
     for (const Action& oc : cands)
