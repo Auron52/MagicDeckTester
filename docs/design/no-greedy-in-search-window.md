@@ -463,8 +463,11 @@ seed, turn, occurrence vs `bp_at`, the continuation-list size):
    breakpoint sites (the main one and the pod twin) use the same two helpers.
 
 Measured on the same probe: MISMATCH 16 -> 0, searched re-solves 82 -> 69 (the pre-target occurrences now
-mirror), and two Snow jobs changed digest at unchanged averages (5.7400, 5.6100). Unit test:
-test_land_search_gaps.cpp, "Breakpoint occurrences: ...".
+mirror), and two Snow jobs changed digest at unchanged averages (5.7400, 5.6100). Smoke (all three
+follow-ups pooled): MISMATCH 3 -> 0, searched re-solves 19 -> 16. Every game that changed is Colossus, and
+the pre-follow-up binary reproduces those digests and units exactly. So the change is the base's
+(Magnetic Theft pairs / cast riders, GT not yet re-accepted), and these follow-ups are byte-identical on
+the smoke tier. Unit test: test_land_search_gaps.cpp, "Breakpoint occurrences: ...".
 
 **Disclosed residual (DIG-UNRUN):** on a committed line's main, and in main 2, the executor runs no reactive
 dig loop at all, so a re-solve whose candidate ran ApplyPlanDirect's dig loop is realized without it. That
@@ -506,9 +509,15 @@ provider's front with no searched alternative. Now:
 * Measured (same smoke): byte-identical, Landfall included. The axis fired at 10 of 1,742 enumerations
   in the Landfall smoke games (8-108 variants each), but the cases' work units are unchanged
   (1,934,233 / 1,620,510). At those budgets the appended variants are never reached.
-* Not extended: the COMBAT-PIN MAIN-PHASE SHARE (SolveWithLookahead) shares a base plan's main-phase
-  apply only with its Titan-pick / crack variants. A combat-landfall variant still re-applies its base's
-  main phase. That is work, not a lost line.
+* The COMBAT-PIN MAIN-PHASE SHARE (SolveWithLookahead) now covers the combat rank too (2026-10-17,
+  follow-up). A combat-landfall variant shares its base plan's cached post-apply state, exactly as the
+  Titan-pick and crack variants do, under the same proof (read in combat only, witnessed by
+  `combatpin::t_reads`). The rank moved from the dedup key's shared prefix into its land-search suffix, so
+  a sharing variant's key still differs from its base's. Measured: on a Landfall board with a
+  SolveWithLookahead root, 6 shares where there were 0, same outcome. Landfall at 10x the smoke budget
+  (135 games, 3 seeds): digests and units identical to the binary without it, share hits unchanged. There
+  the variants occur at FSLineWin nodes, and FSLineWin has no main-phase share for any combat pin (only
+  the put-bounce fold for Titan's bounce sub-choices).
 
 **Disclosed limit.** A post-combat pass keeps only its no-dig twin. The next-turn pins it could still
 carry (Saga target, Search for Tomorrow, cleanup discard) are fanned on the main-1 plan that sets them,
