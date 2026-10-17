@@ -403,6 +403,7 @@ add_executable(mtg-test
     test/unit/test_edf_cast_order.cpp
     test/unit/test_speaker_of_the_heavens.cpp
     test/unit/test_path_to_exile.cpp
+    test/unit/test_human_prepay_demand.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working
