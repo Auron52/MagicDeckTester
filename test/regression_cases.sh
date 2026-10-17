@@ -67,6 +67,7 @@ declare -A DECK_FILE=(
   [bruna]=decks/Bruna/Bruna.cod
   [landfall]=decks/Landfall/Landfall.cod
   [galadriel]=decks/Galadriel/Galadriel.cod
+  [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
 )
 declare -A DECK_PROF=(
   [fungusv2]=decks/Fungus/Fungus.profile.json
@@ -101,6 +102,7 @@ declare -A DECK_PROF=(
   [bruna]=decks/Bruna/Bruna.profile.json
   [landfall]=decks/Landfall/Landfall.profile.json
   [galadriel]=decks/Galadriel/Galadriel.profile.json
+  [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -382,6 +384,9 @@ SMOKE_CASES=(
   "melira2hg          3 1001 25 10"
   "pirates2hg         3 1001 50 10"
   "soldiers2hg        3 1001 50 10"
+  # colossus2hg: a canary for Speaker of the Heavens' "at least 7 life more than your STARTING life
+  # total" gate, which reads the 2HG starting life (30), and for a 30-life opponent the Hammer must reach.
+  "colossus2hg        3 1001 50 10"
   # pd2hg: a RELEVANT deck, not a canary -- Dina ("each opponent loses 1"), Rolling Earthquake /
   # Pyrohemia ("each player") and Vito ("target opponent") all read heads / life. See the pd rows.
   "pd2hg              3 1001 15 10"
@@ -508,6 +513,14 @@ SMOKE_CASES=(
   "galadriel 3 1001   30 10"
   "galadriel 5 1001   15 20"
   "galadriel2hg 3 1001 30 10"
+  # colossus: ADDED 2026-10-17 by the analysis (docs/design/analysis-Colossus Hammer.md), all three tiers
+  # at once (the all-or-none rule), at the pirates / soldiers gate shape and the overnight ENTRY set.
+  # Colossus Hammer (+10/+10) on a double striker through five equip cheats; most games end T3-T5. No
+  # value leaf and no keep table yet, so GT WILL move when they land; the AI-drafted cast order and
+  # discard buckets ship OFF (MTG_COLOSSUS_ORDER / MTG_COLOSSUS_BUCKET_DISCARD) pending the USER.
+  "colossus 0 1001 1000 0"
+  "colossus 3 1001  150 10"
+  "colossus 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -750,6 +763,12 @@ REGRESSION_CASES=(
   "galadriel 5 2002   20 20"
   "galadriel 5 3003   20 20"
   "galadriel2hg 3 2002 40 10"
+  # colossus: see the SMOKE block.
+  "colossus 0 2002 1000 0"
+  "colossus 3 2002  150 10"
+  "colossus 3 3003  150 10"
+  "colossus 5 2002   75 20"
+  "colossus 5 3003   75 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -1344,4 +1363,18 @@ OVERNIGHT_CASES=(
   "galadriel2hg 5 5005  50 20"
   "galadriel2hg 5 6006  50 20"
   "galadriel2hg 5 7007  50 20"
+  # colossus: see the SMOKE block. The ENTRY set (regression-testing.md "Sizing a deck's overnight
+  # rows"); it expands to the FULL set just before a keep table is adopted.
+  "colossus 0 4004 2000 0"
+  "colossus 0 6006 2000 0"
+  "colossus 0 8008 2000 0"
+  "colossus 0 10010 2000 0"
+  "colossus 3 4004  400 10"
+  "colossus 3 5005  400 10"
+  "colossus 3 6006  400 10"
+  "colossus 3 7007  400 10"
+  "colossus 5 4004  300 20"
+  "colossus 5 5005  300 20"
+  "colossus 5 6006  300 20"
+  "colossus 5 7007  300 20"
 )

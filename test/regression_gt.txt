@@ -3,6 +3,9 @@
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: ADOPT the v3 exhaustive keep table (a9a17e64) -- all 12 overnight keys improve, mean -0.6251t (range -0.4800..-0.7380), measured against the table-ABSENT baseline accepted on these same resized rows in 16842c72 so the only difference is the table; held-out confirmation of generation's keep A/B -0.724933t and confounded-bottoming -0.155600t.
+# accepted-with-regressions (smoke, 2026-10-17): colossus + colossus2hg: deck ADDED to all three tiers (4 NEW smoke keys; analysis-Colossus Hammer.md). melira + melira2hg: play-only change at the SAME avg (d3 s1001 gi3, still T4) from the breakpoint cast-record fix 0d410db07 -- the committed T4 continuation convokes Chord of Calling, which the old replay could not pay and skipped. Every other smoke cell byte-identical (116/116).
+# accepted-with-regressions (regression, 2026-10-17): colossus: deck ADDED to all three tiers (5 NEW regression keys; analysis-Colossus Hammer.md), measured on 0d410db07 (the breakpoint cast-record fixes). Every other regression cell byte-identical (166/166), references 600 / 0 drift.
+# accepted-with-regressions (overnight, 2026-10-17): colossus: deck ADDED to all three tiers with the overnight ENTRY set (12 NEW keys, d0 4x2000, d3 4x400 b10, d5 4x300 b20; analysis-Colossus Hammer.md), PGO binary of 0d410db07, makespan 2m23s. Expands to the FULL set just before a keep table is adopted.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -98,6 +101,7 @@ critter2hg_smoke_d3_s1001=4.7600/a5edfe66f0792867
 melira2hg_smoke_d3_s1001=4.8400/7d182c91725b79a6
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=4.9800/eded3f2b34b85d3a
+colossus2hg_smoke_d3_s1001=4.4800/6e315bcbd5964469
 pd2hg_smoke_d3_s1001=5.6000/3ec18a53def26c00
 fluctuator_smoke_d0_s1001=4.9870/51bdb352a7a5fc23
 fluctuator_smoke_d3_s1001=3.5400/68f1f512c6091db9
@@ -131,6 +135,9 @@ galadriel_smoke_d0_s1001=7.2010/6b2df166d8da48dc
 galadriel_smoke_d3_s1001=4.8333/e375f2cf5a5e1677
 galadriel_smoke_d5_s1001=4.4667/a12eaac12c0aac72
 galadriel2hg_smoke_d3_s1001=4.8333/c9509c7100b32bea
+colossus_smoke_d0_s1001=4.9680/ea0225d30671b35b
+colossus_smoke_d3_s1001=3.6467/5ac08c2745a9d3c5
+colossus_smoke_d5_s1001=3.6933/6e80a47872519e88
 
 # --- regression ---
 fungusv2_regression_d0_s2002=5.3740/3a06b8600502945f
@@ -305,6 +312,11 @@ galadriel_regression_d3_s3003=4.8750/bfdec3e461f44c94
 galadriel_regression_d5_s2002=4.8000/39f7c54a12b9f261
 galadriel_regression_d5_s3003=5.1500/e45876721247d913
 galadriel2hg_regression_d3_s2002=4.7500/6abd48544a01f96a
+colossus_regression_d0_s2002=5.1660/e0b01470090e77bd
+colossus_regression_d3_s2002=3.8533/7eac18eb6174c3a6
+colossus_regression_d3_s3003=3.6867/cd66e7e34dc27a5a
+colossus_regression_d5_s2002=3.7333/e85f88e5fd473bb5
+colossus_regression_d5_s3003=3.5867/50136e0520c91ccc
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6540/d6b7b03035b25cc2
@@ -724,3 +736,15 @@ galadriel2hg_overnight_d5_s4004=4.9000/eb078d5a6798942b
 galadriel2hg_overnight_d5_s5005=5.1600/582f6f320afa1b11
 galadriel2hg_overnight_d5_s6006=5.1400/9f880732878bb3e6
 galadriel2hg_overnight_d5_s7007=5.2400/ac7a15b61a07d6b6
+colossus_overnight_d0_s4004=5.0490/7bc7d6b3cd5d3fb7
+colossus_overnight_d0_s6006=5.0260/581d8f857a491236
+colossus_overnight_d0_s8008=5.0745/99e392a9dec4a89e
+colossus_overnight_d0_s10010=5.0480/2e373016ff5a2f07
+colossus_overnight_d3_s4004=3.7850/d775316ffbc80d9b
+colossus_overnight_d3_s5005=3.8050/b0c7780647d97aaf
+colossus_overnight_d3_s6006=3.7125/1bf4b0180e08a298
+colossus_overnight_d3_s7007=3.8275/038dbf44d9451de3
+colossus_overnight_d5_s4004=3.7900/ea3bfc2444b381f9
+colossus_overnight_d5_s5005=3.7733/f88a96d2596ca046
+colossus_overnight_d5_s6006=3.7200/69876c9697c723cf
+colossus_overnight_d5_s7007=3.8367/b52d133411310cf0

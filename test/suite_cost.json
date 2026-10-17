@@ -50,6 +50,14 @@
    "total_core_ms": 142231,
    "worst_case": "burn_regression_d3_s2002"
   },
+  "colossus": {
+   "cost_per_game_ms": 1160.7467,
+   "jobs": 5,
+   "key": "colossus",
+   "tier": "regression",
+   "total_core_ms": 311751,
+   "worst_case": "colossus_regression_d5_s2002"
+  },
   "creature_giving": {
    "cost_per_game_ms": 347.912,
    "jobs": 5,
