@@ -12446,6 +12446,41 @@
     "land_search_tapped": true,
     "land_search_optional": true
    }
+  },
+  {
+   "name": "Sulfur Falls",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control an Island or a Mountain.\n{T}: Add {U} or {R}. [Check land: enters untapped iff a controlled land has subtype Island or Mountain (checkland_subtypes, evaluated in the shared LandWouldEnterTapped predicate so enumeration pricing and the real drop agree -- the Rootbound Crag / Clifftop Retreat precedent). Only basic-typed lands count: Spirebluff Canal, Cascade Bluffs, Ferrous Lake and the depletion lands have no land types, so they do not enable it. Fully modelled.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "R"
+    ],
+    "checkland_subtypes": [
+     "Island",
+     "Mountain"
+    ]
+   }
+  },
+  {
+   "name": "Gitaxian Probe",
+   "mana_cost": "{U/P}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "({U/P} can be paid with either {U} or 2 life.)\nLook at target player's hand.\nDraw a card. [draw_spell draw 1. PHYREXIAN MANA MODELLED (the Birthing Pod machinery, no new params): the parser bakes {U} into the flat pips (MV 1) and records ManaCost::phyrexian metadata; CollectActions' phyrexian post-pass emits a pay-2-life twin with the cost stripped to {0} (Action::phyrexian_life; plan_signature #P keeps the branch), so mana-vs-life is a real search branch (paying life frees a blue source for Niv-Mizzet). Life-gated at emission and at both apply sites: the twin exists only at life > 2, so it never pays to 0. SubsetPhyrexianDominated prunes a life-paid subset whose full-mana twin is jointly payable (weak dominance, off in human play). 'Look at target player's hand' is information only: the passive goldfish opponent holds no hand, and the search is clairvoyant about our own; nothing changes state, so it is not modelled (goldfish-inert, PROVISIONAL). 'Target player' is a bare player target: always legal, never a decision.]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 1
+   }
   }
  ]
 }

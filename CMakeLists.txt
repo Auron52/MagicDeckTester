@@ -415,6 +415,7 @@ add_executable(mtg-test
     test/unit/test_path_to_exile.cpp
     test/unit/test_human_prepay_demand.cpp
     test/unit/test_niv_draw_trigger.cpp
+    test/unit/test_sulfur_falls_probe.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working
