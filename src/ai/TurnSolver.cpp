@@ -8355,6 +8355,7 @@ struct Entry
 {
     std::uint64_t h = 0;
     std::uint8_t  used = 0, fn = 0, n = 0, verdict = 0;
+    std::int16_t  aux = -1;   // OrderPaysSequentially's fail position (the prefix rule), else -1
     std::int16_t  ids[kMaxIds] = {};
     bool Same(int f, const std::vector<int>& q) const
     {
@@ -8391,9 +8392,11 @@ inline std::uint64_t IdsHash(int fn, const std::vector<int>& ids)
     for (int j : ids) { h ^= static_cast<std::uint64_t>(j) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); }
     return h ^ (static_cast<std::uint64_t>(ids.size()) << 56);
 }
+// `aux` (optional): a small int the computation reports alongside its verdict, stored with it and
+// handed back on a hit (OrderPaysSequentially's fail position). compute() must write it when non-null.
 template <class F>
 inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, const std::vector<int>& ids,
-                  F&& compute)
+                  F&& compute, int* aux = nullptr)
 {
     Scope* sc = t_top;
     if (sc == nullptr || sc->s != &s || sc->acts != &acts || !sc->ctx.Same())
@@ -8414,8 +8417,11 @@ inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, c
             if (e.h == h && e.Same(fn, ids))
             {
                 const bool v = e.verdict != 0;
+                const int  stored_aux = e.aux;
                 if (StatsOn()) { g_hits[fn].fetch_add(1, std::memory_order_relaxed); }
-                if (VerifyOn() && compute() != v) { g_mismatch[fn].fetch_add(1, std::memory_order_relaxed); }
+                if (VerifyOn() && (compute() != v || (aux != nullptr && *aux != stored_aux)))
+                { g_mismatch[fn].fetch_add(1, std::memory_order_relaxed); }
+                if (aux != nullptr) { *aux = stored_aux; }
                 return v;
             }
         }
@@ -8443,6 +8449,7 @@ inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, c
     while (sc->table[i].used) { i = (i + 1) & mask; }
     Entry& e = sc->table[i];
     e.used = 1; e.h = h; e.fn = static_cast<std::uint8_t>(fn); e.verdict = r ? 1 : 0;
+    e.aux = static_cast<std::int16_t>(aux != nullptr ? *aux : -1);
     e.n = static_cast<std::uint8_t>(ids.size());
     for (std::size_t k = 0; k < ids.size(); ++k) { e.ids[k] = static_cast<std::int16_t>(ids[k]); }
     ++sc->live;
@@ -9110,8 +9117,10 @@ static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked)
 // `seq_rv_charged` the casts SameSubsetRevealSurcharge debited.
 static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>& cands,
                               const std::vector<int>& sel, const std::vector<int>& ord,
-                              const std::vector<int>& seq_rv_charged)
+                              const std::vector<int>& seq_rv_charged, int* fail_at = nullptr)
 {
+    if (fail_at != nullptr) { *fail_at = -1; }
+    int walk_pos = -1;   // index into `ord` of the cast being paid (reported through fail_at)
     static const bool _dbg = EnvOn("MTG_DBG_SEQ");   // the same static read as the caller's
     const DecisionProvider& prov = ResolveProvider(state);
     // Warm per-thread scratch board, same contract as SubsetPayableWithFilters' (see PayScratch):
@@ -9152,6 +9161,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     }
     for (int j : ord)
     {
+        ++walk_pos;
         const Action& a   = cands[j];
         // KICKER: price the "(Kicked)" face when this action paid the kicker, BEFORE EffectiveCost,
         // so the reduction applies to the summed cost (CR 601.2f order). Identity for every other
@@ -9261,7 +9271,11 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 if (!paid_ok) { paid_ok = TapForCostDirect(cp, ec, def.card.IsCreature()); }
             }
             if (!paid_ok)
-            { if (_dbg) { std::fprintf(stderr, "[dbgseq]   -> FAIL\n"); } return false; }
+            {
+                if (_dbg) { std::fprintf(stderr, "[dbgseq]   -> FAIL\n"); }
+                if (fail_at != nullptr) { *fail_at = walk_pos; }
+                return false;
+            }
             // Paid -> the walk no longer owes it (mirrors apply_one's decrement; clamped).
             SubManaCost(g_line_unpaid_cost, ec);
         }
@@ -9578,19 +9592,32 @@ static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<
 }
 
 static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<Action>& acts,
-                                      const std::vector<int>& order);
+                                      const std::vector<int>& order, int* fail_pos);
+// THE PREFIX RULE (`fail_pos`, consumed by the EDF range projection's MTG_EDF_RANGE_PREFIX_FAIL). The
+// walk (SeqWalkFixedOrder) is fail-fast and strictly sequential: before cast k the scratch board, the
+// floating mana and the walk's line hold (`g_line_unpaid_cost`, bound to the TOTAL of the order's costs
+// and decremented by each paid cast) are a deterministic function of the starting board, the casts
+// before k, and set-level inputs. So two orders of the SAME action set that agree on their first p+1
+// casts reach cast p in the identical state, and if one could not pay it there, neither can the other.
+// Two set-level inputs are order-sensitive in principle and are therefore excluded rather than argued:
+// a Vial put (its Treasures are laid in `sel` order, and the walk receives the order AS `sel`), and a
+// same-subset reveal surcharge (computed over the asked order). A question carrying either reports -1,
+// as does a true verdict or a refusal before any walk (an unmodelled kind).
 bool TurnSolver::OrderPaysSequentially(const GameState& state, const std::vector<Action>& acts,
-                                       const std::vector<int>& order)
+                                       const std::vector<int>& order, int* fail_pos)
 {
     const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
+    int fp = -1;
     const bool r = paymemo::Probe(paycensus::OPS, state, acts, order,
-                                  [&] { return OrderPaysSequentiallyImpl(state, acts, order); });
+                                  [&] { return OrderPaysSequentiallyImpl(state, acts, order, &fp); }, &fp);
+    if (fail_pos != nullptr) { *fail_pos = r ? -1 : fp; }
     if (paycensus::On()) { paycensus::Record(paycensus::OPS, state, acts, order, r, _pc_t0); }
     return r;
 }
 static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<Action>& acts,
-                                      const std::vector<int>& order)
+                                      const std::vector<int>& order, int* fail_pos)
 {
+    *fail_pos = -1;
     // An apply-site plan may carry an action whose memoized def was never back-filled; the walk reads
     // `*a.def`, so fill a private copy rather than call such a cast unpayable (which would leave the
     // apply's order unarranged while the enumeration's walk -- whose candidates are filled -- arranged
@@ -9619,7 +9646,12 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
     if (ord.empty()) { return true; }
     std::vector<int> charged;
     SameSubsetRevealSurcharge(state, *use, order, &charged);
-    return SeqWalkFixedOrder(state, *use, order, ord, charged);
+    int walk_fail = -1;
+    const bool ok = SeqWalkFixedOrder(state, *use, order, ord, charged, &walk_fail);
+    // The prefix rule's exclusions (see OrderPaysSequentially): `ord` == `order` exactly when no Vial put
+    // was skipped, so a walk index is then an `order` position.
+    if (!ok && walk_fail >= 0 && charged.empty() && ord.size() == order.size()) { *fail_pos = walk_fail; }
+    return ok;
 }
 
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color

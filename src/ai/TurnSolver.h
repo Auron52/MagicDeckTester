@@ -2344,8 +2344,11 @@ public:
     //                             kind the walk does not model.
     static bool OrderPrepaysWholeTurn(const GameState& state, const std::vector<Action>& acts,
                                       const std::vector<int>& order);
+    //                             `fail_pos` (optional): on a false verdict, the position in `order`
+    //                             of the cast the walk could not pay, when the PREFIX RULE holds for
+    //                             this question (see OrderPaysSequentially's definition); else -1.
     static bool OrderPaysSequentially(const GameState& state, const std::vector<Action>& acts,
-                                      const std::vector<int>& order);
+                                      const std::vector<int>& order, int* fail_pos = nullptr);
     // MTG_MINT_CREDIT_EXACT -- the base pool's share of a HOISTED-MINTER line, paid jointly. The
     // whole-turn prepay above cannot pay a line the mint funds (its bill exceeds the board by
     // construction), so every such line fell to the per-cast greedy, whose "leave out if you can"

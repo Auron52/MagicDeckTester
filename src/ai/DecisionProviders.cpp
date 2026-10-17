@@ -43445,6 +43445,31 @@ struct Dump
     }
 };
 inline Dump g_dump;
+inline std::atomic<long long> g_prefix_skips{0}, g_prefix_verified{0}, g_prefix_mismatch{0};
+}
+// MTG_EDF_RANGE_PREFIX_FAIL (DEFAULT ON; =0 walks every candidate). Every order this projection asks
+// about is a permutation of ONE action set on ONE board, and the sequential walk is fail-fast with a
+// state before cast k that depends only on the casts before it (the prefix rule, at
+// TurnSolver::OrderPaysSequentially). So once a walk reports that it could not pay the cast at position
+// p, every later candidate that begins with the same p+1 casts is unpayable too, and its walk is not
+// run: the candidate loop reads exactly the verdicts it read before, in the same order, and takes the
+// same first payable candidate. MTG_EDF_RANGE_PREFIX_FAIL_VERIFY=1 walks each skipped candidate anyway
+// and counts a payable one (must be 0; printed at exit with the skip count).
+static bool EdfRangePrefixFailOn()       { static const bool v = EnvOn("MTG_EDF_RANGE_PREFIX_FAIL", true); return v; }
+static bool EdfRangePrefixFailVerifyOn() { static const bool v = EnvOn("MTG_EDF_RANGE_PREFIX_FAIL_VERIFY"); return v; }
+namespace edfrangeprefix
+{
+struct Dump
+{
+    ~Dump()
+    {
+        if (!EdfRangePrefixFailVerifyOn() && !edfrangestats::On()) { return; }
+        std::fprintf(stderr, "[edf-range-prefix] skipped_walks=%lld verified=%lld PAYABLE_SKIPPED=%lld\n",
+                     edfrangestats::g_prefix_skips.load(), edfrangestats::g_prefix_verified.load(),
+                     edfrangestats::g_prefix_mismatch.load());
+    }
+};
+inline Dump g_dump;
 }
 void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>& acts,
                                   std::vector<int>& order, bool stack)
@@ -43493,7 +43518,26 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
         }
         return r + "float=" + std::to_string(s.floating_mana.Total());
     };
-    const bool seq_ok = TurnSolver::OrderPaysSequentially(s, acts, order);
+    // Failed prefixes (the casts up to and including the one the walk could not pay) -- see
+    // EdfRangePrefixFailOn. Every order below is a permutation of `order`.
+    const bool prefix_on = EdfRangePrefixFailOn();
+    std::vector<std::vector<int>> dead;
+    auto note_fail = [&](const std::vector<int>& o, int fp)
+    {
+        if (prefix_on && fp >= 0 && fp < static_cast<int>(o.size()))
+        { dead.emplace_back(o.begin(), o.begin() + fp + 1); }
+    };
+    auto dead_prefix = [&](const std::vector<int>& o) -> bool
+    {
+        for (const std::vector<int>& d : dead)
+        {
+            if (d.size() <= o.size() && std::equal(d.begin(), d.end(), o.begin())) { return true; }
+        }
+        return false;
+    };
+    int seq_fp = -1;
+    const bool seq_ok = TurnSolver::OrderPaysSequentially(s, acts, order, prefix_on ? &seq_fp : nullptr);
+    if (!seq_ok) { note_fail(order, seq_fp); }
     const bool pre_ok = !seq_ok && TurnSolver::OrderPrepaysWholeTurn(s, acts, order);
     if (s_trace)
     {
@@ -43539,13 +43583,26 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
     for (const Cand& c : cands)
     {
         if (c.ord == order) { continue; }
+        if (prefix_on && dead_prefix(c.ord))
+        {
+            if (rs_on) { edfrangestats::g_prefix_skips.fetch_add(1, std::memory_order_relaxed); }
+            if (EdfRangePrefixFailVerifyOn())
+            {
+                edfrangestats::g_prefix_verified.fetch_add(1, std::memory_order_relaxed);
+                if (TurnSolver::OrderPaysSequentially(s, acts, c.ord))
+                { edfrangestats::g_prefix_mismatch.fetch_add(1, std::memory_order_relaxed); }
+            }
+            continue;
+        }
         if (rs_on) { edfrangestats::g_walks.fetch_add(1, std::memory_order_relaxed); }
-        if (TurnSolver::OrderPaysSequentially(s, acts, c.ord))
+        int c_fp = -1;
+        if (TurnSolver::OrderPaysSequentially(s, acts, c.ord, prefix_on ? &c_fp : nullptr))
         {
             if (s_trace) { std::fprintf(stderr, "[edf-range]   -> moved [%s]\n", names(c.ord).c_str()); }
             if (rs_on) { edfrangestats::g_moved.fetch_add(1, std::memory_order_relaxed); }
             order = c.ord; return;
         }
+        note_fail(c.ord, c_fp);
     }
     if (rs_on) { edfrangestats::g_unchanged.fetch_add(1, std::memory_order_relaxed); }
     if (s_trace) { std::fprintf(stderr, "[edf-range]   -> no candidate pays; unchanged\n"); }
