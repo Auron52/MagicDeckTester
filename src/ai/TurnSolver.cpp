@@ -54105,13 +54105,13 @@ struct Dump
     }
 };
 inline Dump g_dump;
-struct Span { std::uint32_t off; std::uint32_t len; std::uint8_t bucket; };
+struct Span { std::uint32_t off; std::uint32_t len; std::uint32_t bucket; };   // bucket widened: no partial-word store forwarding
 struct Scratch
 {
     std::string       arena;
     std::vector<Span> spans;
     std::uint32_t     open = 0;
-    std::uint8_t      bucket = 0;
+    std::uint32_t     bucket = 0;
     void Begin(std::uint8_t b) { bucket = b; open = static_cast<std::uint32_t>(arena.size()); }
     void End() { spans.push_back(Span{ open, static_cast<std::uint32_t>(arena.size()) - open, bucket }); }
     void Put(std::string_view s) { arena.append(s.data(), s.size()); }
