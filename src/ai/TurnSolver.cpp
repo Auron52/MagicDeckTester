@@ -46,6 +46,11 @@
 #include <optional>
 #include <cmath>
 #include <unordered_map>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
 #include <unordered_set>
 #include <utility>
 
@@ -7931,6 +7936,104 @@ static bool IsEtbUntapCast(const Action& a)
         && a.def->params.etb_untap_lands > 0;
 }
 
+// ---- MTG_PAY_CENSUS: payability-probe call census (DIAGNOSTIC, print-only, default OFF) ----------
+// Counts every entry into the subset/order payability probes, the false verdicts, and REPEATS: a
+// call whose exact question (board digest + zone order + floating mana + the line hold + the
+// asked actions in order) this thread already asked inside the same decision (g_decision_epoch).
+// `same_obj` counts the repeats whose GameState was also the SAME object -- a repeat inside one
+// caller's lifetime, as opposed to the same board re-derived elsewhere. Prints at exit. Off -> one
+// static bool test per call.
+static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
+                                           bool second_main);   // fwd (defined much later)
+inline std::uint64_t FsOrderSig(const GameState& state);        // fwd (defined much later)
+namespace paycensus
+{
+enum Fn : int { SPWF = 0, SPS, OPS, OPWT, ASEXEC, kN };
+inline const char* FnName(int f)
+{
+    static const char* n[kN] = { "SubsetPayableWithFilters", "SubsetPayableSequential",
+                                 "OrderPaysSequentially", "OrderPrepaysWholeTurn",
+                                 "SubsetPayableAsExecuted" };
+    return n[f];
+}
+inline bool On() { static const bool v = EnvOn("MTG_PAY_CENSUS"); return v; }
+struct Counters
+{
+    std::atomic<long long> calls[kN]{}, falses[kN]{}, repeats[kN]{}, rep_false[kN]{}, same_obj[kN]{},
+                           rep_mismatch[kN]{}, cyc_true[kN]{}, cyc_false[kN]{}, cyc_rep[kN]{};
+    ~Counters()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[pay-census] fn calls false repeats repeat_false same_obj verdict_mismatch_on_repeat Gcyc_true Gcyc_false Gcyc_repeats\n");
+        for (int f = 0; f < kN; ++f)
+        {
+            std::fprintf(stderr, "[pay-census] %-26s %12lld %12lld %12lld %12lld %12lld %6lld %8.2f %8.2f %8.2f\n", FnName(f),
+                         calls[f].load(), falses[f].load(), repeats[f].load(), rep_false[f].load(),
+                         same_obj[f].load(), rep_mismatch[f].load(), cyc_true[f].load() / 1e9,
+                         cyc_false[f].load() / 1e9, cyc_rep[f].load() / 1e9);
+        }
+    }
+};
+inline Counters g_c;
+inline void MixA(std::uint64_t& h, std::uint64_t v) { h ^= v; h *= 1099511628211ull; h ^= h >> 29; }
+inline std::uint64_t CostSig(const ManaCost& c)
+{
+    std::uint64_t h = 77;
+    MixA(h, static_cast<std::uint64_t>(c.generic) * 1000003ull + static_cast<std::uint64_t>(c.white));
+    MixA(h, static_cast<std::uint64_t>(c.blue) | (static_cast<std::uint64_t>(c.black) << 16)
+            | (static_cast<std::uint64_t>(c.red) << 32) | (static_cast<std::uint64_t>(c.green) << 48));
+    MixA(h, static_cast<std::uint64_t>(c.colorless) | (static_cast<std::uint64_t>(c.hybrid_count) << 16));
+    MixA(h, std::hash<std::string>{}(c.ToString()));
+    return h;
+}
+inline std::uint64_t ActSig(const Action& a)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    MixA(h, static_cast<std::uint64_t>(a.kind));
+    MixA(h, reinterpret_cast<std::uintptr_t>(&a.card_name.str()));
+    MixA(h, reinterpret_cast<std::uintptr_t>(a.def));
+    MixA(h, CostSig(a.cost));
+    MixA(h, static_cast<std::uint64_t>(a.enchant_target) * 131 + static_cast<std::uint64_t>(a.chosen_x + 7));
+    MixA(h, static_cast<std::uint64_t>(a.sac_source_id) * 17 + static_cast<std::uint64_t>(a.ability_mode));
+    MixA(h, static_cast<std::uint64_t>(a.free_cast) | (static_cast<std::uint64_t>(a.alt_cost) << 1)
+            | (static_cast<std::uint64_t>(a.evoke) << 2) | (static_cast<std::uint64_t>(a.kicked) << 3)
+            | (static_cast<std::uint64_t>(a.sacrifice_land) << 4));
+    MixA(h, static_cast<std::uint64_t>(a.rock_mana.Total()) * 7 + static_cast<std::uint64_t>(a.splice_count));
+    return h;
+}
+struct Seen { const GameState* obj; bool verdict; };
+// `ids` are indices into `acts`, in the asked order; `ids2` optional (OPS's subset vs order).
+inline void Record(int fn, const GameState& s, const std::vector<Action>& acts, const std::vector<int>& ids,
+                   bool verdict, unsigned long long t0)
+{
+    const long long cyc = static_cast<long long>(__rdtsc() - t0);
+    (verdict ? g_c.cyc_true : g_c.cyc_false)[fn].fetch_add(cyc, std::memory_order_relaxed);
+    g_c.calls[fn].fetch_add(1, std::memory_order_relaxed);
+    if (!verdict) { g_c.falses[fn].fetch_add(1, std::memory_order_relaxed); }
+    static thread_local std::uint64_t epoch = ~0ull;
+    static thread_local std::unordered_map<std::uint64_t, Seen> seen;
+    if (epoch != TurnSolver::DecisionEpoch() || seen.size() > (1u << 21)) { seen.clear(); epoch = TurnSolver::DecisionEpoch(); }
+    const TranspositionTable::Key k = BuildSimKey(s, 0, 0, false);
+    std::uint64_t h = k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ull);
+    MixA(h, FsOrderSig(s));
+    const ManaPool& fm = s.floating_mana;
+    MixA(h, static_cast<std::uint64_t>(fm.white) | (static_cast<std::uint64_t>(fm.blue) << 10)
+            | (static_cast<std::uint64_t>(fm.black) << 20) | (static_cast<std::uint64_t>(fm.red) << 30)
+            | (static_cast<std::uint64_t>(fm.green) << 40) | (static_cast<std::uint64_t>(fm.colorless) << 50));
+    MixA(h, static_cast<std::uint64_t>(fm.wild));
+    MixA(h, CostSig(g_line_unpaid_cost));
+    MixA(h, static_cast<std::uint64_t>(fn));
+    for (int j : ids) { MixA(h, ActSig(acts[static_cast<std::size_t>(j)])); }
+    auto it = seen.find(h);
+    if (it == seen.end()) { seen.emplace(h, Seen{ &s, verdict }); return; }
+    g_c.repeats[fn].fetch_add(1, std::memory_order_relaxed);
+    g_c.cyc_rep[fn].fetch_add(cyc, std::memory_order_relaxed);
+    if (!verdict) { g_c.rep_false[fn].fetch_add(1, std::memory_order_relaxed); }
+    if (it->second.obj == &s) { g_c.same_obj[fn].fetch_add(1, std::memory_order_relaxed); }
+    if (it->second.verdict != verdict) { g_c.rep_mismatch[fn].fetch_add(1, std::memory_order_relaxed); }
+}
+}   // namespace paycensus
+
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel, bool tap_sources)
 {
@@ -8198,7 +8301,9 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
                                      const std::vector<int>& sel)
 {
     const bool tap = RescueTapSourceOn();
+    const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
     const bool ok  = SubsetPayableWithFiltersImpl(state, cands, sel, tap);
+    if (paycensus::On()) { paycensus::Record(paycensus::SPWF, state, cands, sel, ok, _pc_t0); }
     const int  lim = RescueTapTraceLimit();
     if (lim > 0 && tap && !ok)
     {
@@ -8257,6 +8362,7 @@ static bool SolveAuraPayerAsExecutedOn()
 static bool SubsetPayableAsExecuted(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
 {
+    const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
     std::vector<Action> acts;
     acts.reserve(sel.size());
     for (int j : sel) { acts.push_back(cands[j]); }
@@ -8267,8 +8373,10 @@ static bool SubsetPayableAsExecuted(const GameState& state, const std::vector<Ac
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, acts); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
-    if (!TurnSolver::BatchPrepayMainCasts(cp, acts)) { return SubsetPayableWithFilters(state, cands, sel); }
-    return SubsetPayableWithFilters(cp, cands, sel);
+    const bool r = !TurnSolver::BatchPrepayMainCasts(cp, acts) ? SubsetPayableWithFilters(state, cands, sel)
+                                                                : SubsetPayableWithFilters(cp, cands, sel);
+    if (paycensus::On()) { paycensus::Record(paycensus::ASEXEC, state, cands, sel, r, _pc_t0); }
+    return r;
 }
 
 // MTG_COLOR_EXACT_PROBE -- the soundness instrument for the colour-exact gate. The gate may only
@@ -8792,8 +8900,18 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     return true;
 }
 
+static bool SubsetPayableSequentialImpl(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel);
 static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
+{
+    const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
+    const bool r = SubsetPayableSequentialImpl(state, cands, sel);
+    if (paycensus::On()) { paycensus::Record(paycensus::SPS, state, cands, sel, r, _pc_t0); }
+    return r;
+}
+static bool SubsetPayableSequentialImpl(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
 {
     thread_local std::vector<int> order;
     order.clear();
@@ -8933,6 +9051,7 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
 bool TurnSolver::OrderPrepaysWholeTurn(const GameState& state, const std::vector<Action>& acts,
                                        const std::vector<int>& order)
 {
+    const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
     std::vector<Action> sub;
     sub.reserve(order.size());
     for (int i : order) { sub.push_back(acts[static_cast<std::size_t>(i)]); }
@@ -8943,11 +9062,23 @@ bool TurnSolver::OrderPrepaysWholeTurn(const GameState& state, const std::vector
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, sub); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
-    return TurnSolver::BatchPrepayMainCasts(cp, sub);
+    const bool r = TurnSolver::BatchPrepayMainCasts(cp, sub);
+    if (paycensus::On()) { paycensus::Record(paycensus::OPWT, state, acts, order, r, _pc_t0); }
+    return r;
 }
 
+static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& order);
 bool TurnSolver::OrderPaysSequentially(const GameState& state, const std::vector<Action>& acts,
                                        const std::vector<int>& order)
+{
+    const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
+    const bool r = OrderPaysSequentiallyImpl(state, acts, order);
+    if (paycensus::On()) { paycensus::Record(paycensus::OPS, state, acts, order, r, _pc_t0); }
+    return r;
+}
+static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& order)
 {
     // An apply-site plan may carry an action whose memoized def was never back-filled; the walk reads
     // `*a.def`, so fill a private copy rather than call such a cast unpayable (which would leave the
