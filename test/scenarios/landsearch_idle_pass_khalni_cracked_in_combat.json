@@ -1,0 +1,90 @@
+{
+  "_comment": [
+    "THE IDLE PASS's combat pins (2026-10-17): landsearch_khalni_cracked_in_combat_after_titan with the turn's land drop SPENT",
+    "('lands_played_this_turn': 1). There the drop is open, so the enumeration offers its no-land pass and the post-dedup fan-out",
+    "gives it the in-combat crack (Plan::combat_crack_choice). Here the main has nothing to cast and no drop, so it enumerates",
+    "ZERO plans and the HOST appends the pass after the fan-out ran: before the fix the pass carried no crack pin, the crack's",
+    "front is 'do not crack', and Titan 6 + Avenger 5 + three Plants at 2 = 17 does not kill the 23-life opponent (T7). With the",
+    "pass routed through the same fan-out it carries the crack variant: two more landfalls, Plants at 4, 23 = lethal on T6.",
+    "Same library as the parent: Titan's two nonbasics (Radiant Fountain, Haunted Fengraf), then the basics the crack finds."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 23,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Primeval Titan"
+    },
+    {
+      "name": "Avenger of Zendikar"
+    },
+    {
+      "name": "Khalni Heart Expedition",
+      "quest_counters": 1
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    },
+    {
+      "token": true,
+      "power": 0,
+      "toughness": 1,
+      "subtypes": [
+        "Plant"
+      ],
+      "color": "G"
+    }
+  ],
+  "hand": [],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Radiant Fountain",
+    "Haunted Fengraf",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Mountain"
+  ],
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 7,
+  "expect_win_turn": 6
+}

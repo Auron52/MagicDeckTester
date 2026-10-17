@@ -1922,10 +1922,11 @@ public:
     // The post-apply state identity every candidate dedup keys on (BuildDedupKey), folded to 64 bits.
     // Tests only: it is how a unit case checks that two states collide (or do not) in that key.
     static std::uint64_t     DedupKeyOf(const GameState& state);
-    // The PASS a search host appends when a main enumerates nothing (FSLineWin's idle node, FSLineTail's
-    // do-nothing second main, SolveWithLookahead's empty set) followed by the dig siblings the host
-    // appends after it (MTG_DIG_SEARCHED_CHOICE: the pass marked 2 + its no-dig twin). Tests only.
-    static std::vector<Plan> IdlePassWithDigSiblings(const GameState& state);
+    // The PASS a PRE-combat search host appends when a main enumerates nothing (FSLineWin's idle node:
+    // land decided), routed through the post-dedup sub-decision fan-out like an enumerated plan
+    // (AppendIdlePassAxes: the no-dig twin AND every pin it carries into this turn's combat and beyond).
+    // Element 0 is the pass. Tests only.
+    static std::vector<Plan> IdlePassWithAxes(const GameState& state);
     // The FINITE budget of the OUTERMOST solve of this thread's current decision, or nullptr when
     // that budget is unlimited (`--budget-ms 0`) or no solve is on the stack (the viewer's menu
     // enumeration, the executor's committed apply). A provider-side sub-search run INSIDE a

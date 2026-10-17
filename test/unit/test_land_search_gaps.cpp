@@ -734,3 +734,62 @@ TEST_CASE("Put Karoo bounce: a human playing the put is asked through the ordina
     CHECK(bounce_source == "Gruul Turf");
     CHECK(CountBf(t, "Gruul Turf") + (InHandG(t, "Gruul Turf") ? 1 : 0) == 1);
 }
+
+// ---- THE IDLE PASS's combat pins (2026-10-17; TurnSolver.cpp AppendIdlePassAxes) ----------------
+// A pre-combat main with the drop spent and nothing to cast enumerates ZERO plans and the host appends
+// the pass after the post-dedup fan-out ran -- so the attacking Titan's pick and the in-combat Khalni
+// crack took their front (no crack at all). The pass now goes through the fan-out itself. End-to-end:
+// test/scenarios/landsearch_idle_pass_khalni_cracked_in_combat.json.
+namespace
+{
+GameState IdleTitanBoard()
+{
+    GameState s = FreshG(6);
+    s.players[0].lands_played_this_turn = 1;
+    for (int n = 1; n <= 6; ++n) { PutG(s, "Forest", n, false); }
+    PutG(s, "Primeval Titan", 10, false);
+    const int kx = PutG(s, "Khalni Heart Expedition", 11, false);
+    s.battlefield[static_cast<std::size_t>(kx)].quest_counters = 1;
+    LibG(s, "Radiant Fountain", 50); LibG(s, "Haunted Fengraf", 51);
+    for (int i = 0; i < 4; ++i) { LibG(s, "Forest", 52 + i); }
+    LibG(s, "Mountain", 56);
+    return s;
+}
+bool HasLs(const std::vector<TurnSolver::Plan>& v, int attack, int crack)
+{
+    for (std::size_t i = 1; i < v.size(); ++i)
+    {
+        if (v[i].attack_land_search_choice == attack && v[i].combat_crack_choice == crack) { return true; }
+    }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("Idle pass: an empty main 1 still searches the attacking Titan's pick and the in-combat crack")
+{
+    LoadCardsGaps();
+    const GameState s = IdleTitanBoard();
+    REQUIRE(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true).empty());
+    const std::vector<TurnSolver::Plan> fresh = TurnSolver::IdlePassWithAxes(s);
+    REQUIRE_FALSE(fresh.empty());
+    CHECK(fresh[0].attack_land_search_choice == -1);
+    CHECK(fresh[0].combat_crack_choice == -1);
+    CHECK(HasLs(fresh, -1, 1));                       // crack the Expedition in combat
+    CHECK_FALSE(HasLs(fresh, -1, 0));                 // "no crack" is the pass itself
+    CHECK_FALSE(HasLs(fresh, 0, -1));                 // ...and so is the all-front pick
+}
+
+TEST_CASE("Idle pass: an inherited crack / attack pick makes the front a variant")
+{
+    LoadCardsGaps();
+    GameState c = IdleTitanBoard();
+    c.scripted_combat_land_search_crack = 1;          // the committed plan cracks (a re-solve)
+    const std::vector<TurnSolver::Plan> vc = TurnSolver::IdlePassWithAxes(c);
+    CHECK(HasLs(vc, -1, 0));                          // "crack nothing" is reachable
+    CHECK_FALSE(HasLs(vc, -1, 1));                    // the bare crack IS the pass now
+    GameState a = IdleTitanBoard();
+    a.scripted_attack_land_search = 1;                // the committed plan pinned a non-front pick
+    const std::vector<TurnSolver::Plan> va = TurnSolver::IdlePassWithAxes(a);
+    CHECK(HasLs(va, 0, -1));                          // the all-front pick is reachable
+    CHECK_FALSE(HasLs(va, 1, -1));
+}

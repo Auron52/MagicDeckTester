@@ -887,7 +887,12 @@ static std::atomic<long long> g_combat_pin_folded[2]{{0}, {0}};
 // Raubahn's attack-attach axis (AppendSubdecisionAxes): enumeration nodes that fanned it, and the
 // variants emitted (printed with the rollout stats).
 static std::atomic<long long> g_attack_attach_axis_nodes{0}, g_attack_attach_axis_variants{0};
-static std::atomic<long long> g_attack_attach_idle_nodes{0}, g_attack_attach_idle_variants{0};
+// The idle pass a pre-combat host appends (AppendIdlePassAxes), per host x context: passes seen, passes
+// the fan-out gave at least one variant, and the variants (printed with the rollout stats).
+//   host: 0 FSLineWin's idle node, 1 SolveWithLookahead's empty candidate set, 2 ReshuffleAvgChoosePlan
+//   ctx:  0 a main decision's root, 1 a root under the executor's breakpoint re-solve (turncensus site),
+//         2 inside a rollout (g_rollout_nest > 0)
+static std::atomic<long long> g_idle_pass_seen[3][3]{}, g_idle_pass_fanned[3][3]{}, g_idle_pass_variants[3][3]{};
 // COMBAT-PIN MAIN-PHASE SHARE firing counters (SolveWithLookahead; printed with the rollout stats):
 // base applies cached, variant applies replaced by the cached state.
 static std::atomic<long long> g_cpshare_cached{0}, g_cpshare_used{0};
@@ -1931,9 +1936,22 @@ namespace
                       << " (verify ok=" << g_put_bounce_verify_ok.load()
                       << " bad=" << g_put_bounce_verify_bad.load() << ")\n";
             std::cerr << "[rollout-stats] attack_attach_axis nodes=" << g_attack_attach_axis_nodes.load()
-                      << " variants=" << g_attack_attach_axis_variants.load()
-                      << " idle_pass_nodes=" << g_attack_attach_idle_nodes.load()
-                      << " idle_pass_variants=" << g_attack_attach_idle_variants.load() << "\n";
+                      << " variants=" << g_attack_attach_axis_variants.load() << "\n";
+            {
+                static const char* const kIdleHost[3] = { "fslinewin", "solve_la", "reshuffle" };
+                static const char* const kIdleCtx[3]  = { "root", "bp_resolve", "rollout" };
+                for (int h = 0; h < 3; ++h)
+                {
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        if (g_idle_pass_seen[h][c].load() == 0) { continue; }
+                        std::cerr << "[rollout-stats] idle_pass_axes host=" << kIdleHost[h] << " ctx=" << kIdleCtx[c]
+                                  << " passes=" << g_idle_pass_seen[h][c].load()
+                                  << " fanned=" << g_idle_pass_fanned[h][c].load()
+                                  << " variants=" << g_idle_pass_variants[h][c].load() << "\n";
+                    }
+                }
+            }
             std::cerr << "[rollout-stats] plan_axes etbcounter_variants=" << g_axis_etbcounter_vars.load()
                       << " sweep_variants=" << g_axis_sweep_vars.load()
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
@@ -57427,11 +57445,13 @@ static void AppendDigSiblings(const DigOffer& o, const TurnSolver::Plan& p,
     }
 }
 // THE IDLE PLAN A HOST APPENDS gets the same siblings. A main with nothing to cast enumerates ZERO
-// plans, and the host then appends the pass itself -- FSLineWin's idle node, FSLineTail's do-nothing
-// second main, SolveWithLookahead's empty candidate set, the NC instrument's m2 -- AFTER the axes ran.
-// That pass is exactly the "empty of gas" state the generic gate digs in, so without this the commonest
-// dig of all stayed automatic. `list.back()` is the idle plan; it is marked 2 and its siblings appended.
-// Lever-only: at =0 every host is byte-identical.
+// plans, and the host then appends the pass itself -- FSLineTail's do-nothing second main,
+// SolveWithLookahead's empty post-combat set, the NC instrument's m2 -- AFTER the axes ran. That pass is
+// exactly the "empty of gas" state the generic gate digs in, so without this the commonest dig of all
+// stayed automatic. `list.back()` is the idle plan; it is marked 2 and its siblings appended.
+// Lever-only: at =0 every host is byte-identical. (The PRE-combat hosts' pass goes through the whole
+// fan-out instead -- AppendIdlePassAxes -- whose dig axis is this one; it falls back to this helper
+// inside a breakpoint continuation derivation.)
 static void AppendIdleDigSiblings(const GameState& state, std::vector<TurnSolver::Plan>& list)
 {
     if (list.empty() || HumanPlayActive() || !DigSearchedChoiceOn()) { return; }
@@ -57447,8 +57467,8 @@ static void AppendIdleDigSiblings(const GameState& state, std::vector<TurnSolver
 }
 
 // The width of Raubahn's attack-attach axis from `state` (see the SEARCHED RAUBAHN ATTACK ATTACH note in
-// AppendSubdecisionAxes): 1 + E * H while a Raubahn can attack this turn, else 1 (no axis). ONE
-// function for the post-dedup fan-out and the idle-pass hosts (AppendIdleAttackAttachSiblings).
+// AppendSubdecisionAxes): 1 + E * H while a Raubahn can attack this turn, else 1 (no axis). Read by the
+// post-dedup fan-out only -- which the idle pass a host appends now goes through too (AppendIdlePassAxes).
 static int AttackAttachAxisWidth(const GameState& state)
 {
     if (!state.deck_has_attack_attach) { return 1; }
@@ -57523,15 +57543,19 @@ static int AttackAttachAxisWidth(const GameState& state)
     return attach_width;
 }
 
-// The ranks Raubahn's attack-attach variants carry, given the axis width `w`: 1 .. w-1 -- the base plan
-// carries the front (it writes no pin) -- EXCEPT on a state that already holds a pin (a re-solve inside
-// the same main phase, the state written by an earlier apply): there the base plan inherits THAT rank,
-// so the front (0) must be a variant and the inherited rank is the base's. Every rank 0 .. w-1 is then
-// reachable from every state.
-static std::vector<int> AttackAttachVariantRanks(const GameState& state, int w)
+// THE RANKS A STATE-PIN AXIS'S VARIANTS CARRY, given the axis width `w` and the pin the state already
+// holds (`inherited`, -1 = none). A state pin (Plan -> GameState::scripted_*, write-when-set) is read
+// AFTER the apply -- in this turn's combat, at cleanup, at the next draw or upkeep -- so a plan that
+// carries none INHERITS whatever the state holds. On a fresh turn that is nothing: the base plan is the
+// front and the variants are 1 .. w-1. On a state that already holds a pin (a re-solve inside the same
+// turn, the state written by an earlier apply -- the executor's breakpoint re-solve -- or a next-turn
+// pin left unconsumed) the base plan carries THAT rank, so the front (0) must be a variant and the
+// inherited rank is the base's. Every rank 0 .. w-1 is then reachable from every state. ONE rule for
+// every rank-valued state pin: Raubahn's attach, Bruna's gather subset, Goblin Lackey's put, the cleanup
+// discard and the Saga chapter target (AppendSubdecisionAxes, which the idle pass shares).
+static std::vector<int> StatePinVariantRanks(int inherited, int w)
 {
     std::vector<int> ks;
-    const int inherited = state.scripted_attack_attach;
     for (int k = 0; k < w; ++k)
     {
         if (inherited < 0 ? k == 0 : k == inherited) { continue; }
@@ -57539,36 +57563,21 @@ static std::vector<int> AttackAttachVariantRanks(const GameState& state, int w)
     }
     return ks;
 }
-
-// THE IDLE PASS A HOST APPENDS gets Raubahn's attack-attach variants too (the AppendIdleDigSiblings
-// shape). A pre-combat main with nothing to cast and no drop enumerates ZERO plans, and the host
-// appends the pass AFTER the axes ran -- so without this the trigger in that turn's combat took the
-// provider's front: a greedy pick inside the search window on exactly the empty-handed turns where
-// re-hosting the board's Equipment is the whole decision. `idle_index` = the pass plan (any dig
-// siblings already appended stay as they are; the variants clone the pass only, additive). Pre-combat
-// hosts only; never inside a breakpoint continuation derivation (the outer plan carries the pin) and
-// never in human play. One bool test for every deck without a Raubahn.
-static void AppendIdleAttackAttachSiblings(const GameState& state, std::vector<TurnSolver::Plan>& list,
-                                           std::size_t idle_index)
-{
-    if (!state.deck_has_attack_attach || HumanPlayActive() || g_bp_enum_depth > 0) { return; }
-    if (idle_index >= list.size()) { return; }
-    const int w = AttackAttachAxisWidth(state);
-    if (w <= 1) { return; }
-    const TurnSolver::Plan base = list[idle_index];
-    const std::vector<int> ks = AttackAttachVariantRanks(state, w);
-    for (const int k : ks)
-    {
-        TurnSolver::Plan v = base;
-        v.attack_attach_choice = k;
-        list.push_back(std::move(v));
-    }
-    if (s_rollout_stats)
-    {
-        g_attack_attach_idle_nodes.fetch_add(1, std::memory_order_relaxed);
-        g_attack_attach_idle_variants.fetch_add(static_cast<long long>(ks.size()), std::memory_order_relaxed);
-    }
-}
+static std::vector<int> AttackAttachVariantRanks(const GameState& state, int w)
+{ return StatePinVariantRanks(state.scripted_attack_attach, w); }
+// The same rule for the state pins whose value is not a rank but an EXPLICIT choice (the Arcanum Wings
+// swap permanent, Primeval Titan's packed attack picks, the Khalni crack mask, Search for Tomorrow's
+// packed upkeep pick): each axis emits its non-front values explicitly, so the only thing an inherited
+// pin can make unreachable is the FRONT itself. `front` is that front written out (0 = all-front packed
+// picks / no crack / no swap); it is a variant exactly when the state holds a non-front pin, and the
+// axis skips the one variant equal to the inherited value (it IS the base plan).
+static bool StatePinFrontIsVariant(int inherited, int front) { return inherited >= 0 && inherited != front; }
+// Arcanum Wings' explicit NO-SWAP pin value (Plan::combat_aura_swap_choice): -1 means "write nothing",
+// so a plan on a state already holding a swap had no way to decline it. A swap pin names the swap
+// permanent's card number, which is never 0 (the deck numbering starts at 1, tokens at
+// kFirstTokenNumber), so 0 matches no permanent: ApplyCombatAuraSwap finds nothing to swap,
+// HoldForCombatAuraSwap holds nothing, and the attack projection's copy changes nothing.
+constexpr int kCombatAuraSwapNoSwap = 0;
 
 // ---- Post-dedup sub-decision axis fan-out (factored out of the m1 host, 2026-09-06) --------
 // This whole block used to live inline at the tail of EnumeratePlansWithLandUncached's full body,
@@ -57584,8 +57593,10 @@ static void AppendIdleAttackAttachSiblings(const GameState& state, std::vector<T
 // cast inside a continuation to the heuristic). (A former note here -- "Plan::dig_choice is consumed
 // on the is_pre_combat apply path only, so the dig axis's m2 variants are inert" -- went stale at D7,
 // purge step 14: ApplyPlanDirect's dig loop runs in BOTH mains, so the m2 dig variants are live.)
+// `idle_pass`: `all` is the ONE pass plan a host appended after an empty enumeration
+// (AppendIdlePassAxes) -- it changes only the dig axis's lever hatch (see there).
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
-                                  std::vector<TurnSolver::Plan>& all)
+                                  std::vector<TurnSolver::Plan>& all, bool idle_pass = false)
 {
     // INSIDE A BREAKPOINT CONTINUATION DERIVATION (g_bp_enum_depth > 0) only the DURING-CAST axes
     // fan out -- the ones whose pins a continuation carries (ContPins, TurnSolver.h): scry (its land),
@@ -58058,13 +58069,16 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     const int discard_width = ResolveProvider(state).CleanupDiscardSearchWidth();
     if (!cont_axes_only && discard_width > 1 && !HumanPlayActive())
     {
+        const std::vector<int> discard_ranks = StatePinVariantRanks(state.scripted_discard_choice, discard_width);
         std::vector<TurnSolver::Plan> extra;
         for (const TurnSolver::Plan& p : all)
         {
             // Base plans only -- one axis at a time, so cost stays additive.
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
                 || p.lackey_choice >= 0 || p.ponder_choice >= 0) { continue; }
-            for (int c = 1; c < discard_width; ++c)
+            // A rank-valued state pin: 1 .. W-1, or every rank but the inherited one on a state that
+            // already holds a pin (a main-1 pin standing when main 2 decides; StatePinVariantRanks).
+            for (const int c : discard_ranks)
             {
                 TurnSolver::Plan v = p;
                 v.discard_choice = c;
@@ -58380,6 +58394,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         else if (gather_width > 1 || !wings.empty())
         {
+            // Both are state pins read at this turn's declare-attackers, so a plan that writes none
+            // inherits the state's: the gather ranks follow StatePinVariantRanks, and a swap already
+            // pinned on this state (the executor's breakpoint re-solve) makes NO SWAP a variant
+            // (kCombatAuraSwapNoSwap) while the swap equal to it is the base plan's.
+            const std::vector<int> gather_ranks = gather_width > 1
+                ? StatePinVariantRanks(state.scripted_bruna_gather, gather_width) : std::vector<int>{};
+            const int swap_inh = state.scripted_combat_aura_swap;
+            const bool swap_none_variant = !wings.empty() && StatePinFrontIsVariant(swap_inh, kCombatAuraSwapNoSwap);
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
             {
@@ -58389,18 +58411,26 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0)
                 { continue; }
-                for (int k = 1; k < gather_width; ++k)
+                for (const int k : gather_ranks)
                 {
                     TurnSolver::Plan v = p;
                     v.bruna_gather_choice = k;
+                    extra.push_back(std::move(v));
+                }
+                if (swap_none_variant)
+                {
+                    TurnSolver::Plan v = p;
+                    v.combat_aura_swap_choice = kCombatAuraSwapNoSwap;
                     extra.push_back(std::move(v));
                 }
                 for (int wnum : wings)
                 {
                     for (int r = 0; r < swap_ranks; ++r)
                     {
+                        const int pin = wnum + kAuraSwapRankStride * r;
+                        if (pin == swap_inh) { continue; }   // the base plan already carries it
                         TurnSolver::Plan v = p;
-                        v.combat_aura_swap_choice = wnum + kAuraSwapRankStride * r;
+                        v.combat_aura_swap_choice = pin;
                         extra.push_back(std::move(v));
                     }
                 }
@@ -58823,16 +58853,18 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         const std::size_t k = std::min(cands_now, LackeyAxisWidth());
         if (k > 1)
         {
+            const std::vector<int> lackey_ranks = StatePinVariantRanks(state.scripted_cheat_choice,
+                                                                       static_cast<int>(k));
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
             {
                 // Base plans only -- one axis at a time, so cost stays additive.
                 if (p.scry_choice >= 0 || p.bp_choice >= 0
                     || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
-                for (std::size_t c = 1; c < k; ++c)
+                for (const int c : lackey_ranks)   // a rank-valued state pin (StatePinVariantRanks)
                 {
                     TurnSolver::Plan v = p;
-                    v.lackey_choice = static_cast<int>(c);
+                    v.lackey_choice = c;
                     extra.push_back(std::move(v));
                 }
             }
@@ -59038,6 +59070,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const int W = std::min(4, creatures + 1);
             if (W > 1)
             {
+                // A rank-valued state pin read at the NEXT draw step: one left unconsumed by an
+                // earlier plan is inherited by every plan here (StatePinVariantRanks).
+                const std::vector<int> saga_ranks = StatePinVariantRanks(state.scripted_saga_target, W);
                 std::vector<TurnSolver::Plan> extra;
                 for (const TurnSolver::Plan& p : all)
                 {
@@ -59051,8 +59086,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.attack_attach_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
-                    // k = 0 is the heuristic's own pick, which the base plan already carries.
-                    for (int k = 1; k < W; ++k)
+                    // k = 0 is the heuristic's own pick, which the base plan carries on a fresh state.
+                    for (const int k : saga_ranks)
                     {
                         TurnSolver::Plan v = p;
                         v.saga_target_choice = k;
@@ -59300,7 +59335,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // =0 restores the old pre-gate and the opt-in-only axis byte-identically.
     // Base plans given a no-dig sibling (lever on), with their fan identity; marked 2 at the end.
     std::vector<std::pair<std::size_t, int>> dig_twinned;
-    if (!cont_axes_only && !HumanPlayActive())
+    // The idle pass a host appends had NO dig axis before MTG_DIG_SEARCHED_CHOICE (AppendIdleDigSiblings
+    // is lever-only), so with the lever at =0 it keeps none -- the hatch stays byte-identical there.
+    if (!cont_axes_only && !HumanPlayActive() && !(idle_pass && !DigSearchedChoiceOn()))
     {
         const DigOffer dg = DigOfferFor(state);
         const bool dg_choice = DigSearchedChoiceOn();
@@ -59900,10 +59937,21 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             if (!tw.empty())
             {
+                // A state pin read at declare-attackers: on a state already holding a non-front packed
+                // pick (the executor's breakpoint re-solve) the base plan inherits it, so the all-front
+                // value 0 is a variant and the one-hot equal to the inherited value is the base's.
+                const int atk_inh = state.scripted_attack_land_search;
+                const bool atk_front_variant = StatePinFrontIsVariant(atk_inh, 0);
                 std::vector<TurnSolver::Plan> extra;
                 for (const TurnSolver::Plan& p : all)
                 {
                     if (!base_plan(p)) { continue; }
+                    if (atk_front_variant)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.attack_land_search_choice = 0;
+                        extra.push_back(std::move(v));
+                    }
                     // A put Karoo's bounce sub-choices ride the same packed ordinal (the extended pick
                     // list, values_of); a value past the 6-bit slot is the disclosed packed-pin cap.
                     bool hl_known = false, hl = false;
@@ -59919,8 +59967,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         {
                             const int c = vals[ci];
                             if (c > kLandSearchPinMask) { break; }
+                            const int pin = c << (kLandSearchPinBits * static_cast<int>(j));
+                            if (pin == atk_inh) { continue; }   // the base plan already carries it
                             TurnSolver::Plan v = p;
-                            v.attack_land_search_choice = c << (kLandSearchPinBits * static_cast<int>(j));
+                            v.attack_land_search_choice = pin;
                             extra.push_back(std::move(v));
                         }
                     }
@@ -59942,6 +59992,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     ++e_bf;
                     w_crack = std::max(w_crack, std::min<std::size_t>(width_of(qd), kLandSearchPinMask + 1));
                 }
+                // The crack mask is a state pin too: a mask already on the state (the executor's
+                // breakpoint re-solve) is the base plan's, so "crack nothing" (mask 0) is a variant and
+                // the bare variant equal to the inherited mask is the base's.
+                const int crack_inh = state.scripted_combat_land_search_crack;
                 std::vector<TurnSolver::Plan> crack_extra;
                 for (const TurnSolver::Plan& p : all)
                 {
@@ -59959,11 +60013,17 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     e = std::min(e, 3);
                     if (e <= 0) { continue; }
                     const int titans = static_cast<int>(tw.size());
+                    if (StatePinFrontIsVariant(crack_inh, 0))
+                    {
+                        TurnSolver::Plan v = p;
+                        v.combat_crack_choice = 0;
+                        crack_extra.push_back(std::move(v));
+                    }
                     for (int m = 1; m < (1 << e); ++m)
                     {
                         TurnSolver::Plan v = p;
                         v.combat_crack_choice = m;
-                        crack_extra.push_back(v);
+                        if (m != crack_inh) { crack_extra.push_back(v); }   // == inherited: the base plan
                         const int cracks = std::popcount(static_cast<unsigned>(m));
                         for (int j = 0; j < cracks && titans + j < kLandSearchPinOrdinals; ++j)
                         {
@@ -60002,17 +60062,27 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (std::size_t x : uw) { if (x > 1) { any = true; } }
             if (any)
             {
+                // A state pin read at the NEXT upkeep: one already on the state is the base plan's
+                // (all-front 0 is then a variant, the one-hot equal to it is the base's).
+                const int up_inh = state.scripted_upkeep_land_search;
                 std::vector<TurnSolver::Plan> extra;
                 for (const TurnSolver::Plan& p : all)
                 {
                     if (!base_plan(p)) { continue; }
+                    if (StatePinFrontIsVariant(up_inh, 0))
+                    {
+                        TurnSolver::Plan v = p;
+                        v.upkeep_land_search_choice = 0;
+                        extra.push_back(std::move(v));
+                    }
                     for (std::size_t j = 0; j < uw.size(); ++j)
                     {
                         for (std::size_t c = 1; c < uw[j]; ++c)
                         {
+                            const int pin = static_cast<int>(c) << (kLandSearchPinBits * static_cast<int>(j));
+                            if (pin == up_inh) { continue; }   // the base plan already carries it
                             TurnSolver::Plan v = p;
-                            v.upkeep_land_search_choice =
-                                static_cast<int>(c) << (kLandSearchPinBits * static_cast<int>(j));
+                            v.upkeep_land_search_choice = pin;
                             extra.push_back(std::move(v));
                         }
                     }
@@ -60087,6 +60157,55 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     {
         all[t.first].dig_choice = 2;
         all[t.first].dig_group  = t.second;   // the dig fold's sibling identity (DigFoldMemo)
+    }
+}
+
+// ---- THE IDLE PASS A PRE-COMBAT HOST APPENDS GETS EVERY SUB-DECISION AXIS (2026-10-17) ----------
+// A pre-combat main with nothing to do -- the drop already made (the executor's breakpoint re-solve,
+// a mid-turn root), nothing castable, no affordable activation -- enumerates ZERO plans. (While the
+// drop is open the enumeration always offers its no-land pass, add_for_land("", ""), and the fan-out
+// above treats it like any plan.) The HOST then appends the pass itself -- FSLineWin's idle node,
+// SolveWithLookahead's empty candidate set, ReshuffleAvgChoosePlan -- AFTER the fan-out ran, so every
+// pin that pass could carry past its apply took the provider's FRONT: a greedy pick inside the search
+// window on exactly the empty-handed turns where the trigger is the whole decision. Bruna's gather
+// subset, the Arcanum Wings combat swap, Primeval Titan's attack pick and the in-combat Khalni crack,
+// Goblin Lackey's put, Surtland Flinger's victim, Tectonic Giant's mode and keep, the end-of-main-1
+// sweep, the Land's Edge fire count, the cleanup discard, the Saga chapter target and Search for
+// Tomorrow's upkeep pick (Raubahn's attach and the dig had been patched one helper at a time:
+// AppendIdleAttackAttachSiblings, deleted here, and AppendIdleDigSiblings, which the post-combat
+// hosts still use).
+//
+// THE PASS NOW GOES THROUGH THE FAN-OUT ITSELF: AppendSubdecisionAxes on a one-plan list. Every axis's
+// gate, width, base-plan filter (which axes cross, which stay additive), cap and fold is therefore the
+// enumerated plan's by construction -- one source, nothing to drift, and a new axis covers the pass
+// the day it is written. A cast / land / activation axis finds nothing to vary on a pass and emits
+// nothing. Inherited state pins are the fan-out's own rule (StatePinVariantRanks /
+// StatePinFrontIsVariant). The list must end with the pass; its clones are appended after it.
+// Pre-combat hosts only. A post-combat pass keeps just its no-dig twin: its combat is over, and the
+// next-turn pins it could still carry (Saga target, Search for Tomorrow, cleanup discard) are the main-1
+// plan's, which fanned them -- the one thing it cannot do is RE-decide a main-1 pin in main 2 (a
+// disclosed limit: no draw separates the two mains in a goldfish turn but combat's own). Inside a breakpoint
+// continuation derivation the post-apply pins belong to the OUTER plan (cont_axes_only), so there the
+// pass keeps exactly what it always had: the dig siblings. Never in human play (the person answers
+// every prompt). `host` indexes the rollout-stats counters only.
+static void AppendIdlePassAxes(const GameState& state, std::vector<TurnSolver::Plan>& list, int host)
+{
+    if (list.empty() || HumanPlayActive()) { return; }
+    if (g_bp_enum_depth > 0) { AppendIdleDigSiblings(state, list); return; }
+    std::vector<TurnSolver::Plan> one(1, list.back());
+    AppendSubdecisionAxes(state, /*is_pre_combat=*/true, one, /*idle_pass=*/true);
+    list.back() = std::move(one.front());   // the pass itself: marked 2 when it got a no-dig twin
+    list.insert(list.end(), std::make_move_iterator(one.begin() + 1), std::make_move_iterator(one.end()));
+    if (s_rollout_stats)
+    {
+        const int ctx = g_rollout_nest > 0 ? 2 : (turncensus::t_site != turncensus::kSiteMain ? 1 : 0);
+        g_idle_pass_seen[host][ctx].fetch_add(1, std::memory_order_relaxed);
+        if (one.size() > 1)
+        {
+            g_idle_pass_fanned[host][ctx].fetch_add(1, std::memory_order_relaxed);
+            g_idle_pass_variants[host][ctx].fetch_add(static_cast<long long>(one.size() - 1),
+                                                       std::memory_order_relaxed);
+        }
     }
 }
 
@@ -63987,11 +64106,11 @@ std::uint64_t TurnSolver::DedupKeyOf(const GameState& state)
     return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
 }
 
-std::vector<TurnSolver::Plan> TurnSolver::IdlePassWithDigSiblings(const GameState& state)
+std::vector<TurnSolver::Plan> TurnSolver::IdlePassWithAxes(const GameState& state)
 {
     std::vector<Plan> v(1);
     v.back().land_decided = true;   // FSLineWin's idle node: no drop to take
-    AppendIdleDigSiblings(state, v);
+    AppendIdlePassAxes(state, v, 0);
     return v;
 }
 
@@ -67805,11 +67924,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::Plan idle;
             idle.land_decided = true;   // no drop to take -> "(defer)": never a greedy land play
             pre.push_back(std::move(idle));
-            // ...and the pass is where the empty-of-gas dig fires: offer its no-dig twin
-            // (MTG_DIG_SEARCHED_CHOICE; see AppendIdleDigSiblings).
-            AppendIdleDigSiblings(state, pre);
-            // ...and Raubahn's attack-attach variants of the pass (this is a pre-combat node).
-            AppendIdleAttackAttachSiblings(state, pre, 0);
+            // ...and the pass gets every sub-decision axis an enumerated plan would: the no-dig twin
+            // of the empty-of-gas dig (MTG_DIG_SEARCHED_CHOICE) and every pin it carries into this
+            // turn's combat and beyond (see AppendIdlePassAxes; this is a pre-combat node).
+            AppendIdlePassAxes(state, pre, 0);
         }
         if (winlesscert::StatsOn())
         {
@@ -72944,13 +73062,13 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     if (is_pre_combat)
     {
         plans = EnumeratePlansWithLand(state, true);
-        // Nothing to cast: the pass and (MTG_DIG_SEARCHED_CHOICE) its no-dig twin, so the empty-of-gas
-        // dig is ranked by the reshuffle average rather than taken. One plan = byte-identical.
+        // Nothing to cast: the pass and its sub-decision axes (the no-dig twin of the empty-of-gas dig,
+        // the combat pins -- AppendIdlePassAxes), so each is ranked by the reshuffle average rather
+        // than taken. One plan = byte-identical.
         if (plans.empty())
         {
             plans.push_back(TurnSolver::Plan{});
-            AppendIdleDigSiblings(state, plans);
-            AppendIdleAttackAttachSiblings(state, plans, 0);
+            AppendIdlePassAxes(state, plans, 2);
         }
     }
     else
@@ -73315,9 +73433,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     if (candidates.empty())
     {
         candidates.push_back(Plan{});
-        AppendIdleDigSiblings(state, candidates);
-        // ...and Raubahn's attack-attach variants of the pass (pre-combat only; see the helper).
-        if (is_pre_combat) { AppendIdleAttackAttachSiblings(state, candidates, 0); }
+        // A pre-combat pass gets every sub-decision axis an enumerated plan would (the no-dig twin and
+        // every pin it carries into this turn's combat and beyond -- AppendIdlePassAxes); a post-combat
+        // one only its no-dig twin (its combat is over).
+        if (is_pre_combat) { AppendIdlePassAxes(state, candidates, 1); }
+        else               { AppendIdleDigSiblings(state, candidates); }
         if (candidates.size() == 1) { report(max_turns + 1, 0); return Plan{}; }
     }
 

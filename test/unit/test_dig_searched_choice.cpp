@@ -161,7 +161,7 @@ TEST_CASE("Dig searched choice: the PASS (nothing castable) offers dig AND no-di
     REQUIRE(pre.m_provider->ShouldConsiderDig(pre));
     REQUIRE_FALSE(pre.m_provider->DigDecisionSearched());
     CHECK(TurnSolver::EnumerateMainPlans(pre, /*is_pre_combat=*/true).empty());   // the host appends the pass
-    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithDigSiblings(pre);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithAxes(pre);
     REQUIRE(plans.size() == 2);
     // No automatic heuristic plan, and still NO dig-while-affordable variant for the generic provider
     // (the USER's 2026-09-29 clairvoyance ruling).
@@ -190,7 +190,7 @@ TEST_CASE("Dig searched choice: the gate refuses -> nothing digs (the twin is an
     heurarm::Clear();
     const GameState pre = Stuck(1, /*spare_land=*/false);
     REQUIRE_FALSE(pre.m_provider->ShouldConsiderDig(pre));   // the last land in hand is not cycled
-    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithDigSiblings(pre);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithAxes(pre);
     CHECK(CountChoice(plans, 1) == 0);
     std::vector<std::uint64_t> keys;
     for (const TurnSolver::Plan& p : plans)
@@ -235,7 +235,7 @@ TEST_CASE("Dig searched choice: MTG_DIG_SEARCHED_CHOICE=0 restores the automatic
     EnsureCardsLoaded();
     ArmScope arm(heurarm::DIG_SEARCHED_CHOICE, 0);
     const GameState pre = Stuck(3, /*spare_land=*/true);
-    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithDigSiblings(pre);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithAxes(pre);
     REQUIRE(plans.size() == 1);
     CHECK(plans[0].dig_choice == -1);
     GameState s = pre;
@@ -276,7 +276,7 @@ TEST_CASE("Dig searched choice: gi1106 T2 -- main 1 offers the cycle AND the man
                            "Maelstrom Archangel", "Island", "Zagoth Triome" })
     { pre.players[0].hand.push_back(NumberedCard(n, num++)); }
     for (int k = 0; k < 10; ++k) { pre.players[0].library.push_back(NumberedCard("Forest", 900 + k)); }
-    const std::vector<TurnSolver::Plan> m1 = TurnSolver::IdlePassWithDigSiblings(pre);
+    const std::vector<TurnSolver::Plan> m1 = TurnSolver::IdlePassWithAxes(pre);
     REQUIRE(m1.size() == 2);
     {   // dig now: not deferred (the twin is the no-dig world)
         GameState s = pre;
@@ -384,7 +384,7 @@ TEST_CASE("Dig searched choice: treasure_hunt's provider prunes the dig to its g
     REQUIRE(pre.m_provider->ShouldConsiderDig(pre));
     REQUIRE_FALSE(pre.m_provider->DigDecisionSearched());
     REQUIRE_FALSE(pre.m_provider->DigOfferAt(pre).Any());   // the deck's offer: no sibling world
-    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithDigSiblings(pre);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithAxes(pre);
     REQUIRE(plans.size() == 1);
     CHECK(plans[0].dig_choice == -1);   // the deck's gate decides; no sibling to choose
     GameState s = pre;
@@ -400,7 +400,7 @@ TEST_CASE("Dig searched choice: MTG_TH_DIG_PRUNE=0 gives treasure_hunt the no-di
     ArmScope off(heurarm::TH_DIG_PRUNE, 0);
     const GameState pre = ThStuck();
     REQUIRE(pre.m_provider->DigOfferAt(pre).no_dig);       // the searched offer: the no-dig twin
-    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithDigSiblings(pre);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::IdlePassWithAxes(pre);
     REQUIRE(plans.size() == 2);
     CHECK(plans[0].dig_choice == 2);
     CHECK(plans[1].dig_choice == 0);

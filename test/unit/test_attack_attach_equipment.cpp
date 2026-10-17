@@ -381,7 +381,7 @@ TEST_CASE("Raubahn: a main with nothing to cast still searches the attach (the i
     const int hammer  = Put(s, "Colossus Hammer", 1);
     (void)raubahn; (void)duelist; (void)hammer;
     // No hand, no lands, the drop spent: EnumerateMainPlans is empty, so the host appends the pass --
-    // and its rank variants (AppendIdleAttackAttachSiblings). The search returns a legal pass whose pin
+    // and its rank variants (the post-dedup fan-out, AppendIdlePassAxes). The search returns a legal pass whose pin
     // (if any) is a rank the trigger can take, and the line it scores wins this turn (2 + 22 >= 20).
     REQUIRE(TurnSolver::EnumerateMainPlans(s, true).empty());
     const TurnSolver::Plan pick = TurnSolver::SolveWithLookahead(s, /*is_pre_combat=*/true, /*depth=*/2);
@@ -391,4 +391,29 @@ TEST_CASE("Raubahn: a main with nothing to cast still searches the attach (the i
     TurnSolver::ApplyPlan(t, pick, /*is_pre_combat=*/true);
     RolloutSimulateCombat(t);
     CHECK(t.players[1].life <= 0);
+}
+
+TEST_CASE("Raubahn: the idle pass's ranks come from the fan-out -- 1..W-1 fresh, the front under an inherited pin")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Raubahn, Bull of Ala Mhigo", 10);
+    Put(s, "Kor Duelist", 20);
+    Put(s, "Colossus Hammer", 1);
+    REQUIRE(TurnSolver::EnumerateMainPlans(s, true).empty());
+    auto ranks = [](const std::vector<TurnSolver::Plan>& v)
+    {
+        std::vector<int> r;
+        for (std::size_t i = 1; i < v.size(); ++i) { if (v[i].attack_attach_choice >= 0) { r.push_back(v[i].attack_attach_choice); } }
+        std::sort(r.begin(), r.end());
+        return r;
+    };
+    // E = the Hammer, H = Raubahn + Duelist -> W = 1 + 1*2 = 3.
+    const std::vector<TurnSolver::Plan> fresh = TurnSolver::IdlePassWithAxes(s);
+    REQUIRE_FALSE(fresh.empty());
+    CHECK(fresh[0].attack_attach_choice == -1);
+    CHECK(ranks(fresh) == std::vector<int>{ 1, 2 });
+    GameState t = s;
+    t.scripted_attack_attach = 2;   // a re-solve after the committed plan pinned rank 2
+    CHECK(ranks(TurnSolver::IdlePassWithAxes(t)) == std::vector<int>{ 0, 1 });
 }
