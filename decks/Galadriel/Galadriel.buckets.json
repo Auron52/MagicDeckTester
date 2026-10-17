@@ -1,0 +1,32 @@
+{
+ "merge": [
+  {
+   "cards": [
+    "Crystal Grotto",
+    "Rumble Arena"
+   ],
+   "why": "USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both are untapped any-colour filter lands with an ETB scry 1."
+  },
+  {
+   "cards": [
+    "Temple of Malady",
+    "Temple of Plenty"
+   ],
+   "why": "USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share green and supply one off-colour (B / W) the deck never casts."
+  },
+  {
+   "cards": [
+    "Temple of Malice",
+    "Temple of Triumph"
+   ],
+   "why": "USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share red and supply one off-colour (B / W) the deck never casts."
+  },
+  {
+   "cards": [
+    "Temple of Enlightenment",
+    "Temple of Deceit"
+   ],
+   "why": "USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share blue and supply one off-colour (W / B) the deck never casts."
+  }
+ ]
+}

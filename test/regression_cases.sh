@@ -66,6 +66,7 @@ declare -A DECK_FILE=(
   [pd]="decks/Prevent Damage/Prevent Damage.cod"
   [bruna]=decks/Bruna/Bruna.cod
   [landfall]=decks/Landfall/Landfall.cod
+  [galadriel]=decks/Galadriel/Galadriel.cod
 )
 declare -A DECK_PROF=(
   [fungusv2]=decks/Fungus/Fungus.profile.json
@@ -99,6 +100,7 @@ declare -A DECK_PROF=(
   [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
   [bruna]=decks/Bruna/Bruna.profile.json
   [landfall]=decks/Landfall/Landfall.profile.json
+  [galadriel]=decks/Galadriel/Galadriel.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -498,6 +500,14 @@ SMOKE_CASES=(
   "landfall 0 1001 1000 0"
   "landfall 3 1001   30 10"
   "landfall 5 1001   15 20"
+  # galadriel: ADDED 2026-10-17 (docs/design/analysis-Galadriel.md), all three tiers at once, at Landfall's
+  # pre-keep-table admission shape (d3 30/40, d5 15/20; overnight d3 4x250, d5 4x150) -- grow at the
+  # keep-table adoption. No value leaf and no keep table yet, so GT WILL move when they land. 2HG rows:
+  # Crackle with Power hits "up to X targets", so a second head is a second Crackle target.
+  "galadriel 0 1001 1000 0"
+  "galadriel 3 1001   30 10"
+  "galadriel 5 1001   15 20"
+  "galadriel2hg 3 1001 30 10"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -733,6 +743,13 @@ REGRESSION_CASES=(
   "landfall 3 3003   40 10"
   "landfall 5 2002   20 20"
   "landfall 5 3003   20 20"
+  # galadriel: see the SMOKE block.
+  "galadriel 0 2002 1000 0"
+  "galadriel 3 2002   40 10"
+  "galadriel 3 3003   40 10"
+  "galadriel 5 2002   20 20"
+  "galadriel 5 3003   20 20"
+  "galadriel2hg 3 2002 40 10"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -1310,4 +1327,21 @@ OVERNIGHT_CASES=(
   "landfall 5 5005  150 20"
   "landfall 5 6006  150 20"
   "landfall 5 7007  150 20"
+  # galadriel: see the SMOKE block. Landfall's smaller-than-entry set until the keep table (expand then).
+  "galadriel 0 4004 2000 0"
+  "galadriel 0 6006 2000 0"
+  "galadriel 0 8008 2000 0"
+  "galadriel 0 10010 2000 0"
+  "galadriel 3 4004  250 10"
+  "galadriel 3 5005  250 10"
+  "galadriel 3 6006  250 10"
+  "galadriel 3 7007  250 10"
+  "galadriel 5 4004  150 20"
+  "galadriel 5 5005  150 20"
+  "galadriel 5 6006  150 20"
+  "galadriel 5 7007  150 20"
+  "galadriel2hg 5 4004  50 20"
+  "galadriel2hg 5 5005  50 20"
+  "galadriel2hg 5 6006  50 20"
+  "galadriel2hg 5 7007  50 20"
 )

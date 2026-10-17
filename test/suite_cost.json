@@ -114,6 +114,14 @@
    "total_core_ms": 162667,
    "worst_case": "fungusb_regression_d5_s3003"
   },
+  "galadriel": {
+   "cost_per_game_ms": 2969.1,
+   "jobs": 6,
+   "key": "galadriel",
+   "tier": "regression",
+   "total_core_ms": 243473,
+   "worst_case": "galadriel_regression_d5_s3003"
+  },
   "giants": {
    "cost_per_game_ms": 359.2667,
    "jobs": 5,

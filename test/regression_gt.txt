@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 2706bf61  date 2026-10-17
+# Regression ground truth -- commit 314fa393  date 2026-10-17
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
@@ -81,7 +81,7 @@ goblins2hg_smoke_d3_s1001=4.0400/097f3b408bda91fc
 knights2hg_smoke_d3_s1001=5.0933/5add5c5aa084b3e2
 whiteknights2hg_smoke_d3_s1001=4.6400/e4decc28f7034d81
 fivecolour2hg_smoke_d3_s1001=5.4250/5eb45097992ca9f4
-fluctuator2hg_smoke_d3_s1001=3.4933/3f65404453a0fa8c
+fluctuator2hg_smoke_d3_s1001=3.4933/37076d7beb9a9f32
 angels2hg_smoke_d3_s1001=5.1400/3025941397ce9b1f
 slivers2hg_smoke_d3_s1001=4.8000/e480c2da4e05e5ea
 burn2hg_smoke_d3_s1001=5.8200/26dbfa14846ce9a2
@@ -99,9 +99,9 @@ melira2hg_smoke_d3_s1001=4.8400/7d182c91725b79a6
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=4.9800/eded3f2b34b85d3a
 pd2hg_smoke_d3_s1001=5.6000/3ec18a53def26c00
-fluctuator_smoke_d0_s1001=5.0670/97ac40a393d82813
-fluctuator_smoke_d3_s1001=3.5400/5e219a5aded97f57
-fluctuator_smoke_d5_s1001=3.5067/9172f3c74c70edf1
+fluctuator_smoke_d0_s1001=4.9870/51bdb352a7a5fc23
+fluctuator_smoke_d3_s1001=3.5400/68f1f512c6091db9
+fluctuator_smoke_d5_s1001=3.5067/2c6bf705b991f9c7
 giants_smoke_d0_s1001=6.0750/e198110ade947117
 giants_smoke_d3_s1001=5.7733/7b4cad35eb99ae06
 giants_smoke_d5_s1001=5.6933/95fb0e42aba08889
@@ -127,6 +127,10 @@ snow_smoke_d5_s1001=5.8000/51401cf5b384e6fc
 landfall_smoke_d0_s1001=7.5910/d4bff365cee69d95
 landfall_smoke_d3_s1001=6.0000/c930836eb68a3888
 landfall_smoke_d5_s1001=5.8667/4531d4162b8fccbd
+galadriel_smoke_d0_s1001=7.2010/6b2df166d8da48dc
+galadriel_smoke_d3_s1001=4.8333/e375f2cf5a5e1677
+galadriel_smoke_d5_s1001=4.4667/a12eaac12c0aac72
+galadriel2hg_smoke_d3_s1001=4.8333/c9509c7100b32bea
 
 # --- regression ---
 fungusv2_regression_d0_s2002=5.3740/3a06b8600502945f
@@ -247,14 +251,14 @@ goblins2hg_regression_d3_s2002=4.1500/1d7beb9a0c54ccd2
 knights2hg_regression_d3_s2002=4.9800/eec05b6998419bd9
 whiteknights2hg_regression_d3_s2002=4.5800/c9daec079b5fc993
 fivecolour2hg_regression_d3_s2002=5.3600/d6bb84ad98049d8b
-fluctuator2hg_regression_d3_s2002=3.5300/7a95532eaa910fd6
+fluctuator2hg_regression_d3_s2002=3.5300/ea5813264bdb4177
 angels2hg_regression_d3_s2002=5.1467/8efaa66e2e88dd5c
 pd2hg_regression_d3_s2002=5.8000/771d096cc8673433
-fluctuator_regression_d0_s2002=5.1500/e717beae514eb0e2
-fluctuator_regression_d3_s2002=3.5733/d145cab1df809ed7
-fluctuator_regression_d3_s3003=3.5200/3ebfdaeca2ad7b32
-fluctuator_regression_d5_s2002=3.6400/fda2094c21b56e96
-fluctuator_regression_d5_s3003=3.5467/6d8f43e2388b57c6
+fluctuator_regression_d0_s2002=5.0580/9b089bb29dbdfc70
+fluctuator_regression_d3_s2002=3.5733/dc12b50d7b009c76
+fluctuator_regression_d3_s3003=3.5267/53fc96ac8c04426d
+fluctuator_regression_d5_s2002=3.6400/e19653807fddf685
+fluctuator_regression_d5_s3003=3.5467/2d374923c7afc156
 giants_regression_d0_s2002=6.0530/327799a2eddc1de0
 giants_regression_d3_s2002=5.5933/37ed0993daaff1ea
 giants_regression_d3_s3003=5.6067/fbe54a097d905499
@@ -295,6 +299,12 @@ landfall_regression_d3_s2002=5.8500/8fa5520970a51b3d
 landfall_regression_d3_s3003=5.8500/e2263cccef69817e
 landfall_regression_d5_s2002=5.7500/a853da5da0b9df8a
 landfall_regression_d5_s3003=5.8500/0e4a470dfa01a812
+galadriel_regression_d0_s2002=7.1890/3c2087a12177c435
+galadriel_regression_d3_s2002=4.6750/d0ef14c01c211497
+galadriel_regression_d3_s3003=4.8750/bfdec3e461f44c94
+galadriel_regression_d5_s2002=4.8000/39f7c54a12b9f261
+galadriel_regression_d5_s3003=5.1500/e45876721247d913
+galadriel2hg_regression_d3_s2002=4.7500/6abd48544a01f96a
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6540/d6b7b03035b25cc2
@@ -698,3 +708,19 @@ landfall_overnight_d5_s4004=5.8800/7e2c95f12a98ec1a
 landfall_overnight_d5_s5005=5.7667/dbf227613e90fb32
 landfall_overnight_d5_s6006=5.7867/bece7d473059b3d0
 landfall_overnight_d5_s7007=5.7067/bc50a6ae67129671
+galadriel_overnight_d0_s4004=7.2285/8dac3190eeaac192
+galadriel_overnight_d0_s6006=7.2645/548c733031f0ab1c
+galadriel_overnight_d0_s8008=7.2335/d34d53e75742c453
+galadriel_overnight_d0_s10010=7.2685/1c0ec0211ac2361d
+galadriel_overnight_d3_s4004=5.1360/623035ff0fd46a53
+galadriel_overnight_d3_s5005=5.1200/92499d4b48f1c466
+galadriel_overnight_d3_s6006=4.9880/bd2355f44e1de41f
+galadriel_overnight_d3_s7007=5.0920/0deb7cba4d14924e
+galadriel_overnight_d5_s4004=5.0467/95a6f886d3d04e0b
+galadriel_overnight_d5_s5005=5.1200/68c005d69cde2850
+galadriel_overnight_d5_s6006=4.9267/bd74ae0324306411
+galadriel_overnight_d5_s7007=5.1667/c1d59ec1428f36c6
+galadriel2hg_overnight_d5_s4004=4.9000/eb078d5a6798942b
+galadriel2hg_overnight_d5_s5005=5.1600/582f6f320afa1b11
+galadriel2hg_overnight_d5_s6006=5.1400/9f880732878bb3e6
+galadriel2hg_overnight_d5_s7007=5.2400/ac7a15b61a07d6b6
