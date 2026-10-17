@@ -27,8 +27,8 @@ consume-once CastRiders + the rollout free-cast bank; free-cast hits with no leg
 702.85a); USER-ruled Sigarda's Aid host heuristic. Colossus SMOKE GT accepted twice (`ac44130d8`, `78c864df6`);
 every later commit measured byte-identical on smoke. Deferred (docs/design/free-cast-target-followups.md): the
 executor's targeted free cast, the rollout's template graveyard card.
-FINAL VALIDATION IN FLIGHT on the final tree: units, scenarios, smoke, then the REGRESSION tier; then per-deck
-verdicts, filtered regression accepts, `leaf_tiebreak_check.py` (5c2), verify_deck, final report.
+FINAL VALIDATION DONE (smoke + regression accepted, `953d30538`); `leaf_tiebreak_check.py` (5c2) running, then
+verify_deck and the final report.
 Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
 keep-table cache keying, autonomous hand-aware batch prepay, the d0 greedy's self-Path valuation, a lossy
 combat-landfall top-pick prune (all listed in the final report).
@@ -211,6 +211,16 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   bank is spent at payment (`CastRiders::free_cast`), where the executor spends it; a recorded continuation's free
   cast now replays free. Byte-identical on smoke (its agent). Follow-up IN FLIGHT: a cascade hit with no legal target
   must go to the bottom (CR 702.85) -- the rollout keeps it in hand, the executor casts it untargeted.
+
+* **FINAL VALIDATION (engine at `e1f344944`, 2026-10-17 ~16:40 UTC):** units 1405/1405, scenarios 216/216, smoke
+  124/124 byte-identical to the accepted smoke GT. Regression 165/171 byte-identical; moved: colossus x5 (searched 16
+  same-turn line changes -- double-Theft -> Theft + Gift and the like -- d0 6 faster) and snow d3 s2002 (gi31, same
+  T7: the MISMATCH fix mirrors the scored line before the target). 0 slower anywhere; references 600 / 0 drift.
+  ACCEPTED `953d30538` (`--deck=colossus,snow`, scoped note). Overnight GT left to the periodic overnight run.
+
+* **5c2 horizon tie-break (`leaf_tiebreak_check.py`, final engine):** default sample (12 blocks, 12,000 pairs at play
+  settings) -- 6 changed games (0.050%), net +0, 3 worse / 3 better: NO SIGN. Re-running at 40 blocks (~40,000 pairs)
+  for a decisive sample; the default (ON) stands unless that shows harm.
 
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
