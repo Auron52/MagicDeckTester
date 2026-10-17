@@ -221,7 +221,9 @@ Flags, verified against cards.json + the code:
    this turn); s2100003 T5 menu 173 -> 65 plans, every dropped plan has a smaller twin on the menu. Smoke: only
    Colossus moved -- searched 0 slower / 0 faster / 9 same-turn (the double-Theft line replaced by its cheaper twin), d0
    1 faster (gi448 T7 -> T6). Follow-ups in `docs/design/colossus-attach-fold-followups.md`; the equip/reconfigure
-   host identity fold (two identical Speakers double every plan) is IN FLIGHT on the same agent.
+   host identity fold LANDED `335e01fa8` (MTG_EQUIP_HOST_FOLD, plan-level canonical relabelling so "one on
+   each" survives; play byte-identical, work -0.3% d3); the Theft creature-class fold's completeness gap (two Thefts
+   cannot put one Equipment on each of two identical creatures -- unfindable at any budget) is IN FLIGHT on the same agent.
 6. **CONFIRMED, human default only** (2100005, 2100017): Path to Exile's preselected target ranks by printed power
    (Equipment ignored), so it defaults to the Hammer carrier. **FIXED** (fold commit): `RemovalHumanDefaultTarget` ranks by
    `EquipGatePowerOf` (s2100017: default moves from the 13/13 Lizard Blades to Speaker).
