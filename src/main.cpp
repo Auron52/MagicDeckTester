@@ -1128,6 +1128,10 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             // what the payment path will actually honour, not the raw field.
             emit("wild_c", std::min(fm.wild_c, fm.wild));
             os << "}";
+            // Generator Servant: how many of the floating {C} still carry "a creature spell it pays
+            // for gains haste" (a subset of "C" above, never extra mana). Emitted only when non-zero,
+            // so no existing reference / deck payload changes.
+            if (HasteFloatUnits(s) > 0) { os << ", \"floating_haste_c\": " << HasteFloatUnits(s); }
         }
         // The CREATURE-ONLY reserve (Somberwald Sage's "spend this mana only to cast creature
         // spells"), shown separately so a player never reads it as general float. Emitted only when
@@ -3281,6 +3285,20 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply a graveyard index to return that Equipment card to the battlefield (it enters "
                "unattached; Sigarda's Aid may then attach it). The return is mandatory, so -1 takes "
                "the AI's pick. Default = the AI's pick.");
+    }
+    else if (source.find("(put back:") != std::string::npos)
+    {
+        // Brainstorm's "then put two cards from your hand on top of your library in any order"
+        // (SpellEffects.h ResolvePutBackFromHand) reuses this modal: `examined` is the HAND after the
+        // three draws, every card is legal, asked twice -- "(put back: top)" first, then "(put back:
+        // second)" over the cards left. Mandatory, so -1 takes the AI's pick for that slot.
+        const bool top = source.find("(put back: top)") != std::string::npos;
+        d.Note(top ? "reply a hand index to put that card on TOP of your library (it is the next card you "
+                     "draw); you then choose the card to go beneath it. The put-back is mandatory, so -1 "
+                     "takes the AI's pick. Default = the AI's pick."
+                   : "reply a hand index to put that card on top of your library BENEATH the one you just "
+                     "chose (it is the second card you draw). Mandatory: -1 takes the AI's pick. Default = "
+                     "the AI's pick.");
     }
     else if (source.find("(combat crack)") != std::string::npos)
     {

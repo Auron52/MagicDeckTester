@@ -46,10 +46,12 @@ struct ContPins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
     int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
                            // casts; PutBouncePinOf -- -1 when its own drop is the Karoo)
+    int putback    = -1;   // Plan::putback_choice (a Brainstorm the continuation casts)
     bool Any() const
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
-            || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1;
+            || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
+            || putback >= 0;
     }
 };
 
@@ -1404,6 +1406,15 @@ public:
         // apply via ScriptedReorder -- a SEPARATE pin from scry_choice, which the first look of any
         // kind consumes.
         int ponder_choice = -1;
+
+        // BRAINSTORM PUT-BACK (CardParams::put_back_from_hand): which candidate of PutBackCandidates
+        // (SpellEffects.h -- every distinct ordered selection of hand classes, provider-ordered) the
+        // FIRST put-back of this plan's apply takes. -1 == candidate 0, the provider's default, so an
+        // unpinned plan is byte-identical. Computed at RESOLUTION from the real post-draw hand; the
+        // fan sizes it off the post-draw hand the search can predict, and the index clamps (a stale
+        // width costs a duplicate variant, skipped post-apply). Pinned via ScriptedPutBack; a
+        // DURING-CAST pin, so a breakpoint continuation carries its own (ContPins::putback).
+        int putback_choice = -1;
 
         // OPTIONAL ETB COUNTER PAYMENT (Emiel the Blessed's "you may pay {G/W}"): -1 (default) ==
         // the provider's answer (DecisionProvider::PaysOptionalEtbCounter); 0 = decline at every

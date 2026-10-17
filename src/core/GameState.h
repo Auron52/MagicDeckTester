@@ -198,6 +198,13 @@ struct StackEntry
                                         // the enter cascade EnterBattlefield self-sacrifices the permanent
                                         // through the shared cascade (the LTB fires as on any leave).
                                         // Stamped from Action::evoke at the cast site.
+    bool                haste_from_mana = false;    // GENERATOR SERVANT: this creature spell's payment
+                                        // spent a haste-tagged {C} (GameState::floating_haste_c) -- "it
+                                        // gains haste until end of turn". Stamped by the executor's cast
+                                        // site (CastSpellFromHand) from TakeHasteFloatForCreatureSpell;
+                                        // EnterBattlefield sets Permanent::temp_haste on the permanent it
+                                        // becomes. The rollout twin is apply_one's local flag. A spell
+                                        // that leaves the stack another way (Remand) takes it along.
     // ---- Real-stack trigger machinery (BreachingDragonstorm onboarding, 2026-09-03) ----
     // Cast/enter triggers are their own LIFO entries so nested chains (cascade -> free cast ->
     // cascade...) resolve in true stack order instead of ad-hoc inline special cases.
@@ -366,6 +373,19 @@ struct GameState
     // floating_mana / floating_creature_mana reset sites (lockstep); like them, never folded into
     // BuildSimKey (empty at every cross-phase boundary -- asserted in Dominance's AtCleanBoundary).
     ManaPool                 floating_bigspell_mana;
+    // HASTE-TAGGED colourless float (Generator Servant: "Add {C}{C}. If any of that mana is spent on
+    // a creature spell, it gains haste until end of turn"). A SUBSET COUNT of floating_mana.colorless
+    // -- the units still carry the rider -- never a separate pool: the mana is unrestricted, so every
+    // flat pool, the payer and the viewer keep seeing plain {C} and are untouched. Read only through
+    // HasteFloatUnits() (min with floating_mana.colorless), credited by ApplySacForMana, spent FIRST
+    // by a creature spell's payment (TakeHasteFloatForCreatureSpell, both cast sites) and spent LAST
+    // by everything else (the payer clamps it to the surviving {C} before booking any leftover --
+    // ClampHasteFloat -- so a {C} a later tap over-produced can never inherit the tag). Zeroed at
+    // exactly the floating_mana reset sites. Sits in the 4 bytes of padding before
+    // floating_bigspell_pp (sizeof(GameState) unchanged). 0 for every deck without such a source ->
+    // byte-identical. Folded into BuildSimKey / BuildBreakpointKey when non-zero (two mid-turn
+    // states that differ only in which {C} is hasty play differently).
+    int                      floating_haste_c = 0;
     const struct CardParams* floating_bigspell_pp = nullptr;
     // STORM counter: number of spells cast THIS TURN (by the active player -- the only caster in
     // the goldfish). Incremented by exactly 1 at every shared cast site (AIEngine::CastSpellFromHand,

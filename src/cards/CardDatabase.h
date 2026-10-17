@@ -1825,6 +1825,16 @@ struct CardParams
     // shuffle"). Applied BEFORE the draw in both executor and rollout. Gated > 0.
     int cast_reorder = 0;
 
+    // Put-back AFTER the draw (Brainstorm: "Draw three cards, then put two cards from your hand on top
+    // of your library in any order"): the number of hand cards returned to the library top, in a
+    // chosen order. Resolved by the shared ResolvePutBackFromHand (SpellEffects.h) inside the spell's
+    // resolution in BOTH the executor (ResolveDrawSpell) and the rollout (apply_one's DrawSpell
+    // branch), after `draw` and before the draw breakpoint. WHICH cards and in WHAT order is a
+    // SEARCHED axis (Plan::putback_choice, an ordinal into PutBackCandidates, provider-ordered by
+    // DecisionProvider::PutBackRanking, identity-folded only); human play asks the `dig` chooser once
+    // per card. 0 = no put-back -> byte-identical for every other card.
+    int put_back_from_hand = 0;
+
     // X-damage scaling for an {X} DirectDamage spell (Crackle with Power "deals five times X
     // damage" -> 5). The damage dealt per target is chosen_x * x_damage_multiplier; combined with
     // x_pips on the cost, Crackle = {X}{X}{X}{R}{R}, 5X to each target. Default 1 (plain {X} burn
@@ -1965,6 +1975,24 @@ struct CardParams
     // spends the Spawn on a {R} or {G} pip. Modelling it as any-colour would materially FLATTER a
     // Spawn-making card in a two-colour deck, which is exactly the comparison this pin protects.
     std::string sac_for_mana_color;
+
+    // The sac-for-mana ability's cost includes {T} AND the source can be a CREATURE (Generator
+    // Servant: "{T}, Sacrifice this creature: Add {C}{C}"). Summoning sickness (CR 302.6) then
+    // forbids the activation the turn the creature arrives unless it has haste -- CanTapNow, read by
+    // the SacForMana enumeration and re-checked at ApplySacForMana (both worlds). The artifact /
+    // land sources (Lotus, Treasure, Dwarven Ruins) also tap, but CR 302.6 cannot bind a
+    // noncreature, and an Eldrazi Spawn's "Sacrifice this creature" has no {T}; so this stays false
+    // for all of them and they are byte-identical.
+    bool sac_for_mana_requires_tap = false;
+
+    // Generator Servant's rider: "If any of that mana is spent on a creature spell, it gains haste
+    // until end of turn." The floated {C} units are tagged (GameState::floating_haste_c, a SUBSET
+    // COUNT of floating_mana.colorless) by ApplySacForMana; a creature SPELL's payment spends one
+    // tagged unit on its own cost FIRST (TakeHasteFloatForCreatureSpell, both cast sites) and the
+    // creature enters with Permanent::temp_haste. The mana itself is unrestricted, so it pays
+    // anything else exactly like plain {C}. Only "C"-pinned sources may set this (the tag counts
+    // colourless units). false for every other card -> byte-identical.
+    bool sac_for_mana_grants_haste = false;
 
     // --- Apex of Power ({7}{R}{R}{R} Sorcery: impulse-exile-7 + conditional 10-of-one-colour float) ---
     // "Exile the top seven cards of your library. Until end of turn, you may cast spells from among

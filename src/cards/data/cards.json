@@ -12481,6 +12481,42 @@
    "parameters": {
     "draw": 1
    }
+  },
+  {
+   "name": "Generator Servant",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "{T}, Sacrifice this creature: Add {C}{C}. If any of that mana is spent on a creature spell, it gains haste until end of turn. (That creature can attack and {T} as soon as it comes under your control.) [A 2/1 creature carrying the Lotus-Bloom sac-for-mana machinery: sac_for_mana_amount 2 pinned to sac_for_mana_color C, enumerated as ONE SacForMana action (the colour is not a decision) and floated into state.floating_mana in the apply pre-pass of both worlds. {T} IN A CREATURE'S COST (sac_for_mana_requires_tap): summoning sickness binds it (CR 302.6) -- CanTapNow at the enumeration and again at ApplySacForMana, so it cannot be cracked the turn it is cast unless it has haste (another Servant's mana spent on it gives it haste, CR 611.2c). Sacrificing it is a creature DEATH through the shared SacrificePermanentAt chokepoint. HASTE RIDER (sac_for_mana_grants_haste): the two {C} are TAGGED (GameState::floating_haste_c, a subset count of the floating {C} -- the mana is unrestricted and pays anything as plain {C}); a creature SPELL's payment spends one tagged {C} on its own generic/{C} pip FIRST (TakeHasteFloatForCreatureSpell at both cast sites -- a SOUND fold: the pip is paid by identical mana and the pool left over is the same or more flexible) and the creature enters with temp_haste (attacks, and taps for Niv-Mizzet, the Firemind's {T}: draw, the turn it arrives); every other spend takes the UNTAGGED {C} first. Each creature spell any of the mana is spent on gains haste: a creature spell takes ONE tagged {C}, and the payer then spends floating mana before tapping (tagged units last), so {C}{C} hastes two creature spells only when the first one's remaining generic is paid by something else (a {1}{R} creature off one Mountain does exactly that). A {C} cannot pay a coloured pip: Niv-Mizzet, Parun ({U}{U}{U}{R}{R}{R}) takes none and gains no haste (a {C} fed into Izzet Signet's {1} is spent on the Signet's ability, not on the spell). DISCLOSED payment residue (the standing mana-payment greedy, not a search decision): the payer spends floating mana before tapping, so a NONCREATURE spell cast ahead of a creature in the same phase may spend the tagged {C} (e.g. Izzet Signet before Niv-Mizzet); keeping it for the creature would mean tapping a land instead, which is not a dominance. No viewer decision: whether to crack is a main_phase plan line; the haste attribution is the fold above.]",
+   "template": "custom",
+   "parameters": {
+    "sac_for_mana_amount": 2,
+    "sac_for_mana_color": "C",
+    "sac_for_mana_requires_tap": true,
+    "sac_for_mana_grants_haste": true
+   }
+  },
+  {
+   "name": "Brainstorm",
+   "mana_cost": "{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Draw three cards, then put two cards from your hand on top of your library in any order. [draw_spell draw 3 + put_back_from_hand 2: the shared ResolvePutBackFromHand (SpellEffects.h) runs INSIDE the resolution in both worlds (EffectHandler::ResolveDrawSpell, TurnSolver apply_one's DrawSpell branch), right after the three draws and before anything else -- the draw breakpoint, and every 'whenever you draw' trigger, which waits for the spell to finish resolving (CR 603.3) and so finds the two cards on top. WHICH two and in WHAT order is SEARCHED (Plan::putback_choice): one plan variant per candidate of PutBackCandidates -- every distinct ordered selection of hand cards, identical copies folded (identity class: same card, same staged/impulse state, same side of the live m1_hand snapshot), PROVIDER-ORDERED by DecisionProvider::PutBackRanking (default: the deck's cleanup shed order; candidate 0 = the two most expendable, the less expendable on top) and NOT width-capped. The fan width is an upper bound on the resolution's candidates (the predicted post-draw hand; a same-plan shuffle/tutor uses the class-blind bound); a too-wide index clamps (a duplicate, skipped post-apply). Inside a breakpoint continuation the pin rides ContPins. ONE put-back is pinned per plan; a second Brainstorm in the same plan takes the provider default (the Ponder axis's shape). HUMAN PLAY: the `dig` chooser is asked twice ('Brainstorm (put back: top)', then '(put back: second)'); mandatory, -1 takes the default. INSTANT TIMING (PROVISIONAL fold): cast only in a main phase with an empty stack. Against a passive opponent nothing happens between windows except our own steps: an upkeep (pre-draw) Brainstorm is weakly dominated by the main-phase one (the main-phase cast can reproduce its exact hand and library -- put back the would-be draw step card and the same second card, in the same order -- and also sees one more card); an end-of-turn/opponent's-turn cast equals a cast at the end of our own turn, i.e. a post-combat main, which this deck does not play (main-2 placement is a USER question); combat adds information only through a combat-damage draw trigger (Curiosity on an attacker, a Tandem Lookout pair), where a post-combat Brainstorm could differ -- but with those pieces out the Niv-Mizzet loop is already live. 'In response' windows gain nothing (our own spells only).]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 3,
+    "put_back_from_hand": 2
+   }
   }
  ]
 }

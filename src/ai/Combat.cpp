@@ -378,6 +378,7 @@ static bool FbNextTurnLethal(GameState& probe, std::vector<int>& idx, FbPayer pa
         p.temp_tough_bonus = 0;
     }
     probe.floating_mana = ManaPool{};
+    probe.floating_haste_c = 0;
     // Next turn's draw (the search is clairvoyant: the real top card) and land drop -- the first hand land
     // that enters untapped. Without it the projection is a land short: dragonstorm shipped gi 70 T4, where
     // the T5 Mountain makes the full pump exactly lethal.

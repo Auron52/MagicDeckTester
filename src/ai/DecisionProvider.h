@@ -539,6 +539,17 @@ public:
         const GameState& s, const std::vector<std::string>* required_pieces) const
     { return CleanupDiscardCandidates(s, required_pieces); }
 
+    // PutBackRanking -- Brainstorm's "put two cards from your hand on top of your library in any
+    // order" (CardParams::put_back_from_hand): `controller`'s hand as HAND INDICES, most expendable
+    // first. It only ORDERS the searched put-back candidates (PutBackCandidates in SpellEffects.h:
+    // candidate 0 = the two most expendable, the less expendable of them on top); it never narrows
+    // them -- every distinct ordered selection of hand classes is enumerated and the search picks
+    // (Plan::putback_choice). An index missing from the return ranks after every listed one, in
+    // hand order. Default (DecisionProviders.cpp): the deck's own cleanup SHED ORDER -- the
+    // provider-owned answer to "which card is least needed in hand now" -- so a deck with authored
+    // discard buckets gets a put-back default that agrees with them.
+    virtual std::vector<int> PutBackRanking(const GameState& s, int controller) const;
+
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
     // order? When true (the default, and true of every bucket rule in the suite -- they choose which

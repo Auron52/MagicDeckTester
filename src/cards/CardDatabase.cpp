@@ -1251,6 +1251,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.gy_exile_grow_lifegain         = params.value("gy_exile_grow_lifegain", 0);
     p.cast_scry                 = params.value("cast_scry", 0);
     p.cast_reorder              = params.value("cast_reorder", 0);
+    p.put_back_from_hand        = params.value("put_back_from_hand", 0);
     p.x_damage_multiplier       = params.value("x_damage_multiplier", 1);
     p.damage_divided            = params.value("damage_divided", false);
     p.goldfish_inert            = params.value("goldfish_inert", false);
@@ -1273,6 +1274,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.suspend_cost = ManaCostFromString(params["suspend_cost"].get<std::string>());
     p.sac_for_mana_amount       = params.value("sac_for_mana_amount", 0);
     p.sac_for_mana_color        = params.value("sac_for_mana_color", std::string());
+    p.sac_for_mana_requires_tap = params.value("sac_for_mana_requires_tap", false);
+    p.sac_for_mana_grants_haste = params.value("sac_for_mana_grants_haste", false);
     p.impulse_exile             = params.value("impulse_exile", 0);
     p.impulse_expiry_this_turn  = params.value("impulse_expiry_this_turn", false);
     p.impulse_float_amount      = params.value("impulse_float_amount", 0);

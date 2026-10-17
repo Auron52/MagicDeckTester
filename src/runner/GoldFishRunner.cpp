@@ -402,6 +402,8 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         const CardParams& p = def->params;
         if (p.grants_haste || p.grants_temp_haste || p.equip_grants_haste
             || p.grants_double_strike)                                       { return true; }
+        // Generator Servant: its {C}{C} grant haste to the creature spell they pay for.
+        if (p.sac_for_mana_grants_haste)                                     { return true; }
         if (p.is_equipment)                                                  { return true; }
         if (p.team_pump_cost.has_value() || p.firebreathing_cost.has_value()){ return true; }
         if (p.power_bonus > 0 || p.tough_bonus > 0)                          { return true; }

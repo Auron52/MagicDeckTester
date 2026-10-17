@@ -90,6 +90,10 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     perm.controller_index  = entry.controller_index;
     perm.owner_index       = entry.controller_index;
     perm.entered_this_turn = true;
+    // Generator Servant: haste-tagged mana was spent on this creature spell -> "it gains haste until
+    // end of turn" (the permanent it becomes; CR 611.2c). Lockstep twin: apply_one's creature-enter
+    // branch (cast_haste_from_mana). false for every other entry -> byte-identical.
+    if (entry.haste_from_mana) { perm.temp_haste = true; }
     // Sakashima's Protege: "You may have this creature enter as a copy of any permanent that
     // entered this turn." Replace the entering card with the chosen source's PRINTED card
     // (CR 706.2 copiable values -- no counters/attachments/temp pumps), keeping this cast's
@@ -918,6 +922,11 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
         int drew = DrawIntoHand(state, entry.controller_index, n, HandEntryReason::Draw);
         controller.cards_drawn_this_turn += drew;
         if (drew < n) { state.player_lost_on_draw = true; }
+        // Brainstorm: "...then put two cards from your hand on top of your library in any order" --
+        // PART OF THIS RESOLUTION, so it lands before any "whenever you draw" trigger (those wait for
+        // the spell to finish resolving, CR 603.3). Lockstep twin: apply_one's DrawSpell branch.
+        if (def.params.put_back_from_hand > 0)
+        { ResolvePutBackFromHand(state, entry.controller_index, def.params.put_back_from_hand, def.card.m_name.str()); }
     }
 
     MoveToGraveyard(state, entry);

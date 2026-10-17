@@ -989,6 +989,28 @@ std::vector<int> DecisionProvider::CleanupDiscardCandidates(
     return CleanupDiscardRanking(s, required_pieces);
 }
 
+// See DecisionProvider.h. The shed order ranks the ACTIVE player's hand -- the only caster in the
+// goldfish, and the only player whose Brainstorm resolves -- so it is read only when `controller` is
+// active; otherwise (never reached today) the hand order stands. Indices are de-duplicated and every
+// hand index the shed order omits is appended in hand order, so the ranking is always total.
+std::vector<int> DecisionProvider::PutBackRanking(const GameState& s, int controller) const
+{
+    const int n = static_cast<int>(s.players[controller].hand.size());
+    std::vector<int> out;
+    std::vector<char> seen(static_cast<std::size_t>(n), 0);
+    if (controller == s.active_player_index)
+    {
+        for (int i : CleanupDiscardShedOrder(s, s.m_required_pieces))
+        {
+            if (i < 0 || i >= n || seen[static_cast<std::size_t>(i)]) { continue; }
+            seen[static_cast<std::size_t>(i)] = 1;
+            out.push_back(i);
+        }
+    }
+    for (int i = 0; i < n; ++i) { if (!seen[static_cast<std::size_t>(i)]) { out.push_back(i); } }
+    return out;
+}
+
 // DIAGNOSTIC ONLY (MTG_DISCARD_SHED_VERIFY, see CleanupDiscardShed): the per-shed loop the rollout
 // cleanup used to run -- ask, shed, rebuild the hand, ask again -- re-derived on a scratch copy of
 // the state so the one-consultation answer can be checked against it. Reported as card NAMES: the

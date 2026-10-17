@@ -1013,6 +1013,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     const ManaPool reserve_pre = state.floating_mana;
     const ManaPool cre_reserve_pre = state.floating_creature_mana;
     const ManaPool big_reserve_pre = state.floating_bigspell_mana;
+    const int      haste_reserve_pre = state.floating_haste_c;   // Generator Servant's tag (restored with the float)
     ManaCost cost = cost_in;
     // A CREATURE spell spends the creature-only reserve FIRST (it can pay nothing else, so using it
     // first is never worse); a noncreature payment never touches it. Empty for every deck without a
@@ -2176,6 +2177,12 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // speculative payments stay silent.
     auto commit_leftover = [&](const ManaPool& lo_in)
     { ManaPool lo = lo_in;
+      // GENERATOR SERVANT's haste tag: whatever {C} this payment drained took the UNTAGGED units first
+      // (see HasteFloatUnits), so the tag is clamped to the {C} that SURVIVED -- before the leftover
+      // below adds any, so a {C} this payment over-produced can never inherit it. On the floating-fed
+      // filter retry the float was zeroed first, so the tag drops to 0 there: a surviving tagged unit
+      // is then booked as plain {C} -- conservative (haste lost, never invented). No-op at 0.
+      ClampHasteFloat(state);
       // CREATURE-ONLY PROVENANCE of the leftover. Mana a creature_mana_only source produced keeps
       // its restriction after the payment (Somberwald Sage tapped for Mother of Runes' {W} leaves
       // {W}{W} spendable only on creature spells). Within THIS payment every unit was usable (it is
@@ -2379,6 +2386,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     state.floating_creature_mana       = cre_reserve_pre;
     state.floating_bigspell_mana       = big_reserve_pre;
+    state.floating_haste_c             = haste_reserve_pre;
     if (tapstats::Enabled()) { tapstats::g_pay_once_fail.fetch_add(1, std::memory_order_relaxed); }
     return false;
 }
@@ -5754,6 +5762,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const ManaPool               fm_snap = state.floating_mana;
         const ManaPool               fcm_snap = state.floating_creature_mana;
         const ManaPool               fbm_snap = state.floating_bigspell_mana;
+        const int                    fhc_snap = state.floating_haste_c;
         const ManaPool               av_snap = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -5769,6 +5778,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             state.floating_mana                = fm_snap;
             state.floating_creature_mana       = fcm_snap;
             state.floating_bigspell_mana       = fbm_snap;
+            state.floating_haste_c             = fhc_snap;
             if (available) { *available = av_snap; }
             state.players[a].graveyard         = gy_snap;
             state.players[a].life              = la;
@@ -5823,6 +5833,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const ManaPool               fm_snap  = state.floating_mana;
         const ManaPool               fcm_snap = state.floating_creature_mana;
         const ManaPool               fbm_snap = state.floating_bigspell_mana;
+        const int                    fhc_snap = state.floating_haste_c;
         const ManaPool               av_snap  = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -5838,6 +5849,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         state.floating_mana                = fm_snap;
         state.floating_creature_mana       = fcm_snap;
         state.floating_bigspell_mana       = fbm_snap;
+        state.floating_haste_c             = fhc_snap;
         if (available) { *available = av_snap; }
         state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;

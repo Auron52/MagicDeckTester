@@ -1134,6 +1134,63 @@ inline ManaCost EffectiveActivationCost(const GameState&, int controller, const 
 // called by ApplySacForMana (Lotus Bloom), which is defined above that section.
 inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt);
 
+// ---- GENERATOR SERVANT's haste-tagged {C} (CardParams::sac_for_mana_grants_haste) ----------------
+// "{T}, Sacrifice this creature: Add {C}{C}. If any of that mana is spent on a creature spell, it gains
+// haste until end of turn." The two {C} float like any other {C} (floating_mana.colorless); the TAG is
+// GameState::floating_haste_c, a subset count of them. The shared invariant is
+//     floating_haste_c <= floating_mana.colorless,
+// held by reading through HasteFloatUnits and by ClampHasteFloat at every point where the float's {C}
+// can GROW (a payment booking its leftover, a fresh crack) -- so a {C} a later tap over-produces can
+// never inherit the tag. Everything here is a no-op while floating_haste_c == 0, i.e. for every deck
+// without such a source (byte-identical).
+//
+// WHICH {C} A PAYMENT SPENDS IS OUR ATTRIBUTION, and two folds settle it (both SOUND -- identical mana,
+// so no line is lost):
+//   * a CREATURE SPELL spends one tagged unit on its own generic/{C} pip FIRST
+//     (TakeHasteFloatForCreatureSpell, at both cast sites). Paying that pip with the tagged {C} instead
+//     of anything else leaves the rest of the pool either identical (another {C}) or strictly more
+//     flexible (a coloured/wild unit, or an untapped source, survives instead), and adds haste. One
+//     unit is enough -- "if ANY of that mana is spent" -- so the cast takes exactly one, and the
+//     remaining tagged units stay available to the NEXT creature spell this phase (each creature spell
+//     any of the mana is spent on gains haste).
+//   * every other spend (a noncreature spell, an activation, the rest of a creature's bill) takes the
+//     UNTAGGED {C} first: the units are interchangeable as mana, so this only keeps the haste option.
+// What is NOT folded, and is the standing mana-payment greedy's to decide: whether a NONCREATURE spell
+// should leave a tagged {C} floating for a later creature and tap a land instead (spending a land
+// keeps less flexible mana -- not a dominance). The payer drains floating mana first, so a Signet
+// cast ahead of a Niv-Mizzet with the Servant's {C}{C} floating spends the haste. Disclosed.
+inline int HasteFloatUnits(const GameState& state)
+{
+    return std::min(state.floating_haste_c, state.floating_mana.colorless);
+}
+inline void ClampHasteFloat(GameState& state)
+{
+    if (state.floating_haste_c > state.floating_mana.colorless)
+    { state.floating_haste_c = std::max(0, state.floating_mana.colorless); }
+}
+// A creature SPELL is about to pay `pay_cost` (its own bill; the caller's accounting copy stays the
+// full cost). Spend ONE tagged {C} on a {C} pip, else on a non-snow generic pip, BEFORE the payer runs.
+// Returns true when taken -- the cast then carries "it gains haste". A {C} cannot pay a coloured pip
+// (Niv-Mizzet, Parun's {U}{U}{U}{R}{R}{R} takes none -- correct: no Servant mana can be spent on it).
+// On a FAILED payment the caller undoes it (UndoHasteFloatTake); the payer's own failure restore
+// returns the float it saw, which already excludes the taken unit.
+inline bool TakeHasteFloatForCreatureSpell(GameState& state, ManaCost& pay_cost)
+{
+    if (HasteFloatUnits(state) <= 0) { return false; }
+    if (pay_cost.colorless > 0) { --pay_cost.colorless; }
+    else if (pay_cost.generic > static_cast<int>(pay_cost.snow_pips)) { --pay_cost.generic; }
+    else { return false; }
+    ClampHasteFloat(state);              // normalise: floating_haste_c <= floating_mana.colorless
+    --state.floating_mana.colorless;     // both >= 1 here (HasteFloatUnits > 0)
+    --state.floating_haste_c;
+    return true;
+}
+inline void UndoHasteFloatTake(GameState& state)
+{
+    ++state.floating_mana.colorless;
+    ++state.floating_haste_c;
+}
+
 // ---- Anti-Lifegain (Tainted Remedy / Aria of Flame) shared helpers ----------
 //
 // These back the Anti-Lifegain deck, whose entire damage output flows through "an
@@ -5350,6 +5407,7 @@ inline bool PayOptionalTriggerCost(GameState& state, const ManaCost& cost)
     if (!state.floating_mana.CanPay(cost)) { return false; }
     ManaCost remaining = cost;
     SpendFloatingTowardCost(state.floating_mana, remaining);
+    ClampHasteFloat(state);   // an activation spends the UNTAGGED {C} first (Generator Servant)
     return remaining.ManaValue() == 0;
 }
 
@@ -16501,6 +16559,10 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         const bool skirk = IsSacManaOutlet(d->params);
         if (!lotus && !skirk) { continue; }
         if (lotus && p.tapped)  { continue; }   // Lotus taps as part of the cost; a tapped one can't
+        // ...and a CREATURE whose cost taps it cannot pay {T} while summoning sick (CR 302.6) --
+        // Generator Servant. The enumeration applies the same CanTapNow, so this re-check only
+        // fires for a stale plan (the source lost its haste). Param-gated -> byte-identical.
+        if (lotus && d->params.sac_for_mana_requires_tap && !CanTapNow(p, state.battlefield)) { continue; }
         // Skirk MULTI-SAC BURST: the repeatable "Sacrifice a Goblin: Add {R}" can ramp in one turn.
         // ritual_float carries the TOTAL floated (k * per-sac), so a burst is `amount > per`. Sac k
         // canonical Goblins (token/weakest first, the source LAST -- so a full sac-all sacs Skirk itself
@@ -16637,12 +16699,20 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
             SacrificePermanentAt(state, controller, bidx);
             return;
         }
+        // GENERATOR SERVANT: the floated {C} carry "if any of that mana is spent on a creature spell,
+        // it gains haste" -- tag them (see HasteFloatUnits). Clamp FIRST so only these fresh units can
+        // carry a tag beside whatever tagged {C} already float. Only a "C"-pinned float is taggable
+        // (the tag counts colourless units). Param-gated -> byte-identical for every other source.
+        const bool haste_rider = lotus && d->params.sac_for_mana_grants_haste && color == "C";
+        if (haste_rider) { ClampHasteFloat(state); }
         AddChosenColorFloat(state, color, amount);   // float the chosen colour into state.floating_mana
+        if (haste_rider) { state.floating_haste_c += amount; }
         if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
         {
             EmitPlayEvent(state.turn_number, "mana",
                           "\xF0\x9F\xAA\xB7 " + p.card.m_name.str() + " -- sacrifice: add "
-                          + std::to_string(amount) + " " + (color.empty() ? "wild" : color));
+                          + std::to_string(amount) + " " + (color.empty() ? "wild" : color)
+                          + (haste_rider ? " (a creature spell it pays for gains haste)" : ""));
         }
         if (victim_id != 0 && skirk)
         {
@@ -16675,6 +16745,12 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
             }
             return;
         }
+        // A CREATURE source (Generator Servant; an Eldrazi Spawn on the pay-sac-off route) DIES:
+        // the shared sacrifice chokepoint detaches attachments and fires the death / sacrifice
+        // watchers, as every other creature sacrifice does. No suite deck reaches this with a
+        // creature source (the Spawn is a pay-sac source by default and no suite deck runs Nest
+        // Invader), so the artifact / land path below is the only one taken there -> byte-identical.
+        if (p.card.IsCreature()) { SacrificePermanentAt(state, controller, i); return; }
         state.players[controller].graveyard.push_back(p.card);   // Lotus: sacrifice the source
         state.battlefield.erase(state.battlefield.begin() + i);
         return;
@@ -19788,6 +19864,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
         }
         int owed = discount_applied - real_discount;
         while (owed > 0 && state.floating_mana.Total() > 0) { Color took; if (!ConsumeFloatingAny(state.floating_mana, took)) { break; } --owed; }
+        ClampHasteFloat(state);   // Generator Servant's tagged {C} is spent last
         for (Permanent& p : state.battlefield)
         {
             if (owed <= 0) { break; }
@@ -29975,6 +30052,241 @@ inline void ReorderTopNoShuffle(GameState& state, int n, const std::string& sour
 
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
     ApplyTopDisposition(state, looked, disp, LookKind::ReorderNoShuffle);
+}
+
+// ==== BRAINSTORM: "Draw three cards, then put two cards from your hand on top of your library in any
+// order." (CardParams::put_back_from_hand = 2, on a draw_spell with draw 3) =========================
+//
+// THE CHOICE is WHICH cards go back and in WHAT order -- an ordered selection from the post-draw hand.
+// It is SEARCHED (Plan::putback_choice -> the pin below, an ordinal into PutBackCandidates), never
+// decided by a heuristic inside the search window: the provider only ORDERS the candidates
+// (DecisionProvider::PutBackRanking), index 0 being the base plan's default.
+//
+// THE ONLY FOLD is identity: two hand cards of the same CLASS (PutBackClassKey: same card, same
+// staged/impulse state, same side of the live m1_hand snapshot) are interchangeable, so a candidate
+// names classes, not copies -- putting back "Island #12" or "Island #19" is the same play. Nothing is
+// width-capped: every distinct ordered selection of classes is a candidate.
+//
+// WHERE IT HAPPENS: inside the spell's resolution, right after the draw (ResolveDrawSpell in the
+// executor, apply_one's DrawSpell branch in the rollout, both through ResolvePutBackFromHand) and
+// BEFORE anything else -- the draw breakpoint, and any "whenever you draw" trigger, which waits until
+// the spell has finished resolving (CR 603.3) and so sees the put-back cards on top.
+//
+// HUMAN PLAY asks the shared `dig` chooser twice (source "<card> (put back: top)", then "(put back:
+// second)"): the hand is `examined`, every card is legal, the reply is the card to place; the put-back
+// is mandatory, so -1 takes the default.
+inline thread_local int g_scripted_putback_choice = -1;   // -1 = the provider's default (ordinal 0)
+struct ScriptedPutBack
+{
+    explicit ScriptedPutBack(int k) : saved(g_scripted_putback_choice) { g_scripted_putback_choice = k; }
+    ~ScriptedPutBack() { g_scripted_putback_choice = saved; }
+    ScriptedPutBack(const ScriptedPutBack&) = delete;
+    ScriptedPutBack& operator=(const ScriptedPutBack&) = delete;
+    int saved;
+};
+
+// The identity class of a card for the put-back fold. Cards that are only REPRESENTED in the hand
+// (staged exile, impulse) are not hand cards and never reach here (PutBackEligible).
+inline std::uint64_t PutBackClassKey(const GameState& state, const Card& c)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&h](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); };
+    mix(c.m_name_hash);
+    mix(static_cast<std::uint64_t>(c.m_power ? *c.m_power + 1 : 0));
+    mix(static_cast<std::uint64_t>(c.m_toughness ? *c.m_toughness + 1 : 0));
+    // The order-condemnation snapshot singles a hand card out BY NUMBER (TurnSolver's
+    // HandCastEquivTag makes the same split): a copy in it and a copy drawn since are not
+    // interchangeable while it is live. Stale/empty snapshot -> constant term -> every copy folds.
+    if (state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number)
+    {
+        bool in_m1 = false;
+        for (int i = 0; i < state.m1_hand_n; ++i) { if (state.m1_hand[i] == c.m_number) { in_m1 = true; break; } }
+        mix(in_m1 ? 0x9d1u : 0x2f7u);
+    }
+    return h;
+}
+inline bool PutBackEligible(const Card& c) { return !c.m_is_staged && !c.m_impulse_no_land; }
+
+// Every distinct ordered selection of min(n, eligible) classes, PROVIDER-ORDERED. Each candidate is a
+// list of HAND indices, element 0 = the card that ends on TOP. Index 0 is the default: the classes the
+// provider ranks most expendable, the less expendable of them on top (drawn first). Deterministic.
+inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, int controller, int n)
+{
+    std::vector<std::vector<int>> out;
+    const Player& pl = state.players[controller];
+    struct Cls { std::uint64_t key; std::vector<int> members; int rank; };
+    std::vector<Cls> classes;
+    int eligible = 0;
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        const Card& c = pl.hand[static_cast<std::size_t>(i)];
+        if (!PutBackEligible(c)) { continue; }
+        ++eligible;
+        const std::uint64_t k = PutBackClassKey(state, c);
+        auto it = std::find_if(classes.begin(), classes.end(), [&](const Cls& x) { return x.key == k; });
+        if (it == classes.end()) { classes.push_back(Cls{ k, { i }, 1 << 20 }); }
+        else                     { it->members.push_back(i); }
+    }
+    const int take = std::min(n, eligible);
+    if (take <= 0) { return out; }
+    // Provider ranking: hand indices, most expendable first. A class ranks at its best member (they
+    // are identical, so every member ranks the same under any sane provider; min is the safe read).
+    const std::vector<int> ranking = ResolveProvider(state).PutBackRanking(state, controller);
+    for (std::size_t r = 0; r < ranking.size(); ++r)
+    {
+        for (Cls& cl : classes)
+        {
+            if (std::find(cl.members.begin(), cl.members.end(), ranking[r]) != cl.members.end())
+            { cl.rank = std::min(cl.rank, static_cast<int>(r)); }
+        }
+    }
+    // Stable class order by rank (ties by first hand index) -- the canonical class numbering.
+    std::stable_sort(classes.begin(), classes.end(), [](const Cls& a, const Cls& b) { return a.rank < b.rank; });
+    // Enumerate ordered selections of `take` classes, each class used at most |members| times.
+    struct Sel { std::vector<int> cls; int score; };
+    std::vector<Sel> sels;
+    std::vector<int> used(classes.size(), 0);
+    std::vector<int> cur;
+    std::function<void()> rec = [&]()
+    {
+        if (static_cast<int>(cur.size()) == take)
+        {
+            int score = 0;
+            for (int ci : cur) { score += ci; }
+            sels.push_back(Sel{ cur, score });
+            return;
+        }
+        for (std::size_t ci = 0; ci < classes.size(); ++ci)
+        {
+            if (used[ci] >= static_cast<int>(classes[ci].members.size())) { continue; }
+            ++used[ci]; cur.push_back(static_cast<int>(ci));
+            rec();
+            cur.pop_back(); --used[ci];
+        }
+    };
+    rec();
+    // Most expendable SET first (lowest summed class position); within a set, the LESS expendable
+    // card on top (it is drawn first); then lexicographic on the reversed class list -> a total,
+    // deterministic order whose front is the two most expendable with the better one on top.
+    std::stable_sort(sels.begin(), sels.end(), [](const Sel& a, const Sel& b)
+    {
+        if (a.score != b.score) { return a.score < b.score; }
+        for (std::size_t i = 0; i < a.cls.size(); ++i)
+        { if (a.cls[i] != b.cls[i]) { return a.cls[i] > b.cls[i]; } }
+        return false;
+    });
+    out.reserve(sels.size());
+    for (const Sel& s : sels)
+    {
+        std::vector<int> pick;
+        std::vector<int> taken(classes.size(), 0);
+        for (int ci : s.cls)
+        { pick.push_back(classes[static_cast<std::size_t>(ci)].members[static_cast<std::size_t>(taken[ci]++)]); }
+        out.push_back(std::move(pick));
+    }
+    return out;
+}
+
+// HOW MANY candidates PutBackCandidates would produce over an arbitrary multiset of cards -- the
+// search fan's WIDTH, computed on the post-draw hand the clairvoyant search can predict (see the
+// Brainstorm axis in TurnSolver.cpp). Same class key, so it counts exactly what resolution offers.
+inline int PutBackCandidateCount(const GameState& state, const std::vector<Card>& cards, int n)
+{
+    std::vector<std::pair<std::uint64_t, int>> counts;
+    int eligible = 0;
+    for (const Card& c : cards)
+    {
+        if (!PutBackEligible(c)) { continue; }
+        ++eligible;
+        const std::uint64_t k = PutBackClassKey(state, c);
+        auto it = std::find_if(counts.begin(), counts.end(), [&](const auto& x) { return x.first == k; });
+        if (it == counts.end()) { counts.push_back({ k, 1 }); } else { ++it->second; }
+    }
+    const int take = std::min(n, eligible);
+    if (take <= 0) { return 0; }
+    // Count ordered selections with per-class multiplicity limits (tiny: n <= 2 in every card).
+    std::vector<int> used(counts.size(), 0);
+    std::function<int(int)> rec = [&](int depth) -> int
+    {
+        if (depth == take) { return 1; }
+        int total = 0;
+        for (std::size_t ci = 0; ci < counts.size(); ++ci)
+        {
+            if (used[ci] >= counts[ci].second) { continue; }
+            ++used[ci]; total += rec(depth + 1); --used[ci];
+        }
+        return total;
+    };
+    return rec(0);
+}
+
+// Resolve the put-back: choose (pin / human / default), then move the cards from hand to the library
+// top so that pick[0] is drawn first. Shared by the executor (EffectHandler::ResolveDrawSpell) and the
+// rollout (apply_one's DrawSpell branch) -- lockstep by construction.
+inline void ResolvePutBackFromHand(GameState& state, int controller, int n, const std::string& source)
+{
+    if (n <= 0) { return; }
+    const std::vector<std::vector<int>> cands = PutBackCandidates(state, controller, n);
+    if (cands.empty()) { return; }
+    std::vector<int> pick = cands.front();
+    if (g_scripted_putback_choice >= 0)
+    {
+        const int k = g_scripted_putback_choice;
+        g_scripted_putback_choice = -1;   // consumed by this put-back (a second Brainstorm takes the default)
+        pick = cands[static_cast<std::size_t>(k) < cands.size() ? static_cast<std::size_t>(k) : cands.size() - 1];
+    }
+    else if (g_play_dig_chooser != nullptr)
+    {
+        // Human play: one card at a time, top first, over the hand as it stands (every eligible card
+        // is legal; a pick out of range / -1 takes the default's card for that slot).
+        Player& hp = state.players[controller];
+        std::vector<int> chosen;
+        const int take = static_cast<int>(cands.front().size());
+        for (int slot = 0; slot < take; ++slot)
+        {
+            std::vector<Card> examined;
+            std::vector<int>  hand_of;   // examined index -> hand index
+            for (int i = 0; i < static_cast<int>(hp.hand.size()); ++i)
+            {
+                if (!PutBackEligible(hp.hand[static_cast<std::size_t>(i)])) { continue; }
+                if (std::find(chosen.begin(), chosen.end(), i) != chosen.end()) { continue; }
+                examined.push_back(hp.hand[static_cast<std::size_t>(i)]);
+                hand_of.push_back(i);
+            }
+            if (examined.empty()) { break; }
+            // Default for this slot: the default candidate's card if still unchosen, else the first
+            // remaining member of its class, else the first examined card.
+            int def_ex = 0;
+            const int want = cands.front()[static_cast<std::size_t>(slot)];
+            for (std::size_t e = 0; e < hand_of.size(); ++e) { if (hand_of[e] == want) { def_ex = static_cast<int>(e); break; } }
+            std::vector<int> legal(examined.size());
+            for (std::size_t e = 0; e < legal.size(); ++e) { legal[e] = static_cast<int>(e); }
+            const std::string src = source + (slot == 0 ? " (put back: top)" : " (put back: second)");
+            int r = (*g_play_dig_chooser)(state, controller, src, examined, legal, def_ex);
+            if (r < 0 || r >= static_cast<int>(examined.size())) { r = def_ex; }
+            chosen.push_back(hand_of[static_cast<std::size_t>(r)]);
+        }
+        if (static_cast<int>(chosen.size()) == take) { pick = chosen; }
+    }
+    Player& pl = state.players[controller];
+    // Copy the cards out first (indices refer to the current hand), then erase highest index first.
+    std::vector<Card> moved;
+    moved.reserve(pick.size());
+    for (int hi : pick) { moved.push_back(pl.hand[static_cast<std::size_t>(hi)]); }
+    std::vector<int> erase_order = pick;
+    std::sort(erase_order.begin(), erase_order.end(), std::greater<int>());
+    for (int hi : erase_order) { pl.hand.erase(pl.hand.begin() + hi); }
+    // pick[0] must end on TOP: insert the last first.
+    for (std::size_t i = moved.size(); i-- > 0; ) { pl.library.insert(pl.library.begin(), moved[i]); }
+    if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
+    {
+        std::string names;
+        for (std::size_t i = 0; i < moved.size(); ++i)
+        { if (i) { names += ", then "; } names += moved[i].m_name.str(); }
+        EmitPlayEvent(state.turn_number, "putback",
+                      "\xE2\xA4\xB4 " + source + " -- put back on top of the library: " + names
+                      + " (top first)");
+    }
 }
 
 // Upkeep-reorder trigger sweep (Mirri's Guile). One reorder per permanent carrying the param

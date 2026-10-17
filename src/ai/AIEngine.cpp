@@ -1475,7 +1475,7 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
     // this fixes, was untouched. The echo loop is idempotent via Permanent::echo_resolved, so
     // keying on "an obligation actually came due in THIS pass" inherits that once-per-turn
     // latch. Nothing else floats mana during upkeep, so this is exactly the echo leftover.
-    if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+    if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
 }
 
 // UPKEEP Call of the Wild (MTG_UPKEEP_CALL, default OFF) -- the executor half. Runs from
@@ -1512,7 +1512,7 @@ void AIEngine::ResolveUpkeepRevealTop(GameState& state)
     // over-produced by a lumpy source paying {2}{G}{G} must not survive into this main phase, or the
     // rollout scores a turn the executor cannot pay. Unconditional here (unlike echo's
     // echo_processed latch) because reaching this line means we DID just pay at upkeep.
-    if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+    if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
 }
 
 void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan& plan,
@@ -4173,6 +4173,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Same for the Saga chapter I pick, so the realised free cast is the one that was scored.
     ScriptedSagaCh1 _ssc1_exec(plan.saga_ch1_choice);
     ScriptedReorder _sr_exec(plan.ponder_choice);   // executor/rollout lockstep for the Ponder disposition
+    ScriptedPutBack _sputback_exec(plan.putback_choice);   // executor/rollout lockstep for the Brainstorm put-back
     ScriptedEtbCounter _sec_exec(plan.etbcounter_choice);   // lockstep: optional ETB counter payment
     ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
                                                     // pick (index resolved at the true state); -1 inert
@@ -8431,6 +8432,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         spend_free = true;
         --state.free_casts_available;
     }
+    bool haste_from_mana = false;   // Generator Servant's rider, set at the payment below
     if (alt_lifegain > 0)
     {
         // Alternative cost: pay no mana; instead the payload's players gain alt_lifegain life
@@ -8510,13 +8512,19 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             if (reserved_host > 0) { available = AvailableManaPool(state); }
         }
         SpellSubtypePayScope _ssps(&def->card);   // see the Giada note at the other cast site
-        bool paid_ok = TapForCost(state, effective, available, def->card.IsCreature());
+        // GENERATOR SERVANT: a creature SPELL spends one haste-tagged {C} on its own bill first --
+        // the executor twin of apply_one's take (TakeHasteFloatForCreatureSpell). `effective` stays
+        // the full bill for the line-hold accounting below. A bestowed cast is an Aura spell.
+        ManaCost pay_bill = effective;
+        haste_from_mana = def->card.IsCreature() && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
+        bool paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature());
         if (reserved_host > 0)
         {
             SetPermTapped(state, state.active_player_index, reserved_host, false);
             available = AvailableManaPool(state);
-            if (!paid_ok) { paid_ok = TapForCost(state, effective, available, def->card.IsCreature()); }
+            if (!paid_ok) { paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature()); }
         }
+        if (!paid_ok && haste_from_mana) { UndoHasteFloatTake(state); haste_from_mana = false; }
         if (!paid_ok)
         {
             if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
@@ -8778,6 +8786,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                 : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
     }
 
+    entry.haste_from_mana = haste_from_mana;   // Generator Servant: EnterBattlefield grants temp_haste
     state.stack.push_back(std::move(entry));
 
     // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.

@@ -38,6 +38,7 @@ void EnsureCardsSf()
 
 const CardDefinition& DefSf(const std::string& name)
 {
+    EnsureCardsSf();
     const CardDefinition* d = CardDatabase::Instance().Lookup(name);
     REQUIRE_MESSAGE(d != nullptr, "card not in cards.json: ", name);
     return *d;

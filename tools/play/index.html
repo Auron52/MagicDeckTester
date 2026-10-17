@@ -4174,6 +4174,27 @@ function digPanelHtml(d){
        `<button class="ghost" data-opt="-1">Keep it (the AI's default)</button></div>`;
     return h;
   }
+  // Brainstorm's put-back reuses this modal ("(put back: top)" / "(put back: second)" in the source):
+  // the tiles are your HAND after the three draws; the pick goes on top of your library. Mandatory --
+  // the button takes the AI's pick for this slot.
+  if (/\(put back: (top|second)\)/.test(d.source||'')) {
+    const top=/\(put back: top\)/.test(d.source||'');
+    const card=(d.source||'').replace(/\s*\(put back:.*$/,'');
+    let h=`<h3>${esc(card)} — put a card ${top?'on top of':'second from the top of'} your library</h3>`;
+    h+=`<div class="sub">${top
+      ?'Choose the card to put on <b>top</b> of your library — it is the next card you draw. You then choose the card to go beneath it.'
+      :'Choose the card to go <b>beneath</b> the one you just put back — it is the second card you draw.'}</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      const def=c.index===d.heuristic_default;
+      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — put it back">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+         (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Take the AI's pick</button></div>`;
+    return h;
+  }
   // Galadriel of Lothlórien's scry trigger reuses this modal ("(galadriel reveal)" in the source):
   // the one tile is the library top, a land; taking it puts it onto the battlefield tapped.
   if (/\(galadriel reveal\)/.test(d.source||'')) {

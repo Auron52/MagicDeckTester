@@ -19495,6 +19495,86 @@ static bool PonderSetIsMixed(const GameState& state, int n)
     return wanted > 0 && wanted < look;
 }
 
+// ---- BRAINSTORM PUT-BACK AXIS (Plan::putback_choice) -----------------------------------------
+// "Draw three cards, then put two cards from your hand on top of your library in any order." Which two
+// and in which order is a real decision inside the search window, so it is SEARCHED: one variant per
+// candidate of PutBackCandidates (SpellEffects.h) -- every distinct ordered selection of hand classes,
+// provider-ORDERED (DecisionProvider::PutBackRanking), identity-folded and NOT width-capped. Candidate 0
+// is the base plan. DEFAULT ON; MTG_PUTBACK_AXIS=0 leaves every put-back at the provider's default (an
+// A/B lever only -- shipping it off would be a greedy pick inside the window).
+static bool PutBackAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_PUTBACK_AXIS", true);
+    return on;
+}
+// Can this card reorder the library unpredictably before a later cast of the same plan draws (Ponder's
+// "you may shuffle", a tutor's or a fetch's shuffle)? Then the cards the put-back cast will see cannot
+// be read off the library at enumeration time.
+static bool PutBackPredictionUnsafe(const CardDefinition& d)
+{
+    return d.params.cast_reorder > 0 || d.params.tutor_to_hand || d.params.tutor_to_top
+        || !d.params.fetch_land_types.empty();
+}
+// THE FAN WIDTH for plan `p`'s put-back cast `bs`: an UPPER BOUND on the number of candidates the
+// resolution will offer, so no candidate is unreachable (a too-wide index clamps to the last candidate,
+// a duplicate the post-apply dedup skips: one apply, no rollout). The resolution hand is the hand now
+// minus this cast's own card and whatever the plan casts first, plus the cards drawn before the put-back:
+// this cast's `draw`, every other cantrip's draw and look in the plan, and ONE trigger draw per cast
+// (a "whenever a player casts an instant or sorcery spell, draw a card" -- Niv-Mizzet, Parun -- can
+// fire for each, this cast's own included; a looping draw engine ends the game before it matters).
+//   * Predictable library (the common case): the classes of (hand - this card) + that many library
+//     cards -- PutBackCandidateCount over that multiset. Removing cards (the plan's earlier casts) can
+//     only shrink the count, so this bounds the resolution's.
+//   * A same-plan shuffle/tutor/fetch (PutBackPredictionUnsafe): the drawn cards are unknown, so the
+//     class-blind bound n(n-1)...(n-k+1) over the hand SIZE is used instead -- distinct positions bound
+//     distinct classes.
+static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, std::size_t bs,
+                            const CardDefinition& bd)
+{
+    const Player& ap = state.ActivePlayer();
+    const Action& cast = p.actions[bs];
+    int window = std::max(0, bd.params.draw) + 1;   // + this cast's own trigger slack
+    bool unsafe = !p.fetch_target.empty();
+    for (std::size_t j = 0; j < p.actions.size(); ++j)
+    {
+        if (j == bs) { continue; }
+        const Action& a = p.actions[j];
+        window += 1;                                  // trigger slack (see above)
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { unsafe = true; continue; }
+        if (d->tmpl == CardTemplate::DrawSpell)
+        { window += std::max(0, d->params.draw) + std::max(0, d->params.cast_scry) + std::max(0, d->params.cast_reorder); }
+        else if (d->tmpl == CardTemplate::DrawX || d->tmpl == CardTemplate::DrawUntilNonland) { unsafe = true; }
+        if (PutBackPredictionUnsafe(*d)) { unsafe = true; }
+    }
+    const int k = bd.params.put_back_from_hand;
+    std::vector<Card> cards;
+    cards.reserve(ap.hand.size() + static_cast<std::size_t>(window));
+    bool skipped_self = false;
+    for (std::size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (!skipped_self && (static_cast<int>(i) == cast.hand_index
+                              || (cast.hand_index < 0 && c.m_name == cast.card_name)))
+        { skipped_self = true; continue; }
+        cards.push_back(c);
+    }
+    const int lib_take = std::min(window, static_cast<int>(ap.library.size()));
+    if (!unsafe)
+    {
+        for (int i = 0; i < lib_take; ++i) { cards.push_back(ap.library[static_cast<std::size_t>(i)]); }
+        return PutBackCandidateCount(state, cards, k);
+    }
+    int n = 0;
+    for (const Card& c : cards) { if (PutBackEligible(c)) { ++n; } }
+    n += lib_take;
+    const int take = std::min(k, n);
+    int w = take > 0 ? 1 : 0;
+    for (int t = 0; t < take; ++t) { w *= (n - t); }
+    return w;
+}
+
 // How many legal dig matches the top `pp.etb_dig_count` of the library holds RIGHT NOW. Used only to
 // SIZE the axis at enumeration time; the real candidate list is rebuilt at resolution (an earlier
 // cantrip in the same plan can shift the top N), and the pin clamps if this over-counts.
@@ -20157,6 +20237,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     fold(static_cast<uint64_t>(p.tutor_choice + 2) * 41 + static_cast<uint64_t>(p.tapmode_choice + 2));
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
+    fold(static_cast<uint64_t>(p.putback_choice + 2) * 53);
     fold(static_cast<uint64_t>(p.saga_target_choice + 2) * 59);
     // Searched land-drop TIMING and the landfall-target policy (2026-10-15). MUST-FOLD, the fling /
     // Tectonic rule below: "land before the casts" and "land after the casts" are different plans
@@ -20484,6 +20565,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.land_search_act_slot == -1
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
+        && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
@@ -20507,6 +20589,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
 {
     return p.bp_choice >= 0 || p.scry_choice >= 0 || p.etbdig_choice >= 0 || p.tutor_choice >= 0
         || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
+        || p.putback_choice >= 0   // Brainstorm put-back: a clamped (too-wide) rank lands on a sibling's state
         || p.etbcounter_choice >= 0 || p.sweep_choice >= 0 || p.le_fire_choice >= 0
         || p.bounce_choice >= 1
         // A landfall-target rank that turned out inert (one class at resolution, or no targeted
@@ -23485,7 +23568,13 @@ static bool HasteAccessThisTurn(const GameState& state)
         if (!d) { continue; }
         if (d->params.grants_haste) { return true; }
         if (d->params.is_equipment && d->params.equip_grants_haste) { return true; }
+        // Generator Servant: a crackable one (untapped; its {T} not barred by summoning sickness)
+        // can make a creature cast THIS turn hasty -- its {C}{C} spent on the creature spell.
+        if (d->params.sac_for_mana_grants_haste && !p.tapped
+            && (!d->params.sac_for_mana_requires_tap || CanTapNow(p, state.battlefield))) { return true; }
     }
+    // ...and haste-tagged {C} already floating (a Servant cracked earlier this phase).
+    if (HasteFloatUnits(state) > 0) { return true; }
     for (const Card& c : state.ActivePlayer().hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -28878,6 +28967,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (p.controller_index != state.active_player_index || p.tapped) { continue; }
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                 if (!pd || pd->params.sac_for_mana_amount <= 0) { continue; }
+                // {T} in a CREATURE's cost (Generator Servant): summoning sickness binds it (CR 302.6)
+                // unless it has haste. ApplySacForMana re-checks the same predicate. Param-gated.
+                if (pd->params.sac_for_mana_requires_tap && !CanTapNow(p, state.battlefield)) { continue; }
                 if (dup_cap > 0 && p.counters.empty())   // countered sources are never pooled
                 {
                     const std::pair<const CardDefinition*, int> cls{ pd, p.storage_counters };
@@ -38183,6 +38275,7 @@ namespace solvememo
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
+            || a.putback_choice != b.putback_choice
             || a.etbcounter_choice != b.etbcounter_choice || a.sweep_choice != b.sweep_choice
             || a.le_fire_choice != b.le_fire_choice
             || a.discard_choice != b.discard_choice || a.vial_charge_choice != b.vial_charge_choice
@@ -43853,7 +43946,7 @@ struct BpPrefixSnap
                                      // full apply did, or its ranks index a different list
     bool cascade_free = false;       // the cascade one-shot as the prefix left it: apply_one takes it
                                      // at its head, so false at every capture (kept for exactness)
-    int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
+    int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1, pin_putback = -1;   // scripted-pin state
     int  pin_sagach1 = -1;                                                  // ... incl. chapter I
     int  pin_sac_cursor = 0;         // sac-pin consumption point (the LIST is the plan's own
                                      // sac_pins, re-installed by the resumed apply's entry guard;
@@ -44272,7 +44365,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Searched Saga chapter I free cast (Plan::saga_ch1_choice); -1 inert. Scoped like the dig
     // pin because chapter I fires inside this apply, on the Saga's own enter.
     ScriptedSagaCh1 _ssc1(plan.saga_ch1_choice);
-    ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
+    ScriptedReorder _sr(plan.ponder_choice);
+    ScriptedPutBack _spb_pb(plan.putback_choice);   // searched Brainstorm put-back (own pin; see ScriptedPutBack)   // searched Ponder disposition (own pin; see ScriptedReorder)
     ScriptedEtbCounter _sec(plan.etbcounter_choice);   // searched optional ETB counter payment; -1 inert
     // Searched landfall-target POLICY (Plan::landfall_target_choice) for this turn: installed BEFORE
     // the land block below so the plan's own land drop's targeted triggers read it. -1 installs
@@ -45727,6 +45821,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
 
         bool is_creature = def.card.IsCreature();
+        // GENERATOR SERVANT: did this creature spell's payment spend a haste-tagged {C}? Set at the
+        // payment below (TakeHasteFloatForCreatureSpell), read where the creature enters. Lockstep
+        // twin: the executor's StackEntry::haste_from_mana.
+        bool cast_haste_from_mana = false;
         // FREE: a cascade hit (CR 702.84; its one-shot was taken at the head), or a plan cast marked
         // free_cast spending one banked Maelstrom Archangel charge. The charge is spent HERE, past
         // every early return, the executor's spend point (CastSpellFromHand's spend_free); with the
@@ -45865,12 +45963,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // would happily pay for a Human Cleric off an Angel-only source while the executor
             // refuses -- a rollout-vs-real divergence, i.e. exactly an [fd-diverge].
             SpellSubtypePayScope _ssps(&def.card);
-            bool paid_ok = TapForCostDirect(state, ec, is_creature);
+            // GENERATOR SERVANT (sac_for_mana_grants_haste): a creature SPELL spends one haste-tagged
+            // {C} on its own bill first -- a sound fold, see TakeHasteFloatForCreatureSpell. `ec`
+            // stays the full bill for the line-hold accounting below; only the payer sees the rest.
+            // A bestowed cast is an Aura spell (CR 702.103b), not a creature spell. No-op while no
+            // tagged {C} floats -> byte-identical.
+            ManaCost pay_bill = ec;
+            cast_haste_from_mana = is_creature && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
+            bool paid_ok = TapForCostDirect(state, pay_bill, is_creature);
             if (reserved_host > 0)
             {
                 SetPermTapped(state, state.active_player_index, reserved_host, false);
-                if (!paid_ok) { paid_ok = TapForCostDirect(state, ec, is_creature); }
+                if (!paid_ok) { paid_ok = TapForCostDirect(state, pay_bill, is_creature); }
             }
+            if (!paid_ok && cast_haste_from_mana) { UndoHasteFloatTake(state); cast_haste_from_mana = false; }
             if (!paid_ok)
             {
                 if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
@@ -46755,6 +46861,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
+            // Generator Servant's "it gains haste until end of turn" (lockstep twin: EnterBattlefield
+            // reading StackEntry::haste_from_mana). Expires at cleanup like every temp_haste.
+            if (cast_haste_from_mana) { perm.temp_haste = true; }
             // Sakashima's Protege: enter as a copy of a this-turn entrant (the searched pick
             // rides enchant_target -- reused as the copy-source m_number; 0 = heuristic).
             // Lockstep twin of EnterBattlefield's swap: the COPIED card drives enters-tapped
@@ -47008,6 +47117,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
                     { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
                 }
+                // Brainstorm's put-back, inside the resolution and before the draw breakpoint below
+                // (lockstep twin: EffectHandler::ResolveDrawSpell). Pinned by Plan::putback_choice.
+                if (def.params.put_back_from_hand > 0)
+                { ResolvePutBackFromHand(state, state.active_player_index, def.params.put_back_from_hand, def.card.m_name.str()); }
             }
 
             // Draw breakpoint: play a revealed land (the real engine's second pass
@@ -49394,6 +49507,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
         g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
         g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
+        g_scripted_putback_choice= bp_resume->pin_putback;
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
         g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
         // ...and the put-Karoo bounce pin (re-installed by _spb; a prefix that spent it stays spent).
@@ -49751,6 +49865,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_sagach1  = g_scripted_saga_ch1;
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
+            bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
@@ -49784,6 +49899,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_sagach1  = g_scripted_saga_ch1;
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
+            bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
@@ -50022,6 +50138,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const bool other_axis = plan.scry_choice >= 0 || plan.tutor_choice >= 0
                         || plan.etbdig_choice >= 0 || plan.lackey_choice >= 0 || plan.ponder_choice >= 0
+                        || plan.putback_choice >= 0
                         || plan.discard_choice >= 0 || plan.vial_charge_choice >= 0
                         || plan.fling_victim_choice != -1 || plan.tectonic_mode_choice >= 0
                         || plan.tectonic_keep_choice >= 0 || plan.bruna_gather_choice >= 0
@@ -50314,7 +50431,8 @@ static void SimulateCombat(GameState& state)
     // GameEngine::CombatPhase. Off (MTG_NO_FLOAT_LEFTOVER) -> no-op (pool only ever held
     // ritual float, which was already spent this main phase -> byte-identical regardless).
     if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
-                                      state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr; }
+                                      state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;
+                                      state.floating_haste_c = 0; }
     ApplyPendingEtbTaps(state);   // Colossification's responded-to ETB tap (lockstep w/ GameEngine::CombatPhase)
     int active  = state.active_player_index;
 
@@ -50664,6 +50782,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.floating_creature_mana   = ManaPool{};   // creature-only reserve too (lockstep w/ UntapStep)
     state.floating_bigspell_mana   = ManaPool{};   // big-spell-only reserve too (lockstep w/ UntapStep)
     state.floating_bigspell_pp     = nullptr;
+    state.floating_haste_c         = 0;            // Generator Servant's haste tag (lockstep w/ UntapStep)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start
@@ -50924,7 +51043,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // pre-combat main in AIEngine::TakeTurn -- both worlds must drop it at the same point, and on
     // the same CONDITION, or the rollout scores a line the executor cannot pay. See
     // UpkeepFloatClearEnabled (viewer issue #6).
-    if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+    if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
 
     // UPKEEP Call of the Wild (MTG_UPKEEP_CALL, default OFF -> byte-identical) -- the rollout half,
     // lockstep twin of AIEngine::ResolveUpkeepRevealTop. Position is load-bearing twice over: AFTER
@@ -50951,7 +51070,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             {
                 ApplyRevealTopDeploy(state, rt_ctrl);
                 // CR 500.4, same clear as echo's above and as the executor's twin.
-                if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+                if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
             }
         }
     }
@@ -59522,7 +59641,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // Base plans only -- one axis at a time, so cost stays additive (same trade as the
                 // scry / etbdig / discard axes above).
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.tapmode_choice != 0) { continue; }
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0 || p.tapmode_choice != 0) { continue; }
                 TurnSolver::Plan v = p;
                 v.tapmode_choice = 1;
                 extra.push_back(std::move(v));
@@ -59554,7 +59673,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             // Base plans only -- one axis at a time, so cost stays additive.
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                || p.lackey_choice >= 0 || p.ponder_choice >= 0) { continue; }
+                || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0) { continue; }
             // A rank-valued state pin: 1 .. W-1, or every rank but the inherited one on a state that
             // already holds a pin (a main-1 pin standing when main 2 decides; StatePinVariantRanks).
             for (const int c : discard_ranks)
@@ -59619,7 +59738,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 // Base plans only -- one axis at a time, so cost stays additive.
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0)
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0 || p.discard_choice >= 0)
                 { continue; }
                 for (int k = 0; k <= 1; ++k)
                 {
@@ -59668,7 +59787,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     // Base plans only -- one axis at a time, so cost stays additive.
                     if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                        || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                        || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0)
                     { continue; }
                     {   // DECLINE -- keep the body.
@@ -59724,7 +59843,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 // Base plans only -- one axis at a time, so cost stays additive.
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                    || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1)
                 { continue; }
@@ -59885,7 +60004,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (const TurnSolver::Plan& p : all)
             {
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                    || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0)
@@ -59965,7 +60084,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (const TurnSolver::Plan& p : all)
             {
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                    || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0
@@ -60049,6 +60168,49 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // SEARCHED BRAINSTORM PUT-BACK -- see PutBackAxisEnabled / PutBackAxisWidth. A DURING-CAST axis
+    // (its pin is consumed while the cast resolves), so it fans inside a breakpoint continuation
+    // derivation too and rides ContPins::putback there. Base plans only (one axis at a time, so cost
+    // stays additive -- the convention every axis here keeps); ONE put-back per variant: a plan's
+    // second Brainstorm takes the provider's default (the Ponder axis's "vary ONE Ponder" shape).
+    // Human play asks at resolution instead (the dig chooser; ResolvePutBackFromHand).
+    if (PutBackAxisEnabled() && !HumanPlayActive())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        std::size_t fanned = 0, widest = 0;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0) { continue; }
+            for (std::size_t ai = 0; ai < p.actions.size(); ++ai)
+            {
+                const Action& act = p.actions[ai];
+                if (act.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().Lookup(act.card_name);
+                if (d == nullptr || d->params.put_back_from_hand <= 0) { continue; }
+                const int w = PutBackAxisWidth(state, p, ai, *d);
+                for (int k = 1; k < w; ++k)
+                {
+                    TurnSolver::Plan v = p;
+                    v.putback_choice = k;
+                    extra.push_back(std::move(v));
+                }
+                ++fanned;
+                widest = std::max(widest, static_cast<std::size_t>(std::max(0, w)));
+                break;   // vary ONE put-back per variant
+            }
+        }
+        // MTG_PUTBACK_TRACE: the fan's width, per enumeration (the cost question -- report it).
+        static const bool s_pb_trace = EnvOn("MTG_PUTBACK_TRACE");
+        if (s_pb_trace && fanned > 0)
+        {
+            std::fprintf(stderr, "[putback] T%d %zu base plan(s) fanned, widest %zu, +%zu variants (of %zu plans)\n",
+                         state.turn_number, fanned, widest, extra.size(), all.size());
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
     // SEARCHED OPTIONAL ETB COUNTER (Emiel the Blessed's "you may pay {G/W}") -- 2026-09-30. The
     // engine no longer decides this payment (USER HARD RULE, docs/design/no-greedy-in-search-window.md);
     // the provider supplies the default (EldraziFlickerProvider declines: USER *"should almost never
@@ -60076,7 +60238,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             if (p.actions.empty() || p.etbcounter_choice >= 0) { continue; }
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.tutor_choice >= 0
+                || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0 || p.tutor_choice >= 0
                 || p.discard_choice >= 0) { continue; }   // base plans only -- additive, not a product
             bool live = watcher;
             for (std::size_t ai = 0; !live && ai < p.actions.size(); ++ai)
@@ -60162,7 +60324,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             // Base plans only -- one axis at a time, so cost stays additive.
             if (p.landfall_target_choice >= 0 || p.scry_choice >= 0 || p.bp_choice >= 0
-                || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                 || p.tutor_choice >= 0 || p.discard_choice >= 0 || p.etbcounter_choice >= 0
                 || !p.sac_pins.empty()) { continue; }
             if (p.land_to_play.empty() && p.actions.empty()) { continue; }   // no land can enter
@@ -60227,7 +60389,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 if (p.sweep_choice >= 0 || p.etbcounter_choice >= 0 || p.le_fire_choice >= 0) { continue; }
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.tutor_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0 || p.tutor_choice >= 0
                     || p.discard_choice >= 0) { continue; }   // base plans only
                 // No emission-time prune: a variant whose pin turns out inert (the rule would have
                 // swept anyway, or had nothing to sweep) lands on its base plan's state and the
@@ -60463,7 +60625,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     // Base plans only -- one axis at a time, so cost stays additive.
                     if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
-                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
@@ -60561,7 +60723,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     // Base plans only -- one axis at a time, so cost stays additive.
                     if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
-                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
@@ -60833,7 +60995,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const TurnSolver::Plan& p = all[i];
                 // Base plans only -- one axis at a time, so cost stays additive (tutor's rule).
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
-                    || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0
@@ -61923,7 +62085,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 464;   // pinned; see the static_assert below (+8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
+static constexpr std::size_t kPlanDomAssertedSize = 464;   // pinned; see the static_assert below (+0: Plan::putback_choice (Brainstorm's put-back pin), 2026-10-17, lands in existing padding -- measured, the assert compiles at 464 -- folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -62068,6 +62230,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
             add(pl.bruna_gather_choice); add(pl.combat_aura_swap_choice); add(pl.attack_attach_choice);
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
+            add(pl.putback_choice);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
             add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
@@ -64060,6 +64223,11 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
               ^ (static_cast<uint64_t>(fm.black) << 32) ^ (static_cast<uint64_t>(fm.red) << 24)
               ^ (static_cast<uint64_t>(fm.green) << 16) ^ (static_cast<uint64_t>(fm.colorless) << 8)
               ^  static_cast<uint64_t>(fm.wild));
+        // Generator Servant: WHICH {C} carry "a creature spell it pays for gains haste" is
+        // future-determining (the next creature cast this phase is hasty or not). Nonzero-gated ->
+        // every deck without such a source keeps its exact key.
+        if (HasteFloatUnits(state) > 0)
+        { Fold(k, 0x4A57EC); Fold(k, static_cast<uint64_t>(HasteFloatUnits(state))); }
     }
     // NOT folded: m1_hand (the order-condemnation stamp). Tested 2026-08-20 against the gi66
     // class and byte-inert -- no same-turn live-stamp state reaches a memo today (the rollout
@@ -75652,6 +75820,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ax_i("tutor",    q.tutor_choice,       -1);
                     ax_i("tapmode",  q.tapmode_choice,     -1);
                     ax_i("ponder",   q.ponder_choice,      -1);
+                    ax_i("putback",  q.putback_choice,     -1);
                     ax_i("discard",  q.discard_choice,     -1);
                     ax_i("freshmode", q.freshmode_choice,  -1);
                     ax_i("bp_at",    q.bp_at,               0);
@@ -77325,6 +77494,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 const int   sv_sagach1 = g_scripted_saga_ch1;
                 const int   sv_tutor   = g_scripted_tutor_choice;
                 const int   sv_reorder = g_scripted_reorder_choice;
+                const int   sv_putback = g_scripted_putback_choice;
                 const int   sv_tapmode = g_scripted_tapmode;
                 const int   sv_fresh   = g_scripted_freshmode;
                 const int   sv_saccur  = g_scripted_sac_cursor;
@@ -77336,6 +77506,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 g_scripted_saga_ch1       = sv_sagach1;
                 g_scripted_tutor_choice   = sv_tutor;
                 g_scripted_reorder_choice = sv_reorder;
+                g_scripted_putback_choice = sv_putback;
                 g_scripted_tapmode        = sv_tapmode;
                 g_scripted_freshmode      = sv_fresh;
                 g_scripted_sac_cursor     = sv_saccur;
@@ -77642,6 +77813,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     Fold(k, static_cast<uint64_t>(f.green));
     Fold(k, static_cast<uint64_t>(f.colorless));
     Fold(k, static_cast<uint64_t>(f.wild));
+    // Generator Servant's haste-tagged {C} (see BuildSimKey). Nonzero-gated -> exact prior key elsewhere.
+    if (HasteFloatUnits(state) > 0) { Fold(k, 0x4A57EC); Fold(k, static_cast<uint64_t>(HasteFloatUnits(state))); }
     Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn));
     Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset
     // MV-cast accumulator: same mid-turn-scalar rationale as the storm fold above it; deck-gated
@@ -77662,7 +77835,7 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     const bool sac_pins_live = g_scripted_sac_pins != nullptr
         && g_scripted_sac_cursor < static_cast<int>(g_scripted_sac_pins->size());
     if (g_scripted_top_choice >= 0 || g_scripted_etbdig_choice >= 0
-        || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0
+        || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0 || g_scripted_putback_choice >= 0
         || g_scripted_tapmode != 0 || g_scripted_freshmode != 0 || sac_pins_live
         // NB `!= kSagaCh1Heuristic`, not `>= 0`: a pending DECLINE is -2 and is every bit as
         // future-determining as a rank, so a `>= 0` gate would let two different states collide.
@@ -77674,6 +77847,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         Fold(k, static_cast<uint64_t>(g_scripted_saga_ch1 + 2));   // +2: -2 decline, -1 none, 0 rank0
         Fold(k, static_cast<uint64_t>(g_scripted_tutor_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_reorder_choice + 1));
+        if (g_scripted_putback_choice >= 0)   // Brainstorm's put-back pin (value-gated: exact prior key elsewhere)
+        { Fold(k, 0x9B7A); Fold(k, static_cast<uint64_t>(g_scripted_putback_choice + 1)); }
         Fold(k, static_cast<uint64_t>(g_scripted_tapmode));
         Fold(k, static_cast<uint64_t>(g_scripted_freshmode));
         if (sac_pins_live)
@@ -77741,7 +77916,7 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         if (state.casts_remaining_this_turn >= 0){ solvekeycensus::g_castsrem_live.fetch_add(1); }
         if (state.deck_reads_mv_cast)            { solvekeycensus::g_mv_live.fetch_add(1); }
         if (g_scripted_top_choice >= 0 || g_scripted_etbdig_choice >= 0
-            || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0
+            || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0 || g_scripted_putback_choice >= 0
             || g_scripted_tapmode != 0 || g_scripted_freshmode != 0 || sac_pins_live)
         { solvekeycensus::g_pins_live.fetch_add(1); }
         if (state.free_casts_available > 0)      { solvekeycensus::g_freecast_live.fetch_add(1); }
