@@ -1525,6 +1525,13 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
                   || first.land_search_act_slot != dup.land_search_act_slot);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
+    pl("etbc", first.etbcounter_choice != dup.etbcounter_choice);
+    pl("etbdig", first.etbdig_choice != dup.etbdig_choice);
+    pl("dig", first.dig_choice != dup.dig_choice);
+    pl("discard", first.discard_choice != dup.discard_choice);
+    pl("scry", first.scry_choice != dup.scry_choice);
+    pl("bounce", first.bounce_choice != dup.bounce_choice);
+    pl("sweep", first.sweep_choice != dup.sweep_choice);
     if (!cls.empty()) { cls += "] "; }
     std::vector<std::string> a, b;
     for (const Action& x : first.actions) { a.push_back(Desc(s, x)); }

@@ -35376,9 +35376,462 @@ void EdfComboRouteClearMemo()
     memo.m.clear();
 }
 
+// MTG_EDF_ROUTE_STATS (diagnostic, off by default): process-wide trial counters -- the memo's own
+// hits/misses are thread_local and never printed -- so a profile's route share can be split into
+// "many cheap hits" vs "a few expensive misses". Read-only; no effect on any answer.
+namespace comboroute
+{
+inline std::atomic<unsigned long long> g_rs_calls{0}, g_rs_hits{0}, g_rs_miss{0}, g_rs_ns{0};
+inline std::atomic<unsigned long long> g_rs_res[3] = {{0}, {0}, {0}};
+inline bool RouteStatsOn() { static const bool on = EnvOn("MTG_EDF_ROUTE_STATS"); return on; }
+// MTG_EDF_ROUTE_PREGATE / _VERIFY: see PregateRefuses below.
+inline bool PregateOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_PREGATE", true); return v; }
+inline bool PregateVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_PREGATE_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_rs_gate{0}, g_rs_gate_bad{0};
+struct PregateVerifyPrinter
+{
+    ~PregateVerifyPrinter()
+    {
+        if (!PregateVerify()) { return; }
+        std::fprintf(stderr, "[route-pregate] verify: %llu refused, %llu MISMATCHES\n",
+                     g_rs_gate.load(), g_rs_gate_bad.load());
+    }
+};
+inline PregateVerifyPrinter g_pv_printer;
+struct RouteStatsPrinter
+{
+    ~RouteStatsPrinter()
+    {
+        if (!RouteStatsOn() || g_rs_calls.load() == 0) { return; }
+        std::fprintf(stderr, "[route-stats] trials=%llu memo_hits=%llu misses=%llu miss_ms=%.1f "
+                     "verdicts(miss) no=%llu win=%llu develop=%llu\n",
+                     g_rs_calls.load(), g_rs_hits.load(), g_rs_miss.load(), g_rs_ns.load() / 1e6,
+                     g_rs_res[0].load(), g_rs_res[1].load(), g_rs_res[2].load());
+        std::fprintf(stderr, "[route-stats] pregate=%s refused=%llu (of %llu misses incl. refusals)\n",
+                     PregateOn() ? "on" : "off", g_rs_gate.load(), g_rs_gate.load() + g_rs_miss.load());
+    }
+};
+inline RouteStatsPrinter g_rs_printer;
+
+// ---- THE PRE-GATE (MTG_EDF_ROUTE_PREGATE, DEFAULT ON; =0 runs every trial) ----------------------
+// A SOUND, BYTE-IDENTICAL refusal of boards on which Run provably returns 0. It is not a heuristic:
+// it refuses only where the trial's own code cannot reach a nonzero verdict (WIN or DEVELOP), so every
+// reader (the greedy, the rollouts, the search, the viewer) sees exactly the action set it saw before,
+// and no line becomes unfindable at any budget. At the mulligan-generation shape 84% of trial misses
+// returned "no"; this gate proves about half of those up front (EDF probe: 47,856 of 115,930 misses,
+// 0 verify mismatches), without the deploy permutations and the 60-blink stalls.
+//
+// THE QUANTITY. A = AvailableTotal() = float total + Sum PermanentManaYield(my untapped lands). The
+// route makes mana ONLY by tapping lands (TapLand -> TapSourceIntoFloat) and from their land Auras, and
+// for a PLAIN land a tap floats exactly the land's PermanentManaYield, so tapping leaves A unchanged.
+// (Storage, domain, fetch, Deathrite-fuel, subtype-gated, MDFC and more-colours-than-amount lands
+// disable the gate; so does an unrecognised mechanic, see `unsure`.) Every other primitive moves A by:
+//   - a payment: minus its mana value (PayFromFloat removes one float unit per pip); a rollback restores
+//     a state already reached;
+//   - a land drop: + the land's ManaProducedPerTap, 0 if it enters tapped unconditionally
+//     (LandWouldEnterTapped's plain branch); a Karoo bounce only removes;
+//   - a land Aura cast: net <= max(0, extra - MV);
+//   - an untapper cast or a blink of one: its ETB untaps <= etb_untap_lands lands, so net <=
+//     topk(k) - cost, topk = the k best land yields (land drops included) + every admitted Aura's extra;
+//   - the outlet, a tutor, a reducer, a finisher's cast or activation, a draw: pure spends.
+// So with no mana-making blink, A + (pure spends) <= S: the board's A, plus the land drops, plus each
+// Aura's and each untapper's best net (each card cast at most once).
+//
+// TEST 1 -- the deploy (the HAND path: outlet and untapper not both on the battlefield). Run reaches
+//   Loop there only after DeployPieces returned true, i.e. put the missing pieces down, and it does so
+//   only through CastCreature, whose candidates (step 3 untappers, step 5 outlets) are SKIPPED when their
+//   mana value exceeds A -- an explicit precondition. Before the first untapper only the land drop and
+//   the Auras can raise A, so a missing untapper needs min MV <= A0 + drop + aura gain, and a missing
+//   outlet needs min MV <= that + every untapper's gain.
+// TEST 2 -- the whole route. S is a FIXPOINT: a card off the battlefield (untapper, outlet, Aura,
+//   reducer) arrives only by a cast with A >= its MV plus the tutor reaching it, so start from the board
+//   and the land drops, admit what S can pay, add their nets, repeat; nothing left out is ever cast. A
+//   missing piece nothing admits fails every deploy. Otherwise, if no blink can net mana (topk(k_max) <=
+//   the cheapest admitted blink after every admitted reducer, EffectiveActivationCost's floor kept) or no
+//   blink can be paid at all (spare = S - the deploy's pure spends < that blink), then the float never
+//   exceeds `spare`, and:
+//     - the dig never fires (Loop's Draw needs the float at blink MV + 6), so the library is never read;
+//     - WIN needs the finisher's activations (ceil(life / per-activation loss), or the opponent's library
+//       for the exiler), each at its reduced mana value, plus its cast and tutor: refused if > spare;
+//     - DEVELOP happens only at Loop's guard 0 with Decide on None, casting a creature off the float:
+//       impossible with a drainer on the battlefield or in hand, or a draw sink that stays (no Karoo
+//       drop, a library the tutors cannot empty), or a spare below the cheapest creature.
+// COLOUR. Because only lands and their Auras make mana, the colours the float can ever hold are fixed by
+//   the board, the land drops and the payable Auras in hand: a card (or blink, or activation) with a pip
+//   outside that set is treated as absent.
+// SCOPE. The bound covers the mechanics the route's cards use (lands, land Auras, etb_untap_lands, the
+//   drain / exile / Gorge finishers). A card that is both outlet and untapper, a creature whose ETB
+//   damages the opponent, or a list that overflows the scan buffers disables the gate. A new mechanic
+//   that adds land mana, untaps lands or damages the opponent another way must be added here before it
+//   ships -- MTG_EDF_ROUTE_PREGATE_VERIFY=1 runs the real trial on every refused board and reports any
+//   that was not "no" (with the board), which is how to check that on a new list.
+//
+// ORDER: the gate runs AFTER the memo lookup and leaves the memo exactly as the trial would (a miss
+// counted, the overflow clear, a 0 stored). Before the lookup it would NOT be byte-identical: the key
+// reads only the top eight library cards, so a memo entry can carry a verdict for a board that differs
+// deeper down, and refusing ahead of it (or not storing the 0) would change what later lookups return.
+static bool PregatePlainLand(const GameState& s, int me, const CardDefinition& d)
+{
+    const CardParams& pp = d.params;
+    if (pp.storage_land || pp.domain_mana || pp.gy_land_exile_mana || IsScaledManaDork(d)) { return false; }
+    if (!pp.fetch_land_types.empty() || !pp.mdfc_back_name.empty()) { return false; }
+    if (!ManaSubtypeGateLive(s, me, d)) { return false; }
+    const int amt = ManaProducedPerTap(d);
+    if (amt > 1 && pp.produces.size() > static_cast<std::size_t>(amt)) { return false; }
+    return true;
+}
+// LandWouldEnterTapped's unconditional branch: nothing but `enters_tapped` decides.
+static bool PregateEntersTappedAlways(const CardDefinition& d)
+{
+    const CardParams& pp = d.params;
+    return pp.enters_tapped && pp.etb_pay_life_to_untap <= 0 && pp.etb_untap_reveal_subtypes.empty()
+        && pp.etb_untap_control_subtypes.empty() && pp.fastland_max_other_lands < 0
+        && pp.checkland_subtypes.empty();
+}
+// The lower bound of an activation cost after `reduce` of reductions: EffectiveActivationCost takes it off
+// the GENERIC half of a creature's ability, never below one mana for an all-generic cost (hybrid pips are
+// counted as pips here, which can only lower the bound).
+static int PregateActLb(const ManaCost& printed, int reduce, bool creature)
+{
+    const int mv = printed.ManaValue();
+    if (!creature || reduce <= 0) { return mv; }
+    const int pips  = mv - printed.generic;
+    const int floor = pips >= 1 ? 0 : 1;
+    return pips + std::max(floor, printed.generic - reduce);
+}
+// COLOUR: the route makes mana only by tapping lands (TapLand) and from their land Auras, so the
+// colours it can ever float are fixed by the board, the land drops and the Auras in hand. Bits: the
+// Color enum (W U B R G C). A cost with a pip outside that set is never payable.
+static unsigned PregateColorBits(const std::vector<Color>& v)
+{
+    unsigned m = 0;
+    for (Color c : v) { m |= 1u << static_cast<int>(c); }
+    return m;
+}
+static unsigned PregateAuraBits(const CardDefinition& d)   // "any colour" Auras never make {C}
+{ return d.params.land_aura_produces.empty() ? 0x1Fu : PregateColorBits(d.params.land_aura_produces); }
+static bool PregatePayable(const ManaCost& c, unsigned avail)
+{
+    if (c.phyrexian_count > 0 || c.twobrid_count > 0) { return true; }   // not modelled here: never refuse
+    int pips[6] = { c.white, c.blue, c.black, c.red, c.green, c.colorless };
+    for (unsigned i = 0; i < c.hybrid_count && i < 4; ++i)
+    {
+        const int a = c.hybrid_pair[i] >> 4, b = c.hybrid_pair[i] & 0xF;
+        if (a < 6) { --pips[a]; }   // the first colour is baked into the flat count
+        if (!((avail >> a) & 1u) && !((avail >> b) & 1u)) { return false; }
+    }
+    for (int k = 0; k < 6; ++k) { if (pips[k] > 0 && !((avail >> k) & 1u)) { return false; } }
+    return true;
+}
+struct PregateDiag
+{
+    int  why = 0;   // 0 not refused, 1 deploy unaffordable, 2 the loop can neither win nor develop
+    int  a0 = 0, s = 0, dep = 0, kill = 0, dev = 0, net = 0, blink = 0, exit = 0;
+    bool oon = false, pon = false, dev_struct = false;
+};
+static bool PregateRefuses(const GameState& s, int me, PregateDiag* dg = nullptr)
+{
+    if (OpponentHasLost(s)) { return false; }   // Run's entry RouteWon
+    constexpr int kInf = 1 << 20;
+    constexpr int kCap = 48;
+    const Player& ap = s.players[me];
+    const int     heads    = std::max(1, gamesetup::OpponentHeads());
+    const int     opp_life = std::max(1, s.players[1 - me].life);
+    const int     opp_lib  = static_cast<int>(s.players[1 - me].library.size());
+    const bool    lib_ok   = s.opponent_library_dealt && !s.opponent_decked && opp_lib > 0;
+    auto bail = [&](int code) { if (dg) { dg->exit = code; } return false; };
+
+    // ---- ONE PASS over every card the route can touch: the battlefield, the hand, the sideboard when
+    //      a Wish is in hand and the library when a Call is (the only places Run fetches from; the dig
+    //      is ruled out below before anything relies on that). `where`: 0 battlefield, 1 hand,
+    //      2 sideboard, 3 library.
+    struct U { int k, mv, where; };                      // an untapper
+    struct O { ManaCost blink; int mv, where; bool blink_ok; };   // an outlet (blink_ok: its colours payable)
+    struct R { int amt, mv, where; };                    // an activation reducer
+    struct F { int kind, where, mv; ManaCost act; int amt; bool creature; };   // 0 drain, 1 exile, 2 gorge
+    U    unt[kCap]; int nu = 0;
+    O    out[kCap]; int no = 0;
+    R    red[kCap]; int nr = 0;
+    F    fin[kCap]; int nf = 0;
+    int  aura_x[kCap], aura_mv[kCap]; int na = 0;
+    int  yields[kCap * 2]; int ny = 0;
+    bool outlet_on = false, payload_on = false, unsure = false, karoo = false;
+    bool drainer_held = false, draw_sink_on = false;
+    int  a0 = s.floating_mana.Total();
+    int  drop_now = 0, drop_any = 0;                     // best land-drop yield (as it enters / at all)
+    int  wish_mv = kInf, call_mv = kInf, n_calls = 0;
+    int  min_creature = kInf;                            // cheapest creature that can be in hand
+    const int drops_left = std::max(0, ap.LandDropsAvailable() - ap.lands_played_this_turn);
+    // The colour pre-pass (a superset: every sideboard land counts when a Wish is in hand at all).
+    unsigned avail = 0;
+    {
+        const ManaPool& f = s.floating_mana;
+        if (f.white > 0) { avail |= 1u << 0; }  if (f.blue > 0)  { avail |= 1u << 1; }
+        if (f.black > 0) { avail |= 1u << 2; }  if (f.red > 0)   { avail |= 1u << 3; }
+        if (f.green > 0) { avail |= 1u << 4; }  if (f.colorless > 0 || f.wild_c > 0) { avail |= 1u << 5; }
+        if (f.wild > 0)  { avail |= 0x1Fu; }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = DefOf(p.card);
+            if (!d) { continue; }
+            if (p.card.IsLand()) { avail |= PregateColorBits(EffectiveProducesFor(s, me, *d, &p)); }
+            else if (IsLandAura(d)) { avail |= PregateAuraBits(*d); }
+        }
+        bool any_wish = false;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = DefOf(c);
+            if (!d) { continue; }
+            if (IsWish(d)) { any_wish = true; }
+            if (d->card.IsLand() && drops_left > 0)
+            { avail |= d->params.etb_choose_color ? 0x3Fu : PregateColorBits(d->params.produces); }
+        }
+        if (any_wish && drops_left > 0)
+        {
+            for (const Card& c : ap.sideboard)
+            {
+                const CardDefinition* d = DefOf(c);
+                if (d && d->card.IsLand()) { avail |= d->params.etb_choose_color ? 0x3Fu : PregateColorBits(d->params.produces); }
+            }
+        }
+        for (int it = 0; it < 8; ++it)   // an Aura in hand adds its colour once the board can pay it
+        {
+            unsigned next = avail;
+            for (const Card& c : ap.hand)
+            {
+                const CardDefinition* d = DefOf(c);
+                if (d && IsLandAura(d) && PregatePayable(d->card.m_mana_cost, avail)) { next |= PregateAuraBits(*d); }
+            }
+            if (next == avail) { break; }
+            avail = next;
+        }
+    }
+    auto payable = [&](const ManaCost& c) { return PregatePayable(c, avail); };
+    auto nonland = [&](const CardDefinition* d, int where)
+    {
+        const int mv = d->card.m_mana_cost.ManaValue();
+        const bool o = IsOutlet(d), u = IsUntapper(d);
+        if (o && u) { unsure = true; }   // one cast would meet both needs
+        // A card off the battlefield whose cost the board's colours cannot pay never arrives.
+        const bool cast_ok = where == 0 || payable(d->card.m_mana_cost);
+        if (o && cast_ok)
+        {
+            if (no < kCap) { out[no++] = O{ d->params.blink_cost.value(), mv, where, payable(d->params.blink_cost.value()) }; }
+            else { unsure = true; }
+        }
+        if (u && cast_ok) { if (nu < kCap) { unt[nu++] = U{ d->params.etb_untap_lands, mv, where }; } else { unsure = true; } }
+        if (d->params.reduces_creature_activation > 0 && cast_ok)
+        { if (nr < kCap) { red[nr++] = R{ d->params.reduces_creature_activation, mv, where }; } else { unsure = true; } }
+        if (where != 0 && d->card.IsCreature() && cast_ok) { min_creature = std::min(min_creature, mv); }
+        const bool fin_ok = cast_ok && payable(IsDrainer(d) ? d->params.drain_cost.value_or(ManaCost{})
+                                                            : d->params.exile_opponent_top_cost.value_or(ManaCost{}));
+        if ((IsDrainer(d) || IsExiler(d)) && fin_ok)
+        {
+            if (nf >= kCap) { unsure = true; }
+            else if (IsDrainer(d))
+            { fin[nf++] = F{ 0, where, mv, d->params.drain_cost.value(), d->params.drain_amount, d->card.IsCreature() }; }
+            else
+            { fin[nf++] = F{ 1, where, mv, d->params.exile_opponent_top_cost.value(), 1, d->card.IsCreature() }; }
+        }
+        if (IsDrainer(d) && where <= 1) { drainer_held = true; }
+        // A creature whose ETB damages the opponent could kill outside the finisher count below.
+        if (d->card.IsCreature() && (d->params.etb_damage_each_opponent > 0 || d->params.etb_damage_any > 0))
+        { unsure = true; }
+    };
+    auto gorge = [&](const CardDefinition& d, int where)
+    {
+        if (!IsGorge(&d) || !payable(d.params.tap_damage_cost.value())) { return; }
+        if (nf < kCap) { fin[nf++] = F{ 2, where, 0, d.params.tap_damage_cost.value(), d.params.tap_damage_each_opponent * heads, false }; }
+        else { unsure = true; }
+    };
+    auto land_card = [&](const CardDefinition& d, int where) -> bool
+    {
+        gorge(d, where);
+        if (drops_left <= 0) { return true; }
+        if (!PregatePlainLand(s, me, d)) { return false; }
+        if (d.params.etb_bounce_land) { karoo = true; }
+        const int y = ManaProducedPerTap(d);
+        drop_any = std::max(drop_any, y);
+        if (!PregateEntersTappedAlways(d)) { drop_now = std::max(drop_now, y); }
+        return true;
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!d) { continue; }
+        if (p.card.IsLand())
+        {
+            if (!PregatePlainLand(s, me, *d)) { return bail(1); }
+            if (d->params.reduces_creature_activation > 0) { return bail(1); }
+            const int y = PermanentManaYield(s, p, *d);
+            if (!p.tapped) { a0 += y; }
+            if (ny < kCap) { yields[ny++] = y; } else { return bail(1); }
+            if (IsTapDrawLand(d) || IsInvestigateLand(d)) { draw_sink_on = true; }
+            gorge(*d, 0);
+            continue;
+        }
+        if (IsClue(d)) { draw_sink_on = true; }
+        nonland(d, 0);
+        if (IsOutlet(d))   { outlet_on = true; }
+        if (IsUntapper(d)) { payload_on = true; }
+    }
+    if (dg) { dg->oon = outlet_on; dg->pon = payload_on; dg->a0 = a0; }
+    bool wish = false, call = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = DefOf(c);
+        if (!d) { continue; }
+        if (d->card.IsLand()) { if (!land_card(*d, 1)) { return bail(1); } continue; }
+        nonland(d, 1);
+        if (IsCall(d)) { ++n_calls; }   // (the library count below: any Call, payable or not)
+        if (!payable(d->card.m_mana_cost)) { continue; }
+        if (IsWish(d)) { wish = true; wish_mv = std::min(wish_mv, d->card.m_mana_cost.ManaValue()); }
+        if (IsCall(d)) { call = true; call_mv = std::min(call_mv, d->card.m_mana_cost.ManaValue()); }
+        if (IsLandAura(d))
+        {
+            if (na >= kCap) { return bail(1); }
+            aura_x[na] = d->params.land_aura_extra_mana; aura_mv[na] = d->card.m_mana_cost.ManaValue(); ++na;
+        }
+    }
+    if (wish)
+    {
+        for (const Card& c : ap.sideboard)
+        {
+            const CardDefinition* d = DefOf(c);
+            if (!d) { continue; }
+            if (d->card.IsLand()) { if (!land_card(*d, 2)) { return bail(1); } continue; }
+            nonland(d, 2);
+        }
+    }
+    if (call)
+    {
+        for (const Card& c : ap.library)
+        { const CardDefinition* d = DefOf(c); if (d && !d->card.IsLand()) { nonland(d, 3); } }
+    }
+    if (unsure) { return bail(2); }
+    const int tutor_of[4] = { 0, 0, wish_mv, call_mv };   // the extra cost of reaching a card, by where
+    for (int i = 0; i < drops_left && ny < kCap * 2; ++i) { yields[ny++] = drop_any; }
+    std::sort(yields, yields + ny, [](int a, int b) { return a > b; });
+    auto topk = [&](int k, int extra) { int t = extra; for (int j = 0; j < ny && j < k; ++j) { t += yields[j]; } return t; };
+
+    // ---- TEST 1: the deploy cannot put an outlet AND an untapper on the battlefield (hand path only).
+    {
+        int ag = 0, ax = 0;
+        for (int i = 0; i < na; ++i) { ag += std::max(0, aura_x[i] - aura_mv[i]); ax += aura_x[i]; }
+        const int base = a0 + std::min(drops_left, 1) * drop_now + ag;   // DeployPieces plays ONE land
+        int min_u = kInf, min_o = kInf, ug = 0;
+        for (int i = 0; i < nu; ++i)
+        {
+            if (unt[i].where == 0) { continue; }
+            min_u = std::min(min_u, unt[i].mv);
+            ug += std::max(0, topk(unt[i].k, ax) - unt[i].mv);
+        }
+        for (int i = 0; i < no; ++i) { if (out[i].where != 0) { min_o = std::min(min_o, out[i].mv); } }
+        if (!(outlet_on && payload_on))
+        {
+            if ((!payload_on && min_u > base) || (!outlet_on && min_o > base + ug))
+            { if (dg) { dg->why = 1; } return true; }
+        }
+    }
+
+    // ---- TEST 2: no blink can gain mana, so the route's whole mana is bounded ----------------------
+    // A card not yet on the battlefield (an untapper, an Aura, a reducer) can only arrive by a cast the
+    // route pays for, i.e. with AvailableTotal (deploy) or the float (loop) at its mana value plus the
+    // tutor that reaches it -- both <= S. So S is a FIXPOINT: start from the board and the land drops,
+    // admit every card S can pay for, add what they can net, repeat. Every card left out is never cast
+    // while S holds, and S holds as long as no blink nets mana, which is checked with the admitted set.
+    int S = a0 + drops_left * drop_now, ax = 0;
+    for (int it = 0; it < 64; ++it)
+    {
+        int ag = 0; ax = 0;
+        for (int i = 0; i < na; ++i) { if (aura_mv[i] <= S) { ag += std::max(0, aura_x[i] - aura_mv[i]); ax += aura_x[i]; } }
+        int ug = 0;
+        for (int i = 0; i < nu; ++i)
+        {
+            if (unt[i].where == 0 || unt[i].mv + tutor_of[unt[i].where] > S) { continue; }
+            ug += std::max(0, topk(unt[i].k, ax) - unt[i].mv);
+        }
+        const int next = a0 + drops_left * drop_now + ag + ug;
+        if (next <= S) { break; }
+        S = next;
+    }
+    int reduce = 0, k_max = 0, blink_lb = kInf, dig_lb = kInf;
+    for (int i = 0; i < nr; ++i) { if (red[i].where == 0 || red[i].mv + tutor_of[red[i].where] <= S) { reduce += red[i].amt; } }
+    for (int i = 0; i < nu; ++i) { if (unt[i].where == 0 || unt[i].mv + tutor_of[unt[i].where] <= S) { k_max = std::max(k_max, unt[i].k); } }
+    for (int i = 0; i < no; ++i)
+    {
+        if (out[i].where != 0 && out[i].mv + tutor_of[out[i].where] > S) { continue; }
+        const int lb = PregateActLb(out[i].blink, reduce, true);
+        dig_lb = std::min(dig_lb, lb);   // the dig's reserve reads the outlet's MV, payable or not
+        if (out[i].blink_ok) { blink_lb = std::min(blink_lb, lb); }
+    }
+    // A missing piece the supply cannot reach is never cast, so every deploy attempt fails. (No blink
+    // can come before the deploy, so here S holds whatever a blink would net.)
+    bool unt_ok = payload_on, out_ok = outlet_on;
+    int  dep_u = kInf, dep_o = kInf;   // what reaching each missing piece must SPEND beyond what S nets
+    for (int i = 0; i < nu; ++i)
+    {
+        if (unt[i].where == 0) { continue; }
+        const int c = unt[i].mv + tutor_of[unt[i].where];
+        // S already nets the untapper's own cast (refund - MV, floored at 0); only its tutor is extra
+        if (c <= S) { unt_ok = true; dep_u = std::min(dep_u, tutor_of[unt[i].where]); }
+    }
+    for (int i = 0; i < no; ++i)
+    {
+        if (out[i].where == 0) { continue; }
+        const int c = out[i].mv + tutor_of[out[i].where];
+        if (c <= S) { out_ok = true; dep_o = std::min(dep_o, c); }
+    }
+    if (dg) { dg->s = S; }
+    if (!unt_ok || !out_ok) { if (dg) { dg->why = 1; } return true; }
+    if (dig_lb >= kInf || k_max == 0) { return bail(3); }
+    // What the deploy must spend before the loop on top of S's netting: the missing outlet's cast (it
+    // refunds nothing) and the tutor of a missing untapper.
+    const int dep   = (outlet_on ? 0 : dep_o) + (payload_on ? 0 : dep_u);
+    const int spare = S - dep;   // AvailableTotal's ceiling once the pieces are down, before any blink
+    const int net   = blink_lb >= kInf ? -kInf : topk(k_max, ax) - blink_lb;   // no payable blink: none happens
+    if (dg) { dg->net = net; dg->blink = blink_lb; dg->dep = dep; }
+    // A blink that may net mana makes the supply unbounded -- unless no blink can ever be paid: every
+    // blink needs AvailableTotal >= its cost >= blink_lb, and before the first one A <= S - dep.
+    if (net > 0 && spare >= blink_lb) { return bail(4); }
+    // The dig (Loop's Draw) fires only with the float at blink + 6 or more; below that the library is
+    // never drawn from, which is what lets this bound ignore what a dig could find.
+    if (spare >= dig_lb + 6) { return bail(6); }
+    // WIN: the opponent loses only to the finisher activations, each costing at least its reduced mana
+    // value, plus the finisher's own cast and the tutor that reaches it.
+    int kill = kInf;
+    for (int i = 0; i < nf; ++i)
+    {
+        const F& f = fin[i];
+        int acts = 0;
+        if (f.kind == 1) { if (!lib_ok) { continue; } acts = opp_lib; }
+        else             { const int a = std::max(1, f.amt); acts = (opp_life + a - 1) / a; }
+        const int per  = f.kind == 2 ? f.act.ManaValue() : PregateActLb(f.act, reduce, f.creature);
+        const int cast = f.where == 0 ? 0 : f.mv + tutor_of[f.where];
+        kill = std::min(kill, acts * per + cast);
+    }
+    if (dg) { dg->kill = kill; }
+    if (spare >= kill) { return bail(7); }
+    // DEVELOP: Loop's guard-0 Develop runs only when Decide finds no finisher, and casts a creature from
+    // the float. A drainer on the battlefield or in hand (the deploy never casts one) or a draw sink that
+    // stays put (no Karoo drop to bounce it, a library the tutors cannot run down) keeps Decide off None;
+    // otherwise the float must reach the cheapest creature that can be in hand.
+    const bool dev_struct = drainer_held
+                         || (draw_sink_on && !karoo && static_cast<int>(ap.library.size()) > 1 + n_calls);
+    if (dg) { dg->dev_struct = dev_struct; dg->dev = min_creature; }
+    if (!dev_struct && spare >= min_creature) { return bail(8); }
+    if (dg) { dg->why = 2; }
+    return true;
+}
+}   // namespace comboroute
+
 int EdfComboRouteTrial(const GameState& s, int me)
 {
     if (!comboroute::On()) { return 0; }
+    const bool rs = comboroute::RouteStatsOn();
+    if (rs) { comboroute::g_rs_calls.fetch_add(1, std::memory_order_relaxed); }
     comboroute::TrialMemo& memo = comboroute::Memo();
     const std::uint64_t key = comboroute::BoardKey(s, me);
     // MTG_EDF_COMBO_ROUTE_MEMO=0 bypasses the memo (diagnosis: a root's own trial is otherwise a
@@ -35390,6 +35843,7 @@ int EdfComboRouteTrial(const GameState& s, int me)
         if (it != memo.m.end())
         {
             ++memo.hits;
+            if (rs) { comboroute::g_rs_hits.fetch_add(1, std::memory_order_relaxed); }
             if (comboroute::TraceOn())
             {
                 std::fprintf(stderr, "[combo-route] t%d TRIAL memo-hit %s (key %016llx)\n", s.turn_number,
@@ -35401,11 +35855,59 @@ int EdfComboRouteTrial(const GameState& s, int me)
     }
     ++memo.misses;
     if (memo.m.size() > 65536) { memo.m.clear(); }   // bounded; a go-off turn never needs more
+    // THE PRE-GATE (see PregateRefuses): a board the trial provably answers "no" gets that answer --
+    // and the memo entry the trial would have left -- without running it.
+    if (comboroute::PregateOn() && comboroute::PregateRefuses(s, me))
+    {
+        if (rs || comboroute::PregateVerify()) { comboroute::g_rs_gate.fetch_add(1, std::memory_order_relaxed); }
+        int r = 0;
+        if (comboroute::PregateVerify())
+        {
+            GameState vcopy = s;
+            RevealLogPause     _vquiet;
+            ComboOffApplyPause _vnochoosers;
+            comboroute::Ctx vcx(vcopy, me);
+            r = comboroute::Run(vcx);
+            if (r != 0)
+            {
+                comboroute::g_rs_gate_bad.fetch_add(1, std::memory_order_relaxed);
+                std::fprintf(stderr, "[route-pregate] MISMATCH t%d: refused a board the trial answers %s | %s\n",
+                             s.turn_number, r == 1 ? "WIN" : "DEVELOP", vcx.log.c_str());
+                comboroute::PregateDiag dg;
+                comboroute::PregateRefuses(s, me, &dg);
+                std::string b;
+                for (const Permanent& p : s.battlefield)
+                {
+                    if (p.controller_index != me) { continue; }
+                    const CardDefinition* d = comboroute::DefOf(p.card);
+                    b += p.card.m_name.str() + (p.tapped ? "(T" : "(") + (d && p.card.IsLand() ? std::to_string(PermanentManaYield(s, p, *d)) : std::string()) + ") ";
+                }
+                b += "| hand: ";
+                for (const Card& c : s.players[me].hand) { b += c.m_name.str() + ", "; }
+                std::fprintf(stderr, "[route-pregate]   why=%d a0=%d S=%d dep=%d net=%d blink=%d kill=%d devs=%d dev=%d float=%d lp=%d/%d | %s\n",
+                             dg.why, dg.a0, dg.s, dg.dep, dg.net, dg.blink, dg.kill, dg.dev_struct, dg.dev,
+                             s.floating_mana.Total(), s.players[me].lands_played_this_turn, s.players[me].LandDropsAvailable(), b.c_str());
+            }
+        }
+        if (comboroute::TraceOn())
+        { std::fprintf(stderr, "[combo-route] t%d TRIAL no (pre-gate)\n", s.turn_number); }
+        if (s_memo) { memo.m[key] = r; }
+        return r;
+    }
     GameState copy = s;
     RevealLogPause     _quiet;
     ComboOffApplyPause _nochoosers;
     comboroute::Ctx cx(copy, me);
+    const auto rs_t0 = rs ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const int r = comboroute::Run(cx);
+    if (rs)
+    {
+        comboroute::g_rs_miss.fetch_add(1, std::memory_order_relaxed);
+        comboroute::g_rs_ns.fetch_add(static_cast<unsigned long long>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - rs_t0).count()),
+            std::memory_order_relaxed);
+        if (r >= 0 && r <= 2) { comboroute::g_rs_res[r].fetch_add(1, std::memory_order_relaxed); }
+    }
     if (comboroute::TraceOn())
     {
         std::fprintf(stderr, "[combo-route] t%d TRIAL %s: deploys=%d iters=%d draws=%d acts=%d life=%d opp=%d | %s\n",
