@@ -23,6 +23,7 @@
 // about what looks hot: these helpers are fully inlined today, so they do not appear in a profile
 // by name at all -- only the total Ir moves.
 #include "SpellEffects.h"
+#include "MemBudget.h"
 #include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 
 // The live scry-watcher chain (Galadriel; see the SCRY WATCHERS block in SpellEffects.h).
@@ -4645,6 +4646,23 @@ struct ManaCacheEntry
                                            // source (the exact hole its card model warns about)
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
+// PER-THREAD BYTE CAP (2026-10-17, Galadriel value-leaf phase C RSS abort). The 500,000-entry bound
+// below bounds nothing in BYTES: an entry carries its whole tap set, and a 40-land Galadriel board
+// makes ~40 taps per entry (massif: this map + its tap vectors = 15% of one d5 game's heap).
+// Per-thread so the clear point is a function of this thread's own game only (no cross-worker
+// nondeterminism). MTG_MANA_CACHE_MB (0 = no byte cap); UNSET = min(48, an eighth of the per-worker
+// budget).
+inline thread_local long long g_mana_cache_bytes = 0;
+inline long long ManaCacheByteCap()
+{
+    static const long long v = []{
+        if (std::getenv("MTG_MANA_CACHE_MB") != nullptr)
+        { return static_cast<long long>(std::max(0, EnvInt("MTG_MANA_CACHE_MB", 0))) << 20; }
+        const long long per_worker_mb = membudget::BudgetMb() / std::max(1, membudget::Workers());
+        const long long mb = per_worker_mb > 0 ? std::min<long long>(48, std::max<long long>(8, per_worker_mb / 8)) : 48;
+        return mb << 20; }();
+    return v;
+}
 
 // DEFAULT ON; MTG_MANA_CACHE_ALLSRC=0 restores the old McReplayable store gate (simple sources only).
 // The A/B arm that measured the Deathrite/storage/drip extension, and the hatch if a future source
@@ -5151,7 +5169,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 void ManaCacheClearPerGame()
 {
     static const bool s_keep = EnvOn("MTG_LEGACY_MANA_CACHE_ACROSS_GAMES");
-    if (!s_keep) { g_mana_cache.clear(); }
+    if (!s_keep) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }
 }
 
 
@@ -5659,7 +5677,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --
     if (mc_active)
     {
-        if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); }   // bound cross-rollout growth
+        if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
         e.energy_spent = 0;
         bool storable = true;
@@ -5715,7 +5733,15 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         }
         if (tapstats::Enabled() && !storable)
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
-        if (storable) { g_mana_cache[mk1] = std::move(e); }
+        if (storable)
+        {
+            const long long eb = static_cast<long long>(sizeof(ManaCacheEntry) + sizeof(std::uint64_t) + 32
+                                                        + e.taps.capacity() * sizeof(ManaCacheTap));
+            const long long cap = ManaCacheByteCap();
+            if (cap > 0 && g_mana_cache_bytes + eb > cap) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }
+            g_mana_cache_bytes += eb;
+            g_mana_cache[mk1] = std::move(e);
+        }
     }
     // §2a: sacrifice the Treasures this solve cracked. AFTER the cache store above, so the stored
     // entry describes the same board the live solve produced (hit/miss lockstep). Done here rather

@@ -74172,6 +74172,25 @@ namespace m1memo
     inline thread_local std::unordered_map<TranspositionTable::Key, solvememo::Entry,
                                            TranspositionTable::KeyHash> t_cache;
     inline thread_local uint64_t t_epoch = 0;
+    // PER-THREAD BYTE CAP (2026-10-17, Galadriel value-leaf phase C: 32 workers x ~200 MB of this memo
+    // tripped the 22.6 GB RSS cap). The entry cap above bounds nothing in BYTES: an entry is a whole
+    // Plan, and on a 40-land Galadriel board 262,144 of them is hundreds of MB per thread (massif:
+    // this map + its copied action vectors = 53% of one d5 game's heap). Per-thread rather than the
+    // global plancache pool ON PURPOSE: a hit frees budget units, so under a finite budget WHEN the
+    // memo clears is a play input, and a global pool's refusals depend on what other workers hold
+    // (thread-count nondeterminism). A per-thread cap depends only on this thread's own game.
+    // MTG_ROLLOUT_M1_MEMO_MB (0 = no byte cap); UNSET = min(96, a quarter of the per-worker budget).
+    inline thread_local long long t_bytes = 0;
+    inline long long ByteCap()
+    {
+        static const long long v = []{
+            if (std::getenv("MTG_ROLLOUT_M1_MEMO_MB") != nullptr)
+            { return static_cast<long long>(std::max(0, EnvInt("MTG_ROLLOUT_M1_MEMO_MB", 0))) << 20; }
+            const long long per_worker_mb = membudget::BudgetMb() / std::max(1, membudget::Workers());
+            const long long mb = per_worker_mb > 0 ? std::min<long long>(96, std::max<long long>(16, per_worker_mb / 4)) : 96;
+            return mb << 20; }();
+        return v;
+    }
     // Tallied only under MTG_ROLLOUT_STATS (verify counts always), printed at exit when nonzero.
     inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_cap_clears{0}, g_epoch_clears{0};
     inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0}, g_peak{0};
@@ -74198,7 +74217,7 @@ namespace m1memo
     inline Dumper g_dumper;
 }
 
-static void M1MemoClear() { m1memo::t_cache.clear(); }
+static void M1MemoClear() { m1memo::t_cache.clear(); m1memo::t_bytes = 0; }
 
 static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth, int max_turns,
                                               SearchBudget* budget, bool second_main,
@@ -74224,6 +74243,7 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
     {
         if (!cache.empty())
         { cache.clear(); if (s_rollout_stats) { m1memo::g_epoch_clears.fetch_add(1, std::memory_order_relaxed); } }
+        m1memo::t_bytes = 0;
         m1memo::t_epoch = g_decision_epoch;
     }
     auto it = cache.find(k);
@@ -74274,11 +74294,16 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
     if (finite_budget && (g_fs_trunc_events != trunc_before || budgetbind::t_binds != binds_before
                           || decisionwork::Exceeded()))
     { return p; }
-    if (cache.size() >= m1memo::Cap())
+    const long long entry_bytes = static_cast<long long>(ApproxPlanBytes(p))
+                                + static_cast<long long>(sizeof(TranspositionTable::Key) + sizeof(solvememo::Entry) + 32);
+    const long long byte_cap = m1memo::ByteCap();
+    if (cache.size() >= m1memo::Cap() || (byte_cap > 0 && m1memo::t_bytes + entry_bytes > byte_cap))
     {
         cache.clear();
+        m1memo::t_bytes = 0;
         if (s_rollout_stats) { m1memo::g_cap_clears.fetch_add(1, std::memory_order_relaxed); }
     }
+    m1memo::t_bytes += entry_bytes;
     cache[k] = solvememo::Entry{ g_decision_epoch, p,
                                  static_cast<uint32_t>(g_condemn_drops - drops_before),
                                  static_cast<uint32_t>(g_fs_trunc_events - trunc_before) };
