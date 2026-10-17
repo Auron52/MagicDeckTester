@@ -33903,11 +33903,24 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
 inline bool NarrowUndoOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_NARROW_UNDO", true); return v; }
 inline bool NarrowUndoVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_NARROW_UNDO_VERIFY"); return v; }
 inline std::atomic<unsigned long long> g_nu_restores{0}, g_nu_bad{0}, g_nu_full{0};
+// ---- THE CASTS' UNDO (MTG_EDF_ROUTE_CAST_UNDO, DEFAULT ON; =0 restores the whole-state copies) ---------
+// CastCreature and CastEnchantment took a whole GameState copy (pre_cast) before paying, for three restore
+// points: the payment failing, the card's name not being found again, and DeployCreatureFromHand
+// refusing. Between the copy and every one of them the only writer is Pay -- TapLand's writes and
+// PayFromFloat's float -- plus, in CastEnchantment, the host reservation's `tapped` flip, which is
+// undone before any restore point and is a field the undo restores anyway; DeployCreatureFromHand
+// refuses only BEFORE it writes anything (a bad index or an unknown card). So the narrow undo above,
+// taken where the copy was, restores the same state. (The creature's tap-ahead runs BEFORE that point
+// and stays un-undone on failure, exactly as before. CastTutor keeps its copy: its "target not found"
+// restore follows PerformTutor's writes.) MTG_EDF_ROUTE_CAST_UNDO_VERIFY=1 checks each restore as
+// MTG_EDF_ROUTE_NARROW_UNDO_VERIFY does (the two share the counters and the report line).
+inline bool CastUndoOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_CAST_UNDO", true); return v; }
+inline bool CastUndoVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_CAST_UNDO_VERIFY"); return v; }
 struct NarrowUndoVerifyPrinter
 {
     ~NarrowUndoVerifyPrinter()
     {
-        if (!NarrowUndoVerify()) { return; }
+        if (!NarrowUndoVerify() && !CastUndoVerify()) { return; }
         std::fprintf(stderr, "[route-undo] verify: %llu narrow restores, %llu MISMATCHES (%llu takes fell back to a whole copy)\n",
                      g_nu_restores.load(), g_nu_bad.load(), g_nu_full.load());
     }
@@ -33916,14 +33929,17 @@ inline NarrowUndoVerifyPrinter g_nu_printer;
 class TapUndo
 {
 public:
-    explicit TapUndo(const Ctx& cx)
+    explicit TapUndo(const Ctx& cx) : TapUndo(cx, NarrowUndoOn(), NarrowUndoVerify()) {}
+    // `on` / `verify`: the lever that owns this site (Blink / Pay: MTG_EDF_ROUTE_NARROW_UNDO; the casts:
+    // MTG_EDF_ROUTE_CAST_UNDO). Off = the whole copy, exactly the old snapshot.
+    TapUndo(const Ctx& cx, bool on, bool verify) : m_verify(on && verify)
     {
         const GameState& s = cx.s;
-        m_narrow = NarrowUndoOn() && Eligible(cx);
-        if (!m_narrow || NarrowUndoVerify())
+        m_narrow = on && Eligible(cx);
+        if (!m_narrow || m_verify)
         {
             m_full.emplace(s);
-            if (!m_narrow && NarrowUndoOn()) { g_nu_full.fetch_add(1, std::memory_order_relaxed); }
+            if (!m_narrow && on) { g_nu_full.fetch_add(1, std::memory_order_relaxed); }
         }
         if (!m_narrow) { return; }
         m_n = static_cast<int>(s.battlefield.size());
@@ -33957,7 +33973,7 @@ public:
         s.players[cx.me].life             = m_life;
         s.players[cx.me].energy_counters  = m_energy;
         s.pay_ledger                       = m_ledger;
-        if (NarrowUndoVerify())
+        if (m_verify)
         {
             g_nu_restores.fetch_add(1, std::memory_order_relaxed);
             std::vector<long long> a, b;
@@ -33986,6 +34002,7 @@ private:
         }
         return true;
     }
+    bool                     m_verify = false;
     bool                     m_narrow = false;
     int                      m_n = 0;
     P                        m_p[kMax];
@@ -34376,13 +34393,13 @@ static bool CastCreature(Ctx& cx, int hand_idx, const std::vector<int>* tap_ahea
         TapAhead(cx, *tap_ahead);
         cx.demand = saved; cx.paying = ManaCost();
     }
-    const GameState pre_cast = cx.s;
-    if (!Pay(cx, d->card.m_mana_cost)) { CR_DBG(cx, "cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
+    const TapUndo pre_cast(cx, CastUndoOn(), CastUndoVerify());   // see CastUndoOn
+    if (!Pay(cx, d->card.m_mana_cost)) { CR_DBG(cx, "cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); pre_cast.Restore(cx); return false; }
     const int idx = HandIndexByName(cx, name);
-    if (idx < 0) { cx.s = pre_cast; return false; }
+    if (idx < 0) { pre_cast.Restore(cx); return false; }
     EtbOptionalPayerScope _eops(&DeclinePayer());
     EtbUntapPriorityScope _prio(tap_ahead);
-    if (!DeployCreatureFromHand(cx.s, cx.me, idx)) { cx.s = pre_cast; return false; }
+    if (!DeployCreatureFromHand(cx.s, cx.me, idx)) { pre_cast.Restore(cx); return false; }
     ++cx.deploys;
     CR_NOTE(cx, "cast " + name);
     return true;
@@ -34396,7 +34413,7 @@ static bool CastEnchantment(Ctx& cx, int hand_idx, int host, bool float_only)
     if (!d) { return false; }
     const std::string name = ap.hand[hand_idx].m_name.str();
     if (float_only && !FloatPays(cx, d->card.m_mana_cost)) { return false; }
-    const GameState pre_cast = cx.s;
+    const TapUndo pre_cast(cx, CastUndoOn(), CastUndoVerify());   // see CastUndoOn
     bool paid = false;
     {
         // the host never pays for its own Aura: reserve it (claude_s1_gi0 T3 -- Trace of Abundance
@@ -34407,9 +34424,9 @@ static bool CastEnchantment(Ctx& cx, int hand_idx, int host, bool float_only)
         paid = Pay(cx, d->card.m_mana_cost);
         if (reserve) { cx.s.battlefield[hi].tapped = false; }
     }
-    if (!paid) { CR_DBG(cx, "cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
+    if (!paid) { CR_DBG(cx, "cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); pre_cast.Restore(cx); return false; }
     const int idx = HandIndexByName(cx, name);
-    if (idx < 0) { cx.s = pre_cast; return false; }
+    if (idx < 0) { pre_cast.Restore(cx); return false; }
     Permanent perm;
     perm.card              = d->card;
     perm.card.m_number     = cx.s.players[cx.me].hand[idx].m_number;
