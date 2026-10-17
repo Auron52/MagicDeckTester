@@ -982,3 +982,36 @@ TEST_CASE("Payment pins: the scope installs both pins unconditionally and restor
     CHECK(g_scripted_tapmode == tm0);
     CHECK(g_scripted_freshmode == fm0);
 }
+
+// ---- THE EXECUTOR'S BREAKPOINT OCCURRENCE RULE (2026-10-17; TurnSolver::ClassifyBpOccurrence / ExecMirrorsUnreplayedBp)
+// The MISMATCH counter read 3 on smoke and 16 on a 40k-game probe, all Snow, all on unverified (estimate)
+// commits. TWO causes. (1) Classification: the split read "the plan carries a choice", so an occurrence the
+// plan did NOT target -- a designed re-solve on an unverified line -- counted as a failed replay. (2) Real:
+// an occurrence BEFORE the plan's target was re-solved instead of mirrored, the line left the scored one, and
+// the target's continuation list was then EMPTY (a Frost Augur / Scrying Sheets look re-solved, then the
+// targeted Ice-Fang Coatl / Arcum's Astrolabe draw had nothing to replay). Up to its target the plan's line
+// is the scored one, so the executor now mirrors the canon there; after the target it re-solves as designed.
+TEST_CASE("Breakpoint occurrences: only the targeted one can mismatch; pre-target ones mirror on an estimate line")
+{
+    using O = TurnSolver::BpOccurrence;
+    TurnSolver::Plan none;                         // no searched continuation at all
+    CHECK(TurnSolver::ClassifyBpOccurrence(none, -1) == O::None);
+    TurnSolver::Plan p;
+    p.bp_choice = 0;
+    p.bp_at     = 1;                               // targets the SECOND occurrence
+    CHECK(TurnSolver::ClassifyBpOccurrence(p, 0) == O::PreTarget);
+    CHECK(TurnSolver::ClassifyBpOccurrence(p, 1) == O::Target);
+    CHECK(TurnSolver::ClassifyBpOccurrence(p, 2) == O::Untargeted);
+    TurnSolver::Plan all = p;
+    all.bp_all = true;                             // the same continuation at every occurrence
+    CHECK(TurnSolver::ClassifyBpOccurrence(all, 0) == O::Target);
+    CHECK(TurnSolver::ClassifyBpOccurrence(all, 3) == O::Target);
+    // A verified committed line mirrors every unreplayed occurrence (USER 2026-10-03: "We should not search
+    // again"); an estimate commit mirrors up to its target and re-solves after it; an uncommitted plan never.
+    CHECK(TurnSolver::ExecMirrorsUnreplayedBp(O::Untargeted, /*committed=*/true,  /*verified=*/true));
+    CHECK(TurnSolver::ExecMirrorsUnreplayedBp(O::None,       true,  true));
+    CHECK(TurnSolver::ExecMirrorsUnreplayedBp(O::PreTarget,  true,  false));
+    CHECK_FALSE(TurnSolver::ExecMirrorsUnreplayedBp(O::Untargeted, true, false));
+    CHECK_FALSE(TurnSolver::ExecMirrorsUnreplayedBp(O::None,       true, false));
+    CHECK_FALSE(TurnSolver::ExecMirrorsUnreplayedBp(O::PreTarget,  false, false));
+}
