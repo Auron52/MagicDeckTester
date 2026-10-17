@@ -653,6 +653,29 @@ public:
     bool UseLethalShortCircuit() const override;
 };
 
+// Colossus Hammer (R/W "cheat the equip {8}" voltron: Colossus Hammer onto a double striker via
+// Sigarda's Aid / Magnetic Theft / Forge Anew / Raubahn / Ardenn; onboarded 2026-10-17). Its OWN
+// provider from day one, routed near the TOP of DetectDecisionProvider by the three attach routes no
+// other deck carries (Raubahn's attack_attach_equipment, Magnetic Theft's attach_target_equipment,
+// Lizard Blades' reconfigure_cost). Without that it would land on KittyEquipment's
+// EquipmentProvider -- Kor Duelist, Sigarda's Aid and Ardenn each set the `equipment` signature
+// alone -- and inherit that deck's USER-settled cast order, discard buckets, equip-host width 2,
+// consolidation doctrine and NeverCast(Removal), none of which was ever measured on this list.
+// Derived from DeckProvider (== Generic): every judgement hook is the Generic one. The attach-host
+// hooks this list leans on (EquipmentEtbAttachHost, BeginCombatAttach, AttackDigAttachHost) are
+// BASE-class hooks, so the cards work without borrowing anything from EquipmentProvider.
+class ColossusHammerProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat is the only route to the opponent's "
+               "life and nothing in the pool grants haste, but power is added AFTER attackers are "
+               "declared (Ardenn's begin-combat attach, Raubahn's attack attach) and Colossus Hammer "
+               "is +10/+10 on a double striker, so a bound must price every Equipment that can reach "
+               "an attacker this combat." }; }
+    const char* Name() const override { return "ColossusHammer"; }
+};
+
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other
 // signature, so this routing is additive.
 class BreachingDragonstormProvider : public DeckProvider

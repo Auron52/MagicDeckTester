@@ -167,6 +167,10 @@ enum class Keyword
     // It exists so Scryfall's keywords array can be pasted VERBATIM (KeywordFromString throws on an
     // unmapped keyword -- see Jump's note).
     Landfall,
+    // Reconfigure (Lizard Blades): the mechanic is modelled by CardParams::reconfigure_cost. Unlike
+    // the inert tags above, this one IS read: it is the cheap no-lookup test for "an Equipment that
+    // stops being a creature while attached" in the creature-ness refresh's hot loop.
+    Reconfigure,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

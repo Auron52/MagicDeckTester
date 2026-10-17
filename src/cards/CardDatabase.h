@@ -1641,6 +1641,21 @@ struct CardParams
     // are bypassed, equip_min_power still binds. Partner is a Commander-format ability: inert here.
     bool begin_combat_attach_all = false;
 
+    // ---- Colossus Hammer deck (2026-10-17) -- the three attach routes that are NEW to the engine.
+    // They also form the deck's provider signature (DetectDecisionProvider), so a list running any
+    // one of them routes to ColossusHammerProvider rather than to KittyEquipment's EquipmentProvider.
+    //
+    // Raubahn, Bull of Ala Mhigo: "Whenever Raubahn attacks, attach up to one target Equipment you
+    // control to target attacking creature."
+    bool attack_attach_equipment = false;
+    // Magnetic Theft: "Attach target Equipment to target creature." A spell whose two targets are a
+    // searched plan axis.
+    bool attach_target_equipment = false;
+    // Lizard Blades: "Reconfigure {2}" (CR 702.151) -- attach to target creature you control, or
+    // unattach, as a sorcery; while attached it is not a creature. Not an equip ability (2022-02-18
+    // ruling), so equip-cost waivers never apply to it. nullopt = no reconfigure.
+    std::optional<ManaCost> reconfigure_cost;
+
     // Kemba, Kha Regent: at the controller's upkeep, create upkeep_token_power/toughness tokens
     // -- one per Equipment attached to THIS permanent (counted via Permanent::equipped_to).
     // Rides the existing upkeep_token_* machinery; lockstep GameEngine::UpkeepStep +

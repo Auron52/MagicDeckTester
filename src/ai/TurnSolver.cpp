@@ -16727,8 +16727,9 @@ static bool PaidPowerlessEquipWithheld(const GameState& state, const CardDefinit
     for (const Card& c : state.players[controller].hand)
     {
         if (c.m_number != host_num) { continue; }
-        return !host_earns_it(CardDatabase::Instance().LookupCached(c), 0,
-                              c.HasKeyword(Keyword::DoubleStrike));
+        // Keyword off the DEFINITION: a hand Card's keyword mask is an empty placeholder.
+        const CardDefinition* hdef = CardDatabase::Instance().LookupCached(c);
+        return !host_earns_it(hdef, 0, hdef && hdef->card.HasKeyword(Keyword::DoubleStrike));
     }
     return true;
 }
@@ -27212,7 +27213,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (c.m_number != id) { continue; }
                     st.def = CardDatabase::Instance().LookupCached(c);
                     st.pw  = st.def ? st.def->card.m_power.value_or(0) : 0;
-                    st.ds  = c.HasKeyword(Keyword::DoubleStrike);
+                    // The DEFINITION's keyword, not `c`'s: a hand Card is a bare placeholder whose
+                    // keyword mask is empty, so `c.HasKeyword` was always false and a printed double
+                    // striker still in hand (Swiftblade Vindicator, the first one in cards.json) was
+                    // ranked as a single striker.
+                    st.ds  = st.def && st.def->card.HasKeyword(Keyword::DoubleStrike);
                     return st;
                 }
                 return st;

@@ -536,6 +536,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Jump")          { return Keyword::Jump; }       // inert tag; see Keyword::Jump
     if (s == "Aura Swap")     { return Keyword::AuraSwap; }   // inert tag; param-modelled (aura_swap_cost)
     if (s == "Landfall")      { return Keyword::Landfall; }   // inert ability-word tag; landfall_* params
+    if (s == "Reconfigure")   { return Keyword::Reconfigure; } // tag; mechanic is param-modelled (reconfigure_cost)
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -1194,6 +1195,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.hone_counters_on_enter_or_attack =
         params.value("hone_counters_on_enter_or_attack", 0);
     p.begin_combat_attach_all   = params.value("begin_combat_attach_all", false);
+    // Colossus Hammer deck (2026-10-17): Raubahn's attack attach, Magnetic Theft's attach spell,
+    // Lizard Blades' reconfigure. See the declarations in CardDatabase.h.
+    p.attack_attach_equipment   = params.value("attack_attach_equipment", false);
+    p.attach_target_equipment   = params.value("attach_target_equipment", false);
+    if (params.contains("reconfigure_cost"))
+    {
+        p.reconfigure_cost = ManaCostFromString(params["reconfigure_cost"].get<std::string>());
+    }
     p.metalcraft_equip_zero_artifacts = params.value("metalcraft_equip_zero_artifacts", 0);
     p.storied_permanents        = params.value("storied_permanents", 0);
     p.storied_first_equip_free  = params.value("storied_first_equip_free", false);

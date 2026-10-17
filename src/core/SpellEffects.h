@@ -4689,9 +4689,10 @@ inline bool SoulbondNumberIsClaimed(const GameState& state, int controller, int 
 // walks the whole battlefield. Same contract as CreatureHasLifelink's granter_idx.
 //
 // NOTE on the printed keyword and `is_animated`: the three old sites skipped the HasKeyword check
-// on an animated permanent. Folding it in unconditionally is byte-identical, not a judgement call:
-// no card in cards.json carries a printed DoubleStrike keyword at all, and the only animatable
-// permanent is Mutavault (a land with no keywords), so that branch was unobservable.
+// on an animated permanent. Folding it in unconditionally was byte-identical when it was done: no
+// card in cards.json then carried a printed DoubleStrike keyword, and the only animatable permanent
+// is Mutavault (a land with no keywords), so that branch was unobservable. The Colossus Hammer deck
+// (2026-10-17) added the first printed double strikers (Swiftblade Vindicator, Lizard Blades).
 inline bool CreatureHasDoubleStrike(const Permanent& creature, const GameState& state,
                                     const std::vector<int>* ds_idx = nullptr)
 {
