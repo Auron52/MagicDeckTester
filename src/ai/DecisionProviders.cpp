@@ -33701,6 +33701,15 @@ struct Ctx
     // records that it picked a different Aura than the USER's order would (else the attempt is a repeat).
     std::vector<std::string> aura_order;
     bool        aura_order_fired = false;
+    // MTG_EDF_ROUTE_REPEAT_PREDICT (see Run): what a PARENT attempt's deploy records about the attempts
+    // that differ from it by one rule. `rec_loop`: note whether the loop-untapper rule would have fired
+    // (-> rec_loop_fired). `rec_orders[j]` / `rec_idx[j]`: the aura order of attempt rec_idx[j]; bit
+    // rec_idx[j] of rec_aura_mask is set when that order would have picked a different Aura.
+    bool        rec_loop = false;
+    bool        rec_loop_fired = false;
+    std::vector<const std::vector<std::string>*> rec_orders;
+    std::vector<int> rec_idx;
+    std::uint64_t rec_aura_mask = 0;
     int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
     std::string blink_label;
     std::string log;
@@ -34886,6 +34895,25 @@ static int PickDeployAura(Ctx& cx, const Hand& h)
             if (DefOf(ap.hand[alt]) != best_d) { cx.aura_order_fired = true; }
             pick = alt;
         }
+        else
+        {
+            // MTG_EDF_ROUTE_REPEAT_PREDICT: the USER's-order deploy records, for each later aura order,
+            // whether that order's pick here would differ -- the same computation as the branch above.
+            for (std::size_t j = 0; j < cx.rec_orders.size(); ++j)
+            {
+                const std::vector<std::string>& order = *cx.rec_orders[j];
+                int best_pos = 1 << 20, alt = pick;
+                for (int i : h.auras)
+                {
+                    const CardDefinition* d = DefOf(ap.hand[i]);
+                    if (!d) { continue; }
+                    const auto it = std::find(order.begin(), order.end(), d->card.m_name.str());
+                    const int pos = it == order.end() ? (1 << 19) : static_cast<int>(it - order.begin());
+                    if (pos < best_pos) { best_pos = pos; alt = i; }
+                }
+                if (DefOf(ap.hand[alt]) != best_d) { cx.rec_aura_mask |= 1ULL << cx.rec_idx[j]; }
+            }
+        }
         return pick;
     }
     for (int i : h.auras)
@@ -35001,6 +35029,16 @@ static bool DeployPiecesBody(Ctx& cx, bool auras_first)
                 // for it, which this rule does not price) and a loop net above zero and above the
                 // payload's own.
                 bool loop_better = false;
+                if (!cx.loop_untapper && cx.rec_loop && b.outlet != 0 && !cx.rec_loop_fired)
+                {
+                    // MTG_EDF_ROUTE_REPEAT_PREDICT: the loop rule's own test (the branch below), recorded
+                    // for the attempt that differs from this one only by the rule; this deploy is unchanged.
+                    const int blink = b.blink.ManaValue();
+                    const int cur_n = std::min(b.payload_untaps, std::max(1, b.lands));
+                    const int cur_net = YieldOfSet(cx, ChooseUntaps(cx, cur_n, b.outlet_needs_c ? 1 : 0, 0)) - blink;
+                    const int new_net = refund - blink;
+                    if (new_net > 0 && new_net > cur_net) { cx.rec_loop_fired = true; }
+                }
                 if (cx.loop_untapper && b.outlet != 0)
                 {
                     const int blink = b.blink.ManaValue();
@@ -35634,6 +35672,102 @@ static bool AttemptIsRepeat(const Ctx& cx, const Attempt& a)
     return false;
 }
 
+// ---- REPEAT PREDICTION (MTG_EDF_ROUTE_REPEAT_PREDICT, DEFAULT ON; =0 deploys every attempt) ----------
+// Every attempt after the first two differs from an earlier PARENT attempt by exactly one rule, and Run
+// throws the attempt away (AttemptIsRepeat) when that rule never changed its deploy -- but only after
+// paying for the deploy (and the snapshot restore before it) to find that out: 76,194 of the probe's
+// 330,267 deploys were such repeats. The answer is already in the parent's deploy:
+//   * the loop-untapper rule (attempts 2 / 3, and each aura order's loop variant) changes DeployPieces
+//     only in step 3, at a candidate the refund test skips, and only where its own test (loop_better)
+//     passes; the parent (the same attempt without the rule: 0 / 1 / the order's plain variant) reaches
+//     the same candidates in the same states until the first point the rule would fire, so the child
+//     fires somewhere IFF the parent meets a candidate where the test passes. The parent evaluates the
+//     test there (pure reads: ChooseUntaps / YieldOfSet) and records it, its own deploy untouched.
+//   * an aura order changes DeployPieces only through PickDeployAura's pick in step 2 (the loop rule
+//     acts in step 3, after it), and fires where its pick's definition differs from the USER's; the
+//     USER's-order deploy (attempt 0, auras first) meets the same picks until the first such point, so
+//     it records, per order, whether one exists. (A pick of a different COPY of the same card is not a
+//     fire and changes nothing: the cast finds its card by name.)
+// A child predicted not to fire would replay its parent's deploy exactly and be discarded by
+// AttemptIsRepeat (the board path's "nothing deployed" test, which comes first, is likewise the
+// parent's) -- so skipping it returns what Run returned. Recording needs the parent's deploy to have run
+// in THIS Run (the hand path skips attempt 1 behind a held DEVELOP; its child is then deployed as before).
+// MTG_EDF_ROUTE_REPEAT_PREDICT_VERIFY=1 deploys every predicted repeat anyway and counts any that Run
+// would not have discarded.
+inline bool RepeatPredictOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_REPEAT_PREDICT", true); return v; }
+inline bool RepeatPredictVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_REPEAT_PREDICT_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_rp_pred{0}, g_rp_bad{0};
+struct RepeatPredictVerifyPrinter
+{
+    ~RepeatPredictVerifyPrinter()
+    {
+        if (!RepeatPredictVerify()) { return; }
+        std::fprintf(stderr, "[route-repeat] verify: %llu predicted repeats, %llu MISMATCHES\n", g_rp_pred.load(), g_rp_bad.load());
+    }
+};
+inline RepeatPredictVerifyPrinter g_rp_printer;
+struct RepeatRec { bool done = false; bool loop_fired = false; std::uint64_t aura_mask = 0; };
+class RepeatPredictor
+{
+public:
+    RepeatPredictor(const std::vector<Attempt>& at, bool on) : m_at(at), m_on(on && at.size() <= 64)
+    { if (m_on) { m_rec.resize(at.size()); } }
+    // Would attempt k replay its parent's deploy (and so be discarded)?
+    bool PredictRepeat(int k) const
+    {
+        if (!m_on) { return false; }
+        const Attempt& a = m_at[static_cast<std::size_t>(k)];
+        const bool order = !a.aura_order.empty();
+        if (order && m_rec[0].done && !((m_rec[0].aura_mask >> k) & 1u)) { return true; }
+        if (a.loop)
+        {
+            const int p = Parent(k);
+            if (p >= 0 && m_rec[static_cast<std::size_t>(p)].done && !m_rec[static_cast<std::size_t>(p)].loop_fired) { return true; }
+        }
+        return false;
+    }
+    // Arm the recording for attempt k's deploy (after ArmAttempt).
+    void Arm(Ctx& cx, int k) const
+    {
+        cx.rec_loop = false; cx.rec_loop_fired = false; cx.rec_orders.clear(); cx.rec_idx.clear(); cx.rec_aura_mask = 0;
+        if (!m_on) { return; }
+        const Attempt& a = m_at[static_cast<std::size_t>(k)];
+        if (a.loop) { return; }
+        for (std::size_t c = 0; c < m_at.size(); ++c) { if (Parent(static_cast<int>(c)) == k) { cx.rec_loop = true; } }
+        if (k == 0)
+        {
+            for (std::size_t c = 0; c < m_at.size(); ++c)
+            {
+                if (m_at[c].aura_order.empty()) { continue; }
+                cx.rec_orders.push_back(&m_at[c].aura_order);
+                cx.rec_idx.push_back(static_cast<int>(c));
+            }
+        }
+    }
+    void Record(const Ctx& cx, int k)
+    {
+        if (!m_on) { return; }
+        RepeatRec& r = m_rec[static_cast<std::size_t>(k)];
+        r.done = true; r.loop_fired = cx.rec_loop_fired; r.aura_mask = cx.rec_aura_mask;
+    }
+private:
+    // The attempt a loop variant differs from by the loop rule alone: same auras_first, same order, no rule.
+    int Parent(int k) const
+    {
+        const Attempt& a = m_at[static_cast<std::size_t>(k)];
+        if (!a.loop) { return -1; }
+        for (int c = 0; c < static_cast<int>(m_at.size()); ++c)
+        {
+            const Attempt& b = m_at[static_cast<std::size_t>(c)];
+            if (!b.loop && b.auras_first == a.auras_first && b.aura_order == a.aura_order) { return c; }
+        }
+        return -1;
+    }
+    const std::vector<Attempt>& m_at;
+    bool                        m_on;
+    std::vector<RepeatRec>      m_rec;
+};
+
 static int Run(Ctx& cx, int forced = kRunUnforced)
 {
     if (RouteWon(cx)) { return 1; }
@@ -35654,19 +35788,35 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
             if (direct == 1) { cx.attempt_used = -1; return 1; }
             if (direct == 2) { direct_state = cx.s; direct_ctx.emplace(cx); }
         }
+        RepeatPredictor rp(at, forced < 0 && RepeatPredictOn());
         for (int attempt = 0; attempt < attempts; ++attempt)
         {
             if (forced >= 0 && attempt != forced) { continue; }
             const Attempt& a = at[static_cast<std::size_t>(attempt)];
+            const bool predicted = rp.PredictRepeat(attempt);   // MTG_EDF_ROUTE_REPEAT_PREDICT (see above)
+            if (predicted && !RepeatPredictVerify()) { continue; }
             RestoreCtx(cx, snapshot, saved);
             ArmAttempt(cx, a);
+            rp.Arm(cx, attempt);
             const Snap before = TakeSnap(cx);
             DeployPieces(cx, a.auras_first);
+            rp.Record(cx, attempt);
             // Nothing deployed: this is the loop that already failed above -- do not pay for it twice.
-            if (forced < 0 && SameSnap(TakeSnap(cx), before)
+            const bool nothing = forced < 0 && SameSnap(TakeSnap(cx), before)
                 && cx.s.players[cx.me].lands_played_this_turn
-                   == snapshot.players[cx.me].lands_played_this_turn) { continue; }
-            if (forced < 0 && AttemptIsRepeat(cx, a)) { continue; }
+                   == snapshot.players[cx.me].lands_played_this_turn;
+            const bool repeat = nothing || (forced < 0 && AttemptIsRepeat(cx, a));
+            if (predicted)
+            {
+                g_rp_pred.fetch_add(1, std::memory_order_relaxed);
+                if (!repeat)
+                {
+                    g_rp_bad.fetch_add(1, std::memory_order_relaxed);
+                    std::fprintf(stderr, "[route-repeat] MISMATCH t%d: board attempt %d predicted a repeat\n", cx.s.turn_number, attempt);
+                }
+                continue;
+            }
+            if (repeat) { continue; }
             cx.protect_blink = true;
             const int r = Loop(cx);
             cx.protect_blink = false;
@@ -35693,14 +35843,30 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
     int                held = 0, held_attempt = -1;
     GameState          held_state;
     std::optional<Ctx> held_ctx;
+    RepeatPredictor rp(at, forced < 0 && RepeatPredictOn());
     for (int attempt = 0; attempt < attempts; ++attempt)
     {
         if (forced >= 0 && attempt != forced) { continue; }
         if (held != 0 && attempt < 2) { continue; }
         const Attempt& a = at[static_cast<std::size_t>(attempt)];
+        const bool predicted = rp.PredictRepeat(attempt);   // MTG_EDF_ROUTE_REPEAT_PREDICT (see above)
+        if (predicted && !RepeatPredictVerify()) { continue; }
         if (attempt > 0) { RestoreCtx(cx, snapshot, saved); }
         ArmAttempt(cx, a);
-        if (DeployPieces(cx, a.auras_first))
+        rp.Arm(cx, attempt);
+        const bool deployed = DeployPieces(cx, a.auras_first);
+        rp.Record(cx, attempt);
+        if (predicted)
+        {
+            g_rp_pred.fetch_add(1, std::memory_order_relaxed);
+            if (deployed && !AttemptIsRepeat(cx, a))
+            {
+                g_rp_bad.fetch_add(1, std::memory_order_relaxed);
+                std::fprintf(stderr, "[route-repeat] MISMATCH t%d: hand attempt %d predicted a repeat\n", cx.s.turn_number, attempt);
+            }
+            continue;
+        }
+        if (deployed)
         {
             if (forced < 0 && AttemptIsRepeat(cx, a)) { continue; }
             const int r = Loop(cx);
