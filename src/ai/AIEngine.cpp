@@ -464,6 +464,24 @@ inline std::atomic<unsigned long long> g_bp_base{0}, g_bp_mismatch{0};
 // actually ran GREEDY (rollout twins, or the lever's =0 hatch) -- the number the user's
 // "no greedy decisions" bar reads, which must be zero in real play at defaults.
 inline std::atomic<unsigned long long> g_bp_searched{0};
+// ...and of those, the re-solves whose chosen plan carries a POST-APPLY pin -- a state pin read in this
+// turn's combat / cleanup / next upkeep, or the end-of-main sweep / Land's Edge count / dig -- that the
+// executor does NOT realize: the continuation's casts run under ContPins (during-cast pins only), so
+// the realized combat and end step follow the COMMITTED plan's pins. A realized-vs-scored divergence
+// against the re-solve's own scoring (it applied the pin in its rollouts). Diagnostic; see
+// docs/design/no-greedy-in-search-window.md.
+inline std::atomic<unsigned long long> g_bp_searched_pin_unrealized{0};
+inline void RecordReSolvePins(const TurnSolver::Plan& p)
+{
+    if (!Enabled()) { return; }
+    const bool post_apply = p.lackey_choice >= 0 || p.fling_victim_choice != -1
+        || p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0 || p.bruna_gather_choice >= 0
+        || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0
+        || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
+        || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
+        || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
+    if (post_apply) { g_bp_searched_pin_unrealized.fetch_add(1, std::memory_order_relaxed); }
+}
 inline void Record(int depth, bool in_rollout)
 {
     if (!Enabled()) { return; }
@@ -482,9 +500,11 @@ struct Dumper
     {
         if (!Enabled()) { return; }
         std::fprintf(stderr, "=== EXECUTOR GREEDY Solve(): in-rollout=%llu breakpoint-fallback=%llu"
-                     " (base=%llu MISMATCH=%llu searched-resolve=%llu)"
+                     " (base=%llu MISMATCH=%llu searched-resolve=%llu, of which post-apply pin"
+                     " UNREALIZED=%llu)"
                      " | REAL main-phase decisions by depth:", g_rollout.load(), g_bp.load(),
-                     g_bp_base.load(), g_bp_mismatch.load(), g_bp_searched.load());
+                     g_bp_base.load(), g_bp_mismatch.load(), g_bp_searched.load(),
+                     g_bp_searched_pin_unrealized.load());
         bool any = false;
         for (int i = 0; i < 12; ++i)
         {
@@ -5057,6 +5077,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                        m_lookahead_depth, m_max_turns,
                                                        &bp_budget, true,
                                                        m_search_post_combat, m_shared_tt);
+                execgreedy::RecordReSolvePins(extra);
             }
             else
             {
@@ -5627,6 +5648,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                                    m_lookahead_depth, m_max_turns,
                                                                    &bp_budget, true,
                                                                    m_search_post_combat, m_shared_tt);
+                            execgreedy::RecordReSolvePins(extra);
                         }
                         else
                         {
