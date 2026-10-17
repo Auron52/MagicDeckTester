@@ -427,6 +427,12 @@ re-solve had scored its own. Now:
   writes the discard / Vial / dork attack-hold members with the same rule, and the end-of-main block takes
   the sweep, Land's Edge count and dig choice from the LAST re-solve (installed unconditionally, as
   ApplyPlanDirect's scopes install them).
+* The re-solve's PAYMENT PINS too (2026-10-17, follow-up): `PlanPaymentPinScope` (ai/ContPinScope.h) is
+  the one body installing a plan's tap-mode / fresh-spend pair, unconditionally, for every payment of the
+  apply. ApplyPlanDirect, the executor's committed plan and the re-solve all use it. Before, the re-solve's
+  casts and the rest of the phase were paid under the committed plan's pair, while its scoring had paid
+  each candidate under its own. The fresh-spend axis is ON. A rollout breakpoint continuation still pays
+  under the outer plan's pair (it is part of that plan's apply), so only the searched re-solve installs one.
 * `MTG_M2_YIELD_STATS=1` reports CARRIED (re-solves whose plan holds a post-apply pin), UNREALIZED (of
   those, the pins not in force at the end-of-main hand-over; must read 0) and DIG-UNRUN (below).
 

@@ -43695,10 +43695,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // an outer plan's unconsumed pin. Executor twin: AIEngine::TakeTurn.
     const int put_bounce_pin = PutBouncePinOf(plan.bounce_choice, plan.land_decided, plan.land_to_play);
     ScriptedPutBounce _spb(put_bounce_pin);
-    // Searched hold-vs-tap of the mana creatures. Scoped like the pins above, but NOT consumed by
-    // its first reader: every payment in the apply -- the whole-turn prepay and any post-draw
-    // re-solve -- must see the same mode, or one plan would be scored under two payment policies.
-    ScriptedTapMode _stm(plan.tapmode_choice);
+    // The plan's WHOLE-APPLY PAYMENT PINS -- searched hold-vs-tap of the mana creatures and the
+    // fresh-mint release (MTG_FRESH_SPEND_AXIS). Scoped like the pins above, but NOT consumed by a
+    // reader: every payment in the apply -- the whole-turn prepay and any post-draw re-solve -- must
+    // see the same pair, or one plan would be scored under two payment policies; the deferred-
+    // breakpoint re-solve after a mint prices under the same world as the prepay. ONE body with the
+    // executor's committed plan and its searched breakpoint re-solve (PlanPaymentPinScope).
+    PlanPaymentPinScope _pay(plan);
     // What this line still owes for casts it has not paid yet, so a mid-line greedy sink (replicate)
     // cannot spend a later cast's mana and get it dropped. Built from the plan's own action costs --
     // the SAME numbers the subset math afforded the plan with -- and decremented in apply_one as each
@@ -43710,9 +43713,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // segment, which this process cannot see, so the viewer declares it. 0 for every plan that
     // declared none, i.e. every rollout and every autonomous apply.
     HumanUntapNeedScope _hun(plan.human_untap_need);
-    // Searched fresh-mint release (MTG_FRESH_SPEND_AXIS): same whole-plan static pin -- the
-    // deferred-breakpoint re-solve after the mint must price under the same world as the prepay.
-    ScriptedFreshMode _sfm(plan.freshmode_choice);
 
     // The plan's post-apply STATE pins (combat triggers, next draw / upkeep), write-when-set -- the
     // shared body (TurnSolver::WritePostApplyStatePins), which the executor runs for its committed plan
