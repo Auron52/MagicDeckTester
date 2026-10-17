@@ -459,6 +459,21 @@ with a distinct number in case we choose to do condemnation later"*.
   **d5 unbudgeted, all three win T6 under the prune, as under ord** -- budget allocation at b20, not a lost
   line. **s2001057** (gen T8, every ordered arm unwon by the T8 cap): parts at T4 on which cards to cast
   (Wilds + Khalni + crack vs SfT + Fengraf), then the same shuffle divergence.
+- **Tiers** (full smoke + full regression, rebased onto origin cb69d73ec): every other case byte-identical
+  (117 smoke / 161 regression). Landfall smoke d0 7.6040 -> 7.5910, d3/d5 avg unchanged; regression d0
+  7.6290 -> 7.6220, d3 s2002 5.8750 -> 5.8500, d5 s3003 5.9000 -> 5.8500. Searched slower: smoke d3 gi23
+  (churn: T6 at 16x budget) and **regression d3 s2002 gi37 (6 -> 7, PERSISTS at d3 b0)**. Bisected: the
+  bucket discard alone moves it. The arms part at T1 (Radiant Fountain vs Terramorphic + crack), because
+  the leaf playouts shed by the rule, and then draw different cards; its T2 cleanup shed (Titan) is an
+  all-T7 tie in the searched trial table. Accepted with `--deck=landfall`; `check_gt_logs` consistent.
+- **5i rule-vs-searched labels** (`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1 MTG_LANDFALL_DISCARD_FAN=1`,
+  5,000 games d3 b10 + d5 b20, `logs/castorder/labels/`): **93 real sheds, 70 all-tie, 22 rule-optimal,
+  1 regret** -- s2312103 T2: hand RG, Myriad, Khalni, SfT, Fountain + Avenger, Titan, Genesis Wave; the
+  rule kept all five mana cards (the 7-source target counts CARDS, though Khalni and Myriad each fetch two)
+  and ranked Avenger third by castability (7 vs Titan 6 / Wave priced 6), so it shed Avenger (T7); any
+  other discard keeps T6. Read as a visible-info miss, not clairvoyance. Two amendments for the USER (not
+  built): castability as a GATE (can it be cast within the window?) with the rank deciding among the
+  castable; and pricing the mana target by mana produced, not cards.
 
 ## Hand-played references s1-s10 — bench before the value leaf (2026-10-16, de730cadf)
 `ref_bench.py` at the shipped play setting (d5 b20, no value leaf, no keep table): human 6.000, search
