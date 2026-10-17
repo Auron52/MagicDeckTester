@@ -511,8 +511,8 @@ with a distinct number in case we choose to do condemnation later"*.
     seed luck, which the paired run corrected.
   - Tiers with the Khalni rule + gate on: every other case byte-identical (119 smoke / 164 regression);
     Landfall digests only (3 + 6 games play-changed, 0 slower, 0 faster). Accepted with `--deck=landfall`.
-  - USER 2026-10-17 ("that sounds sensible"): the gate ON, the mana lever deleted. Still open: Courser's place
-    in the rank (last, the author's call), now the gate's usual shed.
+  - USER 2026-10-17 ("that sounds sensible"): the gate ON, the mana lever deleted. Courser's place in the rank
+    (last, the gate's usual shed) is CONFIRMED by the USER 2026-10-17: "Courser last is fine for landfall".
 
 ## Hand-played references s1-s10 — bench before the value leaf (2026-10-16, de730cadf)
 `ref_bench.py` at the shipped play setting (d5 b20, no value leaf, no keep table): human 6.000, search
@@ -684,7 +684,7 @@ doctrine 2026-08-21: quota-first, net of board, fungible upward, distance-to-pla
 Shed order inside an over-full bucket = distance-to-playable (board+hand mana vs the card's cost, colour
 included: Omnath needs RR, Phylath R), so a 7-8 drop on a 3-land board sheds before a castable 6-drop.
 Courser ranks last among threats because it is the only one that is not a payoff (it plays lands and
-gains life); Genesis Wave sits mid-rank because its X scales with exactly the mana this deck makes.
+gains life; USER 2026-10-17: "Courser last is fine for landfall"); Genesis Wave sits mid-rank because its X scales with exactly the mana this deck makes.
 Doubts flagged: (1) the threat rank is my judgement from card text, not mined (the 5g miner's
 INCLUSION report is the evidence to re-rank on); (2) Khalni is filed under RAMP though it is also a
 landfall payoff — it only pays off by being cracked for lands, so RAMP is its role. NOT implemented:
