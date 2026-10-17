@@ -174,7 +174,7 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
-- flags: 5 unresolved      # flag 3 FIXED 9674c1cb6; fixes in flight on colossus-aid / colossus-fold; updated as they land
+- flags: 2 unresolved      # 3 FIXED 9674c1cb6; 4-6 FIXED (fold commit, rebased onto 4e823e60e); 1 = USER cast-order call; 2 in flight (colossus-aid)
 
 Results (search d5 b200 vs Claude, win turn): 2100001 4/4, 2100002 2/2, 2100003 5/5, 2100004 3/3, 2100005 4/4,
 2100006 5/5, 2100007 **7/2** (Claude kept a 1-lander seeing 6 draws; the static keep mulliganed to 5 -- a keep-table
@@ -199,11 +199,19 @@ Flags, verified against cards.json + the code:
    cast needed a different tapping could be undervalued (plausible, unproven; mana payment is a standing exemption,
    so changing it is a quality A/B, not a no-greedy fix).
 4. **CONFIRMED** (2100003): "reconfigure Lizard Blades onto X, then equip the Hammer onto Lizard Blades" is offered;
-   the equip has no legal target but still consumes Forge Anew's first-equip waiver. IN FLIGHT (`colossus-fold`).
+   the equip has no legal target but still consumes Forge Anew's first-equip waiver. **FIXED** (fold commit): an equip onto
+   a non-creature host on our battlefield is never activated (nothing paid, waiver not spent, both worlds:
+   `EquipTargetNotACreatureNow`), and the subset filter drops the reconfigure-then-equip plan (`SubsetHasEquipOntoAttachedPiece`).
 5. **Width** (2100003, 2100017, 2100018): dominated no-op attach sequences (a Theft whose host reconfigures away; a
-   Theft a later equip overwrites, on a same-plan hand-cast Equipment; ONE hand Hammer Theft'd twice). IN FLIGHT (`colossus-fold`).
+   Theft a later equip overwrites, on a same-plan hand-cast Equipment; ONE hand Hammer Theft'd twice). **FIXED** (fold
+   commit): the Theft folds now cover a hand piece whose identity is pinned (exactly one same-name cast, none entered
+   this turn); s2100003 T5 menu 173 -> 65 plans, every dropped plan has a smaller twin on the menu. Smoke: only
+   Colossus moved -- searched 0 slower / 0 faster / 9 same-turn (the double-Theft line replaced by its cheaper twin), d0
+   1 faster (gi448 T7 -> T6). Follow-ups in `docs/design/colossus-attach-fold-followups.md`; the equip/reconfigure
+   host identity fold (two identical Speakers double every plan) is IN FLIGHT on the same agent.
 6. **CONFIRMED, human default only** (2100005, 2100017): Path to Exile's preselected target ranks by printed power
-   (Equipment ignored), so it defaults to the Hammer carrier. IN FLIGHT (`colossus-fold`).
+   (Equipment ignored), so it defaults to the Hammer carrier. **FIXED** (fold commit): `RemovalHumanDefaultTarget` ranks by
+   `EquipGatePowerOf` (s2100017: default moves from the 13/13 Lizard Blades to Speaker).
 7. DISMISSED as by-design, raised to the USER (every agent): human play gets a FULL post-combat main
    (`AIEngine.cpp` play_this_phase `|| use_external`), the search only Speaker's narrow one -- so a hand-played
    reference can use a post-combat Theft re-host / reconfigure the search cannot express. See USER question 5.
