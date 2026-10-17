@@ -32297,6 +32297,80 @@ inline bool RemovalControllerCastLegal(const GameState& s, int me, int enchant_t
     return false;
 }
 
+// Can a spell cast by `controller` TARGET this permanent? Shroud forbids every player, hexproof only an
+// opponent (CR 702.18a / 702.11b). Protection is not modelled anywhere in the engine (see AuraCouldEnchant).
+inline bool SpellCanTargetPermanent(const GameState& s, int controller, const Permanent& p)
+{
+    if (p.card.IsCreature() || p.is_animated) { return CreatureTargetableByAuraSpell(p, s, controller); }
+    if (p.card.IsLand() && LandHasShroud(p, s)) { return false; }
+    if (p.controller_index != controller && p.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+
+// CAN THIS FREE-CAST HIT BE CAST AT ALL? -- the ONE legality test every "you may cast it without paying
+// its mana cost" walk reads, in BOTH worlds: cascade (CR 702.85a), Creative Technique's reveal and
+// Breaching Dragonstorm's enter trigger -- TurnSolver's ApplyPlanDirect walks before their apply_one
+// recursion, and EffectHandler::PushFreeCast (the executor's cast for all three), whose callers also
+// skip the human free-cast prompt when this is false. A spell that needs targets cannot be cast without
+// a legal choice for each (CR 601.2c), so such a hit is NOT cast and takes its walk's not-cast zone:
+// cascade puts it on the bottom with the other exiled cards (CR 702.85a: "all cards exiled this way
+// that weren't cast", in a random order -- modelled deterministically, the hit under the walked cards,
+// exactly as a declined hit); Creative Technique leaves it in exile; Breaching Dragonstorm puts it into
+// your hand. Before this the rollout put the hit into HAND, then apply_one's Path guard refused it and
+// it stayed there; the executor cast it with no target at all.
+// Per class, over the objects the engine models (no free cast carries a plan target):
+//   * Aura (CR 303.4a: it targets what it will enchant): LegalEnchantTargets -- the engine's Aura fold
+//     (our own creatures / lands, the Enchant restriction, shroud) -- is non-empty;
+//   * Magnetic Theft (attach_target_equipment): some legal (Equipment, creature) pair;
+//   * Path to Exile (controller-search removal): RemovalControllerCastLegal with no plan target -- the
+//     same test apply_one makes before it pays, so a hit this passes is never refused there. With only
+//     our own creatures that is false outside human play: casting it on our own creature is legal, but
+//     without a plan target neither world could name one, and declining is always allowed ("may");
+//   * target creature (burn, pump, Swords) / player + creature that player controls (Searing Blaze):
+//     some creature this player can target; target nonland permanent: some such permanent;
+//   * any target / target player, and a spell with no target: always castable here (a player is always
+//     a legal target in this engine).
+// Mana value, the Irencrag budget and the MV gates are the walks' own checks, not target legality.
+inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const CardDefinition& d)
+{
+    const CardParams& pp = d.params;
+    if (pp.is_aura) { return !LegalEnchantTargets(s, controller, pp).empty(); }
+    if (pp.attach_target_equipment)
+    {
+        for (const Permanent& e : s.battlefield)
+        {
+            if (e.controller_index != controller) { continue; }
+            for (const Permanent& h : s.battlefield)
+            {
+                if (AttachTargetEquipmentLegal(s, controller, e.card.m_number, h.card.m_number)) { return true; }
+            }
+        }
+        return false;
+    }
+    if (RemovalSearchesForController(d))
+    {
+        return RemovalControllerCastLegal(s, controller, 0, HumanPlayActive() || g_play_target_chooser != nullptr);
+    }
+    switch (pp.targeting)
+    {
+        case Targeting::Creature:
+        case Targeting::Multi:
+            for (const Permanent& p : s.battlefield)
+            {
+                if ((p.card.IsCreature() || p.is_animated) && SpellCanTargetPermanent(s, controller, p)) { return true; }
+            }
+            return false;
+        case Targeting::NonlandPermanent:
+            for (const Permanent& p : s.battlefield)
+            {
+                if (!p.card.IsLand() && SpellCanTargetPermanent(s, controller, p)) { return true; }
+            }
+            return false;
+        default:
+            return true;
+    }
+}
+
 // The human's default when the plan names no own target: our LOWEST-power legal creature (the cheapest
 // body to trade for a tapped basic), else the opponent target. -1 = nothing legal.
 //

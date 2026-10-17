@@ -45587,14 +45587,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                            seen_nums, seen_names, kept, bottomed);
             }
             const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
-            bool take = fd != nullptr
+            // A hit with no legal target cannot be cast (CR 601.2c; the shared FreeCastHasLegalTargets,
+            // the executor's PushFreeCast test): not offered, it stays exiled like a declined one.
+            const bool castable = fd != nullptr
+                && FreeCastHasLegalTargets(state, state.active_player_index, *fd);
+            bool take = castable
                 && ResolveProvider(state).TakeFreeCast(state, state.active_player_index, *fd);
             // Human free-cast chooser -- consulted HERE because the real claude-play/viewer game
             // executes plans through THIS lambda, not EffectHandler's stack resolvers (the
             // 2026-07-01 retrace-chooser lesson, re-learned by the 5d sweep: the decision never
             // surfaced until this call existed). Nulled in every search/rollout scope
             // (RevealLogPause) -> autonomous play byte-identical.
-            if (g_play_free_cast_chooser)
+            if (castable && g_play_free_cast_chooser)
             {
                 std::vector<Card> cands{ found };
                 take = ((*g_play_free_cast_chooser)(state, state.active_player_index,
@@ -45683,10 +45687,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 if (!have) { continue; }
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(hit);
-                bool take = hd != nullptr
+                // A hit that cannot be cast -- no legal target, CR 601.2c (the shared
+                // FreeCastHasLegalTargets, the executor's PushFreeCast test) -- is not offered and goes
+                // to the bottom with the walked cards, as a declined one (CR 702.85a). It used to be put
+                // into HAND for the apply_one recursion, whose Path guard then refused it there.
+                const bool castable = hd != nullptr
+                    && FreeCastHasLegalTargets(state, state.active_player_index, *hd);
+                bool take = castable
                     && ResolveProvider(state).TakeFreeCast(state, state.active_player_index, *hd);
                 // Human free-cast chooser at the REAL resolution path (see the CT payload note).
-                if (g_play_free_cast_chooser)
+                if (castable && g_play_free_cast_chooser)
                 {
                     std::vector<Card> cands{ hit };
                     take = ((*g_play_free_cast_chooser)(state, state.active_player_index,
@@ -45747,7 +45757,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const int mv  = fd ? fd->card.m_mana_cost.ManaValue()
                                        : found.m_mana_cost.ManaValue();
                     const int cap = bd ? bd->params.etb_exile_free_cast_max_mv : 0;
+                    // ...and no legal target = cannot be cast (FreeCastHasLegalTargets): to hand.
                     bool take = (mv <= cap) && fd != nullptr
+                        && FreeCastHasLegalTargets(state, pe.controller, *fd)
                         && ResolveProvider(state).TakeFreeCast(state, pe.controller, *fd);
                     // Human free-cast chooser at the REAL resolution path (see the CT payload
                     // note). Only offered when the MV gate allows the cast at all.
