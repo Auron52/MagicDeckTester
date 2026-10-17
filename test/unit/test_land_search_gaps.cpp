@@ -793,3 +793,32 @@ TEST_CASE("Idle pass: an inherited crack / attack pick makes the front a variant
     CHECK(HasLs(va, 0, -1));                          // the all-front pick is reachable
     CHECK_FALSE(HasLs(va, 1, -1));
 }
+
+// ---- THE POST-APPLY STATE PINS, one body for both worlds (2026-10-17; TurnSolver::WritePostApplyStatePins)
+// ApplyPlanDirect's preamble and the executor (its committed plan, and a breakpoint re-solve's plan) write the
+// same fields the same way: WRITE-WHEN-SET, so a re-solve's plan that did not branch on an axis leaves the
+// committed plan's pin standing (what the re-solve's own ApplyPlanDirect scored), and one that did replaces it.
+TEST_CASE("Post-apply state pins: write-when-set over the pins a state already holds")
+{
+    GameState s = FreshG(6);
+    s.scripted_bruna_gather        = 2;   // the committed plan's pins
+    s.scripted_attack_land_search  = 1;
+    s.scripted_saga_target         = 0;
+    TurnSolver::Plan x;                   // a re-solve's plan: two pins of its own, the rest unset
+    x.attack_attach_choice      = 3;
+    x.combat_crack_choice       = 0;      // an explicit "crack nothing" is a value, written
+    x.fling_victim_choice       = -2;     // a pinned DECLINE is a value too (the != -1 guard)
+    TurnSolver::WritePostApplyStatePins(s, x);
+    CHECK(s.scripted_attack_attach == 3);
+    CHECK(s.scripted_combat_land_search_crack == 0);
+    CHECK(s.scripted_fling_victim == -2);
+    CHECK(s.scripted_bruna_gather == 2);          // unset on the plan -> inherited, untouched
+    CHECK(s.scripted_attack_land_search == 1);
+    CHECK(s.scripted_saga_target == 0);
+    CHECK(s.scripted_cheat_choice == -1);
+    TurnSolver::Plan y;
+    y.bruna_gather_choice = 0;                    // a later re-solve picks the front explicitly
+    TurnSolver::WritePostApplyStatePins(s, y);
+    CHECK(s.scripted_bruna_gather == 0);
+    CHECK(s.scripted_attack_attach == 3);
+}
