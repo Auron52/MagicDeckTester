@@ -1,4 +1,4 @@
-# Regression ground truth -- commit aecb9c84f  date 2026-10-17
+# Regression ground truth -- commit 3a13decc0  date 2026-10-17
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
@@ -12,6 +12,7 @@
 # accepted-with-regressions (overnight, 2026-10-17): colossus: deck ADDED to all three tiers with the overnight ENTRY set (12 NEW keys, d0 4x2000, d3 4x400 b10, d5 4x300 b20; analysis-Colossus Hammer.md), PGO binary of 0d410db07, makespan 2m23s. Expands to the FULL set just before a keep table is adopted.
 # accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17: attach folds (7b5863d22) + USER-ruled Sigarda's Aid host heuristic (8f2b54551); 0 slower; searched 13 same-turn line changes, d0 7 faster; every other deck byte-identical in the same combined run
 # accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17 (2): Magnetic Theft every-pair offer + joint mirror fold (aecb9c84f); searched 0 slower / 3 same-turn; d0 gi539 T6->unwon (d0 greedy tie-break picks a self-Path that exiles its only attacker; RECOVERS stage 1, d6 b100 T3), gi344 T7->T6; every other deck byte-identical
+# accepted-with-regressions (regression, 2026-10-17): colossus + snow regression 2026-10-17: colossus = attach folds, USER-ruled Sigarda's Aid host heuristic, Theft every-pair/per-copy offers (searched 16 same-turn line changes, d0 6 faster); snow d3 s2002 gi31 = the breakpoint MISMATCH fix (pre-target occurrences mirror the scored line), same T7; 0 slower anywhere; every other deck byte-identical; refs 600/0 drift
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -299,7 +300,7 @@ bruna_regression_d3_s3003=5.0400/6cc9668f814044ea
 bruna_regression_d5_s2002=5.0533/09c2610f602f6a8a
 bruna_regression_d5_s3003=5.1067/c752158471e4e572
 snow_regression_d0_s2002=6.2000/84ab754e3ba4031c
-snow_regression_d3_s2002=5.7000/9ed8505f65cfbc52
+snow_regression_d3_s2002=5.7000/a366ba71c35f920c
 snow_regression_d3_s3003=5.7000/34f95b27767ff9d4
 snow_regression_d5_s2002=5.6667/672a8d6ba4950919
 snow_regression_d5_s3003=5.7667/6cc882e78899ed4a
@@ -308,11 +309,11 @@ landfall_regression_d3_s2002=5.8500/014e3ca6627739e7
 landfall_regression_d3_s3003=5.8500/e2263cccef69817e
 landfall_regression_d5_s2002=5.7500/a853da5da0b9df8a
 landfall_regression_d5_s3003=5.8500/0e4a470dfa01a812
-colossus_regression_d0_s2002=5.1660/e0b01470090e77bd
-colossus_regression_d3_s2002=3.8533/7eac18eb6174c3a6
-colossus_regression_d3_s3003=3.6867/cd66e7e34dc27a5a
-colossus_regression_d5_s2002=3.7333/e85f88e5fd473bb5
-colossus_regression_d5_s3003=3.5867/50136e0520c91ccc
+colossus_regression_d0_s2002=5.1590/ddf66f2faa4a52b3
+colossus_regression_d3_s2002=3.8533/720d4d19b618031f
+colossus_regression_d3_s3003=3.6867/346b3c0fbdbd3491
+colossus_regression_d5_s2002=3.7333/02988fa191b911a9
+colossus_regression_d5_s3003=3.5867/e154c216a91edf4e
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6540/d6b7b03035b25cc2
