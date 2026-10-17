@@ -36094,10 +36094,66 @@ inline RouteDiagPrinter g_rd_printer;
 // shared the thread decided both what it could hit and WHEN the 65,536-entry clear fired -- the
 // cross-game history channel docs/design/batch-run-to-run-nondeterminism.md rules out. Within one
 // game the memo is kept: there the hit pattern is a function of the game alone.
+// ---- THE APPLY REUSES ITS TRIAL (MTG_EDF_ROUTE_APPLY_REUSE, DEFAULT ON; =0 re-runs the trial) ---------
+// EdfComboRouteApply opens with a silent trial on a copy -- Run(copy), exactly what EdfComboRouteTrial
+// ran when it emitted the action -- only to learn which attempt to replay live (cx.attempt_used; the memo
+// keeps the verdict alone). So a nonzero trial now leaves (its input state, verdict, attempt) here, and
+// the apply takes them when its state is the SAME state: compared by the full signature (RouteSig, every
+// writable field), element for element, never by the hash that only buckets the entries. Run is a
+// deterministic function of that state under the same pauses (both sites run it under RevealLogPause +
+// ComboOffApplyPause, unforced, on a fresh Ctx), and within one game the process-level inputs it reads
+// (env levers, the per-job arm, the deck constants RouteSig leaves out) are fixed; the cache is cleared
+// with the memo, per game. A miss runs the trial as before. MTG_EDF_ROUTE_APPLY_REUSE_VERIFY=1 runs the
+// trial on every hit too and counts any verdict or attempt that differs.
+namespace comboroute
+{
+inline bool ApplyReuseOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_APPLY_REUSE", true); return v; }
+inline bool ApplyReuseVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_APPLY_REUSE_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_ar_hits{0}, g_ar_miss{0}, g_ar_bad{0};
+struct ApplyReuseVerifyPrinter
+{
+    ~ApplyReuseVerifyPrinter()
+    {
+        if (!ApplyReuseVerify()) { return; }
+        std::fprintf(stderr, "[route-apply] verify: %llu reused trials (%llu applies missed), %llu MISMATCHES\n",
+                     g_ar_hits.load(), g_ar_miss.load(), g_ar_bad.load());
+    }
+};
+inline ApplyReuseVerifyPrinter g_ar_printer;
+struct TrialAttempt { std::vector<long long> sig; int r = 0, attempt = -1; };
+struct TrialAttemptCache { std::unordered_multimap<std::uint64_t, TrialAttempt> m; };
+inline TrialAttemptCache& AttemptCache() { static thread_local TrialAttemptCache c; return c; }
+inline std::uint64_t SigHash(const std::vector<long long>& v)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    for (long long x : v) { h ^= static_cast<std::uint64_t>(x); h *= 1099511628211ULL; }
+    return h;
+}
+inline void AttemptCacheStore(const GameState& s, int r, int attempt)
+{
+    TrialAttemptCache& c = AttemptCache();
+    if (c.m.size() > 4096) { c.m.clear(); }   // bounded; only the hit rate depends on it
+    TrialAttempt e; RouteSig(s, e.sig); e.r = r; e.attempt = attempt;
+    const std::uint64_t h = SigHash(e.sig);
+    c.m.emplace(h, std::move(e));
+}
+inline const TrialAttempt* AttemptCacheFind(const GameState& s)
+{
+    TrialAttemptCache& c = AttemptCache();
+    if (c.m.empty()) { return nullptr; }
+    static thread_local std::vector<long long> sig;
+    RouteSig(s, sig);
+    const auto range = c.m.equal_range(SigHash(sig));
+    for (auto it = range.first; it != range.second; ++it) { if (it->second.sig == sig) { return &it->second; } }
+    return nullptr;
+}
+}   // namespace comboroute
+
 void EdfComboRouteClearMemo()
 {
     comboroute::TrialMemo& memo = comboroute::Memo();
     memo.m.clear();
+    comboroute::AttemptCache().m.clear();
     if (comboroute::RouteDiagOn()) { for (auto& m : comboroute::KdMemo().m) { m.clear(); } }
 }
 
@@ -36627,6 +36683,7 @@ int EdfComboRouteTrial(const GameState& s, int me)
     const auto rs_t0 = rs ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const auto rd_t0 = std::chrono::steady_clock::now();
     const int r = comboroute::Run(cx);
+    if (r != 0 && comboroute::ApplyReuseOn()) { comboroute::AttemptCacheStore(s, r, cx.attempt_used); }
     if (comboroute::RouteDiagOn())
     {
         comboroute::g_run_n.fetch_add(1, std::memory_order_relaxed);
@@ -36668,12 +36725,32 @@ int EdfComboRouteApply(GameState& s, int me)
     // the real state, and that live run narrates each step into the play history (the same
     // deterministic route).
     int attempt = -1;
+    // MTG_EDF_ROUTE_APPLY_REUSE (see AttemptCacheStore): the trial that emitted this action, if it ran on
+    // this very state.
+    const comboroute::TrialAttempt* reuse = comboroute::ApplyReuseOn() ? comboroute::AttemptCacheFind(s) : nullptr;
+    if (reuse != nullptr && !comboroute::ApplyReuseVerify()) { attempt = reuse->attempt; }
+    else
     {
         GameState copy = s;
         RevealLogPause     _quiet;
         ComboOffApplyPause _nochoosers;
         comboroute::Ctx cx(copy, me);
-        if (comboroute::Run(cx) == 0) { return 0; }
+        const int tr = comboroute::Run(cx);
+        if (comboroute::ApplyReuseVerify() && comboroute::ApplyReuseOn())
+        {
+            if (reuse == nullptr) { comboroute::g_ar_miss.fetch_add(1, std::memory_order_relaxed); }
+            else
+            {
+                comboroute::g_ar_hits.fetch_add(1, std::memory_order_relaxed);
+                if (tr != reuse->r || cx.attempt_used != reuse->attempt)
+                {
+                    comboroute::g_ar_bad.fetch_add(1, std::memory_order_relaxed);
+                    std::fprintf(stderr, "[route-apply] MISMATCH t%d: cached r=%d attempt=%d, trial r=%d attempt=%d\n",
+                                 s.turn_number, reuse->r, reuse->attempt, tr, cx.attempt_used);
+                }
+            }
+        }
+        if (tr == 0) { return 0; }
         attempt = cx.attempt_used;
     }
     ComboOffApplyPause _nochoosers;
