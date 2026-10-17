@@ -206,6 +206,14 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   (tap mode / fresh-spend) not adopted, combat-landfall variants re-running their base main phase (share).
   Raised to the USER: a provider rule capping combat landfall targets to the top pick would be a lossy prune.
   Combined smoke on `c09cd848b`: 124/124 PASS, 0 play changes (byte-identical, as each agent measured).
+* **Hand-copy Theft pins `00a1641ec`:** a hand Equipment is a Theft target per COPY (`Action::attach_equip_hand_ord`;
+  the (i+1)-th cast of a name lands copy i in both worlds), so two freshly cast identical Hammers can each be Theft'd
+  (unfindable before at any budget); mirror images folded by the joint relabelling. Smoke 124/124 byte-identical (no
+  smoke game uses the line). Item 10 (an Equip of a hand copy that never lands still pays for nothing) IN FLIGHT.
+* **Rollout free cast `7e5f6b971`:** the cascade one-shot is taken at `apply_one`'s head, and Maelstrom Archangel's
+  bank is spent at payment (`CastRiders::free_cast`), where the executor spends it; a recorded continuation's free
+  cast now replays free. Byte-identical on smoke (its agent). Follow-up IN FLIGHT: a cascade hit with no legal target
+  must go to the bottom (CR 702.85) -- the rollout keeps it in hand, the executor casts it untargeted.
 
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
