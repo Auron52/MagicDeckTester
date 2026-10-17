@@ -44169,6 +44169,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // re-cast the same card as a CREATURE and realise a different board (the fd-diverge
             // class the chosen_float_color note above documents).
             rec.bestow             = bestow;
+            // MAGNETIC THEFT's Equipment target (the consume-once cast_attach_equip) must ride the
+            // record as well: replay_recorded hands it back through m_pending_attach_equip. Without it
+            // a Theft cast inside a breakpoint continuation -- the Hammer tutored by Steelshaper's
+            // Gift, then cast and Theft'd onto Kor Duelist in the same main -- replayed with NO
+            // Equipment and did nothing, while the rollout had attached it and counted the kill
+            // (Colossus Hammer s1065 gi64: d0 won T3, every searched depth T5 at any budget).
+            rec.attach_equip_id    = cast_attach;
             // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
             // the executor's replay traits (ComputePlanTraits over the records) count the same mana
             // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0
