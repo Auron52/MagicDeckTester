@@ -196,6 +196,17 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   slower / 7 faster (fold 1 + Aid 6) / 49 play-changed. ACCEPTED (smoke, `--deck=colossus,colossus2hg`, scoped note);
   check_gt_logs consistent. Regression tier NOT yet re-run (after the last play-changing fixes land).
 
+* **Smoke accept (2) on `aecb9c84f`** (+ the consume-once CastRiders fix, byte-identical): Colossus searched 0 slower /
+  3 same-turn, d0 gi344 faster / gi539 slower (recovers stage 1); ACCEPTED `78c864df6` (filtered, scoped note).
+* **Idle agent's second round** (cherry-picked onto `78c864df6` as `af990582b` / `6a2af9de8` / `c09cd848b`, its own
+  smoke byte-identical): the executor now realises a breakpoint re-solve's after-apply pins through the shared
+  `WritePostApplyStatePins` (0 re-solves carried such a pin in ~36k games -- a near-unreached path); combat landfalls
+  are searched (`Plan::combat_landfall_target_choice`, a combat state pin, both worlds). Round 3 IN FLIGHT: the
+  MISMATCH counter reads 3 on smoke (continuations the executor cannot replay -- must be 0), re-solve payment pins
+  (tap mode / fresh-spend) not adopted, combat-landfall variants re-running their base main phase (share).
+  Raised to the USER: a provider rule capping combat landfall targets to the top pick would be a lossy prune.
+  Combined smoke on `c09cd848b`: 124/124 PASS, 0 play changes (byte-identical, as each agent measured).
+
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
