@@ -106,6 +106,11 @@ enum GyReader : std::uint32_t
     // CREATURE card names (a superset of Haven's Dragon targets -- coarser would be unsound, finer
     // only declines a fold).
     GyR_CreatureNames   = 1u << 8,
+    // GRAVEYARD EQUIPMENT (Forge Anew, 2026-10-17: "return target Equipment card from your graveyard
+    // to the battlefield"). The ETB's legal set and its searched per-name cast variants read WHICH
+    // Equipment cards sit in our graveyard, so two states differing only there reach different
+    // boards (a returned Colossus Hammer vs a Loxodon Warhammer). Folds the EQUIPMENT card names.
+    GyR_EquipmentNames  = 1u << 9,
 };
 
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
@@ -1013,6 +1018,16 @@ struct GameState
     // unstamped GameState -- the scenario harness, a unit test -- keeps both), the only-err-true rule.
     bool                     deck_has_reconfigure              = true;
     bool                     deck_has_equip_ds_grant           = true;
+    // Forge Anew (2026-10-17), same padding: the deck holds a card whose ETB returns an Equipment card
+    // from the graveyard to the battlefield (CardParams::etb_return_equipment_from_gy), so the site-10
+    // graveyard-Equipment window (TurnSolver::GraveyardEquipmentNumbers / EquipmentReturnedFromGraveyard)
+    // must snapshot. DEFAULT TRUE == snapshot (an unstamped GameState keeps it), the only-err-true rule.
+    bool                     deck_has_gy_equipment_return      = true;
+    // ...and the FIRST-EQUIP WAIVER (Forge Anew's first_equip_free, Kili's storied_first_equip_free):
+    // FirstEquipWaiverOnBattlefield's board walk runs at every trailing pass, every enumeration frame
+    // and every greedy-leaf Solve, so a clear bit PROVES the walk finds nothing and skips it. Same
+    // DEFAULT TRUE rule.
+    bool                     deck_has_first_equip_waiver       = true;
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.

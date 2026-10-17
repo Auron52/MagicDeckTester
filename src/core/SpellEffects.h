@@ -911,6 +911,10 @@ inline void ResolveEtbTapMandatory(GameState& state, int controller, int source_
                                    const std::string& src_name);
 inline void ResolveEtbReturnGyToHand(GameState& state, int controller, const std::string& chosen,
                                      const std::string& source_name);
+// Forge Anew's ETB ("return target Equipment card from your graveyard to the battlefield"), defined
+// below beside the Witness resolver.
+inline void ResolveEtbReturnGyEquipment(GameState& state, int controller, const std::string& chosen,
+                                        const std::string& source_name);
 inline bool EtbDestroyTargetLegal(const Permanent& q, const CardParams& p);
 inline bool EtbDestroyAnyLegal(const GameState& state, const CardParams& p);
 inline bool EtbTreasureSpendOn();   // defined below (MTG_ETB_TREASURE_SPEND, beside PaySacFreshHoldEnabled)
@@ -9131,6 +9135,28 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         ResolveEtbReturnGyToHand(state, controller, chosen_tutor,
                                  state.battlefield[entered_index].card.m_name.str());
     }
+    // Forge Anew: "return target Equipment card from your graveyard to the battlefield." Same
+    // carriage as the Witness above (`chosen_tutor` = the cast's searched graveyard pick, a NAME;
+    // empty on a put path / the unpinned variant -> the provider's pick, the human's dig chooser).
+    // The returned piece runs the FULL enter cascade (PutCardOntoBattlefield), so Sigarda's Aid may
+    // attach it and an enter watcher sees it; that cascade APPENDS permanents (and a later card could
+    // erase one), so this permanent's slot is re-found by number before anything below reads it --
+    // the Primeval Titan shape. Param-gated -> byte-identical for every other deck.
+    if (p.etb_return_equipment_from_gy)
+    {
+        const int self_num = state.battlefield[entered_index].card.m_number;
+        const int self_ctl = state.battlefield[entered_index].controller_index;
+        ResolveEtbReturnGyEquipment(state, controller, chosen_tutor,
+                                    state.battlefield[entered_index].card.m_name.str());
+        entered_index = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == self_num
+                && state.battlefield[static_cast<std::size_t>(i)].controller_index == self_ctl)
+            { entered_index = i; break; }
+        }
+        if (entered_index < 0) { return; }
+    }
 
     // Celes, Rune Knight ETB rummage: "discard any number of cards, then draw that many cards
     // plus one." N chosen by a RESOLUTION heuristic on both the cast and the put path (uniform;
@@ -10762,6 +10788,32 @@ inline ManaCost EquipActionCostNow(const GameState& state, int controller, int e
 //
 // waived_equip_id == 0 (every deck without the card, and every turn after the waiver is spent)
 // returns EquipActionCostNow unchanged, so this is byte-identical by construction.
+// THE ONE FIRST-EQUIP-WAIVER PREDICATE (Kili the Resourceful + Forge Anew). True iff `controller`'s
+// first equip of this turn is still unspent AND a permanent they control grants the waiver now:
+// Forge Anew's `first_equip_free` unconditionally, Kili's `storied_first_equip_free` only once the
+// player holds an enduring story. Every waiver site -- the affordability credit, the frame scan, the
+// payment id, the greedy leaf -- reads THIS, so the two cards share one code path and cannot drift.
+// Any number of sources still give ONE free equip: they all name the same first activation, which
+// `equip_activated_this_turn` tracks per player (set by every real equip activation, never by a
+// reconfigure, a Magnetic Theft, a Sigarda's Aid / Ardenn attach).
+inline bool FirstEquipWaiverOnBattlefield(const GameState& state, int controller)
+{
+    // Presence gate (GameState::deck_has_first_equip_waiver): every deck without either card pays one
+    // bool test here instead of a board walk -- this runs per trailing pass and per greedy leaf.
+    if (!state.deck_has_first_equip_waiver) { return false; }
+    const Player& pl = state.players[static_cast<std::size_t>(controller)];
+    if (pl.equip_activated_this_turn) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.first_equip_free) { return true; }
+        if (d->params.storied_first_equip_free && pl.has_enduring_story) { return true; }
+    }
+    return false;
+}
+
 inline ManaCost StoriedWaivedCost(const GameState& state, int controller, int equip_id,
                                   const ManaCost& baked, int host_id, int waived_equip_id)
 {
@@ -12422,6 +12474,61 @@ inline void ResolveEtbReturnGyToHand(GameState& state, int controller, const std
                       + " from the graveyard to hand");
     }
     EnterHand(state, controller, back, HandEntryReason::Recur);
+}
+
+// The graveyard indices of `controller`'s EQUIPMENT CARDS -- Forge Anew's legal targets ("target
+// Equipment card from your graveyard"). Read off the card's DEFINITION (ZoneCard: a zone copy's type
+// masks are empty) by the printed subtype, so an Equipment creature (Lizard Blades) is one.
+inline std::vector<int> GraveyardEquipmentIndices(const GameState& state, int controller)
+{
+    std::vector<int> legal;
+    const std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    for (int g = 0; g < static_cast<int>(gy.size()); ++g)
+    { if (CardHasSubtype(ZoneCard(gy[static_cast<std::size_t>(g)]), "Equipment")) { legal.push_back(g); } }
+    return legal;
+}
+
+// Forge Anew's ETB: "return target Equipment card from your graveyard to the battlefield." Targeted
+// with no "up to", so with an Equipment card in the graveyard one MUST return (CR 603.3d); none
+// removes the trigger. `chosen` = the cast's searched pick (a graveyard NAME; one cast variant per
+// distinct name, and same-name copies are interchangeable -- a lossless fold). A pin no longer in the
+// graveyard, or an empty pin, takes DecisionProvider::GyEquipmentReturnPick; human play with no pin
+// asks the dig chooser over the graveyard with ONLY the Equipment cards legal (mandatory: a decline
+// takes the default; a single legal card is not a choice and is not prompted). The card enters
+// UNATTACHED with its per-copy number kept (PutCardOntoBattlefield) and runs the full enter cascade
+// in either world -- Sigarda's Aid's attach-on-enter, Puresteel-style watchers. Lizard Blades is an
+// Equipment card and returns as a creature (unattached, so a creature; summoning sick).
+inline void ResolveEtbReturnGyEquipment(GameState& state, int controller, const std::string& chosen,
+                                        const std::string& source_name)
+{
+    Player& pl = state.players[controller];
+    const std::vector<int> legal = GraveyardEquipmentIndices(state, controller);
+    if (legal.empty()) { return; }
+    int pick = -1;
+    if (!chosen.empty())
+    {
+        for (auto it = legal.rbegin(); it != legal.rend(); ++it)
+        { if (pl.graveyard[static_cast<std::size_t>(*it)].m_name.str() == chosen) { pick = *it; break; } }
+    }
+    if (pick < 0)
+    {
+        int k = ResolveProvider(state).GyEquipmentReturnPick(state, controller, legal);
+        if (k < 0 || k >= static_cast<int>(legal.size())) { k = 0; }
+        pick = legal[static_cast<std::size_t>(k)];
+        if (g_play_dig_chooser && chosen.empty() && legal.size() > 1)
+        {
+            std::vector<Card> examined;
+            examined.reserve(pl.graveyard.size());
+            for (const Card& gc : pl.graveyard) { examined.push_back(ZoneCard(gc)); }
+            const int c = (*g_play_dig_chooser)(state, controller,
+                                                source_name + " (return Equipment from graveyard)",
+                                                examined, legal, pick);
+            if (std::find(legal.begin(), legal.end(), c) != legal.end()) { pick = c; }
+        }
+    }
+    const Card back = pl.graveyard[static_cast<std::size_t>(pick)];
+    pl.graveyard.erase(pl.graveyard.begin() + pick);
+    PutCardOntoBattlefield(state, controller, back, source_name);
 }
 
 // Rolling Earthquake ("deals X damage to each creature without horsemanship and each player") and

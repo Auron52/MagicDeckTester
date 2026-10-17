@@ -437,6 +437,11 @@ static_assert(sizeof(Player) == 200,
 // skips a walk that provably finds nothing (RefreshReconfigureCreatures, the equipment double-strike
 // grant scan) -- identical across every pair of states Build() compares, nothing to fold. The STATE
 // the reconfigure refresh writes (a piece's creature type bit) is folded per permanent above.
+// +2 bools (2026-10-17, Forge Anew; same padding): `deck_has_gy_equipment_return` and
+// `deck_has_first_equip_waiver`. Classification: DECK CONSTANTS, stamped once in StampDeckTraits, never
+// written again; each only skips a walk that provably finds nothing (the site-10 graveyard-Equipment
+// snapshot, FirstEquipWaiverOnBattlefield) -- nothing to fold. The STATE they read is folded already:
+// the graveyard's Equipment under GyR_EquipmentNames above, `equip_activated_this_turn` per player.
 static_assert(sizeof(GameState) == 1112,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1034,7 +1039,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                          || ((gy_bits & GyR_LandsEdgeNames) && gp.discard_land_damage > 0)
                          || ((gy_bits & GyR_MulticolorNames) && zc.IsMulticolored())
                          // Haven / Haunted Fengraf: every creature card is a possible return.
-                         || ((gy_bits & GyR_CreatureNames) && zc.IsCreature());
+                         || ((gy_bits & GyR_CreatureNames) && zc.IsCreature())
+                         // Forge Anew: every Equipment card is a possible return.
+                         || ((gy_bits & GyR_EquipmentNames) && [&zc]() {
+                                for (const std::string& st : zc.m_subtypes)
+                                { if (st == "Equipment") { return true; } }
+                                return false; }());
                 }
                 else if (!named && !gd)
                 {

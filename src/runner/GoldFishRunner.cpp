@@ -685,6 +685,8 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         // Haven of the Spirit Dragon / Haunted Fengraf: a graveyard-return ability reads the
         // graveyard's CREATURE cards (see GyR_CreatureNames). MISSED CLASS 5, closed 2026-10-15.
         if (p.gy_return_cost.has_value())    { m |= GyR_CreatureNames; }
+        // Forge Anew: the ETB returns a graveyard EQUIPMENT card (see GyR_EquipmentNames).
+        if (p.etb_return_equipment_from_gy)  { m |= GyR_EquipmentNames; }
     }
     // Timeless Witness (Prevent Damage, 2026-09-27): its ETB returns ANY card from the graveyard and
     // Eternalize reads its own copy there. It is a SIDEBOARD card (reached by Living Wish), and the
@@ -1294,6 +1296,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Lizard Blades: the reconfigure refresh and the equipment-side double-strike walk (see
         // GameState::deck_has_reconfigure / deck_has_equip_ds_grant): the params the walks test.
         bool reconfigure = false, equip_ds_grant = false;
+        // Forge Anew: the site-10 graveyard-Equipment window (GameState::deck_has_gy_equipment_return).
+        bool gy_equipment_return = false;
+        // Forge Anew / Kili: the first-equip waiver walk (GameState::deck_has_first_equip_waiver).
+        bool first_equip_waiver = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1326,6 +1332,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (!d->params.draw_on_other_subtype_enter.empty()) { subtype_enter_draw = true; }
                 if (d->params.reconfigure_cost.has_value())   { reconfigure = true; }
                 if (d->params.equip_grants_double_strike)     { equip_ds_grant = true; }
+                if (d->params.etb_return_equipment_from_gy)   { gy_equipment_return = true; }
+                if (d->params.first_equip_free || d->params.storied_first_equip_free)
+                { first_equip_waiver = true; }
                 if (d->params.storied_permanents > 0)      { storied = true; }
                 // HasEndStepTokenTrigger, not `endstep_lifegain_tokens > 0`: The Mycotyrant's count
                 // is dynamic (endstep_tokens_equal_descend) so it leaves that field at 0, and this
@@ -1372,6 +1381,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // double-strike walk find nothing (each stamp tests the very param its walk tests).
         state.deck_has_reconfigure       = garth || reconfigure;
         state.deck_has_equip_ds_grant    = garth || equip_ds_grant;
+        // Same reasoning, no lever: a clear bit proves no card can return a graveyard Equipment to the
+        // battlefield, so the site-10 window's snapshot is provably empty and its test provably false.
+        state.deck_has_gy_equipment_return = garth || gy_equipment_return;
+        // Same reasoning, no lever: a clear bit proves FirstEquipWaiverOnBattlefield's walk finds no
+        // waiver source (the stamp tests the very params the walk tests).
+        state.deck_has_first_equip_waiver  = garth || first_equip_waiver;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

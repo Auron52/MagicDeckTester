@@ -1217,6 +1217,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.metalcraft_equip_zero_artifacts = params.value("metalcraft_equip_zero_artifacts", 0);
     p.storied_permanents        = params.value("storied_permanents", 0);
     p.storied_first_equip_free  = params.value("storied_first_equip_free", false);
+    p.first_equip_free          = params.value("first_equip_free", false);   // Forge Anew
     p.draw_on_other_subtype_enter =
         params.value("draw_on_other_subtype_enter", std::vector<std::string>{});
     p.draw_on_other_subtype_enter_once_each_turn =
@@ -1311,6 +1312,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_destroy_nonartifact_nonblack       = params.value("etb_destroy_nonartifact_nonblack", false);
     p.etb_destroy_artifact_enchantment_land  = params.value("etb_destroy_artifact_enchantment_land", false);
     p.etb_return_gy_to_hand                  = params.value("etb_return_gy_to_hand", false);
+    p.etb_return_equipment_from_gy           = params.value("etb_return_equipment_from_gy", false);
     if (params.contains("eternalize_cost"))
         p.eternalize_cost = ManaCostFromString(params["eternalize_cost"].get<std::string>());
     if (params.contains("transmute_cost"))
