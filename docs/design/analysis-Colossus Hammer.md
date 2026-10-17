@@ -8,19 +8,27 @@ primary checkout (untracked there) on 2026-10-17 and asked to analyze it. Work h
 viewer and is shared by other sessions, so nothing is edited there). The deck file was COPIED into the
 worktree; the user's original stays in place.
 
-**State (2026-10-17 ~10:00 UTC; USER: "hold off on pushing ... stabilize everything" -- NOTHING PUSHED):**
-`colossus-analysis` tip `e176abb82`. Done and committed: all 10 cards; the two bp cast-record fixes
+**State (2026-10-17 ~10:30 UTC; USER: "hold off on pushing ... stabilize everything" -- NOTHING PUSHED):**
+`colossus-analysis` tip: see `git log`. Done and committed: all 10 cards; the two bp cast-record fixes
 (`0f3c56499` Magnetic Theft's Equipment pin, `0d410db07` ten more fields); Stage 4 profile (`5e32c4d96`); Scryfall
 snapshot (`7088c2f86`); ALL THREE TIERS with accepted GT (`8c1de4465`; suite_gate 0.43x PASS); the cast-order +
 discard DRAFTS implemented OFF (`795642c39`) and MEASURED (`ac2095d02`: order -0.053 play / -0.056 d3 / -0.048 d0,
 every slower game recovers; buckets neutral); viewer-audit state-gated class (5h now PASS); cost audit 435/435;
-verify_deck: coverage/regression_tiers/viewer_wiring/mismatch (nonconv+fd-diverge clean)/play_invariants/suite PASS,
-card_fields FAIL on OTHER decks' cards only (Saproling Migration kicker, Kili storied -- pre-existing);
-claude-play sweep 18/18 recorded below.
-IN FLIGHT (three Opus fix agents, each in its own worktree, branch off `ac2095d02`, commit locally, no push):
+`5b39d898d` card-field audit green for EVERY deck (kicker/storied stripped as param-modelled, stale Glorybringer
+entry dropped). verify_deck (`--no-network`, 10:01): every gate PASS except claude_sweep (6 unresolved = the fixes
+in flight); claude-play sweep 18/18 recorded below.
+IN FLIGHT (Opus fix agents, each in its own worktree under `.claude/worktrees/`, commit locally, no push):
 `colossus-pay` (human-play multi-cast line payment, flag 3), `colossus-aid` (Sigarda's Aid host as a SEARCHED axis,
 flag 2 -- changes Kitty play too), `colossus-fold` (reconfigure-then-equip illegal + waiver, dominated attach folds
-incl. the double-Theft, Path human default; flags 4-6). NEXT: rebase each onto `colossus-analysis` (rebase, never
+incl. the double-Theft, Path human default; flags 4-6) -- these three off `ac2095d02`; off `5b39d898d`:
+`colossus-idle` (an empty-handed pre-combat PASS gets no combat-pin variants -- Bruna gather / Primeval Titan /
+Arcanum Wings, Raubahn already closed: a greedy pick in the window that moves OTHER decks) and `colossus-depskip`
+(radix jump past equip-dependency-violated positions in the subset odometers; byte-identical, see Stage 5).
+PLANNED: Ardenn's begin-combat attach is ONE provider pick (`DecisionProvider::BeginCombatAttach`, a greedy ascent
+on this combat's damage) with search depth remaining -- the same no-greedy defect as the Aid (Raubahn's attach is
+already a searched combat pin), so it becomes a searched axis after `colossus-aid` lands (same agent). This
+supersedes the "should Ardenn be searched?" half of USER question 4.
+NEXT: rebase each onto `colossus-analysis` (rebase, never
 merge), build, units, scenarios, smoke + regression (`env -C`), per-deck verdicts on every play change, accept GT
 with `--deck` filters (carry provenance notes), update the sweep flag count, then `leaf_tiebreak_check.py` (5c2) on
 the final engine, verify_deck again, final report. Open USER questions: below + cast-order adoption, discard
@@ -143,6 +151,14 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   adventure, kicked) -- FIXED `0d410db07`. Full smoke: every deck byte-identical except Melira Pod gi3
   (normal + 2HG, still T4: its committed continuation convokes Chord of Calling, which the old replay could
   not pay and skipped). Full regression ALL PASS 166/166, play-changed=0, references 600 / 0 drift.
+
+* **Budgeted search cost, s7065 gi58 (single thread, Release):** d5 unlimited 0.8 s / T3; b100 3.9 s / T3; b400
+  3.9 s / T3 (budget not binding); b20 5.8 s / T4 (the one budget-starvation game of the depth sweep). The 5x is
+  STRUCTURAL in shape -- unbudgeted play uses the lazy leaf (0 leaf solves), budgeted play solves a leaf at every
+  node (10,955) -- and NOT the 2026-10-14 unbudgeted-only cuts (all four + the leaf memo off: unlimited still 0.9 s).
+  Inside each leaf solve the subset odometer steps through equip-dependency-violated positions one at a time
+  (perf: `SolveUncached` 21% self, `EquipPieceDepViolated` 6.8%); the copy predicate already has a radix jump, the
+  dependency predicate does not. Charged no work units per position, so a jump is byte-identical -> `colossus-depskip`.
 
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
