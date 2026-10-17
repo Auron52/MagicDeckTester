@@ -6122,7 +6122,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 Permanent& p = state.battlefield[pi];
                 if (p.controller_index != state.active_player_index) { continue; }
                 if (p.card.m_number != a.sac_source_id) { continue; }
-                if (p.tapped || td == nullptr) { break; }
+                // The rollout twin's precondition, verbatim (TapTokenSourceLive: untapped, summoning
+                // sickness, Speaker of the Heavens' relative life gate), checked before paying.
+                if (td == nullptr || !TapTokenSourceLive(state, p, *td)) { break; }
                 p.tapped = true;
                 ManaPool avail = AvailableManaPool(state);
                 if (!TapForCost(state, a.cost, avail, /*for_creature=*/true))
@@ -6130,7 +6132,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 const int num = a.sac_source_id;
                 CreateToken(state, state.active_player_index,
                             td->params.tap_token_power, td->params.tap_token_toughness,
-                            td->params.tap_token_subtypes);
+                            td->params.tap_token_subtypes, td->params.tap_token_color,
+                            td->params.tap_token_keywords);
                 if (td->params.tap_token_exerts) { state.battlefield[pi].skip_next_untap = true; }
                 if (m_logger) { m_logger->LogAbility(num, bf_name(num), "create token"); }
                 break;

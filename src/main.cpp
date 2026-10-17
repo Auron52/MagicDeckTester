@@ -1898,6 +1898,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // AnimateLand / TapForTokenPay name a LAND, which is never castable: leaving them in the
             // casts multiset made the GUI's land+cast match read "cast Mutavault", and a hand-built
             // line then carried both `cast=Mutavault` and `animate=Mutavault` and matched no plan.
+            // (TapForTokenPay may also name a CREATURE on the battlefield -- Basri, Speaker of the
+            // Heavens -- which is castable from hand; the activation is still not a cast.)
             return k == Action::Kind::GarthActivate || k == Action::Kind::ActivateLoyalty
                 || k == Action::Kind::Equip         || k == Action::Kind::GraveyardExileAbility
                 || k == Action::Kind::GraveyardReturnAbility

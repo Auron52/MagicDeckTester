@@ -1,0 +1,38 @@
+{
+ "_comment": "Basri, Tomorrow's Champion ({W}, {T}, Exert: create a 1/1 Cat) is a CREATURE source, so summoning sickness applies to its {T} (CR 302.6). Before TapTokenSourceLive (2026-10-17, the Speaker of the Heavens integration) the human-play menu offered a sick Basri's activation; the shared predicate now closes it at enumeration and in both applies. Autonomous play never enumerated it (OffersExertTokenActivation prunes Basri's exert), so no ground truth moves. legal_not_enumerated, not illegal: CheckLine's soundness rule leaves sickness to the enumeration (the Wellwisher precedent).",
+ "deck": "decks/WhiteKnights/WhiteKnights.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "max_turns": 3,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Basri, Tomorrow's Champion",
+   "controller": 0,
+   "tapped": false,
+   "sick": true
+  }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "taptoken=Basri, Tomorrow's Champion",
+ "expect_verdict": "legal_not_enumerated"
+}

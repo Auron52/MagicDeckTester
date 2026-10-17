@@ -5068,6 +5068,30 @@ inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefi
     return false;
 }
 
+// THE ONE LEGALITY PREDICATE for a "{cost}, {T}: create a token" activation (CardParams::
+// tap_token_cost -- Sliver Hive, Basri, Speaker of the Heavens), read by the enumeration
+// (TurnSolver CollectActions) AND re-checked before anything is paid at BOTH apply sites (the
+// rollout's TurnSolver apply and the executor's AIEngine twin), so the two worlds agree by
+// construction -- PermAbilitySourceLive's shape. Three clauses:
+//   * untapped -- the {T} is part of the cost;
+//   * CanTapNow -- summoning sickness (CR 302.6) applies to a CREATURE source's {T} ability. A land
+//     (Sliver Hive) always passes (Permanent::CanTap), so Hive is unchanged; Basri / Speaker are
+//     creatures and were previously offered while sick (a latent bug -- human play only for Basri,
+//     whose autonomous activation is pruned by OffersExertTokenActivation);
+//   * the RELATIVE life restriction (tap_token_min_life_above_start, CR 602.5b): life >=
+//     gamesetup::StartingLife() + N, never a literal 27 -- 37 in a 2HG job, whose shared team life
+//     lives in players[controller] exactly as the ruling reads. N <= 0 = no restriction.
+// The "control a <subtype>" gate (tap_token_requires_subtypes) stays where it was, at the
+// enumeration only -- moving it is out of this predicate's scope and would be a Sliver Hive change.
+inline bool TapTokenSourceLive(const GameState& state, const Permanent& src, const CardDefinition& d)
+{
+    if (src.tapped || !CanTapNow(src, state.battlefield)) { return false; }
+    const int n = d.params.tap_token_min_life_above_start;
+    if (n > 0 && state.players[src.controller_index].life < gamesetup::StartingLife() + n)
+    { return false; }
+    return true;
+}
+
 // Overload taking a GatherHasteSources() prefilter, for callers that test EVERY creature on the
 // battlefield and would otherwise re-derive the same board-level answer once per creature. The
 // three-argument form below delegates here with no prefilter and is byte-identical to before, so
@@ -10689,7 +10713,10 @@ inline int EquipTargetColorCount(const GameState& state, int controller, int hos
     {
         if (p.controller_index != controller || p.card.m_number != host_id) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        return d ? static_cast<int>(d->card.ColorCount()) : 0;
+        // A TOKEN has no definition, but its battlefield card DOES carry its colour (BuildTokenProto
+        // sets it) -- Speaker of the Heavens' white Angel is a mono-white host, equip {3}. Reading 0
+        // there lost the discount; no token in any other Dragonfire Blade deck has a colour.
+        return d ? static_cast<int>(d->card.ColorCount()) : static_cast<int>(p.card.ColorCount());
     }
     for (const Card& c : state.players[controller].hand)
     {

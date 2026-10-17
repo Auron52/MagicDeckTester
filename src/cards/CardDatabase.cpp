@@ -928,6 +928,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("tap_token_requires_subtypes", json::array()))
         p.tap_token_requires_subtypes.push_back(s);
     p.tap_token_exerts             = params.value("tap_token_exerts", false);
+    // Speaker of the Heavens: the token's colour / keywords and the RELATIVE life gate.
+    p.tap_token_color              = params.value("tap_token_color", std::string{});
+    for (const std::string& s : params.value("tap_token_keywords", json::array()))
+        p.tap_token_keywords.push_back(s);
+    p.tap_token_min_life_above_start = params.value("tap_token_min_life_above_start", 0);
 
     // Slimefoot: mana-only, no-{T}, repeatable token maker (PermAbilityMode::PayToken).
     if (params.contains("pay_token_cost"))

@@ -9826,7 +9826,12 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             { taps = PermAbilityTaps(a.ability_mode); }           // SacDraw/Drain/ExileTop: no {T}
             else if (more_kinds)
             {
+                // TapForTokenPay: Speaker of the Heavens' main-1 "{T}: 4/4 Angel" taps an attacker
+                // (a Colossus Hammer'd Speaker is 11 power). Sliver Hive is a land, never an
+                // attacker(); Basri's exert activation is never enumerated autonomously -- so
+                // every other deck's projection is unchanged.
                 taps = a.kind == Action::Kind::GarthActivate || a.kind == Action::Kind::TapForTokens
+                    || a.kind == Action::Kind::TapForTokenPay
                     || a.kind == Action::Kind::GraveyardExileAbility
                     || a.kind == Action::Kind::PutFromHandAbility
                     || a.kind == Action::Kind::GraveyardPlayAbility;
@@ -30834,7 +30839,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 // Sliver Hive: gated on the same "do you control a matching creature" clause the
                 // greedy checks, so a plan menu never offers a guaranteed no-op.
-                if (sd->params.tap_token_cost.has_value() && !src.tapped
+                // TapTokenSourceLive (SpellEffects.h) is the SAME predicate both applies re-check:
+                // untapped, summoning sickness for a creature source (Basri, Speaker of the
+                // Heavens -- CR 302.6), and Speaker's RELATIVE life restriction.
+                if (sd->params.tap_token_cost.has_value() && TapTokenSourceLive(state, src, *sd)
                     && (!sd->params.tap_token_exerts || HumanPlayActive()
                         || ResolveProvider(state).OffersExertTokenActivation(state, *sd)))
                 {
@@ -46879,14 +46887,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 Permanent& p = state.battlefield[pi];
                 if (p.controller_index != state.active_player_index) { continue; }
                 if (p.card.m_number != a.sac_source_id) { continue; }
-                if (p.tapped || td == nullptr) { break; }
+                // Precondition FIRST (TapTokenSourceLive: untapped, summoning sickness, Speaker's
+                // relative life gate -- the enumeration's own predicate), so a stale action pays
+                // nothing. The executor twin (AIEngine) reads the same function.
+                if (td == nullptr || !TapTokenSourceLive(state, p, *td)) { break; }
                 p.tapped = true;
                 if (!TapForCostDirect(state, a.cost, /*for_creature=*/true))
                 { state.battlefield[pi].tapped = false; break; }
                 // CreateToken appends to the battlefield, so `p` must not be touched after this.
+                // Colour + keywords (Speaker's white flying Angel); empty for Hive / Basri.
                 CreateToken(state, state.active_player_index,
                             td->params.tap_token_power, td->params.tap_token_toughness,
-                            td->params.tap_token_subtypes);
+                            td->params.tap_token_subtypes, td->params.tap_token_color,
+                            td->params.tap_token_keywords);
                 // EXERT (CR 701.38, Basri, Tomorrow's Champion): the cost exerts the source, so it
                 // does not untap during its controller's next untap step. Set here as well as in
                 // ActivateTapTokensShared because these are two DIFFERENT routes to the same
@@ -59724,6 +59737,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             b += std::to_string(pp.tap_token_power) + "/" + std::to_string(pp.tap_token_toughness);
             for (const std::string& sub : pp.tap_token_subtypes)          { b += "u" + sub; }
             for (const std::string& sub : pp.tap_token_requires_subtypes) { b += "q" + sub; }
+            // Completeness only (no land sets these today): colour, keywords, the life gate.
+            if (!pp.tap_token_color.empty())            { b += "c" + pp.tap_token_color; }
+            for (const std::string& kw : pp.tap_token_keywords) { b += "k" + kw; }
+            if (pp.tap_token_min_life_above_start > 0)
+            { b += "L" + std::to_string(pp.tap_token_min_life_above_start); }
         }
         return b;
     };
