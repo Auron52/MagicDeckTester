@@ -4308,7 +4308,73 @@ struct BpEnumEntry
     // the thread's game ordinal. The key folds the name order already (BuildSimKey's ordered
     // library digest); the number order is what it does not fold.
     std::uint64_t lib_num = 0, lib_name = 0, game = 0;
+    // MTG_BP_USE_CENSUS (diagnostic, print-only): who derived this entry, how often it was read, and
+    // whether any BRANCHING consumer (an eligible bp_choice apply) ever read it. Written only under the
+    // flag; never read by play.
+    std::uint8_t use_born = 0;
+    std::uint8_t use_branched = 0;
 };
+// MTG_BP_USE_CENSUS (DIAGNOSTIC, print-only, default OFF): breakpoint continuation-list USE. Each
+// BpEnumEntryFor lookup is tagged with its consumer (t_reason, bound by the call sites) and counted as a
+// hit or a derivation per consumer; each derived entry is counted by its deriving consumer with the
+// plans it holds, the reads it later served, and whether a BRANCHING consumer ever read it -- the read
+// for "how many derived lists are discarded unused", and for how much enumeration the canon pays to
+// take one front(). Also the distinct full vs unfolded (board-only) key counts of the derivations.
+namespace bpuse
+{
+enum Reason : int { kOther = 0, kCanon, kEligible, kArmNew, kExec, kN };
+inline const char* Name(int r)
+{
+    static const char* n[kN] = { "other", "canon", "eligible", "armnew", "exec" };
+    return n[r];
+}
+inline bool On() { static const bool v = EnvOn("MTG_BP_USE_CENSUS"); return v; }
+inline thread_local int t_reason = kOther;
+struct ReasonScope
+{
+    int prev;
+    explicit ReasonScope(int r) : prev(t_reason) { t_reason = r; }
+    ~ReasonScope() { t_reason = prev; }
+};
+struct Stats
+{
+    std::atomic<long long> hits[kN]{}, misses[kN]{};
+    // By the consumer that DERIVED the entry: entries, plans they held, reads they served after the
+    // derivation, and how many were later read by a branching (eligible) consumer at least once.
+    std::atomic<long long> born[kN]{}, born_plans[kN]{}, later_reads[kN]{}, branched[kN]{};
+    std::atomic<long long> cycles[kN]{};   // TSC cycles inside the derivation (inclusive of nesting)
+    ~Stats()
+    {
+        if (!On()) { return; }
+        for (int r = 0; r < kN; ++r)
+        {
+            std::fprintf(stderr, "[bp-use] lookups %-9s hits=%lld derivations=%lld derive_Gcyc=%.2f\n", Name(r),
+                         hits[r].load(), misses[r].load(), static_cast<double>(cycles[r].load()) / 1e9);
+        }
+        for (int r = 0; r < kN; ++r)
+        {
+            if (born[r].load() == 0) { continue; }
+            std::fprintf(stderr, "[bp-use] entries derived by %-9s n=%lld plans=%lld (%.2f/list) later_reads=%lld"
+                         " ever_read_by_a_branching_consumer=%lld\n", Name(r), born[r].load(), born_plans[r].load(),
+                         static_cast<double>(born_plans[r].load()) / static_cast<double>(born[r].load()),
+                         later_reads[r].load(), branched[r].load());
+        }
+    }
+};
+inline Stats g_stats;
+inline std::mutex g_raw_mu;
+inline std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> g_raw_keys, g_full_keys;
+struct KeyDump
+{
+    ~KeyDump()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[bp-use] derivation keys: distinct full=%zu distinct unfolded(board-only)=%zu\n",
+                     g_full_keys.size(), g_raw_keys.size());
+    }
+};
+inline KeyDump g_keydump;
+}
 // MTG_BP_ENUM_LIBCHECK (DIAGNOSTIC, default off): IS A HIT EVER SERVED UNDER DIFFERENT LIBRARY
 // CONTENTS, AND DOES IT MATTER? Every entry is stamped on insert with an ordered hash of both
 // libraries by card NUMBER (physical copies) and by NAME, plus the game ordinal; every hit compares
@@ -46511,6 +46577,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (static_cast<int>(g_bp_base_lens.size()) < BpSearchDepth())
             {
+                bpuse::ReasonScope _bu(bpuse::kArmNew);
                 BpEnumEntry* const be = BpEnumEntryFor(state, is_pre_combat);
                 const std::size_t n = be->plans.size();
                 // ...and its DEMOTED length, for the stillborn decline's slot record (see
@@ -46546,7 +46613,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // every apply, which perf put at 25.6% of a pathological Fungus label game.
             // The memo ENTRY, not just its list: the demoted list (MTG_BP_NEW_ONLY_DEMOTE) lives
             // beside it. Same lookup EnumerateBreakpointPlansRef makes, same lifetime contract.
-            BpEnumEntry* const bp_ent = BpEnumEntryFor(state, is_pre_combat);
+            BpEnumEntry* const bp_ent = [&]
+            { bpuse::ReasonScope _bu(bpuse::kEligible); return BpEnumEntryFor(state, is_pre_combat); }();
             const std::vector<TurnSolver::Plan>& cands = bp_ent->plans;
             // How LONG is the ranked list? The caller can only emit bp_choice = 0..W-1 blind, so
             // report the real length back for the deferred-wave loop (and MTG_BP_CANDS_PROBE).
@@ -65355,6 +65423,12 @@ namespace enummemo
 
     inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
     inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
+    // MTG_ENUM_MEMO_STATS (diagnostic, print-only): WHY the memo misses. `second` = misses on a key
+    // already marked this decision (the promotion visit: the plans are computed again and only now
+    // stored); `bypass_*` = calls that never consult the memo, by the first gate that refused them.
+    inline bool StatsOn() { static const bool v = EnvOn("MTG_ENUM_MEMO_STATS"); return v; }
+    inline std::atomic<uint64_t> g_second{0}, g_bypass_bpdepth{0}, g_bypass_rootenum{0},
+                                 g_bypass_nest{0}, g_bypass_other{0};
 
     inline bool SamePlans(const std::vector<TurnSolver::Plan>& a,
                           const std::vector<TurnSolver::Plan>& b)
@@ -65382,6 +65456,14 @@ namespace enummemo
                              (unsigned long long)g_mismatches.load());
             }
             std::fprintf(stderr, "\n");
+            if (StatsOn())
+            {
+                std::fprintf(stderr, "[enum-memo] misses_on_promotion_visit=%llu"
+                             " bypass(m1 host): bp_enum_depth=%llu bp_root_enum=%llu no_solver_frame=%llu other=%llu\n",
+                             (unsigned long long)g_second.load(),
+                             (unsigned long long)g_bypass_bpdepth.load(), (unsigned long long)g_bypass_rootenum.load(),
+                             (unsigned long long)g_bypass_nest.load(), (unsigned long long)g_bypass_other.load());
+            }
             // Subtype-restricted mana coverage (Giada). Printed alongside the memo stats so any
             // run can show its own proof; silent unless MTG_SUBTYPE_MANA_AUDIT is set.
             if (SubtypeManaAuditOn())
@@ -65472,7 +65554,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                       // results must never be served to -- or taken from -- an ordinary frame.
                       && !EquipRouteInProgress()
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
-    if (!memo_ok) { return EnumeratePlansWithLandUncached(state, is_pre_combat); }
+    if (!memo_ok)
+    {
+        if (enummemo::StatsOn() && enummemo::Enabled() && !HumanPlayActive())
+        {
+            if (g_bp_enum_depth != 0)    { enummemo::g_bypass_bpdepth.fetch_add(1, std::memory_order_relaxed); }
+            else if (g_bp_root_enum)     { enummemo::g_bypass_rootenum.fetch_add(1, std::memory_order_relaxed); }
+            else if (!(g_cs_solver_nest > 0 || g_fsline_nest > 0))
+            { enummemo::g_bypass_nest.fetch_add(1, std::memory_order_relaxed); }
+            else                         { enummemo::g_bypass_other.fetch_add(1, std::memory_order_relaxed); }
+        }
+        return EnumeratePlansWithLandUncached(state, is_pre_combat);
+    }
 
     auto& cache = enummemo::t_cache;
     if (enummemo::t_epoch_seen != g_decision_epoch)
@@ -65539,6 +65632,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
+    if (second_visit && enummemo::StatsOn()) { enummemo::g_second.fetch_add(1, std::memory_order_relaxed); }
     const int saved_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = 0;
     const unsigned long long drops_before = g_condemn_drops;
@@ -81655,6 +81749,16 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                     return &s_libcheck_served;
                 }
             }
+            if (bpuse::On())
+            {
+                bpuse::g_stats.hits[bpuse::t_reason].fetch_add(1, std::memory_order_relaxed);
+                bpuse::g_stats.later_reads[it->second.use_born].fetch_add(1, std::memory_order_relaxed);
+                if (bpuse::t_reason == bpuse::kEligible && !it->second.use_branched)
+                {
+                    it->second.use_branched = 1;
+                    bpuse::g_stats.branched[it->second.use_born].fetch_add(1, std::memory_order_relaxed);
+                }
+            }
             return &it->second;
         }
     }
@@ -81662,8 +81766,15 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // Derive, rank, and (drop modes 2/3) mark the condemned entries -- see BpDeriveContinuationList,
     // which the verifier above shares so a marked list is never diffed against an unmarked one.
     std::vector<TurnSolver::Plan> demoted;   // MTG_BP_NEW_ONLY_DEMOTE (empty with the lever off)
+    const int use_reason = bpuse::t_reason;   // the derivation re-enters; read the consumer first
+    const unsigned long long use_t0 = bpuse::On() ? __rdtsc() : 0;
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
                                                                   /*count_stats=*/true, &demoted);
+    if (bpuse::On())
+    {
+        bpuse::g_stats.cycles[use_reason].fetch_add(static_cast<long long>(__rdtsc() - use_t0),
+                                                    std::memory_order_relaxed);
+    }
     plancache::ReportHiwater("bp", state, plans);
 
     if (keyed)
@@ -81684,6 +81795,15 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans))
                             + (demoted.empty() ? 0LL
                                                : static_cast<long long>(plancache::ApproxPlansBytes(demoted)));
+        if (bpuse::On())
+        {
+            bpuse::g_stats.misses[bpuse::t_reason].fetch_add(1, std::memory_order_relaxed);
+            // The UNFOLDED key: how many derivations share a board and differ only in the folds.
+            const TranspositionTable::Key raw = BuildBreakpointKey(state, is_pre_combat);
+            std::lock_guard<std::mutex> lk(bpuse::g_raw_mu);
+            bpuse::g_raw_keys.insert(raw);
+            bpuse::g_full_keys.insert(key);
+        }
         if (cache.size() >= s_bp_enum_cap || !plancache::Fits(psz))
         {
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
@@ -81697,6 +81817,15 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             ent.plans   = std::move(plans);
             ent.demoted = std::move(demoted);
             ent.epoch = g_decision_epoch;   // stamped unconditionally; see BpEnumEpochScoped
+            if (bpuse::On())
+            {
+                ent.use_born     = static_cast<std::uint8_t>(bpuse::t_reason);
+                ent.use_branched = (bpuse::t_reason == bpuse::kEligible) ? 1 : 0;
+                bpuse::g_stats.born[bpuse::t_reason].fetch_add(1, std::memory_order_relaxed);
+                bpuse::g_stats.born_plans[bpuse::t_reason].fetch_add(static_cast<long long>(ent.plans.size()),
+                                                                     std::memory_order_relaxed);
+                if (ent.use_branched) { bpuse::g_stats.branched[bpuse::t_reason].fetch_add(1, std::memory_order_relaxed); }
+            }
             if (bplibcheck::On())
             {
                 ent.lib_num  = bplibcheck::LibHash(state, true);
@@ -85881,6 +86010,7 @@ bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, c
     {
         // The list's front() only -- BpCanonFront (the full list's front, without building the
         // put-back clones it can never be).
+        bpuse::ReasonScope _bu(bpuse::kCanon);
         if (BpCanonFront(state, is_pre_combat, out)) { out.cont_canon = CanonContNoActsOn(); return true; }
     }
     if (class_on && g_rollout_nest == 0)
@@ -85893,6 +86023,7 @@ bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, c
                                     && state.turn_number > g_condemn_root_turn + 1));
         if (enum_slot || base_slot)
         {
+            bpuse::ReasonScope _bu(bpuse::kCanon);
             if (BpCanonFront(state, is_pre_combat, out)) { out.cont_canon = CanonContNoActsOn(); return true; }
         }
     }

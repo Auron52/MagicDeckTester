@@ -43425,9 +43425,32 @@ void EdfStackShroudLast(const std::vector<Action>& acts, std::vector<int>& order
 // candidate pays -> the given order, untouched. Probe aura_drake: five lands, {Fertile Ground,
 // Peregrine Drake} -- the given order walks the Aura first and fails; Drake-first pays (it taps ahead,
 // refunds five lands, then the Aura).
+// MTG_EDF_RANGE_STATS (DIAGNOSTIC, print-only, default OFF): where the range projection's work goes --
+// calls, the early exits, how many reach the candidate loop, how many candidate walks they pay for, and
+// how the loop ends.
+namespace edfrangestats
+{
+inline bool On() { static const bool v = EnvOn("MTG_EDF_RANGE_STATS"); return v; }
+inline std::atomic<long long> g_calls{0}, g_no_untapper{0}, g_no_movable{0}, g_seq_ok{0}, g_pre_ok{0},
+                              g_loop{0}, g_cands{0}, g_walks{0}, g_moved{0}, g_unchanged{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[edf-range-stats] calls=%lld no_untapper=%lld no_movable=%lld seq_ok=%lld prepay_ok=%lld"
+                     " loop=%lld cand_orders=%lld cand_walks=%lld moved=%lld unchanged=%lld\n",
+                     g_calls.load(), g_no_untapper.load(), g_no_movable.load(), g_seq_ok.load(), g_pre_ok.load(),
+                     g_loop.load(), g_cands.load(), g_walks.load(), g_moved.load(), g_unchanged.load());
+    }
+};
+inline Dump g_dump;
+}
 void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>& acts,
                                   std::vector<int>& order, bool stack)
 {
+    const bool rs_on = edfrangestats::On();
+    if (rs_on) { edfrangestats::g_calls.fetch_add(1, std::memory_order_relaxed); }
     int last_untapper = -1;
     for (std::size_t p = 0; p < order.size(); ++p)
     {
@@ -43436,7 +43459,7 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
         if (a.kind == Action::Kind::CastFromHand && !a.alt_cost && d && d->card.IsCreature()
             && d->params.etb_untap_lands > 0) { last_untapper = static_cast<int>(p); }
     }
-    if (last_untapper < 0) { return; }
+    if (last_untapper < 0) { if (rs_on) { edfrangestats::g_no_untapper.fetch_add(1, std::memory_order_relaxed); } return; }
     std::vector<int> movable;   // POSITIONS in `order`
     for (int p = 0; p < last_untapper; ++p)
     {
@@ -43445,7 +43468,7 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
         if (EdfIsLandAuraCast(a, d)
             && d->card.m_mana_cost.ManaValue() > d->params.land_aura_extra_mana) { movable.push_back(p); }
     }
-    if (movable.empty()) { return; }
+    if (movable.empty()) { if (rs_on) { edfrangestats::g_no_movable.fetch_add(1, std::memory_order_relaxed); } return; }
     // MTG_EDF_RANGE_TRACE: one line per range decision (diagnostic only; prints nothing when unset).
     static const bool s_trace = EnvOn("MTG_EDF_RANGE_TRACE");
     auto names = [&](const std::vector<int>& o)
@@ -43477,6 +43500,12 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
         std::fprintf(stderr, "[edf-range] t%d in=[%s] seq=%d prepay=%d board=[%s]\n", s.turn_number,
                      names(order).c_str(), seq_ok ? 1 : 0, pre_ok ? 1 : 0, board().c_str());
     }
+    if (rs_on)
+    {
+        if (seq_ok) { edfrangestats::g_seq_ok.fetch_add(1, std::memory_order_relaxed); }
+        else if (pre_ok) { edfrangestats::g_pre_ok.fetch_add(1, std::memory_order_relaxed); }
+        else { edfrangestats::g_loop.fetch_add(1, std::memory_order_relaxed); }
+    }
     if (seq_ok || pre_ok) { return; }
     const int k = std::min(static_cast<int>(movable.size()), 6);   // 63 candidates at most
     // Each action index's position in the given order, for the inversion count.
@@ -43506,15 +43535,19 @@ void EdfRangeAurasBehindUntappers(const GameState& s, const std::vector<Action>&
     }
     std::stable_sort(cands.begin(), cands.end(), [](const Cand& x, const Cand& y)
     { return x.inv != y.inv ? x.inv < y.inv : x.mask < y.mask; });
+    if (rs_on) { edfrangestats::g_cands.fetch_add(static_cast<long long>(cands.size()), std::memory_order_relaxed); }
     for (const Cand& c : cands)
     {
         if (c.ord == order) { continue; }
+        if (rs_on) { edfrangestats::g_walks.fetch_add(1, std::memory_order_relaxed); }
         if (TurnSolver::OrderPaysSequentially(s, acts, c.ord))
         {
             if (s_trace) { std::fprintf(stderr, "[edf-range]   -> moved [%s]\n", names(c.ord).c_str()); }
+            if (rs_on) { edfrangestats::g_moved.fetch_add(1, std::memory_order_relaxed); }
             order = c.ord; return;
         }
     }
+    if (rs_on) { edfrangestats::g_unchanged.fetch_add(1, std::memory_order_relaxed); }
     if (s_trace) { std::fprintf(stderr, "[edf-range]   -> no candidate pays; unchanged\n"); }
 }
 }   // namespace
