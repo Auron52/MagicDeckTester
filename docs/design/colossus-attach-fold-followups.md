@@ -89,11 +89,18 @@ on and are recorded here per the deferred-work rule.
    {Theft, Theft} and {Path -> Kor Duelist, Theft, Theft} tie on rank (4200) and the smallest mask picks
    the second; the game goes from a T6 win to unwon. The search finds T3 at d6/b100 (stage-1 recovery),
    so this is the depth-0 runner's valuation, not a reachability gap; a heuristic fix needs its own A/B.
-10. **An Equip of a hand Equipment copy that never lands is still enumerated (by code reading, not yet
-   measured).** The Equip block offers
-   one Equip per hand COPY, and SubsetHasStrandedEquip accepts it whenever a cast action names that
-   copy's hand slot -- but the cast materialises the FIRST copy still in hand, so with one Hammer cast,
-   "equip Hammer #2 -> X" pays and does nothing (MTG_EQUIP_PAY_GUARD off). Dominated by the same plan
-   without it (no line is lost), so a pure width item: the copy-ordinal rule the Theft now uses
-   (ordinal < casts of the name) would fold it.
-
+10. **An Equip of a hand Equipment copy that never lands -- FIXED 2026-10-17 (MTG_EQUIP_UNLANDED_COPY_FOLD).**
+   The Equip block offers one Equip per hand COPY, and SubsetHasStrandedEquip accepts it whenever a
+   cast names that copy's hand SLOT -- but the cast materialises the first copy still in hand, so with
+   N copies of a name cast, an Equip of the copy of hand ordinal k >= N pays its equip cost (and spends
+   the first-equip waiver; MTG_EQUIP_PAY_GUARD is off) and attaches nothing. It is reachable whenever
+   the hand-cast fold keeps two copies apart (one copy drawn after this turn's main-1 snapshot, a
+   tagging decline), which is when the two cast slots are separate digits. Folded in both subset walkers
+   (SubsetHasEquipOfUnlandedCopy, beside SubsetHasStrandedEquip, odometer positions only) with the
+   ordinal rule the per-copy Theft pins use: the subset without that Equip is enumerated (an optional
+   digit, never forced), costs no more, and reaches the same board. Proven only where nothing else in the
+   subset can move a hand copy (every action an Equip, a reconfigure unattach, or a cast of an Equipment
+   or attach spell) and nothing can re-solve the phase before the trailing pass (no equipment / cast /
+   enters draw watcher, no play-from-top source); a name with a staged copy keeps every plan; human play
+   and MTG_UNPRUNED are untouched. Unit cases in test/unit/test_equip_host_fold.cpp ("Unlanded hand
+   copy: ...").
