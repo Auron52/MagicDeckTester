@@ -43345,7 +43345,8 @@ struct BpPrefixSnap
     bool equip_armed  = false;       // deferred_equip_armed (site 6) -- same role, same reason:
                                      // the resumed tail must re-solve at the SAME site index the
                                      // full apply did, or its ranks index a different list
-    bool cascade_free = false;       // one-shot free-cast marker, captured for exactness
+    bool cascade_free = false;       // the cascade one-shot as the prefix left it: apply_one takes it
+                                     // at its head, so false at every capture (kept for exactness)
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
     int  pin_sagach1 = -1;                                                  // ... incl. chapter I
     int  pin_sac_cursor = 0;         // sac-pin consumption point (the LIST is the plan's own
@@ -45001,17 +45002,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     };
 
 
-    // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
-    // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
+    // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free cascade cast -- the
+    // cascade / free-cast walks below set it immediately before their recursive apply_one). TAKEN as
+    // apply_one's first statement, beside the cast riders, so a hit that apply_one then refuses (the
+    // Path no-target guard, a breakpoint truncation) can never make a LATER cast free. Executor twin:
+    // EffectHandler::PushFreeCast, which pushes the hit itself and leaves nothing armed.
     bool cascade_free = false;
-    // Maelstrom Archangel: a plan action marked free_cast spends one banked free cast -- arm the
-    // one-shot cascade_free so exactly its apply_one skips payment. A stranded marker (bank empty
-    // because the combat line diverged) falls through to a paid attempt, mirroring the executor.
-    auto prep_free = [&](const Action& act)
-    {
-        if (act.free_cast && state.free_casts_available > 0)
-        { cascade_free = true; --state.free_casts_available; }
-    };
+    // Maelstrom Archangel's banked charge is NOT armed here: a plan action marked free_cast carries
+    // it as a cast rider (CastRiders::free_cast) and apply_one spends the bank AT PAYMENT -- after
+    // every early return, exactly where the executor's CastSpellFromHand spends it -- so a skipped
+    // free cast keeps the charge and the next cast pays. (prep_free spent the bank BEFORE the call
+    // and armed cascade_free, which the skip then handed to the next cast.)
     std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int, bool, bool, bool)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
@@ -45024,6 +45025,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // never hand one to a later apply_one call that arms none (the karoo-held Aura release, the
         // Aura recast, the alt-payload loop, a cascade hit).
         const CastRiders riders = cast_riders.Take();
+        const bool     cascade_hit_free = cascade_free;   // ...and the cascade one-shot, likewise
+        cascade_free = false;
         const ManaPool cast_put_credit = riders.land_put;
         const int      cast_loyalty    = riders.loyalty_ability;
         const int      cast_devour     = riders.devour_count;
@@ -45174,10 +45177,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
 
         bool is_creature = def.card.IsCreature();
-        // Cascade casts its target for FREE (CR 702.84). Consume the one-shot flag here,
-        // before any nested casts, so exactly THIS cast skips its mana cost.
-        bool free_cast = cascade_free;
-        cascade_free = false;
+        // FREE: a cascade hit (CR 702.84; its one-shot was taken at the head), or a plan cast marked
+        // free_cast spending one banked Maelstrom Archangel charge. The charge is spent HERE, past
+        // every early return, the executor's spend point (CastSpellFromHand's spend_free); with the
+        // bank empty (the combat line diverged) the cast falls through to a paid attempt, as there.
+        bool free_cast = cascade_hit_free;
+        if (!free_cast && riders.free_cast && state.free_casts_available > 0)
+        {
+            free_cast = true;
+            --state.free_casts_available;
+        }
         // Desperate Ritual SPLICE: pay (splice_count+1) times the printed cost (single Medallion floor
         // inside EffectiveCost). Matches the enum's a.cost = EffectiveCost(def,state,k+1) and the
         // executor's CastSpellFromHand -> lockstep. copies=1 for every non-spliced cast.
@@ -45712,6 +45721,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.evoke              = evoke;
             rec.adventure          = adventure;
             rec.kicked             = kicked;
+            // ...and the Archangel free-cast intent: replay_recorded hands Action::free_cast to
+            // cast_by_name, which spends the charge at payment as this cast just did. A cascade hit is
+            // NOT a free_cast rider (the executor's own cascade trigger casts it) -- false, as before.
+            rec.free_cast          = riders.free_cast;
             // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
             // the executor's replay traits (ComputePlanTraits over the records) count the same mana
             // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0
@@ -47450,7 +47463,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("cast", a);
-                    prep_free(a);
                     // BREAKPOINT LEFTOVERS: an impulse-exile site the provider merges for gets this
                     // list's remaining casts (see lo_pending). Param test first: no other deck pays.
                     {
@@ -47619,7 +47631,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); const bool tb = bp_truncate; cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -47645,8 +47657,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[ai];
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
-                        prep_free(a);
-                        cast_riders = CastRiders::Of(a); apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                            cast_riders = CastRiders::Of(a); apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -47703,7 +47714,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // a.sacrifice_land is true here only under SacLandCastsInOrder; the trailing sac
                     // loop then skips it (spec_hoisted_sac).
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }
-                    prep_free(a); cast_riders = CastRiders::Of(a); apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock();
+                    cast_riders = CastRiders::Of(a); apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock();
                     lo_pending_set = false; lo_pending.clear();
                     slot_hook(a, tb);
                     dbg_cast("ord", a, dbg_before);
@@ -47743,7 +47754,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const bool tb = bp_truncate;
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }   // cast here, not in the trailing pass
-                    prep_free(a);
                     cast_riders = CastRiders::Of(a); apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     fire_unlock();
                     slot_hook(a, tb);
@@ -47757,7 +47767,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                prep_free(a);
                 const bool tb = bp_truncate;
                 cast_riders = CastRiders::Of(a); apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);

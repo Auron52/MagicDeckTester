@@ -52,7 +52,8 @@ const CardDefinition& Def(const std::string& name)
     return *d;
 }
 
-GameState Fresh()
+// `top` goes on the library first (the top: Library::DrawTop reads the front), then 20 Plains.
+GameState Fresh(const std::vector<std::string>& top = {})
 {
     GameState s;
     s.active_player_index = 0;
@@ -60,6 +61,12 @@ GameState Fresh()
     s.players[0].life     = gamesetup::StartingLife();
     s.players[1].life     = gamesetup::StartingLife();
     s.players[0].lands_played_this_turn = 1;
+    for (std::size_t k = 0; k < top.size(); ++k)
+    {
+        Card c = Def(top[k]).card;
+        c.m_number = 800 + static_cast<int>(k);
+        s.players[0].library.push_back(c);
+    }
     for (int k = 0; k < 20; ++k)
     {
         Card c = Def("Plains").card;
@@ -137,6 +144,19 @@ void ResolveAll(GameState& st)
 
 // The executor's hand cast with NOTHING armed (cast_alt / the dig rebuy / the Aura recast shape):
 // cast `name` (just put into hand) and return the stack entry it pushed.
+int UntappedLands(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsLand() && !p.tapped) { ++n; } }
+    return n;
+}
+
+bool InHand(const GameState& s, const std::string& name)
+{
+    for (const Card& c : s.players[0].hand) { if (c.m_name.str() == name) { return true; } }
+    return false;
+}
+
 StackEntry CastUnarmed(AIEngine& eng, GameState& s, const std::string& name, int number)
 {
     Hand(s, name, number);
@@ -229,4 +249,59 @@ TEST_CASE("Cast riders: an UNPAID walker cast does not fire its loyalty activati
           == FindNum(roll, old_ajani)->loyalty_activated_this_turn);
     CHECK(FindNum(exec, old_ajani)->loyalty == FindNum(roll, old_ajani)->loyalty);
     CHECK(exec.players[0].hand.size() == roll.players[0].hand.size());
+}
+
+// ---- the FREE-CAST one-shot (Maelstrom Archangel's banked charge; a cascade hit) -----------------
+//
+// The rollout used to arm its free-cast flag (cascade_free) and SPEND the bank before apply_one, and
+// to consume the flag only after five early returns; a skipped free cast therefore made the NEXT cast
+// free. The executor spends the bank at payment and charges the next cast. Now apply_one takes the
+// flag (and the action's free_cast rider) at its head and spends the bank at payment, as the executor.
+
+TEST_CASE("Free cast: a SKIPPED Archangel free cast does not make the next cast free (rollout == executor)")
+{
+    EnsureCardsLoaded();
+    // No mana at all: the Duelist is castable only for free. One banked Maelstrom Archangel charge, post-
+    // combat main; the plan's free cast names a creature that is not in hand, so it is skipped. (A
+    // creature, so the generic cast order -- creatures first, ties by plan order -- keeps it ahead of
+    // the Duelist.)
+    GameState s = Fresh();
+    Hand(s, "Kor Duelist", 31);
+    s.free_casts_available = 1;
+    Action skipped = CastAct("Swiftblade Vindicator");
+    skipped.free_cast = true;
+    skipped.cost      = ManaCost{};
+    const TurnSolver::Plan line = PlanOf({ skipped, CastAct("Kor Duelist") });
+
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/false);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    eng.SetSearchPostCombat(true);   // the executor plays this post-combat main (FiveColour does)
+    MtgTestSeam::CommitPhasePlan(eng, line, false);
+    GameState exec = s;
+    eng.TakeTurn(exec, false, ResolveAll);
+
+    // The executor cannot pay {W} and keeps the charge; the rollout used to spend the charge on the
+    // skipped cast AND cast the unpayable Duelist for free.
+    CHECK(InHand(exec, "Kor Duelist"));
+    CHECK(exec.free_casts_available == 1);
+    CHECK(InHand(roll, "Kor Duelist") == InHand(exec, "Kor Duelist"));
+    CHECK(roll.free_casts_available == exec.free_casts_available);
+}
+
+TEST_CASE("Free cast: a REFUSED cascade hit does not make the next cast free (rollout)")
+{
+    EnsureCardsLoaded();
+    // Throes of Chaos cascades into Path to Exile, which has no legal target (no creature anywhere) and
+    // is refused at apply_one's Path guard -- after the cascade walk armed the free-cast one-shot. Four
+    // Mountains pay for Throes; nothing pays the Duelist's {W}, so only a stray free cast could cast it.
+    GameState s = Fresh({ "Path to Exile" });
+    for (int k = 0; k < 4; ++k) { Put(s, "Mountain", 50 + k); }
+    Hand(s, "Throes of Chaos", 30);
+    Hand(s, "Kor Duelist", 31);
+    const TurnSolver::Plan line = PlanOf({ CastAct("Throes of Chaos"), CastAct("Kor Duelist") });
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/true);
+    REQUIRE_FALSE(InHand(roll, "Throes of Chaos"));
+    CHECK(InHand(roll, "Kor Duelist"));
 }

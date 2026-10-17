@@ -713,7 +713,8 @@ struct Action
 // CAST RIDERS -- the per-cast values a plan action hands to ONE cast that are NOT positional parameters
 // of the executor's cast_by_name / cast_alt or the rollout's apply_one (each already takes ~20): Magnetic
 // Theft's Equipment target, Mycoloth's devour count, Beseech's coloured twobrid pips, Search for
-// Tomorrow's land-put credit and a walker's same-cast loyalty activation.
+// Tomorrow's land-put credit, a walker's same-cast loyalty activation and Maelstrom Archangel's
+// banked free cast.
 //
 // CONSUME-ONCE, ONE BODY FOR BOTH WORLDS. Every plan-execution site arms them with Of(action)
 // immediately before the cast; the cast entry TAKES them (copies them out, resets the slot) as its
@@ -736,6 +737,10 @@ struct CastRiders
     int      twobrid_colored = 0;    // Action::twobrid_colored (Beseech the Queen)
     int      attach_equip_id = 0;    // Action::attach_equip_id (Magnetic Theft's Equipment target)
     ManaPool land_put{};             // Action::rock_mana on a LandSearchPutsUntapped cast (Search for Tomorrow)
+    bool     free_cast       = false;   // Action::free_cast: spend one banked Maelstrom Archangel charge
+                                        // AT PAYMENT if the bank holds one (the rollout's apply_one; the
+                                        // executor passes Action::free_cast to cast_by_name positionally
+                                        // and spends at the same point in CastSpellFromHand)
 
     static CastRiders Of(const Action& a)
     {
@@ -745,6 +750,7 @@ struct CastRiders
         r.twobrid_colored = a.twobrid_colored;
         r.attach_equip_id = a.attach_equip_id;
         r.land_put        = a.rock_mana;
+        r.free_cast       = a.free_cast;
         return r;
     }
     // Copy out and reset: the ONLY way a cast reads them.
