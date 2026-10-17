@@ -87,6 +87,18 @@ The 10-15 incident in detail, from the 15 s watchdog log (`~/.claude/mdt-watch/p
    truncated rows file and mark itself complete. Every pipeline already gates on the exit status, and
    phase A re-queues missing games on a re-run.
 
+## OPEN: the 9p clock lags the container, so a fresh edit can be skipped by the build (2026-10-17)
+A file written on the mount gets an mtime about **3 minutes in the past** (measured 2026-10-17: a
+`touch` on a worktree stamped 1792224486 while `date +%s` read 1792224681, so the file was 195 s behind).
+Objects are built on the volume, which keeps the container's clock. So a source edit saved within
+about 3 minutes AFTER a build can look OLDER than its object file, and the next `./build.sh` skips the
+recompile **with no message**: the binary runs the old code. The Fungus seed-7021 fix
+(`fungus-v2-fd-diverge-7021.md`) hit this twice in one session.
+- **Workaround:** run `touch -d "@$(date +%s)" <edited files>` before `./build.sh`, or wait 3+
+  minutes after the last build before editing.
+- **Not fixed:** `build.sh` neither detects the skew nor compensates for it. A guard could measure the
+  skew with a probe file and warn, or force-touch sources modified since the last build.
+
 ## Generation artifacts (the user's rule above)
 - **Mulligan generation (`mullgen.sh`)** writes its journal beside the decklist on the Windows drive. On a
   failed write the generator holds the records in memory and retries every 30 s, and it keeps rolling
