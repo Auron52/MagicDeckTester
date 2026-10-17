@@ -1,5 +1,19 @@
 # Overnight handoff — 2026-10-06
 
+**Status (2026-10-17): a historical handoff, mostly DONE.** Verified against git and `src/`:
+* **Done.** The viewer combat swap landed as 56ea019a (2026-10-07). The CR 508.1f engine fix landed
+  USER-approved as 15bf177a (2026-10-07). The Glittering Wish rule landed in rounds through 9197cf53
+  (2026-10-08; `MTG_WISH_FULL_WIDTH` is a default-OFF control arm). Bruna was restored to all three
+  tiers with accepted GT in f1e675d9. Bruna's value leaf was ADOPTED with the USER's bucket rulings
+  and overnight GT re-accepted in 6a8fd686 (2026-10-09). FiveColour has accepted overnight GT keys.
+  The legacy `/home/vscode/wt/*` worktrees no longer exist.
+* **Still open as of this date.** `MTG_ATTACK_BODY_TAP_ORDER` is still OFF autonomously (ON in human
+  play only; `EngineFlags.h`) with no held-out A/B on record. `MTG_BRUNA_ORDER` is still default OFF,
+  pending the USER. `MTG_BRUNA_BUCKET_DISCARD` is ON in code since b43c1111 (authored as PROPOSED), with no user
+ruling found, so it is pending the USER's ruling. Bruna has no keep table yet (6a8fd686
+  projected ~3.4 days; not started). The Selesnya flicker and bruna2hg per-row questions were not
+  checked here.
+
 This handoff is for the session that starts the overnight run on 2026-10-06. The user asked for an
 overnight run in a NEW session. That session owns the choice of job. This file lists the candidates
 and what must be true before any of them starts.

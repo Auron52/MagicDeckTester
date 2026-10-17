@@ -1,6 +1,14 @@
 # StompySurprise: the USER-approved cast order, built and measured (2026-10-14)
 
-**Status (2026-10-15): BUILT and MEASURED; everything DEFAULT OFF, adoption is the USER's call (§5, §6).**
+**Status (2026-10-17): ON in code since ce04d222 (2026-10-15, "integ: ... pending the USER"),
+pending the USER's ruling.** That commit turned five flags `EnvOn(..., true)`: `MTG_STOMPY_ORDER`,
+`MTG_HOLD_RELEASE_YIELD`, `MTG_HOLD_PRODUCER_FIRST`, `MTG_SAC_VICTIM_SAME_NAME` and
+`MTG_EXEC_PUT_DEFERRED`. `MTG_STOMPY_TOP_RESOLVE` is also ON. `MTG_STOMPY_NO_TARGET_RANK` stays OFF.
+`=0` restores each old default. No user ruling on adoption is on record; see `cast-order-review-2026-10-14.md`
+(035ae274) for the integration round. The 2026-10-15 "everything DEFAULT OFF" line below and §6
+describe the tree before ce04d222.
+
+**Status (2026-10-15, SUPERSEDED as to defaults by ce04d222): BUILT and MEASURED; everything DEFAULT OFF, adoption is the USER's call (§5, §6).**
 The payment fix + three engine levers clear the whole bar with the order OFF; the order with them is net
 <= 0 in every cell, references unchanged, but 2 of 598 slower games do not recover (§3.3, §3.4, §4f).
 Self-contained. The USER's verbatim 2026-08-21 order
@@ -410,6 +418,10 @@ because it casts the 1-drop Elves before the Archdruids.
    d0 plays the canonical (early) slot.
 
 ## 6. Defaults as shipped
+
+> **SUPERSEDED 2026-10-15 by ce04d222:** all of these except `MTG_STOMPY_NO_TARGET_RANK` are now
+> DEFAULT ON in code, pending the USER's ruling (see the status line at the top). The paragraph
+> below records the branch's defaults before the integration.
 
 All DEFAULT OFF (`=1` enables, per job via heurarm): `MTG_STOMPY_ORDER` (since `0731e8a5`; its
 `MTG_STOMPY_ORDER_SEARCH` and `MTG_STOMPY_TOP_RESOLVE` stay ON inside it), `MTG_HOLD_RELEASE_YIELD`,

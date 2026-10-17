@@ -1,5 +1,12 @@
 # Bruna — where things stand (2026-10-06, end of session)
 
+**Status (2026-10-17):** this page is a 2026-10-06 snapshot and is superseded on its main open items.
+The CR 508.1f fix landed USER-approved in `15bf177a` (2026-10-07, with the attack-hold follow-up
+`415c6ddf`); Bruna was restored to all three suite tiers at 2.60x hinata in `f1e675d9` (2026-10-09);
+the first value leaf was adopted in `6a8fd686` (2026-10-10, `decks/Bruna/Bruna.value.json`); the
+mulligan profile was handed to the secondary machine (`6313b875`, `61b5961a`) and no keep table is
+committed yet. Current state lives in `docs/design/analysis-Bruna.md`.
+
 A one-page summary for picking Bruna back up. The full record is the ledger,
 `docs/design/analysis-Bruna.md` (about 1,500 lines). This page says what is done, what is in flight,
 what is owed, and what waits on the user.

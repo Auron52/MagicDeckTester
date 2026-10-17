@@ -1,5 +1,7 @@
 # Giants — cleanup-discard BUCKET policy (PROPOSAL, 2026-09-23)
 
+**Status (2026-10-17):** IMPLEMENTED and SHIPPED default ON. The USER settled the design 2026-10-09 (the SETTLED block) and ruled on the implementation readings 2026-10-10 (sections below); `MTG_GIANTS_BUCKET_DISCARD` is `EnvOn(..., true)` in `src/ai/DecisionProviders.cpp` since d9d27ff6 (2026-10-09). It was measured only as part of the whole discard-policy integration in `final-ab-2026-10-13.md` (all integration levers on vs off, not this lever alone): Giants -3; smoke/regression GT accepted (2afc786f, 4ceec8b6, 0739018a). Any "agent default" / "agent reading" not covered by the USER's 10-10 rulings is still the USER's to overturn; no USER review of the measured result is recorded in this file. The "IN REVIEW" heading below records the 10-09 review, which concluded in the SETTLED block.
+
 ## USER-revised design (2026-10-09) -- SUPERSEDES the proposal below
 
 The USER reviewed this proposal on 2026-10-09, one deck at a time, and amended it. Everything in

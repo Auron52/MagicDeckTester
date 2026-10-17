@@ -270,7 +270,12 @@ the recorded win turn was correct in all 30 games. The game now ends immediately
   (`sub=0/156506` for the entire run — every one of its 156,506 sub cell-sides holds a single
   rollout). `DecideBottom`'s argmin then selected on noise.
 
-  **Owed: regenerate.** Fixed in `8592cb18` (feed + exit guard + artifact check) and `9f8d74fe`
+  **DONE 2026-09-02 (status added 2026-10-17):** the table was REPAIRED in place (resumed with the
+  fixed feed, not regenerated from scratch), passed both gates and was ADOPTED (`dfffa638`), committed
+  gzipped (`c25d45b1`), and GT rebaselined on all three tiers (`520fadea`, 19 of 20 cells faster). See
+  `confounded-bottoming-gate-failures.md` "RESOLVED for Dragons". The paragraph below is the pre-repair text.
+
+  ~~**Owed: regenerate.**~~ Fixed in `8592cb18` (feed + exit guard + artifact check) and `9f8d74fe`
   (the scout no longer leaves a journal), so a fresh run is sound. Regeneration should recover the
   −0.0472t keep win the all-or-nothing gate is currently discarding.
 

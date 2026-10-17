@@ -5,6 +5,16 @@ written for another agent to pick up cold. Every claim below is backed by a meas
 `file:line` citation taken on branch `phase-1-2-deck-analyzer` at commit `e97c85a`
 (2026-07-30).
 
+**Status (2026-10-17):** each body heading below (A1-D2) now carries a one-line tag pointing at its
+recorded state in the two Status sections: DONE = A1, A2, A3 (incl. step 4), A4, A6, A7, B2, B3, C2;
+PARTIAL = B1 (11 functions >= 500 LOC remain), B4 (item 2 only), C1 (every twin except
+`TakeTurn`/`ApplyPlanDirect`), D1/D2; DONE-then-REGRESSED = A5 (docs/design/ now holds 533 `.md` files,
+README links ~115). A8 re-checked today: `build-tsan/` and `build-instr/` are gone again; only a 14 MB
+gitignored `build-linux/` sits at the root. Spot-checked in the tree today: `CMakeLists.txt` build-type
+guard, `src/core/EnvFlags.h`, `src/ai/EngineFlags.h`, `cmake/FlagRegistry.cmake`, `test/lib/harness.sh`,
+`src/ai/{Combat,LandPlay}.h`, and no `Hook N` in DecisionProviders.h / TurnSolver.cpp. The bodies were not
+otherwise re-audited.
+
 ## Status (updated 2026-09-03): the BODY below was never updated and is ~705 src commits stale
 
 Snapshot-taken at e97c85a (2026-07-30); read the body as history, not as open work. Verified
@@ -370,6 +380,8 @@ the held-out sweep and the user's sign-off, no matter how mechanical it looked.
 
 ### A1. `cmake --build build` still builds `-O0`, and a stale `-O0` analyzer is on disk
 
+*Status (2026-10-17): DONE (`e3bfb01`) — see the Status sections at the top.*
+
 **This is the exact footgun the project has a CMake guard, a `build.sh`, and a CLAUDE.md
 section to prevent — and the guard does not cover the path that is actually reachable today.**
 
@@ -405,6 +417,8 @@ this document.
 
 ### A2. `ApplyHeuristicDefaults()` silently no-ops unless CWD is the repo root
 
+*Status (2026-10-17): DONE (`a3d5fdd`) — see the Status sections at the top.*
+
 [HeuristicDefaults.h:20-24](src/core/HeuristicDefaults.h#L20-L24) defaults its path to the
 **relative** `"src/ai/data/heuristic_defaults.env"` and returns silently when the file is
 absent. Called from [main.cpp:2903](src/main.cpp#L2903) and
@@ -429,6 +443,8 @@ directory-relative off the profile path.
 **Risk: none while the file is empty.** Do it before the first adoption lands, not after.
 
 ### A3. `MTG_X=0` enables 88 of the ~290 flags — and the docs tell you to write exactly that
+
+*Status (2026-10-17): DONE, incl. step 4 (flag registry) — see the Status sections at the top.*
 
 Three different truthiness conventions coexist:
 
@@ -461,6 +477,8 @@ Action (mechanical, byte-identical if done right):
    an A/B arm.
 
 ### A4. Prune the orphaned one-off experiment scripts
+
+*Status (2026-10-17): DONE (`b57749f`) — see the Status sections at the top.*
 
 `scripts/` holds **85 files**. Classified by who references them:
 
@@ -499,6 +517,8 @@ citing doc in the same commit.
 
 ### A5. Give `docs/design/` an index
 
+*Status (2026-10-17): DONE 2026-07-30, then REGRESSED (533 docs vs ~115 linked, 2026-10-17) — see the Status sections at the top.*
+
 105 files, 1.5 MB, no `README.md` or `INDEX.md`. They mix live specifications
 (`exhaustive-keep-policy.md`, `per-deck-folder-layout.md`), adopted-feature write-ups
 (`accelerant-ordering-and-self-funding.md`), and *measured dead ends* that must not be
@@ -514,6 +534,8 @@ section with a one-line "what was measured and why it lost". Cheap to write, and
 single highest-leverage document for onboarding.
 
 ### A6. Fix the colliding hook numbers
+
+*Status (2026-10-17): DONE — see the Status sections at the top.*
 
 The `DecisionProvider` hook numbering has **duplicates**, counted over
 [DecisionProvider.h](src/ai/DecisionProvider.h):
@@ -541,6 +563,8 @@ name so old docs and commits stay decodable. Comment-only change.
 
 ### A7. De-duplicate the flag statics that are declared twice
 
+*Status (2026-10-17): DONE (`15b151e`) — see the Status sections at the top.*
+
 Identical `static const` flag readers exist in two translation units:
 
 - `s_legacy_static_tapped` — [AIEngine.cpp:2644](src/ai/AIEngine.cpp#L2644) and
@@ -558,6 +582,8 @@ Action: one `inline bool LandClosingWindowEnabled()` etc. per flag, in the heade
 behaviour. Byte-identical by construction; fold into the A3 sweep.
 
 ### A8. Disk hygiene: 1.1 GB of superseded build trees
+
+*Status (2026-10-17): DONE; re-checked 2026-10-17, only a 14 MB `build-linux/` remains — see the Status sections at the top.*
 
 `build-asan/` (452 MB), `build-prof/` (282 MB), `build-tsan/` (428 MB) are root-level trees
 predating the multi-config `build/` layout. `build-prof` is fully superseded by
@@ -579,6 +605,8 @@ of times, so each one needs a digest check. Land them **one at a time** — a ba
 "obviously safe" extractions that together move a digest is very expensive to bisect.
 
 ### B1. Eleven functions over 500 lines; two over 1700
+
+*Status (2026-10-17): PARTIAL (in progress) — see the Status sections at the top.*
 
 | LOC | Location | Function |
 |---:|---|---|
@@ -612,6 +640,8 @@ same sequence of operations.
 second target.
 
 ### B2. `main.cpp`: 18 hand-rolled decision-JSON writers with an identical prologue
+
+*Status (2026-10-17): DONE — see the Status sections at the top.*
 
 `grep -c 'static void Write.*DecisionJson' src/main.cpp` → **18**, spanning
 [main.cpp:406](src/main.cpp#L406)–[main.cpp:1352](src/main.cpp#L1352). Each repeats the same
@@ -647,6 +677,8 @@ just stop having 18 of them.
 
 ### B3. `test/` and `scripts/`: no shared harness library, 55 direct binary invocations
 
+*Status (2026-10-17): DONE (`test/lib/harness.sh`) — see the Status sections at the top.*
+
 - 55 scripts invoke `build/Release/mtg` directly.
 - 16 re-implement the avg-turn-to-win metric math inline.
 - 26 build their own `MTG_*` A/B skeleton.
@@ -664,6 +696,8 @@ Action: extract `test/lib/harness.sh` with the primitives the harness already ha
 [CLAUDE.md](CLAUDE.md) mandates for free, instead of each one re-learning it.
 
 ### B4. Compile-time / dev-loop cost
+
+*Status (2026-10-17): PARTIAL (item 2 done) — see the Status sections at the top.*
 
 Measured single-TU compiles at `-O3` on this machine:
 
@@ -702,6 +736,8 @@ the build tree more fragile.
 This is the largest real debt in the repository, and the one that has produced actual bugs.
 
 ### C1. Executor and rollout are twin implementations of the same rules
+
+*Status (2026-10-17): PARTIAL (all twins but TakeTurn/ApplyPlanDirect) — see the Status sections at the top.*
 
 The real game runs through `GameEngine`/`AIEngine`. The search's rollout runs through
 `TurnSolver`'s `Simulate*`/`ApplyPlanDirect` family. They must agree exactly — and they are
@@ -770,6 +806,8 @@ byte-identical, stop and report the discrepancy to the user — a discrepancy fo
 
 ### C2. There are no unit tests, at all
 
+*Status (2026-10-17): DONE (`ca0cb96`) — see the Status sections at the top.*
+
 `grep -rn 'enable_testing\|add_test\|catch2\|gtest\|doctest' CMakeLists.txt cmake/` → nothing.
 There is no test target; `test/` is entirely end-to-end shell harness over the built binaries.
 
@@ -796,6 +834,8 @@ appears late in this document.
 ## Tier D — needs the user's decision, do not act unilaterally
 
 ### D1. ~290 environment flags, and no lifecycle for retiring them
+
+*Status (2026-10-17): PARTIAL (user-approved deletions) — see the Status sections at the top.*
 
 `grep -rhoE 'MTG_[A-Z0-9_]+' src/ | sort -u` → **290 distinct names** across **310 `getenv`
 call sites**. By file: `TurnSolver.cpp` 115, `ExhaustiveKeep.cpp` 48, `analyzer/main.cpp` 44,
@@ -856,6 +896,8 @@ every known flag, its default, its owning subsystem, and whether it is
 makes the flag surface reviewable instead of grep-only.
 
 ### D2. Flags whose experiment is documented as not-adopted
+
+*Status (2026-10-17): PARTIAL (user-approved deletions) — see the Status sections at the top.*
 
 `MTG_HINATA_SPASM_GATE` (7 sites, [DecisionProviders.cpp:1847](src/ai/DecisionProviders.cpp#L1847)
 plus a mode reader in the solver at [TurnSolver.cpp:998](src/ai/TurnSolver.cpp#L998)) gates a

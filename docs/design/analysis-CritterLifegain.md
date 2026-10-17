@@ -3,6 +3,13 @@
 Deck: `decks/CritterLifegain/CritterLifegain.cod` (60, mono-white lifegain; no sideboard).
 Started 2026-09-08 on branch `phase-1-2-deck-analyzer` (base 67ef4c66).
 
+**Status (2026-10-17):** a v2 list was ADOPTED as the shipped deck on 2026-09-15 (USER: "make this the
+new list"; v1 archived at `decks/CritterLifegain/v1-thune4-basilica/` in `909e781d`; installed
+`62de9527`, its own value leaf `d96c9b98` and mulligan profile `831272a1`, GT rebaselined `7f7ad8a6`).
+The adopted v2 (23 lands: Serra 4, Ocelot 4, Remote Farm 4, Ajani walker 1) is NOT identical to "THE
+LIST" below (24 lands, Serra 2, Ajani 2). The "NOT adopted" list sections below are superseded; the
+adoption record is `docs/design/critter-lifegain-v2-adoption.md`.
+
 Status: **ANALYZED** (2026-09-08) — all Stage-5 checks green; suite GT accepted for all three tiers
 (smoke/regression/overnight); tie-break `--blocks 121` re-run + 5g mining are the remaining box work.
 

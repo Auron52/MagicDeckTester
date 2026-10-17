@@ -5,7 +5,7 @@
 reserved that keeps the best post-combat payload payable. It reserves for the single best uncast
 hand card rather than this doc's `ClassifyMainPhase` want-set.
 
-**Status:** designed, not built.
+**Original status (SUPERSEDED by the line above):** designed, not built.
 **Origin:** USER, 2026-08-16 — *"it would be nice for the mana choices to be made
 with main 2 in mind (since often the human player would know what they need in
 main 2)"*.

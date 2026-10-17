@@ -1,5 +1,9 @@
 # Landfall: search cost against the suite gate (2026-10-15)
 
+**Status (2026-10-17):** The §4.1 proposal (`search_leaf_depth: 0`) has since SHIPPED in the
+profile (223cbba4) and is pending the USER's sign-off; see the status line in §4.1. Landfall
+entered the regression suite in 6bed7c67 (2026-10-16).
+
 Standalone record of the performance pass that followed the Landfall deck's card implementation
 (branch `landfall-perf`, from `be6f475d`). What the cost was made of, what was removed (all
 byte-identical), what was measured but NOT shipped because it is a user decision, and what remains.
@@ -86,6 +90,12 @@ under", when the host is busy** -- 4.1 is the lever that would make it comfortab
 ## 4. Measured but NOT shipped -- user decisions
 
 ### 4.1 `search_leaf_depth: 0` for Landfall (PROPOSAL; the Melira Pod precedent)
+
+**Status (2026-10-17):** SHIPPED in the deck profile, NOT yet user-ruled. 223cbba4 (2026-10-15)
+added `"search_leaf_depth": 0` to `decks/Landfall/Landfall.profile.json` as "cheaper and not worse"
+and surfaced it for sign-off. No user ruling is on record: `analysis-Landfall.md` still lists it as
+L2, "ADOPTED 223cbba4 ... Confirm". Pending the USER's ruling; revert = delete the key. Section 4's
+"NOT shipped" heading no longer applies to 4.1.
 
 The 1-ply horizon leaf (`MTG_FD_LEAF_DEPTH` default 1) scores the leaf's whole candidate list
 (Titan picks and land-search pins included) with one greedy rollout each; it is the `W_leaf` factor

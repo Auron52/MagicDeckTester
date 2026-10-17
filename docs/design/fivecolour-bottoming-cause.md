@@ -144,7 +144,7 @@ Read it first.
 
 **ADOPTED 2026-09-15 (`53e0ff57`, pushed).** The shrunk table is installed at
 `decks/FiveColour/FiveColour.keepmodel.exhaustive.profile.json(.gz)`; the generated (`plain`) table is
-kept beside it as `...profile.DISABLED.json`. GT rebaseline for the three tiers is **still owed** —
+kept beside it as `...profile.DISABLED.json`. [**Status 2026-10-17: DONE** -- all three tiers were rebaselined for the shrunk profile in 30868c40 (2026-09-15, 26 fivecolour / fivecolour2hg cases, check_gt_logs consistent).] GT rebaseline for the three tiers was then **still owed** —
 it runs after the labeller-depth diagnostic frees the box (`logs/fc_repolicy/adopt_finish.sh`), on the
 binary rebased onto `origin/909e781d`, which brought 63 changed `src` files.
 

@@ -1,11 +1,18 @@
 # Land-signature completeness: an incomplete dedupe key made land abilities unreachable
 
-**Status (updated 2026-09-03):** ADOPTED 2026-07-30 (cb806c84, dynamic land tapped-ness;
+**Status (2026-10-17):** ADOPTED in full. The signature fix itself is now DEFAULT ON:
+`MTG_LAND_SIG_COMPLETE` flipped to `EnvOn(..., true)` in 3a2206e1 (2026-09-03, `=0` restores the
+legacy signature; `TurnSolver.cpp` `s_complete_land_sig`), together with a 17-param signature
+extension, after the recoverability audit's d8/b0 proof on 4 Creature Giving games; all three tiers
+were rebaselined in that commit. `MTG_LAND_CLOSING_WINDOW` is default ON (`EngineFlags.h`). The
+"remains opt-in" clause in the 2026-09-03 line below is superseded by 3a2206e1.
+
+**Status (updated 2026-09-03, SUPERSEDED by the line above):** ADOPTED 2026-07-30 (cb806c84, dynamic land tapped-ness;
 `MTG_LAND_CLOSING_WINDOW` default ON), GT rebaselined 2026-08-02 (c89a7c25). The signature fix
 itself remains opt-in as `MTG_LAND_SIG_COMPLETE` (the `MTG_LEGACY_LAND_SIG` hatch named below
 does not exist).
 
-**Status:** BUILT, measured, GT-rebaseline pending (2026-07-29). Found while measuring the
+**Original status (2026-07-29, SUPERSEDED):** BUILT, measured, GT-rebaseline pending (2026-07-29). Found while measuring the
 demand-driven colour-bucketing idea from
 [plan-odometer-factorization.md](plan-odometer-factorization.md) — the colour idea measured dead,
 but the audit it required surfaced this.

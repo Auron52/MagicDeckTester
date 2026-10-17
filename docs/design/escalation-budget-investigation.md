@@ -1,6 +1,8 @@
 # The hybrid's escalation budget: why "rejected" value leaves were config artifacts — investigation state
 
-**Status: OPEN INVESTIGATION (2026-09-03), being tackled in earnest next.** USER's bar, in their
+**Status (2026-10-17):** CONCLUDED 2026-09-11 (no session after Session 4). The fix landed as the per-deck calibrated `value_play.escalation_r` (+ `escalation_fresh_frac` where absent) and the Creature Giving value leaf armed (cap5 / beam W3), 6a938099 (2026-09-04, "User-approved adoption 2026-09-04"); Session 4's re-check adopted Goblins R 74 -> 240 (95033f93) and left FiveColour / Dragonstorm at their frozen R. The "Next steps" and "Related docs to update when this closes" lists below are the 09-03 plan, not open work verified as still owed.
+
+**Status (2026-09-03, superseded above): OPEN INVESTIGATION (2026-09-03), being tackled in earnest next.** USER's bar, in their
 words: *"I don't want to just disable the value-leaf, as I consider that a failure of our approach
 here. I think I have, in the past, accepted a small amount of quality regression to install some
 value-leaf entries, but in reality I shouldn't need to make that tradeoff for the most part."*

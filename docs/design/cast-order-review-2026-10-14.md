@@ -9,8 +9,15 @@ if that can largely be constructed by AI as well."* Agents then wrote one cast-o
 drafter followed the shared `_BRIEF.md`, read every card from `cards.json`, and checked its claims with single-game
 probes on the current Release binary. The full drafts are in
 `docs/design/cast-order-drafts-2026-10-14/<Deck>.md`. Every number and quote below comes from those drafts.
-**No code has been changed. Every proposal here is unimplemented and waits for you.** Cast order, its ranges and
+~~**No code has been changed. Every proposal here is unimplemented and waits for you.**~~ Cast order, its ranges and
 main 1 / main 2 are your decisions. The measurements are input to them.
+
+**Status (2026-10-17):** the "no code has been changed" line above was true on 2026-10-14 and is superseded.
+The integration round (§ "INTEGRATION ROUND" below) landed on `phase-1-2-deck-analyzer` and is pushed;
+smoke + regression GT for it were accepted in `5f1db12a` (2026-10-16), overnight GT left to the periodic
+run. Landfall's own order followed in `45640bdc` (GT `2895f5a4`). Several levers in that table were set ON
+by the integrator, not the USER, and remain pending the USER's ruling as listed there; the questions below
+are unchanged and still open unless marked answered.
 
 How the decks split by status:
 
@@ -222,8 +229,9 @@ Unexpectedly Absent are never cast (USER 10-04).
 
 One implementation agent per settled deck built its order and measured it against the committed tree (paired, loss
 = 9; every slower game re-played at `--depth W --budget-ms 100`, then `--depth 8 --budget-ms 0`). The branches were
-then cherry-picked into ONE integration tree, `work/integ-2026-10-14`, which builds and passes every unit test. No
-smoke or regression has run on it yet. Nothing is pushed. Every setting below is the USER's to confirm or overturn.
+then cherry-picked into ONE integration tree, `work/integ-2026-10-14`, which builds and passes every unit test. ~~No
+smoke or regression has run on it yet. Nothing is pushed.~~ *(Superseded 2026-10-17: landed and pushed;
+smoke + regression GT accepted in `5f1db12a`, 2026-10-16.)* Every setting below is the USER's to confirm or overturn.
 Cells are shipped / d3 / d0 in turns against the committed tree, negative = faster.
 
 | deck | ON in the integration tree | net (20-life; 2HG) | slower games not recovered | open for the USER |

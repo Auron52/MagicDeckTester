@@ -1,6 +1,14 @@
 # The sac-outlet pool's colour gate: 3 cards in 60 disabled a collapse on 100% of boards
 
-> **STATUS 2026-10-01, after both levers were measured in one batch — the supersession did NOT
+**Status (2026-10-17): ADOPTED, DEFAULT ON since ec0e67b3 (2026-10-01), at the USER's direction**
+(*"We need the optimizations. That was the whole point."*). `MTG_SAC_POOL_TURN_COLOR` is
+`EnvOn(..., true)` (`TurnSolver.cpp`; `HeuristicArm.h` records "ADOPTED default ON 2026-10-01, USER
+accepted the lossy case"). The "waiting on one thing" hold below, which kept the keepgen journal
+resumable, was overruled: resume with `MTG_KEEP_RETAIN_FOREIGN` instead. `MTG_SAC_OUTLET_PAY` is still
+default OFF. Both headers below are superseded, and so is the "default OFF" in the `TurnSolver.cpp`
+comment above the reader. The §5 remainder (~44%) was not re-checked here.
+
+> **STATUS 2026-10-01 (SUPERSEDED by ec0e67b3), after both levers were measured in one batch — the supersession did NOT
 > happen, and this narrowing is MEASURED, APPROVED, AND WAITING ON ONE THING.**
 >
 > The earlier warning here said `MTG_SAC_OUTLET_PAY` would make this document inert, because with the
@@ -32,7 +40,7 @@
 > **Flip it when that generation lands, or if a restart is chosen anyway.** The working tree is clean —
 > the default lives in `SacPoolTurnColorEnabled()` and the flip is one line.
 
-**Status 2026-10-01: diagnosed, sized, and a first fix BUILT behind `MTG_SAC_POOL_TURN_COLOR`
+**Original status 2026-10-01 (SUPERSEDED): diagnosed, sized, and a first fix BUILT behind `MTG_SAC_POOL_TURN_COLOR`
 (default OFF). It recovers ~56% of the lost opportunity. The remaining ~44% needs a different
 change (§5).**
 

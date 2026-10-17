@@ -1,6 +1,13 @@
 # Do low-depth / low-budget mulligan generation settings produce the same LABELS?
 
-**Status:** DEFERRED to 2026-09-19 by the user. Angels is the test case, and it is a good one.
+**Status (2026-10-17): STILL OPEN, never run.** The 2026-09-19 date passed and nothing in git or
+`docs/` records a label-agreement comparison. The baseline below has also moved: Angels adopted a new
+list on 2026-09-19 (598848fa), the d1 table quoted below is now archived under
+`decks/Angels/v1-thune4-chancery/`, and the shipped table was regenerated on the new list in
+4e81a3e7, again at `mull_gen_depth=1` / `mull_gen_budget_ms=3` (`decks/Angels/Angels.value.json`).
+The experiment still applies, but against that table.
+
+**Original status (2026-09-18, SUPERSEDED):** DEFERRED to 2026-09-19 by the user. Angels is the test case, and it is a good one.
 **User, 2026-09-18:** *"I would actually be curious to test the play settings profile against this
 one. It's a good test for our low-depth low-budget profiles."*
 

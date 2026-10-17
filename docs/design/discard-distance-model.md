@@ -1,6 +1,8 @@
 # A shared distance-to-castable model for the cleanup-discard buckets
 
-Status: IN PROGRESS (2026-10-10). Lever: `MTG_DISCARD_DIST_MODEL` (heurarm `DISCARD_DIST_MODEL`),
+**Status (2026-10-17):** IMPLEMENTED and wired into all six decks in the table below on 2026-10-10 (e0a70bc8 model; 72786cc8 Giants, 578a59e2 Auras, 3a6fd4f7 Goblins, 38d2779a Angels, 6f0fb927 CritterLifegain, d8eece80 SelesnyaLifegain). `MTG_DISCARD_DIST_MODEL` is `EnvOn(..., true)` default ON at every reader in `src/ai/DecisionProviders.cpp`. No `=0` vs `=1` A/B result is recorded here or in a commit message, so that measurement is still owed; Minotaur's arm was not built.
+
+Status (2026-10-10, superseded above): IN PROGRESS (2026-10-10). Lever: `MTG_DISCARD_DIST_MODEL` (heurarm `DISCARD_DIST_MODEL`),
 default ON; `=0` restores each deck's previous distance proxy so the model is A/B-measured, not assumed.
 
 ## Why

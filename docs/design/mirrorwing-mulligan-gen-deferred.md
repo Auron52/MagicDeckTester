@@ -1,5 +1,11 @@
 # Mirrorwing mulligan generation — DEFERRED (2026-08-15), and what unblocks it
 
+**Status (2026-10-17): CLOSED — no longer deferred.** The shipping Anger-4 / Oracle-3 list
+(`3faf5c76`, unchanged since) has its value leaf (7d13fd6c) and its exhaustive keep+bottom table,
+repaired (dfffa638) and ADOPTED 2026-09-02 in 17dac2d7; both files are present in
+`decks/Mirrorwing Dragon/`. The title's "DEFERRED" and the 2026-08-15 status further down describe
+the archived v2 list and are kept as history only.
+
 > **2026-09-01 — THIS DOCUMENT DESCRIBES THE LIST NOW ARCHIVED AS `v2-instigator-entrance`.**
 > The shipping list is the Anger-4 / Oracle-3 rebuild (`3faf5c76`). What carries over, what does
 > not, and one error in the text below:
@@ -44,7 +50,7 @@
 generated, repaired (dfffa638) and ADOPTED on 2026-09-02 (17dac2d7, both gates pass, GT
 rebaselined 20 cells).
 
-**Status:** the exhaustive keep/bottom profile for `decks/Mirrorwing Dragon` is NOT generated and
+**Original status (2026-08-15, SUPERSEDED):** the exhaustive keep/bottom profile for `decks/Mirrorwing Dragon` is NOT generated and
 generation is deliberately deferred. The deck plays on defaults + the adopted value-leaf sidecar
 (`Mirrorwing Dragon.value.json`, presence-only, `mull_gen_depth=3` / `mull_gen_budget_ms=3` —
 **superseded: the measured setting is d2/b3, see the 2026-09-01 header**).

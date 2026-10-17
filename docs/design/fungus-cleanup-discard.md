@@ -1,6 +1,8 @@
 # Fungus cleanup discard: the generic rule sheds Mycoloth and Doubling Season first
 
-**Status: OPEN.** Found 2026-09-23 when the USER asked *"Does fungus have a proper discard
+**Status (2026-10-17):** IMPLEMENTED. The USER's §5 buckets (2026-09-24), the 2026-10-09 settled gaps (§6) and the 2026-10-10 rulings (§7) are in `FungusProvider::CleanupDiscardCandidates` behind `MTG_FUNGUS_BUCKET_DISCARD`, `EnvOn(..., true)` default ON since e7ed137c (2026-10-09), covered by `test/unit/test_fungus_discard.cpp`. Measured only inside the integration A/B (`final-ab-2026-10-13.md`: Fungus 0, Fungus-b -30, all slower games recover). The agent readings noted in §7 remain the USER's to overturn.
+
+**Status (2026-09-23, superseded above): OPEN.** Found 2026-09-23 when the USER asked *"Does fungus have a proper discard
 heuristic? If it is searched there could be some issues"* and added *"(though there isn't that much
 draw in the list, but our Psychotrope kept showing up in the slowest hands)"*.
 

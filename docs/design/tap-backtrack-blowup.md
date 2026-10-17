@@ -1,4 +1,6 @@
-# TapForCostBacktrackWorker exponential blow-up on wide boards (open defect)
+# TapForCostBacktrackWorker exponential blow-up on wide boards (open defect -- FIXED, see Status)
+
+**Status (2026-10-17):** FIXED. The identical-copy case by the sibling collapse 7603eb97 (2026-08-12; still in `src/core/SpellEffects.cpp`, `MTG_NO_TAP_DUP_COLLAPSE=1` is the off switch); the mixed-class residual by the source-count gate fixes 2c6bc641 + f990bcfe (2026-08-16), per `tap-backtrack-mixed-class-sighting.md`. The "(open defect)" in the title is the 2026-08-11 state; the full record is in "Status" at the bottom.
 
 ## Observation (2026-08-11)
 

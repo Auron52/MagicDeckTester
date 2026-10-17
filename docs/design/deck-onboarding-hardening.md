@@ -1,6 +1,12 @@
 # Deck-onboarding hardening — make the pipeline a set of enforced gates
 
-**Status:** in progress (started 2026-07-17, branch `phase-1-2-deck-analyzer`).
+**Status (2026-10-17):** the five workstreams were BUILT by 2026-07-17 per the progress log below
+(① guard + registry and land-entry wiring, ② `dcff29d2`/`ffa86a43`, ③ `scripts/verify_deck.py`, ④
+`c8753286`, ⑤ loop `d30c0ac3`); the gate is the one every deck since has run through. Not re-verified
+here: the latent second greedy replicate loop ① names, and ⑤'s "author real heuristic experiments",
+which the log leaves as REMAINING. The doc body has not been updated since 2026-07-17.
+
+~~**Status:** in progress~~ (superseded above) (started 2026-07-17, branch `phase-1-2-deck-analyzer`).
 **Owner goal (user):** move the user from *bug-finder* to *sanity-checker*. Getting the first
 6 decks workable took heavy manual effort and issues still slipped through (e.g. the Slivers /
 Hatchery-Sliver `replicate` viewer gap, found by hand mid-game). The onboarding process must

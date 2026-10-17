@@ -1,6 +1,8 @@
 # Dragonstorm: cast in the USER's order everywhere it is decided (`MTG_DRAGONSTORM_USER_ORDER`)
 
-Status: IMPLEMENTED behind ONE lever, `MTG_DRAGONSTORM_USER_ORDER` (heurarm slot `DRAGONSTORM_USER_ORDER`,
+**Status (2026-10-17):** `MTG_DRAGONSTORM_USER_ORDER` still default ON (`src/ai/DecisionProviders.cpp`, 362a571c). The owed pooled A/B was run JOINTLY, not per lever: it was added after origin 27c5976d, so it is in the `off` arm (every default-ON lever since origin turned off) of the integration held-out A/B in `final-ab-2026-10-13.md` -- Dragonstorm net -935 (444 faster / 25 slower; 22 recover at stage 1, the other 3 were illegal-splice kills in the committed tree), with smoke / regression GT accepted after it (2afc786f, 4ceec8b6, 0739018a). No lever-alone pooled suite A/B is recorded (only the non-verdict sanity batches). The regression-tier slower games it caused are worked in Round 3 below and in `final-ab-2026-10-13.md`'s follow-up fixes.
+
+Status (2026-10-10): IMPLEMENTED behind ONE lever, `MTG_DRAGONSTORM_USER_ORDER` (heurarm slot `DRAGONSTORM_USER_ORDER`,
 appended), **default ON**; `=0` is byte-identical to the parent commit `d6a760e5` (27 jobs / 540 games:
 Dragonstorm d0 / d3 b10 / shipped, Hinata2 d0 / d3, Mirrorwing d0 / d3). The pooled suite A/B is owed
 (not run here). 2026-10-10.

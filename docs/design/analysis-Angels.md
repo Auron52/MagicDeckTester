@@ -7,6 +7,15 @@ context is disposable, this is not.
 **Deck:** `decks/Angels/Angels.cod` — mono-white Angels tribal, 60 cards + 5 sideboard.
 **Started:** 2026-09-17. **Branch:** `phase-1-2-deck-analyzer`.
 
+**Status (2026-10-17):** this ledger describes the ORIGINAL list, now archived at
+`decks/Angels/v1-thune4-chancery/`. On that list the value leaf was adopted 2026-09-18 (`097c446a`,
+superseding the "NOT adoptable yet" section) and the exhaustive mulligan profile followed (`0c5ce223`).
+The decided list was then adopted (`598848fa`, 2026-09-19) and its pipeline regenerated fresh
+(`4e81a3e7`: value leaf + mulligan, smoke + regression rebaselined); `695e8535` (2026-09-20) then
+restored the leafless single pass (`value_play` `{ladder: single, leaf: none, alpha: relaxed}`), which
+is what `decks/Angels/Angels.value.json` ships today, with its keep table. Neither the list change nor
+the later commits are written up in this ledger.
+
 ## The list
 
 | n | card | board |
@@ -619,6 +628,8 @@ report)_
 _(not started)_
 
 ## Value leaf — GENERATED and MEASURED (2026-09-18). It works, and it is NOT adoptable yet.
+
+*(Superseded the same day: ADOPTED 2026-09-18 in `097c446a` — see the next section and the status note at the top.)*
 
 Following the retraction above, the leaf was generated. This section is the answer to the user's
 "use this as a test-case for whatever rules we are using to determine 'we don't need a value-leaf'."

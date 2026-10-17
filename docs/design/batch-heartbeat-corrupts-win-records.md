@@ -1,6 +1,11 @@
 # The batch heartbeat can corrupt a `[win]` record, and it voids the whole run's report
 
-**Status:** open, unfixed. Found 2026-09-16 during the StompySurprise list convergence.
+**Status (2026-10-17):** FIXED in `19485902` (2026-09-19), both halves: `src/runner/BatchRunner.cpp`
+builds the heartbeat line into one buffer and writes it once (fix option 1's effect), and
+`scripts/deck_compare.py` `score()` scans with `re.finditer` instead of an anchored `re.match` (option 3).
+The `UntapCreature` logging gap under "Related" is a separate item and is not covered by that commit.
+
+~~**Status:** open, unfixed.~~ (superseded above) Found 2026-09-16 during the StompySurprise list convergence.
 **Severity:** a 1.6M-game, 65-minute screen produced no report. The data was fully recoverable, but
 only because the failure was noticed and hand-repaired.
 

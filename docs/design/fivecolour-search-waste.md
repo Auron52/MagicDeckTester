@@ -1,5 +1,7 @@
 # FiveColour search-waste census + the free-cast candidate prune
 
+**Status (2026-10-17):** both levers this file lists as "pending" are SHIPPED default ON (`EnvOn(..., true)`): `MTG_FREECAST_PRUNE` since 333480a6 (2026-08-20, after the held-out overnight; `src/ai/TurnSolver.cpp`) and `MTG_5C_CONDEMN` since 65c22f1d (2026-08-20; its commit records "USER approval conditional on fresh perf numbers", which it then measured; `src/ai/DecisionProviders.cpp`). The enum memo (763bb22) and `MTG_5C_SSM` (5efeb1d) are ON as the status blocks below say. The "Pending before adoption" / "Pending USER adoption" lines further down are superseded.
+
 > ## STATUS 2026-08-20b (verify class SOLVED = find #4; memo through its FULL adoption gate,
 > awaiting USER call)
 >

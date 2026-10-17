@@ -1,5 +1,10 @@
 # Anti-Lifegain: the tutor target is a one-option pick inside the search window
 
+**Status (2026-10-17):** the move, the fallback fix, the dead-param deletion and the A1-A7 tests all
+LANDED in `f7d082b1` (2026-10-16); the paired A/B against the proof arm `MTG_ANTILIFE_TUTOR_BRANCH`
+(still in `src/ai/HeuristicArm.h`, DEFAULT OFF) is still owed. The "Proposed fix (next session)" section
+at the end is the pre-fix plan, now done except that A/B.
+
 Status (2026-10-10): **MOVED INTO THE PROVIDER; the prune's proof is owed.** USER: *"Let's delete the
 part that is useless. However, we should have a narrowing tutor for anti-lifegain."* So the narrowing
 stays -- it is the deck's tutor policy -- and the two things that made it a defect are fixed:
@@ -61,7 +66,7 @@ provider **and is sufficiently tested**. This one fails both conditions:
 `TutorSearchWidth() == 2` on the provider is exhaustive for that list's pool, but width is
 irrelevant when the candidate LIST has one entry.
 
-## Proposed fix (next session)
+## Proposed fix (next session) — DONE in `f7d082b1` except the proof A/B (see status at top)
 
 * Move the enabler/wincon ranking into `AntiLifegainProvider` (out of SpellEffects.h).
 * Return BOTH legal names (enabler and wincon) in every branch, ranked, and let the existing

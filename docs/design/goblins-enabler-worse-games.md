@@ -1,6 +1,8 @@
 # Goblins enabler ranking: the games it made WORSE — tracked until recovered
 
-**Status:** OPEN. `606a381` adopted the enabler term on its net (161 games better, 39 worse). This
+**Status (2026-10-17):** NO OPEN WORK (last activity 2026-08-05; an agent conclusion, not a USER closure). Rounds 1-17 recovered what could be recovered (Skirk and Piledriver terms adopted, rounds 6-7); Round 16 concluded *"There is no fix left worth making"* and Round 17 confirmed it. The probe levers (`MTG_GOBLIN_PLAN_AWARE`, `MTG_TUTOR_AXIS_POSTLAND`, `MTG_TUTOR_AXIS_REBASE`) stay default OFF with their numbers. The "OPEN" status below is superseded.
+
+**Status (2026-08-03, superseded above):** OPEN. `606a381` adopted the enabler term on its net (161 games better, 39 worse). This
 doc is the standing record of the 39, so they are not quietly forgotten. **Goal: recover them by
 improving the ranking, without giving back any of the 161.**
 

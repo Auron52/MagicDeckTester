@@ -1,6 +1,8 @@
 # The equip route's per-link price was starving the detector that pays for itself (2026-10-06)
 
-Status: **NOTHING ADOPTED.** The PRICE result is complete, passes the adoption bar, and is inert at
+**Status (2026-10-17):** The PRICE half is ADOPTED: `MTG_EQUIP_ROUTE_NODE_UNITS` default lowered 8 -> 2 in c4ad1b0b (2026-10-07, "user ruling 2026-10-07" per its commit message and the code comment in `src/ai/DecisionProviders.cpp`). TOPMAIN is still NOT adopted: `MTG_EQUIP_ROUTE_TOPMAIN` reads `EnvOn(...)` default OFF. (`MTG_EQUIP_ROUTE_CUT_TOPMAIN`, default ON, is a DIFFERENT lever -- the go-off-cut fix f81d95c2 in `equip-route-cut-poisons-a-frame-it-does-not-win.md` -- not this file's TOPMAIN gate.) The "NOTHING ADOPTED" line below is superseded for the price only.
+
+Status (2026-10-06, superseded for the price by c4ad1b0b): **NOTHING ADOPTED.** The PRICE result is complete, passes the adoption bar, and is inert at
 unlimited budget BY CONSTRUCTION — that is the part that is ready. **TOPMAIN is PROBABLY SOUND but
 NOT PROVEN** (§5a, §5a-bis, §5a-ter): it perturbs 0.63% of games even at 50x the shipped budget and
 makes 17 of them worse, yet all 16 of those re-tested at `--budget-ms 0` come back byte-identical,

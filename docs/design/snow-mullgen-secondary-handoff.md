@@ -1,5 +1,12 @@
 # Snow mulligan profile: handoff to the secondary machine
 
+**Status (2026-10-17): DONE; this handoff is history.** The generation completed 2026-10-06
+(§9.4j). The table was ADOPTED in e4a6e4cb (2026-10-09: keep -0.2818t, confounded bottoming -0.0771t,
+16/16 seeds), and both §9.4m items are done. The artifacts are committed in `decks/Snow/`, and GT was
+rebaselined on all three tiers in 90a0050e (2026-10-10). After that, 21db2cd5 pointed Jorn at the
+table's Kaldring bucket (USER 2026-10-10). The "not started" phases in §1 describe the 2026-09-25
+starting state only.
+
 Written for **whoever operates the secondary box** (human or agent). Self-contained: you should not
 need to read another doc to run this, though section 6 points at one for the "is it stuck?" question.
 

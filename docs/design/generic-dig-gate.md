@@ -1,6 +1,8 @@
 # The generic dig gate — cycling is unreachable for any deck without a bespoke provider
 
-**Status: BUILT 2026-09-29 on the user's explicit go** (*"even with the merge I would like to fix
+**Status (2026-10-17):** BUILT 2026-09-29; extended 2026-10-13/14 so the dig is a SEARCHED choice (`MTG_DIG_SEARCHED_CHOICE`, default ON, GT accepted 9c794b2a) with the deck building its own offer (`DigOfferAt`, c5f3f852); `MTG_DIG_DEFER_MAIN2` deleted (44950437, USER). See the 2026-10-13/14 sections and Resume item 7.
+
+**Status (2026-09-29): BUILT 2026-09-29 on the user's explicit go** (*"even with the merge I would like to fix
 the cycling issue"* / *"That should not be inaccessible"*). The heuristic shipped is **narrower than
 the one designed below**, on three further rulings the user gave while it was being built — see
 "What the user changed during the build", which is the part to read if you are here for the
@@ -395,7 +397,7 @@ keys on the sidecar's canonical path, so a worktree path rebuilds a 1-3 GB table
    reproduce (FiveColour gi83 6 vs 4, gi185 6 vs 5, treasure_hunt gi233 5 vs 4); at **K=64 all three tie**
    (gi83 6 / 6, gi185 5 / 5, gi233 5 / 5). The K=16 ranker's average over 16 reshuffles is too noisy to separate
    dig from no-dig on these boards, so the NC +3 / +1 is not a preference for declining the gate's digs.
-7. **USER decisions owed**: adopt the lever default ON (clairvoyant bar unmet on two decks by budget churn
+7. **[Status 2026-10-17: RESOLVED / SUPERSEDED.]** `MTG_DIG_DEFER_MAIN2` was DELETED in 44950437 (2026-10-14, USER: *"Sure, let's delete it."*). `MTG_DIG_SEARCHED_CHOICE` is `EnvOn(..., true)` default ON (`src/ai/EngineFlags.h`) since 228e1d35, and smoke + regression GT were accepted for it in 9c794b2a after the deck-built offer (c5f3f852; treasure_hunt prunes to its gate, per the USER's 10-14 rulings below). No separate USER sign-off on the lever-ON adoption itself is recorded here beyond the USER's 10-13 "searched, never automatic" direction. Original item text: **USER decisions owed**: adopt the lever default ON (clairvoyant bar unmet on two decks by budget churn
    alone; non-clairvoyant also +3 FiveColour / +1 treasure_hunt); delete MTG_DIG_DEFER_MAIN2 (inert in 2,500
    FiveColour games under the lever).
 

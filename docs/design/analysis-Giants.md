@@ -5,6 +5,11 @@ ledger — durable state across compaction AND handoffs"). Updated continuously 
 
 **Run started:** 2026-09-22. Branch `phase-1-2-deck-analyzer`, base commit `76f76796`.
 
+**Status (2026-10-17):** both generation stages are DONE. Value leaf adopted `27caba6f` (2026-09-23,
+`decks/Giants/Giants.value.json`); exhaustive mulligan profile (`complete`, keep -0.397t) adopted
+`d906a65f` (2026-09-24). Giants is in all three suite tiers (key `giants`). Items below saying the value
+leaf / mulligan are "NOT started" or "RUNNING" predate those commits.
+
 ## Decklist (60 main / 3 side)
 
 | n | card | role |
@@ -1127,7 +1132,7 @@ user still had the viewer open:
    detaches at `SacrificePermanentAt`, Finding 2 dedups in-hand equip hosts by name, both with their
    GT rebaseline (0 slower games at any depth in either tier). `claude_sweep` now reads
    **PASS, 0 unresolved flags**.
-7. **NOT started, correctly** — value leaf, then mulligan profile. Strictly serial, in that order,
+7. ~~**NOT started, correctly**~~ **SUPERSEDED — both DONE** (value leaf `27caba6f`, mulligan `d906a65f`; see 12, 13) — value leaf, then mulligan profile. Strictly serial, in that order,
    alone on the box, and both user-kicked-off. Finding 3 is now the strongest concrete argument
    for the mulligan stage on this deck.
 8. ~~Nothing has been committed. No `references/Giants/` exists.~~ **SUPERSEDED.**
@@ -1159,7 +1164,7 @@ user still had the viewer open:
     Both GT tiers re-accepted with `slower=0` in each. See *Value-leaf COMPLETED and ADOPTED*.
     The phase-E restart cost **36 min**, not the 1–1.5 h estimated — the estimate's three
     extrapolated arms all carry the sidecar and run far cheaper than `live`.
-13. **The mulligan profile: RUNNING** (launched 2026-09-23 05:55 UTC), for which Finding 3 is the
+13. ~~**The mulligan profile: RUNNING**~~ **DONE and ADOPTED 2026-09-24 (`d906a65f`)** (launched 2026-09-23 05:55 UTC), for which Finding 3 is the
     concrete argument. Phase F wrote its contract (**`mull_gen_depth: 1`, `mull_gen_budget_ms: 3`,
     `expected_buckets: 13`**; K=13 is binding). The `recommend` probe verdicted `complete`
     FEASIBLE at ~6.9 h — **and that projection is running ~4x over; see *Mulligan generation

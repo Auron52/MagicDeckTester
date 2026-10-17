@@ -1,5 +1,7 @@
 # Escalation value-guided beam ("reuse the leaf-value pass, do only the incremental rollout")
 
+**Status (2026-10-17):** single-depth escalation SHIPPED in eded828b (2026-07-19; GT reconciled 43096b3f) and is the engine's escalation for every deck whose `.value.json` sets `value_play.escalation_cap` (12 sidecars today); its frozen R was later calibrated per deck (`escalation_r`, 6a938099, 2026-09-04 -- see `escalation-budget-investigation.md`). The "SINGLE-DEPTH DEEP-DIVE -- OPEN", "STATUS: OPEN" and "SINGLE-DEPTH ESCALATION -- OPEN" sections below are the 07-18/19 pre-adoption history and are superseded by the header. (eded828b's message records no explicit USER sign-off.)
+
 > **ADOPTED + SHIPPED (2026-07-19): single-depth escalation = R-hint + live climb, per-deck `value_play.escalation_cap`.**
 > The escalation now runs ONE heuristic pass at a depth chosen by a cheap FROZEN cost-per-leaf hint (R=120 default),
 > then a per-decision LIVE climb/back-off corrects the depth from THIS decision's measured cost — deterministic AND
@@ -108,7 +110,7 @@ the beam: an explicit `MTG_ESC_SINGLE` env is the research override (its `_PREDI
 legacy ladder => byte-identical. **REMAINING: finalize hinata cap, set per-deck caps, full regression/overnight A/B
 + GT rebaseline + user sign-off.**
 
-## SINGLE-DEPTH DEEP-DIVE — OPEN + PROMISING (2026-07-18/19). DO NOT call single-depth "slower"/"refuted".
+## SINGLE-DEPTH DEEP-DIVE — OPEN + PROMISING (2026-07-18/19; SUPERSEDED -- shipped eded828b, see Status). DO NOT call single-depth "slower"/"refuted".
 Long collaborative investigation with the user. Two SEPARATE, both-valid optimizations emerged; neither is
 adopted. **The user's clear direction: single-depth (one budget-limited pass) is the goal — do NOT drop it or
 conclude it "does more work"; a prior naive measurement that said so was CONFOUNDED (see below).**
@@ -141,7 +143,7 @@ conclude it "does more work"; a prior naive measurement that said so was CONFOUN
 `MTG_ESC_DEPTH_CAP`) are env-gated, default-off, GT-safe. Adoption of either needs full regression/overnight A/B +
 GT rebaseline + user sign-off; per-deck depth must come from the profile's convergence depth, not a global env.
 
-## SINGLE-DEPTH ESCALATION — OPEN (not rejected)
+## SINGLE-DEPTH ESCALATION — OPEN (not rejected) [SUPERSEDED -- shipped eded828b, see Status]
 The escalation default is the full 1..depth iterative-deepening ladder (`FullSearchLine`). `MTG_ESC_SINGLE` runs
 ONE heuristic pass at a single target depth `clamp(committed - MTG_ESC_SINGLE_OFFSET, 1, depth)` instead — the
 idea being to skip the ladder's shallow-pass rework and concentrate budget on the crossover-deciding depth. It is

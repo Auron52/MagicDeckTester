@@ -1,6 +1,8 @@
 # The Saproling Burst k-menu reads a `*/*` creature as ZERO POWER
 
-**Status: FOUND 2026-10-15, NOT YET FIXED.** Found while answering the user's question: *"One thing
+**Status (2026-10-17):** FIXED in c0973fd1 (2026-10-15, at the USER's request "we should fix The Mycotyrant soon"): `ReadFadeBoard` now reads power through `DynamicBasePower` (the static mis-read, unconditional) and the scaling term is `MTG_FADE_K_CDA_SCALING`, `EnvOn(..., true)` default ON in `src/ai/TurnSolver.cpp`. Measured latent (0 of 8,000 games changed; ~1% arming rate), so no GT moved -- see "MEASURED: THE FIX IS LATENT" below.
+
+**Status (superseded by c0973fd1): FOUND 2026-10-15, NOT YET FIXED.** Found while answering the user's question: *"One thing
 we should also be checking is whether The Mycotyrant is handled in the heuristics. Particularly I am
 thinking for Saproling Burst it's damage scaling should be considered in the current and future
 turns."* The answer is **no, in two separate ways**, and the user's framing names the second one

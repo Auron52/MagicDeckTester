@@ -3,7 +3,9 @@
 **Written for whoever picks this run up:** the user on Monday, or an agent on a second machine. It
 assumes no memory of the session that started the run.
 
-**Status 2026-09-27 12:00Z:** running, healthy, ~9.3 h in, floor pass ~70% done. The user's decision
+**Status (2026-10-17):** HISTORICAL -- this run is not live (no `mtg-analyze` process). Candidate-b's keep table came from a LATER generation (2026-10-03 -> 10-04, recipe `fast`/R=30, after the 10-02 K=17 bucket ruling 77e00499), adopted in 21d0d1a8; its value leaf followed in 1abff9bc. Candidate-b itself is superseded: the screen's winner was adopted as the shipped `decks/Fungus/` list 2026-10-16 (5d4d4b2e, USER-approved) and candidate-b was retired from the suite (6fe87afa). Nothing here needs resuming.
+
+**Status 2026-09-27 12:00Z (superseded above):** running, healthy, ~9.3 h in, floor pass ~70% done. The user's decision
 is to let it run over Sunday and on Monday either resume it here when the machine has spare CPU or
 move it to another machine. Everything needed for both routes is below.
 

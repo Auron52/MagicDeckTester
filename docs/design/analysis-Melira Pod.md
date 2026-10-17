@@ -1,6 +1,12 @@
 # Analysis ledger — Melira Pod (`decks/Melira Pod/Melira Pod.cod`)
 
-Status: **IN PROGRESS** (Stage 2 — research fan-out launched)
+**Status (2026-10-17):** ANALYZED and shipped through the full pipeline: verify_deck GATE PASS on
+`e293a813` (2026-09-04, see "Verification verdicts"); in all three suite tiers since `26817e0c`
+(2026-09-08, key `melira`); value-leaf sidecar adopted `e75ac8ba` (2026-09-09); exhaustive mulligan
+profile (fast/R30, K=23, the USER's bucket ruling `a523b881`) adopted with GT on all three tiers in
+`f935285e` (2026-09-14). The line below is the 2026-09-04 start-of-run header.
+
+~~Status: **IN PROGRESS** (Stage 2 — research fan-out launched)~~ (superseded)
 Started: 2026-09-04. Branch: `phase-1-2-deck-analyzer` (base HEAD 9062c552 at start).
 
 ## Deck shape

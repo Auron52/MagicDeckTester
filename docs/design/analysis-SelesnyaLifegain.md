@@ -5,6 +5,11 @@ Deck: `decks/SelesnyaLifegain/SelesnyaLifegain.cod` (60 cards, GW lifegain-into-
 
 Started 2026-09-29.
 
+**Status (2026-10-17):** `MTG_ACT_LINE_HOLD` is DEFAULT ON (`src/core/SpellEffects.h`, landed in
+`ba7b7ead`, adopted 2026-09-30); lines below that say "default OFF" / "lever OFF — today's default"
+predate that flip. The d0/Snow-CPU residual remains a pending USER call per
+`trailing-activation-payment-hole.md`.
+
 ## Decklist
 
 | n | card | role |
@@ -353,7 +358,8 @@ makes coverage, viewer, viewer_wiring, mismatch and play_invariants all fail spu
 7. ~~Root-cause the dropped-trailing-activation bug~~ — **DONE 2026-09-30**, and it turned out to be
    an engine-wide defect with its own doc and its own instrument:
    **[`trailing-activation-payment-hole.md`](trailing-activation-payment-hole.md)**. Fix =
-   `MTG_ACT_LINE_HOLD`, default OFF; audit = `MTG_ACT_DROP_AUDIT`.
+   `MTG_ACT_LINE_HOLD`, default OFF *(superseded: flipped DEFAULT ON 2026-09-30, landed in `ba7b7ead`;
+   see the 2026-10-17 status note at the top)*; audit = `MTG_ACT_DROP_AUDIT`.
    **UPDATED 2026-09-30: the "one open decision for the user" framing there was withdrawn.** The
    provider-gate recommendation rested on a searched-depth cost that decoded to 7 discordant games in
    1,000, the lever itself had two defects (both now fixed), and the residual d0 cost is a *separate*
@@ -379,7 +385,11 @@ binary; its results were still arriving at handoff.
 
 ## BLOCKING BUG found by the Stage 5d sweep — ROOT-CAUSED AND FIXED behind a lever (seed 77617)
 
-> **STATUS 2026-09-30: fixed, measured on all three tiers, and DEFAULT OFF pending the user's call.**
+> **STATUS (2026-10-17): DEFAULT ON** — `EnvOn("MTG_ACT_LINE_HOLD", true)` in `src/core/SpellEffects.h`,
+> flipped by an agent 2026-09-30 and landed in `ba7b7ead` with all three tiers rebaselined. The
+> residual d0-only regression / Snow CPU trade is still listed as a judgement call for the USER in
+> `trailing-activation-payment-hole.md` ("ADOPTED 2026-09-30" section, item 5); no user ruling is recorded.
+> ~~STATUS 2026-09-30: fixed, measured on all three tiers, and DEFAULT OFF pending the user's call.~~ (superseded)
 > The fix is `MTG_ACT_LINE_HOLD` and it is **engine-wide, not this deck's** — it lands the repro
 > exactly (life 25 -> 31, Steppe sacrificed) and cuts this deck's measured drop count 82%. The full
 > write-up, the `MTG_ACT_DROP_AUDIT` instrument, the cross-deck exposure (Snow 29%, EDF **43.5%**,

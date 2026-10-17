@@ -977,7 +977,7 @@ These two notes are emitted only on the human-play decision path and never reach
 | A | battle cry (Accorder Paladin, Hero of Bladehold) + the `attack_tokens_per_opponent` gate | **DONE** — 7 unit cases / 64 assertions |
 | B | one shared `CreatureHasDoubleStrike` oracle replacing three open-coded expressions | **DONE** — neutrality proven with a live control |
 | C | Valiant Knight (lord clause + the activated team double-strike grant) | **DONE** — 5 unit cases; coverage now clean for it |
-| D | Silverblade Paladin (soulbond) | **NOT STARTED — resume here** |
+| D | Silverblade Paladin (soulbond) | **DONE** (status corrected 2026-10-17; was "NOT STARTED — resume here") — shipped with the deck in `8464d442` (2026-09-27: `soulbond` + `Permanent::paired_with`, read-time verified); the searched pair-or-wait twin followed in `f298d090` (2026-10-06, `MTG_SOULBOND_DECLINE_AXIS`, default ON) |
 | E | widen the `GatherBoardSources` `bs.ds` write predicate | **NOT NEEDED** — see below |
 
 ### Verification already banked (do not redo)

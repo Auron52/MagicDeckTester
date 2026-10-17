@@ -1,6 +1,8 @@
 # Executor: a ritual-funded opaque cast can be ordered before its rituals
 
-Status: IMPLEMENTED BEHIND THREE LEVERS (2026-10-10). `MTG_DRAGONSTORM_ORDER_OPAQUE` and
+**Status (2026-10-17):** defaults unchanged in src: `MTG_DRAGONSTORM_ORDER_OPAQUE` and `MTG_PAYABLE_ORDER_RITUALS` ON, `MTG_EXEC_FAILED_CAST_NO_RESOLVE` OFF (7c1880db). The owed pooled A/B was run JOINTLY, not per lever: these levers were added after origin 27c5976d, so they are in the `off` arm (every default-ON lever since origin turned off) of the integration held-out A/B in `final-ab-2026-10-13.md` -- Dragonstorm net -935 (444 faster / 25 slower; 22 recover at stage 1, the other 3 were illegal-splice kills in the committed tree), with smoke / regression GT accepted after it (2afc786f, 4ceec8b6, 0739018a). No lever-alone pooled suite A/B is recorded.
+
+Status (2026-10-10): IMPLEMENTED BEHIND THREE LEVERS (2026-10-10). `MTG_DRAGONSTORM_ORDER_OPAQUE` and
 `MTG_PAYABLE_ORDER_RITUALS` default ON (`=0` restores the previous behaviour exactly);
 `MTG_EXEC_FAILED_CAST_NO_RESOLVE` default OFF -- the behaviour it gates is DELIBERATE (step 31, below), so
 it is a measurement arm only. The pooled A/B is still owed. Found 2026-10-10 while root-causing the one

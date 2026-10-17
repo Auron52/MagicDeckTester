@@ -1,6 +1,10 @@
 # Combined-branch regression gate (soldiers-analysis, rebased onto d264c556; 2026-10-05)
 
-Status: **measured. Smoke + regression GT ACCEPTED (local commit, NOT pushed). Overnight NOT accepted -- one bar fails (kittyv2, below).** Self-contained; written by the agent that owned the
+**Status (2026-10-17):** CLOSED. Smoke + regression were accepted (re-accepted for the Dwalin-after-Equipment
+order in `d5f8854f`) and the catch-up overnight was ACCEPTED in `c34312e8` (2026-10-05, see the last section);
+all are on `origin/phase-1-2-deck-analyzer`. The original header below is superseded.
+
+~~Status: **measured. Smoke + regression GT ACCEPTED (local commit, NOT pushed). Overnight NOT accepted -- one bar fails (kittyv2, below).**~~ Self-contained; written by the agent that owned the
 gate while the user was away (no question blocked the work -- defaults taken are listed at the end).
 
 ## What was gated

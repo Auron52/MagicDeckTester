@@ -1,6 +1,8 @@
 # Saproling Burst: replacing the activation-count ladder with a projected landmark menu
 
-**Status:** built, behind `MTG_FADE_K_WINDOW` / `heurarm::FADE_K_WINDOW`, plus a separate arm
+**Status (2026-10-17):** all three levers are SHIPPED default ON in `src/ai/TurnSolver.cpp` (`EnvOn(..., true)`): `MTG_FADE_K_WINDOW`, `MTG_M2_FREE_ACTIVATION`, and `MTG_SPORE_POP_ALL` (ON since its first commit a37ae968, 2026-09-27, "a cost-only adoption: flat quality, real narrowing. Default ON" implementing the USER's 2026-09-26 spore policy). The spore section's "default OFF pending the held-out measurement" line is superseded.
+
+**Status (original):** built, behind `MTG_FADE_K_WINDOW` / `heurarm::FADE_K_WINDOW`, plus a separate arm
 `MTG_M2_FREE_ACTIVATION` for the post-combat gate defect this work uncovered.
 **Code:** `src/ai/TurnSolver.cpp` — `FadeBoardRead`, `ReadFadeBoard`, `FadeKLandmarks`, the
 `fade_saproling_cost` emission block in `CollectActions`, and `SecondMainUnproductive`.
@@ -172,8 +174,8 @@ to `36a65944fd138cd0`, which discards the banked journal — already accepted by
 
 ## The sibling axis: spore counters
 
-**Status:** built, behind `MTG_SPORE_POP_ALL` / `heurarm::SPORE_POP_ALL` (default OFF pending the
-held-out measurement), with three sub-mode arms. **Code:** the `spore_saproling_cost` emission block
+**Status:** built, behind `MTG_SPORE_POP_ALL` / `heurarm::SPORE_POP_ALL` (~~default OFF pending the
+held-out measurement~~ -- superseded: default ON since a37ae968, see the top-of-file status), with three sub-mode arms. **Code:** the `spore_saproling_cost` emission block
 in `CollectActions`. **Instrument:** `MTG_SPORE_K_DUMP=1` — width histogram split by doubler, **plus
 a decision-branch tally**.
 

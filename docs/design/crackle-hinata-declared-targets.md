@@ -4,7 +4,8 @@
 "CONTINUATION STATE" section's "All Crackle work is UNCOMMITTED WIP / `git checkout` reverts
 everything" is FALSE against today's tree — do not act on it.
 
-Status: **in progress**. Soulfire dialog fix landed (see bottom); Crackle engine work staged below.
+~~Status: **in progress**.~~ *(Superseded — the 2026-09-03 status above is current: committed in
+`efc7f10c` + `5289974f`, both on the branch.)* Soulfire dialog fix landed (see bottom); Crackle engine work staged below.
 
 ## Problem
 
@@ -240,6 +241,7 @@ The user framed this as "primarily a viewer change" — vindicated. Plan:
 
 ## CONTINUATION STATE (2026-07-07, pre-compaction) — read this first
 
+*(FALSE since 2026-07-07: committed in `efc7f10c` + `5289974f`; do not run the `git checkout` below.)*
 **All Crackle work is UNCOMMITTED WIP** (last commit is `cee32c2`, the viewer queue fix + test
 infra). `git status` shows the WIP across: `src/ai/TurnSolver.{h,cpp}`, `src/core/GameState.h`,
 `src/core/SpellEffects.h`, `src/ai/AIEngine.{h,cpp}`, `src/core/EffectHandler.cpp`, plus the

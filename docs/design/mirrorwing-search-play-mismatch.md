@@ -1,6 +1,14 @@
 # Mirrorwing: the horizon search underestimates draw-dependent wins (open, fix planned)
 
-**Status: DIAGNOSED with a minimal repro, not yet root-caused. The fix-first item from the
+**Status (2026-10-17): still OPEN as far as the record shows; NOT verified either way.** Nothing in
+git since 20d84601 (2026-08-15) reports a root cause or a fix, and nobody has recorded a re-run of
+the acceptance test (`test/repros/mirrorwing_h5_gi14.manifest.json`: `T1 pass=5` must report
+`win=5`) since. The repro plays the archived list `decks/Mirrorwing Dragon/v1-twinflame-anger/`, so
+a fresh run measures today's engine on that list, not the shipping one. Re-run it before acting on
+this doc. The §5 sequencing ("should land before the depth matrix") is moot: the shipping list's
+value leaf (7d13fd6c) and keep table (17dac2d7) were both adopted without this fix.
+
+**Original status (2026-08-15): DIAGNOSED with a minimal repro, not yet root-caused. The fix-first item from the
 2026-08-14 degenerate-case investigation.** User directive (2026-08-14): *"If search and play do
 not match it's worthy of a fix"* — even though the unwon-game audit found no lost games (see §3).
 

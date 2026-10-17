@@ -14,10 +14,19 @@ or performance tests to find any slow areas of the deck").
 > **⚠ THE SHIPPED LIST CHANGED ON 2026-10-16.** Everything from "Decklist" down to the end of the
 > original run describes **v1**, which is now archived at
 > `decks/Fungus/v1-sporesower-shelldweller/` with its own profile, value sidecar and keep table.
-> The adopted list, its measurement and its own pipeline run are recorded in
-> **[v2 adoption](#v2-adoption--2026-10-16)** at the end of this file. The card-implementation,
+> ~~The adopted list, its measurement and its own pipeline run are recorded in
+> **v2 adoption** at the end of this file.~~ *(That section was never written — see the status note
+> below.)* The card-implementation,
 > provider, viewer and Stage-6a disclosure sections above remain valid for both lists wherever
 > they concern a card BOTH lists play; the v2 section states exactly which of them it re-ran.
+
+**Status (2026-10-17):** v2 is the shipped list (USER-approved 2026-10-16, `5d4d4b2e`; v1 archived at
+`decks/Fungus/v1-sporesower-shelldweller/`). It is in all three suite tiers as key `fungusv2` with
+accepted GT (`6fe87afa`); the USER's bucket ruling K=16 is recorded (`862d70ea`); the value-leaf run
+was adopted LEAFLESS — the sidecar carries play-shape settings and the mulligan contract, no model
+(`a92e916c`); and the exhaustive keep + bottoming table (R=40, d3/b1) is adopted (`c4bc4b79`). The
+measurement and per-step detail live in those commit messages and in
+`docs/design/fungus-screen-2026-10-13.md`; no v2 section exists in this ledger yet.
 
 ## Decklist (v1 — ARCHIVED 2026-10-16)
 

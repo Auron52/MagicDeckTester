@@ -1,6 +1,12 @@
 # Suite entry during a list TRANSITION: carry both versions, retire the old one last
 
-**Status: USER PROPOSAL 2026-10-01, measured and costed here, NOT yet written into CLAUDE.md.**
+**Status (2026-10-17): ADOPTED 2026-10-02 in practice (see "ADOPTED 2026-10-02" below; first used
+for `[fungusb]`), and since followed for KittyEquipment: the v3 rows ran beside the shipped list's rows
+until 34cfa905 promoted v3 and dropped the v1/v2 rows. It is still NOT a written rule.** Neither CLAUDE.md nor
+`.claude/skills/regression-testing.md` states it (checked 2026-10-17), so it lives only in this
+doc. Whether to codify it is the USER's call.
+
+**Original status (2026-10-01, SUPERSEDED): USER PROPOSAL 2026-10-01, measured and costed here, NOT yet written into CLAUDE.md.**
 The user's words: *"It's a good point that maybe we should actually have new versions of lists in the
 regression test. That might make sense to do and then we remove the old one once it has been fully
 retired."* Phrased as a proposal, so CLAUDE.md's suite rule is left alone until it is confirmed. This

@@ -1,6 +1,14 @@
 # Keepgen cost concentration: why the Mirrorwing mulligan gen collapsed
 
-**Status:** diagnosed, not fixed. Found 2026-08-22/23 while generating the first exhaustive keep
+**Status (2026-10-17): Mirrorwing case CLOSED; the general proposal partly superseded, partly
+open.** The Mirrorwing keep table was generated on the next list (with the value leaf attached, at
+d2/b3) and ADOPTED 2026-09-02 (17dac2d7). The proposed per-rollout ceiling below is ruled OUT for
+mulligan profiles: the USER, 2026-10-12, said *"There should be no abandon wall for mulligan
+profiles!"* (0279f832), and `MTG_KEEP_ROLLOUT_WALL_SEC` now defaults to 0. The wave-barrier
+concern is mitigated by slowest-first wave dispatch (`MTG_KEEP_SLOWEST_FIRST`, default ON,
+56939ac6). Still open: whether refinement should be cost-aware.
+
+**Original status (2026-08-23, SUPERSEDED):** diagnosed, not fixed. Found 2026-08-22/23 while generating the first exhaustive keep
 profile for the new Mirrorwing list. The run was killed at 6h15m having produced no profile.
 
 ## What happened

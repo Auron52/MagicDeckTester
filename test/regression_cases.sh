@@ -455,7 +455,8 @@ SMOKE_CASES=(
   # Armory candidate rules (0111b1b5) brought it back inside: ONE pooled regression-tier batch on a QUIET
   # box (load ~0) measured its worst searched case, d5 b20 s3003, at 4,683 ms/game against hinata's
   # 1,812 (the costliest deck with both artifacts) -> 2.58x, budget 5,437 (suite_gate --measure-all).
-  # No value leaf / keep table yet, so GT WILL move when they land. Cost in the tiers (2026-10-09, Bruna
+  # Value leaf ADOPTED 2026-10-10 (6a8fd686, GT re-accepted in all three tiers); no keep table yet, so GT
+  # WILL move when it lands. Cost in the tiers (2026-10-09, before the value leaf; Bruna
   # rows alone): overnight makespan 27m46s on 24 cores with 285 games over 30 s; ~70% of its search is
   # the clairvoyant mulligan-bottoming playouts the keep table replaces (analysis-Bruna.md, slow games).
   "bruna2hg 3 1001   50 10"

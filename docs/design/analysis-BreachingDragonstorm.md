@@ -1,6 +1,12 @@
 # Analysis ledger — BreachingDragonstorm
 
 Deck: `decks/BreachingDragonstorm/BreachingDragonstorm.cod` (60 cards).
+
+**Status (2026-10-17):** both generation stages are DONE (USER go 2026-09-04, "as long as it is fast"):
+value leaf adopted `6949ddb1`, mullgen contract `e548e432` (d4 b3, K=11), exhaustive keep+bottom profile
+(`complete` R40) adopted `8266faf8`, GT re-accepted on all three tiers — see "Value leaf + mulligan
+profile (2026-09-04)". The "NOT started" clause in the 2026-09-03 header below is superseded.
+
 Started 2026-09-03. Status: **ANALYZED (GATE PASS) + user sign-off round complete
 (2026-09-03)** — verify_deck all-green under the post-sign-off binary; the deck is IN THE
 REGRESSION SUITE (all three tiers, key `breaching`). The user answered the four batched
@@ -167,7 +173,7 @@ Implemented per the user's stack directive:
 3. **Unpayable-plan follow-up: "let's fix it"** → root-caused and fixed (fixed-colour sac
    credit — see below). **Regression suite: "can be added if fast enough"** → probed at
    ~0.38/0.56 s/game (kitty-class), added to all three tiers as `breaching`.
-4. **Mulligan/value-leaf: "I'll let you know when we're ready"** → NOT started.
+4. **Mulligan/value-leaf: "I'll let you know when we're ready"** → NOT started. *(Superseded 2026-09-04: the user gave the go and both stages were adopted, `6949ddb1` / `8266faf8`.)*
 
 ## Sign-off implementations (2026-09-03)
 

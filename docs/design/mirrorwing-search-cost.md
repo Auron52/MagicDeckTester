@@ -1,6 +1,12 @@
 # Where Mirrorwing's search cost actually goes
 
-**Status:** PROFILED 2026-08-23, not yet optimized. Supersedes the cost attribution in
+**Status (2026-10-17):** The cost question this doc served is settled: the Mirrorwing mulligan
+profile was generated and adopted (17dac2d7, 2026-09-02, on the Anger-4 / Oracle-3 list that
+replaced the list profiled here in 3faf5c76). The one lever left at the end, the **mana-side exact
+dedup (1.32x)**, is still open: grep finds no implementation of it in `src/`, and it was measured
+on the now-archived v2 list. The gating lever was refuted (see below).
+
+**Original status (2026-08-23):** PROFILED 2026-08-23, not yet optimized. Supersedes the cost attribution in
 `keepgen-cost-concentration.md`, which was written against a ~3.5x slower engine and blamed the
 wrong things.
 

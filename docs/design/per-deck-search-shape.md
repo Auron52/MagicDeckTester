@@ -1,5 +1,17 @@
 # Per-deck search shape (`value_play.ladder` / `leaf` / `commit`)
 
+**Status (2026-10-17): the four OPEN items below are STILL OPEN.** Checked against the shipped
+sidecars and `src/`:
+1. No post-fix `emul` re-screen is on record.
+2. `escalation_cap` is still absent from Breaching, Critter, Dragons, Fluctuator, Kitty, Melira,
+   Minotaur and Mirrorwing.
+3. `slivers_vial` still has no `leaf` key, so it is still HELD.
+4. No shape depth-gate exists in `src/`: no `shape_min_depth`, and Hinata2 / KittyEquipment carry no
+   shape key.
+
+What did change: since a0c78a6e (2026-10-15), `valueleaf.sh` phase E screens the leafless shapes on
+every value-leaf run (see "IN THE PIPELINE").
+
 Standalone record of the 2026-09-09/10 shape work: what each shape is, how a deck selects one, what the
 screen measured, and what is adopted. The per-session narrative is in `analysis-Melira Pod.md` (09i-10a).
 

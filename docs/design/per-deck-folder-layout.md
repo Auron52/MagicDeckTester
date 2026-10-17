@@ -3,7 +3,7 @@
 **Status (updated 2026-09-03): DONE** — Option A shipped in a2ba8712; `decks/` holds per-deck
 folders and CLAUDE.md documents it as the convention. Kept as the design/migration record.
 
-**Status:** deferred / not started. Do at a clean break (no in-flight profile
+**Original status (SUPERSEDED by the DONE line above):** deferred / not started. Do at a clean break (no in-flight profile
 regen), then rebaseline nothing — this is a pure path move, byte-identical
 artifacts. Motivation: `decks/` has grown cluttered — every deck carries a
 decklist plus 3–5 generated artifacts, and there are stray experimental

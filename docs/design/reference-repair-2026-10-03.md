@@ -1,5 +1,19 @@
 # Repairing the 8 failing reference games (2026-10-03)
 
+**Status (2026-10-17): all four OPEN rows in the triage table below have since been fixed, per
+their fix commits and `reference-gate-red-on-origin-tip.md`. No reference file was rewritten.**
+* #8 `Hinata2/claude_s1_gi0` was a false ENUM-GAP and is fixed in the checker (c5e610d1).
+* #3 `Snow/claude_s4_gi3` is fixed in the engine, human play only, in 53adc731: the Scrying Sheets
+  hold is judged at turn scope. The commit says "replays ok".
+* #7 `Mirrorwing v1 claude_s29_gi28` is fixed in the checker (1924e741).
+* #6 `Mirrorwing v2 claude_s51_gi50` replays its T4 win in human play (590e8ee6). There
+  `MTG_ATTACK_BODY_TAP_ORDER` defaults ON in human play only. It stays OFF autonomously, pending the
+  held-out A/B and the USER's sign-off.
+
+These claims rest on commit messages. No replay sweep was re-run for this status line. The queued
+full-reference sweep was run at cf7c95aa (see the 2026-10-06 update in
+`reference-gate-red-on-origin-tip.md`).
+
 **USER RULING 2026-10-03, and it refines CLAUDE.md's "references are COMMIT-ONLY":**
 *"there should not be failing references. We should repair them."* and, when told a reference may
 never be overwritten: *"I don't agree with that. If what is in them changes, then we should change

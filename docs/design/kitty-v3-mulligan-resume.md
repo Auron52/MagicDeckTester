@@ -1,6 +1,13 @@
 # KittyEquipment v3 mulligan profile — paused 2026-10-14, how to resume
 
-**Status: PAUSED BY THE USER at 2026-10-14 00:32Z, mid-`refine` at 91.5%. Nothing is lost.** The user
+**Status (2026-10-17): DONE — the run was resumed, finished and adopted; this resume procedure is
+history.** The v3 keep table (~29 h of rollouts) landed in a9a17e64 (2026-10-14) and was adopted
+with a GT rebaseline in 25b78489 (all 20 keys improve, mean -0.62 turns). v3 was then promoted to
+the shipped list in 34cfa905 (2026-10-15, on the USER's "we need to make V3 the main deck"), so its
+artifacts now live at `decks/KittyEquipment/` itself, not `decks/KittyEquipment/v3-adelbert-gauntlets/`
+as the command below says.
+
+**Original status (2026-10-14, SUPERSEDED): PAUSED BY THE USER at 2026-10-14 00:32Z, mid-`refine` at 91.5%. Nothing is lost.** The user
 stopped it to free the box for daytime work and expects to relaunch the same night. The journal holds
 **~26.4 h** of rollouts (14.6 h to 2026-10-12 + 11.75 h on 2026-10-13) and is resumable.
 Branch bookmark: **`kitty-v3-mulligan-wip`** — see "DO NOT REBASE" below, it is the whole ballgame.

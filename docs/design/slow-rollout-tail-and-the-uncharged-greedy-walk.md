@@ -1,6 +1,16 @@
 # The slow-rollout tail, and the greedy walk nothing ever charged
 
-Status: **OPEN — deferred 2026-09-22 by the user, deliberately.** The diagnosis below is complete and
+**Status (2026-10-17): the 2026-09-22 deferral is SUPERSEDED by the rulings recorded further down.**
+* **USER RULING 2026-09-24: fix the budget, not discovery.** The generation-side decision ceiling
+  `MTG_DECISION_WORK_X=1000` was adopted 2026-09-25 and is wired into `scripts/mullgen.sh` only.
+* **`MTG_FUNGUS_SHRINK_SAC_M2` ADOPTED, DEFAULT ON, in 694ddf6a (2026-09-25).** The USER's words:
+  *"If it is a general win, then let's adopt."*
+* **`MTG_SOLVE_CHARGE`**, the lever this header calls "not settled", is still default OFF
+  (`TurnSolver.cpp`).
+
+Later sections carry their own statuses. Read them rather than this header.
+
+Original status (2026-09-22, SUPERSEDED): **OPEN — deferred 2026-09-22 by the user, deliberately.** The diagnosis below is complete and
 the evidence is on disk. The fix is *not* settled: the obvious lever exists, is built, and is wired
 into six hosts, but adopting it changes play, and the user's position is that it may not be right
 as-is. Read this before touching either.
@@ -636,6 +646,8 @@ diffs all 62 `Action` fields against the twin plan sharing the fingerprint. That
 
 ### The lever that does move it: `MTG_FUNGUS_SHRINK_SAC_M2` — 2.95x, and it is the USER's call
 
+*(2026-10-17: the USER made that call. It was ADOPTED default ON in 694ddf6a, 2026-09-25.)*
+
 Priced against the worst game, every default-OFF Fungus lever, one at a time:
 
 | lever | game 11 |
@@ -698,7 +710,9 @@ not move. So the trade is: ~3x on the expensive rollouts, against restarting the
 1. **The chosen-X axis on repeatable token-makers** — 82% of candidate mass, one Saproling Burst
    emitting 393,475 activations. Nothing has been built here. This is the only remaining lever in
    the 5–20x class and it is a real design change, not a tuning knob.
-2. `MTG_FUNGUS_SHRINK_SAC_M2` — measured above, awaiting the user's adoption call.
+2. `MTG_FUNGUS_SHRINK_SAC_M2` — measured above, awaiting the user's adoption call. **[2026-10-17:
+   ADOPTED default ON in 694ddf6a, 2026-09-25, on the USER's "If it is a general win, then let's
+   adopt."]**
 3. **Closed, do not re-open:** enumeration-side exact dedup (1.0007x after the fingerprint fix);
    cache layout (0.65%, landed); the budget ceiling (1.33x, landed); `SweepDeadFadeTokens` batching
    (refuted — `OnCreatureDies` runs between erases).

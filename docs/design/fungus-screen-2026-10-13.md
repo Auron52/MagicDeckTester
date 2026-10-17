@@ -1,6 +1,8 @@
 # Fungus candidate-b screen, 2026-10-13: results and list recommendation
 
-**Status: rounds 1a-6 COMPLETE; round 7 (Slimefoot x Mycoloth + the pin's price) specified.** No list
+**Status (2026-10-17):** CONCLUDED. The screen ran 39 rounds (~1.06M games); the USER approved its winner 2026-10-16 and it was ADOPTED as the shipped `decks/Fungus/` list in 5d4d4b2e (v1 archived as `decks/Fungus/v1-sporesower-shelldweller/`), with its own suite key (6fe87afa), value-leaf output (a92e916c) and keep table (c4bc4b79). The "no list has been adopted" header below describes the state after round 6 and is superseded.
+
+**Status (after round 6; superseded): rounds 1a-6 COMPLETE; round 7 (Slimefoot x Mycoloth + the pin's price) specified.** No list
 has been adopted and no new apparatus has been generated. One ENGINE change has landed since round 6:
 the Mycoloth Main-2 pin fix (`MTG_FUNGUS_M2_HASTE`), so round 7 is NOT on rounds 1a-6's engine.
 

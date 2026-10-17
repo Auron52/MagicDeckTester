@@ -1,6 +1,13 @@
 # The 2026-08-25 Mirrorwing overnight anomaly — UNEXPLAINED, cells void
 
-**Status: OPEN.** One overnight run produced Mirrorwing numbers that no configuration on this
+**Status (2026-10-17): still OPEN, unexplained. No recurrence is recorded in git or `docs/` since
+2026-08-25, but it was never root-caused, so it is not closed.** The list it was seen on was
+archived as `v2-instigator-entrance` when 3faf5c76 (2026-08-30) shipped the Anger-4 / Oracle-3
+list. Mirrorwing GT has been re-accepted many times since (e.g. 17dac2d7, df7f6017), so the
+"do not accept those cells" instruction below no longer has any cells to apply to. The
+capture-first instruction for a recurrence still stands.
+
+**Original status (2026-08-25): OPEN.** One overnight run produced Mirrorwing numbers that no configuration on this
 machine can reproduce. Four subsequent runs — including one with the *literal snapshotted binary
 that produced it* — all reproduce committed ground truth exactly. The anomaly has not recurred.
 Self-contained; everything needed to pick this up is here.

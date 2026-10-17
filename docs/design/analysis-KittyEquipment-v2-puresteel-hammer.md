@@ -4,6 +4,13 @@ Parent ledger: [analysis-KittyEquipment.md](analysis-KittyEquipment.md) (the v1 
 1350 lines of heuristic doctrine, approved deferrals and cost work that still applies to the engine,
 but **not** to this list's card pool).
 
+**Status (2026-10-17):** this list is ARCHIVED, not in progress. It entered the suite as `kittyv2` in
+`6f90f520` (2026-10-03, 2.08x fivecolour), got its keep profile `d92cd7f9` (2026-10-03) and value leaf
+`6c969b35` (2026-10-12) in `decks/KittyEquipment/v2-puresteel-hammer/`; then v3 beat it on the USER's
+decisive d5 cell and was promoted to the shipped list, with the `kittyv2` rows dropped from all tiers, in
+`34cfa905` (2026-10-15; the suite key is now `kittyv3`). The "RESUME HERE" block and the "4-bis suite
+tiers NOT started" / "blocked by the suite gate" rows below are superseded.
+
 ## ⇥ RESUME HERE
 
 **What this is.** The user added a NEW VERSION of KittyEquipment (`KittiesEquipmentV2.cod`, dropped in

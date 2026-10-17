@@ -1,6 +1,8 @@
 # Fungus: the second main, card placement, and implementing devour properly
 
-**Status:** MEASURED 2026-09-23 (§6). The second main is a REAL quality win on every cell and is
+**Status (2026-10-17):** `MTG_FUNGUS_M2_DEVOUR` and `MTG_FUNGUS_M2_GATE` are both default ON (`EnvOn(..., true)`, `src/ai/DecisionProviders.cpp`, `src/runner/GoldFishRunner.cpp`) since 49f45dd2 (2026-09-23, "ADOPT the Mycoloth second main", §7; GT re-accepted in that commit). That commit records the USER's challenge to the cost (which drove the 2.45x -> 1.47x fix) but no explicit USER sign-off on turning it ON. `MTG_FUNGUS_M2_ROOT` stays default OFF. The "both default OFF" sentence below is superseded.
+
+**Status (2026-09-23, first pass; superseded above):** MEASURED 2026-09-23 (§6). The second main is a REAL quality win on every cell and is
 BUILT behind `MTG_FUNGUS_M2_DEVOUR` / `MTG_FUNGUS_M2_GATE`, both default OFF pending adoption.
 Adoption cascades into the value leaf -- see §6d before deciding.
 

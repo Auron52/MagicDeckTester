@@ -3,6 +3,14 @@
 In-flight state for the analyze-deck workflow on `decks/Creature Giving/Creature Giving.cod`
 (60 cards). Updated continuously; readable by any resumed session or second machine.
 
+**Status (2026-10-17):** both generation stages are done and superseded the "REJECTED" / "gen NOT
+started" sections below. Mulligan: exhaustive keep+bottom profile adopted in `585f01b2` (2026-08-17,
+K=21, R=30). Value leaf: the LIVE sidecar is `Creature Giving.value.json`, an armed hybrid
+(`value_play.enabled: true`, the fresh 2026-09-03 model, escalation_cap 5 / beam W3 / r21 / frac 0.5),
+adopted USER-approved 2026-09-04 in `6a938099`. `Creature Giving.value.DISABLED.json` is INERT (the
+engine resolves only `<stem>.value.json`): it is the same model preserved by `c099c1f3`, differing only
+in `value_play`, and is not read by play.
+
 ## Deck concept
 
 Gift the opponent creatures (Forbidden Orchard spirits, Hunted Phantasm's 5 Goblins,

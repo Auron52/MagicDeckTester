@@ -1,6 +1,8 @@
 # Index-carry for screening: skip the games that cannot see the changed card
 
-**Status: DESIGNED, NOT BUILT. Agreed 2026-10-13 to build AFTER the Fungus candidate-b round 2.**
+**Status (2026-10-17):** BUILT AND MEASURED 2026-10-13 (section "BUILT AND MEASURED" below; recorder 9a22313b, bitset mask 33133fac). Opt-in per spec via `"index_carry": true` in `scripts/deck_compare.py` (default OFF; engine side `MTG_INDEX_CARRY`, default OFF). Still owed: the win-turn relaxation (unmeasured) and the in-batch skip (see "Still owed").
+
+~~**Status: DESIGNED, NOT BUILT. Agreed 2026-10-13 to build AFTER the Fungus candidate-b round 2.**~~ (superseded: built the same day)
 USER's idea and USER's rulings throughout; this file records them so the build does not re-derive
 them.
 

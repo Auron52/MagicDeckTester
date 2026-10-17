@@ -1,6 +1,13 @@
 # The Equipment provider's cleanup-discard buckets are stale for the Puresteel/Sram list
 
-**Status: FOUND 2026-10-08, NOT FIXED. The fix is a USER RULING (bucket policy is user-only).**
+**Status (2026-10-17): FIXED to the USER's ruling of 2026-10-08** in c1914f4e (same day):
+`MTG_KE_BUCKET_V3` is `EnvOn(..., true)` (`KittyBucketV3Enabled`, just above
+`EquipmentProvider::CleanupDiscardCandidates` in `src/ai/DecisionProviders.cpp`; `=0` restores the
+v1-only tables). Sram joins the enabler bucket behind Puresteel and is capped at one, Sigarda's Aid,
+{0} Equipment, Hammer/Gauntlets and the one-of Adelbert/Dwalin slot follow the user's allocation
+clause by clause. The original header below is kept as history.
+
+**Original status (2026-10-08, SUPERSEDED): FOUND 2026-10-08, NOT FIXED. The fix is a USER RULING (bucket policy is user-only).**
 Surfaced while the v3 mulligan generation was ~30 min into a ~10.6 h run; the run was deliberately
 **not** killed (see "What to do about the run in flight").
 
