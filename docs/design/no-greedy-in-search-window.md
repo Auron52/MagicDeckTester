@@ -364,6 +364,81 @@ not how it weighs the new actions. Every searched depth is unaffected. Options w
 provider-owned post-cast sink for the greedy runner ONLY (outside every window -- GreedyPermit
 territory), measured against step 8's d0. Not a quality issue for any searched cell.
 
+## The idle pass's post-apply pins (2026-10-17, colossus-idle) -- DONE, plus two gaps found beside it
+
+**Fixed.** A pre-combat main with the drop spent and nothing to cast enumerates ZERO plans (while the
+drop is open the enumeration always offers its no-land pass, which the post-dedup fan-out treats like any
+plan), and the HOST appends the pass after `AppendSubdecisionAxes` ran: FSLineWin's idle node,
+SolveWithLookahead's empty candidate set, ReshuffleAvgChoosePlan. Every pin the pass could carry past its
+apply took the provider's front. `AppendIdlePassAxes` now runs the pass through `AppendSubdecisionAxes`
+itself, so the pass gets exactly an enumerated plan's axes (gates, widths, base-plan filters, caps).
+It replaces the per-axis idle helpers (`AppendIdleAttackAttachSiblings` deleted; `AppendIdleDigSiblings`
+stays for the post-combat hosts). Coverage of the pins read after the main-phase apply:
+
+| Plan pin | Read at | Idle pass before | After |
+|---|---|---|---|
+| attack_attach_choice (Raubahn) | declare-attackers | yes (own helper) | yes |
+| bruna_gather_choice | declare-attackers | **no** | yes |
+| combat_aura_swap_choice (Arcanum Wings) | declare-attackers | **no** | yes |
+| attack_land_search_choice (Primeval Titan) | declare-attackers | **no** | yes |
+| combat_crack_choice (Khalni, in combat) | declare-attackers | **no** | yes |
+| fling_victim_choice (Surtland Flinger) | declare-attackers | **no** | yes |
+| tectonic_mode/keep_choice (Tectonic Giant) | declare-attackers | **no** | yes |
+| lackey_choice (Goblin Lackey) | combat damage | **no** | yes |
+| sweep_choice (drip / pain) | end of main 1 | **no** | yes |
+| le_fire_choice (Land's Edge) | end of main | **no** | yes |
+| discard_choice | cleanup | **no** | yes (axis inert by default: width 1) |
+| saga_target_choice | next draw step | **no** | yes |
+| upkeep_land_search_choice (Search for Tomorrow) | next upkeep | **no** | yes |
+| vial_charge_choice | next upkeep | **no** | yes (axis default OFF) |
+| tapmode_choice | the apply's payments | **no** | yes (axis default OFF) |
+| dig_choice | end-of-casts dig loop | yes (own helper) | yes |
+
+The inherited-pin rule (`StatePinVariantRanks` / `StatePinFrontIsVariant`) moved into the fan-out with
+it. A state pin is write-when-set, so on a state that already holds one the base plan inherits it and the
+FRONT must be a variant. That state is the executor's breakpoint re-solve, or a next-turn pin left
+unconsumed. Only Raubahn had this rule before. It now covers the gather, Lackey, discard and Saga-target
+ranks. The explicit-valued pins write their front out: an all-front packed pick of 0, a crack mask of 0,
+and Wings `kCombatAuraSwapNoSwap` = 0. Fixtures: `bruna_idle_pass_gather_skips_almost_perfect`,
+`landsearch_idle_pass_khalni_cracked_in_combat` (both T7 -> T6).
+
+**Where it fires (measured).** The smoke tier is byte-identical: 124/124 cases, 0 changed games. A
+`MTG_ROLLOUT_STATS=1` probe counted ZERO idle passes, at any host or context, in 480 games on the eight
+decks whose pins it covers (Bruna, Landfall, Goblins, Giants, Colossus, Treasure Hunt, Prevent Damage,
+Stompy; 40 games at d3/b10 and 20 at d5/b20 each). At a turn start the drop is open, so the enumeration
+never comes back empty. The pass is reached from a MID-TURN root with the drop spent: a viewer
+search-from-here frame after the human's land, a `resume_at` fixture, or the executor's breakpoint
+re-solve (none fired in that sample). The new `idle_pass_axes` rollout-stats line counts it per host and
+context.
+
+**DEFERRED gap 1 -- the executor drops a searched re-solve's post-apply pins.** The executor's breakpoint
+re-solve calls SolveWithLookahead at deck settings (AIEngine, the main and pod sites), with
+`g_bp_enum_depth == 0`, so its candidates carry every axis. The executor then applies the chosen plan's
+casts under `ContPins`, which holds during-cast pins only, and never writes the chosen plan's state pins
+(combat, cleanup, next upkeep) or its end-of-main sweep, Land's Edge count or dig. The realized combat
+and end step follow the COMMITTED plan's pins, while the re-solve scored its own. A re-solve that picks a
+pin variant therefore has a realized line that differs from the one it scored, and the branching was
+wasted work. It is also one of the two places an autonomous game can meet a pre-combat idle pass at
+all (the other is a mid-turn root), though the probe above saw no searched re-solve in 480 games.
+`MTG_M2_YIELD_STATS=1` counts it ("post-apply pin UNREALIZED"). Fix shape: after the re-solve, write
+the chosen plan's state pins with TakeTurn's write-when-set rule (including `m_discard_choice_pin` and
+`m_vial_choice_pin`), and let its sweep, Land's Edge and dig choices override the committed plan's at the
+end-of-main point. This moves executor play on every deck with a combat pin and breakpoints, so it
+needs its own A/B.
+
+**DEFERRED gap 2 -- a landfall trigger in COMBAT takes the front for every plan.**
+`Plan::landfall_target_choice` (Phylath's target) is installed by `ScriptedLandfallTarget` for the
+main-phase apply only, in both worlds (`ApplyPlanDirect` and the executor's main-phase optional). Primeval
+Titan's attack fetch and the in-combat Khalni crack put lands in the declare-attackers step, so their
+landfall targets are the provider's front with no searched alternative. The axis also skips a plan with
+no land and no cast, so it never reaches the idle pass either. Fix shape: carry the policy to the end of
+the turn as a state pin (the combat-pin route), and widen the axis's "a land can enter" gate to include
+an attacking land-search Titan or a crackable Expedition.
+
+**Disclosed limit.** A post-combat pass keeps only its no-dig twin. The next-turn pins it could still
+carry (Saga target, Search for Tomorrow, cleanup discard) are fanned on the main-1 plan that sets them,
+so what it cannot do is RE-decide a main-1 pin in main 2.
+
 ## Phase 2: greedy fully dropped
 
 The user's stated end state is that the horizon playout's greedy policy (site 90 and the playout's
