@@ -7936,6 +7936,110 @@ static bool IsEtbUntapCast(const Action& a)
         && a.def->params.etb_untap_lands > 0;
 }
 
+// ---- THE REAL PAYER'S TOTAL-SUPPLY GATE (MTG_SPWF_SUPPLY_GATE, DEFAULT ON; =0 restores the old path) --
+// SubsetPayableWithFilters copies the board and pays every selected action with the executor's own
+// payer, and on EldraziDisplacerFlicker at the mulligan-generation shape ~81% of those walks end in
+// "unpayable" (MTG_PAY_CENSUS, 2026-10-17: 5.17M of 6.41M calls over 8 hands x R=4, 15.1 of the run's
+// ~90 G cycles). Many of them are short of mana IN TOTAL, which needs no walk to prove.
+//
+// NECESSARY CONDITION, not a heuristic. The walk pays `a.cost` for every non-Vial action in the subset
+// (the reveal surcharge only ever ADDS to a bill), so it needs at least Sum(a.cost.ManaValue()) mana.
+// Everything the walk can spend is bounded by:
+//   * every floating reserve the payer drains (the open pool, the creature-only and the big-spell-only
+//     reserves), plus UntappedManaUpperBound of the board -- the SAME bound the payer's own B&B gate
+//     and the payment-entry fail-fast prove unpayability with (it over-counts by contract:
+//     sac fodder, grants, untap bursts, scaled sources, land-Aura bonuses already attached). Read
+//     with for_creature=true under a null paying-spell scope and no batch scope, so every restricted
+//     source (creature-only, subtype-only, big-spell-only) is COUNTED -- a superset of what any one
+//     cast may spend;
+//   * the producers the walk itself lays down: each land Aura in the subset adds at most its
+//     land_aura_extra_mana (its host taps once unless something untaps it), and each ETB untapper
+//     refunds at most etb_untap_lands lands, each worth at most the best land's per-tap yield plus
+//     every subset Aura's bonus (they could all ride that land).
+// The walk adds supply in no other way EXCEPT a rock / ETB-Treasure maker / land-put credit / Vial
+// Treasure, so a subset holding one of those is not gated at all; neither is a cost with a Phyrexian
+// or twobrid pip (payable with less than its mana value in mana). Activation taps and the Aura host
+// reservation only REMOVE supply. So "demand > bound" proves the walk returns false.
+// MTG_SPWF_SUPPLY_VERIFY=1 runs the walk anyway on every gated subset and counts a payable one (must
+// be 0) -- printed at exit with the call / gate counts, plus the first five offenders. It earned its
+// keep on day one: the first cut counted only floating_mana, and Bruna's Somberwald Sage reserve
+// (floating_creature_mana, filled by a whole-turn prepay) made 86 verify mismatches in one game.
+// MEASURED (2026-10-17): EDF generation probe 3.85M of 6.41M calls proved short, 0 mismatches; all 31
+// suite decks + EDF (d0 150 + d3 16 games each, seed 7007) 11.4M of 26.3M, 0 mismatches.
+static bool SpwfSupplyGateOn()
+{
+    static const bool v = EnvOn("MTG_SPWF_SUPPLY_GATE", true);
+    return v;
+}
+static bool SpwfSupplyVerifyOn()
+{
+    static const bool v = EnvOn("MTG_SPWF_SUPPLY_VERIFY");
+    return v;
+}
+namespace spwfgate
+{
+inline std::atomic<long long> g_calls{0}, g_short{0}, g_mismatch{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!SpwfSupplyVerifyOn()) { return; }
+        std::fprintf(stderr, "[spwf-supply] calls=%lld proved_short=%lld verify_mismatch=%lld\n",
+                     g_calls.load(), g_short.load(), g_mismatch.load());
+    }
+};
+inline Dump g_dump;
+}   // namespace spwfgate
+// True = the subset provably cannot be paid (see above); false = not provable, run the walk.
+static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel)
+{
+    int demand = 0, aura_extra = 0, untap_lands = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        const CardDefinition* def = a.def;
+        if (a.kind == Action::Kind::ActivateVial)
+        {
+            if (a.rock_mana.Total() > 0 && def && def->params.etb_creates_treasures > 0) { return false; }
+            continue;
+        }
+        if (a.cost.phyrexian_count > 0 || a.cost.twobrid_count > 0) { return false; }
+        demand += a.cost.ManaValue();
+        if (def == nullptr) { continue; }
+        if (a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0
+            && (def->params.etb_creates_treasures > 0 || LandSearchPutsUntapped(*def))) { return false; }
+        if (def->params.mana_rock && !def->card.IsCreature() && !def->params.enters_tapped) { return false; }
+        if (def->params.is_land_aura && def->params.land_aura_extra_mana > 0)
+        { aura_extra += def->params.land_aura_extra_mana; }
+        if (a.kind == Action::Kind::CastFromHand && def->params.etb_untap_lands > 0)
+        { untap_lands += def->params.etb_untap_lands; }
+    }
+    // Every floating reserve the payer drains: the open pool, the creature-only reserve (Somberwald
+    // Sage) and the big-spell-only reserve (Troyan) -- a bound must count all three.
+    const int floating = static_cast<int>(state.floating_mana.Total())
+                       + static_cast<int>(state.floating_creature_mana.Total())
+                       + static_cast<int>(state.floating_bigspell_mana.Total());
+    if (demand <= floating + aura_extra) { return false; }
+    SpellSubtypePayScope _ssps(nullptr);
+    BigSpellBatchScope   _bbs(-1);
+    int supply = floating + aura_extra + UntappedManaUpperBound(state, /*for_creature=*/true, 0);
+    if (demand <= supply) { return false; }
+    if (untap_lands > 0)
+    {
+        int best_land = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            best_land = std::max(best_land, SourceMaxNetLive(state, p, *d));
+        }
+        supply += untap_lands * (best_land + aura_extra);
+    }
+    return demand > supply;
+}
+
 // ---- MTG_PAY_CENSUS: payability-probe call census (DIAGNOSTIC, print-only, default OFF) ----------
 // Counts every entry into the subset/order payability probes, the false verdicts, and REPEATS: a
 // call whose exact question (board digest + zone order + floating mana + the line hold + the
@@ -8302,6 +8406,40 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
 {
     const bool tap = RescueTapSourceOn();
     const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
+    if (SpwfSupplyGateOn())
+    {
+        const bool verify = SpwfSupplyVerifyOn();
+        if (verify) { spwfgate::g_calls.fetch_add(1, std::memory_order_relaxed); }
+        if (SpwfProvablySupplyShort(state, cands, sel))
+        {
+            if (verify)
+            {
+                spwfgate::g_short.fetch_add(1, std::memory_order_relaxed);
+                if (SubsetPayableWithFiltersImpl(state, cands, sel, tap)
+                    && spwfgate::g_mismatch.fetch_add(1, std::memory_order_relaxed) < 5)
+                {
+                    std::string acts;
+                    for (int j : sel)
+                    {
+                        const Action& a = cands[static_cast<std::size_t>(j)];
+                        acts += a.card_name.str() + "[k" + std::to_string(static_cast<int>(a.kind)) + " "
+                              + a.cost.ToString() + "] ";
+                    }
+                    std::string srcs;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index != state.active_player_index) { continue; }
+                        srcs += p.card.m_name.str() + (p.tapped ? "(T) " : " ");
+                    }
+                    std::fprintf(stderr, "[spwf-supply] MISMATCH t%d float=%d ub=%d: %s| board: %s\n",
+                                 state.turn_number, static_cast<int>(state.floating_mana.Total()),
+                                 UntappedManaUpperBound(state, true, 0), acts.c_str(), srcs.c_str());
+                }
+            }
+            if (paycensus::On()) { paycensus::Record(paycensus::SPWF, state, cands, sel, false, _pc_t0); }
+            return false;
+        }
+    }
     const bool ok  = SubsetPayableWithFiltersImpl(state, cands, sel, tap);
     if (paycensus::On()) { paycensus::Record(paycensus::SPWF, state, cands, sel, ok, _pc_t0); }
     const int  lim = RescueTapTraceLimit();
