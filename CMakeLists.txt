@@ -335,6 +335,7 @@ add_executable(mtg-test
     test/unit/test_reconfigure.cpp
     test/unit/test_magnetic_theft.cpp
     test/unit/test_forge_anew.cpp
+    test/unit/test_attach_folds.cpp
     test/unit/test_attack_attach_equipment.cpp
     test/unit/test_d0_epoch.cpp
     test/unit/test_equip_route_key.cpp

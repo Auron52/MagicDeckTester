@@ -10948,6 +10948,44 @@ inline bool CanAttachEquip(const GameState& state, int controller, int equip_id,
     return true;
 }
 
+// Does this Equip activation have NO LEGAL TARGET right now because its host is ON OUR BATTLEFIELD
+// BUT IS NOT A CREATURE (or is the Equipment itself)? "Equip [cost]: Attach to target creature you
+// control" (CR 702.6a), and an ability with a target cannot be activated without a legal one
+// (CR 602.2b -> 601.2c). So such an equip is NEVER ACTIVATED: nothing is paid and -- the point -- it
+// is not "the first equip ability you activate each turn" either, so Forge Anew's / Kili's waiver is
+// not spent on it (Player::equip_activated_this_turn untouched; the trailing pass re-assigns the
+// per-plan waiver, TurnSolver::StoriedWaivedEquipId, to the equips still to come).
+//
+// THE CASE IT EXISTS FOR (claude-play sweep, Colossus Hammer seed 2100003 T5): one plan both
+// reconfigures a loose Lizard Blades onto a Kor Duelist and equips Colossus Hammer onto that same
+// Lizard. The trailing pass runs the reconfigure first, the Lizard stops being a creature
+// (CR 301.5c / 702.151b, RefreshReconfigureCreatures), and the Hammer equip then paid -- {0}, being
+// the waived one -- and ApplyEquip refused the attach: Forge Anew's free equip was burned on nothing.
+// The enumeration no longer emits that plan (TurnSolver SubsetHasEquipOntoAttachedPiece); this is
+// the apply-side half, for a stale or hand-ordered line.
+//
+// WHAT IT IS NOT: a host ABSENT from the battlefield (its cast was dropped as unpayable earlier in the
+// plan) is MTG_EQUIP_PAY_GUARD's dropped-cast class (CanAttachEquip above), which was measured and is
+// left default-OFF pending the USER (docs/design/equip-host-not-on-battlefield.md) -- deliberately not
+// adopted here by the back door. And equip_min_power is not target legality (CR 701.3b: the attach
+// just does nothing), so O-Naginata's gate stays where it was.
+//
+// Presence gate: within one plan an enumerated creature host can stop being a creature only by being
+// attached as a reconfigure piece (the Equip enumeration offers creature hosts only, and never the
+// piece itself), so every deck without one (GameState::deck_has_reconfigure false) pays one integer
+// compare and stays byte-identical by construction.
+inline bool EquipTargetNotACreatureNow(const GameState& state, int controller, int equip_id, int host_id)
+{
+    if (equip_id > 0 && equip_id == host_id) { return true; }   // never onto itself (CR 301.5c)
+    if (!state.deck_has_reconfigure) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != host_id) { continue; }
+        return !p.card.IsCreature() && !p.is_animated;
+    }
+    return false;
+}
+
 // Which pieces would "equip all free to <host_id>" attach, in the order it will attach them?
 //
 // ONE PREDICATE, FOUR READERS -- the enumeration's "offer it at all" gate, the apply's selection,
@@ -32261,6 +32299,14 @@ inline bool RemovalControllerCastLegal(const GameState& s, int me, int enchant_t
 
 // The human's default when the plan names no own target: our LOWEST-power legal creature (the cheapest
 // body to trade for a tapped basic), else the opponent target. -1 = nothing legal.
+//
+// "Power" is the creature's REAL power -- EquipGatePowerOf: printed + counters + until-EOT bonuses +
+// lords + Auras + EQUIPMENT -- never Permanent::EffectivePower(), which omits every attachment. On
+// EffectivePower a Kor Duelist carrying Colossus Hammer (+10/+10) read as the bare 1/1 it was printed
+// as, tied every vanilla 1/1, and won the tie on battlefield order -- so the PRESELECTED board click
+// exiled the lethal attacker (claude-play sweep, Colossus Hammer seeds 2100005 / 2100017: the target
+// decision listed "Lizard Blades (13/13)" with heuristic_default 0). Human play only: every caller is
+// behind HumanPlayActive() or g_play_target_chooser, so autonomous play never reads this.
 inline int RemovalHumanDefaultTarget(const GameState& s, int me)
 {
     int best = -1, low = 0;
@@ -32268,7 +32314,7 @@ inline int RemovalHumanDefaultTarget(const GameState& s, int me)
     {
         const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
         if (!RemovalOwnTargetLegal(s, p, me)) { continue; }
-        const int pw = p.EffectivePower();
+        const int pw = EquipGatePowerOf(p, s);
         if (best < 0 || pw < low) { best = i; low = pw; }
     }
     return best >= 0 ? best : RemovalOpponentTargetIndex(s, me);
