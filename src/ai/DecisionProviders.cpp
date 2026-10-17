@@ -21259,7 +21259,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // Read the WhiteKnightsProvider comment for why `Knights` listing three of these four cards
         // in its SIDEBOARD does not break this (the scan is over deck.mainboard) and why a misroute
         // between these two providers would be play-neutral anyway.
-        if (p.battle_cry_power > 0 || p.soulbond || p.team_pump_grants_double_strike)
+        //
+        // THE SOULBOND TERM IS SILVERBLADE'S PAYLOAD, not the keyword (2026-10-17): Tandem Lookout
+        // (NivMizzetCombo) is a second soulbond card, and keyed on `soulbond` alone it routed a U/R
+        // Niv-Mizzet combo list to WhiteKnightsProvider. soulbond_grants_double_strike is carried by
+        // Silverblade Paladin only, so every deck that routed here before still does (byte-identical).
+        if (p.battle_cry_power > 0 || p.soulbond_grants_double_strike || p.team_pump_grants_double_strike)
         { wknights = true; }
 
         // Breaching Dragonstorm. OR-ed across its namesake (the exile-until-nonland free cast),

@@ -172,6 +172,10 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // attach_target_equipment, Lizard Blades' reconfigure_cost) -- never KittyEquipment's
         // EquipmentProvider, which Kor Duelist / Sigarda's Aid / Ardenn would otherwise select.
         {"Colossus Hammer", "ColossusHammer"},
+        // NivMizzetCombo (Stage 1 landed the decklist 2026-10-17): rides Generic until the deck's
+        // provider-routing step (analyze-deck Stage 4a) decides otherwise -- pinned here only so the
+        // folder count below matches; the routing itself is that step's decision.
+        {"NivMizzetCombo", "Generic"},
     };
 
     namespace fs = std::filesystem;
