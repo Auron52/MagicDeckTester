@@ -1292,7 +1292,15 @@ extern thread_local bool g_human_play_suppressed;
 // the search plays shipped. thread_local like the flag above.
 extern thread_local bool g_unpruned_suppressed;
 
-inline bool HumanPlayActive()
+// FORCED INLINE (2026-10-17, docs/design/edf-round3-2026-10-17.md): the payer and the mana-source
+// rankers call this hundreds of millions of times per generation run and GCC kept it out of line
+// (the function-local static's guard), so the CALL was 0.6-0.8% of the EDF generation probe -- for
+// a body that is a guard test and a load. Codegen only: same statics, same answer.
+#if defined(_MSC_VER)
+__forceinline bool HumanPlayActive()
+#else
+inline __attribute__((always_inline)) bool HumanPlayActive()
+#endif
 {
     static const bool s_env = EnvSet("MTG_HUMAN_PLAY");
     return s_env && !g_human_play_suppressed;
