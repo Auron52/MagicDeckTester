@@ -53926,6 +53926,39 @@ struct KarooDropEnumScope
     ~KarooDropEnumScope() { g_enum_karoo_drop = prev; g_enum_karoo_num = prev_num; }
 };
 
+// MTG_ENUM_AURA_SORT_SKIP (DEFAULT ON) and its verifier -- see the use in EnumeratePlans.
+static bool EnumAuraSortSkipOn()       { static const bool v = EnvOn("MTG_ENUM_AURA_SORT_SKIP", true); return v; }
+static bool EnumAuraSortSkipVerifyOn() { static const bool v = EnvOn("MTG_ENUM_AURA_SORT_SKIP_VERIFY"); return v; }
+namespace aurasortskip
+{
+inline std::atomic<long long> g_checked{0}, g_changed{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!EnumAuraSortSkipVerifyOn()) { return; }
+        std::fprintf(stderr, "[aura-sort-skip] skipped_sorts_checked=%lld CHANGED=%lld\n",
+                     g_checked.load(), g_changed.load());
+    }
+};
+inline Dump g_dump;
+}
+template <class Less>
+static void EnumAuraSortSkipVerify(const std::vector<Action>& acts, Less less)
+{
+    std::vector<Action> sorted = acts;
+    std::stable_sort(sorted.begin(), sorted.end(), less);
+    bool same = true;
+    for (std::size_t i = 0; i < acts.size() && same; ++i)
+    {
+        same = acts[i].card_name == sorted[i].card_name && acts[i].kind == sorted[i].kind
+            && acts[i].hand_index == sorted[i].hand_index && acts[i].enchant_target == sorted[i].enchant_target
+            && acts[i].sac_source_id == sorted[i].sac_source_id;
+    }
+    aurasortskip::g_checked.fetch_add(1, std::memory_order_relaxed);
+    if (!same) { aurasortskip::g_changed.fetch_add(1, std::memory_order_relaxed); }
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -54005,6 +54038,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
     // because the summary's whole claim is that it saw every member of `cands`.
     const SubsetFilterPre pre = BuildSubsetFilterPre(state, cands);
+    // MTG_ENUM_AURA_SORT_SKIP (DEFAULT ON; =0 restores the per-plan sorts): the two per-emitted-plan
+    // Aura ordering sorts below key every action on a predicate of (frozen `state`, the action), and
+    // an emitted plan's actions are members of `cands` (or `fill_action`, a copy of one whose kind,
+    // name and enchant target FillScaledCastFace / FillScaledXTrick never write). So if NO candidate
+    // keys 1, every plan's key sequence is all zeros and the STABLE sort is the identity -- computed
+    // once here, per enumeration, instead of a stable_sort (temporary buffer + n log n by-name card
+    // lookups) per emitted plan. On EDF -- land Auras set pre.aura_target, but none of them is a
+    // restricted or new-creature Aura -- that was every plan of every enumeration.
+    // MTG_ENUM_AURA_SORT_SKIP_VERIFY=1 sorts a copy of every skipped plan and counts a change (must be
+    // 0; printed at exit).
+    int any_cond_ra = -1, any_aura_newc = -1;   // lazily: -1 unknown, else 0/1
+    auto cands_any = [&](int& memo, bool (*pred)(const GameState&, const Action&)) -> bool
+    {
+        if (memo < 0)
+        {
+            memo = 0;
+            for (const Action& ca : cands) { if (pred(state, ca)) { memo = 1; break; } }
+        }
+        return memo != 0;
+    };
     // The spectacle plan credit (MTG_SPECTACLE_PLAN_CREDIT; see BuildSpectacleCreditCtx). Lockstep
     // twin of Solve's; built here, after both aura injectors, for the same reason as `pre`.
     SpectacleCreditCtx spec_ctx;
@@ -56009,9 +56062,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // __insertion_sort instantiations, their two __merge_adaptive halves and the buffer.
         if (pre.aura_target && SeqAuraOrderingEnabled())
         {
-            std::stable_sort(plan.actions.begin(), plan.actions.end(),
-                [&](const Action& x, const Action& y)
-                { return IsConditionalRestrictedAura(state, x) < IsConditionalRestrictedAura(state, y); });
+            auto by_cra = [&](const Action& x, const Action& y)
+            { return IsConditionalRestrictedAura(state, x) < IsConditionalRestrictedAura(state, y); };
+            if (!EnumAuraSortSkipOn() || cands_any(any_cond_ra, &IsConditionalRestrictedAura))
+            { std::stable_sort(plan.actions.begin(), plan.actions.end(), by_cra); }
+            else if (EnumAuraSortSkipVerifyOn()) { EnumAuraSortSkipVerify(plan.actions, by_cra); }
         }
         // Shroud-target Auras (aura_shroud_src != 0: the host is Greaves'd NOW and the plan moves the
         // Greaves) resolve AFTER every other Aura, so one onto the move's DESTINATION is cast while
@@ -56047,9 +56102,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // FillScaledCastFace / FillScaledXTrick rescale -- neither writes `kind` or `enchant_target`.
         if (pre.aura_target && AuraOnNewCreatureEnabled())
         {
-            std::stable_sort(plan.actions.begin(), plan.actions.end(),
-                [&](const Action& x, const Action& y)
-                { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); });
+            auto by_newc = [&](const Action& x, const Action& y)
+            { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); };
+            if (!EnumAuraSortSkipOn() || cands_any(any_aura_newc, &IsAuraOnNewCreature))
+            { std::stable_sort(plan.actions.begin(), plan.actions.end(), by_newc); }
+            else if (EnumAuraSortSkipVerifyOn()) { EnumAuraSortSkipVerify(plan.actions, by_newc); }
         }
         // Cantrip-first runs AFTER the three Aura sorts (no-op unless searched play). Every Aura those
         // sorts move is in cantrip-first's "rest" group and keeps its place at the end of it, so the
