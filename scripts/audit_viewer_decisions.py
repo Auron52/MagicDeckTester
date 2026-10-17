@@ -456,6 +456,13 @@ MANIFEST = {
     "land_search_on_resolve":          ("tutor_etb",  truthy),
     "land_search_on_enter_or_attack":  ("tutor_etb",  truthy),
     "land_search_activation_cost":     ("tutor_etb",  truthy),
+    # ---- Colossus Hammer (2026-10-17) ----
+    # Magnetic Theft, "Attach target Equipment to target creature": WHICH (Equipment, creature) pair
+    # is a searched main_phase plan variant for the engine, but for a HUMAN both targets are asked at
+    # RESOLUTION -- two sequential `target` board-clicks through g_play_loyalty_chooser
+    # (ResolveAttachTargetEquipment, shared executor + ApplyPlan), the searched pair preselected, a
+    # forced pick not prompted. The plan JSON flags the cast `trick` (no queue-time enchant dialog).
+    "attach_target_equipment":   ("target",           truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -1556,6 +1563,9 @@ def modeled_tokens(card):
     if p.get("etb_choose_keyword_count", 0) > 0:
         t.add("modal")
     if p.get("etb_or_transform_exile_opp_creature_until_leaves"):
+        t.add("target")
+    # Magnetic Theft's "target Equipment ... target creature" IS the two-click `target` decision.
+    if p.get("attach_target_equipment"):
         t.add("target")
     return t
 

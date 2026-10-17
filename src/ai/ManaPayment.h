@@ -276,11 +276,29 @@ void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Acti
 // keeps the maker / reveal domain, so subset admission is unchanged.
 // See ManaPayment.cpp for the search order. MTG_PAYABLE_ORDER_STATS prints fire counts at exit.
 bool PayableOrderOn();
+// Both forms END with ApplyAttachSpellDependencyOrder (below), so every cast-order sort site in both
+// apply worlds realises the attach-spell dependency whatever rank, arrangement or payable rescue
+// produced the order.
 void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& actions,
                            std::vector<int>& order);
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& actions,
                              std::vector<int>& order, const std::vector<InternedName>& hand_exits,
                              int extra_wild);
+
+// ---- ATTACH-SPELL DEPENDENCY ORDER (Magnetic Theft) -- STRUCTURAL, not a heuristic ---------------
+// A Magnetic Theft whose Equipment target (Action::attach_equip_hand) or creature target
+// (Action::trick_hand_target) is cast by the SAME plan must resolve AFTER that cast: before it, the
+// target does not exist and the spell does nothing (CR 608.2b). So this is a legality constraint on
+// the realised order, not a preference, and it must hold under ANY cast-order rank -- the deck's
+// USER-reviewed order included (the IsAuraOnNewCreature precedent). Each such Theft is moved to just
+// after the FIRST cast of every target it depends on (minimal displacement, stable otherwise -- a
+// Theft that already follows its targets is untouched). Thefts never depend on each other, so one
+// pass settles it. No dependent Theft in `order` (every deck without the card) -> a no-op.
+void ApplyAttachSpellDependencyOrder(const std::vector<Action>& actions, std::vector<int>& order);
+// True iff `acts`, IN THIS ORDER, cast a dependent Theft before every cast its target needs -- the
+// check the human-play cast-ORDERING search uses to drop an ordering (OrderingPlacesAuraBeforeCreature's
+// shape). The explicit route plays a searched order verbatim, so the fix above never reaches it.
+bool OrderingPlacesAttachSpellBeforeTarget(const std::vector<Action>& acts);
 
 // ---- The EXACT order walk (docs/design/dragonstorm-user-cast-order.md) ------------------------
 // FirstUnpayablePos's walk plus the four SAME-TURN terms a ritual-combo turn's order turns on, every

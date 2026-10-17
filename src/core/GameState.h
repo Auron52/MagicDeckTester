@@ -172,6 +172,12 @@ struct StackEntry
                                         // creature). Set at the cast site from Action::enchant_target; read at
                                         // resolution (EffectHandler default case) to set the aura permanent's
                                         // aura_attached_to. 0 => not an aura / heuristic fallback pick.
+    int                 attach_equip_id = 0;        // Magnetic Theft (attach_target_equipment): the SEARCHED
+                                        // Equipment target's card.m_number (the creature target rides
+                                        // enchant_target). Stamped by the executor's cast site from
+                                        // Action::attach_equip_id (AIEngine::m_pending_attach_equip,
+                                        // consume-once); read by EffectHandler's resolution through the
+                                        // shared ResolveAttachTargetEquipment. 0 for every other spell.
     bool                bestow         = false;     // BESTOW (Gnarled Scarhide): this cast is the AURA mode.
                                         // Stamped from Action::bestow at the cast site; the resolver then
                                         // enters the DB's synthesized "<name> (Bestowed)" aura face instead

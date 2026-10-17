@@ -2025,6 +2025,20 @@ public:
         (void)s; (void)def; (void)out;   // default: no narrowing
     }
 
+    // AttachSpellPairCandidates -- narrow Magnetic Theft's ("Attach target Equipment to target
+    // creature", attach_target_equipment) enumerated (Equipment m_number, creature m_number) pairs.
+    // `pairs` arrives holding EVERY pair the engine folded as distinct (TurnSolver
+    // BuildAttachSpellPairs); erase entries to narrow, leave it untouched for no narrowing (the
+    // default, and every provider today -- ColossusHammerProvider included, deliberately: a narrowing
+    // here is a measured, USER-visible decision, never an engine default). Must keep at least one pair
+    // when it keeps the cast at all. Never consulted under human play or MTG_UNPRUNED, so the viewer
+    // and the unpruned A/B arm always see every pair.
+    virtual void AttachSpellPairCandidates(const GameState& s, const CardDefinition& def,
+                                           std::vector<std::pair<int, int>>& pairs) const
+    {
+        (void)s; (void)def; (void)pairs;   // default: no narrowing
+    }
+
     // BranchSoulfireOwnTargets -- branch on Soulfire Eruption's OWN-creature target count (0..K)?
     // Own-targeting only pays off with Hinata's per-target discount (which can enable an
     // otherwise-unaffordable cast) plus a deeper dig; without it the K+1 variants are dead weight every

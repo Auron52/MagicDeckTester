@@ -455,6 +455,21 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 }
                 // AuraHostLabel, not EnchantTargetName: two same-named candidate hosts (one in play,
                 // one being played this turn) otherwise render this plan and its sibling identically.
+                // Magnetic Theft: the EQUIPMENT target is half of what tells two pair variants apart
+                // ("Magnetic Theft (Colossus Hammer on Swiftblade Vindicator) -> Kor Duelist"); the
+                // creature half follows as the arrow below. The human re-picks both on the board at
+                // resolution, so this names the preselected default. Gated on the field.
+                if (a.attach_equip_id != 0)
+                {
+                    tag += " (" + AuraHostLabel(s, a.attach_equip_id);
+                    for (const Permanent& p : s.battlefield)
+                    {
+                        if (p.controller_index != s.active_player_index || p.card.m_number != a.attach_equip_id) { continue; }
+                        if (p.equipped_to != 0) { tag += " on " + AuraHostLabel(s, p.equipped_to); }
+                        break;
+                    }
+                    tag += ")";
+                }
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
                 // The no-own-creature "cash the cantrip off their body" variant (kTrickOpponentTarget).
                 else if (a.enchant_target == kTrickOpponentTarget)
@@ -1652,6 +1667,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                  + "|" + std::to_string(a.chosen_x)
                  + "|" + std::to_string(static_cast<int>(a.ability_mode))
                  + "|" + std::to_string(a.enchant_target)
+                 + (a.attach_equip_id != 0 ? "|mt" + std::to_string(a.attach_equip_id) : std::string())
                  + "|" + tgt;
         };
         // The PLAN-level identity: its land, its face, and its actions' payload keys IN VECTOR
@@ -2374,6 +2390,18 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             {
                 const CardDefinition* ad = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
                 if (ad && ad->params.solo_target_trick) { os << ", \"trick\": true"; }
+                // Magnetic Theft: BOTH targets are board clicks at RESOLUTION too, so it carries the
+                // same "no queue-time enchant dialog" flag (enchantTargetsFor / the variant-sub pass
+                // skip `trick` actions), plus the Equipment half of the searched pair -- the
+                // preselected default of the first board click -- and its disambiguated label.
+                if (ad && ad->params.attach_target_equipment && ac.attach_equip_id != 0)
+                {
+                    os << ", \"trick\": true, \"attach_equip\": " << ac.attach_equip_id
+                       << ", \"attach_equip_name\": "; JsonStr(os, EnchantTargetName(s, ac.attach_equip_id));
+                    const std::string ael = AuraHostLabel(s, ac.attach_equip_id);
+                    if (ael != EnchantTargetName(s, ac.attach_equip_id))
+                    { os << ", \"attach_equip_label\": "; JsonStr(os, ael); }
+                }
             }
             os << " }";
         }

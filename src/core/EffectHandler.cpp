@@ -570,6 +570,14 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                            entry.soulfire_own_targets.value_or(0),
                                            entry.chosen_x.value_or(0));
                 }
+                // Magnetic Theft ("Attach target Equipment to target creature"): the searched pair
+                // (Equipment on entry.attach_equip_id, creature on entry.enchant_target) through the
+                // SHARED resolver -- lockstep with the rollout's apply_one branch.
+                if (def.params.attach_target_equipment)
+                {
+                    ResolveAttachTargetEquipment(state, entry.controller_index, def,
+                                                 entry.attach_equip_id, entry.enchant_target);
+                }
                 // Unite the Coalition (user-approved collapse): the searched split S (on
                 // chosen_x) of the five mode-picks -> S x damage-per-choice to the opponent
                 // face + (N - S) draws. Lockstep with the rollout's apply_one modal branch.

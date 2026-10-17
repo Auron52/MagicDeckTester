@@ -504,6 +504,25 @@ struct Action
                                        // (SubsetHasMissingTrickTarget) is a name compare instead of a
                                        // zone scan (it profiled at 3.7%). Empty = battlefield target
                                        // (always legal) or not a trick.
+                                       // ALSO the Magnetic Theft CREATURE target when it is a same-plan
+                                       // hand creature (same meaning, same filter -- the subset must
+                                       // cast a creature of that name).
+    int         attach_equip_id  = 0;  // MAGNETIC THEFT (CardParams::attach_target_equipment, "Attach
+                                       // target Equipment to target creature"): the EQUIPMENT target's
+                                       // card.m_number; the CREATURE target rides enchant_target (the
+                                       // solo-trick precedent). CollectActions emits one CastFromHand
+                                       // variant per legal (Equipment, creature) pair after sound
+                                       // identity folds (sharing hand_index -> mutually exclusive), so
+                                       // the SEARCH picks the pair; plan_signature keys it (#MT) so the
+                                       // dedup cannot collapse pairs. Threaded to resolution through
+                                       // apply_one's consume-once cast_attach_equip (rollout) and
+                                       // AIEngine::m_pending_attach_equip -> StackEntry::attach_equip_id
+                                       // (executor), both into ResolveAttachTargetEquipment.
+                                       // 0 = not an attach spell.
+    InternedName attach_equip_hand;    // ...and the Equipment target's NAME when it is a same-plan HAND
+                                       // cast (cast the Hammer, then Theft it onto the Duelist): the
+                                       // subset must cast an Equipment of that name
+                                       // (SubsetHasStrandedAttachSpell). Empty = battlefield Equipment.
     bool        evoke            = false;
                                        // EVOKE (Reveillark, CR 702.75; user-directed 2026-09-05):
                                        // this CastFromHand pays CardParams::evoke_cost instead of
