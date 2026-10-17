@@ -815,6 +815,27 @@ automatically, because an unscored card is scored as an *empty slot* and that pe
 the arm that plays it. What no guard can do is notice that the engine models one side of a comparison
 more completely than the other (a `[bracket note]` in a card's `oracle_text`) — say so in the report.
 
+## Deck-Update Summary Skill
+
+When the user asks to **compare a deck's current list against the version it replaced**, to **summarize
+how a deck changed between v1 and now**, or for **a write-up of what a list adoption actually bought**,
+read `.claude/skills/deck-update-summary.md` first. It is the retrospective measurement — two lists that
+each already shipped, one pooled batch per format, one document page per deck. Distinct from
+`deck-screening.md` (which compares *candidate* lists against a SHARED apparatus to decide what to
+adopt) and from the adoption pipeline; nothing here regenerates an artifact.
+
+**Rule 0 it enforces:** each arm plays with **its own** shipped apparatus out of its own directory
+(`decks/<Deck>/v1-<slug>/` carries a full profile + value sidecar + keep table), which is the right
+pairing for "did the deck get better" **and** a deliberate confound that the document must state. Its
+traps: the pairing contract needs **both** `seed = BASE+off` and `game_index = off` or the arms silently
+unpair; `provider=` must be verified identical across arms, because an edited list can cross an
+archetype signature and swap the heuristics under one arm; a 50-game probe over-estimated per-game cost
+by **5x**, so re-project off the first real block; `max_turns` must be validated per format before
+spending the run (2HG's 30 team life can push games past the horizon and turn the metric into a non-win
+rate); and a format-sensitive result is explained from `cards.json` `parameters`, never the oracle text —
+`attack_tokens_per_opponent` defaults to **true**, so *absence* of the key is the heads-scaling case.
+Standard and 2HG are co-equal, and the format does reorder the gains.
+
 ## Mulligan Profile Generation Skill
 
 When the user asks to **generate / regenerate / pool / A-B / adopt a mulligan (keep or bottom) profile**, or to **hand profile generation to the secondary machine**, read `.claude/skills/mulligan-profile.md` first. It is the authoritative guide for the **exhaustive bucketed mulligan profile** — the separate, expensive, hand-off-able mulligan stage (distinct from `analyze-deck`, which does cards/coverage/play).
