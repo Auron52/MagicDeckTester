@@ -23376,6 +23376,48 @@ static thread_local int g_bp_enum_depth = 0;
 // stored anywhere is ever built under it. Read by the put-back axis alone.
 static thread_local int t_bp_front_only_depth = -1;
 
+// MTG_BP_DERIVE_METER (DEFAULT OFF -- it changes play; the USER's decision). A breakpoint-continuation
+// DERIVATION (BpDeriveContinuationList -> EnumeratePlansWithLand, under g_bp_enum_depth > 0) is an
+// enumeration, not a search node: it charges no unit, so the per-decision work ceiling
+// (MTG_DECISION_WORK_X, DecisionWorkMeter.h) never sees it. On a hand that has drawn its library one
+// derivation enters ~1.5M subsets and a single decision runs ~30 of them for ~14 minutes while billing
+// 214 units (docs/design/edf-slow-rollout-tail-2026-10-17.md). Armed, every subset the derivation's
+// enumerator visits bills the ARMED decision meter at the greedy walk's exchange rate
+// (GreedyChargeWeight -- one definition of a unit). Mode 1 only bills; mode 2 also stops a derivation once
+// the meter is exceeded: it is reported INTERRUPTED, returns an EMPTY list (the continuation the canon
+// default falls back to) and is NOT cached, so no later reader is ever served a truncated list. KNOWN
+// LOCKSTEP RISK of mode 2, to be measured before anyone adopts it: an interrupted derivation can only sit
+// inside a pass the overrun aborts, so it reaches play only through the anytime rescue (a strictly better
+// win proven before the abort); the executor re-derives that breakpoint outside the meter and would apply
+// the canon front() where the search scored EMPTY. Exceeding the meter is exactly
+// the condition under which SearchBudget::Overrun() already aborts the running pass, so the derivation
+// stops on the soft-stop path the ceiling was built for. Inert unless the meter is armed (a budgeted
+// decision under MTG_DECISION_WORK_X), so an unlimited budget is untouched: this RE-PRICES work under a
+// finite budget and cannot make a line unfindable at a large one.
+// Modes: 0 off (default) | 1 BILL only (the derivation always completes; the meter's overrun stops the
+// pass at its next poll) | 2 bill AND stop the derivation the moment the meter is spent.
+static int BpDeriveMeterMode()
+{
+    static const int v = std::max(0, std::min(2, EnvInt("MTG_BP_DERIVE_METER", 0)));
+    return v;
+}
+static bool BpDeriveMeterOn() { return BpDeriveMeterMode() > 0; }
+static thread_local bool g_bp_derive_interrupted = false;
+namespace bpmeter
+{
+inline std::atomic<long long> g_interrupted{0}, g_visits_billed{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!BpDeriveMeterOn()) { return; }
+        std::fprintf(stderr, "[bp-derive-meter] visits_billed=%lld derivations_interrupted=%lld\n",
+                     g_visits_billed.load(), g_interrupted.load());
+    }
+};
+inline Dump g_dump;
+}
+
 // Breakpoint-continuation marker for MTG_CONDEMN_M1_BP -- see TurnSolver::BpContinuationScope in the
 // header for why g_bp_enum_depth cannot serve this purpose (it misses every GREEDY continuation).
 static thread_local int g_bp_continuation_depth = 0;
@@ -55147,6 +55189,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     std::function<void(const std::vector<int>&)> eval_and_push_body;
+    // MTG_BP_DERIVE_METER: armed for this enumeration only inside a breakpoint derivation, under an armed
+    // decision meter, outside human play. Read once per call.
+    const bool bp_meter_on = BpDeriveMeterOn() && g_bp_enum_depth > 0 && decisionwork::Armed()
+                          && !HumanPlayActive();
     // (The PUTS-LAST retry that lived here is gone: a Vial put is sequenced like a cast of its card,
     // USER 2026-10-06, so a Pirate put that ranks after Daring Buccaneer is still in hand for the
     // reveal under the ordinary pricing -- SameSubsetRevealSurcharge prices the put at its position.)
@@ -55157,6 +55203,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // odometer walk the odo/plans/dedup columns actually describe.
         if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }
         const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
+        // MTG_BP_DERIVE_METER (default OFF; see BpDeriveMeterOn): bill this visit to the armed decision
+        // meter while deriving a breakpoint continuation list, and stop the derivation once it is spent.
+        if (bp_meter_on)
+        {
+            if (g_bp_derive_interrupted) { return; }
+            const int dw = GreedyChargeWeight(state);
+            if (dw <= 1 || ++decisionwork::t_charge_acc >= dw)
+            {
+                decisionwork::t_charge_acc = 0;
+                decisionwork::Add(1);
+                bpmeter::g_visits_billed.fetch_add(1, std::memory_order_relaxed);
+                if (BpDeriveMeterMode() >= 2 && decisionwork::Exceeded())
+                { g_bp_derive_interrupted = true; return; }
+            }
+        }
         if (enumstats::Enabled()) { enumstats::g_e_enter.fetch_add(1, std::memory_order_relaxed); }
         // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
         // cross-product BETWEEN them beyond `sat_max_actions` chosen actions. The forced free equips
@@ -81937,8 +81998,10 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                                                               bool is_pre_combat,
                                                               bool count_stats,
                                                               std::vector<TurnSolver::Plan>* demoted_out = nullptr,
-                                                              bool front_only = false)
+                                                              bool front_only = false,
+                                                              bool* interrupted_out = nullptr)
 {
+    if (interrupted_out != nullptr) { *interrupted_out = false; }
     const int  mode   = BpCondemnDropMode();
     const bool demote = (mode == 2);   // condemned lines ranked LAST (list keeps every entry)
     const bool skip   = (mode == 3);   // condemned ENTRIES emptied in place (ranks preserved)
@@ -81962,7 +82025,20 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                                              : std::chrono::steady_clock::time_point{};
     const std::uint64_t bp_slow_e0 = s_bp_slow_ms > 0 ? enumstats::g_e_enter.load() : 0;
     const std::uint64_t bp_slow_s0 = s_bp_slow_ms > 0 ? enumstats::g_e_surv.load() : 0;
+    // MTG_BP_DERIVE_METER=2: did the meter stop THIS derivation? Saved/restored around it (a nested
+    // derivation inside it reports into this one, and an interrupted inner one has spent the meter, so
+    // this one is interrupted too).
+    const bool bp_outer_interrupted = g_bp_derive_interrupted;
+    g_bp_derive_interrupted = false;
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    const bool bp_interrupted = g_bp_derive_interrupted;
+    g_bp_derive_interrupted = bp_outer_interrupted || bp_interrupted;
+    if (bp_interrupted)
+    {
+        plans.clear();   // a truncated list is never served: EMPTY, the canon's own fallback
+        bpmeter::g_interrupted.fetch_add(1, std::memory_order_relaxed);
+        if (interrupted_out != nullptr) { *interrupted_out = true; }
+    }
     if (s_bp_slow_ms > 0)
     {
         const double ms = std::chrono::duration<double, std::milli>(
@@ -82595,8 +82671,10 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     std::vector<TurnSolver::Plan> demoted;   // MTG_BP_NEW_ONLY_DEMOTE (empty with the lever off)
     const int use_reason = bpuse::t_reason;   // the derivation re-enters; read the consumer first
     const unsigned long long use_t0 = bpuse::On() ? __rdtsc() : 0;
+    bool bp_interrupted = false;   // MTG_BP_DERIVE_METER=2: never cache an interrupted derivation
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
-                                                                  /*count_stats=*/true, &demoted);
+                                                                  /*count_stats=*/true, &demoted,
+                                                                  /*front_only=*/false, &bp_interrupted);
     if (bpuse::On())
     {
         bpuse::g_stats.cycles[use_reason].fetch_add(static_cast<long long>(__rdtsc() - use_t0),
@@ -82604,7 +82682,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     }
     plancache::ReportHiwater("bp", state, plans);
 
-    if (keyed)
+    if (keyed && !bp_interrupted)
     {
         if (BpEnumProbeOn())
         {
