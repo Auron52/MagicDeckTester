@@ -111,9 +111,13 @@ fi
 # resolves it by walking UP from the binary's real path (HeuristicDefaults.h), which from
 # <primary>/build/wt/<name>/<Config>/ would otherwise reach the PRIMARY checkout's copy -- silently the
 # wrong tree. A `src` link beside the configs makes the walk stop at this tree's file first.
+# `decks` the same way: the unit tests that load a decklist (ResolveHeuristicDefaultsPath("decks/...")),
+# among them the every-deck routing table, otherwise read the PRIMARY checkout's lists -- 2026-10-17 a
+# rebased worktree failed that table on a deck folder the primary had not pulled yet.
 if [ -L build ]; then
   bt="$(readlink -f build)"
   if [ -L "$bt/src" ] || [ ! -e "$bt/src" ]; then ln -sfn "$PWD/src" "$bt/src"; fi
+  if [ -L "$bt/decks" ] || [ ! -e "$bt/decks" ]; then ln -sfn "$PWD/decks" "$bt/decks"; fi
 fi
 
 # PGO+LTO mode: its own single-config tree (build/pgo-work/ -> binaries in build/PGO/), trained on the

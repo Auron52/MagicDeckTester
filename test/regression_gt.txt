@@ -139,9 +139,9 @@ galadriel_smoke_d0_s1001=7.2010/6b2df166d8da48dc
 galadriel_smoke_d3_s1001=4.8333/e375f2cf5a5e1677
 galadriel_smoke_d5_s1001=4.4667/a12eaac12c0aac72
 galadriel2hg_smoke_d3_s1001=4.8333/c9509c7100b32bea
-colossus_smoke_d0_s1001=4.9680/ea0225d30671b35b
-colossus_smoke_d3_s1001=3.6467/5ac08c2745a9d3c5
-colossus_smoke_d5_s1001=3.6933/6e80a47872519e88
+colossus_smoke_d0_s1001=4.9630/e9f6d1760ce65951
+colossus_smoke_d3_s1001=3.6467/3b12735ec7762255
+colossus_smoke_d5_s1001=3.6933/803171391e3dc5d3
 
 # --- regression ---
 fungusv2_regression_d0_s2002=5.3740/3a06b8600502945f
