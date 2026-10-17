@@ -1803,6 +1803,13 @@ public:
     // ordinal for a plan carrying a choice, else -1 (bp_searched_plan's numbering).
     static bool BpUnbranchedCanon(const GameState& state, bool is_pre_combat, const Plan& plan,
                                   int seen_before, bool class_on, Plan& out);
+    // The plan's POST-APPLY STATE PINS -- the searched choices read after its main-phase apply returns
+    // (this turn's declare-attackers and combat damage, the next draw step and upkeep) -- written
+    // WRITE-WHEN-SET onto `s`, so a plan that did not branch on an axis leaves any value already there.
+    // ONE body for both worlds: ApplyPlanDirect's preamble, and the executor (AIEngine::TakeTurn) for its
+    // committed plan and for a breakpoint re-solve's plan. The cleanup discard and the Vial charge are
+    // NOT here: the rollout keeps them on the state, the executor in AIEngine members.
+    static void WritePostApplyStatePins(GameState& s, const Plan& p);
 
     // THE OPEN LAND DROP, read the way the dig loop needs it (DecisionProvider::DigUsesDrawnLandDrop):
     // is this turn's land drop still open, and would playing a land in hand (`only_land` = that one

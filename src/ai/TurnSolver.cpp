@@ -43716,39 +43716,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // deferred-breakpoint re-solve after the mint must price under the same world as the prepay.
     ScriptedFreshMode _sfm(plan.freshmode_choice);
 
-    // Searched Goblin Lackey put: copied onto the STATE (not a scoped guard) because the trigger
-    // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
-    // did not branch on the axis leaves any outer value alone.
-    if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
-    // Searched Surtland Flinger victim: same reasoning -- the fling fires at declare-attackers,
-    // after this function returns. -2 (decline) is a real pinned choice, so the guard is != -1.
-    if (plan.fling_victim_choice != -1) { state.scripted_fling_victim = plan.fling_victim_choice; }
-    // Searched Tectonic Giant mode: same reasoning -- the trigger fires at declare-attackers.
-    if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
-    if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
-    if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
-    if (plan.combat_aura_swap_choice >= 0)
-    { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; state.scripted_combat_aura_swap_in = -1; }
-    // Searched Raubahn attack attach: same reasoning -- the trigger fires at declare-attackers.
-    if (plan.attack_attach_choice >= 0) { state.scripted_attack_attach = static_cast<std::int16_t>(plan.attack_attach_choice); }
+    // The plan's post-apply STATE pins (combat triggers, next draw / upkeep), write-when-set -- the
+    // shared body (TurnSolver::WritePostApplyStatePins), which the executor runs for its committed plan
+    // and for a breakpoint re-solve's plan.
+    TurnSolver::WritePostApplyStatePins(state, plan);
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
-    // after this function returns, so it rides the STATE rather than a scoped guard.
+    // after this function returns, so it rides the STATE rather than a scoped guard. (The executor
+    // holds this one, and the Vial charge below, in AIEngine members.)
     if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
     // Searched Aether Vial charge: same reasoning again, one turn further out -- the upkeep that
     // reads this runs at the START OF NEXT TURN, so it must ride the state across the turn boundary.
     if (plan.vial_charge_choice >= 0) { state.scripted_vial_charge = plan.vial_charge_choice; }
-    // Searched Saga chapter target: same write-when->=0 state pin, read at the NEXT turn's draw
-    // step by AdvanceSagas (see GameState::scripted_saga_target).
-    if (plan.saga_target_choice >= 0) { state.scripted_saga_target = plan.saga_target_choice; }
-    // Searched land-search picks consumed AFTER this apply returns: Primeval Titan's attack trigger
-    // (this turn's declare-attackers) and Search for Tomorrow off suspend (NEXT upkeep). The same
-    // write-when-set state-pin rule as the pins above. Executor twins: AIEngine::TakeTurn.
-    if (plan.attack_land_search_choice >= 0)
-    { state.scripted_attack_land_search = plan.attack_land_search_choice; }
-    if (plan.upkeep_land_search_choice >= 0)
-    { state.scripted_upkeep_land_search = plan.upkeep_land_search_choice; }
-    if (plan.combat_crack_choice >= 0)
-    { state.scripted_combat_land_search_crack = plan.combat_crack_choice; }
 
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
@@ -82527,6 +82505,33 @@ void TurnSolver::PlanDumpAt(const GameState& state, bool is_pre_combat, int dept
     }
     std::fprintf(stderr, "================================================================================\n");
     busy = false;
+}
+
+// The plan's post-apply STATE pins (TurnSolver.h). Each is consumed AFTER the main-phase apply returns,
+// so it rides the state rather than a scoped guard, and each is written only by a real variant: a plan
+// that did not branch on the axis leaves an outer value (the committed plan's, under a re-solve) alone.
+void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
+{
+    // Goblin Lackey's put: this turn's combat-damage step.
+    if (p.lackey_choice >= 0) { s.scripted_cheat_choice = p.lackey_choice; }
+    // Surtland Flinger's victim, at declare-attackers. -2 (decline) is a real pinned choice: != -1.
+    if (p.fling_victim_choice != -1) { s.scripted_fling_victim = p.fling_victim_choice; }
+    // Tectonic Giant's mode and mode-B keep, at declare-attackers.
+    if (p.tectonic_mode_choice >= 0) { s.scripted_tectonic_mode = p.tectonic_mode_choice; }
+    if (p.tectonic_keep_choice >= 0) { s.scripted_tectonic_keep = p.tectonic_keep_choice; }
+    // Bruna's gather subset and Arcanum Wings' combat swap, at declare-attackers.
+    if (p.bruna_gather_choice >= 0) { s.scripted_bruna_gather = p.bruna_gather_choice; }
+    if (p.combat_aura_swap_choice >= 0)
+    { s.scripted_combat_aura_swap = p.combat_aura_swap_choice; s.scripted_combat_aura_swap_in = -1; }
+    // Raubahn's attack attach, at declare-attackers.
+    if (p.attack_attach_choice >= 0) { s.scripted_attack_attach = static_cast<std::int16_t>(p.attack_attach_choice); }
+    // The Saga chapter target, read at the NEXT turn's draw step (AdvanceSagas).
+    if (p.saga_target_choice >= 0) { s.scripted_saga_target = p.saga_target_choice; }
+    // Land-search picks: Primeval Titan's attack trigger and the in-combat Khalni crack (this turn's
+    // declare-attackers), Search for Tomorrow off suspend (the NEXT upkeep).
+    if (p.attack_land_search_choice >= 0) { s.scripted_attack_land_search = p.attack_land_search_choice; }
+    if (p.upkeep_land_search_choice >= 0) { s.scripted_upkeep_land_search = p.upkeep_land_search_choice; }
+    if (p.combat_crack_choice >= 0)       { s.scripted_combat_land_search_crack = p.combat_crack_choice; }
 }
 
 // The apply's canon default at a breakpoint the plan does not branch on (nested canon, enum/base canon),

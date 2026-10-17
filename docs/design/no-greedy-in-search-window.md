@@ -411,20 +411,28 @@ search-from-here frame after the human's land, a `resume_at` fixture, or the exe
 re-solve (none fired in that sample). The new `idle_pass_axes` rollout-stats line counts it per host and
 context.
 
-**DEFERRED gap 1 -- the executor drops a searched re-solve's post-apply pins.** The executor's breakpoint
-re-solve calls SolveWithLookahead at deck settings (AIEngine, the main and pod sites), with
-`g_bp_enum_depth == 0`, so its candidates carry every axis. The executor then applies the chosen plan's
-casts under `ContPins`, which holds during-cast pins only, and never writes the chosen plan's state pins
-(combat, cleanup, next upkeep) or its end-of-main sweep, Land's Edge count or dig. The realized combat
-and end step follow the COMMITTED plan's pins, while the re-solve scored its own. A re-solve that picks a
-pin variant therefore has a realized line that differs from the one it scored, and the branching was
-wasted work. It is also one of the two places an autonomous game can meet a pre-combat idle pass at
-all (the other is a mid-turn root), though the probe above saw no searched re-solve in 480 games.
-`MTG_M2_YIELD_STATS=1` counts it ("post-apply pin UNREALIZED"). Fix shape: after the re-solve, write
-the chosen plan's state pins with TakeTurn's write-when-set rule (including `m_discard_choice_pin` and
-`m_vial_choice_pin`), and let its sweep, Land's Edge and dig choices override the committed plan's at the
-end-of-main point. This moves executor play on every deck with a combat pin and breakpoints, so it
-needs its own A/B.
+**Gap 1 -- the executor dropped a searched re-solve's post-apply pins. FIXED 2026-10-17.** The executor's
+breakpoint re-solve calls SolveWithLookahead at deck settings (AIEngine, the main and pod sites), with
+`g_bp_enum_depth == 0`, so its candidates carry every axis, and it scores each through ApplyPlanDirect:
+the preamble writes the candidate's state pins write-when-set over what the state already holds (the
+committed plan's), and its end-of-main sweep, Land's Edge count and dig loop run under the candidate's own
+values. The executor applied the chosen plan's casts under `ContPins` (during-cast pins only) and wrote
+none of the rest, so the realized combat and end step followed the COMMITTED plan's pins while the
+re-solve had scored its own. Now:
+
+* `TurnSolver::WritePostApplyStatePins` is the ONE body for the state pins (Lackey, Flinger, Tectonic,
+  Bruna, Wings, Raubahn, Saga target, Titan, Search for Tomorrow, the in-combat crack). ApplyPlanDirect's
+  preamble, the executor's committed-plan write and the re-solve all call it.
+* After a searched re-solve, `adopt_resolve_post_apply` (AIEngine::TakeTurn) runs it on the chosen plan,
+  writes the discard / Vial / dork attack-hold members with the same rule, and the end-of-main block takes
+  the sweep, Land's Edge count and dig choice from the LAST re-solve (installed unconditionally, as
+  ApplyPlanDirect's scopes install them).
+* `MTG_M2_YIELD_STATS=1` reports CARRIED (re-solves whose plan holds a post-apply pin), UNREALIZED (of
+  those, the pins not in force at the end-of-main hand-over; must read 0) and DIG-UNRUN (below).
+
+**Disclosed residual (DIG-UNRUN):** on a committed line's main, and in main 2, the executor runs no reactive
+dig loop at all, so a re-solve whose candidate ran ApplyPlanDirect's dig loop is realized without it. That
+is the loop missing, not its pin. The counter shows how often it happens.
 
 **DEFERRED gap 2 -- a landfall trigger in COMBAT takes the front for every plan.**
 `Plan::landfall_target_choice` (Phylath's target) is installed by `ScriptedLandfallTarget` for the
