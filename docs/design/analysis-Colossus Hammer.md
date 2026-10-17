@@ -8,7 +8,7 @@ primary checkout (untracked there) on 2026-10-17 and asked to analyze it. Work h
 viewer and is shared by other sessions, so nothing is edited there). The deck file was COPIED into the
 worktree; the user's original stays in place.
 
-**State (2026-10-17 ~16:20 UTC; USER: "hold off on pushing ... stabilize everything" -- NOTHING PUSHED):**
+**State (2026-10-17; pushed ~22:00 UTC after the USER lifted the hold -- see LANDED below):**
 `colossus-analysis` tip: see `git log`. Done and committed: all 10 cards; the two bp cast-record fixes
 (`0f3c56499` Magnetic Theft's Equipment pin, `0d410db07` ten more fields); Stage 4 profile (`5e32c4d96`); Scryfall
 snapshot (`7088c2f86`); ALL THREE TIERS with accepted GT (`8c1de4465`; suite_gate 0.43x PASS); the cast-order +
@@ -27,12 +27,19 @@ consume-once CastRiders + the rollout free-cast bank; free-cast hits with no leg
 702.85a); USER-ruled Sigarda's Aid host heuristic. Colossus SMOKE GT accepted twice (`ac44130d8`, `78c864df6`);
 every later commit measured byte-identical on smoke. Deferred (docs/design/free-cast-target-followups.md): the
 executor's targeted free cast, the rollout's template graveyard card.
-ANALYSIS COMPLETE (2026-10-17 ~18:50 UTC), engine `56937ba8a` + GT `768be587d`, branch `colossus-analysis`, NOTHING
-PUSHED (USER hold). Final: units 1411/1411, scenarios 216/216, smoke + regression accepted (only colossus + one snow
+ANALYSIS COMPLETE (2026-10-17 ~18:50 UTC), engine `56937ba8a` + GT `768be587d` (pre-rebase hashes), branch
+`colossus-analysis`. Final: units 1411/1411, scenarios 216/216, smoke + regression accepted (only colossus + one snow
 cell moved; 0 slower anywhere), refs 600 / 0 drift, 5c2 keep ON (net -8 / 40k pairs), verify_deck all PASS except
 claude_sweep = 1 (the USER's cast-order call), flagged-seed recheck confirmed every fix. Overnight GT for the moved
-cells is left to the periodic overnight run. When the USER lifts the push hold: rebase onto origin, rebuild, smoke,
-push, watch CI (Windows).
+cells is left to the periodic overnight run.
+LANDED (2026-10-17 ~22:00 UTC, USER: "let's push the changes"): rebased onto origin `1943bccca` (then the docs-only `3288c3ec0`; 26 upstream commits:
+Galadriel onboarding, lockstep #11, the site-9 adventure continuation fix, ManaPool::wild_conv, the memo byte caps,
+the O(1)-leaf inclusive cut) and pushed to `phase-1-2-deck-analyzer`. Engine `0bbc7d603` + GT `bad509179` after the
+rebase; `ef5ac4d39` drops the record fields upstream's site-9 fix had added in parallel with `0d410db07`, and
+`6955aa120` links `decks/` beside an off-mount worktree build (the routing unit test was reading the primary
+checkout's decks). On the rebased tree: units 1428/1428, scenarios 217/217, smoke 128/128 and regression 177/177
+BYTE-IDENTICAL to the accepted GT (no accept needed), refs 600 / 0 drift. Commit hashes cited elsewhere in this
+ledger predate the rebase -- find each by its subject (`git log --oneline --grep`).
 Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
 keep-table cache keying, autonomous hand-aware batch prepay, the d0 greedy's self-Path valuation, a lossy
 combat-landfall top-pick prune (all listed in the final report).
