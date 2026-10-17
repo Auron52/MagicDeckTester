@@ -146,6 +146,11 @@ std::vector<const TurnSolver::Plan*> SolePathPlans(const std::vector<TurnSolver:
     return out;
 }
 
+// The result points INTO `plans`, so a temporary list would leave every pointer dangling (a Plan's
+// freed storage then reads as garbage -- a non-cast Action::Kind -- and ApplyPlan silently casts
+// nothing). Bind the list to a named variable first; the rvalue overload makes the slip a compile error.
+std::vector<const TurnSolver::Plan*> SolePathPlans(std::vector<TurnSolver::Plan>&& plans, int target) = delete;
+
 // Every enchant_target a Path cast takes across the plans.
 std::set<int> PathTargets(const std::vector<TurnSolver::Plan>& plans)
 {
@@ -264,7 +269,8 @@ TEST_CASE("Path: a self-target cast exiles our creature and fetches a TAPPED bas
     // One basic left in the library -> width 1: the self-target cast has no pin fan.
     GameState one = BoardPe(1, { kPath }, true, /*mountains=*/0);
     PutPe(one, "Kor Duelist", 50);
-    CHECK(SolePathPlans(TurnSolver::EnumerateMainPlans(one, true), 50).size() == 1);
+    const std::vector<TurnSolver::Plan> one_plans = TurnSolver::EnumerateMainPlans(one, true);
+    CHECK(SolePathPlans(one_plans, 50).size() == 1);
 }
 
 TEST_CASE("Path: an opponent target exiles it and nothing else; the ColossusHammer provider refuses that cast")
@@ -351,6 +357,39 @@ TEST_CASE("Path: exiling an equipped host DETACHES the Equipment, in both worlds
     CHECK(FindPe(w, 60)->equipped_to == 0);
     CHECK(FindPe(w, 50) == nullptr);
     CHECK(w.players[0].life == 21);   // our Duelist's power, to us
+}
+
+TEST_CASE("Path: exiling the host of an attached Lizard Blades makes the Lizard a creature again, in both worlds")
+{
+    // Reconfigure (CR 702.151b): attached, Lizard Blades is not a creature; once its host leaves it is
+    // unattached and a creature again -- not summoning sick, because it has been under our control
+    // continuously (CR 302.6). ResolveCreatureRemovalAt's detach is followed by the shared refresh.
+    GameState s = BoardPe(1, { kPath });
+    PutPe(s, "Kor Duelist", 50);
+    PutPe(s, "Lizard Blades", 70);
+    ApplyEquip(s, 0, 70, 50);
+    REQUIRE(FindPe(s, 70)->equipped_to == 50);
+    REQUIRE_FALSE(FindPe(s, 70)->card.IsCreature());
+    // The plan list must OUTLIVE the pointers into it (SolePathPlans' rvalue overload is deleted).
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const std::vector<const TurnSolver::Plan*> self = SolePathPlans(plans, 50);
+    REQUIRE_FALSE(self.empty());
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *self[0], true);
+    GameState exec = RunExecutor(s, *self[0]);
+    for (const GameState* g : { &roll, &exec })
+    {
+        INFO("world: " << std::string(g == &roll ? "rollout" : "executor"));
+        INFO("Path in gy " << NamedIn(g->players[0].graveyard, kPath) << ", in hand "
+             << NamedIn(g->players[0].hand, kPath) << ", Plains tapped " << CountBf(*g, "Plains", true));
+        CHECK(FindPe(*g, 50) == nullptr);
+        const Permanent* lz = FindPe(*g, 70);
+        REQUIRE(lz != nullptr);
+        CHECK(lz->equipped_to == 0);
+        CHECK(lz->card.IsCreature());
+        CHECK_FALSE(lz->entered_this_turn);
+    }
+    CheckSameWorld(roll, exec);
 }
 
 TEST_CASE("Path: one cast variant per own-creature identity class; the second Path names the second member")
