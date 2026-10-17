@@ -1839,8 +1839,8 @@ public:
     // `recoverable=11,424,464  UNRECOVERABLE=0` (search=11,379,949): every one of 11.4M rejected
     // selections had a legal, enumerable twin. See docs/design/search-recoverability-audit.md.
     //
-    // NOT INERT -- the 36,000-game fleet screen has this deck at 0.997, so adoption MOVES PLAY and
-    // owes a `kittyv2` GT rebaseline in all three tiers (one was already owed from the rebase).
+    // NOT INERT -- the 36,000-game fleet screen has this deck at 0.997, so adoption MOVED PLAY (the
+    // kittyv2 rows it was measured on were superseded by kittyv3 on 2026-10-14; kittyv3's GT carries it).
     // `MTG_FOLD_SEARCH_ODO=0` hard-disables it here, which is how the A/B control survives adoption.
     bool FoldSearchOdometerOptIn() const override { return true; }
     // THE EQUIP-CHAIN GO-OFF is emitted for this deck only (EquipRouteTrial). This deck is where

@@ -20963,7 +20963,7 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
     return colors;
 }
 
-// THE POOL GATE'S COLOUR FAN, SCOPED TO THIS TURN'S SINKS (MTG_SAC_POOL_TURN_COLOR, default OFF).
+// THE POOL GATE'S COLOUR FAN, SCOPED TO THIS TURN'S SINKS (MTG_SAC_POOL_TURN_COLOR, default ON since ec0e67b3).
 //
 // ChosenFloatColorCandidates above scans hand + LIBRARY + graveyard + battlefield, which asks "could
 // this colour ever be wanted by this DECK". For the sac-outlet POOL that question is far too wide,
@@ -61010,9 +61010,10 @@ inline bool TTNoWinCacheOn()
 // an accident of which sibling ran last. A hit replays kInvalid (leaf_tb == kInvalid), exactly
 // what the fresh run leaves.
 //
-// It changes UNITS, never play: a hit skips the rollout's ConsumeAt() calls, which is why it is
-// gated behind the same unbudgeted-play latch as the rest of the no-win half (NoWinLeafMemoArmed)
-// and cannot touch budgeted play. Measured: docs/design/snow-exact-unit-reductions.md.
+// It changes UNITS, never play, at an unlimited budget: a hit skips the rollout's ConsumeAt() calls.
+// Since 2026-10-15 it is NOT unbudgeted-only -- NoWinLeafMemoArmed no longer latches on unbudgeted
+// play, so under a budget the saved units are re-spent and play can move (a play change, tested as
+// one). Measured: docs/design/snow-exact-unit-reductions.md ("Budgeted").
 inline bool NoWinStoreUngradedOn()
 {
     static const bool v = EnvOn("MTG_NOWIN_STORE_UNGRADED", true);
@@ -61041,9 +61042,9 @@ inline bool NoWinStoreUngradedOn()
 // proved the earliest possible win -- each still applied (that is how a this-turn win is found),
 // but no longer rolled out.
 //
-// GATED like the leaf table's no-win half: unbudgeted play only, an unlimited (or absent) budget,
-// and never at the enforcing root (whose escalation reads every candidate's score). Under a budget
-// the freed units would be re-spent and play would move, which is an A/B, not an identity.
+// GATED never at the enforcing root (whose escalation reads every candidate's score). Since
+// 2026-10-15 it applies at ANY budget (see the call site): under a budget the freed units are
+// re-spent and play can move, so it is a play change tested as one, not an unbudgeted-only identity.
 inline bool LaTiePruneOn()
 {
     static const bool v = EnvOn("MTG_LA_TIE_PRUNE", true);
