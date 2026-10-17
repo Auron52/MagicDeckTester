@@ -795,3 +795,7 @@ Add a key to `## Approved deferrals` to sign one off (only if it is a genuine, u
 - clause_ledger: no dedicated per-clause artifact. Its function -- every oracle clause modeled/inert/deferred -- is covered by coverage(partial hard-stop) + bracket-note deferrals + viewer oracle cross-check + audit_card_fields oracle-diff. A dedicated ledger is deferred (high per-card cost, marginal added rigor).
 
 <!-- verify_deck:end -->
+
+## Stage 5c2 — horizon-honest tie-break (2026-10-17, 4b57bf72)
+`leaf_tiebreak_check.py` at PLAY settings, 12,000 paired games: net -9 turns (half A -6, half B -3; 19
+better / 9 worse; 28 changed = 0.233%). VERDICT: KEEP THE DEFAULT (GradesNoWinLeaf ON).
