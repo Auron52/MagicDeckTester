@@ -345,12 +345,16 @@ TEST_CASE("Galadriel scry before Galadriel: colours in hand -> Crackle and accel
     CHECK_FALSE(KeepsGal(s, kGaladriel));
 }
 
-TEST_CASE("Galadriel scry before Galadriel: short on lands -> any land is kept")
+TEST_CASE("Galadriel scry before Galadriel: short on lands -> any land, but only once the colours are in")
 {
     EnsureCardsLoadedGal();
     GameState s = FreshGal();
-    PutGal(s, kTemple, 1);
+    PutGal(s, kTemple, 1);                  // G/U, no R: colours first even though short
     HandGal(s, kGaladriel, 2);
+    CHECK_FALSE(KeepsGal(s, kHavens));
+    CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));
+    CHECK(KeepsGal(s, "Temple of Malice")); // R
+    PutGal(s, "Temple of Malice", 3);       // G, U and R covered, two lands: short
     CHECK(KeepsGal(s, kHavens));
     CHECK(KeepsGal(s, "Temple of Plenty"));
 }

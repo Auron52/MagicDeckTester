@@ -72,7 +72,9 @@ the chain to it alone outside human play.
   G, U (Galadriel) and R (Crackle), covered by any land/rock on the battlefield or in hand (a filter covers
   all); a top card covering a missing colour is kept; "bad shape" = G or U missing, and then Crackle and
   acceleration (Sol Ring, Skerry) are thrown unless they cover a missing colour; "short on lands" = under
-  three lands on the battlefield + in hand, and then any land is kept; everything else is thrown.
+  three lands on the battlefield + in hand, and then any land is kept -- but only once G, U and R are all
+  covered (USER clarification: "you still need to prioritize getting the colours even if short on lands.
+  It is only beyond that that you would accept anything"); everything else is thrown.
   AGENT READING (surfaced): a Galadriel on top while none is in hand or on the battlefield is kept.
 - BUG FIXED with this change: `x_damage_multiplier` DEFAULTS TO 1, so the first version's "Crackle"
   test (`> 0`) matched every card (every hand card counted as a held Crackle; with Galadriel out a Sol

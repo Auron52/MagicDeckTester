@@ -5356,7 +5356,10 @@ int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
 //   * bad shape    = G or U missing (Galadriel uncastable): Crackle and acceleration are then thrown
 //                    unless they cover a missing colour (Saprazzan Skerry's U can).
 //   * Crackle, acceleration (mana_rock, or a land producing 2+) -- kept otherwise.
-//   * short on lands = fewer than three lands on the battlefield + in hand: any land is kept.
+//   * short on lands = fewer than three lands on the battlefield + in hand: any land is kept --
+//                    but ONLY once G, U and R are all covered (USER: "you still need to prioritize
+//                    getting the colours even if short on lands. It is only beyond that that you
+//                    would accept anything").
 //   * anything else (an extra Galadriel, an off-colour or colourless land) is thrown.
 //   AGENT READING, surfaced to the user: a Galadriel when NONE is in hand or on the battlefield is
 //   kept (the rule presumes she is held; the required-piece keep makes the no-Galadriel case rare).
@@ -5476,7 +5479,10 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
     (void)rocks_bf;
 
     if (fixes) { return true; }
-    if (td->card.IsLand() && short_lands) { return true; }
+    // "you still need to prioritize getting the colours even if short on lands. It is only beyond
+    // that that you would accept anything" (USER): a non-fixing land is kept only once G, U and R
+    // are all covered.
+    if (td->card.IsLand() && short_lands && missing == 0) { return true; }
     if (tp.scry_reveal_land_to_battlefield) { return gal_hand == 0; }   // agent reading (header)
     if (IsCrackle(*td) || accel) { return !bad_colours; }
     return false;
