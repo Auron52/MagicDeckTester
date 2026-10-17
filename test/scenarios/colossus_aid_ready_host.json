@@ -1,0 +1,25 @@
+{
+ "_comment": "Colossus Hammer claude-play sweep seed 2100011 T4 shape (2026-10-17): Sigarda's Aid out, Lizard Blades cast this turn (a SUMMONING-SICK 1/1 double striker), Swiftblade Vindicator READY (1/1 double strike, vigilance, trample), a Colossus Hammer in hand and {1} to cast it. The Aid's free attach onto the Vindicator swings for 22 into 20; onto the Lizard it deals 2. The base EquipmentEtbAttachHost scorer ties the two ((1+10)*2 - 1*2 = 20 each) and breaks the tie to the lower card number -- the Lizard, listed first here so it gets it -- so before the fix there is no T4 kill at any depth or budget (d8 unlimited included). ColossusHammerProvider's USER-ruled heuristic (2026-10-17: double-strike potential, then can-attack-this-turn) puts it on the ready Vindicator.",
+ "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {"name": "Lizard Blades", "sick": true},
+  {"name": "Swiftblade Vindicator", "sick": false},
+  {"name": "Sigarda's Aid"},
+  {"name": "Plains", "tapped": true},
+  {"name": "Mountain", "tapped": true},
+  {"name": "Furycalm Snarl", "tapped": true},
+  {"name": "Mountain"}
+ ],
+ "hand": ["Colossus Hammer"],
+ "library_filler": "Path to Exile",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 4,
+ "expect_win_turn": 4
+}
