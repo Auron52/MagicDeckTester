@@ -3041,10 +3041,92 @@ static const bool s_move_order = !EnvOn("MTG_NO_MOVE_ORDER");
 // second reader).
 static const bool s_legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
 
+// MTG_PLAN_SORT_BY_INDEX (DEFAULT ON; =0 restores the in-place std::stable_sort of the Plans). A Plan
+// is a large object (action vector, land name, a dozen scalars, pin vectors) and a merge sort moves
+// each element O(log n) times through a temporary buffer; perf put Plan::operator= + the buffer at
+// ~2% of EDF's generation shape. Stable-sorting the INDICES with the same comparator yields the same
+// permutation -- a stable sort's output is uniquely determined by the comparator and the input order
+// -- and the Plans are then moved once each along the permutation's cycles (nothing at all when the
+// list was already in order, the common case for a re-sorted list). MTG_PLAN_SORT_BY_INDEX_VERIFY=1
+// also sorts a copy the old way and counts a positional difference (must be 0; printed at exit).
+static bool PlanSortByIndexOn()       { static const bool v = EnvOn("MTG_PLAN_SORT_BY_INDEX", true); return v; }
+static bool PlanSortByIndexVerifyOn() { static const bool v = EnvOn("MTG_PLAN_SORT_BY_INDEX_VERIFY"); return v; }
+namespace plansortidx
+{
+inline std::atomic<long long> g_sorts{0}, g_mismatch{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!PlanSortByIndexVerifyOn()) { return; }
+        std::fprintf(stderr, "[plan-sort-idx] verified_sorts=%lld MISMATCH=%lld\n", g_sorts.load(), g_mismatch.load());
+    }
+};
+inline Dump g_dump;
+inline bool SameSlot(const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+{
+    if (a.value != b.value || a.wins_this_turn != b.wins_this_turn || a.actions.size() != b.actions.size()
+        || a.land_to_play != b.land_to_play || a.bp_choice != b.bp_choice || a.bp_at != b.bp_at)
+    { return false; }
+    for (std::size_t i = 0; i < a.actions.size(); ++i)
+    {
+        const Action& x = a.actions[i];
+        const Action& y = b.actions[i];
+        if (x.card_name != y.card_name || x.kind != y.kind || x.hand_index != y.hand_index
+            || x.enchant_target != y.enchant_target || x.sac_source_id != y.sac_source_id
+            || x.chosen_x != y.chosen_x)
+        { return false; }
+    }
+    return true;
+}
+}
+template <class Less>
+static void StableSortPlans(std::vector<TurnSolver::Plan>& plans, Less less)
+{
+    const std::size_t n = plans.size();
+    if (n < 2) { return; }
+    if (!PlanSortByIndexOn()) { std::stable_sort(plans.begin(), plans.end(), less); return; }
+    std::vector<TurnSolver::Plan> check;
+    if (PlanSortByIndexVerifyOn())
+    {
+        check = plans;
+        std::stable_sort(check.begin(), check.end(), less);
+    }
+    std::vector<std::uint32_t> idx(n);
+    for (std::size_t i = 0; i < n; ++i) { idx[i] = static_cast<std::uint32_t>(i); }
+    std::stable_sort(idx.begin(), idx.end(), [&](std::uint32_t a, std::uint32_t b)
+                     { return less(plans[a], plans[b]); });
+    // Apply plans'[i] = plans[idx[i]] in place, one cycle at a time (one temporary per cycle).
+    std::vector<char> done(n, 0);
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        if (done[i] || idx[i] == i) { done[i] = 1; continue; }
+        TurnSolver::Plan tmp = std::move(plans[i]);
+        std::size_t j = i;
+        for (;;)
+        {
+            const std::size_t k = idx[j];
+            done[j] = 1;
+            if (k == i) { plans[j] = std::move(tmp); break; }
+            plans[j] = std::move(plans[k]);
+            j = k;
+        }
+    }
+    if (PlanSortByIndexVerifyOn())
+    {
+        plansortidx::g_sorts.fetch_add(1, std::memory_order_relaxed);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            if (!plansortidx::SameSlot(plans[i], check[i]))
+            { plansortidx::g_mismatch.fetch_add(1, std::memory_order_relaxed); break; }
+        }
+    }
+}
+
 static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
 {
     if (!s_move_order || plans.size() < 2) { return; }
-    std::stable_sort(plans.begin(), plans.end(),
+    StableSortPlans(plans,
         [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn; }
@@ -56906,7 +56988,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Sort so the highest-value plans are simulated first.  When a timeout fires
     // the search returns the best plan found so far, so we want the most promising
     // candidates evaluated before cheaper ones.
-    std::stable_sort(plans.begin(), plans.end(),
+    StableSortPlans(plans,
         [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
