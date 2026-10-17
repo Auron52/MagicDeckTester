@@ -529,6 +529,9 @@ enum Slot : int
     LANDFALL_KHALNI_NEEDS_RAMP,// MTG_LANDFALL_KHALNI_NEEDS_RAMP  the USER's Khalni rule in the 5i discard (2026-10-17): "I wouldn't keep it unless we have enough other ramp active to activate it quickly", "Khalni is not great unless you have a lot of lands coming down", "it should still be kept if we cannot fill our ramp spots otherwise" -- kept as ramp only when the hand and board bring its three landfalls by the turn after it is cast (land drops from hand lands, at most 2, + other kept ramp + fetch lands in hand or uncracked out); otherwise only a ramp spot the other ramp leaves -- ahead of the extra lands except Myriad ("It is more ramp than land except arguably Myriad Landscape") -- else it sheds right after a capped copy. Default ON (the USER's rule); =0 -> Khalni is ordinary ramp
     LANDFALL_DISCARD_GATE,    // MTG_LANDFALL_DISCARD_GATE  amendment to the 5i discard (2026-10-17, USER-approved): threats are split by a castability GATE -- P(castable within our next 4 turns) >= 0.5, the kept ramp credited as mana (one spell a turn from next turn, its land usable the turn after; a qualifying Khalni +2 a turn later) -- and the rank decides among the castable (Phylath still first). Found by the rule-vs-searched labels: s2312103 T2 shed Avenger because the land-only model read it uncastable beside Titan / Wave. MEASURED (logs/castorder/amend): A/B play 4 faster / 1 slower, d0 3 / 1; paired labels 1 regret in 128 sheds (sheds Courser, the lowest rank) vs 0 for the castability order; changes the pick on 23 of 91 shared sheds (keeps Avenger / Omnath / Wave, sheds Courser). Default ON (USER 2026-10-17: "that sounds sensible"); =0 -> the castability order
     FS_STRICT_CUT_O1,         // MTG_FS_STRICT_CUT_O1  the strict child cut (MTG_FS_STRICT_CUT) also in a search whose horizon leaf is O(1) -- the learned value model or the no-leaf constant. The cut's saving is the tie turn a ROLLOUT leaf plays out in full; an O(1) leaf costs the same at any cutoff, and measured the cut RAISES value-leaf pass cost (Landfall d5 7.5k -> 11.9k units, Prevent Damage d5 3.6k -> 8.3k) while it lowers rollout passes. DEFAULT OFF (2026-10-17): the inclusive cut where the leaf is O(1); =1 restores the strict cut there (the 2026-10-15..17 behaviour)
+    GALADRIEL_SCRY,           // MTG_GALADRIEL_SCRY         GaladrielProvider's scry policy (USER 2026-10-17 "smart scry heuristics"); default ON pending its A/B, =0 -> the Generic rule
+    GALADRIEL_CHAIN_PRUNE,    // MTG_GALADRIEL_CHAIN_PRUNE  prune a Galadriel reveal chain to the USER's rule alone (2026-10-17: keep scry-lands, pitch everything else except Crackle when next turn's mana finishes the opponent) -- GaladrielProvider::ScryChainSingleCandidate. Default ON pending its A/B; =0 -> every skip count is searched
+    GALADRIEL_SPOTS,          // MTG_GALADRIEL_SPOTS        the USER's turn order (2026-10-17: "Galadriel before lands and Crackle after") -- GaladrielProvider::LandEntrySpotsRule: the land right after Galadriel's cast is the preferred spot, the land-first plan still searched. Default ON (the USER's rule); =0 -> the generic land-first preference
     COUNT
 };
 
@@ -1008,6 +1011,9 @@ inline const char* Name(int slot)
         "MTG_LANDFALL_KHALNI_NEEDS_RAMP",
         "MTG_LANDFALL_DISCARD_GATE",
         "MTG_FS_STRICT_CUT_O1",
+        "MTG_GALADRIEL_SCRY",
+        "MTG_GALADRIEL_CHAIN_PRUNE",
+        "MTG_GALADRIEL_SPOTS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

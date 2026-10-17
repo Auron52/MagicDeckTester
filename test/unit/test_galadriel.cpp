@@ -12,6 +12,7 @@
 //     colours.
 #include <doctest/doctest.h>
 
+#include "ai/DecisionProviders.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -137,12 +138,12 @@ TEST_CASE("Galadriel: a pinned skip count bottoms that many stop cards")
     PutGal(s, kGaladriel, 1);
     LibGal(s, { kCrackle, kTemple, kTemple }, 10);
 
-    // Candidates are {default 0, then 1, 2}: index 1 = skip one stop card.
+    // Candidates are {live default (-1), then k = 0, 1}: index 2 = skip one stop card.
     const std::vector<int> cands = ScryChainCandidates(s);
-    REQUIRE(cands.size() == 2);   // one stop card: k = 0 or 1
-    CHECK(cands[0] == 0);
+    REQUIRE(cands.size() == 3);   // one stop card: the default, k = 0, k = 1
+    CHECK(cands[0] == -1);
     {
-        ScriptedTopChoice pin(1);
+        ScriptedTopChoice pin(2);
         EnterLand(s, DefGal(kTemple), 2, true, true, LandEntryTap::ForcedTapped);
     }
     // Crackle bottomed, both Temples revealed in, and the chain's last look sees Crackle again with no
@@ -287,4 +288,88 @@ TEST_CASE("Mana payment: the same board with a second red land pays {14}{R}{R} t
     GameState s1 = CrackleBoardGal(false);
     ManaCost c1; c1.generic = 13; c1.red = 2;
     CHECK(TapForCostBacktrack(s1, c1, false, ManaPool{}));
+}
+
+// ---- GaladrielProvider::ScryKeepOnTop before Galadriel (USER 2026-10-17): "Without Galadriel, you
+// want to look for colors, Crackle and acceleration. Anything else is thrown unless you are short on
+// lands and when you are really in bad shape for colours you might even throw Crackle or acceleration
+// if they don't help solve the problem."
+namespace
+{
+void HandGal(GameState& s, const std::string& name, int number)
+{
+    Card c = DefGal(name).card;
+    c.m_number = number;
+    s.players[0].hand.push_back(c);
+}
+bool KeepsGal(const GameState& s, const std::string& name)
+{
+    static const GaladrielProvider gp;
+    Card c = DefGal(name).card;
+    c.m_number = 900;
+    return gp.ScryKeepOnTop(s, c);
+}
+}   // namespace
+
+TEST_CASE("Galadriel scry before Galadriel: missing G/U -> only colour fixers are kept")
+{
+    EnsureCardsLoadedGal();
+    GameState s = FreshGal();
+    PutGal(s, "Temple of Malice", 1);       // B/R
+    PutGal(s, "Zhalfirin Void", 2);         // C
+    HandGal(s, "Temple of Triumph", 3);     // R/W: three lands, not short
+    HandGal(s, kGaladriel, 4);
+    CHECK(KeepsGal(s, kTemple));            // G/U
+    CHECK(KeepsGal(s, "Temple of Deceit")); // U
+    CHECK(KeepsGal(s, kSkerry));            // U: acceleration that solves the problem
+    CHECK(KeepsGal(s, "Crystal Grotto"));   // any colour
+    CHECK_FALSE(KeepsGal(s, kCrackle));     // bad shape: Crackle does not help
+    CHECK_FALSE(KeepsGal(s, "Sol Ring"));   // ...nor colourless acceleration
+    CHECK_FALSE(KeepsGal(s, kHavens));
+    CHECK_FALSE(KeepsGal(s, kGaladriel));   // a second one
+}
+
+TEST_CASE("Galadriel scry before Galadriel: colours in hand -> Crackle and acceleration kept, the rest thrown")
+{
+    EnsureCardsLoadedGal();
+    GameState s = FreshGal();
+    PutGal(s, kTemple, 1);                  // G/U
+    PutGal(s, "Temple of Malice", 2);       // B/R
+    PutGal(s, "Zhalfirin Void", 3);
+    HandGal(s, kGaladriel, 4);
+    CHECK(KeepsGal(s, kCrackle));
+    CHECK(KeepsGal(s, "Sol Ring"));
+    CHECK(KeepsGal(s, kSkerry));
+    CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));
+    CHECK_FALSE(KeepsGal(s, kHavens));
+    CHECK_FALSE(KeepsGal(s, kGaladriel));
+}
+
+TEST_CASE("Galadriel scry before Galadriel: short on lands -> any land is kept")
+{
+    EnsureCardsLoadedGal();
+    GameState s = FreshGal();
+    PutGal(s, kTemple, 1);
+    HandGal(s, kGaladriel, 2);
+    CHECK(KeepsGal(s, kHavens));
+    CHECK(KeepsGal(s, "Temple of Plenty"));
+}
+
+TEST_CASE("Galadriel scry with Galadriel out: scry-lands kept, a first Crackle only when next turn is lethal")
+{
+    EnsureCardsLoadedGal();
+    GameState s = FreshGal();
+    PutGal(s, kGaladriel, 1);               // a 3/3
+    PutGal(s, "Temple of Malice", 2);       // R
+    PutGal(s, "Temple of Abandon", 3);      // R
+    PutGal(s, kTemple, 4);
+    PutGal(s, "Zhalfirin Void", 5);
+    HandGal(s, "Temple of Plenty", 6);      // next turn: 5 mana
+    s.players[1].life = 5;                  // 5 - 3 power = 2 -> X = 1: {3}{R}{R}, payable
+    CHECK(KeepsGal(s, kCrackle));
+    CHECK(KeepsGal(s, "Temple of Deceit"));
+    CHECK_FALSE(KeepsGal(s, "Sol Ring"));
+    CHECK_FALSE(KeepsGal(s, kSkerry));
+    s.players[1].life = 20;                 // X = 4: 14 mana needed
+    CHECK_FALSE(KeepsGal(s, kCrackle));
 }

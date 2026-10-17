@@ -28842,40 +28842,29 @@ inline bool ScryChainLand(const Card& c)
     return d != nullptr && d->card.IsLand() && d->params.etb_scry > 0;
 }
 
-// The chain's candidate skip counts, the provider's default FIRST, then every other distinct k in
-// ascending order. With S stop cards in the library the distinct policies are k = 0..S (k = S bottoms
-// every stop card and lets every scry-land in; any larger k is the same chain). The default walks the
-// library and bottoms stop cards while the provider's ScryKeepOnTop would bottom them, stopping at
-// the first it keeps -- the per-look heuristic, expressed as one k so the search's alternatives can
-// be deduplicated against it.
+// The chain's candidates: index 0 = the PROVIDER DEFAULT, decided LIVE at every look (keep a scry-land,
+// else ScryKeepOnTop on the board as it stands -- the lands the chain has already put in count); then
+// every explicit skip count k = 0..S (S = stop cards in the library; k = S bottoms every stop card and
+// lets every scry-land in -- any larger k is the same chain). Returned as skip counts with -1 standing
+// for the live default. A provider that owns a chain rule may prune to the default alone
+// (DecisionProvider::ScryChainSingleCandidate); human play is never pruned.
 inline std::vector<int> ScryChainCandidates(const GameState& state)
 {
+    std::vector<int> out{ -1 };
+    if (ResolveProvider(state).ScryChainSingleCandidate(state) && !HumanPlayActive()) { return out; }
     const Player& ap = state.ActivePlayer();
-    const DecisionProvider& prov = ResolveProvider(state);
-    int stops = 0, def_k = 0;
-    bool def_done = false;
-    for (std::size_t i = 0; i < ap.library.size(); ++i)
-    {
-        const Card& c = ap.library[i];
-        if (ScryChainLand(c)) { continue; }
-        ++stops;
-        if (!def_done)
-        {
-            if (prov.ScryKeepOnTop(state, c)) { def_done = true; }
-            else                              { ++def_k; }
-        }
-    }
-    std::vector<int> out;
-    out.reserve(static_cast<std::size_t>(stops) + 1);
-    out.push_back(def_k);
-    for (int k = 0; k <= stops; ++k) { if (k != def_k) { out.push_back(k); } }
+    int stops = 0;
+    for (std::size_t i = 0; i < ap.library.size(); ++i) { if (!ScryChainLand(ap.library[i])) { ++stops; } }
+    out.reserve(static_cast<std::size_t>(stops) + 2);
+    for (int k = 0; k <= stops; ++k) { out.push_back(k); }
     return out;
 }
 
 // The live chain. `depth` counts nested ScryTop frames inside one chain (the RAII scope below);
 // `bound` is set by the chain's first one-card look, which consumes the scry pin; `policy` is false
-// when the human is choosing every look instead.
-struct ScryChainState { int depth = 0; bool bound = false; bool policy = false; int skips_left = 0; };
+// when the human is choosing every look instead; `live_default` when the provider decides each look.
+struct ScryChainState { int depth = 0; bool bound = false; bool policy = false; bool live_default = false;
+                        int skips_left = 0; };
 extern thread_local ScryChainState g_scry_chain;
 
 struct ScryChainScope
@@ -28897,18 +28886,24 @@ inline bool ScryChainPolicyBind(const GameState& state)
     else if (g_play_top_chooser != nullptr) { g_scry_chain.policy = false; return false; }
     const std::vector<int> cands = ScryChainCandidates(state);
     const std::size_t idx = k < 0 ? 0 : std::min(static_cast<std::size_t>(k), cands.size() - 1);
-    g_scry_chain.skips_left = cands[idx];
-    g_scry_chain.policy     = true;
+    g_scry_chain.live_default = cands[idx] < 0;
+    g_scry_chain.skips_left   = cands[idx] < 0 ? 0 : cands[idx];
+    g_scry_chain.policy       = true;
     return true;
 }
 
-// One look under the bound policy: keep a scry-land (dominance), bottom a stop card while skips
-// remain, keep the first stop card after that (the chain ends on it).
-inline TopDisposition ScryChainDisposition(const Card& c)
+// One look under the bound policy. A scry-land is always kept (dominance). Live default: the
+// provider's ScryKeepOnTop on the current board. Explicit k: bottom a stop card while skips remain,
+// keep the first one after that (the chain ends on it).
+inline TopDisposition ScryChainDisposition(const GameState& state, const Card& c)
 {
     TopDisposition d;
-    if (ScryChainLand(c) || g_scry_chain.skips_left <= 0) { d.top_order.push_back(0); }
-    else                                                   { --g_scry_chain.skips_left; }
+    bool keep;
+    if (ScryChainLand(c))               { keep = true; }
+    else if (g_scry_chain.live_default) { keep = ResolveProvider(state).ScryKeepOnTop(state, c); }
+    else if (g_scry_chain.skips_left > 0) { --g_scry_chain.skips_left; keep = false; }
+    else                                { keep = true; }
+    if (keep) { d.top_order.push_back(0); }
     return d;
 }
 
@@ -28934,7 +28929,7 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
     std::optional<ScryChainScope> chain_scope;
     if (watched) { chain_scope.emplace(); }
     TopDisposition disp = (watched && look == 1 && ScryChainPolicyBind(state))
-                        ? ScryChainDisposition(looked[0])
+                        ? ScryChainDisposition(state, looked[0])
                         : ChooseTopDisposition(state, source, looked, LookKind::Scry);
 
     // Reveal capture (real play only; null during search): seen cards in look order, and which

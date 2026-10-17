@@ -440,6 +440,13 @@ public:
     // heuristic to prune the search". Default -1 everywhere -> no pruning, byte-identical.
     virtual int ScryVerdict(const GameState& s, const Card& card) const { (void)s; (void)card; return -1; }
 
+    // ScryChainSingleCandidate -- a scry-watcher reveal chain (Galadriel; ScryChainCandidates in
+    // core/SpellEffects.h) normally offers the search every distinct skip count, the provider default
+    // first. TRUE prunes the chain to that default alone: a provider-owned ONE-OPTION prune, so it
+    // belongs only to a deck whose provider carries a measured (or user-given) chain rule. Human play
+    // is never pruned. Default false -> every k is searched.
+    virtual bool ScryChainSingleCandidate(const GameState& s) const { (void)s; return false; }
+
     // KeepReorderTop -- Ponder-style reorder keep-vs-shuffle: a SET decision over the cards looked at
     // (top N). Return true to KEEP them on top (SituationalCardRank then ORDERS them), false to
     // SHUFFLE them all away. Unlike the per-card ScryKeepOnTop gate, this judges the WHOLE set --

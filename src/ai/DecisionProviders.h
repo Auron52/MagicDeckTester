@@ -2936,6 +2936,13 @@ public:
     // with every other k still enumerated (ScryChainCandidates). Behind MTG_GALADRIEL_SCRY (default
     // ON; =0 -> the Generic rule). See the .cpp for the rule.
     bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
+    // The USER's chain rule is a one-option prune of the reveal chain (MTG_GALADRIEL_CHAIN_PRUNE).
+    bool ScryChainSingleCandidate(const GameState& s) const override;
+    // The USER's turn order (2026-10-17): "the typical order should have Galadriel before lands and
+    // Crackle after". Galadriel is the deck's only land-entry watcher, so the land right after her
+    // cast is the preferred spot (the Crackle cast follows the land); the land-first plan stays
+    // searched. MTG_GALADRIEL_SPOTS (default ON).
+    bool LandEntrySpotsRule(const GameState& s) const override;
 };
 
 class LandfallProvider : public DeckProvider

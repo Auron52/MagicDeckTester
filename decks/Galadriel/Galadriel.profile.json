@@ -1,0 +1,71 @@
+{
+  "card_scores": {
+    "Crackle with Power": [
+      0.2253896103896098,
+      -0.8156302521008403
+    ],
+    "Crystal Grotto": [
+      -0.09669726096697229
+    ],
+    "Galadriel of Lothlórien": [
+      2.0657999048676077,
+      -0.06740568567852723
+    ],
+    "Rumble Arena": [
+      0.05217645866642595
+    ],
+    "Saprazzan Skerry": [
+      0.7209702660406885
+    ],
+    "Sol Ring": [
+      0.6345867387105733
+    ],
+    "Temple of Abandon": [
+      0.1167474296202542
+    ],
+    "Temple of Deceit": [
+      -0.11150346326225691
+    ],
+    "Temple of Enlightenment": [
+      0.020633647738699246
+    ],
+    "Temple of Epiphany": [
+      -0.40473379434418444
+    ],
+    "Temple of Malady": [
+      -0.01760545230663446
+    ],
+    "Temple of Malice": [
+      -0.2907255428861939
+    ],
+    "Temple of Mystery": [
+      0.028894848303484544
+    ],
+    "Temple of Plenty": [
+      0.17967387408911684
+    ],
+    "Temple of Triumph": [
+      -0.5398618642042097
+    ],
+    "The Grey Havens": [
+      -0.5011547014882813
+    ],
+    "Zhalfirin Void": [
+      -0.46779453921706793
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 1,
+    "required_pieces": [
+      "Galadriel of Lothlórien"
+    ],
+    "stop_at": 4
+  },
+  "version": 1
+}

@@ -60,17 +60,31 @@ Skerry. No sideboard. Routed to `GenericProvider` before this analysis.
   `ScryChainCandidates`). It ORDERS only (the search still branches every k), so it is a provider
   default, but it is authored, measured (with/without A/B), and presented to the user before adoption.
 
-## Scry policy draft — `GaladrielProvider::ScryKeepOnTop` (2026-10-17, `MTG_GALADRIEL_SCRY`, default ON pending measurement)
-A DEFAULT, not a narrowing: the land drop's scry stays searched, and a chain's candidate 0 is this rule
-walked as a skip count, with every other k still enumerated.
-- Galadriel: keep only while none is on the battlefield or in hand (a second copy is legend-ruled).
-- Crackle: keep while none is in hand; a second copy is bottomed (X=4 off one cast is 20 for 14 mana;
-  two X=2 casts are 20 for 16).
-- Sol Ring: keep only while short of Galadriel's three mana.
-- Land, no Galadriel out: keep while lands on battlefield + in hand (+2 per rock) are under three.
-- Land with Galadriel out (only Saprazzan Skerry reaches the rule mid-chain): bottom it, so the chain
-  continues.
-To measure: generic vs this rule, paired seeds, d0/d3/d5; report to the user before calling it adopted.
+## Scry policy — `GaladrielProvider::ScryKeepOnTop` (USER rules, 2026-10-17; `MTG_GALADRIEL_SCRY`, default ON)
+A DEFAULT, not a narrowing on its own: the land drop's scry stays searched. Inside a reveal chain the
+rule is candidate 0 (walked live, per look); `MTG_GALADRIEL_CHAIN_PRUNE` (default ON pending A/B) prunes
+the chain to it alone outside human play.
+- **Galadriel out** (USER): "You keep any scry land on top and pitch other things except for Crackle when
+  you have enough mana out to finish the opponent next turn." (`GaladrielCrackleLethalNextTurn`.)
+- **Galadriel not out** (USER): "Without Galadriel, you want to look for colors, Crackle and acceleration.
+  Anything else is thrown unless you are short on lands and when you are really in bad shape for colours
+  you might even throw Crackle or acceleration if they don't help solve the problem." Encoded as: colours =
+  G, U (Galadriel) and R (Crackle), covered by any land/rock on the battlefield or in hand (a filter covers
+  all); a top card covering a missing colour is kept; "bad shape" = G or U missing, and then Crackle and
+  acceleration (Sol Ring, Skerry) are thrown unless they cover a missing colour; "short on lands" = under
+  three lands on the battlefield + in hand, and then any land is kept; everything else is thrown.
+  AGENT READING (surfaced): a Galadriel on top while none is in hand or on the battlefield is kept.
+- BUG FIXED with this change: `x_damage_multiplier` DEFAULTS TO 1, so the first version's "Crackle"
+  test (`> 0`) matched every card (every hand card counted as a held Crackle; with Galadriel out a Sol
+  Ring / Skerry on top went down the Crackle-lethal path). Now `IsCrackle` = multiplier > 1.
+
+## Turn order — `GaladrielProvider::LandEntrySpotsRule` (USER 2026-10-17; `MTG_GALADRIEL_SPOTS`, default ON)
+USER: "the typical order should have Galadriel before lands and Crackle after. It might sound weird, but
+this works the best." Galadriel is the deck's only land-entry watcher (`PutsLandfallWatcher` includes
+`scry_reveal_land_to_battlefield`), so the Landfall deck's SPOTS rule expresses it: the land right after
+her cast (land_slot k=1, payable prefix) takes the preferred list position, the land-first plan stays
+searched, and Crackle (dispatched after the land) is sized with the chain's lands in play. Human play keeps
+every position. NOT YET COVERED: the beyond-horizon playout / depth-0 runner still play the land first.
 
 ## Unit tests (2026-10-17)
 `test/unit/test_galadriel.cpp` (6 cases: printed data, chain to the first nonland, pinned skip, Skerry
@@ -104,3 +118,57 @@ Measured, gi 6: did not finish in minutes -> 21.1 s (ACF_EXACT) -> 9.6 s (+INTER
 slow-payment nodes 157 M -> 0.87 M. Smoke makespan 79 s -> 70 s (another filter deck got faster).
 Not yet done: identical-capability source folding (Grotto == Arena; the dup collapse keys on the
 CardDefinition) -- only if a residual payment tail shows up again.
+
+## Stage 4 — baseline profile (2026-10-17, on 48bf0607 + the GALADRIEL_SCRY heurarm slot)
+`decks/Galadriel/Galadriel.profile.json`. Card scores: Galadriel 1st copy +2.07 (2nd -0.07, the legend
+rule), Skerry +0.72, Sol Ring +0.63, Crackle 1st +0.23 / 2nd -0.82. Cost diagnostic COST_NEUTRAL.
+Discard: DISCARD_UNLABELLED -- 0 real sheds, 17,823 rollout sheds / 400 games (13,183 under 4 lands);
+owed: the MTG_SHED_WORST bound.
+**USER decision (2026-10-17): Galadriel is a REQUIRED PIECE** ("We should probably make Galadriel a
+required pieces"; after the user noted "it's not difficult to lose the game if you keep a no-Galadriel
+hand"). Applied with min_playable 0 -> 1 (the skill's multi-colour floor); stop_at stays 4.
+Measured, seed 63000: d0 4000 games 7.8625 -> 7.8450; d3 b20 300 games 5.5733 -> 5.5567.
+
+## Stage 5j — cost gate: OVER (2026-10-17, first reading)
+Budget = 3x pd = 8,085.6 ms/game. Galadriel measured ~9,900 ms/game at d3 b20 (300 games, 30 threads) --
+OVER before the d5 case is even measured. Per CLAUDE.md the deck is NOT added to the suite; getting it
+into range is now the FIRST goal (ahead of value leaf / mulligan). Post-payment-fix profile is flat
+(BuildSimKey ~7%, CollectActions ~4%, the chain's ScryTop/FireScryWatchers/ScryKeepOnTop ~6%).
+Next: measure the chain axis' share (MTG_SCRY_SEARCH=0 diagnostic) and the k-variant census.
+
+## RESUME POINT (2026-10-17, before a context compaction)
+Committed: 48bf0607 (cards, Galadriel engine, Grey Havens, MTG_ACF_EXACT / MTG_ACF_INTERIOR payment
+fixes, viewer wiring, tests, ledger). NOT pushed -- asked the user whether to push + watch CI (Windows);
+no answer yet, so hold.
+UNCOMMITTED, in flight:
+- `decks/Galadriel/Galadriel.profile.json` (untracked): baseline profile + USER's required piece
+  (Galadriel) + min_playable 1.
+- heurarm slots GALADRIEL_SCRY and GALADRIEL_CHAIN_PRUNE (src/ai/HeuristicArm.h).
+- **USER's chain rule (2026-10-17)**: "We definitely want a scry heuristic. With Galadriel out it is
+  simple. You keep any scry land on top and pitch other things except for Crackle when you have enough
+  mana out to finish the opponent next turn." Implemented in GaladrielProvider::ScryKeepOnTop (gal_bf>0
+  branch; GaladrielCrackleLethalNextTurn: all sources untap + a hand land, X = ceil((life-power)/5), cost
+  3X+2 + one per {R} short of native red sources, needs filters to cover the shortfall). Pre-Galadriel:
+  the agent's draft rule (unmeasured).
+- Chain mechanics changed: ScryChainCandidates = {-1 = LIVE provider default (ScryKeepOnTop per look on
+  the current board), then k = 0..S}; GaladrielProvider::ScryChainSingleCandidate prunes to the default
+  alone (MTG_GALADRIEL_CHAIN_PRUNE, default ON pending A/B; never in human play). Test updated
+  (pinned skip now index 2).
+- A rebuild + full unit-test run was in flight (background) when compaction was requested.
+Measured so far (seed 63000 unless noted): d3 b20 ~9.9 s/game; d5 b40 ~12.4 s/game (seeds 61000/62000,
+draft rule, unpruned) -> Stage 5j cost gate OVER (budget 8,086 ms/game = 3x pd). Deck NOT in the suite.
+NEXT, in order:
+1. Confirm build + unit tests green; smoke must stay byte-identical (only Galadriel code changed).
+2. One pooled batch, fresh seeds (61000/62000), d0/d3/d5: arms = {generic scry (GALADRIEL_SCRY off),
+   USER rule unpruned (CHAIN_PRUNE off), USER rule pruned (default)} -- report avg AND ms/game to the
+   user; the prune is a perf lever whose quality must hold.
+3. Cost gate again (suite_gate --cost semantics: worst searched case, regression-row settings
+   d3 b20 / d5 b20). If still over: next suspects are per-node costs on 30-40-permanent boards
+   (BuildSimKey ~7%, CollectActions ~4%) and remaining branching (land-choice x cast subsets).
+4. Then Stage 5 battery (5a nonconv/fd-diverge, 5b depth sweep, 5c2 tie-break, 5d claude-play
+   sweep, 5h viewer audit, discard MTG_SHED_WORST bound), Stage 4-bis/5j suite add once under 3x.
+Open user questions: push 48bf0607 + watch CI? Field audit found 2 OTHER-deck keyword mismatches
+(Saproling Migration: Kicker; Kili, the Resourceful: Storied) -- untouched, reported. 3 Temples still
+need `audit_card_fields.py --update` (429s); cost audit should be re-run clean later.
+Gotchas: the 9p clock lags ~195 s and most files are root-owned (touch fails) -> wait ~200 s after an
+edit before ./build.sh. Never `pkill -f <pattern>` -- it matches its own shell; kill by pid.

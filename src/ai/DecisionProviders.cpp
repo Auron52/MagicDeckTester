@@ -5339,26 +5339,77 @@ int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
     return td ? SnowUserScry(*this, s, *td, card).firm : -1;
 }
 
-// ---- GaladrielProvider::ScryKeepOnTop (USER 2026-10-17: "smart scry heuristics") ----------------
-// The deck wants, in order: ONE Galadriel and three mana to cast her; then lands (her reveal chain
-// turns every land drop into several); then ONE Crackle with Power with 3X+2 mana behind it. So:
-//   * Galadriel of Lothlorien -- keep only while none is on the battlefield or in hand (a second copy
-//     is dead to the legend rule; bottoming it digs, and inside a chain CONTINUES it).
-//   * Crackle (the X finisher)  -- keep while none is in hand; a second copy is bottomed (more lands
-//     beat a second Crackle: X=4 off one cast is 20 for 14 mana, two X=2 casts are 20 for 16).
-//   * Sol Ring (a mana rock)    -- keep only while we are short of Galadriel's three mana.
-//   * A LAND with no Galadriel out -- keep while lands on the battlefield + in hand are under three
-//     (her cost); past that, dig for her / the Crackle.
-//   * A LAND with Galadriel out -- only a scry-LESS land reaches this (a scry-land in a chain is kept
-//     by dominance, ScryChainLand): Saprazzan Skerry. Bottom it, so the chain continues into lands that
-//     tap every turn rather than stopping on one that taps twice.
-// Card roles are read from PARAMS (scry_reveal_land_to_battlefield / x_damage_multiplier / mana_rock),
-// never names. Anything else falls through to the Generic rule.
+// ---- GaladrielProvider::ScryKeepOnTop (USER 2026-10-17: "We definitely want a scry heuristic") ----
+// WITH GALADRIEL OUT -- the USER's rule, verbatim in intent: "You keep any scry land on top and pitch
+// other things except for Crackle when you have enough mana out to finish the opponent next turn."
+// A scry-land never reaches this hook inside a chain (ScryChainLand keeps it first); a scry-land seen
+// by any other look is kept by the same rule. Everything else is BOTTOMED -- Saprazzan Skerry, an extra
+// Galadriel, Sol Ring, a Crackle we already hold -- except a first Crackle when next turn's mana pays
+// a lethal X (GaladrielCrackleLethalNextTurn).
+// BEFORE GALADRIEL -- the USER's rule (2026-10-17): "Without Galadriel, you want to look for colors,
+// Crackle and acceleration. Anything else is thrown unless you are short on lands and when you are
+// really in bad shape for colours you might even throw Crackle or acceleration if they don't help
+// solve the problem."
+//   * colours      = G and U (Galadriel's {1}{G}{U}) and R (Crackle's {R}{R}); a source on the
+//                    battlefield or in hand covers its colours, an any-colour filter covers all five.
+//                    A top card that covers a MISSING colour is kept.
+//   * bad shape    = G or U missing (Galadriel uncastable): Crackle and acceleration are then thrown
+//                    unless they cover a missing colour (Saprazzan Skerry's U can).
+//   * Crackle, acceleration (mana_rock, or a land producing 2+) -- kept otherwise.
+//   * short on lands = fewer than three lands on the battlefield + in hand: any land is kept.
+//   * anything else (an extra Galadriel, an off-colour or colourless land) is thrown.
+//   AGENT READING, surfaced to the user: a Galadriel when NONE is in hand or on the battlefield is
+//   kept (the rule presumes she is held; the required-piece keep makes the no-Galadriel case rare).
+// Card roles come from PARAMS (scry_reveal_land_to_battlefield / x_damage_multiplier / mana_rock /
+// etb_scry), never names. MTG_GALADRIEL_SCRY=0 -> the Generic rule.
 static bool GaladrielScryOn()
 {
     static const bool on = EnvOn("MTG_GALADRIEL_SCRY", true);
-    return on;
+    return heurarm::Flag(heurarm::GALADRIEL_SCRY, on);   // per-job lever: both A/B arms in one batch
 }
+
+// Can next turn's mana pay a Crackle with Power for the kill? Every source we control untaps; a land
+// in hand adds next turn's drop. Lethal X = ceil((opponent life - our creatures' power) / 5), cost
+// 3X + {R}{R}; each {R} short of the native red sources must come through an any-colour filter, whose
+// {1} feed costs one more mana (the MTG_ACF_EXACT model). Conservative on purpose (a pump or a second
+// Crackle is not counted): the rule only decides whether a Crackle is worth stopping the chain for.
+static bool GaladrielCrackleLethalNextTurn(const GameState& s)
+{
+    const int me = s.active_player_index;
+    int mana = 0, native_red = 0, filters = 0, power = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (p.card.IsCreature()) { power += std::max(0, p.EffectivePower()); }
+        if (!(d->card.IsLand() || d->params.mana_rock)) { continue; }
+        if (d->params.enters_tapped_with_depletion > 0)
+        {
+            int dep = 0;
+            for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { dep += c.count; } }
+            if (dep <= 0) { continue; }
+        }
+        mana += std::max(1, d->params.produces_amount);
+        if (d->params.any_color_filter) { ++filters; continue; }
+        for (Color c : d->params.produces) { if (c == Color::Red) { ++native_red; break; } }
+    }
+    for (const Card& c : s.players[me].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { ++mana; break; }
+    }
+    const int life = s.players[1 - me].life;
+    const int need_dmg = std::max(0, life - power);
+    const int x = (need_dmg + 4) / 5;
+    const int red_short = std::max(0, 2 - native_red);
+    if (red_short > filters) { return false; }
+    return mana >= 3 * x + 2 + red_short;
+}
+
+// Crackle with Power's signature: an X burn that scales X (x_damage_multiplier DEFAULTS TO 1, so "> 0"
+// would read every card as a Crackle).
+static bool IsCrackle(const CardDefinition& d) { return d.params.x_damage_multiplier > 1; }
 
 bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
@@ -5384,20 +5435,68 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr) { continue; }
         if (d->params.scry_reveal_land_to_battlefield) { ++gal_hand; }
-        if (d->params.x_damage_multiplier > 0)         { ++crackle_hand; }
+        if (IsCrackle(*d))         { ++crackle_hand; }
         if (d->card.IsLand())                          { ++lands_hand; }
     }
-
     const CardParams& tp = td->params;
-    if (tp.scry_reveal_land_to_battlefield) { return gal_bf == 0 && gal_hand == 0; }
-    if (tp.x_damage_multiplier > 0)         { return crackle_hand == 0; }
-    if (td->card.IsLand())
+
+    if (gal_bf > 0)   // the USER's rule
     {
-        if (gal_bf > 0) { return false; }   // a scry-less land in a chain: keep the chain going
-        return lands_bf + lands_hand + 2 * rocks_bf < 3;
+        if (td->card.IsLand() && tp.etb_scry > 0) { return true; }
+        if (IsCrackle(*td)) { return crackle_hand == 0 && GaladrielCrackleLethalNextTurn(s); }
+        return false;
     }
-    if (tp.mana_rock) { return gal_bf == 0 && lands_bf + lands_hand + 2 * rocks_bf < 3; }
-    return GenericProvider::ScryKeepOnTop(s, top_card);
+    // The USER's pre-Galadriel rule (header comment).
+    auto colour_bit = [](Color c) -> unsigned {
+        return c == Color::Green ? 1u : c == Color::Blue ? 2u : c == Color::Red ? 4u : 0u;
+    };
+    auto covers = [&](const CardDefinition& d) -> unsigned {
+        if (d.params.any_color_filter) { return 7u; }
+        unsigned m = 0;
+        for (Color c : d.params.produces) { m |= colour_bit(c); }
+        return m;
+    };
+    unsigned have = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && (d->card.IsLand() || d->params.mana_rock)) { have |= covers(*d); }
+    }
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && (d->card.IsLand() || d->params.mana_rock)) { have |= covers(*d); }
+    }
+    const unsigned missing = 7u & ~have;
+    const bool bad_colours = (missing & 3u) != 0;          // G or U missing: Galadriel uncastable
+    const bool short_lands = lands_bf + lands_hand < 3;
+    const bool fixes = (td->card.IsLand() || tp.mana_rock) && (covers(*td) & missing) != 0;
+    const bool accel = tp.mana_rock || (td->card.IsLand() && tp.produces_amount > 1);
+    (void)rocks_bf;
+
+    if (fixes) { return true; }
+    if (td->card.IsLand() && short_lands) { return true; }
+    if (tp.scry_reveal_land_to_battlefield) { return gal_hand == 0; }   // agent reading (header)
+    if (IsCrackle(*td) || accel) { return !bad_colours; }
+    return false;
+}
+
+bool GaladrielProvider::ScryChainSingleCandidate(const GameState& s) const
+{
+    (void)s;
+    static const bool on = EnvOn("MTG_GALADRIEL_CHAIN_PRUNE", true);
+    return GaladrielScryOn() && heurarm::Flag(heurarm::GALADRIEL_CHAIN_PRUNE, on);
+}
+
+// "Galadriel before lands and Crackle after. It might sound weird, but this works the best." (USER
+// 2026-10-17). The land's ETB scry then feeds her reveal chain the turn she lands, and the chain's
+// lands are in play before Crackle is sized.
+bool GaladrielProvider::LandEntrySpotsRule(const GameState& s) const
+{
+    (void)s;
+    static const bool on = EnvOn("MTG_GALADRIEL_SPOTS", true);
+    return heurarm::Flag(heurarm::GALADRIEL_SPOTS, on);
 }
 
 bool SnowProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
