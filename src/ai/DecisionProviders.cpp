@@ -33845,6 +33845,125 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         { v.push_back(static_cast<int>(p.counters[i].type)); v.push_back(p.counters[i].count); }
     }
 }
+// ---- THE NARROW TAP UNDO (MTG_EDF_ROUTE_NARROW_UNDO, DEFAULT ON; =0 restores the whole-state copies) ----
+// Blink and Pay roll back a failed payment, and they used to do it with a whole GameState copy taken
+// BEFORE every attempt -- Blink on every blink, Pay whenever the float alone does not cover the cost --
+// although almost all of them succeed and the copy is thrown away. Both protect exactly one kind of
+// mutation: lands tapped by TapLand (Blink's tap-ahead, Pay's tapping loop). TapLand writes the state
+// only through TapSourceIntoFloat (ManaPayment.cpp), whose writes are, exhaustively:
+//   * the permanent: `tapped`, its first Depletion counter's count (DecrementDepletionOnTap edits an
+//     existing entry, never adds or removes one), `storage_counters` (a storage burst);
+//   * the float (`floating` is cx.s.floating_mana here: the land's mana and its land Auras' bonus);
+//   * our life (painland damage), our energy (Aether Hub's coloured mode), the pay_ledger
+//     (MTG_PAY_ROLLBACK);
+//   * and three that this undo does NOT cover, so their presence falls back to the whole copy: the
+//     opponent's life (a Grove-class `tap_opponent_lifegain` land), our graveyard (Deathrite's
+//     `gy_land_exile_mana`) and the armed damage-event model (`dmg_events_armed`: a pain tap is an
+//     event recorded beside the permanent).
+// Its other effects are process globals that the whole-copy rollback never restored either
+// (g_paysac_cracked, the payledger audit, the CCO audit), so the two paths agree on them too. Pay's own
+// float arithmetic (PayFromFloat) writes the float only on success, which is never rolled back. So the
+// narrow undo -- those fields of every battlefield entry (the battlefield's size and order cannot change
+// between the take and the restore: nothing on these paths adds, removes or moves a permanent), the
+// float, our life and energy, and the ledger -- restores exactly the state the copy restored. This is the
+// payer's own compact snapshot (ManaPayment.cpp, PermPaySnap) applied to the route's two rollbacks.
+// MTG_EDF_ROUTE_NARROW_UNDO_VERIFY=1 takes the whole copy as well, compares the two restored states with
+// RouteSig and counts any difference (reported at exit; the run then continues from the whole copy).
+inline bool NarrowUndoOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_NARROW_UNDO", true); return v; }
+inline bool NarrowUndoVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_NARROW_UNDO_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_nu_restores{0}, g_nu_bad{0}, g_nu_full{0};
+struct NarrowUndoVerifyPrinter
+{
+    ~NarrowUndoVerifyPrinter()
+    {
+        if (!NarrowUndoVerify()) { return; }
+        std::fprintf(stderr, "[route-undo] verify: %llu narrow restores, %llu MISMATCHES (%llu takes fell back to a whole copy)\n",
+                     g_nu_restores.load(), g_nu_bad.load(), g_nu_full.load());
+    }
+};
+inline NarrowUndoVerifyPrinter g_nu_printer;
+class TapUndo
+{
+public:
+    explicit TapUndo(const Ctx& cx)
+    {
+        const GameState& s = cx.s;
+        m_narrow = NarrowUndoOn() && Eligible(cx);
+        if (!m_narrow || NarrowUndoVerify())
+        {
+            m_full.emplace(s);
+            if (!m_narrow && NarrowUndoOn()) { g_nu_full.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (!m_narrow) { return; }
+        m_n = static_cast<int>(s.battlefield.size());
+        for (int i = 0; i < m_n; ++i)
+        {
+            const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+            int dep = -1;
+            for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
+            m_p[i] = P{ p.tapped, dep, p.storage_counters };
+        }
+        m_float  = s.floating_mana;
+        m_life   = s.players[cx.me].life;
+        m_energy = s.players[cx.me].energy_counters;
+        m_ledger = s.pay_ledger;
+    }
+    void Restore(Ctx& cx) const
+    {
+        if (!m_narrow) { cx.s = *m_full; return; }
+        GameState& s = cx.s;
+        for (int i = 0; i < m_n && i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+            p.tapped           = m_p[i].tapped;
+            p.storage_counters = m_p[i].storage;
+            if (m_p[i].dep >= 0)
+            {
+                for (Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { c.count = m_p[i].dep; break; } }
+            }
+        }
+        s.floating_mana                    = m_float;
+        s.players[cx.me].life             = m_life;
+        s.players[cx.me].energy_counters  = m_energy;
+        s.pay_ledger                       = m_ledger;
+        if (NarrowUndoVerify())
+        {
+            g_nu_restores.fetch_add(1, std::memory_order_relaxed);
+            std::vector<long long> a, b;
+            RouteSig(s, a);
+            RouteSig(*m_full, b);
+            if (a != b || static_cast<int>(s.battlefield.size()) != m_n)
+            {
+                g_nu_bad.fetch_add(1, std::memory_order_relaxed);
+                std::fprintf(stderr, "[route-undo] MISMATCH t%d: the narrow restore differs from the whole copy\n", s.turn_number);
+                s = *m_full;
+            }
+        }
+    }
+private:
+    static constexpr int kMax = 64;
+    struct P { bool tapped; int dep; int storage; };
+    static bool Eligible(const Ctx& cx)
+    {
+        const GameState& s = cx.s;
+        if (s.dmg_events_armed || s.battlefield.size() > static_cast<std::size_t>(kMax)) { return false; }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != cx.me || !p.card.IsLand()) { continue; }
+            const CardDefinition* d = DefOf(p.card);
+            if (!d || d->params.gy_land_exile_mana || d->params.tap_opponent_lifegain > 0) { return false; }
+        }
+        return true;
+    }
+    bool                     m_narrow = false;
+    int                      m_n = 0;
+    P                        m_p[kMax];
+    ManaPool                 m_float;
+    int                      m_life = 0, m_energy = 0;
+    PayRollbackLedger        m_ledger;
+    std::optional<GameState> m_full;
+};
+
 // ---- mana: explicit allocation ------------------------------------------------------------------
 // ROLLBACK DOCTRINE. Every primitive below is ATOMIC: it either completes or leaves the state
 // exactly as it found it. Tapping is not free -- a painland pays life, an energy land spends {E},
@@ -34015,7 +34134,7 @@ static bool Pay(Ctx& cx, const ManaCost& cost)
 {
     if (PayFromFloat(cx.s.floating_mana, cost, cx.reserve)) { return true; }
     // ATOMIC: a payment that cannot be completed taps nothing. See the note above `Rollback`.
-    const GameState snapshot = cx.s;
+    const TapUndo snapshot(cx);   // the narrow undo of TapLand's writes (see TapUndo)
     const ManaCost saved = cx.demand;
     const ManaCost saved_paying = cx.paying;
     cx.paying = ResolveHybrids(cx, cost);
@@ -34063,7 +34182,7 @@ static bool Pay(Ctx& cx, const ManaCost& cost)
         cx.Dbg("pay " + cost.ToString() + " FAILED (rolled back); float w" + std::to_string(f.white) + " u" + std::to_string(f.blue)
                + " b" + std::to_string(f.black) + " r" + std::to_string(f.red) + " g" + std::to_string(f.green)
                + " c" + std::to_string(f.colorless) + " *" + std::to_string(f.wild) + " lands available=" + std::to_string(lands.size()));
-        cx.s = snapshot;
+        snapshot.Restore(cx);
     }
     return ok;
 }
@@ -34179,7 +34298,7 @@ static bool Blink(Ctx& cx, int outlet_id, int payload_id, const std::vector<int>
     if (!CanApplyBlink(cx.s, cx.me, outlet_id, payload_id, od->params.blink_own_only)) { return false; }
     const ManaCost cost = EffectiveActivationCost(cx.s, cx.me, cx.s.battlefield[oi].card,
                                                   od->params.blink_cost.value());
-    const GameState pre_blink = cx.s;
+    const TapUndo pre_blink(cx);   // the tap-ahead's rollback: TapLand's writes only (see TapUndo)
     {
         const ManaCost saved = cx.demand, saved_paying = cx.paying;
         cx.demand = AddManaCosts(cx.demand, cost);   // the tap-ahead makes what THIS blink needs
@@ -34187,7 +34306,7 @@ static bool Blink(Ctx& cx, int outlet_id, int payload_id, const std::vector<int>
         TapAhead(cx, untaps);
         cx.demand = saved; cx.paying = saved_paying;
     }
-    if (!Pay(cx, cost)) { cx.Dbg("blink: cannot pay " + cost.ToString()); cx.s = pre_blink; return false; }
+    if (!Pay(cx, cost)) { cx.Dbg("blink: cannot pay " + cost.ToString()); pre_blink.Restore(cx); return false; }
     const std::string label = cx.s.battlefield[oi].card.m_name.str() + ": blink "
                             + cx.s.battlefield[pi].card.m_name.str();
     if (label != cx.blink_label) { cx.FlushBlinks(); cx.blink_label = label; }
