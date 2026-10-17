@@ -45,3 +45,16 @@ returns the whole order). A card off this list sheds before every listed card.
 
 1. Is 4 the right land cap (counting the board), or 3 for this curve?
 2. Should Forge Anew rank above Magnetic Theft in CHEAT when the graveyard already holds an Equipment?
+
+## Evidence and measurement (2026-10-17)
+
+* **Evidence pass** (`analyze_deck.py`, Stage 4): 7 cleanup decisions in 400 games at d3, every one a tie
+  (all options equally optimal) -- STATUS_QUO_OK. The deck empties its hand fast; cleanup discards are rare
+  and, when they happen, free.
+* **Paired A/B** (same batch as the cast-order draft, held-out seeds): play settings +0.0003 (se .0003, 0
+  faster / 1 slower, 3000 games); d3 +0.0000 (1 / 1, 4000); d0 +0.0001 (2 / 3, 20000); 2HG +0.0010 (0 / 1,
+  1000). Every searched slower game recovers at stage 1 (budget 100). I.e. the buckets are neutral: there is
+  almost nothing for a discard rule to decide in this deck.
+
+**Status: still OFF.** The USER decides whether a neutral rule ships for doctrine and rollout fidelity (the
+Landfall precedent) or the generic max-MV fallback stays.
