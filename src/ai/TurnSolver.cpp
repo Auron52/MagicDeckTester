@@ -17642,6 +17642,192 @@ static inline bool EquipPieceDepViolated(const EquipPieceDeps& d, const std::vec
     return false;
 }
 
+// MTG_EQUIP_DEP_SKIP -- turn the piece-dependency rejection above into a RADIX CUT, the twin of
+// MTG_EQUIP_COPY_SKIP. DEFAULT ON; =0 disables (the byte-identity / wall A/B arm).
+//
+// A REJECT PREDICATE IS NOT A COLLAPSE (MTG_EQUIP_COPY_SKIP's lesson): the odometer still WALKS every
+// position the predicate refuses. Colossus Hammer seed 7065 gi 58 at d5/b100 spends 21% of its time
+// SELF in SolveUncached's walk plus 6.8% in EquipPieceDepViolated, stepping one position at a time
+// through runs that all fail the same requirement.
+//
+// THE JUMP, AND WHY IT IS EXACT. A position is dep-violated when a taken equip digit g (choice[g] = c)
+// has a required piece castable only by the groups in mask R and no digit of R is selected (or R is
+// empty: a dead digit). The verdict for that requirement reads exactly two things: digit g (which
+// row of `req` applies) and whether each digit of R is non-zero. So every position that agrees with
+// this one on all digits >= L = min({g} u R) holds the same row and the same all-zero R digits, and
+// violates the same requirement. Digit 0 is the FASTEST digit, so those positions are one contiguous
+// run of the walk -- everything from here until digit L next changes -- and the first position past
+// it is reached by zeroing digits [0, L) and carry-incrementing at L. With several violated
+// requirements each defines such a run and all of them contain this position, so they nest: the
+// LARGEST L names the longest, and it is still made only of positions that violate (its own
+// requirement). Nothing outside the run is passed over, so the set and ORDER of positions ever
+// emitted is bit-for-bit what the predicate alone produced. L = 0 is the ordinary step.
+//
+// Composition with the other cuts: any one predicate rejecting rejects the position, so the
+// dependency alone justifies its run whatever the copy / splice / accelerant / fold predicates say.
+// Where a second cut also fires (the copy jump; EnumeratePlans' metalcraft cut) both runs start here,
+// and the walk takes whichever reaches further -- itself a run of rejected positions.
+static bool EquipDepSkipVerify()
+{
+    // MTG_EQUIP_DEP_SKIP_VERIFY=1 -- DIAGNOSTIC, DEFAULT OFF. Do NOT jump; walk every position as the
+    // =0 arm does, and check that each one the jump WOULD have passed over is rejected by the walk's
+    // full predicate set AND by EquipPieceDepViolated's slow overload (which rebuilds the selection
+    // from the digits, so it also audits the running sel_mask). Counts + a summary line at exit.
+    static const bool v = EnvOn("MTG_EQUIP_DEP_SKIP_VERIFY");
+    return v;
+}
+static bool EquipDepSkipEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_DEP_SKIP", true) && !EquipDepSkipVerify();   // DEFAULT ON
+    return v;
+}
+namespace depskip
+{
+    // Per walk: 0 = SolveUncached inline, 1 = EnumeratePlans inline, 2 = EnumeratePlanPositions'
+    // flat fallback, 3 = its two-stage Stage A.
+    inline std::atomic<std::uint64_t> g_blocks[4], g_skipped[4], g_unsound{0}, g_dep_miss{0},
+                                      g_verdict_miss{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!EquipDepSkipVerify()) { return; }
+            std::fprintf(stderr, "[equip-dep-skip] VERIFY unsound=%llu dep_miss=%llu verdict_miss=%llu |",
+                         (unsigned long long)g_unsound.load(), (unsigned long long)g_dep_miss.load(),
+                         (unsigned long long)g_verdict_miss.load());
+            static const char* const kSite[4] = { "solve", "enumplans", "flatfb", "stageA" };
+            for (int s = 0; s < 4; ++s)
+            {
+                std::fprintf(stderr, " %s blocks=%llu skipped=%llu", kSite[s],
+                             (unsigned long long)g_blocks[s].load(),
+                             (unsigned long long)g_skipped[s].load());
+            }
+            std::fprintf(stderr, "\n");
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+// The run a violated requirement opens: min({g} u R), or g itself for a dead digit (R empty).
+static inline int EquipDepJumpDigit(int g, std::uint64_t groups)
+{
+    return groups == 0 ? g : std::min(g, static_cast<int>(std::countr_zero(groups)));
+}
+
+// The fast overload's verdict (same `sel` contract), plus the digit to carry from: the LARGEST L over
+// every violated requirement. Scans the dependent digits from the HIGHEST group down, because a
+// requirement's L is at most its own g -- once g <= the best L found, nothing left can beat it, so
+// the scan stops (only ever after a violation is found, so the verdict is the full predicate's).
+static inline bool EquipPieceDepAdvance(const EquipPieceDeps& d, const std::vector<int>& choice,
+                                        std::uint64_t sel, int& jump_digit)
+{
+    if ((sel & d.gs_mask) == 0) { return false; }
+    int best = -1;
+    for (std::size_t k = d.gs.size(); k-- > 0;)
+    {
+        const int g = d.gs[k];
+        if (g <= best) { break; }
+        const int c = choice[g];
+        if (c <= 0) { continue; }
+        const std::array<PieceReq, 2>& r = d.req[k][static_cast<std::size_t>(c - 1)];
+        for (int s = 0; s < 2; ++s)
+        {
+            if (!r[s].required)           { continue; }
+            if ((r[s].groups & sel) != 0) { continue; }
+            best = std::max(best, EquipDepJumpDigit(g, r[s].groups));
+        }
+    }
+    if (best < 0) { return false; }
+    jump_digit = best;
+    return true;
+}
+
+// The same, for a caller with no running mask (the two-stage split's Stage A): `sel` is rebuilt
+// lazily over d.needed exactly as the slow EquipPieceDepViolated overload does.
+static inline bool EquipPieceDepAdvance(const EquipPieceDeps& d, const std::vector<int>& choice,
+                                        int& jump_digit)
+{
+    std::uint64_t sel      = 0;
+    bool          have_sel = false;
+    int           best     = -1;
+    for (std::size_t k = d.gs.size(); k-- > 0;)
+    {
+        const int g = d.gs[k];
+        if (g <= best) { break; }
+        const int c = choice[g];
+        if (c <= 0) { continue; }
+        const std::array<PieceReq, 2>& r = d.req[k][static_cast<std::size_t>(c - 1)];
+        for (int s = 0; s < 2; ++s)
+        {
+            if (!r[s].required) { continue; }
+            if (r[s].groups != 0)
+            {
+                if (!have_sel)
+                {
+                    for (int n : d.needed)
+                    { if (n < static_cast<int>(choice.size()) && choice[n] > 0) { sel |= 1ull << n; } }
+                    have_sel = true;
+                }
+                if ((r[s].groups & sel) != 0) { continue; }
+            }
+            best = std::max(best, EquipDepJumpDigit(g, r[s].groups));
+        }
+    }
+    if (best < 0) { return false; }
+    jump_digit = best;
+    return true;
+}
+
+// MTG_EQUIP_DEP_SKIP_VERIFY's per-walk tracker. `digits` is the walk's own odometer vector (the one
+// the jump would zero and carry), `full` the group-indexed vector the predicate reads -- the same
+// vector in every walk but Stage A, whose odometer runs over the mana-side digits only.
+struct DepSkipAudit
+{
+    int              site = 0;
+    int              L    = -1;        // pending would-be run: positions agreeing with `hi` on [L, n)
+    std::vector<int> hi;
+    std::uint64_t    blocks = 0, skipped = 0;
+    explicit DepSkipAudit(int s) : site(s) {}
+    ~DepSkipAudit()
+    {
+        if (blocks != 0)  { depskip::g_blocks[site].fetch_add(blocks, std::memory_order_relaxed); }
+        if (skipped != 0) { depskip::g_skipped[site].fetch_add(skipped, std::memory_order_relaxed); }
+    }
+    // One call per VISITED position, after its verdicts: `rejected` = the walk's full predicate
+    // composite, `dep_viol`/`dep_jump` = EquipPieceDepAdvance's verdict and run digit (in `digits`
+    // index space), `dep_orig` = the original predicate's verdict at the same position.
+    void Visit(const EquipPieceDeps& d, const std::vector<int>& digits, const std::vector<int>& full,
+               bool rejected, bool dep_viol, int dep_jump, bool dep_orig)
+    {
+        if (dep_viol != dep_orig) { Report("verdict_miss", digits, depskip::g_verdict_miss); }
+        if (L >= 0)
+        {
+            bool in = true;
+            for (std::size_t q = static_cast<std::size_t>(L); q < digits.size(); ++q)
+            { if (digits[q] != hi[q]) { in = false; break; } }
+            if (in)
+            {
+                ++skipped;
+                if (!rejected)                        { Report("UNSOUND", digits, depskip::g_unsound); }
+                if (!EquipPieceDepViolated(d, full))  { Report("dep_miss", digits, depskip::g_dep_miss); }
+                return;   // a run opened inside this one nests in it (its L cannot be larger)
+            }
+            L = -1;
+        }
+        if (dep_viol && dep_jump > 0) { L = dep_jump; hi = digits; ++blocks; }
+    }
+    void Report(const char* what, const std::vector<int>& digits, std::atomic<std::uint64_t>& ctr)
+    {
+        ctr.fetch_add(1, std::memory_order_relaxed);
+        static thread_local int s_rep = 0;
+        if (s_rep >= 8) { return; }
+        ++s_rep;
+        std::string ds;
+        for (int v : digits) { ds += std::to_string(v) + " "; }
+        std::fprintf(stderr, "[equip-dep-skip] %s site=%d run_L=%d digits=[%s]\n", what, site, L, ds.c_str());
+    }
+};
+
 // Forward decl so the storm go-off short-circuit in Solve/EnumeratePlans can VERIFY a projected win by
 // actually simulating the line (ApplyPlanDirect is defined later). Default arg lives here (the earliest
 // declaration) so those callsites can omit out_breakpoint. bp_capture/bp_resume are the deferred-
@@ -35666,6 +35852,13 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     // Stage A judges mana-side digits alone (and the straddle guard above has already stood the
     // predicate down if a class spanned the sides), while Stage B runs no group predicates at all.
     const bool copy_skip_on = copy_pred_on && EquipCopySkipEnabled();
+    // MTG_EQUIP_DEP_SKIP / _VERIFY, read once per call (after the straddle guard above, so a
+    // dependency judged on a partial Stage-A vector has already stood the predicate down). Unlike the
+    // copy jump this one applies in Stage A too: a requirement Stage A can see is wholly mana-side
+    // (straddle guard), so its run digit is a Stage-A digit -- see the jump there.
+    const bool dep_skip_on  = dep_pred_on && EquipDepSkipEnabled();
+    const bool dep_audit_on = dep_pred_on && EquipDepSkipVerify();
+    const bool dep_adv_on   = dep_skip_on || dep_audit_on;
     // Flat position weights: the mixed-radix stride of each group digit (digit 0 is fastest, matching
     // the flat odometer's carry order), so a side's position contribution is just a weighted sum.
     std::vector<std::uint64_t> stride(num_groups, 1);
@@ -35721,6 +35914,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             // Running "which digits are non-zero" mask, maintained by the carry below instead of
             // rebuilt per position -- see EquipPieceDepViolated's fast overload.
             std::uint64_t sel_mask = 0;
+            DepSkipAudit dep_audit(2);
             bool done = false;
             while (!done)
             {
@@ -35732,11 +35926,22 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     && (copy_skip_on
                             ? FungibleEquipCopyAdvance(copy_class, choice, cp_fix_g, cp_fix_v)
                             : FungibleEquipCopyViolated(copy_class, choice));
+                // MTG_EQUIP_DEP_SKIP: the dependency verdict plus its run digit, tested on every
+                // position on the jump arm (its run may reach past the copy jump's). The =0 arm keeps
+                // the old predicate in its old place, last in the chain.
+                int dep_jump = -1;
+                const bool dep_adv = dep_adv_on
+                    && EquipPieceDepAdvance(equip_deps, choice, sel_mask, dep_jump);
                 const bool rejected =
-                       copy_viol
+                       copy_viol || dep_adv
                     || (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
                     || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice))
-                    || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
+                    || (dep_pred_on && !dep_adv_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
+                if (dep_audit_on)
+                {
+                    dep_audit.Visit(equip_deps, choice, choice, rejected, dep_adv, dep_jump,
+                                    EquipPieceDepViolated(equip_deps, choice, sel_mask));
+                }
                 if (!rejected)
                 {
                     Agg ga;
@@ -35761,9 +35966,11 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     }
                 }
                 // RADIX CUT: skip the entire run of positions that must violate the same pair,
-                // instead of stepping through them one at a time.
+                // instead of stepping through them one at a time -- unless the dependency run
+                // (MTG_EQUIP_DEP_SKIP) is carried from a higher digit and so contains it.
+                const int dep_cut = (dep_skip_on && dep_adv) ? dep_jump : 0;
                 if (copy_viol && cp_fix_g >= 0
-                    && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()))
+                    && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()) && dep_cut <= cp_fix_g)
                 {
                     for (int d = 0; d < cp_fix_g; ++d) { choice[d] = 0; }
                     choice[cp_fix_g] = cp_fix_v;
@@ -35773,6 +35980,13 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     continue;
                 }
                 int t = 0;
+                if (dep_cut > 0)
+                {
+                    // RADIX CUT (MTG_EQUIP_DEP_SKIP): zero below the run digit, carry from it.
+                    for (int d = 0; d < dep_cut; ++d) { choice[d] = 0; }
+                    sel_mask &= ~((1ull << dep_cut) - 1);
+                    t = dep_cut;
+                }
                 for (; t < num_groups; ++t)
                 {
                     ++choice[t];
@@ -35796,15 +36010,37 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         const int ng = static_cast<int>(mg.size()), ni = static_cast<int>(mi.size());
         std::vector<int> choice(ng, 0);
         std::vector<int> full(num_groups, 0);   // the predicates read only mana-side digits
+        DepSkipAudit dep_audit(3);
         bool done = false;
         while (!done)
         {
             for (int t = 0; t < ng; ++t) { full[mg[t]] = choice[t]; }
+            // MTG_EQUIP_DEP_SKIP: the verdict plus the run's GROUP digit, mapped onto this odometer's
+            // own (mana-side) digit. A requirement Stage A can fail has its equip digit taken, so that
+            // group is mana-side (payoff digits are 0 in `full` here), and the straddle guard put its
+            // whole R on the same side -- so the run digit min({g} u R) is a Stage-A digit, and
+            // positions agreeing on Stage-A digits >= it agree on every group digit >= it.
+            int dep_jump = -1;
+            const bool dep_adv = dep_adv_on && EquipPieceDepAdvance(equip_deps, full, dep_jump);
+            int dep_t = -1;
+            if (dep_adv)
+            {
+                const auto it = std::lower_bound(mg.begin(), mg.end(), dep_jump);
+                if (it != mg.end() && *it == dep_jump) { dep_t = static_cast<int>(it - mg.begin()); }
+            }
             const bool rejected =
-                   (any_splice && SpliceGroupChoiceRejected(sidx, groups, full, splice_collapse_on))
+                   dep_adv
+                || (any_splice && SpliceGroupChoiceRejected(sidx, groups, full, splice_collapse_on))
                 || (accel_pred_on && NonPrefixAccelViolated(accel_order, full))
                 || (copy_pred_on && FungibleEquipCopyViolated(copy_class, full))
-                || (dep_pred_on && EquipPieceDepViolated(equip_deps, full));
+                || (dep_pred_on && !dep_adv_on && EquipPieceDepViolated(equip_deps, full));
+            if (dep_audit_on)
+            {
+                // A run digit that failed to map onto mg would read as a verdict_miss here: it is the
+                // argument above failing, not an unsound jump (the jump below declines it).
+                dep_audit.Visit(equip_deps, choice, full, rejected, dep_adv && dep_t >= 0, dep_t,
+                                EquipPieceDepViolated(equip_deps, full));
+            }
             if (!rejected)
             {
                 for (int imask = 0; imask < (1 << ni); ++imask)
@@ -35832,6 +36068,12 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                 }
             }
             int t = 0;
+            if (dep_skip_on && dep_adv && dep_t > 0)
+            {
+                // RADIX CUT (MTG_EQUIP_DEP_SKIP): zero below the run digit, carry from it.
+                for (int q = 0; q < dep_t; ++q) { choice[q] = 0; }
+                t = dep_t;
+            }
             for (; t < ng; ++t)
             {
                 ++choice[t];
@@ -39484,6 +39726,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // jump is exact here with no straddle question at all.
         const bool copy_skip_on = copy_pred_on && EquipCopySkipEnabled();
         const bool dep_pred_on  = !equip_deps.Empty();
+        // MTG_EQUIP_DEP_SKIP / _VERIFY (read once per call): the dependency verdict plus the digit the
+        // odometer may carry from -- see EquipPieceDepAdvance and the carry at the bottom of this loop.
+        const bool dep_skip_on  = dep_pred_on && EquipDepSkipEnabled();
+        const bool dep_audit_on = dep_pred_on && EquipDepSkipVerify();
+        const bool dep_adv_on   = dep_skip_on || dep_audit_on;
+        DepSkipAudit dep_audit(0);
         // Canonical-prefix fold, hoisted to the digit (see BuildFoldPrefixMap): 65% of this walk's
         // subset visits on Snow are non-canonical positions whose whole inner loop is dead work.
         // Gated on pre.dup_source as well, so the skip can never outlive the leaf clause it mirrors.
@@ -39510,9 +39758,18 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 && (copy_skip_on
                         ? FungibleEquipCopyAdvance(copy_class, choice, cp_fix_g, cp_fix_v)
                         : FungibleEquipCopyViolated(copy_class, choice));
-            const bool copy_skip = copy_viol
-                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
-                                || (fold_viol && !s_fold_odo_verify);
+            // The =0 arm keeps the old short-circuit (no dependency test on a copy-rejected position);
+            // the jump arm tests it there too, since its run may reach past the copy jump's.
+            int dep_jump = -1;
+            const bool dep_viol = dep_pred_on
+                && (dep_adv_on ? EquipPieceDepAdvance(equip_deps, choice, sel_mask, dep_jump)
+                               : (!copy_viol && EquipPieceDepViolated(equip_deps, choice, sel_mask)));
+            const bool copy_skip = copy_viol || dep_viol || (fold_viol && !s_fold_odo_verify);
+            if (dep_audit_on)
+            {
+                dep_audit.Visit(equip_deps, choice, choice, copy_skip, dep_viol, dep_jump,
+                                EquipPieceDepViolated(equip_deps, choice, sel_mask));
+            }
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
             if (!copy_skip && gate_on)
             {
@@ -39598,10 +39855,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 if (!ok) { continue; }
                 if (vial_ok(sel)) { foldsel::g_from_odometer = true; consider(sel); }
             }
+            // RADIX CUT (MTG_EQUIP_DEP_SKIP): every position until digit `dep_cut` next changes
+            // violates the same piece requirement. 0 = the ordinary step.
+            const int dep_cut = (dep_skip_on && dep_viol) ? dep_jump : 0;
             // RADIX CUT (MTG_EQUIP_COPY_SKIP): every position from here until digit `cp_fix_g` next
-            // changes holds the same violating pair, so jump straight past them all.
+            // changes holds the same violating pair, so jump straight past them all. When the
+            // dependency run is carried from a HIGHER digit it contains this whole run (its positions
+            // keep digit cp_fix_g and above), so it goes further and takes precedence.
             if (copy_viol && cp_fix_g >= 0
-                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()))
+                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()) && dep_cut <= cp_fix_g)
             {
                 for (int d = 0; d < cp_fix_g; ++d) { choice[d] = 0; }
                 choice[cp_fix_g] = cp_fix_v;
@@ -39611,6 +39873,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 continue;
             }
             int g = 0;
+            if (dep_cut > 0)
+            {
+                // dep_cut is a group index and the dependency map only exists at <= 64 groups.
+                for (int d = 0; d < dep_cut; ++d) { choice[d] = 0; }
+                sel_mask &= ~((1ull << dep_cut) - 1);
+                g = dep_cut;
+            }
             for (; g < num_groups; ++g)
             {
                 ++choice[g];
@@ -52608,6 +52877,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // jump is exact here with no straddle question at all.
         const bool copy_skip_on = copy_pred_on && EquipCopySkipEnabled();
         const bool dep_pred_on  = !equip_deps.Empty();
+        // MTG_EQUIP_DEP_SKIP / _VERIFY -- Solve's twin; see EquipPieceDepAdvance.
+        const bool dep_skip_on  = dep_pred_on && EquipDepSkipEnabled();
+        const bool dep_audit_on = dep_pred_on && EquipDepSkipVerify();
+        const bool dep_adv_on   = dep_skip_on || dep_audit_on;
+        DepSkipAudit dep_audit(1);
         // Canonical-prefix fold at the digit -- the twin of Solve's (see BuildFoldPrefixMap), with
         // ONE extra gate that is the whole reason this twin is not just a copy.
         //
@@ -52662,9 +52936,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 && (copy_skip_on
                         ? FungibleEquipCopyAdvance(copy_class, choice, cp_fix_g, cp_fix_v)
                         : FungibleEquipCopyViolated(copy_class, choice));
-            const bool copy_skip = copy_viol
-                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
+            // As in Solve: the =0 arm keeps the old short-circuit, the jump arm tests every position.
+            int dep_jump = -1;
+            const bool dep_viol = dep_pred_on
+                && (dep_adv_on ? EquipPieceDepAdvance(equip_deps, choice, sel_mask, dep_jump)
+                               : (!copy_viol && EquipPieceDepViolated(equip_deps, choice, sel_mask)));
+            const bool copy_skip = copy_viol || dep_viol
                                 || (fold_pred_on && FoldPrefixViolated(fold_map, choice));
+            if (dep_audit_on)
+            {
+                dep_audit.Visit(equip_deps, choice, choice, copy_skip, dep_viol, dep_jump,
+                                EquipPieceDepViolated(equip_deps, choice, sel_mask));
+            }
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
             if (!copy_skip && gate_on)
             {
@@ -52811,10 +53094,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
                 eval_and_push(sel);
             }
+            // RADIX CUT (MTG_EQUIP_DEP_SKIP): every position until digit `dep_cut` next changes
+            // violates the same piece requirement. 0 = the ordinary step.
+            const int dep_cut = (dep_skip_on && dep_viol) ? dep_jump : 0;
             // RADIX CUT (MTG_EQUIP_COPY_SKIP): every position from here until digit `cp_fix_g` next
-            // changes holds the same violating pair, so jump straight past them all.
+            // changes holds the same violating pair, so jump straight past them all -- unless the
+            // dependency run is carried from a higher digit, which then contains this one (Solve's
+            // twin has the argument).
             if (copy_viol && cp_fix_g >= 0
-                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()))
+                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()) && dep_cut <= cp_fix_g)
             {
                 for (int d = 0; d < cp_fix_g; ++d) { choice[d] = 0; }
                 choice[cp_fix_g] = cp_fix_v;
@@ -52827,15 +53115,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // test, so zero every digit below it and carry from mc_cut itself -- the next position
             // whose high part differs. Exact for the same reason as the copy jump above: every
             // position passed over shares the refused high part. (mc_cut == 0 is the ordinary step.)
+            // The dependency cut has the same "zero below, carry from" shape, so the two compose as
+            // the larger digit: a run carried from a higher digit contains the lower one's.
             int g = 0;
-            if (mc_cut > 0 && !mcw_verify)
+            const int walk_cut = std::max((mc_cut > 0 && !mcw_verify) ? mc_cut : 0, dep_cut);
+            if (walk_cut > 0)
             {
-                for (int d = 0; d < mc_cut; ++d)
+                for (int d = 0; d < walk_cut; ++d)
                 {
                     choice[d] = 0;
                     if (d < 64) { sel_mask &= ~(1ull << d); }
                 }
-                g = mc_cut;
+                g = walk_cut;
             }
             for (; g < num_groups; ++g)
             {
