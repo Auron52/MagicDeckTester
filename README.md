@@ -6,12 +6,15 @@ Swap a card, change a land count, try 3 copies instead of 2 — then play the de
 times and compare. The headline metric is **average turn to win** (lower is better); games that
 don't win inside the turn limit count as a loss.
 
-There are two ways to use it:
+There are three ways to use it:
 
 - **Play a game yourself** in a browser, against the same engine — a real board with card art,
   where you build each turn by hand. Good for seeing how a deck actually runs, and for checking
   the AI's judgement against your own.
 - **Run the simulator** over thousands of games and read the numbers.
+- **Check a mulligan**: open [`tools/mulligan/index.html`](tools/mulligan/README.md) (no server, no
+  build), build the hand you drew, and see whether the deck's mulligan table keeps it, what to
+  bottom, by how many turns, and how sure the table is.
 
 ---
 
@@ -89,6 +92,7 @@ code, for most cards.
 |---|---|
 | Install prerequisites, per OS | [docs/INSTALL.md](docs/INSTALL.md) |
 | The play viewer — protocol, checks, scope | [tools/play/README.md](tools/play/README.md) |
+| The mulligan checker — how it reproduces the keep table, its gate | [tools/mulligan/README.md](tools/mulligan/README.md) |
 | Engineering record: designs, measurements, dead ends | [docs/design/README.md](docs/design/README.md) |
 | Reproducible Linux dev container | [.devcontainer/README.md](.devcontainer/README.md) |
 | Regression suite | `test/regression.sh --smoke` (~1 min), `--regression`, `--overnight` |

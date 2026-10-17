@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MagicDeckTester — Mulligan Checker</title>
+<style>
+  :root { --bg:#1a1c20; --panel:#24272d; --panel2:#2b2f36; --ink:#e8e8ea; --muted:#9aa0a8; --acc:#5aa9e6;
+          --good:#5ad17a; --bad:#e6695a; --warn:#e6c35a; --line:#33373e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
+           display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; color:var(--acc); white-space:nowrap; }
+  button, select, input[type=search] { background:#2e323a; color:var(--ink); border:1px solid var(--line); border-radius:6px;
+           padding:5px 11px; font:inherit; }
+  button { cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--acc); }
+  button:disabled, select:disabled { opacity:.45; cursor:default; }
+  button.primary { border-color:var(--acc); background:rgba(90,169,230,.18); }
+  button.quiet { background:none; border-color:transparent; color:var(--muted); }
+  button.quiet:hover:not(:disabled) { color:var(--ink); border-color:var(--line); }
+  #deckSel { min-width:240px; }
+  code { font-family:Consolas,Menlo,monospace; font-size:12px; background:#2e323a; padding:1px 5px; border-radius:4px; }
+  input[type=file] { display:none; }
+  .hint { color:var(--muted); font-size:12px; }
+  .seg { display:inline-flex; }
+  .seg button { border-radius:0; }
+  .seg button:first-child { border-radius:6px 0 0 6px; }
+  .seg button:last-child { border-radius:0 6px 6px 0; border-left:none; }
+  .seg button.on { background:rgba(90,169,230,.22); border-color:var(--acc); }
+  main { display:grid; grid-template-columns:minmax(0,1fr) 300px; min-height:calc(100vh - 51px); }
+  #content { padding:14px 18px 40px; min-width:0; }
+  #side { background:var(--panel); border-left:1px solid var(--line); padding:14px 16px; font-size:13px; }
+  .deckname { font-size:16px; font-weight:600; margin:0 0 4px; overflow-wrap:anywhere; }
+  .check { font-size:12.5px; margin:0 0 8px; }
+  .check.ok { color:var(--good); }
+  .facts { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; margin:8px 0 0; }
+  .facts dt { color:var(--muted); }
+  .facts dd { margin:0; text-align:right; font-variant-numeric:tabular-nums; }
+  .sub3 { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:16px 0 4px; }
+  .eqline { font-size:12.5px; padding:1px 0; }
+  details.help { margin-top:20px; border-top:1px solid var(--line); padding-top:10px; }
+  details.help summary { cursor:pointer; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em;
+                         list-style:none; user-select:none; }
+  details.help summary::-webkit-details-marker { display:none; }
+  details.help summary::before { content:'▸'; display:inline-block; width:14px; }
+  details.help[open] summary::before { content:'▾'; }
+  details.help summary:hover { color:var(--ink); }
+  .gloss { margin:4px 0 0; }
+  .gloss dt { font-weight:600; margin-top:12px; }
+  .gloss dd { margin:2px 0 0; color:var(--muted); font-size:12.5px; }
+  table.tiers { width:auto; margin-top:6px; font-size:12px; }
+  table.tiers td { border:none; padding:2px 10px 2px 0; color:var(--muted); }
+  .keys { display:grid; grid-template-columns:auto 1fr; gap:5px 10px; margin-top:14px; font-size:12px; color:var(--muted); align-items:center; }
+  .keys kbd { justify-self:start; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:18px 0 8px;
+       border-bottom:1px solid var(--line); padding-bottom:4px; display:flex; gap:10px; align-items:baseline; }
+  h2:first-child { margin-top:0; }
+  h2 .r { margin-left:auto; text-transform:none; letter-spacing:0; }
+  #side h2 { margin-top:16px; }
+  #side h2:first-child { margin-top:0; }
+  .note { border-radius:6px; padding:7px 10px; margin:8px 0; font-size:12.5px; }
+  .note.warn { background:rgba(230,195,90,.12); border:1px solid rgba(230,195,90,.35); }
+  .note.bad { background:rgba(230,105,90,.12); border:1px solid rgba(230,105,90,.4); }
+  .note.info { background:rgba(90,169,230,.10); border:1px solid rgba(90,169,230,.3); }
+
+  /* controls + hand */
+  .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .controls label { color:var(--muted); font-size:13px; display:flex; gap:6px; align-items:center; }
+  #hand { display:flex; gap:8px; flex-wrap:wrap; min-height:178px; }
+  .slot { width:118px; height:165px; border:1px dashed var(--line); border-radius:8px; display:flex; align-items:center;
+          justify-content:center; color:var(--muted); font-size:12px; }
+  .card { position:relative; width:118px; cursor:pointer; }
+  .card img, .card .ph { width:118px; height:165px; border-radius:7px; display:block; background:#0b0c0e; object-fit:cover; }
+  .card .ph { display:flex; align-items:center; justify-content:center; text-align:center; padding:8px; font-size:12px;
+              border:1px solid var(--line); color:var(--ink); }
+  .card .x { position:absolute; top:4px; right:4px; width:20px; height:20px; border-radius:10px; background:rgba(0,0,0,.7);
+             color:#fff; font-size:13px; line-height:20px; text-align:center; opacity:0; }
+  .card:hover .x { opacity:1; }
+  .card.bottomed img, .card.bottomed .ph { box-shadow:0 0 0 3px var(--bad); opacity:.75; }
+  .card .tag { position:absolute; left:0; right:0; bottom:6px; text-align:center; }
+  .card .tag span { background:var(--bad); color:#fff; font-size:11px; font-weight:700; padding:1px 7px; border-radius:9px; letter-spacing:.04em; }
+
+  /* verdict */
+  #result { margin-top:14px; }
+  .verdict { border-radius:10px; padding:14px 18px; border:1px solid var(--line); background:var(--panel); }
+  .verdict .big { font-size:26px; font-weight:700; letter-spacing:.01em; }
+  .verdict .sub { color:var(--ink); margin-top:2px; }
+  .verdict.keep.clear { border-color:rgba(90,209,122,.7); background:rgba(90,209,122,.13); }
+  .verdict.keep.likely { border-color:rgba(90,209,122,.45); background:rgba(90,209,122,.07); }
+  .verdict.keep.marginal, .verdict.mull.marginal { border-color:rgba(230,195,90,.5); background:rgba(230,195,90,.08); }
+  .verdict.mull.likely { border-color:rgba(230,105,90,.45); background:rgba(230,105,90,.07); }
+  .verdict.mull.clear { border-color:rgba(230,105,90,.7); background:rgba(230,105,90,.13); }
+  .verdict.keep .big { color:var(--good); }
+  .verdict.mull .big { color:var(--bad); }
+  .verdict.marginal .big { color:var(--warn); }
+  .verdict.forced .big { color:var(--ink); }
+  .nums { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .opt { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:8px 12px; }
+  .opt.best { border-color:var(--acc); }
+  .opt .lbl { color:var(--muted); font-size:12px; display:block; }
+  .opt b { font-size:20px; }
+  .opt .pm, .opt .n { color:var(--muted); font-size:12px; }
+  .progress { height:6px; background:#2e323a; border-radius:3px; overflow:hidden; margin-top:8px; }
+  .progress div { height:100%; background:var(--acc); width:0; transition:width .15s; }
+  .tierchip { font-size:11px; font-weight:700; padding:1px 8px; border-radius:9px; text-transform:uppercase; letter-spacing:.05em; }
+  .tierchip.clear { background:rgba(90,209,122,.2); color:var(--good); }
+  .tierchip.likely { background:rgba(90,169,230,.2); color:var(--acc); }
+  .tierchip.marginal { background:rgba(230,195,90,.2); color:var(--warn); }
+
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:8px; }
+  th { text-align:left; color:var(--muted); font-weight:500; font-size:12px; border-bottom:1px solid var(--line); padding:4px 8px; }
+  td { padding:4px 8px; border-bottom:1px solid #2a2d33; vertical-align:top; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  tr.chosen td { background:rgba(90,169,230,.12); }
+  tr.ineligible td { color:var(--muted); }
+  .linkish { background:none; border:none; color:var(--acc); padding:0; cursor:pointer; font-size:12px; }
+  .ladder { display:flex; gap:6px; flex-wrap:wrap; }
+  .rung { border:1px solid var(--line); border-radius:6px; padding:4px 9px; font-size:12.5px; cursor:pointer; background:var(--panel2); }
+  .rung.k { color:var(--good); } .rung.mu { color:var(--bad); }
+  .rung.cur { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset; }
+  .rung small { color:var(--muted); }
+
+  /* deck grid */
+  .deckbar { display:flex; gap:10px; align-items:center; }
+  .grid { display:flex; flex-wrap:wrap; gap:8px; }
+  .tile { position:relative; width:96px; cursor:pointer; text-align:center; font-size:11px; color:var(--muted); }
+  .tile img, .tile .ph { width:96px; height:134px; border-radius:6px; display:block; background:#0b0c0e; object-fit:cover; }
+  .tile .ph { display:flex; align-items:center; justify-content:center; padding:6px; font-size:11px; color:var(--ink); border:1px solid var(--line); }
+  .tile .cnt { position:absolute; top:4px; left:4px; background:rgba(0,0,0,.75); color:#fff; font-weight:700; font-size:12px;
+               padding:0 6px; border-radius:8px; }
+  .tile .eq { position:absolute; top:4px; right:4px; background:rgba(90,169,230,.85); color:#fff; font-weight:700; font-size:11px;
+              padding:0 5px; border-radius:8px; }
+  .tile.out { opacity:.3; cursor:default; }
+  .tile .nm { display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .group { margin-bottom:10px; }
+  .group .gh { font-size:11px; color:var(--muted); margin:6px 0 4px; }
+  #zoom { position:fixed; z-index:50; pointer-events:none; display:none; width:250px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.6); }
+  body.dragging::after { content:'Drop a deck folder (or the decks/ folder)'; position:fixed; inset:12px; border:3px dashed var(--acc);
+    border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--acc);
+    background:rgba(26,28,32,.85); z-index:100; }
+  .empty { color:var(--muted); padding:30px 10px; text-align:center; }
+  kbd { background:#2e323a; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mulligan Checker</h1>
+  <select id="deckSel" disabled><option>— no decks loaded —</option></select>
+  <button id="pickBtn" class="primary">Open decks folder…</button>
+  <input type="file" id="dirInput" webkitdirectory multiple>
+  <span id="status" class="hint">Pick this repo's <b>decks/</b> folder, or drop a deck folder anywhere on the page.</span>
+</header>
+<main>
+  <section id="content">
+    <h2>Your hand <span id="handCount" class="hint"></span><span class="r hint" id="dealtTag"></span></h2>
+    <div class="controls">
+      <label>Mulligans taken <select id="mullSel"><option value="0">0 (opening 7)</option></select></label>
+      <div class="seg" id="pdSeg"><button data-pd="1" class="on">On the play</button><button data-pd="0">On the draw</button></div>
+      <button id="randBtn" disabled title="Deal 7 at random from the decklist (R)">Random hand</button>
+      <button id="clearBtn" disabled title="Clear the hand (Esc)">Clear</button>
+    </div>
+    <div id="hand"></div>
+    <div id="result"></div>
+    <h2>Deck <span class="hint" id="deckHint">click a card to add it to the hand</span>
+      <span class="r"><input type="search" id="filter" placeholder="Filter cards…" disabled></span></h2>
+    <div id="deck"><div class="empty">No deck loaded yet.</div></div>
+  </section>
+  <aside id="side">
+    <h2>Table</h2>
+    <div id="tableInfo"></div>
+    <details class="help" id="help">
+      <summary>How to read this</summary>
+      <dl class="gloss">
+        <dt>Win turn</dt>
+        <dd>The average turn the deck kills a goldfish in the table's simulated games. No kill by turn
+        <span class="maxt">8</span> counts as <span class="maxt1">9</span>. Lower is better.</dd>
+        <dt>Keep or mulligan</dt>
+        <dd>Keep is this hand after the best bottom. Mulligan is the expected next hand, played the same way
+        from there. The lower one is the engine's call.</dd>
+        <dt>Confidence</dt>
+        <dd>How many standard errors separate the two. Fewer games means more noise.
+          <table class="tiers">
+            <tr><td><span class="tierchip clear">Clear</span></td><td>2 or more</td><td>≈98%+ that more games agree</td></tr>
+            <tr><td><span class="tierchip likely">Likely</span></td><td>1 to 2</td><td>≈84–98%</td></tr>
+            <tr><td><span class="tierchip marginal">Marginal</span></td><td>under 1</td><td>a close call</td></tr>
+          </table></dd>
+        <dt>Goldfish only</dt>
+        <dd>The opponent sits at <span class="life">20</span> life and never casts a spell, blocks or
+        interacts, so removal, counterspells, blockers and life gain earn little. That matters only in close
+        calls, so Marginal ones carry a reminder.</dd>
+        <dt>≡</dt>
+        <dd>Cards the table treats as one card.</dd>
+      </dl>
+      <div class="keys">
+        <kbd>R</kbd><span>random hand</span>
+        <kbd>Esc</kbd><span>clear the hand</span>
+        <kbd>Backspace</kbd><span>remove the last card</span>
+        <kbd>P</kbd><span>switch play / draw</span>
+        <span><kbd>0</kbd>–<kbd>6</kbd></span><span>mulligans taken</span>
+      </div>
+    </details>
+  </aside>
+</main>
+<img id="zoom" alt="">
+<script src="keepcore.js"></script>
+<script src="decks.js"></script>
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (x, d) => (x === null || x === undefined || !isFinite(x)) ? '—' : x.toFixed(d === undefined ? 2 : d);
+const sgn = (x, d) => (x > 0 ? '+' : x < 0 ? '−' : '±') + fmt(Math.abs(x), d);
+const pct = (p) => p >= 0.9995 ? '>99.9%' : (100 * p).toFixed(p >= 0.995 ? 1 : 0) + '%';
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+const tick = () => new Promise(r => setTimeout(r, 0));
+const CANCEL = { cancelled: true };
+
+const S = {
+  decks: [], deck: null, cards: [], table: null, loadToken: 0, phase: '', error: null, handle: null, needAccess: false,
+  hand: [], dealt: false, m: 0, onPlay: true, info: new Map(), infoPending: false, allBottoms: false, filter: '', pendingHash: null,
+};
+
+// ---- persistence -----------------------------------------------------------------------------------
+const prefs = (() => { try { return JSON.parse(localStorage.getItem('mdt-mulligan') || '{}'); } catch (e) { return {}; } })();
+function savePrefs() {
+  if (S.deck) { prefs.deck = S.deck.key; }
+  prefs.onPlay = S.onPlay;
+  try { localStorage.setItem('mdt-mulligan', JSON.stringify(prefs)); } catch (e) {}
+}
+if (typeof prefs.onPlay === 'boolean') { S.onPlay = prefs.onPlay; }
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('mdt-mulligan', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function saveHandle(h) { try { const db = await idb(); db.transaction('kv', 'readwrite').objectStore('kv').put(h, 'dir'); } catch (e) {} }
+async function loadHandle() {
+  try {
+    const db = await idb();
+    return await new Promise((res) => { const r = db.transaction('kv').objectStore('kv').get('dir'); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); });
+  } catch (e) { return null; }
+}
+// The hand lives in the URL (#hand=A|B|...&m=1&draw), so a hand can be bookmarked or sent.
+function writeHash() {
+  const parts = [];
+  if (S.hand.length) { parts.push('hand=' + S.hand.map(encodeURIComponent).join('|')); }
+  if (S.m) { parts.push('m=' + S.m); }
+  if (!S.onPlay) { parts.push('draw'); }
+  const h = parts.length ? '#' + parts.join('&') : ' ';
+  try { history.replaceState(null, '', h === ' ' ? location.pathname + location.search : h); } catch (e) {}
+}
+function readHash() {
+  const out = {};
+  for (const p of location.hash.replace(/^#/, '').split('&')) {
+    if (p.startsWith('hand=')) { out.hand = p.slice(5).split('|').map(decodeURIComponent).filter(Boolean); }
+    else if (p.startsWith('m=')) { out.m = parseInt(p.slice(2), 10) || 0; }
+    else if (p === 'draw') { out.draw = true; }
+  }
+  return out;
+}
+S.pendingHash = readHash();
+if (S.pendingHash.draw) { S.onPlay = false; }
+
+// ---- finding decks ---------------------------------------------------------------------------------
+// decks.js (generated from this repo's decks/ by build_deck_list.js) lists the decks with a mulligan
+// table, so the dropdown is full the moment the page opens. A page opened from disk may read only a
+// folder the user has allowed, so the first deck chosen asks for the repo's folder once; Chrome and Edge
+// remember it, and later visits only confirm. A scan of the allowed folder then replaces the list.
+// Every source (that folder, another one, <input webkitdirectory>, drag and drop) becomes a flat list of
+// { path, name, getFile() } for KeepCore.discoverDecks.
+const LISTED = Array.isArray(window.MDT_DECKS) ? window.MDT_DECKS : null;
+// The repo's decks folder as the user's file manager names it, when this is the repo's own copy of the
+// page opened from disk (shown so the user knows which folder to allow).
+const DECKS_PATH = (() => {
+  if (location.protocol !== 'file:') { return null; }
+  const m = decodeURIComponent(location.pathname).match(/^(.*)\/tools\/mulligan\/[^/]*$/);
+  if (!m) { return null; }
+  const p = m[1] + '/decks';
+  return /^\/[A-Za-z]:\//.test(p) ? p.slice(1).replace(/\//g, '\\') : p;
+})();
+
+function fillDeckSel() {
+  const sel = $('#deckSel');
+  const cur = [], old = [];
+  S.decks.forEach((d, i) => (d.archived ? old : cur).push(`<option value="${i}">${esc(d.label)}</option>`));
+  sel.innerHTML = '<option value="">— choose a deck —</option>' + cur.join('')
+    + (old.length ? '<optgroup label="Older lists">' + old.join('') + '</optgroup>' : '');
+  const i = S.deck ? S.decks.findIndex(d => d.key === S.deck.key) : -1;
+  sel.value = i >= 0 ? String(i) : '';
+  sel.disabled = !S.decks.length;
+}
+
+// repo: the scan answers a request for the repo's decks (the dropdown's list), so a listed deck the
+// folder does not hold stays listed rather than vanishing.
+function setDecks(entries, source, repo) {
+  const found = KeepCore.discoverDecks(entries);
+  if (!found.length) {
+    setStatus('No deck with a mulligan table in ' + esc(source) + '. Choose the <b>decks</b> folder, or a folder holding a decklist and its <code>.keepmodel.exhaustive.raw.json.gz</code>.');
+    if (S.deck && S.deck.stub) { S.needAccess = true; renderAll(); }
+    return;
+  }
+  const keys = new Set(found.map(d => d.key));
+  S.decks = repo && LISTED ? found.concat(S.decks.filter(d => d.stub && !keys.has(d.key))) : found;
+  S.decks.sort((a, b) => (a.archived - b.archived) || a.label.localeCompare(b.label));
+  const wantKey = S.deck ? S.deck.key : prefs.deck;
+  const want = found.find(d => d.key === wantKey) || (found.length === 1 ? found[0] : null);
+  if (S.deck && S.deck.stub && !want) {
+    setStatus(esc(S.deck.label) + ' is not in ' + esc(source) + '.');
+    S.needAccess = true;
+  } else {
+    setStatus(repo ? '' : plural(found.length, 'deck') + ' with a mulligan table in ' + esc(source) + '.');
+  }
+  if (want) { S.deck = want; }
+  fillDeckSel();
+  if (want) { selectDeck(want); } else { renderAll(); }
+}
+
+async function walkHandle(dir, path, depth, out) {
+  for await (const [name, h] of dir.entries()) {
+    if (h.kind === 'file') { out.push({ path: path + '/' + name, name, getFile: () => h.getFile() }); }
+    else if (depth < 2 && !KeepCore.SKIP_DIRS.has(name)) { await walkHandle(h, path + '/' + name, depth + 1, out); }
+  }
+}
+async function useDirHandle(h, remember, repo) {
+  setStatus('Reading ' + esc(h.name) + '…');
+  let root = h, prefix = h.name;
+  try { root = await h.getDirectoryHandle('decks'); prefix = h.name + '/decks'; } catch (e) { /* not the repo root */ }
+  const entries = [];
+  await walkHandle(root, prefix, 0, entries);
+  if (remember) { saveHandle(h); }
+  setDecks(entries, h.name, repo);
+}
+async function walkEntry(en, path, depth, out) {
+  if (en.isFile) {
+    const f = await new Promise((res, rej) => en.file(res, rej));
+    out.push({ path, name: en.name, getFile: async () => f });
+    return;
+  }
+  if (depth > 2 || (depth > 0 && KeepCore.SKIP_DIRS.has(en.name))) { return; }
+  const reader = en.createReader();
+  for (;;) {
+    const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+    if (!batch.length) { break; }
+    for (const c of batch) { await walkEntry(c, path + '/' + c.name, depth + 1, out); }
+  }
+}
+
+// Asks to read the remembered folder. A dropdown choice or a button click lets the browser ask at once;
+// with no remembered folder (or no click to act on), the result area offers a button instead.
+async function requestAccess() {
+  if (S.handle && S.handle.requestPermission) {
+    try {
+      if (await S.handle.requestPermission({ mode: 'read' }) === 'granted') { S.needAccess = false; await useDirHandle(S.handle, false, true); return; }
+    } catch (e) { /* no user gesture: the button asks */ }
+  }
+  S.needAccess = true;
+  renderAll();
+}
+let pickForRepo = false;
+async function pickFolder(repo) {
+  pickForRepo = !!repo;
+  if (window.showDirectoryPicker) {
+    try {
+      const h = await window.showDirectoryPicker({ id: 'mdt-decks', mode: 'read' });
+      S.handle = h;
+      await useDirHandle(h, true, repo);
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') { return; } }
+  }
+  $('#dirInput').click();
+}
+$('#pickBtn').addEventListener('click', () => pickFolder(false));
+$('#dirInput').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files || []);
+  const top = files.length && files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : 'the folder';
+  setDecks(files.map(f => ({ path: f.webkitRelativePath || f.name, name: f.name, getFile: async () => f })), top, pickForRepo);
+  e.target.value = '';
+});
+let dragDepth = 0;
+document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', async (e) => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
+  const items = Array.from(e.dataTransfer.items || []);
+  const entries = [];
+  setStatus('Scanning the dropped files…');
+  for (const it of items) {
+    const en = it.webkitGetAsEntry && it.webkitGetAsEntry();
+    if (en) { await walkEntry(en, en.name, 0, entries); }
+    else { const f = it.getAsFile && it.getAsFile(); if (f) { entries.push({ path: f.name, name: f.name, getFile: async () => f }); } }
+  }
+  setDecks(entries, 'the dropped files');
+});
+$('#deckSel').addEventListener('change', (e) => {
+  const d = e.target.value === '' ? null : S.decks[+e.target.value];
+  if (!d) { return; }
+  if (!d.stub) { selectDeck(d); return; }
+  // A listed deck: its files are readable once the folder is allowed.
+  S.loadToken++;
+  S.deck = d; S.table = null; S.cards = []; S.error = null; S.phase = '';
+  savePrefs();
+  renderAll();
+  requestAccess();
+});
+
+// ---- loading a deck --------------------------------------------------------------------------------
+// The raw sidecar is streamed the moment a deck is chosen (decompressed natively, parsed chunk by chunk
+// into typed arrays); the hand can be built while it loads.
+function fileBytes(file, onRead) {
+  let s = file.stream();
+  if (onRead) { s = s.pipeThrough(new TransformStream({ transform(c, ctl) { onRead(c.byteLength); ctl.enqueue(c); } })); }
+  if (/\.gz$/i.test(file.name)) { s = s.pipeThrough(new DecompressionStream('gzip')); }
+  return s;
+}
+function setStatus(html) { $('#status').innerHTML = html; }
+function setProgress(f) { const el = $('#progbar'); if (el) { el.style.width = Math.round(100 * Math.min(1, f)) + '%'; } }
+
+async function selectDeck(d) {
+  const token = ++S.loadToken;
+  const live = () => { if (token !== S.loadToken) { throw CANCEL; } };
+  S.deck = d; S.table = null; S.error = null; S.cards = []; S.allBottoms = false; S.needAccess = false;
+  S.phase = 'Reading the decklist';
+  savePrefs();
+  renderAll();
+  try {
+    const lf = await d.list.getFile();
+    const cards = KeepCore.parseDecklist(await lf.text(), lf.name);
+    live();
+    let aliases = [];
+    if (d.play) {
+      try { const pj = JSON.parse(await (await d.play.getFile()).text()); aliases = (pj.mulligan && pj.mulligan.keep_table_alias) || []; }
+      catch (e) { /* no aliases */ }
+    }
+    live();
+    S.cards = cards;
+    const ph = S.pendingHash; S.pendingHash = null;
+    const counts = new Map(cards.map(c => [c.name, c.count]));
+    const fits = (h) => { const u = new Map(); return h.every(n => { u.set(n, (u.get(n) || 0) + 1); return u.get(n) <= (counts.get(n) || 0); }); };
+    if (ph && ph.hand && ph.hand.length && fits(ph.hand)) { S.hand = ph.hand.slice(0, 7); S.m = ph.m || 0; S.dealt = false; }
+    else if (!fits(S.hand)) { S.hand = []; S.dealt = false; }
+    fetchInfo(cards, token);
+    S.phase = 'Reading the mulligan table';
+    renderAll();
+    const t = new KeepCore.KeepTable(cards, aliases);
+    const raw = await d.raw.getFile();
+    let read = 0;
+    await t.load(fileBytes(raw, k => { read += k; }), () => { live(); setProgress(read / raw.size); });
+    live();
+    S.phase = 'Solving the mulligan ladder'; renderResult();
+    await t.computeDopt(async (f) => { live(); setProgress(f); await tick(); });
+    live();
+    if (d.compiled) {
+      S.phase = 'Checking it against the table the engine plays'; renderResult();
+      const cf = await d.compiled.getFile();
+      const rep = await t.calibrate(fileBytes(cf), { onShrinkProgress: async (f) => { live(); setProgress(f); await tick(); } });
+      live();
+      if (rep.needsShipped) {
+        S.phase = 'This deck\'s raw data does not cover the engine\'s whole table: reading the table itself'; renderResult();
+        let read = 0;
+        await t.useShippedTable(fileBytes(cf, k => { read += k; }), async () => { live(); setProgress(read / cf.size); });
+        live();
+      }
+    }
+    S.table = t; S.phase = '';
+    if (S.m > t.levels) { S.m = t.levels; }
+    renderAll();
+  } catch (e) {
+    if (e === CANCEL) { return; }
+    console.error(e);
+    S.error = String(e && e.message || e); S.phase = '';
+    renderAll();
+  }
+}
+
+// ---- card info + images (Scryfall) -----------------------------------------------------------------
+// One /cards/collection call per 75 names gives type, mana value and image URLs (sorts the deck into
+// lands / spells and avoids an API hit per image). Offline it degrades to decklist order and the
+// per-name image endpoint.
+function scryInfo(c) {
+  const face = (c.card_faces && c.card_faces[0]) || c;
+  const img = c.image_uris || face.image_uris || null;
+  return { type: face.type_line || c.type_line || '', cmc: c.cmc || 0, small: img && img.small, normal: img && img.normal };
+}
+async function fetchInfo(cards, token) {
+  const names = cards.map(c => c.name).filter(n => !S.info.has(n));
+  S.infoPending = names.length > 0;
+  for (let i = 0; i < names.length; i += 75) {
+    const chunk = names.slice(i, i + 75);
+    try {
+      const r = await fetch('https://api.scryfall.com/cards/collection', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifiers: chunk.map(n => ({ name: n })) }),
+      });
+      if (!r.ok) { break; }
+      const j = await r.json();
+      for (const c of j.data || []) {
+        const info = scryInfo(c);
+        S.info.set(c.name, info);
+        if (c.name.includes(' // ')) { S.info.set(c.name.split(' // ')[0], info); }
+      }
+      for (const nf of j.not_found || []) { if (nf.name) { S.info.set(nf.name, null); } }
+    } catch (e) { break; }
+  }
+  // A name the collection lookup does not know is an alternate-name printing: the deck lists the name
+  // printed on the card (Secret Lair "Rick, Steadfast Leader" is Greymond, Avacyn's Stalwart), which is
+  // what cards.json's scryfall_name / scryfall_image cover for the play viewer. Scryfall's exact-name
+  // SEARCH also matches printed names and returns that printing, so the art is the one the deck shows.
+  for (const n of names) {
+    if (S.info.get(n) !== null) { continue; }
+    try {
+      const r = await fetch('https://api.scryfall.com/cards/search?unique=prints&q=' + encodeURIComponent('!"' + n + '"'));
+      if (r.ok) {
+        const data = (await r.json()).data || [];
+        const c = data.find(x => x.printed_name === n || (x.card_faces || []).some(f => f.printed_name === n)) || data[0];
+        if (c) { S.info.set(n, scryInfo(c)); }
+      }
+    } catch (e) { /* offline: the name placeholder stays */ }
+    await new Promise(res => setTimeout(res, 100));   // Scryfall asks for <= 10 requests a second
+  }
+  S.infoPending = false;
+  if (token === S.loadToken) { renderDeck(); renderHand(); }
+}
+function imgUrl(name, ver) {
+  const i = S.info.get(name);
+  if (i && i[ver]) { return i[ver]; }
+  return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=' + ver;
+}
+// Until the collection lookup settles, a name placeholder: requesting the per-name API image now and
+// the CDN image a moment later would load every card twice (and burst the API).
+function cardImg(name) {
+  if (S.infoPending && !S.info.get(name)) { return `<div class="ph" data-zoom="${esc(name)}">${esc(name)}</div>`; }
+  return `<img src="${esc(imgUrl(name, 'small'))}" alt="${esc(name)}" loading="lazy" data-zoom="${esc(name)}" onerror="this.outerHTML='<div class=&quot;ph&quot; data-zoom=&quot;${esc(esc(name))}&quot;>${esc(esc(name))}</div>'">`;
+}
+const zoom = $('#zoom');
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest('[data-zoom]');
+  if (!el) { zoom.style.display = 'none'; return; }
+  zoom.src = imgUrl(el.getAttribute('data-zoom'), 'normal');
+  zoom.style.display = 'block';
+});
+document.addEventListener('mousemove', (e) => {
+  if (zoom.style.display !== 'block') { return; }
+  const w = 250, h = 350;
+  let x = e.clientX + 18, y = e.clientY - h / 2;
+  if (x + w > window.innerWidth - 8) { x = e.clientX - w - 18; }
+  y = Math.max(8, Math.min(window.innerHeight - h - 8, y));
+  zoom.style.left = x + 'px'; zoom.style.top = y + 'px';
+});
+
+// ---- hand editing ----------------------------------------------------------------------------------
+function copiesLeft(name) {
+  const c = S.cards.find(x => x.name === name);
+  return c ? c.count - S.hand.filter(n => n === name).length : 0;
+}
+function addCard(name) {
+  if (S.hand.length >= 7 || copiesLeft(name) <= 0) { return; }
+  S.hand.push(name); S.dealt = false; S.allBottoms = false; changed();
+}
+function removeAt(i) { S.hand.splice(i, 1); S.dealt = false; S.allBottoms = false; changed(); }
+function clearHand() { S.hand = []; S.dealt = false; changed(); }
+function dealRandom() {
+  if (!S.cards.length) { return; }
+  S.hand = KeepCore.dealRandom(S.cards); S.dealt = true; S.allBottoms = false; changed();
+}
+function changed() { writeHash(); savePrefs(); renderHand(); renderResult(); renderDeck(); }
+
+$('#randBtn').addEventListener('click', dealRandom);
+$('#clearBtn').addEventListener('click', clearHand);
+$('#mullSel').addEventListener('change', (e) => { S.m = +e.target.value; S.allBottoms = false; changed(); });
+$('#pdSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-pd]');
+  if (!b) { return; }
+  S.onPlay = b.dataset.pd === '1'; renderControls(); changed();
+});
+$('#filter').addEventListener('input', (e) => { S.filter = e.target.value.toLowerCase(); renderDeck(); });
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) { return; }
+  if (e.key === 'r' || e.key === 'R') { dealRandom(); }
+  else if (e.key === 'Escape') { clearHand(); }
+  else if (e.key === 'Backspace') { if (S.hand.length) { removeAt(S.hand.length - 1); } e.preventDefault(); }
+  else if (e.key === 'p' || e.key === 'P') { S.onPlay = !S.onPlay; renderControls(); changed(); }
+  else if (/^[0-6]$/.test(e.key)) {
+    const m = +e.key, M = S.table ? S.table.levels : 6;
+    if (m <= M) { S.m = m; renderControls(); changed(); }
+  }
+});
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-add]');
+  if (t) { addCard(t.getAttribute('data-add')); return; }
+  const h = e.target.closest('[data-rm]');
+  if (h) { removeAt(+h.getAttribute('data-rm')); return; }
+  const r = e.target.closest('[data-rung]');
+  if (r) { S.m = +r.getAttribute('data-rung'); renderControls(); changed(); return; }
+  if (e.target.closest('#allBottoms')) { S.allBottoms = !S.allBottoms; renderResult(); return; }
+  if (e.target.closest('#allowBtn')) { requestAccess(); return; }
+  if (e.target.closest('#chooseBtn')) { pickFolder(true); }
+});
+$('#help').open = !!prefs.help;
+$('#help').addEventListener('toggle', () => { prefs.help = $('#help').open; savePrefs(); });
+
+// ---- rendering -------------------------------------------------------------------------------------
+function renderAll() { renderControls(); renderHand(); renderResult(); renderDeck(); renderSide(); }
+
+function renderControls() {
+  const M = S.table ? S.table.levels : 0;
+  const sel = $('#mullSel');
+  const opts = [];
+  for (let m = 0; m <= Math.max(M, S.m); m++) { opts.push(`<option value="${m}">${m === 0 ? '0 (opening 7)' : m + ' (keep ' + (7 - m) + ')'}</option>`); }
+  sel.innerHTML = opts.join('');
+  sel.value = String(S.m);
+  sel.disabled = !S.table;
+  for (const b of document.querySelectorAll('#pdSeg button')) { b.classList.toggle('on', (b.dataset.pd === '1') === S.onPlay); }
+  $('#randBtn').disabled = !S.cards.length;
+  $('#clearBtn').disabled = !S.hand.length;
+  $('#filter').disabled = !S.cards.length;
+}
+
+function currentEval() {
+  if (!S.table || S.hand.length !== 7) { return null; }
+  return S.table.evaluate(S.hand, S.m, S.onPlay);
+}
+
+function renderHand() {
+  $('#handCount').textContent = S.cards.length ? S.hand.length + '/7' : '';
+  $('#dealtTag').textContent = S.dealt ? 'dealt at random' : '';
+  $('#clearBtn').disabled = !S.hand.length;
+  const res = currentEval();
+  const bottomed = new Set(res && res.bottom && !res.error ? res.bottom.cards.map(c => c.handIndex) : []);
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const nm = S.hand[i];
+    if (nm === undefined) { html += `<div class="slot">${i === S.hand.length ? (S.cards.length ? 'pick a card below' : '') : ''}</div>`; continue; }
+    const b = bottomed.has(i);
+    html += `<div class="card${b ? ' bottomed' : ''}" data-rm="${i}" title="Click to remove">${cardImg(nm)}<div class="x">✕</div>`
+          + (b ? '<div class="tag"><span>BOTTOM</span></div>' : '') + '</div>';
+  }
+  $('#hand').innerHTML = html;
+}
+
+function tierClass(conf) { return conf ? conf.tier.toLowerCase() : ''; }
+
+function renderResult() {
+  const el = $('#result');
+  if (!S.deck) { el.innerHTML = ''; return; }
+  if (S.needAccess) {
+    // Remembered folder: one click lets the browser ask. None yet: the folder has to be picked once.
+    const again = S.handle && S.handle.requestPermission;
+    const where = DECKS_PATH ? `<code>${esc(DECKS_PATH)}</code>` : 'this repo\'s <b>decks</b> folder';
+    el.innerHTML = '<div class="verdict">'
+      + `<div class="sub">To read the mulligan table for <b>${esc(S.deck.label)}</b>, the browser needs permission to read `
+      + (again ? `the <b>${esc(S.handle.name)}</b> folder.` : `${where}. You only do this once.`) + '</div>'
+      + '<div class="controls" style="margin:10px 0 4px">'
+      + (again ? '<button id="allowBtn" class="primary">Allow access</button><button id="chooseBtn" class="quiet">Choose another folder…</button>'
+               : '<button id="chooseBtn" class="primary">Choose the folder…</button>')
+      + '</div>'
+      + `<div class="hint">${again ? 'If the browser offers “Allow on every visit”, choosing it skips this step next time.'
+                                   : 'Choose ' + where + ' (or the repo folder above it). Chrome and Edge remember it.'}</div>`
+      + '</div>';
+    return;
+  }
+  if (S.error) { el.innerHTML = `<div class="note bad"><b>Could not load the mulligan table.</b> ${esc(S.error)}</div>`; return; }
+  if (S.phase) {
+    el.innerHTML = `<div class="verdict"><div class="sub">${esc(S.phase)}…</div><div class="progress"><div id="progbar"></div></div></div>`;
+    return;
+  }
+  if (!S.table) { el.innerHTML = ''; return; }
+  if (S.hand.length < 7) {
+    el.innerHTML = `<div class="verdict"><div class="sub">Add ${7 - S.hand.length} more card${S.hand.length === 6 ? '' : 's'}, or press <b>Random hand</b>.</div></div>`;
+    return;
+  }
+  const r = currentEval();
+  if (r.error) { el.innerHTML = `<div class="note bad">${esc(r.error)}</div>`; return; }
+  const t = S.table, side = S.onPlay ? 'on the play' : 'on the draw';
+  let html = '';
+  // -- verdict
+  const life = (t.meta && t.meta.start_life) || 20;
+  if (r.noStats) {
+    const word = r.forced ? 'Keep' : r.keep ? 'Keep' : 'Mulligan';
+    html += `<div class="verdict forced"><div class="big">${word}${r.forced ? ' (forced)' : ''}</div>`
+      + `<div class="sub">The engine's call at ${plural(r.m, 'mulligan')}, taken from its own table. No statistics survive for this level: `
+      + `this deck's raw data covers 0–${r.statsLevels} mulligans, so there are no win turns, confidence or game counts to show.</div>`;
+  } else if (r.forced) {
+    html += `<div class="verdict forced"><div class="big">Keep</div><div class="sub">No mulligans left in the table at ${plural(r.m, 'mulligan')}, so this is a forced keep. The table only decides what to bottom.</div>`;
+  } else {
+    const word = r.keep ? 'Keep' : 'Mulligan';
+    const gap = Math.abs(r.delta);
+    const mv = r.mullValue;
+    const err = Math.sqrt(mv.se * mv.se + mv.spread * mv.spread);
+    const mvErr = '±' + (err < 0.005 ? '&lt;0.01' : fmt(err));
+    html += `<div class="verdict ${r.keep ? 'keep' : 'mull'} ${tierClass(r.conf)}">`
+      + `<div class="big">${r.conf.tier} ${word}</div>`
+      + `<div class="sub">${r.keep ? 'Keeping' : 'Mulliganing'} is <b>${fmt(gap)} turns faster</b> ${side}`
+      + ` · ${pct(r.conf.p)} confident (gap = ${fmt(r.conf.z, 1)} standard errors)</div>`;
+    html += '<div class="nums">'
+      + `<div class="opt${r.keep ? ' best' : ''}"><span class="lbl">Keep${r.m ? ' (bottom ' + r.m + ' as below)' : ''}</span>`
+      + `<b>${fmt(r.keepValue.v)}</b> turns <span class="pm">±${fmt(r.keepValue.se)}</span><br>`
+      + `<span class="n">${plural(r.keepValue.n, 'simulated game')} of this ${7 - r.m}-card hand ${side}</span></div>`
+      + `<div class="opt${r.keep ? '' : ' best'}"><span class="lbl">Mulligan to ${6 - r.m}</span>`
+      + `<b>${fmt(mv.v)}</b> turns <span class="pm">${mvErr}</span><br>`
+      + (mv.recovered
+          ? `<span class="n">the expected next hand. ${r.m === r.statsLevels ? 'Recovered' : 'Its part past ' + plural(r.statsLevels, 'mulligan') + ' is recovered'} from the engine's own decisions, as that data was not saved</span>`
+          : `<span class="n">the expected next hand, averaged over all ${t.sizes[7].N.toLocaleString()} draws</span>`)
+      + '</div></div>';
+    if (r.conf.tier === 'Marginal') {
+      html += `<div class="note warn">A close call, and the table only knows the goldfish: an opponent at ${life} life that never casts a spell, blocks or interacts. `
+        + `If this hand's strength is interaction (removal, counterspells, discard, blockers, life gain), it is better than this number says. `
+        + `A hand that only races is a little worse against a real opponent.</div>`;
+    }
+  }
+  if (r.unreliable) { html += `<div class="note bad">${esc(r.unreliable)}</div>`; }
+  html += '</div>';
+
+  // -- bottoming
+  if (r.bottom) {
+    const b = r.bottom, ch = b.chosen;
+    const groups = groupNames(b.cards.map(c => c.name));
+    const eqs = b.cards.filter(c => c.equivalents.length);
+    html += `<h2>${r.keep || r.forced ? 'Put on the bottom' : 'If you keep anyway, put on the bottom'}`
+      + (b.conf ? ` <span class="tierchip ${tierClass(b.conf)}">${b.conf.tier}</span>` : '')
+      + `<span class="r hint">${!b.conf ? (b.options ? 'the only option' : 'the engine\'s pick')
+          : b.delta < 0.005 ? 'tied with the next option' : sgn(b.delta) + ' turns better than the next option · ' + pct(b.conf.p)}</span></h2>`;
+    html += `<div>${groups.map(g => `<b>${esc(g.name)}</b>${g.n > 1 ? ' ×' + g.n : ''}`).join(', ')}</div>`;
+    if (eqs.length) {
+      html += `<div class="hint">Interchangeable for the table: ${eqs.map(c => esc(c.name) + ' ≡ ' + c.equivalents.map(esc).join(' ≡ ')).join('; ')}. Bottoming either one is the same choice.</div>`;
+    }
+    if (b.conf && b.conf.tier === 'Marginal') {
+      html += `<div class="note warn">Close between these bottoms. The table values a card only by how much it speeds up a goldfish kill, so if one of these cards matters against a real opponent (removal, a counterspell, a blocker), keeping it instead costs little.</div>`;
+    }
+  }
+  if (r.bottom && r.bottom.options) {
+    const b = r.bottom, ch = b.chosen;
+    const shown = S.allBottoms ? b.options : b.options.slice(0, 8);
+    const scoreCol = b.shrink;
+    html += '<table><tr><th>#</th><th>Bottom</th><th class="num">Win turn</th>'
+      + (scoreCol ? '<th class="num" title="The table ranks bottoms on this shrunk estimate, which borrows strength from hands holding the same cards">Ranked on</th>' : '')
+      + '<th class="num">vs pick</th><th class="num">±</th><th class="num">Games</th><th></th></tr>';
+    shown.forEach((o, i) => {
+      const names = groupNames(S.table.bottomCards(r.names, o.removed).map(c => c.name)).map(g => esc(g.name) + (g.n > 1 ? ' ×' + g.n : '')).join(', ');
+      const d = o.score - ch.score;
+      html += `<tr class="${o.chosen ? 'chosen' : ''}${o.eligible ? '' : ' ineligible'}"><td>${i + 1}</td><td>${names}</td>`
+        + `<td class="num">${fmt(o.v)}</td>` + (scoreCol ? `<td class="num">${fmt(o.score)}</td>` : '')
+        + `<td class="num">${o.chosen ? 'pick' : sgn(d)}</td><td class="num">${fmt(o.se)}</td><td class="num">${o.n}</td>`
+        + `<td class="hint">${o.chosen ? '◀ the table’s pick' : o.eligible ? '' : 'barely sampled, so the table never picks it'}</td></tr>`;
+    });
+    html += '</table>';
+    if (b.options.length > 8) {
+      html += `<button class="linkish" id="allBottoms">${S.allBottoms ? 'show fewer' : 'show all ' + b.options.length + ' ways to bottom'}</button>`;
+    }
+    if (b.floor >= 0) {
+      html += `<div class="hint">This table spent its games on the bottoms that matter. An option with only ${b.floor} games was never seriously in the running, so it is shown but cannot be picked.</div>`;
+    }
+  } else if (r.bottom) {
+    html += '<div class="hint">The engine\'s own bottoming for this level. With no statistics saved, the alternatives cannot be ranked.</div>';
+  }
+
+  // -- the same 7 at other mulligan counts, and the other side of the coin
+  html += `<h2>These 7 cards at each mulligan count <span class="r hint">${side}</span></h2><div class="ladder">`;
+  for (const l of r.ladder) {
+    const lbl = l.forced ? 'Keep (forced)' : (l.keep ? 'Keep' : 'Mull');
+    html += `<div class="rung ${l.keep ? 'k' : 'mu'}${l.m === r.m ? ' cur' : ''}" data-rung="${l.m}" title="Show this hand after ${plural(l.m, 'mulligan')}">`
+      + `${l.m}: ${lbl}${l.delta === null ? '' : ' <small>' + sgn(l.keep ? l.delta : -l.delta) + '</small>'}</div>`;
+  }
+  html += '</div>';
+  const o = r.other;
+  html += `<div class="hint" style="margin-top:6px">${S.onPlay ? 'On the draw' : 'On the play'} the call would be `
+    + `<b>${o.forced ? 'Keep (forced)' : o.keep ? 'Keep' : 'Mulligan'}</b>${o.delta === null ? '' : ' (' + sgn(Math.abs(o.delta)) + ' turns)'}.`
+    + ` Numbers in the chips are how many turns faster the call is than the alternative.</div>`;
+  el.innerHTML = html;
+}
+
+function groupNames(names) {
+  const out = [];
+  for (const n of names) { const g = out.find(x => x.name === n); if (g) { g.n++; } else { out.push({ name: n, n: 1 }); } }
+  return out;
+}
+
+function renderDeck() {
+  const el = $('#deck');
+  if (!S.cards.length) {
+    el.innerHTML = `<div class="empty">${!S.deck ? 'Choose a deck above.' : S.needAccess ? 'The cards appear once the folder can be read.' : S.error ? '' : 'Reading the decklist…'}</div>`;
+    return;
+  }
+  const t = S.table;
+  const tile = (c) => {
+    const left = copiesLeft(c.name);
+    const eq = t ? t.equivalents(c.name) : [];
+    const unb = t && !t.bucketOf.has(c.name);
+    return `<div class="tile${left <= 0 || S.hand.length >= 7 ? ' out' : ''}" data-add="${esc(c.name)}" title="${esc(c.name)}${eq.length ? ' — the table treats it the same as ' + esc(eq.join(', ')) : ''}${unb ? ' — NOT in the keep table' : ''}">`
+      + cardImg(c.name)
+      + `<span class="cnt">${left < c.count ? left + '/' : '×'}${c.count}</span>`
+      + (eq.length ? '<span class="eq">≡</span>' : '') + (unb ? '<span class="eq" style="background:var(--bad)">!</span>' : '')
+      + `<span class="nm">${esc(c.name)}</span></div>`;
+  };
+  const list = S.cards.filter(c => !S.filter || c.name.toLowerCase().includes(S.filter));
+  // Grouped once the Scryfall lookup has answered for most of the deck; a name it does not know (an
+  // alternate-name printing such as Rick, Steadfast Leader) sorts after the spells, in decklist order.
+  const known = list.filter(c => S.info.get(c.name)).length;
+  if (S.infoPending || known < 0.8 * list.length) { el.innerHTML = `<div class="grid">${list.map(tile).join('')}</div>`; return; }
+  const inf = (c) => S.info.get(c.name) || { type: '', cmc: 99 };
+  const isLand = (c) => /\bLand\b/.test(inf(c).type);   // front face (Pathways are lands, MDFC spells are not)
+  const lands = list.filter(isLand).sort((a, b) => a.name.localeCompare(b.name));
+  const spells = list.filter(c => !isLand(c)).sort((a, b) => (inf(a).cmc - inf(b).cmc) || (inf(a).cmc === 99 ? 0 : a.name.localeCompare(b.name)));
+  const sum = (xs) => xs.reduce((s, c) => s + c.count, 0);
+  el.innerHTML = (spells.length ? `<div class="group"><div class="gh">Spells · ${sum(spells)}</div><div class="grid">${spells.map(tile).join('')}</div></div>` : '')
+    + (lands.length ? `<div class="group"><div class="gh">Lands · ${sum(lands)}</div><div class="grid">${lands.map(tile).join('')}</div></div>` : '');
+}
+
+function renderSide() {
+  const el = $('#tableInfo');
+  const t = S.table;
+  if (!S.deck) { el.innerHTML = '<div class="hint">Choose a deck to see its mulligan table.</div>'; return; }
+  let html = `<div class="deckname">${esc(S.deck.label)}</div>`;
+  if (!t) {
+    el.innerHTML = html + `<div class="hint">${S.error ? 'Could not load.' : S.needAccess ? 'Waiting for permission to read the folder.' : 'Loading…'}</div>`;
+    return;
+  }
+  const s = t.summary();
+  const m = t.meta;
+  document.querySelectorAll('.maxt').forEach(e => { e.textContent = m.max_turns || 8; });
+  document.querySelectorAll('.maxt1').forEach(e => { e.textContent = (m.max_turns || 8) + 1; });
+  document.querySelectorAll('.life').forEach(e => { e.textContent = m.start_life || 20; });
+
+  // -- does it match the table the engine plays? One quiet line when it does; a note for anything else.
+  const cal = s.calibration;
+  if (s.deckMatch === 'mismatch') {
+    html += '<div class="note bad">This decklist is <b>not</b> the one the table was generated on, so every number here is approximate.</div>';
+  } else if (s.deckMatch === 'alias') {
+    html += `<div class="note warn" title="${esc(s.aliasUsed.map(a => a.why).join('\n\n'))}">`
+      + `${s.aliasUsed.map(a => `Reads <b>${esc(a.name)}</b> as <b>${esc(a.as)}</b>`).join('; ')}, as the engine does: `
+      + `the card was renamed after the table was built. Hover for why.</div>`;
+  }
+  if (s.unbucketed.length) {
+    html += `<div class="note bad">Not in the table: ${s.unbucketed.map(c => esc(c.name)).join(', ')}. A hand holding ${s.unbucketed.length === 1 ? 'it' : 'one'} cannot be evaluated.</div>`;
+  }
+  if (!S.deck.compiled) {
+    html += '<div class="note warn">The engine\'s compiled table is not in this folder, so the bottoming rule is unconfirmed. Keep calls are unaffected.</div>';
+  } else if (s.shipped) {
+    const rc = s.recovery || {};
+    if (rc.needed && rc.ok) {
+      const pm = (pd) => fmt(rc.spread[pd][s.maxMull + 1], 3);
+      html += `<div class="note warn">Statistics cover 0–${s.maxMull} mulligans; the engine's table goes to ${s.levels} (the deeper data was never saved). `
+        + `Every call is the engine's own. The value of mulliganing past ${s.maxMull} is recovered from its decisions `
+        + `(±${pm(0)} turns on the draw, ±${pm(1)} on the play).</div>`;
+    } else if (rc.needed) {
+      html += `<div class="note bad">Statistics cover 0–${s.maxMull} mulligans; the engine's table goes to ${s.levels}, and the value of mulliganing past ${s.maxMull} could not be recovered. Calls are the engine's own; the numbers may not explain them.</div>`;
+    } else {
+      html += '<div class="note warn">The raw data does not reproduce the engine\'s table exactly, so every call is read from the table itself. Win turns and game counts come from the raw data.</div>';
+    }
+  } else if (cal && !cal.exact) {
+    const lv = (cal.keepMismatchByM || []).map((x, mm) => x ? mm : -1).filter(mm => mm >= 0);
+    html += '<div class="note bad">Does not fully match the engine\'s table'
+      + (cal.problem ? ': ' + esc(cal.problem) : '')
+      + (lv.length ? `. Keep calls differ at ${lv.join(', ')} mulligans (the raw sidecar covers ${s.maxMull}, the engine's table ${cal.shippedMaxMull})` : '')
+      + (cal.bottomMismatch ? `. ${cal.bottomMismatch} of ${cal.bottomChecks} sampled bottoms differ` : '') + '.</div>';
+  } else if (cal && s.deckMatch !== 'mismatch') {
+    const why = (s.deckMatch === 'exact' ? 'Generated on exactly this decklist. ' : '')
+      + `The first ${cal.sampled.toLocaleString()} hands were checked against the table the engine plays, and match exactly.`;
+    html += `<div class="check ok" title="${esc(why)}">✓ Matches the engine's table</div>`;
+  }
+
+  // -- the table's facts
+  const big = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + ' million' : n.toLocaleString();
+  const fact = (k, v, title) => `<dt>${k}</dt><dd${title ? ` title="${esc(title)}"` : ''}>${v}</dd>`;
+  html += '<dl class="facts">'
+    + fact('Expected win turn', `${fmt(s.doptPlay)} play · ${fmt(s.doptDraw)} draw`, 'From a fresh 7, mulliganing optimally')
+    + fact('Simulated games', big(s.totalGames))
+    + fact('7-card hands', s.hands7.toLocaleString())
+    + fact('Games per hand', `up to ${s.R} a side`)
+    + fact('Mulligans', `0–${s.levels}` + (s.levels > s.maxMull ? ` (statistics 0–${s.maxMull})` : ''))
+    + (m.depth !== undefined ? fact('Search', `depth ${m.depth}` + (m.budget_ms > 0 ? `, ${m.budget_ms} ms` : m.budget_ms === 0 ? ', no time limit' : '')) : '')
+    + (m.commit ? fact('Built at', `<code>${esc(String(m.commit).slice(0, 10))}</code>`, m.commit) : '')
+    + '</dl>';
+
+  const groups = t.buckets.map(b => b.filter(n => S.cards.some(c => c.name === n))).filter(g => g.length > 1);
+  if (groups.length) {
+    html += '<div class="sub3">Treated as one card</div>' + groups.map(g => `<div class="eqline">${g.map(esc).join(' ≡ ')}</div>`).join('');
+  }
+  el.innerHTML = html;
+}
+
+renderAll();
+
+// Start-up: the listed decks fill the dropdown at once. If the browser still lets this page read the
+// remembered folder, it is scanned and the last deck loads; otherwise the last deck waits for a click.
+(async () => {
+  if (LISTED) {
+    S.decks = LISTED.map(d => Object.assign({ stub: true }, d));
+    S.deck = S.decks.find(d => d.key === prefs.deck) || null;
+    const pb = $('#pickBtn');
+    pb.textContent = 'Other folder…';
+    pb.className = 'quiet';
+    pb.title = 'Load decks from a folder outside this repo (or drop one on the page)';
+    setStatus('');
+    fillDeckSel();
+  }
+  S.handle = await loadHandle();
+  let granted = false;
+  if (S.handle && S.handle.queryPermission) {
+    try { granted = await S.handle.queryPermission({ mode: 'read' }) === 'granted'; } catch (e) { /* ask later */ }
+  }
+  if (granted) {
+    try { await useDirHandle(S.handle, false, true); return; } catch (e) { /* moved or deleted: ask for a folder */ }
+  }
+  if (S.deck && S.deck.stub) { S.needAccess = true; }
+  renderAll();
+})();
+</script>
+</body>
+</html>
