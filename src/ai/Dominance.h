@@ -465,6 +465,8 @@ static_assert(sizeof(Player) == 200,
 // `scripted_combat_landfall_target` (an int8_t, in the bool padding after deck_has_attack_dig_hand -- an
 // int beside the combat pins cost +8). Classification: FUTURE-DETERMINING, the in-combat Khalni crack's
 // class (set by the main-1 plan, read at THIS turn's declare-attackers), FOLDED in Build(), value-gated.
+// Galadriel's +24 and the Colossus padding-only fields above were made on parallel branches; together
+// 1136, measured (the static_assert compiles) on the rebased tree, 2026-10-17.
 static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

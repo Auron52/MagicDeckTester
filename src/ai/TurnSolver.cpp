@@ -45966,7 +45966,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // tokens never existed. Fungus v2 seed 7021: proven T4 kill, realised T5
             // (docs/design/fungus-v2-fd-diverge-7021.md). The rest of the list is the same gap on
             // the cards that reach it (kicker = Saproling Migration, evoke = Reveillark, convoke,
-            // phyrexian, replicate) plus the four values apply_one consumes from its same-cast
+            // phyrexian, replicate) plus the four values apply_one consumes from its consume-once
             // globals (devour count, twobrid pips, the land-put credit, a walker's cast-time
             // loyalty activation), each of which the replay already installs from the record.
             // NOT recorded: free_cast -- apply_one sees only cascade_free, which a real cascade
@@ -45989,26 +45989,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Equipment and did nothing, while the rollout had attached it and counted the kill
             // (Colossus Hammer s1065 gi64: d0 won T3, every searched depth T5 at any budget).
             rec.attach_equip_id    = cast_attach;
-            // ...and so must every OTHER value the cast was made with. replay_recorded already feeds
-            // all of them back (the m_pending_* channels and cast_by_name's tail arguments), but the
-            // record never captured them, so a continuation cast replayed each one at its default:
-            // Mycoloth's searched devour count, Beseech's coloured twobrid pips, Search for
-            // Tomorrow's land-put credit, a walker's same-cast loyalty activation, the replicate
-            // count, Chord's convoke split, Phyrexian life, evoke, the adventure half and kicker --
-            // the same lockstep class as the float colour above. Each field has the Action's own
-            // default as its "not this kind of cast" value, so a cast that sets none records exactly
-            // what it recorded before.
-            rec.devour_count       = cast_devour;
-            rec.twobrid_colored    = cast_twobrid;
-            rec.rock_mana          = cast_put_credit;
-            rec.loyalty_ability    = cast_loyalty;
-            rec.replicate_count    = replicate_count;
-            rec.convoke_green      = convoke_green;
-            rec.convoke_other      = convoke_other;
-            rec.phyrexian_life     = phyrexian_life;
-            rec.evoke              = evoke;
-            rec.adventure          = adventure;
-            rec.kicked             = kicked;
             // ...and the Archangel free-cast intent: replay_recorded hands Action::free_cast to
             // cast_by_name, which spends the charge at payment as this cast just did. A cascade hit is
             // NOT a free_cast rider (the executor's own cascade trigger casts it) -- false, as before.
