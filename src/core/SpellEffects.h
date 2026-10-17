@@ -11122,6 +11122,194 @@ inline bool EquipmentAttachedTo(const GameState& state, int controller, int equi
     return false;
 }
 
+// ---- "ATTACH TARGET EQUIPMENT TO TARGET CREATURE" (Magnetic Theft; shared with Raubahn) ----------
+// One TARGET-LEGALITY predicate for an effect that attaches a TARGETED Equipment to a TARGETED
+// creature, read by the Magnetic Theft enumeration (TurnSolver CollectActions), its resolution
+// re-check (CR 608.2b) and its human chooser -- and by Raubahn's attack trigger, which adds its own
+// "attacking" constraint on top. PROVISIONAL fold (card note): both sides collapsed to permanents
+// `controller` controls -- the passive opponent holds no Equipment, and our Equipment on its
+// creature only removes our bonus (the Ardenn precedent).
+//   * `equip_id`: an Equipment on the battlefield. One that is currently a CREATURE (a loose
+//     reconfigure piece, or an animated Equipment) is a legal target only with reconfigure
+//     (CR 301.5c; Lizard Blades 2022-02-18 ruling: "can be attached to creatures by effects other
+//     than its reconfigure ability"), and it stops being a creature once attached (ApplyEquip ->
+//     RefreshReconfigureCreatures). The effect TARGETS it, so shroud (a loose Lizard wearing
+//     Lightning Greaves) or protection from everything makes it illegal (CR 702.18b).
+//   * `host_id`: a creature (or animated permanent), never the Equipment itself (CR 301.5c), not
+//     shrouded, not protection-from-everything (it targets). Hexproof and ward restrict only an
+//     OPPONENT's spells and abilities, so they never bind here.
+// DELIBERATELY NOT TARGET LEGALITY: equip_min_power (O-Naginata's "can be attached only to ..." makes
+// the ATTACH do nothing, CR 701.3b -- the spell still resolves; ApplyEquip enforces it) and "already
+// attached to that creature" (CR 701.3b: the effect does nothing). The enumeration folds the latter
+// pair; neither is a reason the spell cannot be cast.
+inline bool AttachTargetEquipmentLegal(const GameState& state, int controller, int equip_id, int host_id)
+{
+    if (equip_id <= 0 || host_id <= 0 || equip_id == host_id) { return false; }
+    const Permanent* eq = nullptr;
+    const Permanent* host = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.card.m_number == equip_id) { eq = &p; }
+        if (p.card.m_number == host_id)  { host = &p; }
+    }
+    if (eq == nullptr || host == nullptr) { return false; }
+    const CardDefinition* ed = CardDatabase::Instance().LookupCached(eq->card);
+    if (ed == nullptr || !ed->params.is_equipment) { return false; }
+    if ((eq->card.IsCreature() || eq->is_animated) && !ed->params.reconfigure_cost.has_value()) { return false; }
+    if (ed->params.protection_from_everything || CreatureHasShroud(*eq, state)) { return false; }
+    if (!host->card.IsCreature() && !host->is_animated) { return false; }
+    if (CreatureHasShroud(*host, state)) { return false; }
+    const CardDefinition* hd = CardDatabase::Instance().LookupCached(host->card);
+    if (hd != nullptr && hd->params.protection_from_everything) { return false; }
+    return true;
+}
+
+// The battlefield index of an attach-spell target pinned by card.m_number (`number`), or -1. The exact
+// number first. Otherwise the NAME FALLBACK for a target the plan casts in the same main phase: the
+// variant pinned a HAND copy at enumeration, but apply_one / cast_by_name casts an arbitrary copy of
+// that name, so the permanent's number may differ (ResolveSoloTargetTrick's identical fallback). The
+// pinned copy's name is read off the caster's zones; then the own battlefield permanent of that name
+// that passes `ok` is taken, preferring one that ENTERED THIS TURN (the copy this plan just cast),
+// then one not attached to anything, ties by battlefield order. Deterministic and shared by both
+// worlds -> lockstep.
+template <typename Ok>
+inline int ResolveAttachSpellPiece(const GameState& state, int controller, int number, Ok&& ok)
+{
+    if (number <= 0) { return -1; }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.m_number == number) { return ok(i) ? i : -1; }
+    }
+    const Player& pl = state.players[controller];
+    const std::string* name = nullptr;
+    for (const Card& c : pl.hand)      { if (c.m_number == number) { name = &c.m_name.str(); break; } }
+    if (name == nullptr)
+    { for (const Card& c : pl.graveyard) { if (c.m_number == number) { name = &c.m_name.str(); break; } } }
+    if (name == nullptr)
+    { for (const Card& c : pl.library)   { if (c.m_number == number) { name = &c.m_name.str(); break; } } }
+    if (name == nullptr) { return -1; }
+    int best = -1, best_score = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller || p.card.m_name.str() != *name || !ok(i)) { continue; }
+        const int score = (p.entered_this_turn ? 2 : 0) + (p.equipped_to == 0 ? 1 : 0);
+        if (score > best_score) { best = i; best_score = score; }
+    }
+    return best;
+}
+
+// Resolve "Attach target Equipment to target creature" (Magnetic Theft, CardParams::
+// attach_target_equipment) cast by `controller`. `equip_number` / `host_number` = the SEARCHED pair
+// (Action::attach_equip_id / Action::enchant_target, carried on StackEntry in the executor and through
+// apply_one's consume-once channel in the rollout). The ONE resolver, called identically by the
+// executor (EffectHandler's custom non-permanent branch) and the rollout / human apply
+// (TurnSolver::apply_one) -> lockstep by construction.
+//   * Each target re-checked at resolution (CR 608.2b): a pinned piece that is gone or no longer a
+//     legal target makes the spell do nothing (it still went to the graveyard and still counted as a
+//     spell cast -- the caller's cast path owns both).
+//   * HUMAN PLAY: both targets are BOARD CLICKS at resolution through g_play_loyalty_chooser (the
+//     `target` decision, the Terastodon / Phylath shape), over the full RULES-legal set, with the
+//     searched pair PRESELECTED -- the enumerator's variants are a search axis and must not bind a
+//     human (the Zada trick precedent). A forced pick (one legal option) is not prompted. The chooser
+//     is nulled by RevealLogPause in every search / rollout / enumeration scope, so autonomous play
+//     and every enumeration take the searched pair.
+//   * The attach is the shared ApplyEquip: equip costs are BYPASSED (this is not the Equipment's
+//     equip ability), equip_min_power still binds (a failing gate is a no-op, CR 701.3b), Grafted
+//     Wargear's re-host sacrifice fires, and a reconfigure piece stops being a creature (its own gear
+//     falls off). NOT AN EQUIP ABILITY: Player::equip_activated_this_turn is never touched, so a
+//     first-equip waiver (Kili; Forge Anew) is neither consumed nor granted by it.
+// Returns true when the attach was attempted on two legal targets.
+inline bool ResolveAttachTargetEquipment(GameState& state, int controller, const CardDefinition& def,
+                                         int equip_number, int host_number)
+{
+    auto eq_ok = [&](int i) -> bool
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.is_equipment) { return false; }
+        for (const Permanent& h : state.battlefield)
+        {
+            if (h.controller_index == controller
+                && AttachTargetEquipmentLegal(state, controller, p.card.m_number, h.card.m_number))
+            { return true; }
+        }
+        return false;
+    };
+    // HUMAN PLAY re-picks both targets on the board (see the header). A person is asked even when the
+    // pinned pair no longer resolves -- e.g. they queued the Theft ahead of the Hammer it was meant to
+    // move: the targets are THEIRS to choose from what is on the battlefield now, exactly as they
+    // would be on the stack. Autonomously a pin that does not resolve is the 608.2b no-effect.
+    const bool human = g_play_loyalty_chooser != nullptr && !g_tap_speculating;
+    int ei = ResolveAttachSpellPiece(state, controller, equip_number, eq_ok);
+    if (ei < 0 && !human) { return false; }   // the declared Equipment is gone / illegal (608.2b)
+    int eq_num = ei >= 0 ? state.battlefield[static_cast<std::size_t>(ei)].card.m_number : 0;
+    auto host_ok = [&](int i) -> bool
+    {
+        return AttachTargetEquipmentLegal(state, controller, eq_num,
+                                          state.battlefield[static_cast<std::size_t>(i)].card.m_number);
+    };
+    int hi = ei >= 0 ? ResolveAttachSpellPiece(state, controller, host_number, host_ok) : -1;
+    if (hi < 0 && !human) { return false; }   // the declared creature is gone / illegal (608.2b)
+
+    if (human)
+    {
+        std::vector<int> legal_eq;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].controller_index == controller && eq_ok(i))
+            { legal_eq.push_back(i); }
+        }
+        if (legal_eq.empty()) { return false; }
+        int heur = 0;
+        bool hit = false;
+        for (int k = 0; k < static_cast<int>(legal_eq.size()); ++k) { if (legal_eq[k] == ei) { heur = k; hit = true; break; } }
+        if (!hit) { ei = legal_eq[0]; }
+        if (legal_eq.size() > 1)
+        {
+            const int c = (*g_play_loyalty_chooser)(state, controller, def.card.m_name.str(),
+                "the Equipment that gets attached (target Equipment -- an attached one MOVES; the creature is picked next)",
+                legal_eq, heur);
+            if (c >= 0 && c < static_cast<int>(legal_eq.size())) { ei = legal_eq[static_cast<std::size_t>(c)]; }
+        }
+        eq_num = state.battlefield[static_cast<std::size_t>(ei)].card.m_number;
+        std::vector<int> legal_host;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].controller_index == controller && host_ok(i))
+            { legal_host.push_back(i); }
+        }
+        if (legal_host.empty()) { return false; }
+        heur = 0;
+        hit = false;
+        for (int k = 0; k < static_cast<int>(legal_host.size()); ++k)
+        { if (legal_host[k] == hi) { heur = k; hit = true; break; } }
+        if (!hit) { hi = legal_host[0]; }
+        if (legal_host.size() > 1)
+        {
+            const int c = (*g_play_loyalty_chooser)(state, controller, def.card.m_name.str(),
+                "the creature that receives " + state.battlefield[static_cast<std::size_t>(ei)].card.m_name.str()
+                + " (target creature)", legal_host, heur);
+            if (c >= 0 && c < static_cast<int>(legal_host.size())) { hi = legal_host[static_cast<std::size_t>(c)]; }
+        }
+    }
+    const int host_num = state.battlefield[static_cast<std::size_t>(hi)].card.m_number;
+    // CR 608.2b re-check of the final pair (a no-op guard for the autonomous path, which resolved
+    // both indices through the same predicate just above).
+    if (!AttachTargetEquipmentLegal(state, controller, eq_num, host_num)) { return false; }
+    const std::string eq_name   = state.battlefield[static_cast<std::size_t>(ei)].card.m_name.str();
+    const std::string host_name = state.battlefield[static_cast<std::size_t>(hi)].card.m_name.str();
+    ApplyEquip(state, controller, eq_num, host_num);   // indices are stale after this (Wargear / refresh)
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      def.card.m_name.str() + ": attach " + eq_name + " -> " + host_name);
+    }
+    return true;
+}
+
 // THIS combat's damage from one controlled creature, as DeclareAttackerIndices + ResolveCombatDamage
 // will realise it: 0 unless it can attack (CanAttackFull -- haste from an attached equip_grants_haste
 // piece included) and the provider would declare it (AttackWith); otherwise its gate power (base +

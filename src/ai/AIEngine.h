@@ -388,6 +388,10 @@ private:
     // idiom in the rollout twin. -1 = not a devour cast.
     int m_pending_devour_count = -1;
     int m_pending_twobrid = 0;   // Beseech twobrid variant (Action::twobrid_colored); consume-once in CastSpellFromHand
+    // Magnetic Theft's searched EQUIPMENT target (Action::attach_equip_id), set beside
+    // m_pending_devour_count at every plan-execution cast site and consumed (consume-once, before any
+    // early return) by CastSpellFromHand onto StackEntry::attach_equip_id. 0 = not an attach spell.
+    int m_pending_attach_equip = 0;
     // Land-put credit (Search for Tomorrow hard-cast; Action::rock_mana on a LandSearchPutsUntapped
     // cast): consume-once in CastSpellFromHand onto StackEntry::land_put_credit, so the resolution
     // restricts the pick exactly as the rollout's apply_one does (cast_land_put). Empty elsewhere.

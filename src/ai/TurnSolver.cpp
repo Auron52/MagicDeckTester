@@ -3023,6 +3023,9 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         // limiter silently picks a winner among real alternatives. Gated on the sentinel, so no
         // existing deck's signature moves.
         if (a.devour_count >= 0)      { k += "/D" + std::to_string(a.devour_count); }
+        // Magnetic Theft's (Equipment, creature) pair -- two pairs are a substitution, not a subset.
+        if (a.attach_equip_id != 0)
+        { k += "/MT" + std::to_string(a.attach_equip_id) + ">" + std::to_string(a.enchant_target); }
         if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
         if (a.alt_cost)               { k += "/alt"; }
         if (!a.tutor_target.empty())  { k += "/t" + a.tutor_target; }
@@ -13167,6 +13170,13 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
+    // Magnetic Theft's Equipment target is a searched axis too (the creature rides enchant_target,
+    // above). Folded only when set, so every other deck's signature is byte-identical.
+    if (a.attach_equip_id != 0)
+    {
+        FoldMix(h, 0xA77Aull + static_cast<std::uint64_t>(a.attach_equip_id));
+        FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.attach_equip_hand.str())));
+    }
     FoldMix(h, static_cast<std::uint64_t>(a.eval));
     FoldMix(h, static_cast<std::uint64_t>(a.direct_damage));
     FoldMix(h, a.is_noncreature ? 1u : 0u);
@@ -15060,6 +15070,100 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     return false;
 }
 
+// Magnetic Theft subset legality + one sound fold (CardParams::attach_target_equipment; the creature
+// side of a same-plan hand target is SubsetHasMissingTrickTarget's job via trick_hand_target).
+//   (a) STRANDED EQUIPMENT: a Theft whose Equipment target is a same-plan HAND cast (attach_equip_hand)
+//       needs this subset to cast an Equipment of that NAME -- a targeted spell cannot be cast without
+//       its target (CR 601.2c). By name, because copies are fungible (the resolver's name fallback).
+//   (b) REDUNDANT ATTACH: the same BATTLEFIELD Equipment is the subject of a second attach in this
+//       subset (another Theft of it, or an Equip of it). Only the later attach survives -- the
+//       trailing Equip pass runs after every cast, and two Thefts resolve in cast order -- so the
+//       earlier one spends a card and mana for a board the subset WITHOUT it reaches exactly, and that
+//       subset is enumerated (a Theft and an Equip are optional digits). A dominance fold, and sound
+//       only where the INTERMEDIATE attachment cannot be observed, so it is skipped when either piece
+//       could make it matter: a HASTE granter (a mid-plan host can tap for mana -- the mana-unlock
+//       hoist), a SHROUD granter (it blocks a target in between), a RE-HOST SACRIFICE (Grafted
+//       Wargear kills the intermediate host), or any min-power-gated Equipment on our board / in hand
+//       (an intermediate +power could admit an O-Naginata attach that then stays). Like the CR 701.3b
+//       no-op fold at emission it assumes nothing pays off the CAST itself (no prowess-style reader on
+//       a Theft deck) -- PROVISIONAL, card note. A same-plan HAND piece is never folded here: with two
+//       copies cast, two Thefts can genuinely take two different copies.
+//   (c) ONTO A PIECE THAT IS ATTACHED ITSELF: a Theft whose CREATURE target is a loose reconfigure
+//       piece (Lizard Blades) that this subset also attaches (an Equip/reconfigure of it, or another
+//       Theft of it). However the casts interleave, the piece stops being a creature and whatever was
+//       attached to it falls off (CR 704.5n) -- or, attached first, it is no longer a legal target --
+//       so the Theft at best re-reaches the board of the subset without it, and that subset is
+//       enumerated. Same observability guards as (b).
+//   (d) ...and the mirror: an Equip whose HOST is such a piece a Theft in this subset attaches. The
+//       trailing Equip pass finds a non-creature host and declines before paying (CanAttachEquip), so
+//       the subset realises exactly the subset without that Equip -- an identity fold.
+// Lockstep: called from both subset walkers (Solve::consider and EnumeratePlans::eval_and_push) behind
+// SubsetFilterPre::attach_spell. Inert for every deck without the card.
+static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel)
+{
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.attach_equip_id == 0) { continue; }
+        if (!a.attach_equip_hand.empty())
+        {
+            bool found = false;
+            for (int k : sel)
+            {
+                if (k == j || cands[k].kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* kd = cands[k].def;
+                if (kd != nullptr && kd->params.is_equipment && cands[k].card_name == a.attach_equip_hand)
+                { found = true; break; }
+            }
+            if (!found) { return true; }
+            continue;
+        }
+        bool twice = false;
+        for (int k : sel)
+        {
+            if (k == j) { continue; }
+            const Action& c = cands[k];
+            if ((c.kind == Action::Kind::CastFromHand && c.attach_equip_id == a.attach_equip_id
+                 && c.attach_equip_hand.empty())
+                || (c.kind == Action::Kind::Equip && c.sac_source_id == a.attach_equip_id))
+            { twice = true; break; }
+            // (c)/(d): the Theft's creature is a battlefield piece another action attaches, or this
+            // Theft attaches the creature another action equips. enchant_target / sac_victim_id are
+            // m_numbers; a reconfigure piece is the only Equipment that is also a creature host.
+            const int c_attaches = c.kind == Action::Kind::Equip ? c.sac_source_id
+                                 : (c.kind == Action::Kind::CastFromHand && c.attach_equip_hand.empty()
+                                    ? c.attach_equip_id : 0);
+            if (a.trick_hand_target.empty() && c_attaches != 0 && c_attaches == a.enchant_target)
+            { twice = true; break; }
+            if (c.kind == Action::Kind::Equip && c.sac_victim_id == a.attach_equip_id)
+            { twice = true; break; }
+        }
+        if (!twice) { continue; }
+        // The observability guards (see the header) -- read only once a double attach is found.
+        bool observable = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.is_equipment) { continue; }
+            if (d->params.equip_min_power > 0) { observable = true; break; }
+            if (p.card.m_number == a.attach_equip_id
+                && (d->params.equip_grants_haste || d->params.equip_grants_shroud
+                    || d->params.equip_sacrifices_prior_host))
+            { observable = true; break; }
+        }
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            if (observable) { break; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.is_equipment && d->params.equip_min_power > 0) { observable = true; }
+        }
+        if (!observable) { return true; }
+    }
+    return false;
+}
+
 // ---- PER-ENUMERATION FILTER PRECONDITIONS (SubsetFilterPre) -----------------------------------
 //
 // THE DEFECT THIS CLOSES. Both subset walkers -- Solve::consider and EnumeratePlans::eval_and_push,
@@ -15215,6 +15319,10 @@ struct SubsetFilterPre
     // bools; a member added here keeps its initialiser (kDupAll = every clause live = unoptimised),
     // which is the same "forgetting one costs speed, never correctness" contract as the bits.
     unsigned dup_clause = kDupAll;
+    // SubsetHasStrandedAttachSpell (Magnetic Theft). Placed after the positional aggregate init on
+    // purpose: it keeps its TRUE initialiser (unoptimised) on the instruments-armed path, and the
+    // builder below lowers it explicitly before raising it per candidate.
+    bool attach_spell = true;
 };
 
     // Aura-target shroud grantors (see the struct / SubsetHasShroudBlockedAura). Grantors first, so a
@@ -15320,6 +15428,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     // unoptimised behaviour -- so forgetting one costs speed, never correctness.
     p = SubsetFilterPre{ false, false, false, false, false, false, false, false, false,
                          false, false, false, false, false, false, false, false, false };
+    p.attach_spell = false;
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
     bool best_target = false;   // a kTrickBestOwnTarget cand (MTG_MINT_CREDIT_EXACT, Mirrorwing)
     for (const Action& a : cands)
@@ -15350,9 +15459,13 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
                 p.dup_source = true;                      // one activation per source per plan
                 break;
             case Action::Kind::CastFromHand:
-                if (a.enchant_target > 0)                     { p.aura_target = true; }
+                // A Magnetic Theft's creature target rides enchant_target too, but it is no Aura: every
+                // filter and plan sort behind this bit returns false on a non-Aura first, so leaving the
+                // bit down for it is exact (and spares the Theft deck those per-subset lookups).
+                if (a.enchant_target > 0 && a.attach_equip_id == 0) { p.aura_target = true; }
                 if (!a.trick_hand_target.empty())             { p.trick_target = true; }
                 if (a.enchant_target == kTrickBestOwnTarget)  { p.trick_target = true; best_target = true; }
+                if (a.attach_equip_id != 0)                   { p.attach_spell = true; }
                 if (d != nullptr && d->params.splice_onto_arcane) { p.splice = true; }
                 break;
             default: break;
@@ -18492,6 +18605,14 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         fold(static_cast<uint64_t>(a.devour_count + 2) * 97);
         fold(static_cast<uint64_t>(a.soulfire_own_targets + 3) * 13
              + static_cast<uint64_t>(a.enchant_target));
+        // Magnetic Theft's Equipment target: a must-fold like devour_count (two pairs are two plays).
+        // Folded only when set, so every other plan's fingerprint is unchanged.
+        if (a.attach_equip_id != 0)
+        {
+            fold(0x4D54ull + static_cast<uint64_t>(a.attach_equip_id) * 131);   // "MT"
+            folds(a.attach_equip_hand.str());
+            folds(a.trick_hand_target);
+        }
         fold(static_cast<uint64_t>(a.convoke_green) * 37
              + static_cast<uint64_t>(a.convoke_other));
         fold(static_cast<uint64_t>(a.gy_exile_mode + 2) * 11
@@ -18706,6 +18827,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.devour_count) != static_cast<long long>(y.devour_count))
     { add("devour_count", std::to_string(static_cast<long long>(x.devour_count)),
            std::to_string(static_cast<long long>(y.devour_count))); }
+    if (x.attach_equip_id != y.attach_equip_id)
+    { add("attach_equip_id", std::to_string(x.attach_equip_id), std::to_string(y.attach_equip_id)); }
     if (static_cast<long long>(x.replicate_count) != static_cast<long long>(y.replicate_count))
     { add("replicate_count", std::to_string(static_cast<long long>(x.replicate_count)),
            std::to_string(static_cast<long long>(y.replicate_count))); }
@@ -23767,6 +23890,236 @@ static bool SubsetHasIdleReleaseMove(const std::vector<Action>& cands, const std
     return false;
 }
 
+// ---- MAGNETIC THEFT: the (Equipment, creature) TARGET-PAIR AXIS ---------------------------------
+// "Attach target Equipment to target creature" (CardParams::attach_target_equipment). WHICH pair is a
+// SEARCHED decision: CollectActions emits one CastFromHand variant per pair returned here (sharing the
+// Theft's hand_index -> mutually exclusive), and plan_signature keys it (#MT) so the dedup never
+// collapses two pairs. Built ONCE per CollectActions call and reused by every Theft copy in hand.
+//
+// THE SETS (both sides collapsed to OUR permanents -- the PROVISIONAL fold in the card note):
+//   * Equipment: every Equipment on our battlefield that is a legal TARGET (AttachTargetEquipmentLegal's
+//     Equipment half -- an attached one MOVES; a loose reconfigure piece is legal, an animated
+//     non-reconfigure one is not; shroud / protection excluded), plus every Equipment card IN HAND,
+//     one per NAME: the same-plan "cast the Hammer, then Theft it onto the Duelist" line
+//     (SubsetHasStrandedAttachSpell requires the co-cast; the dependency order in
+//     ApplyPayableCastOrder puts the Theft after it). One per name because apply_one casts an
+//     arbitrary copy of a name, so a variant pinned to the copy that is NOT cast would strand
+//     (the Equip enumerator's hand-host dedup, Giants gi4) -- the resolver's name fallback finds the
+//     cast copy.
+//   * Creature: every legal TARGET creature we control (tokens and summoning-sick ones included), plus
+//     every creature card in hand, one per name (SubsetHasMissingTrickTarget requires the co-cast via
+//     trick_hand_target).
+// SOUND IDENTITY FOLDS, and only these (no width heuristic -- the Equip action's ranked / one_host /
+// dominance masks / zero-power withhold are ENGINE-SIDE equip policies and are deliberately NOT
+// copied; any narrowing belongs to DecisionProvider::AttachSpellPairCandidates, which narrows nothing
+// by default):
+//   * Equipment class = name + where it is attached + its counters, and for a piece that is currently
+//     a CREATURE (a loose Lizard Blades) its whole host class below as well (attaching it ends its own
+//     attack and drops its gear, so a sick and a ready Lizard are different moves). Two members of a
+//     class reach the same board up to the identity of interchangeable permanents.
+//   * Creature class = the solo-trick key (name, attack eligibility, until-EOT bonuses and keywords,
+//     counters) + tapped + the multiset of Equipment and Auras attached to it: Kor Duelist's double
+//     strike and Lizard Blades' grant depend on WHAT it wears, so a bare and an equipped Duelist are
+//     never folded.
+//   * The already-attached pair (E on H) is not offered: CR 701.3b, the attach does nothing, so the
+//     cast is a strictly dominated "spend {R} and a card for no change" -- sound because nothing in
+//     the engine pays off the CAST of this card (no prowess / cast-trigger reader on a Theft deck; a
+//     future deck with one must emit the do-nothing variant again). PROVISIONAL, card note.
+//   * A hand-Equipment x hand-creature pair of the SAME name (one card cannot be both) is skipped.
+// `eval` is the ORDERING / PLAYOUT value only (never an emission gate): this combat's attack-damage
+// delta x 100 from BeginCombatHostDamage summed over our permanents, on a scratch board where the
+// hand pieces are materialised and the attach applied through the shared ApplyEquip (so Kor Duelist's
+// double strike, Lizard Blades' creature-ness and a stripped old host are all priced). Main 2 / no
+// gain -> 0, a lost attack -> negative, so the greedy playout (beyond the horizon) never casts a
+// do-nothing Theft. The SEARCH ranks the pairs by rollout, not by this number.
+struct AttachSpellPair
+{
+    int          eq_num   = 0;
+    int          host_num = 0;
+    InternedName eq_hand;          // Equipment target is a same-plan hand cast of this name
+    std::string  host_hand;        // creature target is a same-plan hand cast of this name
+    int          eval     = 0;
+};
+static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state, const CardDefinition& theft,
+                                                          bool is_pre_combat)
+{
+    constexpr int DMG = 100;
+    std::vector<AttachSpellPair> out;
+    const int me = state.active_player_index;
+    const Player& ap = state.ActivePlayer();
+    struct Piece { int num; const CardDefinition* def; const Card* hand; };
+    std::vector<Piece> eqs, hosts;
+
+    // Host class key (see the header), shared by the creature side and a creature-piece Equipment.
+    auto host_key = [&](const Permanent& p) -> std::string
+    {
+        std::string k = p.card.m_name.str();
+        k += CanAttackFull(p, state.battlefield, me) ? "/A" : "/s";
+        k += p.tapped ? "T" : "u";
+        k += "/" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus)
+           + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "") + (p.temp_double_strike ? "D" : "")
+           + "/c" + p.counters.KeyFragment();
+        std::vector<std::string> worn;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me) { continue; }
+            if (q.equipped_to == p.card.m_number || q.aura_attached_to == p.card.m_number)
+            { worn.push_back(q.card.m_name.str() + "/c" + q.counters.KeyFragment()); }
+        }
+        std::sort(worn.begin(), worn.end());
+        for (const std::string& w : worn) { k += "|" + w; }
+        return k;
+    };
+
+    {
+        std::unordered_set<std::string> seen_eq, seen_host;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            const bool creature = p.card.IsCreature() || p.is_animated;
+            if (d != nullptr && d->params.is_equipment)
+            {
+                // The Equipment half of AttachTargetEquipmentLegal (the host half is checked per pair).
+                const bool legal = (!creature || d->params.reconfigure_cost.has_value())
+                                && !d->params.protection_from_everything && !CreatureHasShroud(p, state);
+                std::string k = p.card.m_name.str() + "/@" + std::to_string(p.equipped_to)
+                              + "/c" + p.counters.KeyFragment();
+                if (creature) { k += "/" + host_key(p); }
+                if (legal && seen_eq.insert(k).second) { eqs.push_back({ p.card.m_number, d, nullptr }); }
+            }
+            if (creature)
+            {
+                if (d != nullptr && d->params.protection_from_everything) { continue; }
+                if (CreatureHasShroud(p, state)) { continue; }
+                if (seen_host.insert(host_key(p)).second) { hosts.push_back({ p.card.m_number, d, nullptr }); }
+            }
+        }
+    }
+    {
+        std::unordered_set<std::string> seen_eq_hand, seen_host_hand;
+        for (const Card& hc : ap.hand)
+        {
+            if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(hc);
+            if (d == nullptr || d->params.protection_from_everything) { continue; }
+            if (d->params.is_equipment && (!d->card.IsCreature() || d->params.reconfigure_cost.has_value())
+                && seen_eq_hand.insert(hc.m_name.str()).second)
+            { eqs.push_back({ hc.m_number, d, &hc }); }
+            if (d->card.IsCreature() && seen_host_hand.insert(hc.m_name.str()).second)
+            { hosts.push_back({ hc.m_number, d, &hc }); }
+        }
+    }
+    if (eqs.empty() || hosts.empty()) { return out; }
+
+    for (const Piece& e : eqs)
+    {
+        for (const Piece& h : hosts)
+        {
+            if (e.num == h.num) { continue; }                                   // never itself (CR 301.5c)
+            if (e.hand != nullptr && h.hand != nullptr && e.hand->m_name == h.hand->m_name) { continue; }
+            if (e.hand == nullptr && h.hand == nullptr)
+            {
+                if (!AttachTargetEquipmentLegal(state, me, e.num, h.num)) { continue; }
+                if (EquipmentAttachedTo(state, me, e.num, h.num)) { continue; }   // CR 701.3b no-op fold
+            }
+            AttachSpellPair pr;
+            pr.eq_num   = e.num;
+            pr.host_num = h.num;
+            if (e.hand != nullptr) { pr.eq_hand = e.hand->m_name; }
+            if (h.hand != nullptr) { pr.host_hand = h.hand->m_name.str(); }
+            out.push_back(std::move(pr));
+        }
+    }
+
+    // Provider narrowing (DecisionProvider::AttachSpellPairCandidates; the default narrows nothing).
+    // Never under human play or MTG_UNPRUNED: a breadth policy must not bind a human.
+    if (!out.empty() && !HumanPlayActive() && !DecisionUnpruned())
+    {
+        std::vector<std::pair<int, int>> pairs;
+        pairs.reserve(out.size());
+        for (const AttachSpellPair& pr : out) { pairs.emplace_back(pr.eq_num, pr.host_num); }
+        ResolveProvider(state).AttachSpellPairCandidates(state, theft, pairs);
+        if (pairs.size() != out.size())
+        {
+            std::vector<AttachSpellPair> kept;
+            for (AttachSpellPair& pr : out)
+            {
+                if (std::find(pairs.begin(), pairs.end(), std::make_pair(pr.eq_num, pr.host_num)) != pairs.end())
+                { kept.push_back(std::move(pr)); }
+            }
+            out.swap(kept);
+        }
+    }
+
+    // ORDERING / PLAYOUT value (see the header): this combat's damage delta on a scratch board.
+    if (is_pre_combat && !out.empty())
+    {
+        GameState scratch = state;
+        for (const Piece& pc : eqs)
+        {
+            if (pc.hand == nullptr) { continue; }
+            Permanent np;
+            np.card = pc.def->card;
+            np.card.m_number = pc.num;
+            np.controller_index = me;
+            np.owner_index = me;
+            np.entered_this_turn = true;
+            scratch.battlefield.push_back(np);
+        }
+        for (const Piece& pc : hosts)
+        {
+            if (pc.hand == nullptr) { continue; }
+            bool dup = false;   // a hand Lizard is both a piece and a host: materialise it once
+            for (const Permanent& q : scratch.battlefield) { if (q.card.m_number == pc.num) { dup = true; break; } }
+            if (dup) { continue; }
+            Permanent np;
+            np.card = pc.def->card;
+            np.card.m_number = pc.num;
+            np.controller_index = me;
+            np.owner_index = me;
+            np.entered_this_turn = true;
+            scratch.battlefield.push_back(np);
+        }
+        auto board_damage = [&](const GameState& g) -> int
+        {
+            int dmg = 0;
+            for (const Permanent& q : g.battlefield)
+            { if (q.controller_index == me) { dmg += BeginCombatHostDamage(g, q); } }
+            return dmg;
+        };
+        const int before = board_damage(scratch);
+        for (AttachSpellPair& pr : out)
+        {
+            const CardDefinition* ed = nullptr;
+            for (const Piece& pc : eqs) { if (pc.num == pr.eq_num) { ed = pc.def; break; } }
+            // A PLAIN piece (no reconfigure, no re-host sacrifice) changes nothing but its own
+            // equipped_to -- no creature-ness flips, no permanent leaves -- so it is priced by a
+            // flip-and-restore on the one scratch board instead of a board copy per pair. The gate
+            // ApplyEquip would apply (min power, a creature host) is checked first: a refused attach
+            // is a no-op, delta 0.
+            if (ed != nullptr && !ed->params.reconfigure_cost.has_value()
+                && !ed->params.equip_sacrifices_prior_host)
+            {
+                if (!CanAttachEquip(scratch, me, pr.eq_num, pr.host_num)) { pr.eval = 0; continue; }
+                Permanent* ep = nullptr;
+                for (Permanent& q : scratch.battlefield)
+                { if (q.controller_index == me && q.card.m_number == pr.eq_num) { ep = &q; break; } }
+                if (ep == nullptr) { pr.eval = 0; continue; }
+                const int was = ep->equipped_to;
+                ep->equipped_to = pr.host_num;
+                pr.eval = (board_damage(scratch) - before) * DMG;
+                ep->equipped_to = was;
+                continue;
+            }
+            GameState after = scratch;
+            ApplyEquip(after, me, pr.eq_num, pr.host_num);
+            pr.eval = (board_damage(after) - before) * DMG;
+        }
+    }
+    return out;
+}
+
 // The card definition CollectActions' closing pass stamps on every action ("Resolve each action's card
 // definition ONCE", at the end of CollectActions): a hand-sourced action reads its hand card's memoized
 // def, anything else is looked up by name. ONE expression, shared by that pass and by every block INSIDE
@@ -23848,6 +24201,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // move-copies every element -- and CollectActions is called on the rollout hot path (millions of
     // times). A hint only: the contents and order are unchanged, so every game stays byte-identical.
     actions.reserve(ap.hand.size() + state.battlefield.size());
+    // Magnetic Theft's (Equipment, creature) pairs: built once per call, shared by every copy in hand.
+    const CardDefinition* attach_pairs_for = nullptr;
+    std::vector<AttachSpellPair> attach_pairs;
 
     // --- Hand casts ---
     for (int i = 0; i < n; ++i)
@@ -25685,6 +26041,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.enchant_target = -1;   // decline: enter as the printed 3/1
                 actions.push_back(std::move(a));
             }
+        }
+
+        // Magnetic Theft ("Attach target Equipment to target creature"): WHICH (Equipment, creature)
+        // pair is a SEARCH decision -- one CastFromHand variant per pair BuildAttachSpellPairs keeps
+        // (sharing hand_index -> mutually exclusive). The Equipment rides attach_equip_id (+ its name
+        // in attach_equip_hand when it is a same-plan hand cast), the creature rides enchant_target
+        // (+ trick_hand_target for a same-plan hand creature -- SubsetHasMissingTrickTarget's job).
+        // NO untargeted cast: with no legal pair the spell cannot be cast at all (CR 601.2c), so the
+        // card simply stays in hand. Param-gated -> every other deck byte-identical.
+        if (def.params.attach_target_equipment)
+        {
+            if (attach_pairs_for != &def)
+            {
+                attach_pairs = BuildAttachSpellPairs(state, def, is_pre_combat);
+                attach_pairs_for = &def;
+            }
+            for (const AttachSpellPair& pr : attach_pairs)
+            {
+                Action a;
+                a.kind              = Action::Kind::CastFromHand;
+                a.card_name         = ap.hand[i].m_name;
+                a.hand_index        = i;
+                a.cost              = EffectiveCost(def, state);
+                a.eval              = pr.eval;
+                a.is_noncreature    = true;
+                a.card_mv           = def.card.m_mana_cost.ManaValue();
+                a.enchant_target    = pr.host_num;
+                a.trick_hand_target = pr.host_hand;
+                a.attach_equip_id   = pr.eq_num;
+                a.attach_equip_hand = pr.eq_hand;
+                actions.push_back(std::move(a));
+            }
+            continue;
         }
 
         // Zada/Mirrorwing solo-target trick: WHICH creature it targets is a SEARCH decision --
@@ -35844,7 +36233,8 @@ namespace solvememo
                 || x.chosen_x != y.chosen_x || x.splice_count != y.splice_count
                 || x.replicate_count != y.replicate_count || x.devour_count != y.devour_count
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
-                || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored)
+                || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored
+                || x.attach_equip_id != y.attach_equip_id)
             { return false; }
         }
         return true;
@@ -37092,6 +37482,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Reject a Magnetic Theft whose hand Equipment target is not cast by this subset, and a
+        // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the
+        // other walker. Inert without an attach-spell candidate -> byte-identical.
+        if (pre.attach_spell && SubsetHasStrandedAttachSpell(state, cands, sel)) { return; }
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
@@ -41867,6 +42261,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // -1 = not a devour cast.
     int cast_devour_count = -1;
     int cast_twobrid_colored = 0;   // Beseech twobrid variant (Action::twobrid_colored), consume-once like cast_devour_count
+    // Magnetic Theft's searched EQUIPMENT target (Action::attach_equip_id), consume-once like
+    // cast_devour_count; the creature target rides apply_one's enchant_target. Executor twin:
+    // AIEngine::m_pending_attach_equip -> StackEntry::attach_equip_id. 0 = not an attach spell.
+    int cast_attach_equip = 0;
     // Land-put credit (Search for Tomorrow hard-cast; Action::rock_mana on a LandSearchPutsUntapped cast),
     // consume-once like the two above; restricts the resolution's pick (executor twin: m_pending_land_put).
     ManaPool cast_land_put{};
@@ -42891,6 +43289,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         cast_devour_count = -1;
         const int cast_twobrid = cast_twobrid_colored;   // ditto, Beseech's coloured twobrid pips
         cast_twobrid_colored = 0;
+        const int cast_attach = cast_attach_equip;       // ditto, Magnetic Theft's Equipment target
+        cast_attach_equip = 0;
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
         // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
@@ -44602,6 +45002,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             DestroyAllEnchantments(state);
         }
+        else if (def.params.attach_target_equipment)
+        {
+            // Magnetic Theft ("Attach target Equipment to target creature"): the searched pair --
+            // Equipment on the consume-once cast_attach, creature on enchant_target -- through the
+            // SHARED resolver, in lockstep with EffectHandler's executor branch. Human play asks both
+            // targets on the board inside the resolver (g_play_loyalty_chooser).
+            ResolveAttachTargetEquipment(state, state.active_player_index, def, cast_attach, enchant_target);
+        }
         else if (IsSoloTargetTrick(def.params))
         {
             // Zada/Mirrorwing solo-target trick (Expedite / Fists / Ancestral Anger / Gold Rush /
@@ -45186,7 +45594,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         }
                     }
                     const bool tb = bp_truncate;
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     lo_pending_set = false; lo_pending.clear();
                     fire_unlock();
                     slot_hook(a, tb);
@@ -45338,7 +45746,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -45365,7 +45773,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -45422,7 +45830,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // a.sacrifice_land is true here only under SacLandCastsInOrder; the trailing sac
                     // loop then skips it (spec_hoisted_sac).
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock();
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock();
                     lo_pending_set = false; lo_pending.clear();
                     slot_hook(a, tb);
                     dbg_cast("ord", a, dbg_before);
@@ -45463,7 +45871,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }   // cast here, not in the trailing pass
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     fire_unlock();
                     slot_hook(a, tb);
                 }
@@ -45478,7 +45886,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 prep_free(a);
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
             }
         }
@@ -45487,7 +45895,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
             }
         }
@@ -50039,6 +50447,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Reject a Magnetic Theft whose hand Equipment target is not cast by this subset, and a
+        // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the
+        // other walker. Inert without an attach-spell candidate -> byte-identical.
+        if (pre.attach_spell && SubsetHasStrandedAttachSpell(state, cands, sel)) { return; }
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
@@ -52174,6 +52586,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // byte-identical (the #S/#V/#K precedent).
                         + (act.devour_count >= 0
                            ? ("#D" + std::to_string(act.devour_count)) : "")
+                        // MAGNETIC THEFT's (Equipment, creature) pair: "Theft the Hammer onto the
+                        // Duelist" and "Theft the Warhammer onto the Vindicator" are DIFFERENT
+                        // SPELLS that share a name -- the devour lesson exactly. Without the key the
+                        // name-only dedup keeps the highest-sorted pair and every other pair is
+                        // unfindable at any budget, i.e. a greedy pick inside the search window.
+                        // The hand-target names ride along: a same-plan hand piece is a different
+                        // line from a battlefield copy. Gated on the field (0 = not an attach
+                        // spell), so every other deck's signature is byte-identical.
+                        + (act.attach_equip_id != 0
+                           ? ("#MT" + std::to_string(act.attach_equip_id) + ">"
+                              + std::to_string(act.enchant_target) + "/" + act.attach_equip_hand.str()
+                              + "/" + act.trick_hand_target) : "")
                         // REPLICATE COUNT (CR 702.56, Hatchery Sliver): the devour defect again, on
                         // the axis that was fanned for the USER's no-greedy rule (2026-09-30) and
                         // then never reached the search. CollectActions emits one variant per pinned
@@ -52443,6 +52867,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // not collapse into the untargeted (0) variant of an up-to-one trick.
                 if (act.enchant_target > 0 || act.enchant_target == kTrickBestOwnTarget)
                 { sub.push_back("e" + act.card_name + ">" + std::to_string(act.enchant_target)); }
+                // Magnetic Theft: the EQUIPMENT target is the pair's other half (the creature is the
+                // `e` token above), so two pairs onto one creature stay distinct variants.
+                if (act.attach_equip_id != 0)
+                { sub.push_back("m" + act.card_name + ">" + std::to_string(act.attach_equip_id)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }
@@ -53219,6 +53647,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // ...or a restricted Aura on a not-yet-legal creature before its enabler Aura (same fallback below).
             if (AuraRestrictedNewCreatureEnabled() && OrderingPlacesRestrictedAuraBeforeEnabler(state, cand.actions))
             { continue; }
+            // ...or a Magnetic Theft before the same-plan cast of its Equipment / creature target (it
+            // would resolve to nothing; the explicit route plays this order verbatim). No-op without one.
+            if (OrderingPlacesAttachSpellBeforeTarget(cand.actions)) { continue; }
 
             // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
             std::vector<std::string> dropped;
@@ -77166,6 +77597,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             const CardDefinition* trdef = (a.enchant_target != 0 || a.kind == Action::Kind::CastFromHand)
                                         ? CardDatabase::Instance().Lookup(a.card_name) : nullptr;
             const bool is_trick = trdef && trdef->params.solo_target_trick;
+            // Magnetic Theft: BOTH targets (Equipment on attach_equip_id, creature on enchant_target)
+            // are re-asked at RESOLUTION on the board (ResolveAttachTargetEquipment's two
+            // g_play_loyalty_chooser picks, the searched pair preselected) -- exactly the trick
+            // shape above, so no queue-time sub: the pair variants share a signature and collapse to
+            // one representative, and the human picks on the board.
+            const bool is_attach_spell = trdef && trdef->params.attach_target_equipment;
             if (is_trick)
             {
                 // <= 0: the untargeted (up-to-one) cast, or the opponent-creature variant --
@@ -77264,7 +77701,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             //
             // BOTH conditions are load-bearing and they were fixed independently (2026-09-03): widen
             // the HOST to any permanent, and keep loyalty OUT of this path entirely.
-            if (a.enchant_target > 0 && !is_trick && a.kind != Action::Kind::ActivateLoyalty)
+            if (a.enchant_target > 0 && !is_trick && !is_attach_spell && a.kind != Action::Kind::ActivateLoyalty)
             {
                 std::string art;
                 for (const Permanent& perm : state.battlefield)
@@ -79054,7 +79491,8 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.phyrexian_life, a.twobrid_colored, a.convoke_green, a.convoke_other,
                               a.soulfire_own_targets, a.crackle_targets, a.ponder_keep, a.evoke ? 1 : 0,
                               a.adventure ? 1 : 0, a.bestow ? 1 : 0, a.gy_exile_mode, a.loyalty_ability,
-                              a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0 };
+                              a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
+                              a.attach_equip_id };
             for (int v : f) { k += "|" + std::to_string(v); }
             ks.push_back(std::move(k));
         }

@@ -4016,18 +4016,81 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     g_po_stats.none[site].fetch_add(1, std::memory_order_relaxed);
 }
 
+// Does cast `c` satisfy a dependent Theft's same-plan target of name `nm`? `equipment` selects which
+// side (an Equipment cast for attach_equip_hand, a creature cast for trick_hand_target).
+static bool CastSatisfiesAttachTarget(const Action& c, const std::string& nm, bool equipment)
+{
+    if (c.kind != Action::Kind::CastFromHand || c.attach_equip_id != 0 || c.card_name.str() != nm) { return false; }
+    const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+    return d != nullptr && (equipment ? d->params.is_equipment : d->card.IsCreature());
+}
+static bool IsDependentAttachSpell(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && a.attach_equip_id != 0
+        && (!a.attach_equip_hand.empty() || !a.trick_hand_target.empty());
+}
+
+void ApplyAttachSpellDependencyOrder(const std::vector<Action>& acts, std::vector<int>& order)
+{
+    bool any = false;
+    for (int i : order) { if (IsDependentAttachSpell(acts[static_cast<std::size_t>(i)])) { any = true; break; } }
+    if (!any) { return; }
+    for (std::size_t guard = 0; guard <= order.size(); ++guard)
+    {
+        bool moved = false;
+        for (std::size_t p = 0; p < order.size() && !moved; ++p)
+        {
+            const Action& t = acts[static_cast<std::size_t>(order[p])];
+            if (!IsDependentAttachSpell(t)) { continue; }
+            // The position of the FIRST cast satisfying each dependency; the Theft must follow both.
+            std::size_t need = 0;
+            bool need_set = false;
+            auto first_cast = [&](const std::string& nm, bool equipment)
+            {
+                for (std::size_t q = 0; q < order.size(); ++q)
+                {
+                    if (CastSatisfiesAttachTarget(acts[static_cast<std::size_t>(order[q])], nm, equipment))
+                    {
+                        if (!need_set || q > need) { need = q; need_set = true; }
+                        return;
+                    }
+                }
+            };
+            if (!t.attach_equip_hand.empty()) { first_cast(t.attach_equip_hand.str(), /*equipment=*/true); }
+            if (!t.trick_hand_target.empty()) { first_cast(t.trick_hand_target, /*equipment=*/false); }
+            if (!need_set || need < p) { continue; }   // already after its targets (or cast elsewhere)
+            const int v = order[p];
+            order.erase(order.begin() + static_cast<std::ptrdiff_t>(p));
+            order.insert(order.begin() + static_cast<std::ptrdiff_t>(need), v);   // right after it
+            moved = true;
+        }
+        if (!moved) { return; }
+    }
+}
+
+bool OrderingPlacesAttachSpellBeforeTarget(const std::vector<Action>& acts)
+{
+    std::vector<int> order(acts.size());
+    for (std::size_t i = 0; i < acts.size(); ++i) { order[i] = static_cast<int>(i); }
+    std::vector<int> fixed = order;
+    ApplyAttachSpellDependencyOrder(acts, fixed);
+    return fixed != order;
+}
+
 void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
 {
-    if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); return; }
-    PayableCastOrderCore(state, acts, order, nullptr, 0, /*site=*/0);
+    if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); }
+    else { PayableCastOrderCore(state, acts, order, nullptr, 0, /*site=*/0); }
+    ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
 }
 
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& acts,
                              std::vector<int>& order, const std::vector<InternedName>& hand_exits,
                              int extra_wild)
 {
-    if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); return; }
-    PayableCastOrderCore(state, acts, order, &hand_exits, extra_wild, /*site=*/1);
+    if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); }
+    else { PayableCastOrderCore(state, acts, order, &hand_exits, extra_wild, /*site=*/1); }
+    ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
 }
 
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,
