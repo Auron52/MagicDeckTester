@@ -225,9 +225,9 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   (0.052%), net -8 turns, 13 better / 8 worse, halves +0 / -8 -> VERDICT: KEEP THE DEFAULT (ON).**
 
 ## Claude-play sweep
-- commit: `8c1de4465` (engine identical through `ac2095d02`)
+- commit: `8c1de4465` (engine identical through `ac2095d02`); flagged seeds RE-CHECKED on the final engine (`51573d7e5`), see below
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
-- flags: 1 unresolved      # 2 FIXED (Aid heuristic, USER ruling); 3 FIXED 9674c1cb6; 4-6 FIXED; 1 = the USER cast-order call (fixed by the OFF draft)
+- flags: 4 unresolved      # 1 = the USER cast-order call; 3 new human-menu items from the final recheck IN FLIGHT on colossus-fold (all 2-6 FIXED, recheck-confirmed; tutor fail-to-find FIXED 3ad79d509)
 
 Results (search d5 b200 vs Claude, win turn): 2100001 4/4, 2100002 2/2, 2100003 5/5, 2100004 3/3, 2100005 4/4,
 2100006 5/5, 2100007 **7/2** (Claude kept a 1-lander seeing 6 draws; the static keep mulliganed to 5 -- a keep-table
