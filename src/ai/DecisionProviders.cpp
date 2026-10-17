@@ -35860,16 +35860,58 @@ private:
     std::vector<RepeatRec>      m_rec;
 };
 
-static int Run(Ctx& cx, int forced = kRunUnforced)
+// ---- THE CALLER'S STATE IS RUN'S SNAPSHOT (MTG_EDF_ROUTE_RUN_ORIGIN, DEFAULT ON; =0 copies it again) ----
+// Run keeps a whole copy of its starting state to restore before each attempt. Its silent callers
+// (EdfComboRouteTrial, the apply's trial) have just made cx.s as a copy of a state they hold unchanged
+// for the whole call, so they pass that state as `origin` and Run restores from it instead of copying it
+// a second time: the snapshot is taken at Run's entry, before anything writes cx.s, when the two are
+// copies of each other, and the origin is never written during the call (the trial's is a const
+// reference; the apply's real state is untouched until its trial returns). The live replay passes none
+// (its cx.s IS the real state). MTG_EDF_ROUTE_RUN_ORIGIN_VERIFY=1 compares the two (RouteSig) where the
+// snapshot is taken and counts any difference.
+inline bool RunOriginOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_RUN_ORIGIN", true); return v; }
+inline bool RunOriginVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_RUN_ORIGIN_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_ro_n{0}, g_ro_bad{0};
+struct RunOriginVerifyPrinter
+{
+    ~RunOriginVerifyPrinter()
+    {
+        if (!RunOriginVerify()) { return; }
+        std::fprintf(stderr, "[route-origin] verify: %llu snapshots aliased to the caller's state, %llu MISMATCHES\n",
+                     g_ro_n.load(), g_ro_bad.load());
+    }
+};
+inline RunOriginVerifyPrinter g_ro_printer;
+static const GameState& RunSnapshot(const Ctx& cx, const GameState* origin, std::optional<GameState>& own)
+{
+    if (origin == nullptr || !RunOriginOn()) { return own.emplace(cx.s); }
+    if (RunOriginVerify())
+    {
+        std::vector<long long> a, b;
+        RouteSig(*origin, a);
+        RouteSig(cx.s, b);
+        g_ro_n.fetch_add(1, std::memory_order_relaxed);
+        if (a != b)
+        {
+            g_ro_bad.fetch_add(1, std::memory_order_relaxed);
+            std::fprintf(stderr, "[route-origin] MISMATCH t%d: the caller's state is not Run's start state\n", cx.s.turn_number);
+            return own.emplace(cx.s);
+        }
+    }
+    return *origin;
+}
+
+static int Run(Ctx& cx, int forced = kRunUnforced, const GameState* origin = nullptr)
 {
     if (RouteWon(cx)) { return 1; }
+    std::optional<GameState> own_snapshot;   // MTG_EDF_ROUTE_RUN_ORIGIN: used only when there is no origin
     const Board b0 = ScanBoard(cx);
     const std::vector<Attempt> at = RunAttempts(cx);
     const int attempts = static_cast<int>(at.size());
     if (b0.outlet != 0 && b0.payload != 0)
     {
         if (!BoardDeployOn() || forced == -1) { cx.attempt_used = -1; return Loop(cx); }
-        const GameState snapshot = cx.s;
+        const GameState& snapshot = RunSnapshot(cx, origin, own_snapshot);
         const Ctx saved = cx;
         int direct = 0;
         GameState          direct_state;   // the board loop's own end state, restored if no deploy kills
@@ -35933,7 +35975,7 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
         cx.attempt_used = -1;
         return direct;
     }
-    const GameState snapshot = cx.s;
+    const GameState& snapshot = RunSnapshot(cx, origin, own_snapshot);
     const Ctx saved = cx;
     // A DEVELOP from attempt 0 / 1 returns at once when only those two exist. With later attempts armed
     // it is HELD (and ends attempts 0 / 1 exactly where it used to) while they look for a KILL, and is
@@ -36819,7 +36861,7 @@ int EdfComboRouteTrial(const GameState& s, int me)
     comboroute::Ctx cx(copy, me);
     const auto rs_t0 = rs ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const auto rd_t0 = std::chrono::steady_clock::now();
-    const int r = comboroute::Run(cx);
+    const int r = comboroute::Run(cx, comboroute::kRunUnforced, &s);
     if (r != 0 && comboroute::ApplyReuseOn()) { comboroute::AttemptCacheStore(s, r, cx.attempt_used); }
     if (comboroute::RouteDiagOn())
     {
@@ -36874,7 +36916,7 @@ int EdfComboRouteApply(GameState& s, int me)
         RevealLogPause     _quiet;
         ComboOffApplyPause _nochoosers;
         comboroute::Ctx cx(copy, me);
-        const int tr = comboroute::Run(cx);
+        const int tr = comboroute::Run(cx, comboroute::kRunUnforced, &s);
         if (comboroute::ApplyReuseVerify() && comboroute::ApplyReuseOn())
         {
             if (reuse == nullptr) { comboroute::g_ar_miss.fetch_add(1, std::memory_order_relaxed); }
