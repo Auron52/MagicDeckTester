@@ -333,6 +333,7 @@ add_executable(mtg-test
     test/unit/test_begin_combat_attach.cpp
     test/unit/test_reconfigure.cpp
     test/unit/test_magnetic_theft.cpp
+    test/unit/test_sigardas_aid.cpp
     test/unit/test_forge_anew.cpp
     test/unit/test_attach_folds.cpp
     test/unit/test_equip_host_fold.cpp

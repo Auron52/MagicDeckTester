@@ -44117,6 +44117,85 @@ bool ColossusHammerProvider::OffersRemovalCast(const GameState& s, const CardDef
     return self_target;
 }
 
+// ---- Sigarda's Aid host: a USER-AUTHORISED HEURISTIC PICK -----------------------------------------
+//
+// "Whenever an Equipment you control enters, you may attach it to target creature you control."
+// WHICH creature is ONE provider pick, executor and search alike, and that is deliberate: the USER
+// ruled it a heuristic on 2026-10-17 -- "The host should be handled the same way as kitty. Prefer
+// doublestrike and creatures without summoning sickness." / "And just drop it on something." / "It can
+// be done heuristically." / "Lizard Blades is also a creature replacement as needed." The no-greedy rule
+// confines a provider pick inside the search window to what the USER authorises; this ruling is that
+// authorisation, and it is why this hook is a pick and not a searched axis.
+//
+// WHY THE BASE RULE WAS WRONG HERE: its delta (pw+bonus)*(ds?2:1) - pw*(ds?2:1) has no "can it attack
+// this turn" term, so a summoning-sick double striker ties a ready one and the tie goes to the lower card
+// number. Claude-play sweep seed 2100011 T4: the Hammer went onto the Lizard Blades cast that turn
+// instead of the ready Swiftblade Vindicator -- 2 damage instead of 22, T5 instead of T4, unfindable at
+// any depth or budget because the search never saw the other host.
+//
+// THE RANKING, lexicographic over the caller's rules-legal candidates (it never widens or narrows them):
+//   1. DOUBLE-STRIKE POTENTIAL after the attach: printed double strike, a creature already wearing an
+//      equip_grants_double_strike piece (a host carrying Lizard Blades), double_strike_while_equipped
+//      (Kor Duelist -- the attach itself equips it), a double_strike_min_equipment count this attach
+//      reaches, or the entering piece's own grant.
+//   2. CAN ATTACK THIS TURN: CanAttackFull, combat's own test (untapped, not summoning sick or hasted),
+//      or the entering piece grants haste.
+//   3. higher RESULTING power (gate power + this piece's bonus, EquipAttachDeltaFor) -- the KittyEquipment
+//      consolidation doctrine's "stack it on the one strongest double striker" (ConsolidatesEquips),
+//      applied to the free attach: a host already wearing the Hammer outranks a bare twin.
+//   4. lower card number (deterministic -- it feeds the sim key).
+// "JUST DROP IT ON SOMETHING": any Equipment attaches whenever a legal candidate exists -- no decline.
+// THE ONE DECLINE is Lizard Blades itself entering ("a creature replacement as needed"): it is a 1/1
+// double-strike CREATURE, and attaching it costs that body, so it attaches only onto a candidate that
+// GAINS double strike from it (no double strike now, double strike after), ranked as above; with none it
+// stays a creature -- the base rule's reconfigure decline, kept. A loose Lizard Blades is an ordinary
+// candidate: its printed double strike puts it in tier 1 and its sickness counts like any creature's.
+// Human play: the attach_host click still offers the full legal set, -1 = the "may"; this is its default.
+int ColossusHammerProvider::EquipmentEtbAttachHost(
+    const GameState& s, int controller, const Card& equip_card,
+    const std::vector<int>& candidate_bf_indices) const
+{
+    const CardDefinition* ed = CardDatabase::Instance().LookupCached(equip_card);
+    if (ed == nullptr || !ed->params.is_equipment) { return 0; }
+    const bool reconfigure = ed->params.reconfigure_cost.has_value();
+    struct Key { bool ds; bool ready; int power; int num; };
+    bool have = false;
+    Key best{};
+    for (int idx : candidate_bf_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
+        const Permanent& h = s.battlefield[static_cast<std::size_t>(idx)];
+        if (!h.card.IsCreature() && !h.is_animated) { continue; }
+        if (h.card.m_number == equip_card.m_number) { continue; }   // never onto itself (CR 301.5c)
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
+        const int  n_now  = CountEquipmentAttachedTo(s, controller, h.card.m_number);
+        const bool ds_now = h.card.HasKeyword(Keyword::DoubleStrike) || HasDoubleStrikeFromEquipment(h, s);
+        bool ds_after = ds_now || ed->params.equip_grants_double_strike;
+        if (hd != nullptr)
+        {
+            if (hd->params.double_strike_while_equipped) { ds_after = true; }
+            if (hd->params.double_strike_min_equipment > 0
+                && n_now + 1 >= hd->params.double_strike_min_equipment) { ds_after = true; }
+        }
+        if (reconfigure && (ds_now || !ds_after)) { continue; }   // gains no double strike from it
+        const Key k{ ds_after,
+                     CanAttackFull(h, s.battlefield, controller) || ed->params.equip_grants_haste,
+                     EquipGatePowerOf(h, s)
+                         + EquipAttachDeltaFor(s, controller, h.card.m_number, ed->params).first,
+                     h.card.m_number };
+        bool better = !have;
+        if (!better)
+        {
+            if (k.ds != best.ds)            { better = k.ds; }
+            else if (k.ready != best.ready) { better = k.ready; }
+            else if (k.power != best.power) { better = k.power > best.power; }
+            else                            { better = k.num < best.num; }
+        }
+        if (better) { best = k; have = true; }
+    }
+    return have ? best.num : 0;
+}
+
 // ---- Cast order: the AI-DRAFTED order (MTG_COLOSSUS_ORDER, DEFAULT OFF) ------------------------
 //
 // docs/design/colossus-hammer-cast-order-draft.md, drafted 2026-10-17 under the USER's standing ask

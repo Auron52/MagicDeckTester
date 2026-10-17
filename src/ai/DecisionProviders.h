@@ -694,6 +694,13 @@ public:
     // board, so it spends {W} and a card for no effect (a sound prune; PROVISIONAL until the USER
     // signs it off). Human play and MTG_UNPRUNE=uacast still see it. DecisionProviders.cpp.
     bool OffersRemovalCast(const GameState& s, const CardDefinition& def, bool self_target) const override;
+    // SIGARDA'S AID HOST: a USER-AUTHORISED heuristic pick (USER 2026-10-17: "Prefer doublestrike and
+    // creatures without summoning sickness." / "And just drop it on something." / "It can be done
+    // heuristically."): double-strike potential, then can-attack-this-turn, then resulting power, then
+    // card number; always attaches, except Lizard Blades entering onto nothing that gains double strike
+    // from it. DecisionProviders.cpp, "Sigarda's Aid host".
+    int EquipmentEtbAttachHost(const GameState& s, int controller, const Card& equip_card,
+                               const std::vector<int>& candidate_bf_indices) const override;
     // CAST ORDER: the AI-DRAFTED order (docs/design/colossus-hammer-cast-order-draft.md), behind
     // MTG_COLOSSUS_ORDER (heurarm COLOSSUS_ORDER), DEFAULT OFF until the USER reviews it -- off, every
     // hook below returns the generic answer. DecisionProviders.cpp, "Cast order".

@@ -1,0 +1,25 @@
+{
+ "_comment": "Sigarda's Aid's host for an Equipment cast INSIDE a breakpoint continuation (2026-10-17). Turn 3 with Sigarda's Aid, a summoning-sick Lizard Blades (listed first: the lower card number, the base scorer's tie-break pick) and a ready Swiftblade Vindicator out; hand Steelshaper's Gift, a Colossus Hammer in the library, {W}{1} open. The line: Gift finds the Hammer (site 10 opens the continuation), cast it, the Aid attaches it to the READY Vindicator -- 22 into 20. The Hammer's cast exists only in the continuation, which the executor REPLAYS from the rollout's cast records, so this pins the host rule on the replayed trigger as well as the rollout's. Fails before the ColossusHammerProvider host heuristic (USER 2026-10-17), passes after.",
+ "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {"name": "Lizard Blades", "sick": true},
+  {"name": "Swiftblade Vindicator", "sick": false},
+  {"name": "Sigarda's Aid"},
+  {"name": "Plains"},
+  {"name": "Mountain"},
+  {"name": "Mountain", "tapped": true}
+ ],
+ "hand": ["Steelshaper's Gift"],
+ "library_filler": "Path to Exile",
+ "library_size": 30,
+ "library_top": ["Colossus Hammer"],
+ "depth": 3,
+ "budget_ms": 200,
+ "max_turns": 3,
+ "expect_win_turn": 3
+}
