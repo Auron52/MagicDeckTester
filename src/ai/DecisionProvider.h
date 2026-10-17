@@ -1724,6 +1724,18 @@ public:
         return false;
     }
 
+    // OffersRemovalCast -- whether the AUTONOMOUS search enumerates a controller-search creature
+    // removal (Path to Exile, land_search_for_removal_controller) aimed at one of OUR creatures
+    // (`self_target`: the exile fetches US a tapped basic -- one variant per own-creature class) or at
+    // an OPPONENT's (their search is a no-op). A provider RESTRICTION only: the search still branches
+    // over every variant offered. DEFAULT true for both. Human play never asks (one cast, the board
+    // click picks); MTG_UNPRUNE=uacast / MTG_UNPRUNED re-open a refused opponent target.
+    virtual bool OffersRemovalCast(const GameState& s, const CardDefinition& def, bool self_target) const
+    {
+        (void)s; (void)def; (void)self_target;
+        return true;
+    }
+
     // OffersJitteNonCombatModes -- whether the AUTONOMOUS search enumerates an equipment's
     // non-combat charge modes (Umezawa's Jitte -1/-1, gain 2). DEFAULT false, a provider PRUNE (USER
     // doctrine 2026-08-14: "always use it for +2/+2 ... no reason to use any other mode in

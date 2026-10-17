@@ -44090,3 +44090,29 @@ bool ColossusHammerProvider::RestrictedSecondMainAdmits(const GameState& s, cons
     // remaining test: admit the life-gated source (Speaker), never Sliver Hive / Basri shapes.
     return IsLifeGatedTapTokenSource(CardDatabase::Instance().Lookup(a.card_name));
 }
+
+// ---- Path to Exile: the opponent-target prune (OffersRemovalCast) ------------------------------
+//
+// Path to Exile: "Exile target creature. Its controller may search their library for a basic land
+// card, put that card onto the battlefield tapped, then shuffle." The engine searches BOTH targets
+// (TurnSolver CollectActions: one cast variant per own-creature identity class on enchant_target,
+// plus one opponent-target variant); this hook only RESTRICTS which the autonomous search sees.
+//
+// THE OPPONENT TARGET IS REFUSED, and that is a sound prune here, not a judgement. The only opponent
+// creatures in this goldfish are the passive spawns (GoldFishRunner's PATTERNS), which never attack
+// or block; the opponent's search is a no-op (no library unless the deck reaches it, and nothing taps
+// its lands). So the cast changes the game by exactly "{W} spent, Path in the graveyard, a spawn
+// gone" -- and no card in this list reads any of it: none pays off on casting a spell, on spells cast
+// this turn, on a card entering the graveyard, or on the opponent's board. Holding Path (or
+// self-targeting) is never worse. GOLDFISH-SPECIFIC: re-derive under a real opponent, and re-check
+// if the list gains a cast-payoff or a graveyard/exile reader.
+//
+// THE SELF TARGET STAYS OPEN: every own-creature class is offered, and the search weighs a body
+// against a tapped basic (+1 toward equip {8}). PROVISIONAL like every deck-level decision -- the
+// USER signs off the prune; Path's main-1-only placement is a separate USER question.
+bool ColossusHammerProvider::OffersRemovalCast(const GameState& s, const CardDefinition& def,
+                                               bool self_target) const
+{
+    (void)s; (void)def;
+    return self_target;
+}

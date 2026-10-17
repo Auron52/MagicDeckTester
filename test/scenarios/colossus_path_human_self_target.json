@@ -1,0 +1,36 @@
+{
+ "_comment": "Path to Exile in HUMAN PLAY with only OUR creature on the board: the plan menu must carry exactly ONE target-less Path cast (the board click picks the creature at resolution, over both sides; exiling our own Kor Duelist then asks the tutor_etb basic-land prompt). Before 2026-10-17 a non-lifegain removal needed an opponent creature to be offered at all, so the self-target ramp line was unreachable for the human. (No creature on either side -> no Path cast at all: pinned by test/unit/test_path_to_exile.cpp, since CheckLine grades a target-less line on mana alone and would call it legal_not_enumerated.)",
+ "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Kor Duelist",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Path to Exile"
+ ],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "cast=Path to Exile",
+ "expect_verdict": "accept",
+ "expect_variants": 1
+}

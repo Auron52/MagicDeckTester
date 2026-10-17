@@ -5262,9 +5262,15 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // With allow_self_target the wording must not say "you" for a target whose controller may be
             // EITHER side -- the rider gives the life to the exiled creature's CONTROLLER (CR: "its
             // controller"), so self-targeting gains US life and is a real line in a lifegain deck.
+            // Path to Exile (land_search_for_removal_controller): the rider is a LAND SEARCH by the exiled
+            // creature's controller -- the Swords life wording would be wrong for it.
             const std::string remove_desc = !exile_removal ? std::string()
                 : def.params.tuck_to_library
                 ? std::string("put into its owner's library just beneath the top X cards (a token ceases to exist); no life gain")
+                : def.params.land_search_for_removal_controller
+                ? std::string("exiled; ITS CONTROLLER may search for a basic land, put it onto the battlefield "
+                              "tapped, then shuffle -- so your OWN creature fetches YOU one (the opponent's "
+                              "search does nothing here)")
                 : def.params.allow_self_target
                 ? std::string("exiled; ITS CONTROLLER gains life equal to its power -- so targeting your OWN "
                               "creature gains YOU that life (a Tainted Remedy / Plague Drone flips an "

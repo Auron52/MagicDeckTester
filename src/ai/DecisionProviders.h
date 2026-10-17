@@ -85,7 +85,10 @@ enum class UnprunedGate
                   // search (USER doctrine 2026-08-14: "always use it for +2/+2 in goldfishing" --
                   // the modes are pruned by default; human play always keeps them)
     UACast,       // Unexpectedly Absent hand-cast re-enumerated in autonomous search (USER doctrine
-                  // 2026-08-14: "just not cast for now" -- pruned by default; human play keeps it)
+                  // 2026-08-14: "just not cast for now" -- pruned by default; human play keeps it).
+                  // ALSO the removal-cast family's other prune (2026-10-17): Path to Exile's OPPONENT
+                  // target refused by DecisionProvider::OffersRemovalCast (ColossusHammer). Shared
+                  // rather than a new gate because the 32-bit gate masks are full (_Count == 32).
     TapReserve,   // the mana-CREATURE hold opened as a searched branch instead of a default: the
                   // enumeration emits a second variant of each plan that spends its dorks rather
                   // than sparing them, so the search scores hold-vs-tap per line instead of taking
@@ -685,6 +688,12 @@ public:
     // Implementation + soundness argument: DecisionProviders.cpp, "ColossusHammerProvider".
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
+    // PATH TO EXILE: the autonomous search offers only the SELF-target casts (exile our own creature,
+    // fetch a tapped basic); the opponent-target cast is refused -- it exiles a spawn that never
+    // attacks or blocks, and nothing in this list pays off on casting a spell or reads the opponent's
+    // board, so it spends {W} and a card for no effect (a sound prune; PROVISIONAL until the USER
+    // signs it off). Human play and MTG_UNPRUNE=uacast still see it. DecisionProviders.cpp.
+    bool OffersRemovalCast(const GameState& s, const CardDefinition& def, bool self_target) const override;
 };
 
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other
