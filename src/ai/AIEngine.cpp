@@ -8001,6 +8001,26 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         }
         case Targeting::Creature:
         {
+            // Path to Exile (land_search_for_removal_controller): the target is the PLAN's -- the own
+            // creature the searched self-target variant names (enchant_target), else the opponent
+            // target (the first opponent creature). No legal target -> not cast (CR 601.2c), before
+            // anything is paid; the rollout's apply_one makes the same test (RemovalControllerCastLegal)
+            // before it pays, so a stale variant is skipped in both worlds. Never the prowess fallback
+            // below: that reads `damage` as burn, and this card's damage:1 only selects the exile branch.
+            if (RemovalSearchesForController(*def))
+            {
+                // (A human-play target-less cast takes the board click's default -- apply_one's twin.)
+                const int pidx = enchant_target > 0
+                    ? RemovalOwnTargetIndex(state, state.active_player_index, enchant_target)
+                    : HumanPlayActive() ? RemovalHumanDefaultTarget(state, state.active_player_index)
+                                        : RemovalOpponentTargetIndex(state, state.active_player_index);
+                if (pidx < 0) { return; }
+                Target pt;
+                pt.type            = Target::Type::Permanent;
+                pt.permanent_index = pidx;
+                entry.targets.push_back(pt);
+                break;
+            }
             // Own-creature pump (Invigorate) targets the controller's best attacker; Swords (the
             // controller-lifegain removal) targets the opponent's LARGEST creature ONLY with an enabler
             // in play (else -1 -> not cast; see FindLifegainRemovalTarget); other creature-targeting

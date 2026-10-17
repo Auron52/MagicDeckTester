@@ -9881,6 +9881,23 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             set_bit(j, a.enchant_target);
         }
     }
+    // Path to Exile's SELF target: the exiled creature is out of this turn's attack exactly as a
+    // tapped one is (with whatever it carried -- an Equipment on a tapped host adds nothing either),
+    // so a self-target cast takes its creature's bit. Without it the projection kept crediting an
+    // attacker the plan exiles. Keyed on the card param (a cheap enchant_target test first), so every
+    // other deck's projection is unchanged.
+    if (pending_atk > 0)
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr || !RemovalSearchesForController(*d)) { continue; }
+            if (!attacker(own_perm(a.enchant_target))) { continue; }
+            set_bit(j, a.enchant_target);
+        }
+    }
     // Stage-2 walk flags.
     const bool pump = AttackTeamPumpEtbEnabled();
     bool life = AttackPlanLifegainEnabled();
@@ -24729,7 +24746,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // (Invigorate) needs one of OUR attackers; other creature-targeting spells need an
         // opponent creature.
         Targeting t = def.params.targeting;
-        if (t == Targeting::Creature && def.params.target_own_creature)
+        if (RemovalSearchesForController(def))
+        {
+            // Path to Exile: "target creature" on EITHER side. Its own emission block (below, after
+            // the shared Action fields are built) decides which variants exist -- one per own-creature
+            // class, the provider-gated opponent target, or the human's single cast -- and emits none
+            // when no legal target exists. The burn / prowess gates below do not apply to it.
+        }
+        else if (t == Targeting::Creature && def.params.target_own_creature)
         {
             if (FindBestOwnAttacker(state, state.active_player_index) < 0)
             {
@@ -26737,6 +26761,67 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // creature's summoning sickness is irrelevant: it is the TREASURE that taps, not the body.
         if (def.params.etb_creates_treasures > 0 && EtbTreasureSpendOn())
         { a.rock_mana.wild += def.params.etb_creates_treasures; }
+        // PATH TO EXILE (land_search_for_removal_controller): WHICH creature is exiled is a SEARCHED
+        // axis on enchant_target (the solo-trick / Aura target channel): > 0 = that own creature, whose
+        // controller -- us -- then searches for a tapped basic (the pick rides Plan::land_search_pins);
+        // 0 = the opponent target (the first opponent creature; their search is a no-op).
+        //   * OWN TARGETS fold by RemovalSelfTargetFoldKey (SpellEffects.h) -- an IDENTITY fold: two
+        //     creatures with equal keys leave boards that differ only in which copy id survives. The
+        //     k-th Path in hand names the k-th member of each class (clamped to the class), so "Path
+        //     BOTH Kor Duelists" stays one plan -- a representative-only fold would make two Paths name
+        //     the same creature and the second fizzle, losing that line at every budget.
+        //   * The OPPONENT target is the provider's (DecisionProvider::OffersRemovalCast, default offer
+        //     both; ColossusHammerProvider refuses it: no effect in this goldfish). MTG_UNPRUNE=uacast /
+        //     MTG_UNPRUNED re-open it; one variant stands for every opponent creature (nothing reads
+        //     which one).
+        //   * HUMAN PLAY: one cast, enchant_target 0 -- the board click picks the creature at resolution
+        //     over both sides (apply_one's Removal branch), so nothing is asked twice.
+        // eval 0: the playout beyond the horizon (and the d0 runner) never trades a body for a TAPPED
+        // land on its own -- the value of doing so is the search's to find, inside the window.
+        if (def.tmpl == CardTemplate::Removal && RemovalSearchesForController(def))
+        {
+            const int me = state.active_player_index;
+            a.eval          = 0;
+            a.direct_damage = 0;
+            if (HumanPlayActive())
+            {
+                if (RemovalControllerCastLegal(state, me, 0, /*human=*/true))
+                { Action v = a; v.enchant_target = 0; actions.push_back(std::move(v)); }
+                continue;
+            }
+            const DecisionProvider& rprov = ResolveProvider(state);
+            if (rprov.OffersRemovalCast(state, def, /*self_target=*/true))
+            {
+                // This copy's rank among the controller-search removals in hand.
+                int rank = 0;
+                for (int k = 0; k < i; ++k)
+                {
+                    const CardDefinition* kd = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(k)]);
+                    if (kd != nullptr && RemovalSearchesForController(*kd)) { ++rank; }
+                }
+                std::vector<std::pair<std::string, std::vector<int>>> classes;   // key -> member numbers
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (!RemovalOwnTargetLegal(state, p, me)) { continue; }
+                    std::string key = RemovalSelfTargetFoldKey(state, p);
+                    auto it = std::find_if(classes.begin(), classes.end(),
+                                           [&](const auto& c) { return c.first == key; });
+                    if (it == classes.end()) { classes.push_back({ std::move(key), { p.card.m_number } }); }
+                    else                     { it->second.push_back(p.card.m_number); }
+                }
+                for (const auto& c : classes)
+                {
+                    Action v = a;
+                    v.enchant_target = c.second[std::min<std::size_t>(static_cast<std::size_t>(rank),
+                                                                      c.second.size() - 1)];
+                    actions.push_back(std::move(v));
+                }
+            }
+            if ((DecisionUnpruned(UnprunedGate::UACast) || rprov.OffersRemovalCast(state, def, /*self_target=*/false))
+                && RemovalOpponentTargetIndex(state, me) >= 0)
+            { Action v = a; v.enchant_target = 0; actions.push_back(std::move(v)); }
+            continue;
+        }
         // Terastodon: the ETB destroy-K rides chosen_x on the cast. The v1 engine wired K through
         // the apply/executor path but never EMITTED K > 0, so no Elephant was ever made. The
         // autonomous search emits ONE variant carrying the kEtbKxHeuristic sentinel: K is decided
@@ -43585,6 +43670,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // without a max_casts_after card. See GameState::casts_remaining_this_turn.
         if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
 
+        // Path to Exile: a targeted spell with no legal target cannot be cast (CR 601.2c) -- a
+        // self-target variant whose creature left earlier in this plan, or no opponent creature for
+        // the opponent variant. Checked before any mutation; AIEngine::CastSpellFromHand's target arm
+        // returns before paying on the same predicate (lockstep). Human play (a chooser installed)
+        // only needs SOME legal creature: the board click picks it at resolution.
+        if (def.tmpl == CardTemplate::Removal && RemovalSearchesForController(def)
+            && !RemovalControllerCastLegal(state, state.active_player_index, enchant_target,
+                                           HumanPlayActive() || g_play_target_chooser != nullptr))
+        { return; }
+
         // Cast-time guard for a risky alt payload (Reverent Silence): the search may commit it
         // from a node whose enabler diverges away in the realized line (commit-the-line
         // non-convergence, gi=212). Re-check the gate on the CURRENT board: if no enabler
@@ -44927,6 +45022,46 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
+        else if (def.tmpl == CardTemplate::Removal && RemovalSearchesForController(def))
+        {
+            // Path to Exile: the target is the PLAN's (the own creature the searched self-target
+            // variant names, else the first opponent creature -- AIEngine::CastSpellFromHand's rule),
+            // resolved through the SHARED ResolveCreatureRemovalAt (exile, attachments fall off, and
+            // our own creature's controller -- us -- searches for a tapped basic). The self-target
+            // cast's land-search pin is consumed whether it resolves or not, as the executor's
+            // EffectHandler::ResolveRemoval does.
+            // In HUMAN PLAY a target-less cast (enchant_target 0, the human's one menu entry) resolves
+            // onto the board click's DEFAULT when no chooser answers (a trial apply, a hand-back
+            // replay) -- the same rule AIEngine::CastSpellFromHand applies, so the two agree.
+            const int me     = state.active_player_index;
+            const int ls_pin = enchant_target > 0 ? ConsumeScriptedLandSearchPin() : -1;
+            int ci = enchant_target > 0 ? RemovalOwnTargetIndex(state, me, enchant_target)
+                   : HumanPlayActive()  ? RemovalHumanDefaultTarget(state, me)
+                                        : RemovalOpponentTargetIndex(state, me);
+            // HUMAN PLAY (g_play_target_chooser -- null in every search / rollout scope): the board
+            // click offers every legal creature on BOTH sides (main.cpp, allow_self_target). Default =
+            // the plan's own target when it names one, else our lowest-power creature (the cheapest
+            // body to trade for a basic), else the opponent's. An illegal answer keeps the default.
+            if (g_play_target_chooser)
+            {
+                const int def_ci = enchant_target > 0 && ci >= 0 ? ci : RemovalHumanDefaultTarget(state, me);
+                if (def_ci >= 0)
+                {
+                    std::vector<ChosenTarget> heur = { { 1, def_ci, 0 } };
+                    const std::vector<ChosenTarget> picked =
+                        (*g_play_target_chooser)(state, def, me, 1, 0, heur);
+                    ci = def_ci;
+                    if (!picked.empty() && picked[0].kind == 1 && picked[0].index >= 0
+                        && picked[0].index < static_cast<int>(state.battlefield.size()))
+                    {
+                        const Permanent& pp = state.battlefield[static_cast<std::size_t>(picked[0].index)];
+                        if (pp.card.IsCreature() && (pp.controller_index != me || RemovalOwnTargetLegal(state, pp, me)))
+                        { ci = picked[0].index; }
+                    }
+                }
+            }
+            if (ci >= 0) { ResolveCreatureRemovalAt(state, ci, def, me, ls_pin); }
+        }
         else if (def.tmpl == CardTemplate::Removal)
         {
             // Removal (Swords to Plowshares): exile the opponent's LARGEST creature (max life loss via
@@ -45002,17 +45137,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // AI only; consumes the pump so the safe-alt pass below never double-fires it).
                 // Shared with EffectHandler::ResolveRemoval for lockstep.
                 TryPumpThenSwordsRedirect(state, state.active_player_index, ci, def);
-                int tgt_controller = state.battlefield[ci].controller_index;
-                int tgt_power      = state.battlefield[ci].EffectivePower();
-                if (def.params.damage > 0) { state.exile.push_back(state.battlefield[ci].card); }
-                else { state.players[tgt_controller].graveyard.push_back(state.battlefield[ci].card); }
-                state.battlefield.erase(state.battlefield.begin() + ci);
-                RefreshDevotionCreatures(state);   // lockstep with EffectHandler's tuck branch
-                RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
-                if (def.params.controller_lifegain_equals_power && tgt_power > 0)
-                {
-                    OpponentGainsLife(state, 1 - tgt_controller, tgt_power);
-                }
+                // Exile / graveyard, the attachments fall off (the 2026-10-17 detach fix), the
+                // controller-lifegain rider: the helper EffectHandler::ResolveRemoval also calls.
+                ResolveCreatureRemovalAt(state, ci, def, state.active_player_index, /*pin=*/-1);
             }
         }
         else if (IsManaRitual(def))
@@ -52894,6 +53021,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // and the variant never reached a rollout. Gated on the sentinel, which only
                         // exists under the lever -> every other deck's signature is byte-identical.
                         + (act.enchant_target == kTrickBestOwnTarget ? "#B" : "")
+                        // PATH TO EXILE's searched TARGET (land_search_for_removal_controller): one
+                        // variant per own-creature identity class plus the opponent target (0) --
+                        // DISTINCT plans (the #F / #L precedent). Without it the name-keyed dedup kept
+                        // ONE target per subset, the first emitted, i.e. a greedy pick of which
+                        // creature to exile. Gated on the param, so no other deck's signature moves.
+                        + ((act.def && RemovalSearchesForController(*act.def))
+                           ? ("#PX" + std::to_string(act.enchant_target)) : "")
                         // Planeswalker cast + same-turn loyalty activation (CritterLifegain's Ajani):
                         // the plain cast and each "cast + activate #k" variant are DISTINCT plans
                         // (core invariant; the name-only dedup would keep the first and hide the
@@ -58877,9 +59011,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         continue;
                     }
                     if (d->params.land_search_count <= 0) { continue; }
+                    // Path to Exile: only a SELF-target cast (enchant_target names our creature) holds
+                    // an ordinal -- the rule both resolutions consume by (ResolveCreatureRemovalAt's
+                    // callers); an opponent-target cast holds none.
                     if (a.kind == Action::Kind::CastFromHand
                         && ((d->params.land_search_on_resolve && (d->card.IsInstant() || d->card.IsSorcery()))
-                            || (d->params.land_search_on_enter_or_attack && d->card.IsCreature())))
+                            || (d->params.land_search_on_enter_or_attack && d->card.IsCreature())
+                            || (RemovalSearchesForController(*d) && a.enchant_target > 0)))
                     { ++n_cast; union_into(v_cast, values_of(d, &a, hand_land)); }
                     else if (a.kind == Action::Kind::ActivatePermAbility
                              && (a.ability_mode == Action::AbilityMode::SacLandSearch

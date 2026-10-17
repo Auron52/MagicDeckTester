@@ -32187,6 +32187,188 @@ inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_b
     }
 }
 
+// ---- CREATURE REMOVAL: the exile / graveyard branch, SHARED by both worlds (2026-10-17) -----------
+// EffectHandler::ResolveRemoval (executor) and TurnSolver apply_one's Removal branch (rollout + human
+// play) both resolve a non-tuck creature removal through ResolveCreatureRemovalAt, so the two cannot
+// drift. Three riders, each inert unless its card sets it:
+//   * controller_lifegain_equals_power (Swords to Plowshares): the removed creature's controller gains
+//     its power (OpponentGainsLife(1 - controller) -- a Tainted Remedy turns the opponent's gain into
+//     damage);
+//   * land_search_for_removal_controller (Path to Exile): the removed creature's CONTROLLER "may search
+//     their library for a basic land card, put that card onto the battlefield tapped, then shuffle" --
+//     the shared PerformLandSearch, only when that controller is the CASTER. The passive opponent's
+//     search is a no-op (PROVISIONAL: it has no library unless the deck reaches it, never taps a land,
+//     and no card reads its lands); declining makes no shuffle either (Path ruling 2026-01-27).
+//   * EVERY removal: what was attached to the creature falls off (CR 301.5c Equipment, 303.4c Aura)
+//     -- BUG FIX 2026-10-17: this branch never reset equipped_to / aura_attached_to (the tuck branch
+//     always did), so an Equipment stayed "attached" to a creature that was gone. Before Path the only
+//     route here with an attachment was Swords' HUMAN-only self-target.
+inline bool RemovalSearchesForController(const CardDefinition& d)
+{
+    return d.tmpl == CardTemplate::Removal && d.params.land_search_for_removal_controller
+        && d.params.land_search_count > 0;
+}
+
+// A legal OWN target: a creature we control without shroud (CR 702.18a: shroud stops our own spells
+// too; hexproof does not, so a hexproof host is legal for our own Path) and without protection from
+// everything (Progenitus, CR 702.16b: no spell can target it, ours included).
+inline bool RemovalOwnTargetLegal(const GameState& s, const Permanent& p, int me)
+{
+    if (p.controller_index != me || !p.card.IsCreature() || CreatureHasShroud(p, s)) { return false; }
+    const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+    return d == nullptr || !d->params.protection_from_everything;
+}
+
+// The battlefield index of the own creature `num` (card.m_number) if it is a legal target, else -1.
+inline int RemovalOwnTargetIndex(const GameState& s, int me, int num)
+{
+    if (num <= 0) { return -1; }
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (p.card.m_number == num && p.controller_index == me)
+        { return RemovalOwnTargetLegal(s, p, me) ? i : -1; }
+    }
+    return -1;
+}
+
+// The opponent target: the FIRST opponent creature (AIEngine::FindOpponentCreature's rule, which the
+// executor also applies -- lockstep). Which one is inert: nothing in a goldfish reads it.
+inline int RemovalOpponentTargetIndex(const GameState& s, int me)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != me && p.card.IsCreature()) { return i; }
+    }
+    return -1;
+}
+
+// Is a controller-search removal CASTABLE with this plan target (CR 601.2c: a targeted spell needs a
+// legal target to be cast at all)? `enchant_target` > 0 names an own creature (the searched
+// self-target variant); 0 = the opponent-target variant, or -- in human play (`human`) -- a cast whose
+// target the board click picks at resolution, which needs ANY legal creature. Read by the rollout's
+// apply_one BEFORE it pays, mirrored by AIEngine::CastSpellFromHand's target arm (which returns before
+// it pays): a stale variant (its creature left earlier in the plan) is not cast in either world.
+inline bool RemovalControllerCastLegal(const GameState& s, int me, int enchant_target, bool human)
+{
+    if (enchant_target > 0) { return RemovalOwnTargetIndex(s, me, enchant_target) >= 0; }
+    if (RemovalOpponentTargetIndex(s, me) >= 0) { return true; }
+    if (!human) { return false; }
+    for (const Permanent& p : s.battlefield) { if (RemovalOwnTargetLegal(s, p, me)) { return true; } }
+    return false;
+}
+
+// The human's default when the plan names no own target: our LOWEST-power legal creature (the cheapest
+// body to trade for a tapped basic), else the opponent target. -1 = nothing legal.
+inline int RemovalHumanDefaultTarget(const GameState& s, int me)
+{
+    int best = -1, low = 0;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (!RemovalOwnTargetLegal(s, p, me)) { continue; }
+        const int pw = p.EffectivePower();
+        if (best < 0 || pw < low) { best = i; low = pw; }
+    }
+    return best >= 0 ? best : RemovalOpponentTargetIndex(s, me);
+}
+
+// THE SELF-TARGET IDENTITY FOLD (Path to Exile's searched target). Two own creatures with equal keys
+// are interchangeable as the exiled creature: the boards after exiling either differ only in WHICH copy
+// id remains, which nothing reads. So the cast is emitted once per key (CollectActions), never once per
+// creature -- an identity fold, not a narrowing. SOUNDNESS lives in what the key holds, and a false
+// SPLIT only costs a duplicate variant, so it errs wide:
+//   * every per-permanent field of Permanent.h (the BuildSimKey per-permanent fold's fields and more:
+//     owner, token-ness, every counter family, every once-per-turn flag, until-EOT grants, damage), the
+//     live characteristics (types, keywords, P/T, subtypes -- copy / reconfigure / devotion edits), and
+//     CanAttackFull (which body is lost from this turn's attack);
+//   * WHAT IS ATTACHED to it, by content -- name, counters, charge, tapped -- as a sorted multiset: the
+//     Equipment / Aura that falls off is the difference between exiling the Hammer's host and a bare
+//     copy, and two hosts of a Colossus Hammer each are still one class;
+//   * any OTHER permanent that references it by number (a soulbond partner, a linked exile, a token's
+//     provenance) makes it unique -- the reference would differ between the two boards.
+inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent& p)
+{
+    const int num = p.card.m_number;
+    std::string k = p.card.m_name.str();
+    auto add = [&k](long long v) { k += '|'; k += std::to_string(v); };
+    if (!p.copy_printed_name.empty()) { k += "|cp:" + p.copy_printed_name.str(); }
+    add(p.owner_index);
+    add((p.tapped ? 1 : 0) | (p.entered_this_turn ? 2 : 0) | (p.is_token ? 4 : 0) | (p.is_animated ? 8 : 0)
+        | (p.animated_printed_types ? 16 : 0) | (p.gained_control_this_turn ? 32 : 0)
+        | (p.temp_haste ? 64 : 0) | (p.temp_lifelink ? 128 : 0) | (p.temp_double_strike ? 256 : 0)
+        | (p.skip_next_untap ? 512 : 0) | (p.etb_tap_pending ? 1024 : 0) | (p.exile_at_end ? 2048 : 0)
+        | (p.fresh_hold_exempt ? 4096 : 0) | (p.def_absent ? 8192 : 0)
+        | (p.marked_for_destruction ? 16384 : 0) | (p.pay_sac_eaten ? 32768 : 0)
+        | (p.echo_resolved ? 65536 : 0) | (p.storage_hold_this_turn ? 131072 : 0)
+        | (p.loyalty_activated_this_turn ? 262144 : 0)
+        | (p.colored_cast_lifegain_used_this_turn ? 524288 : 0)
+        | (p.storied_draw_used_this_turn ? 1048576 : 0)
+        | (p.lifegain_counters_used_this_turn ? 2097152 : 0));
+    add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
+    add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
+    add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);
+    add(p.fade_counters); add(p.quest_counters); add(p.hone_counters); add(p.mana_tap_mark);
+    add(p.chosen_color); add(p.garth_chosen_mask); add(p.chosen_keyword_mask); add(p.chosen_subtype_id);
+    add(p.paired_with); add(p.linked_exile_number); add(p.created_by_number);
+    add(p.equipped_to); add(p.aura_attached_to);
+    k += "|c" + p.counters.KeyFragment();
+    add(static_cast<long long>(p.card.m_type_mask));
+    add(static_cast<long long>(p.card.m_keyword_mask));
+    add(p.card.m_power.value_or(-99)); add(p.card.m_toughness.value_or(-99));
+    for (std::size_t i = 0; i < p.card.m_subtypes.size(); ++i) { add(p.card.m_subtypes.IdAt(i)); }
+    k += CanAttackFull(p, s.battlefield, p.controller_index) ? "|A" : "|s";
+    std::vector<std::string> att;
+    for (const Permanent& o : s.battlefield)
+    {
+        if (&o == &p) { continue; }
+        if (o.paired_with == num || o.linked_exile_number == num || o.created_by_number == num)
+        { k += "|ref#" + std::to_string(num); }
+        if (o.equipped_to == num || o.aura_attached_to == num)
+        {
+            att.push_back(o.card.m_name.str() + (o.equipped_to == num ? "/e" : "/a")
+                          + "/c" + o.counters.KeyFragment() + "/v" + std::to_string(o.charge_counters)
+                          + (o.tapped ? "/t" : "/u") + "/o" + std::to_string(o.controller_index));
+        }
+    }
+    std::sort(att.begin(), att.end());
+    for (const std::string& a : att) { k += "|att:" + a; }
+    return k;
+}
+
+// THE resolution of a non-tuck creature removal at battlefield index `bi` (see the block above).
+// `pin` = the in-plan land-search pin the caller consumed for a self-target cast (-1 = the front).
+inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinition& def, int caster,
+                                     int pin)
+{
+    if (bi < 0 || bi >= static_cast<int>(state.battlefield.size())) { return; }
+    Permanent& target = state.battlefield[static_cast<std::size_t>(bi)];
+    const int tgt_controller = target.controller_index;
+    const int tgt_power      = target.EffectivePower();   // captured before the erase (Swords' rider)
+    const int dead_num       = target.card.m_number;
+    if (def.params.damage > 0) { state.exile.push_back(target.card); }   // exile
+    else { state.players[static_cast<std::size_t>(tgt_controller)].graveyard.push_back(target.card); }
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to      == dead_num) { e.equipped_to      = 0; }
+        if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
+    }
+    // Reconfigure (Lizard Blades): a piece freed by the detach above is a creature again. After the
+    // detach, not before, so the refresh sees the host link already cleared.
+    RefreshReconfigureCreatures(state);
+    if (def.params.controller_lifegain_equals_power && tgt_power > 0)
+    {
+        OpponentGainsLife(state, 1 - tgt_controller, tgt_power);
+    }
+    if (RemovalSearchesForController(def) && tgt_controller == caster)
+    {
+        PerformLandSearch(state, tgt_controller, LandSearchSpecOf(def.params), def.card.m_name.str(), pin);
+    }
+}
+
 // ---- PAIN SWEEP (Prevent Damage, 2026-09-27) ------------------------------------------------------
 // The Grove-drip sweep's twin (TapDripLandsIfUseful) for a board where tapping a land for mana is
 // itself the payoff: with Tamanoa out, a painland's coloured tap / an Ancient Tomb / a City of Brass

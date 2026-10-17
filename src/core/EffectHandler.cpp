@@ -814,6 +814,12 @@ void EffectHandler::ResolveCounterSpell(GameState& state, const StackEntry& entr
 void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
                                     const CardDefinition& def)
 {
+    // Path to Exile's land-search pin: a SELF-target cast (entry.enchant_target names our creature --
+    // the searched variant) holds one in-plan land-search ordinal, consumed here whether it resolves
+    // or fizzles, exactly as the rollout's Removal branch consumes it (the pin fan sizes one ordinal
+    // per such cast). An opponent-target cast holds none. Inert for every other removal.
+    const int ls_pin = RemovalSearchesForController(def) && entry.enchant_target > 0
+                       ? ConsumeScriptedLandSearchPin() : -1;
     for (const Target& t : entry.targets)
     {
         if (t.type == Target::Type::Permanent
@@ -854,31 +860,13 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
                 }
                 continue;
             }
-            // Rider (Swords to Plowshares): the exiled creature's controller gains life equal
-            // to its power. Via OpponentGainsLife so a Tainted Remedy turns the opponent's
-            // gain into damage equal to the creature's power. Captured before the erase.
-            int tgt_controller = target.controller_index;
-            int tgt_power      = target.EffectivePower();
-            if (def.params.damage > 0)  // exile
-            {
-                state.exile.push_back(target.card);
-            }
-            else
-            {
-                state.players[target.controller_index].graveyard.push_back(target.card);
-            }
-            state.battlefield.erase(state.battlefield.begin() + t.permanent_index);
-            RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
-            RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
-
-            // The exiled creature's controller gains `power` life. OpponentGainsLife(X) makes
-            // (1-X) gain, so pass (1 - tgt_controller). When tgt_controller is the opponent
-            // (the usual goldfish case) this routes through OUR Tainted Remedy, turning the
-            // opponent's gain into `power` damage; on our own creature it just gives us life.
-            if (def.params.controller_lifegain_equals_power && tgt_power > 0)
-            {
-                OpponentGainsLife(state, 1 - tgt_controller, tgt_power);
-            }
+            // Exile (damage > 0) or graveyard, the attachments fall off, then the riders: Swords'
+            // controller-lifegain (OpponentGainsLife(1 - controller): a Tainted Remedy turns the
+            // opponent's gain into damage equal to the power; on our own creature it gives US the
+            // life) and Path's controller land search. ONE helper shared with the rollout's Removal
+            // branch (TurnSolver apply_one) -- see ResolveCreatureRemovalAt (SpellEffects.h).
+            (void)target;
+            ResolveCreatureRemovalAt(state, t.permanent_index, def, entry.controller_index, ls_pin);
         }
     }
     MoveToGraveyard(state, entry);

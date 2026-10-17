@@ -87,7 +87,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop — **FALLBACK ONLY** since 2026-08-26; the count is normally a plan variant (see below) | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |
 | `land_entry` | `g_play_land_entry_chooser` (`LandEntryChooser`) | `TurnSolver::PlayLandByName` (shared land drop) | `WriteLandEntryDecisionJson` | `landEntryPanelHtml` | modal |
 | `dragon` | `g_play_dragon_chooser` (`DragonChooser`) | `PerformTutorToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteDragonDecisionJson` | `dragonPanelHtml` | modal |
-| `tutor_etb` | `g_play_tutor_chooser` (`TutorChooser`) | `PerformLandSearch`'s sequential per-land picks (core/LandSearch.h: Evolving Wilds / Terramorphic / Myriad / Khalni / Primeval Titan / Cultivate / Rampant Growth / Search for Tomorrow; -1 = stop or decline) and the X-capped put-route ETB tutor (SpellEffects.h) | `WriteTutorDecisionJson` | `tutorPanelHtml` | modal |
+| `tutor_etb` | `g_play_tutor_chooser` (`TutorChooser`) | `PerformLandSearch`'s sequential per-land picks (core/LandSearch.h: Evolving Wilds / Terramorphic / Myriad / Khalni / Primeval Titan / Cultivate / Rampant Growth / Search for Tomorrow / Path to Exile on your own creature; -1 = stop or decline) and the X-capped put-route ETB tutor (SpellEffects.h) | `WriteTutorDecisionJson` | `tutorPanelHtml` | modal |
 | `sac_tutor` | `g_play_sac_tutor_chooser` (`SacTutorChooser`) | `PerformUpkeepSacTutor` (SpellEffects.h, shared executor+rollout) | `WriteSacTutorDecisionJson` | `sacTutorPanelHtml` | modal |
 | `revive` | `g_play_revive_chooser` (`ReviveChooser`) | `PerformReturnFromGraveyardToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteReviveDecisionJson` | `revivePanelHtml` | modal |
 | `flicker` | `g_play_flicker_chooser` (`BounceChooser`) | `FireOwnEtbTriggers` blink block (SpellEffects.h, shared executor+rollout) | `WriteFlickerDecisionJson` | `promptPanelHtml` (board prompt) | prompt |
@@ -176,6 +176,15 @@ Removal-template card came from `CollectOpponentCreatureTargets` (opponent CREAT
 of `allow_self_target`, which only ever gated cast EMISSION. As of 2026-09-18 a card carrying
 `allow_self_target` does get the both-sides list (`CollectCreatureTargets`), which is what makes
 Swords to Plowshares self-targetable in the viewer (user request; the search is unchanged).
+**Path to Exile** (2026-10-17, `land_search_for_removal_controller`) reuses BOTH: the plan menu
+carries ONE target-less cast (castable while any legal creature exists on either side -- an own one
+without shroud, or any opponent's), the `target` board click at resolution offers every creature on
+both sides (TurnSolver apply_one's Removal branch; default = the plan's own target when it names one,
+else your lowest-power creature, else the opponent's), and exiling YOUR creature then asks the
+land-search `tutor_etb` prompt (basic, onto the battlefield tapped; `-1` declines with no shuffle, per
+the ruling). The `remove` text names the land search, not life. Exiling an opponent creature asks
+nothing more (their search is a no-op). Autonomous play searches the target instead (one variant per
+own-creature class + the provider's opponent target) and the basic on `land_search_pins`.
 
 Planeswalker loyalty-ability TARGET reuse note (2026-09-03): Oko's +1 (`elk_transform`), Bolas's +3
 (`destroy_own_noncreature`) and -2 (`steal_creature`) all reuse `target` via a dedicated

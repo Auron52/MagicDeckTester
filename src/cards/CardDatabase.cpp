@@ -1359,6 +1359,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.land_search_optional            = params.value("land_search_optional", false);
     p.land_search_on_resolve          = params.value("land_search_on_resolve", false);
     p.land_search_on_enter_or_attack  = params.value("land_search_on_enter_or_attack", false);
+    p.land_search_for_removal_controller = params.value("land_search_for_removal_controller", false);
     if (params.contains("land_search_activation_cost"))
         p.land_search_activation_cost =
             ManaCostFromString(params["land_search_activation_cost"].get<std::string>());

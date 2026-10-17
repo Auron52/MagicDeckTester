@@ -473,6 +473,10 @@ MANIFEST = {
     # board-click, twice (FireAttackAttachEquipment): `pick: "equipment"` (-1 = attach nothing, never
     # auto-taken) then `pick: "attacker"`. No new decision type.
     "attack_attach_equipment":   ("attach_host",      truthy),
+    # Path to Exile (2026-10-17): the EXILED creature's controller searches -- our own creature fetches
+    # US a tapped basic through the same PerformLandSearch prompts (-1 on the first declines, no
+    # shuffle). WHICH creature is exiled rides `targeting` -> target (both sides offered).
+    "land_search_for_removal_controller": ("tutor_etb", truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -1256,7 +1260,7 @@ INERT_PARAMS = {
     "charge_minus_power": "Jitte -1/-1 mode payload detail (the creature pick surfaces as per-target main_phase JitteModeAbility variants)",
     "charge_minus_tough": "Jitte -1/-1 mode payload detail (rides equip_combat_damage_charges)",
     "charge_lifegain": "Jitte lifegain mode payload detail (mode pick surfaces as main_phase JitteModeAbility)",
-    "allow_self_target": "targeting-legality broadening detail (Unexpectedly Absent, Swords to Plowshares; "
+    "allow_self_target": "targeting-legality broadening detail (Unexpectedly Absent, Swords to Plowshares, Path to Exile; "
                          "the pick itself rides targeting / tuck_to_library -> target)",
     "tap_put_from_hand_types": "put-from-hand card-type filter detail (rides tap_put_from_hand_cost -> main_phase)",
     # --- Fluctuator (cycling combo) ---

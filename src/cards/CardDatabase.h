@@ -2349,6 +2349,14 @@ struct CardParams
     // before damage, both worlds).
     bool land_search_on_resolve          = false;
     bool land_search_on_enter_or_attack  = false;
+    // for_removal_controller: a creature REMOVAL's resolution, where the searcher is the removed
+    // creature's CONTROLLER, not the caster (Path to Exile: "Its controller may search their library
+    // for a basic land card, put that card onto the battlefield tapped, then shuffle"). Fires in the
+    // removal template's exile/graveyard branch (ResolveCreatureRemovalAt, SpellEffects.h -- both
+    // worlds) only when that controller is the caster; the passive opponent's search is a no-op
+    // (PROVISIONAL, see Path's bracket note). Also opens the removal's SELF-target cast variants.
+    // NOT land_search_on_resolve: that fires for the CASTER at every resolution, whatever the target.
+    bool land_search_for_removal_controller = false;
     // An ACTIVATED land search on a permanent (Evolving Wilds, Terramorphic Expanse, Myriad Landscape,
     // Khalni Heart Expedition). The cost arms it: "" = an all-zero ManaCost (the Wellwisher {T}-only
     // precedent), "{2}" = Myriad. taps -> PermAbilityMode::SacLandSearch ({T} in the cost);
