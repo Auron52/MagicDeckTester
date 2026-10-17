@@ -2441,6 +2441,7 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     // / turn-start checkpoint. Shared by the executor and the rollout (both land-drop paths call this
     // function), and every caller re-locates by card number after it, so the erase is safe here.
     SweepOrphanedAuras(state);
+    RefreshReconfigureCreatures(state);   // an animated-land host leaving frees a reconfigure piece
 }
 
 // ---- Flow-prune oracle (byte-identical infeasibility test) ------------------------------------

@@ -6170,10 +6170,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // (metalcraft can flip mid-plan -- see EquipActionCostNow). A hoisted equip is still
             // LOGGED here (the hoist runs through the shared TurnSolver helper, which has no
             // logger) -- the viewer sees it at the action's plan position, same phase.
+            // Reconfigure (Lizard Blades) is not an equip ability: it neither spends the turn's first
+            // equip nor reads as "equip" in the log. Decided BEFORE the apply, from the predicate the
+            // rollout reads (lockstep twin in TurnSolver's ApplyPlanDirect).
+            const bool reconf = IsReconfigureAttach(state, state.active_player_index, a.sac_source_id);
+            const char* attach_verb = reconf ? "reconfigure -> " : "equip -> ";
             if (m_logger
                 && EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
             { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                   "equip -> " + bf_name(a.sac_victim_id)); }
+                                   attach_verb + bf_name(a.sac_victim_id)); }
             // STRANDED EQUIP (audit-only, see GameLogger.h): the host this equip was co-selected
             // against was dropped as unpayable earlier in this same plan, so TapForCost below is
             // about to pay for an attach ApplyEquip will refuse. Counted, NOT prevented -- the fix
@@ -6201,11 +6206,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     !EquipLogTruthEnabled()
                     || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
                 ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
-                // Lockstep twin of the rollout: the turn's first equip is spent, whichever it was.
-                state.players[state.active_player_index].equip_activated_this_turn = true;
+                // Lockstep twin of the rollout: the turn's first equip is spent, whichever it was --
+                // unless this was a reconfigure attach, which is not an equip activation.
+                if (!reconf) { state.players[state.active_player_index].equip_activated_this_turn = true; }
                 if (m_logger && will_attach)
                 { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                       "equip -> " + bf_name(a.sac_victim_id)); }
+                                       attach_verb + bf_name(a.sac_victim_id)); }
             }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)

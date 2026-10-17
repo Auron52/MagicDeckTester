@@ -288,6 +288,7 @@ void GameEngine::UntapStep(GameState& state)
     // rollout's twin runs PerformEndStepLifegainTokens before reaching this line.
     ap.gy_size_at_turn_start = static_cast<int>(ap.graveyard.size());
     RefreshDevotionCreatures(state);    // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ rollout)
+    RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     RefreshCityBlessing(state);         // ascend backstop for any non-cascade board change (lockstep w/ rollout)
     RefreshStoriedLatch(state);         // storied backstop, same contract (lockstep w/ rollout)
     // Rimescale Dragon's static ("Creatures with ice counters on them don't untap during their
@@ -665,6 +666,10 @@ void GameEngine::CombatPhase(GameState& state)
     // fell off a creature during main 1 is in the graveyard before attackers are declared (where
     // Bruna, Light of Alabaster's trigger can return it). Lockstep with TurnSolver::SimulateCombat.
     SweepOrphanedAuras(state);
+    // ...and the same checkpoint for reconfigure creature-ness (Lizard Blades), so a piece whose host
+    // left during main 1 by a path that does not refresh is a creature again before attackers are
+    // declared. Lockstep with TurnSolver::SimulateCombat. One bool test for every other deck.
+    RefreshReconfigureCreatures(state);
 
     // Ardenn, Intrepid Archaeologist (begin_combat_attach_all): "at the beginning of combat on your
     // turn, you may attach any number of Auras and Equipment you control to target permanent or

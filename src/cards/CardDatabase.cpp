@@ -1202,7 +1202,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("reconfigure_cost"))
     {
         p.reconfigure_cost = ManaCostFromString(params["reconfigure_cost"].get<std::string>());
+        // The attach half rides Action::Kind::Equip, whose payment (EquipActionCostNow) builds a
+        // GENERIC-ONLY ManaCost from EquipCostGenericNow. A coloured / hybrid / {X} reconfigure cost
+        // would therefore pay WRONG -- silently, and cheaper than printed. THROWN, not asserted (an
+        // assert is compiled out under NDEBUG, i.e. every measuring build) -- the kicker precedent.
+        if (p.reconfigure_cost->ManaValue() != p.reconfigure_cost->generic
+            || !p.reconfigure_cost->IsFlat())
+        {
+            throw std::runtime_error("reconfigure_cost must be pure generic (the Equip action pays "
+                                     "generic mana only): " + params["reconfigure_cost"].get<std::string>());
+        }
     }
+    p.equip_grants_double_strike = params.value("equip_grants_double_strike", false);
     p.metalcraft_equip_zero_artifacts = params.value("metalcraft_equip_zero_artifacts", 0);
     p.storied_permanents        = params.value("storied_permanents", 0);
     p.storied_first_equip_free  = params.value("storied_first_equip_free", false);

@@ -276,6 +276,13 @@ enum class PermAbilityMode
     // out-of-band ActKey slot so a mid-plan landfall that brings it to N opens breakpoint site 9.
     // Appended LAST.
     QuestSacLandSearch,
+    // Reconfigure's UNATTACH half (Lizard Blades, CardParams::reconfigure_cost; CR 702.151a):
+    // "[Cost]: Unattach this permanent. Activate only if this permanent is attached to a creature and
+    // only as a sorcery." NO {T} (in PermAbilityTaps' exclusion list), live only while attached
+    // (PermAbilitySourceLive), and ONCE per plan -- emitted as an out-of-band single action beside the
+    // QuestSacLandSearch block, never through the ModeSpec tables (whose {T}-less rows get a K-count
+    // block). Its attach half is the Equip action. Appended LAST.
+    ReconfigureUnattach,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -295,7 +302,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::FadeSaproling
         && m != PermAbilityMode::PingAll
         && m != PermAbilityMode::ActivatedDig         // Recruitment Officer: "{3}{W}:" -- no {T}
-        && m != PermAbilityMode::QuestSacLandSearch;  // Khalni Heart Expedition: counters + sac, no {T}
+        && m != PermAbilityMode::QuestSacLandSearch   // Khalni Heart Expedition: counters + sac, no {T}
+        && m != PermAbilityMode::ReconfigureUnattach; // Lizard Blades: "{2}: unattach" -- no {T}
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding

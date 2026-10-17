@@ -416,6 +416,10 @@ MANIFEST = {
     # Balan attach-all + Stoneforge put: battlefield activations surfaced as their own
     # main_phase plan lines (AttachAllEquipment / PutFromHandAbility; attachall=/sfput= verbs).
     "attach_all_equipment_cost": ("main_phase",       truthy),
+    # Lizard Blades' reconfigure (2026-10-17): the ATTACH half is an Equip plan action (EQ#, the equip=
+    # drag) and the UNATTACH half an ActivatePermAbility (ReconfigureUnattach) on the attached chip --
+    # both main_phase plan variants. See BOARD_ACTIVATIONS for the board-affordance check.
+    "reconfigure_cost":          ("main_phase",       truthy),
     "tap_put_from_hand_cost":    ("main_phase",       truthy),
     # ---- Bruna (2026-10-05) ----
     # Bruna, Light of Alabaster's attack trigger: WHICH Auras (any number, per zone) reuses the
@@ -516,6 +520,12 @@ BOARD_ACTIVATIONS = {
     "tap_put_from_hand_cost":                    ("verb:sfput",     truthy,   "tap_put_from_hand_cost"),
     "aura_swap_cost":                            ("verb:auraswap",  truthy,   "aura_swap_cost"),
     "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
+    # Lizard Blades: reconfigure's ATTACH half rides the Equip kind, so it is offered as verb:equip at
+    # the reconfigure cost. (Its UNATTACH half is a verbless `activate` ActivatePermAbility on the
+    # attached chip -- `cast=Lizard Blades` cannot collide with a hand copy on a one-copy list; a list
+    # with 2+ reconfigure copies would need an `unattach=` verb, the taplife= shape. It is reachable
+    # only once the piece is attached, so it is checked by test/unit/test_reconfigure.cpp, not here.)
+    "reconfigure_cost":                          ("verb:equip",     truthy,   "reconfigure_cost"),
     "equip_combat_damage_charges":               ("verb:jittemode", truthy,   None),  # spends a counter
     "gy_exile_instant_sorcery_drain":            ("verb:gyexile",   positive, 1),     # "{B}, {T}"
     "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
@@ -1127,6 +1137,7 @@ INERT_PARAMS = {
     "domain_mana": "domain-scaled mana production (Faeburrow/Bloom Tender); color/amount auto-resolved in payment (left to engine)",
     "domain_self_pump": "computed P/T (Faeburrow Elder +1/+1 per color among permanents), no choice",
     "equip_cost_generic": "equip cost detail (rides is_equipment)",
+    "equip_grants_double_strike": "static grant detail (rides is_equipment): Lizard Blades' 'Equipped creature has double strike', no choice",
     "equip_grants_haste": "static grant detail (rides is_equipment)",
     "equip_grants_shroud": "static grant detail (goldfish-inert; rides is_equipment)",
     "graveyard_replace_shuffle_library": "automatic replacement effect (Progenitus shuffle-in), no choice",

@@ -1349,18 +1349,25 @@ int DecisionProvider::EquipmentEtbAttachHost(
 {
     const CardDefinition* ed = CardDatabase::Instance().LookupCached(equip_card);
     if (ed == nullptr || !ed->params.is_equipment) { return 0; }
-    int best_num = 0, best_delta = -1;
+    // A RECONFIGURE piece (Lizard Blades) entering is a 1/1 double-strike CREATURE, and attaching it
+    // costs that body (it stops being a creature). So for it the "may" DECLINES unless some host
+    // strictly gains -- best_delta starts at 0 instead of -1, and a 0-gain host (one that already
+    // double-strikes, or has no power) never wins. PROVIDER HEURISTIC (disclosed): the base rule for
+    // every other Equipment is unchanged (always attach to the best host), so every other deck is
+    // byte-identical; the human keeps the full host list plus decline via attach_host.
+    int best_num = 0, best_delta = (ed->params.reconfigure_cost.has_value() ? 0 : -1);
     for (int idx : candidate_bf_indices)
     {
         if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
         const Permanent& h = s.battlefield[idx];
         if (!h.card.IsCreature() && !h.is_animated) { continue; }
+        if (h.card.m_number == equip_card.m_number) { continue; }   // never onto itself (CR 301.5c)
         const int pw_now = EquipGatePowerOf(h, s);
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
         const int  n_now  = CountEquipmentAttachedTo(s, controller, h.card.m_number);
         const bool ds_now = h.card.HasKeyword(Keyword::DoubleStrike)
                          || HasDoubleStrikeFromEquipment(h, s);
-        bool ds_after = ds_now;
+        bool ds_after = ds_now || ed->params.equip_grants_double_strike;   // Lizard Blades' grant
         if (hd != nullptr)
         {
             if (hd->params.double_strike_while_equipped && n_now + 1 >= 1) { ds_after = true; }
@@ -1393,11 +1400,12 @@ int DecisionProvider::AttackDigAttachHost(
         if (!h.card.IsCreature() && !h.is_animated) { continue; }
         const int pw_now = EquipGatePowerOf(h, s);
         if (ed->params.equip_min_power > 0 && pw_now < ed->params.equip_min_power) { continue; }
+        if (h.card.m_number == equip_card.m_number) { continue; }   // never onto itself (CR 301.5c)
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
         const int  n_now    = CountEquipmentAttachedTo(s, h.controller_index, h.card.m_number);
         const bool ds_now   = h.card.HasKeyword(Keyword::DoubleStrike)
                            || HasDoubleStrikeFromEquipment(h, s);
-        bool ds_after = ds_now;
+        bool ds_after = ds_now || ed->params.equip_grants_double_strike;   // Lizard Blades' grant
         if (hd != nullptr)
         {
             if (hd->params.double_strike_while_equipped && n_now + 1 >= 1) { ds_after = true; }
@@ -1437,7 +1445,11 @@ DecisionProvider::BeginCombatAttachChoice DecisionProvider::BeginCombatAttach(
 {
     BeginCombatAttachChoice out;
     const int bf_size = static_cast<int>(s.battlefield.size());
-    struct Piece { int num; bool aura; int flat_pw; int min_power; int from; const CardParams* pp; };
+    // `reconf`: a reconfigure piece (Lizard Blades) -- a creature while loose, NOT a creature while
+    // attached (CR 702.151b). The scratch board toggles that in set_host so every score reads the
+    // board the move would really produce, and its OWN attack term counts in a move's gain.
+    struct Piece { int num; bool aura; int flat_pw; int min_power; int from; const CardParams* pp;
+                   bool reconf = false; };
     std::vector<Piece> pieces;
     for (int i = 0; i < bf_size; ++i)
     {
@@ -1452,7 +1464,8 @@ DecisionProvider::BeginCombatAttachChoice DecisionProvider::BeginCombatAttach(
             // like any other piece (a first attach is a no-op for its clause).
             if (d->params.equip_sacrifices_prior_host && e.equipped_to != 0) { continue; }
             pieces.push_back({ e.card.m_number, false, d->params.equip_power_bonus,
-                               d->params.equip_min_power, e.equipped_to, &d->params });
+                               d->params.equip_min_power, e.equipped_to, &d->params,
+                               d->params.reconfigure_cost.has_value() });
         }
         else if (d->params.is_aura && !d->params.is_land_aura)
         {
@@ -1479,11 +1492,21 @@ DecisionProvider::BeginCombatAttachChoice DecisionProvider::BeginCombatAttach(
         Permanent* p = find_perm(b, pc.num);
         if (p == nullptr) { return; }
         if (pc.aura) { p->aura_attached_to = to; } else { p->equipped_to = to; }
+        // Creature-ness only, and deliberately NOT the real refresh: the gear sitting on the piece
+        // stays pointed at it, so the undo (set_host back to `from`) is exact. That gear contributes
+        // nothing while its holder is not a creature (BeginCombatHostDamage reads IsCreature), which
+        // is the same damage the real apply's fall-off produces this combat.
+        if (pc.reconf)
+        {
+            if (to != 0) { p->card.RemoveType(CardType::Creature); }
+            else         { p->card.AddType(CardType::Creature); }
+        }
     };
     // Legal on the board AS IT STANDS (the min-power gate reads the host's power with everything
     // attached so far, which is why a gated piece is ordered after the bonuses that lift it).
     auto legal_on = [&](GameState& b, const Piece& pc, int host_num) -> bool
     {
+        if (pc.num == host_num) { return false; }   // never onto itself (CR 301.5c)
         if (pc.aura)
         {
             const std::vector<int> lt = LegalEnchantTargets(b, controller, *pc.pp);
@@ -1523,6 +1546,10 @@ DecisionProvider::BeginCombatAttachChoice DecisionProvider::BeginCombatAttach(
                 if (pieces[k].from != 0
                     && std::find(touched.begin(), touched.end(), pieces[k].from) == touched.end())
                 { touched.push_back(pieces[k].from); }
+                // A loose reconfigure piece is itself an attacker; attaching it ends that term.
+                if (pieces[k].reconf
+                    && std::find(touched.begin(), touched.end(), pieces[k].num) == touched.end())
+                { touched.push_back(pieces[k].num); }
             }
             int before = 0;
             for (int t : touched) { before += host_dmg(scratch, t); }

@@ -2102,6 +2102,9 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount = 0);
 inline void FireCreatureDiesWatchers(GameState& state, int dead_controller,
                                      const std::vector<int>* prefiltered = nullptr);
 inline void RefreshDevotionCreatures(GameState& state);
+// Lizard Blades' reconfigure creature-ness (CR 702.151b); defined beside ApplyEquip, which is its
+// main caller, and needed here by the battlefield-membership chokepoints that sit above it.
+inline void RefreshReconfigureCreatures(GameState& state);
 // Doubling Season's multiplier exponent; defined beside CreateToken (the token chokepoint) but
 // needed here by the counter-put chokepoint below.
 inline int DoublerShift(const GameState& state, int controller, bool for_tokens);
@@ -3368,8 +3371,30 @@ inline int CountAttackHonePump(const GameState& state, int controller,
 // ds source beside the own keyword and the lord grant -- OR'd into the same three ds sites
 // (Combat.cpp ResolveCombatDamage; TurnSolver attacking-mana-source scorer + PendingAttackDamage)
 // so executor and rollout agree.
+//
+// FOURTH SOURCE, EQUIPMENT-SIDE (Lizard Blades, 2026-10-17): "Equipped creature has double strike"
+// (CardParams::equip_grants_double_strike). Read HERE rather than at each caller because every ds
+// reader in the engine -- Combat.cpp's real damage, both TurnSolver attack projections, the
+// begin-combat planner's objective, the attach-host rankers -- already reaches this helper through
+// CreatureHasDoubleStrike, so one walk makes all of them agree. Checked BEFORE the definition early-
+// out because a TOKEN (no definition) can wear the piece. The walk is presence-gated on
+// GameState::deck_has_equip_ds_grant (stamped false for every deck without the param), so no other
+// deck pays for it; an unstamped state keeps the walk (the only-err-true rule).
+inline bool EquipmentGrantsDoubleStrikeTo(const Permanent& creature, const GameState& state)
+{
+    if (!state.deck_has_equip_ds_grant || creature.card.m_number == 0) { return false; }
+    for (const Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to != creature.card.m_number
+            || e.controller_index != creature.controller_index || e.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (d && d->params.is_equipment && d->params.equip_grants_double_strike) { return true; }
+    }
+    return false;
+}
 inline bool HasDoubleStrikeFromEquipment(const Permanent& creature, const GameState& state)
 {
+    if (EquipmentGrantsDoubleStrikeTo(creature, state)) { return true; }
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(creature.card);
     if (!cd) { return false; }
     if (!cd->params.double_strike_while_equipped
@@ -7318,6 +7343,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // later permanent lifting devotion to 5 flips an older Heliod on WITHOUT it "entering" (only
     // the actual entrant is passed to the creature-enter watchers). Param-gated early-out.
     RefreshDevotionCreatures(state);
+    RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     // ASCEND (Ocelot Pride): a permanent just ENTERED, which is the only way the count can rise, so
     // this is where the city's-blessing state trigger is checked (CR 702.131b). Above the watchers
     // below for the same reason devotion is: the designation is part of the board the entering
@@ -9608,6 +9634,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
     // you control dies" lifegain (Daxos) fires. Both ABOVE the `reactions.empty()` early-out
     // below, which only knows subtype-keyed watchers.
     RefreshDevotionCreatures(state);
+    RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     FireCreatureDiesWatchers(state, dead_controller, dwatch);
 
     std::vector<CardParams> reactions;
@@ -10127,6 +10154,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                 state.battlefield.erase(state.battlefield.begin() + i);
             }
             RefreshDevotionCreatures(state);   // Ajani's {W}{W} left devotion
+            RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
             if (g_play_event_sink && !g_tap_speculating)
             {
                 EmitPlayEvent(state.turn_number, "exile",
@@ -10546,6 +10574,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         state.players[q.owner_index].graveyard.push_back(dead_card);
         state.battlefield.erase(state.battlefield.begin() + i);
         RefreshDevotionCreatures(state);   // a dead walker's pips leave devotion (Ajani {2}{W}{W})
+        RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
         break;
     }
 }
@@ -10632,8 +10661,10 @@ inline int EquipTargetColorCount(const GameState& state, int controller, int hos
 // on WHICH creature it targets. The metalcraft loop stays FIRST and unchanged: Puresteel grants an
 // ADDITIONAL equip {0} ability rather than reducing the printed one, so "metalcraft wins outright"
 // is exact rather than an approximation, and {0} is already the floor.
-inline int EquipCostGenericNow(const GameState& state, int controller,
-                               const CardDefinition& equip_def, int host_id = 0)
+// Is a metalcraft "Equipment you control have equip {0}" grant (Puresteel Paladin) LIVE for
+// `controller` right now? Factored out of EquipCostGenericNow so the reconfigure predicate below asks
+// the identical question.
+inline bool MetalcraftEquipZeroLive(const GameState& state, int controller)
 {
     for (const Permanent& p : state.battlefield)
     {
@@ -10641,8 +10672,53 @@ inline int EquipCostGenericNow(const GameState& state, int controller,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || d->params.metalcraft_equip_zero_artifacts <= 0) { continue; }
         if (CountControlledArtifacts(state, controller)
-            >= d->params.metalcraft_equip_zero_artifacts) { return 0; }
+            >= d->params.metalcraft_equip_zero_artifacts) { return true; }
     }
+    return false;
+}
+
+// ---- RECONFIGURE (Lizard Blades, CR 702.151) -- the ATTACH half's identity --------------------------
+// A reconfigure piece has NO equip ability of its own, so its Action::Kind::Equip attach IS the
+// reconfigure ability -- "[Cost]: Attach this permanent to another target creature you control.
+// Activate only as a sorcery" -- priced at CardParams::reconfigure_cost. Two consequences, both read
+// through this ONE predicate:
+//   * NOT AN EQUIP ABILITY (2022-02-18 ruling: "reconfigure is not an 'equip ability' for the purpose
+//     of cards like Fighter Class and Leonin Shikari"). So a first-equip waiver (Kili's
+//     storied_first_equip_free; Forge Anew's first_equip_free once it lands) neither applies to it
+//     nor is consumed by it, and Player::equip_activated_this_turn is NOT set by it.
+//   * PURESTEEL'S METALCRAFT GRANTS A REAL EQUIP {0} ABILITY ("Equipment you control have equip {0}"
+//     -- a granted ability, not a cost reduction), and CR 301.5c lets an Equipment that is also a
+//     creature equip only when it has reconfigure, which this piece does. So while metalcraft is live
+//     the cheapest attach is that granted EQUIP ability: {0}, and it IS an equip activation. Paying
+//     {0} for the identical attach strictly dominates paying the reconfigure cost (a cost-only
+//     difference on the same board), so the one Equip action is priced {0} and this predicate reads
+//     false -- a sound dominance fold, not a pick.
+// Read at payment time by both worlds (before ApplyEquip; the attach changes no artifact count, so
+// the answer is the same before and after).
+inline bool IsReconfigurePiece(const CardDefinition& d) { return d.params.reconfigure_cost.has_value(); }
+inline bool IsReconfigureAttach(const GameState& state, int controller, int equip_id)
+{
+    // Presence gate: every deck without a reconfigure piece (stamped false) pays one bool test at
+    // each Equip apply instead of a board walk.
+    if (!state.deck_has_reconfigure) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != equip_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        return d != nullptr && IsReconfigurePiece(*d) && !MetalcraftEquipZeroLive(state, controller);
+    }
+    return false;
+}
+
+inline int EquipCostGenericNow(const GameState& state, int controller,
+                               const CardDefinition& equip_def, int host_id = 0)
+{
+    if (MetalcraftEquipZeroLive(state, controller)) { return 0; }
+    // A reconfigure piece (Lizard Blades) has no equip ability: its attach is the reconfigure
+    // ability, at the reconfigure cost -- never at equip_cost_generic, whose default 0 would hand it
+    // a phantom FREE equip. Pure generic by the load-time guard (CardDatabase.cpp). Dragonfire
+    // Blade's per-colour reduction below names its OWN equip ability, so it does not apply here.
+    if (equip_def.params.reconfigure_cost.has_value()) { return equip_def.params.reconfigure_cost->generic; }
     int cost = equip_def.params.equip_cost_generic;
     if (equip_def.params.equip_cost_less_per_target_color > 0 && host_id != 0)
     {
@@ -10750,6 +10826,11 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx);  //
 // unpayable still paid the equip. See docs/design/equip-host-not-on-battlefield.md.
 inline bool CanAttachEquip(const GameState& state, int controller, int equip_id, int creature_id)
 {
+    // "An Equipment creature can never become attached to itself" (CR 301.5c; Lizard Blades
+    // 2022-02-18 ruling) -- a reconfigure piece is the first Equipment that is ALSO a legal-looking
+    // creature host, so the self pair is reachable for the first time (Ardenn's target, Magnetic
+    // Theft, Raubahn). Same guard in ApplyEquip.
+    if (equip_id == creature_id) { return false; }
     const Permanent* eq   = nullptr;
     const Permanent* host = nullptr;
     for (const Permanent& p : state.battlefield)
@@ -10832,6 +10913,9 @@ inline std::vector<std::pair<int, int>> FreeAttachableEquipment(const GameState&
         if (!d || !d->params.is_equipment)         { continue; }
         if (d->params.equip_grants_shroud)         { continue; }
         if (d->params.equip_sacrifices_prior_host) { continue; }
+        // A reconfigure piece (Lizard Blades) is a CREATURE while loose: attaching it ends its own
+        // attack -- a price, like Wargear's, so it is never bundled silently (drag it individually).
+        if (d->params.reconfigure_cost.has_value()) { continue; }
         if (EquipCostGenericNow(state, controller, *d, host_id) != 0) { continue; }
         if (d->params.equip_min_power > 0)
         { gated.push_back({ e.card.m_number, d->params.equip_min_power }); continue; }
@@ -10868,8 +10952,99 @@ inline std::vector<std::pair<int, int>> FreeAttachableEquipment(const GameState&
     return out;
 }
 
+// ---- RECONFIGURE CREATURE-NESS (Lizard Blades; CR 702.151b, CR 704.5n) ----------------------------
+// THE SHARED ATTACH PRIMITIVE'S SECOND HALF. "Attaching an Equipment with reconfigure to another
+// creature causes the Equipment to stop being a creature until it becomes unattached from that
+// creature" -- by ANY effect, not only its own reconfigure ability (2022-02-18 ruling: "can be
+// attached to creatures by effects other than its reconfigure ability"). So the toggle cannot live in
+// the reconfigure apply: it is re-derived from `equipped_to` HERE, and this runs at the end of EVERY
+// ApplyEquip (which every attach in the engine goes through -- Equip / reconfigure, Sigarda's Aid,
+// Ardenn, Balan, Armored Skyhunter, and Magnetic Theft / Raubahn once they land), at the unattach
+// apply, and at the battlefield-membership chokepoints beside RefreshDevotionCreatures (a host that
+// LEAVES turns the piece back into a creature). The Heliod precedent: the type bit is toggled on the
+// PERMANENT's own Card copy, so all ~700 `p.card.IsCreature()` readers are right at once and the
+// definition's copiable values are never touched (CR 706.2).
+//
+// Per reconfigure piece (Keyword::Reconfigure is the no-lookup test):
+//   * ATTACHED = equipped_to names a creature (or animated permanent) of the same controller that is
+//     on the battlefield and is not the piece itself. Anything else is not a legal attachment: the
+//     link is cleared (CR 704.5n -- an Equipment attached to an illegal or nonexistent permanent
+//     becomes unattached), which also covers a host that left by a path that forgot to clear it.
+//   * attached and still a creature -> stop being a creature AND lose its creature subtypes (ruling:
+//     "It also loses any creature subtypes it had"; only its artifact subtype Equipment is kept), and
+//     everything attached to it falls off (ruling: "any Equipment and Auras with enchant creature
+//     abilities become unattached"; an Aura so freed is swept by the next SweepOrphanedAuras
+//     checkpoint, the engine's existing detach convention).
+//   * unattached and not a creature -> a creature again, printed subtypes restored. SUMMONING SICKNESS
+//     NEEDS NOTHING: entered_this_turn tracks how long we have CONTROLLED it (CR 302.6), so it is sick
+//     only if it came under our control this turn. Tapped state is untouched in both directions
+//     (ruling: becoming attached doesn't tap or untap it).
+// Iterated to a fixpoint (a piece that stops being a creature can strand ANOTHER piece attached to
+// it), bounded by the number of pieces.
+//
+// Presence-gated on GameState::deck_has_reconfigure (stamped false for every deck without
+// reconfigure_cost), so every other deck pays one bool test. Defaults TRUE (the only-err-true rule).
+inline void RefreshReconfigureCreatures(GameState& state)
+{
+    if (!state.deck_has_reconfigure) { return; }
+    for (int pass = 0; pass < 8; ++pass)
+    {
+        bool changed = false;
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            Permanent& p = state.battlefield[i];
+            if (!p.card.HasKeyword(Keyword::Reconfigure)) { continue; }
+            const int num  = p.card.m_number;
+            const int ctrl = p.controller_index;
+            bool attached = false;
+            if (p.equipped_to != 0 && p.equipped_to != num)
+            {
+                for (const Permanent& h : state.battlefield)
+                {
+                    if (h.controller_index != ctrl || h.card.m_number != p.equipped_to) { continue; }
+                    attached = h.card.IsCreature() || h.is_animated;
+                    break;
+                }
+            }
+            if (!attached && p.equipped_to != 0) { p.equipped_to = 0; changed = true; }
+            if (attached && p.card.IsCreature())
+            {
+                p.card.RemoveType(CardType::Creature);
+                SubtypeSet kept;
+                for (std::size_t k = 0; k < p.card.m_subtypes.size(); ++k)
+                {
+                    if (p.card.m_subtypes[k] == "Equipment") { kept.push_back_id(p.card.m_subtypes.IdAt(k)); }
+                }
+                p.card.m_subtypes = kept;
+                for (Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != ctrl) { continue; }
+                    if (q.equipped_to == num) { q.equipped_to = 0; }
+                    if (q.aura_attached_to == num)
+                    {
+                        const CardDefinition* ad = CardDatabase::Instance().LookupCached(q.card);
+                        if (ad == nullptr || !AuraCouldEnchant(state, ad->params, p)) { q.aura_attached_to = 0; }
+                    }
+                }
+                changed = true;
+            }
+            else if (!attached && !p.card.IsCreature())
+            {
+                p.card.AddType(CardType::Creature);
+                if (const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card))
+                { p.card.m_subtypes = d->card.m_subtypes; }
+                changed = true;
+            }
+        }
+        if (!changed) { break; }
+    }
+}
+
 inline void ApplyEquip(GameState& state, int controller, int equip_id, int creature_id)
 {
+    // Never onto itself (CR 301.5c; Lizard Blades ruling: "If an effect tries to do this, nothing
+    // happens"). See CanAttachEquip.
+    if (equip_id == creature_id) { return; }
     Permanent* eq = nullptr;
     const CardDefinition* eqd = nullptr;
     bool host_ok = false;
@@ -10926,6 +11101,10 @@ inline void ApplyEquip(GameState& state, int controller, int equip_id, int creat
         }
     }
     eq->equipped_to = creature_id;
+    // A reconfigure piece stops being a creature, and anything on it falls off (CR 702.151b /
+    // 704.5n) -- and a piece that was attached to THIS piece is now stranded. Gated, one bool test
+    // for every other deck. See RefreshReconfigureCreatures.
+    RefreshReconfigureCreatures(state);
 }
 
 // True when `equip_id` is ALREADY attached to `creature_id`. The Equip enumeration never offers a
@@ -17389,6 +17568,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { state.battlefield.erase(state.battlefield.begin() + *it); }
     SweepOrphanedAuras(state);
     RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
+    RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     for (const DoomedDeath& dd : doomed_creatures)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
 }
@@ -20904,6 +21084,15 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
                 || p.quest_counters < qd->params.land_search_activation_remove_quest)
             { return false; }
         }
+        // Reconfigure's unattach half: "Activate only if this permanent is attached to a creature"
+        // (CR 702.151a) -- an activation RESTRICTION, checked before anything is paid. A stale plan
+        // (the piece was moved off / its host left earlier in the same plan) is a clean no-op.
+        if (mode == PermAbilityMode::ReconfigureUnattach)
+        {
+            const CardDefinition* rd = CardDatabase::Instance().LookupCached(p.card);
+            if (rd == nullptr || !rd->params.reconfigure_cost.has_value() || p.equipped_to == 0)
+            { return false; }
+        }
         // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
         // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
         // an untappable source would have stopped a just-wished Essence Depleter from draining on
@@ -21020,6 +21209,8 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::SacLandSearch:  return "sacrifice it: search for land(s), put them onto the battlefield";
         case PermAbilityMode::QuestSacLandSearch:
                                               return "remove quest counters, sacrifice it: search for two basic lands";
+        case PermAbilityMode::ReconfigureUnattach:
+                                              return "reconfigure: unattach it (it becomes a creature again)";
         default:                              return "activate";
     }
 }
@@ -21629,6 +21820,23 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // -- quest counters, the sacrifice -- and the search: core/LandSearch.h.
             ApplyLandSearchActivation(state, controller, idx, *d);
             break;
+        case PermAbilityMode::ReconfigureUnattach:
+        {
+            // Lizard Blades: "[Cost]: Unattach this permanent. Activate only if this permanent is
+            // attached to a creature and only as a sorcery" (CR 702.151a). The {2} is already paid
+            // by the caller. Unattached it is a creature again (CR 702.151b) -- the shared refresh
+            // re-derives that from equipped_to, exactly as it does for every other detach.
+            Permanent& rp = state.battlefield[static_cast<std::size_t>(idx)];
+            if (rp.equipped_to == 0) { break; }
+            rp.equipped_to = 0;
+            RefreshReconfigureCreatures(state);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              src_name + ": reconfigure -- unattached, it is a creature again");
+            }
+            break;
+        }
         case PermAbilityMode::TapLifegain:
         {
             // Wellwisher: "{T}: You gain 1 life for each Elf on the battlefield." The {T} is already

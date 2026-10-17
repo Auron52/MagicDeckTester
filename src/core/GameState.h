@@ -997,6 +997,16 @@ struct GameState
     // menu option". Chapter I instead resolves INSIDE the Saga's own resolution (see
     // PerformSagaFreeCast in SpellEffects.h), which is where the card's permission first exists.
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
+    // Two ETB-cascade-style presence gates (see the deck_has_* family above), 2026-10-17 (Lizard Blades),
+    // placed HERE because this is the padding before m_provider (sizeof(GameState) unchanged). RECONFIGURE: RefreshReconfigureCreatures
+    // (SpellEffects.h) runs at the end of every ApplyEquip and at the battlefield-membership
+    // chokepoints; stamped from CardParams::reconfigure_cost, mainboard + sideboard, Garth holding it
+    // open, so a clear bit PROVES its walk finds no reconfigure piece. EQUIPMENT DOUBLE-STRIKE GRANT:
+    // HasDoubleStrikeFromEquipment's board walk for an attached equip_grants_double_strike piece, on
+    // the combat / projection hot path; stamped from that param. Both DEFAULT TRUE == walk (an
+    // unstamped GameState -- the scenario harness, a unit test -- keeps both), the only-err-true rule.
+    bool                     deck_has_reconfigure              = true;
+    bool                     deck_has_equip_ds_grant           = true;
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.

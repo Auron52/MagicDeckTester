@@ -431,6 +431,12 @@ static_assert(sizeof(Player) == 200,
 // +16 bytes (2026-10-15, burn): GameState::m2_stage_turn + m2_prestaged_mask (folded value-gated above).
 // Both +16s (the land-search cluster above, burn here) were made against 1080 on parallel branches; together
 // 1112, measured (the static_assert compiles) on the rebased tree, 2026-10-16.
+// +2 bools (2026-10-17, Lizard Blades; NO size change -- measured 1112 -> 1112, they sit in the
+// padding between on_the_play and m_provider): `deck_has_reconfigure` and `deck_has_equip_ds_grant`.
+// Classification: DECK CONSTANTS, stamped once in StampDeckTraits and never written again; each only
+// skips a walk that provably finds nothing (RefreshReconfigureCreatures, the equipment double-strike
+// grant scan) -- identical across every pair of states Build() compares, nothing to fold. The STATE
+// the reconfigure refresh writes (a piece's creature type bit) is folded per permanent above.
 static_assert(sizeof(GameState) == 1112,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1153,6 +1159,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // tapped at phase end and cannot attack, so it is NOT fungible with an unflagged twin.
         // Exact-match, gated on set -> every deck without the param keeps its exact key.
         if (p.etb_tap_pending) { mfold(0xC0105ull); }
+        // Lizard Blades: an attached reconfigure piece is NOT a creature (it cannot attack, and it is
+        // not a host). Derived from equipped_to (folded with the wiring below), but folded on its own
+        // too, exact-match, so the comparator never leans on the wiring fold to separate a creature
+        // piece from an attached one. Set only on such a piece -> every other deck's key is unchanged.
+        if (!p.card.IsCreature() && p.card.HasKeyword(Keyword::Reconfigure)) { mfold(0x2EC0Full); }
         // Nykthos Paragon's "Do this only once each turn" (PER PERMANENT). An EXACT-MATCH field, the
         // colored_cast_lifegain_used_this_turn classification directly above the axes -- but folded
         // GATED ON SET rather than unconditionally, so every deck without a Paragon keeps its exact
