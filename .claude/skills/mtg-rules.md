@@ -210,7 +210,7 @@ For review, build, and card modes, use the rules sections below as the authorita
 | Keyword | Rules Summary |
 |---------|---------------|
 | **Annihilator N** | Whenever this attacks, defending player sacrifices N permanents |
-| **Cascade** | When cast, exile cards from top until you hit one with lesser mana value; cast it for free; shuffle the rest back |
+| **Cascade** | When cast, exile cards from top until you hit a nonland card with lesser mana value; you may cast it without paying its mana cost (a spell that needs a target cannot be cast without a legal one, CR 601.2c); put all exiled cards NOT cast on the BOTTOM of your library in a random order (CR 702.85a -- the pre-2021 "shuffle the rest back" wording is obsolete) |
 | **Storm** | When cast, copy it for each spell cast before it this turn |
 | **Ripple N** | When cast, reveal top N cards; cast any with the same name for free, put the rest on the bottom |
 | **Gravestorm** | When cast, copy it for each permanent that went to the graveyard this turn |
