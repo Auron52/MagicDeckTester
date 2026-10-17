@@ -103,6 +103,17 @@ LEAFCAL_SEED=12012          # held out: the matrix plays 8008/9009/10010/11011 +
 LEAFCAL_CEIL=10000000       # per-game unit ceiling (the fleet H-cell reads used the same)
 
 
+def _profile_leaf_pin(prof):
+    """The deck profile's `search_leaf_depth` (MulliganProfile::search_leaf_depth), or None when unpinned.
+    A pinned deck plays that leaf in BOTH calibration arms -- the pin outranks leaf_greedy_from_depth --
+    so its cells are identical by construction (Landfall and Melira Pod pin 0, the greedy horizon)."""
+    try:
+        v=json.load(open(prof)).get("search_leaf_depth") if prof else None
+    except (OSError, ValueError):
+        return None
+    return v if isinstance(v, int) and v >= 0 else None
+
+
 def _read_units(winsdir, nm):
     """{global_index: units} from `<winsdir>/<nm>.units` (MTG_DUMP_UNITS); {} if absent."""
     try:
@@ -181,19 +192,25 @@ def run_leafcal(args):
             c=cells[str(d)]
             if c["engaged"] and c["moved"] == 0 and c["paired"] >= LEAFCAL_MIN_PAIRED: K=d
             else: break
-        res[dname]={"K":K, "cells":cells}
+        res[dname]={"K":K, "cells":cells, "profile_leaf_pin":_profile_leaf_pin(PROFILES.get(dname))}
     json.dump({"games":LEAFCAL_GAMES, "seed":LEAFCAL_SEED, "ceiling_units":LEAFCAL_CEIL,
                "min_depth":LEAFCAL_MIN_DEPTH, "min_paired":LEAFCAL_MIN_PAIRED,
                "wall_sec":round(time.time()-t0, 1), "decks":res}, open(args.leafcal, "w"), indent=1)
     for dname, r in res.items():
-        print("  %-28s K=%s" % (dname, r["K"] if r["K"] else "none (every H cell keeps the 1-ply leaf)"))
+        pin=r["profile_leaf_pin"]
+        if pin is not None:
+            print("  %-28s K=none -- nothing to calibrate: the deck's profile pins search_leaf_depth %d, so both"
+                  " arms (and every matrix H cell) play that leaf" % (dname, pin))
+        else:
+            print("  %-28s K=%s" % (dname, r["K"] if r["K"] else "none (every H cell keeps the 1-ply leaf)"))
         for d in depths:
             c=r["cells"][str(d)]
             ratio=(c["units_greedy"]/c["units_base"]) if c["units_base"] else float("nan")
             print("    H%d  paired %2d  moved %d (%d better / %d worse)  unpaired %d/%d  units %.3fx%s%s"
                   % (d, c["paired"], c["moved"], c["better"], c["worse"], c["unpaired_base"],
                      c["unpaired_greedy"], ratio,
-                     "" if c["engaged"] else "  NOT ENGAGED (identical units -- stale engine?)",
+                     "" if c["engaged"] else ("  identical by construction (profile pins the leaf)" if pin is not None
+                                              else "  NOT ENGAGED (identical units -- stale engine?)"),
                      ("  games " + ",".join(map(str, c["moved_games"]))) if c["moved_games"] else ""))
     print("  wall %.1f min -> %s" % ((time.time()-t0)/60, args.leafcal), flush=True)
 

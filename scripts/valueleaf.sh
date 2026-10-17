@@ -1039,7 +1039,8 @@ phase_leafcal() {
     while IFS= read -r l; do log "  $l"; done < "$VLQ/leafcal.log"
     { echo "=== $(date '+%Y-%m-%dT%H:%M:%S')  PHASE C0 leaf calibration (taken without stopping)"
       echo "    rule: the matrix's H cells of depth >= K use the greedy leaf, K = the shallowest depth from"
-      echo "    which every paired cell moved no win turn; no K = the 1-ply leaf everywhere."
+      echo "    which every paired cell moved no win turn; no K = the 1-ply leaf everywhere (a deck whose profile"
+      echo "    pins search_leaf_depth plays that leaf in every cell instead -- nothing to calibrate)."
       sed 's/^/    /' "$VLQ/leafcal.log"; echo; } >> "$DECISIONS"
     mark C0_leafcal
 }
