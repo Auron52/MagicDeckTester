@@ -1293,6 +1293,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // FireEtbWatchers' "another <subtype> enters: draw" walk (GameState::
         // deck_has_other_subtype_enter_draw): the param the walk tests.
         bool subtype_enter_draw = false;
+        // Lizard Blades: the reconfigure refresh and the equipment-side double-strike walk (see
+        // GameState::deck_has_reconfigure / deck_has_equip_ds_grant): the params the walks test.
+        bool reconfigure = false, equip_ds_grant = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1324,6 +1327,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
                 if (!d->params.draw_on_other_subtype_enter.empty()) { subtype_enter_draw = true; }
+                if (d->params.reconfigure_cost.has_value())   { reconfigure = true; }
+                if (d->params.equip_grants_double_strike)     { equip_ds_grant = true; }
                 if (d->params.storied_permanents > 0)      { storied = true; }
                 // HasEndStepTokenTrigger, not `endstep_lifegain_tokens > 0`: The Mycotyrant's count
                 // is dynamic (endstep_tokens_equal_descend) so it leaves that field at 0, and this
@@ -1368,6 +1373,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves FireEtbWatchers' subtype-enter draw walk finds no
         // watcher (the stamp tests the very param the walk tests).
         state.deck_has_other_subtype_enter_draw = garth || subtype_enter_draw;
+        // Same reasoning, no lever: a clear bit proves the reconfigure refresh and the equipment
+        // double-strike walk find nothing (each stamp tests the very param its walk tests).
+        state.deck_has_reconfigure       = garth || reconfigure;
+        state.deck_has_equip_ds_grant    = garth || equip_ds_grant;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

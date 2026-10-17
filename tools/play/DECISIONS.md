@@ -259,6 +259,20 @@ opened when one source offers several distinct activations) is for.
 | `eternalize=<card>` (2026-09-27) | Timeless Witness's `Eternalize {5}{G}{G}` (exile it from the GRAVEYARD: a 4/4 black Zombie token copy) | activated from the GRAVEYARD: no board source to click and not a cast. The state JSON lists `eternalize_gy`; the GUI makes those graveyard thumbs clickable (`eternalizeCard`) |
 | `gyplay=<played card>` (2026-09-06) | Kaldring, the Rimestaff's `{T}: You may play target snow permanent card from your graveyard this turn. It enters tapped.` | `gyreturn`'s shape for the same reason: the value is the card LEAVING the graveyard, not the source — one Kaldring over a graveyard holding three distinct snow cards is three different activations. Unlike `gyreturn` the card goes straight to the BATTLEFIELD (tapped; a land consumes the land drop), so the verb also cannot collapse into a later `cast=` |
 
+**Reconfigure (Lizard Blades, 2026-10-17) -- no new type, no new verb.** Both halves of CR 702.151 are
+board activations. The ATTACH half is an `Action::Kind::Equip` priced at the reconfigure cost, so it is
+the existing `equip=` drag: a LOOSE Lizard is a creature AND an Equipment, so its thumb is both a drag
+source (`data-equip`, it has Equip actions) and a drop target (`data-num`, other Equipment may go on
+it); the engine never offers it onto itself (CR 301.5c), so `equipTargetsFor` never lights its own
+thumb. Attached, it is drawn as an `auraAttThumb` chip on its host, still draggable (MOVE it). The
+UNATTACH half is an `ActivatePermAbility` (`PermAbilityMode::ReconfigureUnattach`, `act_label`
+"reconfigure: unattach it ...") on that same chip -- a click queues the verbless `cast=Lizard Blades`,
+which CheckLine matches in the `orderNames` multiset. Verbless is safe ONLY because the list runs one
+copy (an attached Lizard and a Lizard in hand cannot coexist); a list running two or more reconfigure
+pieces of one name needs an `unattach=` verb, the `taplife=` shape. Sigarda's Aid / Ardenn putting a
+Lizard on a host reuse their existing `attach_host` / begin-combat paths (Sigarda's Aid's chooser offers
+every legal host plus decline).
+
 **Snow deck dig-chooser reuse (2026-09-06, no new types):** two Snow decision points ride the
 existing `dig` chooser rather than adding a type. (1) **Gated look-at-top** (Scrying Sheets /
 Frost Augur `tap_draw_requires_top_supertype`): on a snow hit the chooser offers take-vs-leave —

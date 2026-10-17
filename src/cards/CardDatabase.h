@@ -1671,7 +1671,26 @@ struct CardParams
     // Lizard Blades: "Reconfigure {2}" (CR 702.151) -- attach to target creature you control, or
     // unattach, as a sorcery; while attached it is not a creature. Not an equip ability (2022-02-18
     // ruling), so equip-cost waivers never apply to it. nullopt = no reconfigure.
+    //
+    // HOW IT IS MODELLED (SpellEffects.h, "RECONFIGURE"):
+    //   * the ATTACH half rides Action::Kind::Equip, priced by EquipCostGenericNow at THIS cost (a
+    //     reconfigure piece has no equip ability of its own, so equip_cost_generic is never read for
+    //     it -- the "phantom free equip" the default 0 would otherwise hand it). Under Puresteel's
+    //     metalcraft the piece GAINS a real equip {0} ability (CR 301.5c lets an Equipment that is a
+    //     creature equip only when it has reconfigure), so the attach is then that equip ability:
+    //     {0}, and it counts as an equip activation. IsReconfigureAttach is the one predicate.
+    //   * the UNATTACH half is PermAbilityMode::ReconfigureUnattach (no {T}; live only while attached).
+    //   * "while attached it isn't a creature" is RefreshReconfigureCreatures, run at the end of
+    //     EVERY ApplyEquip and at the battlefield-membership chokepoints.
+    // MUST BE PURE GENERIC -- thrown at load: the Equip action pays generic mana only
+    // (EquipActionCostNow builds a generic-only ManaCost).
     std::optional<ManaCost> reconfigure_cost;
+    // Lizard Blades: "Equipped creature has double strike." Read by HasDoubleStrikeFromEquipment, the
+    // ONE equipment-side ds helper every combat / projection / ranker site already calls through
+    // CreatureHasDoubleStrike; its board walk is gated on GameState::deck_has_equip_ds_grant so no
+    // other deck pays for it. The equip-host RANKERS (rider_delta, EquipmentEtbAttachHost,
+    // AttackDigAttachHost) price it as ds_after = true.
+    bool equip_grants_double_strike = false;
 
     // Kemba, Kha Regent: at the controller's upkeep, create upkeep_token_power/toughness tokens
     // -- one per Equipment attached to THIS permanent (counted via Permanent::equipped_to).

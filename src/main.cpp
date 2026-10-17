@@ -509,7 +509,11 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
                 break;
             case Action::Kind::Equip:
-                tag = "equip " + a.card_name + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
+                // Lizard Blades: the attach is its RECONFIGURE ability, not an equip ability (unless
+                // Puresteel's metalcraft has granted it equip {0}) -- the label says which.
+                tag = (IsReconfigureAttach(s, s.active_player_index, a.sac_source_id) ? "reconfigure "
+                                                                                      : "equip ")
+                    + a.card_name + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
                 break;
             case Action::Kind::GraveyardExileAbility:
                 tag = a.card_name + (a.gy_exile_mode == 1 ? ": exile instant/sorcery (drain 2)"
@@ -7429,6 +7433,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 if (ed && ed->params.is_aura) { state.battlefield[i].aura_attached_to = host_num; }
                 else                          { state.battlefield[i].equipped_to      = host_num; }
             }
+            // The fixture wrote equipped_to directly (not through ApplyEquip), so derive a reconfigure
+            // piece's creature-ness from it here (Lizard Blades -- CR 702.151b).
+            RefreshReconfigureCreatures(state);
         }
         for (const auto& hc : j.value("hand", json::array()))
         { state.players[0].hand.push_back(make_card(hc.get<std::string>())); }

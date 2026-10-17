@@ -5069,6 +5069,11 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
     if (sd.params.land_search_activation_remove_quest > 0 && sd.params.land_search_count > 0
         && src.quest_counters >= sd.params.land_search_activation_remove_quest)
     { bits |= 1u << static_cast<int>(PermAbilityMode::QuestSacLandSearch); }
+    // Lizard Blades' reconfigure unattach: the out-of-band block's conditions, mirrored (attached,
+    // cost payable by colour). Mirrors the enumerator's block (see CollectActions, "UNATTACH half").
+    if (sd.params.reconfigure_cost.has_value() && src.equipped_to != 0
+        && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.reconfigure_cost)))
+    { bits |= 1u << static_cast<int>(PermAbilityMode::ReconfigureUnattach); }
     return bits;
 }
 
@@ -6937,8 +6942,15 @@ static int StoriedFirstEquipWaiverCredit(const GameState& state, const std::vect
     int best = 0;
     for (int j : sel)
     {
-        if (cands[j].kind == Action::Kind::Equip && cands[j].cost.generic > best)
-        { best = cands[j].cost.generic; }
+        if (cands[j].kind != Action::Kind::Equip || cands[j].cost.generic <= best) { continue; }
+        // RECONFIGURE IS NOT AN EQUIP ABILITY (Lizard Blades; see IsReconfigureAttach): the waiver
+        // names the first EQUIP ability, so a reconfigure attach can neither receive it nor be the
+        // one that spends it. Its baked cost is > 0 only when metalcraft is OFF -- under metalcraft
+        // the attach is Puresteel's granted equip {0}, which is free and already skipped here.
+        const CardDefinition* ed = cands[j].def ? cands[j].def
+                                 : CardDatabase::Instance().Lookup(cands[j].card_name);
+        if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }
+        best = cands[j].cost.generic;
     }
     return best;
 }
@@ -7208,6 +7220,9 @@ int TurnSolver::StoriedWaivedEquipId(const GameState& state, const std::vector<A
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::Equip) { continue; }
+        // A reconfigure attach is not an equip ability -- never waived (IsReconfigureAttach). This is
+        // the predicate the next first-equip waiver (Forge Anew) must reuse at its own sites.
+        if (IsReconfigureAttach(state, controller, a.sac_source_id)) { continue; }
         const int c = EquipActionCostNow(state, controller, a.sac_source_id, a.cost,
                                          a.sac_victim_id).generic;
         if (c <= 0) { continue; }                     // already free: the waiver would be wasted
@@ -7338,7 +7353,8 @@ static bool FrameHasDoubleStrikeSource(const GameState& state, const std::vector
         if (d == nullptr) { return false; }
         return d->card.HasKeyword(Keyword::DoubleStrike)
             || d->params.double_strike_while_equipped
-            || d->params.double_strike_min_equipment > 0;
+            || d->params.double_strike_min_equipment > 0
+            || d->params.equip_grants_double_strike;           // Lizard Blades' equipped-creature grant
     };
     for (const Permanent& p : state.battlefield)
     {
@@ -16688,6 +16704,13 @@ static bool PowerDeltaCanPriceEquip(const CardParams& p)
     if (p.equip_grants_shroud)                  { return false; }   // ordering / the parking dance
     if (p.equip_combat_damage_charges > 0)      { return false; }   // Jitte's charge engine
     if (p.equip_sacrifices_prior_host)          { return false; }   // Wargear: the search weighs it
+    // Lizard Blades: its whole value is a DOUBLE-STRIKE grant, which doubles the host's power rather
+    // than adding any -- so a pure power delta reads it as +0 and both readers would misprice it: the
+    // zero-power free-only rule would withhold its paid {2} reconfigure outright, and the equal-cost
+    // dominance mask could fold it under any {2} piece with a positive flat bonus. A reconfigure
+    // piece is ALSO a body that stops attacking when attached, which no power delta sees either.
+    if (p.equip_grants_double_strike)           { return false; }
+    if (p.reconfigure_cost.has_value())         { return false; }
     return true;
 }
 
@@ -27289,6 +27312,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (ed2->params.equip_min_power > 0
                     && st.pw + reachable_bonus < ed2->params.equip_min_power) { return -1; }
                 bool ds_after = st.ds;
+                // Lizard Blades: "Equipped creature has double strike" -- the incoming piece grants it.
+                if (ed2->params.equip_grants_double_strike) { ds_after = true; }
                 if (st.def != nullptr)
                 {
                     if (st.def->params.double_strike_while_equipped && st.n_att + 1 >= 1)
@@ -27825,7 +27850,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // ds-potential host or Kemba (Wargear: ds only -- its equip sacrifices the prior
                 // host, so the "free" Kemba re-equip is not free). MTG_UNPRUNE=equiphost /
                 // MTG_EQUIP_ALL_HOSTS / human play restore the open set for the standing A/B.
-                if (s_consolidate && !open_all && !ed->params.equip_grants_haste)
+                // A double-strike GRANTING piece (Lizard Blades) is exempt as well: the doctrine's pick is
+                // the top ds-POTENTIAL host, which for a piece whose whole value is granting double strike
+                // is precisely the host it adds nothing to. Widening only; no deck with the doctrine
+                // (EquipmentProvider) holds such a piece today, so this is byte-identical there.
+                if (s_consolidate && !open_all && !ed->params.equip_grants_haste
+                    && !ed->params.equip_grants_double_strike)
                 {
                     // Can this host attack THIS turn carrying the gear? A hand host is not on the
                     // battlefield yet, and a fresh one without haste is summoning-sick (CR 302.6).
@@ -28085,6 +28115,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // Haste onto a fresh creature enables a whole attack; a rider attach is worth
                     // its realized damage delta; anything else is a repositioning nicety.
                     a.eval           = haste_benefit ? DMG : (rd > 0 ? rd : 1);
+                    // A RECONFIGURE piece (Lizard Blades) that could swing THIS combat stops being a
+                    // creature when it attaches, so the attach also costs its own attack -- which
+                    // rider_delta (the host's gain) cannot see. Priced into the ORDERING / playout
+                    // value only, never into the emission gate above: the pair is still offered and
+                    // the search still branches on it (a body traded for a later-turn double strike
+                    // is a real line). Pre-combat only; after combat the body has already swung.
+                    if (is_pre_combat && ed->params.reconfigure_cost.has_value())
+                    {
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != state.active_player_index
+                                || q.card.m_number != equips[e].second->m_number) { continue; }
+                            const int own = BeginCombatHostDamage(state, q);
+                            if (own > 0) { a.eval = rd - own; }
+                            break;
+                        }
+                    }
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
                 }
@@ -29775,6 +29822,48 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.eval           = 1;
                 a.is_noncreature = true;
                 actions.push_back(std::move(a));
+            }
+
+            // ---- Reconfigure, UNATTACH half (Lizard Blades): "{2}: Unattach this permanent. Activate
+            // only if this permanent is attached to a creature and only as a sorcery" (CR 702.151a;
+            // PermAbilityMode::ReconfigureUnattach). NOT in the ModeSpec table: that table gives every
+            // {T}-less row a K-count block, and this is a once-per-plan state change, not a sink. ONE
+            // emission per ATTACHED piece whose cost the turn can reach; unattached it is a creature
+            // again (SpellEffects.h RefreshReconfigureCreatures), summoning-sick only if it came under
+            // our control this turn. NOT pruned -- whether the 1/1 double-strike body beats the host's
+            // double strike is the search's call (it gains when the host already double-strikes from
+            // elsewhere, or when the host's power is below 2). It shares the piece's Equip variants'
+            // activation family (ActivationFamilyKey keys both on sac_source_id), so "unattach" and
+            // "move it to another host" are mutually exclusive in one plan: unattach-then-attach is just
+            // the attach and attach-then-unattach is just the unattach, each for more mana -- a sound
+            // dominance, not a narrowing. Main-phase only by construction (CollectActions), which is
+            // the sorcery-speed restriction.
+            if (sd->params.reconfigure_cost.has_value() && src.equipped_to != 0
+                && PermAbilitySourceLive(state, state.active_player_index, src.card.m_number,
+                                         Action::AbilityMode::ReconfigureUnattach))
+            {
+                const ManaCost ucost = EffectiveActivationCost(state, state.active_player_index,
+                                                               src.card, *sd->params.reconfigure_cost);
+                ManaPool have = AvailableManaPool(state);
+                have.AddPool(state.floating_mana);
+                if (have.CanPay(ucost))
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePermAbility;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.ability_mode   = Action::AbilityMode::ReconfigureUnattach;
+                    a.chosen_x       = 1;
+                    a.equiv_tag      = ActivationEquivTag(
+                        state, src, static_cast<const std::string&>(src.card.m_name),
+                        static_cast<int>(Action::AbilityMode::ReconfigureUnattach), ucost, 1);
+                    a.cost           = ucost;
+                    a.eval           = 1;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
             }
 
             // ---- Spore outlet: "Remove three spore counters: create a 1/1 green Saproling" --------
@@ -38585,7 +38674,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 if (!ed || !ed->params.is_equipment
                     || ed->params.equip_sacrifices_prior_host
                     || ed->params.equip_grants_shroud
-                    || ed->params.equip_grants_haste) { continue; }
+                    || ed->params.equip_grants_haste
+                    // A reconfigure piece (Lizard Blades) is a CREATURE while loose: attaching it ends
+                    // its own attack, so a free attach is not "strictly beneficial" -- keep it searched.
+                    || ed->params.reconfigure_cost.has_value()) { continue; }
                 int jbest = groups[g][0];
                 for (int j : groups[g]) { if (cands[j].eval > cands[jbest].eval) { jbest = j; } }
                 auto_sel.push_back(jbest);
@@ -44232,6 +44324,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const int  owner     = tgt.owner_index;
                 state.battlefield.erase(state.battlefield.begin() + ci);
                 RefreshDevotionCreatures(state);   // lockstep with EffectHandler's tuck branch
+                RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
                 if (!is_tok)
                 {
                     Library& lib = state.players[owner].library;
@@ -44327,6 +44420,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 else { state.players[tgt_controller].graveyard.push_back(state.battlefield[ci].card); }
                 state.battlefield.erase(state.battlefield.begin() + ci);
                 RefreshDevotionCreatures(state);   // lockstep with EffectHandler's tuck branch
+                RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
                 if (def.params.controller_lifegain_equals_power && tgt_power > 0)
                 {
                     OpponentGainsLife(state, 1 - tgt_controller, tgt_power);
@@ -46349,6 +46443,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Do not pay for an attach ApplyEquip will refuse (MTG_EQUIP_PAY_GUARD; lockstep twin
             // in AIEngine's Equip branch -- one shared reader, because fixing one side alone would
             // make the search project a mana cost the real game does not pay).
+            // Reconfigure (Lizard Blades) is not an equip ability -- decided BEFORE the apply, from
+            // the same predicate the executor reads (lockstep twin in AIEngine's Equip branch).
+            const bool reconf = IsReconfigureAttach(state, state.active_player_index, a.sac_source_id);
             if ((!EquipPayGuardEnabled()
                  || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
                 && !EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
@@ -46361,8 +46458,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
                 // The turn's first equip is now spent, whichever one it was (lockstep twin in
                 // AIEngine). Set unconditionally: the waiver is "the FIRST equip you activate",
-                // so an equip that was already free still consumes it.
-                state.players[state.active_player_index].equip_activated_this_turn = true;
+                // so an equip that was already free still consumes it. A RECONFIGURE attach is not
+                // an equip activation at all, so it leaves the flag alone.
+                if (!reconf) { state.players[state.active_player_index].equip_activated_this_turn = true; }
             }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)
@@ -47330,6 +47428,7 @@ static void SimulateCombat(GameState& state)
     EnforceLegendRule(state, active);
     // CR 704.5m orphaned-Aura SBA checkpoint -- mirror GameEngine::CombatPhase (lockstep).
     SweepOrphanedAuras(state);
+    RefreshReconfigureCreatures(state);   // reconfigure checkpoint -- mirror GameEngine::CombatPhase
 
     // Ardenn's beginning-of-combat attach (begin_combat_attach_all): BEFORE attackers are declared,
     // so the moved pieces pump this combat and a moved haste piece makes a sick creature eligible.
@@ -47691,6 +47790,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // read-then-rebase exactly as in the executor's two separate steps.
     ap.gy_size_at_turn_start = static_cast<int>(ap.graveyard.size());
     RefreshDevotionCreatures(state);               // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ UntapStep)
+    RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
     RefreshCityBlessing(state);                    // ascend backstop for any non-cascade board change (lockstep w/ UntapStep)
     RefreshStoriedLatch(state);                    // storied backstop, same contract (lockstep w/ UntapStep)
 
@@ -49593,7 +49693,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (!ed || !ed->params.is_equipment
                     || ed->params.equip_sacrifices_prior_host
                     || ed->params.equip_grants_shroud
-                    || ed->params.equip_grants_haste) { continue; }
+                    || ed->params.equip_grants_haste
+                    // A reconfigure piece (Lizard Blades) is a CREATURE while loose: attaching it ends
+                    // its own attack, so a free attach is not "strictly beneficial" -- keep it searched.
+                    || ed->params.reconfigure_cost.has_value()) { continue; }
                 int jbest = groups[g][0];
                 for (int j : groups[g]) { if (cands[j].eval > cands[jbest].eval) { jbest = j; } }
                 auto_sel.push_back(jbest);
@@ -60862,6 +60965,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         if (perm.skip_next_untap) { Fold(tk, 0xE7E27); }
         // Colossification's deferred ETB tap: tapped at phase end, cannot attack -> not fungible.
         if (perm.etb_tap_pending) { Fold(tk, 0xC0105); }
+        // Lizard Blades (reconfigure): an ATTACHED piece is not a creature. That is derived from
+        // equipped_to, which the attachment wiring below folds -- but g_simkey_m2coarse drops that
+        // wiring, and a piece is a creature-or-not independently of WHICH host it is on (it decides
+        // whether it attacks), so it is folded here on its own, unconditionally. Set only on a
+        // reconfigure piece that is currently not a creature -> every other deck's key is unchanged.
+        if (!perm.card.IsCreature() && perm.card.HasKeyword(Keyword::Reconfigure)) { Fold(tk, 0x2EC0F); }
         // A TYPED animation (Gideon's +1) is a materially different board from a Mutavault-style one:
         // the same is_animated bit, but no subtype lord reaches it. Folded only when set, so every
         // deck whose only animation is all-types keeps the EXACT prior key (byte-identical).
@@ -75828,7 +75937,12 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // read "cast: Umezawa's Jitte" -- which is a different (and impossible) play from attaching
         // the copy already in play, and gave the human no way to tell the two menu entries apart.
         else if (a.kind == Action::Kind::Equip)
-        { cast_names.push_back("equip " + a.card_name); }
+        {
+            // Lizard Blades: a reconfigure attach says so (cosmetic; see IsReconfigureAttach).
+            const bool reconf = st != nullptr
+                && IsReconfigureAttach(*st, st->active_player_index, a.sac_source_id);
+            cast_names.push_back((reconf ? "reconfigure " : "equip ") + a.card_name);
+        }
         // Planeswalker loyalty: listed bare under "cast:", an activation read "cast: Oko, Thief of
         // Crowns" -- the SAME text as hard-casting the walker, and silent about which ability was
         // used. That summary is what the viewer writes into its history panel on an accepted line,
@@ -79510,7 +79624,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "None", "TapDamage", "TapInvestigate", "TapDraw", "SacDraw", "Drain", "ExileTop",
         "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
-        "SacLandSearch", "QuestSacLandSearch"
+        "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
