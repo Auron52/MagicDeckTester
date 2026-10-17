@@ -57,10 +57,27 @@ on and are recorded here per the deferred-work rule.
    provider's activation rank). A human who reorders "equip E -> Lizard" before "reconfigure Lizard ->
    X", with E attached elsewhere, could have expressed "move E off its host for nothing"; the menu no
    longer offers that set when its canonical order is the illegal one.
-6. **Magnetic Theft's creature-class fold is a keep-one-host cut, and that can lose the SPREAD line.**
-   BuildAttachSpellPairs offers a Theft onto ONE member of each creature identity class. With two Thefts
-   and two identical hosts, "one Equipment onto each" is then unexpressible by Thefts alone (both name
-   the same representative), although it is a different board from "both onto one". It stays reachable
-   when an Equip can do the second move, which is why nothing in the suite has shown it. The
-   restricted-growth form MTG_EQUIP_HOST_FOLD uses for Equip hosts is the sound replacement: offer the
-   Theft onto every member and fold the mirror images on the subset.
+6. **Magnetic Theft's class folds -- FIXED 2026-10-17 for battlefield creatures AND battlefield pieces.**
+   BuildAttachSpellPairs kept one creature and one Equipment per identity class, so two Thefts could
+   never put one Equipment on EACH of two identical creatures, nor move each of two identical loose
+   Hammers (and, with the fungible-copy fold canonicalising the Equips of those Hammers, "equip one
+   Hammer, Theft the other" was unreachable too) -- unfindable at any budget. The search now offers
+   every pair; the mirror images are folded jointly with the Equips by MTG_EQUIP_HOST_FOLD's canonical
+   relabelling (a creature axis and an independent piece axis). Human play keeps the one-per-class menu
+   (the person re-picks both targets on the board at resolution).
+7. **Still open, the same defect one zone over: a HAND piece is offered one per NAME.** Both Thefts of a
+   "cast two Colossus Hammers, Theft each onto a different creature" line name the first hand copy, so
+   the second Theft moves the same Hammer again: two freshly cast identical Equipment cannot both be
+   Thefted (reachable only as Theft + Equip). Fixing it needs per-COPY hand variants plus a relabelling
+   over the hand copies that composes with the hand-cast fold (MTG_FOLD_HAND_CASTS) and with apply_one
+   casting an arbitrary copy of a name -- the identity of the copy that materialises is the subtle part.
+8. **Two identical Theft CARDS are still walked in both assignments.** {Theft #22: X, Theft #23: Y} and
+   {Theft #22: Y, Theft #23: X} are one plan (the plan dedup keys a Theft by its pair) but two odometer
+   positions. A card-copy fold must order the restricted-growth strings by something a card swap does
+   not move (they read Theft-card order today), or the two forms conflict -- worked through in the
+   commit that fixed item 6.
+9. **d0 greedy: a self-target Path is priced 0 even when it exiles the plan's only attacker.** Found
+   through smoke gi539 (seed 1540) after item 6: the greedy's projection has no win on either plan, so
+   {Theft, Theft} and {Path -> Kor Duelist, Theft, Theft} tie on rank (4200) and the smallest mask picks
+   the second; the game goes from a T6 win to unwon. The search finds T3 at d6/b100 (stage-1 recovery),
+   so this is the depth-0 runner's valuation, not a reachability gap; a heuristic fix needs its own A/B.
