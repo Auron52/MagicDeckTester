@@ -784,6 +784,18 @@ struct GameState
     // sizeof(GameState) does not move. Default FALSE: an unstamped state opens no second main,
     // which is the conservative direction (the pre-existing behaviour).
     bool                     deck_has_attack_dig_hand = false;
+    // THE COMBAT LANDFALL-TARGET RANK (Plan::combat_landfall_target_choice, 2026-10-17) -- a per-turn
+    // COMBAT PIN like scripted_combat_land_search_crack, placed HERE (int8_t, in this bool padding) because
+    // an int beside the other combat pins costs sizeof(GameState) +8 (measured). The rank into
+    // DecisionProvider::LandfallCounterTargetOrder that every TARGETED landfall trigger (Phylath) takes for
+    // the lands THIS turn's combat puts: Primeval Titan's attack fetch and the in-combat Khalni crack
+    // (core/LandSearch.h, CombatLandfallTargetScope). Plan::landfall_target_choice is a main-phase policy,
+    // installed for the apply only, so before this pin every combat landfall took the provider's front for
+    // every plan. -1 = the front. Written by the main-1 plan (TurnSolver::WritePostApplyStatePins), cleared
+    // with the combat pins at both turn starts, folded value-gated into the dominance key and the post-apply
+    // dedup key; read only by the combat land entries (which bump combatpin::t_reads). The axis width is
+    // capped at 4, so int8_t holds every value.
+    std::int8_t              scripted_combat_landfall_target = -1;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.
@@ -1001,6 +1013,8 @@ struct GameState
     // stream above (after the Titans' ordinals). Per-turn, cleared with the combat pins; folded
     // value-gated like the two above.
     int                      scripted_combat_land_search_crack = -1;
+    // (The COMBAT LANDFALL-TARGET RANK, scripted_combat_landfall_target, is the same class of pin -- it lives
+    // in the bool padding near uses_second_main because an int here costs sizeof(GameState) +8.)
     // Maelstrom Archangel free-cast BANK (user-approved 2026-08-06): each copy that deals combat
     // damage to the player increments this (Combat.cpp ResolveCombatDamage, the shared combat
     // core), and the post-combat main may cast that many hand spells without paying mana (a

@@ -461,6 +461,10 @@ static_assert(sizeof(Player) == 200,
 // Build(), value-gated; the bool is a DECK CONSTANT stamped once in StampDeckTraits that only skips
 // provably-empty scans (the axis fan-out, CountAttackAttachPump, FireAttackAttachEquipment) -- nothing
 // to fold.
+// +0 bytes (2026-10-17, the combat landfall-target rank; measured 1112 -> 1112):
+// `scripted_combat_landfall_target` (an int8_t, in the bool padding after deck_has_attack_dig_hand -- an
+// int beside the combat pins cost +8). Classification: FUTURE-DETERMINING, the in-combat Khalni crack's
+// class (set by the main-1 plan, read at THIS turn's declare-attackers), FOLDED in Build(), value-gated.
 static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -807,6 +811,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A5E0000000ull + static_cast<std::uint64_t>(s.scripted_upkeep_land_search)); }
     if (s.scripted_combat_land_search_crack >= 0)
     { fold(0x1A5F0000000ull + static_cast<std::uint64_t>(s.scripted_combat_land_search_crack)); }
+    // The combat landfall-target rank (Phylath's targets for the lands this combat puts): the same
+    // future-determining class as the crack mask, value-gated, its own domain tag.
+    if (s.scripted_combat_landfall_target >= 0)
+    { fold(0x1A60000000ull + static_cast<std::uint64_t>(s.scripted_combat_landfall_target)); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP

@@ -1493,6 +1493,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("gather", first.bruna_gather_choice != dup.bruna_gather_choice);
     pl("cswap", first.combat_aura_swap_choice != dup.combat_aura_swap_choice);
     pl("aattach", first.attack_attach_choice != dup.attack_attach_choice);
+    pl("clandfall", first.combat_landfall_target_choice != dup.combat_landfall_target_choice);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
@@ -19785,6 +19786,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // ...and the land's SOURCE ZONE (Courser of Kruphix's top vs a hand copy): the same must-fold.
     if (p.land_from_top)               { fold(0x4C544F50ull); }       // "LTOP"
     if (p.landfall_target_choice >= 0) { fold(static_cast<uint64_t>(p.landfall_target_choice + 2) * 89); }
+    // ...and the COMBAT landfall-target rank: the same must-fold, its own multiplier.
+    if (p.combat_landfall_target_choice >= 0)
+    { fold(0x434C4654ull); fold(static_cast<uint64_t>(p.combat_landfall_target_choice + 2) * 97); }   // "CLFT"
     fold(static_cast<uint64_t>(p.etbcounter_choice + 2) * 67);
     fold(static_cast<uint64_t>(p.sweep_choice + 2) * 71);
     fold(static_cast<uint64_t>(p.le_fire_choice + 2) * 73);
@@ -20088,7 +20092,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
     return p.actions.empty() && p.breakpoint_actions.empty()
         && p.land_decided && p.land_to_play.empty() && p.fetch_target.empty()
         && p.land_face.empty() && p.land_slot == 0 && !p.land_from_top
-        && p.landfall_target_choice == -1
+        && p.landfall_target_choice == -1 && p.combat_landfall_target_choice == -1
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
@@ -20124,6 +20128,9 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // A landfall-target rank that turned out inert (one class at resolution, or no targeted
         // trigger fired) lands on its base plan's state: one apply, not a rollout.
         || p.landfall_target_choice >= 0
+        // ...and the combat landfall-target rank (a clone of its base differing only in a combat pin;
+        // the pin is folded into the post-apply dedup key, so it never merges with its base).
+        || p.combat_landfall_target_choice >= 0
         // Land-search picks: every variant is a clone of its base plan differing only in a pick, and
         // the clamp at resolution makes a too-wide rank a duplicate of the last pick -- exactly the
         // inert-duplicate shape this skip exists for. Safe because the two STATE pins are folded
@@ -20372,6 +20379,7 @@ struct PutBounceFold
         }
         mix(static_cast<std::uint64_t>(p.bp_choice + 7));
         mix(static_cast<std::uint64_t>(p.landfall_target_choice + 7));
+        if (p.combat_landfall_target_choice >= 0) { mix(static_cast<std::uint64_t>(p.combat_landfall_target_choice + 11)); }
         mix(std::hash<std::string>{}(p.land_to_play));
         return h;
     }
@@ -37616,6 +37624,7 @@ namespace solvememo
             || a.land_slot != b.land_slot
             || a.land_from_top != b.land_from_top
             || a.landfall_target_choice != b.landfall_target_choice
+            || a.combat_landfall_target_choice != b.combat_landfall_target_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
             || a.bp_at != b.bp_at || a.bp_wave0 != b.bp_wave0)
         { return false; }
@@ -49972,6 +49981,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
+    state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
@@ -59372,7 +59382,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // first one split off). A land-only plan has at most one trigger, on exactly this board,
             // so its class count is exact and a rank past it could only clamp back onto rank 0.
             const int width = std::min(4, classes + (p.actions.empty() ? 0 : 1));
-            for (int k = 1; k < width; ++k)
+            // A policy already LIVE for this turn (an outer apply's, or -- the executor's breakpoint
+            // re-solve -- the committed plan's) is what a base plan here inherits, since -1 installs
+            // nothing: the front (an explicit 0) is then a variant and the inherited rank is the base's
+            // (StatePinVariantRanks; 2026-10-17). With nothing live this is ranks 1..width-1, as before.
+            for (const int k : StatePinVariantRanks(LandfallTargetPinFor(state), width))
             {
                 TurnSolver::Plan v = p;
                 v.landfall_target_choice = k;
@@ -60708,6 +60722,98 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                           std::make_move_iterator(crack_extra.end()));
                 all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                       std::make_move_iterator(extra.end()));
+
+                // (2c) THE COMBAT LANDFALL TARGET (Plan::combat_landfall_target_choice, 2026-10-17). The
+                //      lands this combat puts (the Titans' attack fetch above, any crack after it) fire the
+                //      TARGETED landfall triggers (Phylath) at declare-attackers, after the main-phase policy
+                //      (landfall_target_choice) has gone out of scope -- so they took the provider's front for
+                //      every plan, a greedy pick inside the window. A rank policy over the identity-folded
+                //      classes like the main-phase axis, carried into combat as a STATE pin (the crack
+                //      mask's route), additive (base plans only). WIDTH = the classes of the watcher's
+                //      subtype on this board + 1 headroom when a class can SPLIT before a later trigger (a
+                //      multi-member class: the first +4 makes one of them distinct) or the plan casts
+                //      something (a new watcher / new Plants), capped at 4; an overshoot clamps at
+                //      resolution. The pin is read in combat only (CombatLandfallTargetScope), so on a state
+                //      already holding one (a breakpoint re-solve) the base inherits it and the front (an
+                //      explicit 0) is a variant (StatePinVariantRanks).
+                if (state.deck_has_landfall)
+                {
+                    auto targeted = [](const CardDefinition* d)
+                    {
+                        return d != nullptr && d->params.landfall_target_counters > 0
+                            && !d->params.landfall_target_subtype.empty();
+                    };
+                    std::vector<std::string> bsubs;   // the targeted watchers' subtypes on THIS board
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != me || q.def_absent) { continue; }
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+                        if (targeted(d) && std::find(bsubs.begin(), bsubs.end(),
+                                                     d->params.landfall_target_subtype) == bsubs.end())
+                        { bsubs.push_back(d->params.landfall_target_subtype); }
+                    }
+                    // Classes of one subtype's legal targets on this board (the resolver's identity fold:
+                    // LandfallTargetFoldKey; shroud as the resolver reads it), and whether a class has
+                    // more than one member. Memoised per subtype for this enumeration.
+                    std::vector<std::pair<std::string, std::pair<int, bool>>> cmemo;
+                    auto classes_of = [&](const std::string& sub) -> std::pair<int, bool>
+                    {
+                        for (const auto& cm : cmemo) { if (cm.first == sub) { return cm.second; } }
+                        std::vector<std::pair<std::uint64_t, int>> keys;
+                        std::vector<int> linked;
+                        LandfallTargetLinks(state, linked);
+                        int singles = 0;
+                        bool multi = false;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != me) { continue; }
+                            if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
+                            if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+                            std::uint64_t k = 0;
+                            if (!LandfallTargetFoldKey(state, q, k, &linked)) { ++singles; continue; }
+                            auto it = std::find_if(keys.begin(), keys.end(),
+                                                   [k](const std::pair<std::uint64_t, int>& e) { return e.first == k; });
+                            if (it == keys.end()) { keys.emplace_back(k, 1); }
+                            else { ++it->second; multi = true; }
+                        }
+                        const std::pair<int, bool> r(static_cast<int>(keys.size()) + singles, multi);
+                        cmemo.emplace_back(sub, r);
+                        return r;
+                    };
+                    const int clt_inh = state.scripted_combat_landfall_target;
+                    std::vector<TurnSolver::Plan> clt_extra;
+                    for (const TurnSolver::Plan& p : all)
+                    {
+                        if (!base_plan(p)) { continue; }
+                        int classes = -1;
+                        bool split = !p.actions.empty();
+                        auto take = [&](const std::string& sub)
+                        {
+                            const std::pair<int, bool> c = classes_of(sub);
+                            classes = std::max(classes, c.first);
+                            split = split || c.second;
+                        };
+                        for (const std::string& sub : bsubs) { take(sub); }
+                        for (const Action& a : p.actions)
+                        {
+                            if (a.kind != Action::Kind::CastFromHand) { continue; }
+                            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+                            if (targeted(d)) { take(d->params.landfall_target_subtype); }
+                        }
+                        if (classes < 0) { continue; }   // no targeted watcher can be on the battlefield in combat
+                        const int width = std::min(4, classes + (split ? 1 : 0));
+                        for (const int k : StatePinVariantRanks(clt_inh, width))
+                        {
+                            TurnSolver::Plan v = p;
+                            v.combat_landfall_target_choice = static_cast<std::int8_t>(k);
+                            clt_extra.push_back(std::move(v));
+                        }
+                    }
+                    TRACE("landfalltgt", "T%d combat landfall-target axis -> %zu variants", state.turn_number,
+                          clt_extra.size());
+                    all.insert(all.end(), std::make_move_iterator(clt_extra.begin()),
+                                          std::make_move_iterator(clt_extra.end()));
+                }
             }
         }
         // (3) Search for Tomorrow's off-suspend pin (packed per arrival at the NEXT upkeep, in the
@@ -61096,7 +61202,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
-            add(pl.land_slot); add(pl.landfall_target_choice);
+            add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
             add(pl.land_from_top);   // Courser: in padding, so the size pin below cannot catch it
             add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
             add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
@@ -64737,6 +64843,13 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
         }
     }
+    // ...and the COMBAT LANDFALL-TARGET RANK (2026-10-17): a combat-landfall variant's main phase IS its
+    // base plan's, so without this slot its post-apply state collided with the base's and was skipped as a
+    // duplicate. Its own slot (36), value-gated, and NOT under the lever above: this soundness has no
+    // off switch.
+    if (state.scripted_combat_landfall_target != -1)
+    { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(36) << 40)
+                 ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(state.scripted_combat_landfall_target))); }
     return k;
 }
 // ...and the LAND-SEARCH state pins (Primeval Titan's attack pick, Search for Tomorrow's off-suspend
@@ -74221,6 +74334,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 for (int v : p.land_search_pins) { mix(static_cast<std::uint64_t>(v + 7)); }
                 mix(static_cast<std::uint64_t>(p.bp_choice + 7));
                 mix(static_cast<std::uint64_t>(p.landfall_target_choice + 7));
+                if (p.combat_landfall_target_choice >= 0) { mix(static_cast<std::uint64_t>(p.combat_landfall_target_choice + 11)); }
                 mix(std::hash<std::string>{}(p.land_to_play));
                 return h;
             };
@@ -82532,6 +82646,10 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.attack_land_search_choice >= 0) { s.scripted_attack_land_search = p.attack_land_search_choice; }
     if (p.upkeep_land_search_choice >= 0) { s.scripted_upkeep_land_search = p.upkeep_land_search_choice; }
     if (p.combat_crack_choice >= 0)       { s.scripted_combat_land_search_crack = p.combat_crack_choice; }
+    // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
+    // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
+    if (p.combat_landfall_target_choice >= 0)
+    { s.scripted_combat_landfall_target = static_cast<std::int8_t>(p.combat_landfall_target_choice); }
 }
 
 // The apply's canon default at a breakpoint the plan does not branch on (nested canon, enum/base canon),

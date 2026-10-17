@@ -822,3 +822,128 @@ TEST_CASE("Post-apply state pins: write-when-set over the pins a state already h
     CHECK(s.scripted_bruna_gather == 0);
     CHECK(s.scripted_attack_attach == 3);
 }
+
+// ---- THE COMBAT LANDFALL TARGET (2026-10-17; Plan::combat_landfall_target_choice) -------------------------
+// Primeval Titan's attack fetch (and the in-combat Khalni crack) put lands at declare-attackers, after the
+// main-phase landfall policy has gone out of scope, so Phylath's TARGETED trigger took the provider's front
+// for every plan. The main-1 plan now carries a combat RANK (the crack mask's state-pin route), fanned beside
+// an attacking Titan. No win-turn fixture: in goldfish the combat front (attackers first) is never worse in Landfall.
+namespace
+{
+int PlantTokenG(GameState& s, int power, int toughness, int number)
+{
+    Permanent p;
+    p.card.m_name = std::to_string(power) + "/" + std::to_string(toughness) + " Plant Token";
+    p.card.RehashName();
+    p.card.AddType(CardType::Creature);
+    p.card.m_subtypes  = { "Plant" };
+    p.card.m_power     = power;
+    p.card.m_toughness = toughness;
+    p.card.m_number    = number;
+    p.is_token         = true;
+    p.controller_index = 0;
+    p.owner_index      = 0;
+    s.battlefield.push_back(p);
+    return static_cast<int>(s.battlefield.size()) - 1;
+}
+// Titan (can attack), a sick Phylath, a 0/1 and a 1/1 Plant (two classes), drop spent, nothing in hand.
+GameState IdlePhylathTitanBoard()
+{
+    GameState s = FreshG(7);
+    s.players[0].lands_played_this_turn = 1;
+    for (int n = 1; n <= 3; ++n) { PutG(s, "Forest", n, /*tapped=*/true); }
+    PutG(s, "Primeval Titan", 10, false);
+    PutG(s, "Phylath, World Sculptor", 11, false, /*sick=*/true);
+    PlantTokenG(s, 0, 1, 20);
+    PlantTokenG(s, 1, 1, 21);
+    LibG(s, "Radiant Fountain", 50); LibG(s, "Haunted Fengraf", 51);
+    return s;
+}
+bool HasClt(const std::vector<TurnSolver::Plan>& v, int k)
+{
+    for (std::size_t i = 1; i < v.size(); ++i) { if (v[i].combat_landfall_target_choice == k) { return true; } }
+    return false;
+}
+int PowerOfNumber(const GameState& s, int number)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == number) { return p.EffectivePower(); } }
+    return -100;
+}
+}   // namespace
+
+TEST_CASE("Combat landfall target: an attacking Titan beside Phylath fans the combat rank, even on the idle pass")
+{
+    LoadCardsGaps();
+    const GameState s = IdlePhylathTitanBoard();
+    REQUIRE(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true).empty());
+    const std::vector<TurnSolver::Plan> v = TurnSolver::IdlePassWithAxes(s);
+    REQUIRE_FALSE(v.empty());
+    CHECK(v[0].combat_landfall_target_choice == -1);   // the pass itself: the front
+    CHECK(HasClt(v, 1));                                // rank 1: the other Plant class first
+    CHECK_FALSE(HasClt(v, 0));                          // the front IS the pass
+    CHECK_FALSE(HasClt(v, 2));                          // two singleton classes, no cast: no headroom
+    // On a state already holding a rank (a breakpoint re-solve under a committed plan that pinned 1), the
+    // pass inherits it, so the front is the variant.
+    GameState r = IdlePhylathTitanBoard();
+    r.scripted_combat_landfall_target = 1;
+    const std::vector<TurnSolver::Plan> vr = TurnSolver::IdlePassWithAxes(r);
+    CHECK(HasClt(vr, 0));
+    CHECK_FALSE(HasClt(vr, 1));
+}
+
+TEST_CASE("Combat landfall target: no attacking Titan, no combat rank")
+{
+    LoadCardsGaps();
+    GameState s = IdlePhylathTitanBoard();
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 10) { p.tapped = true; } }   // Titan can't attack
+    const std::vector<TurnSolver::Plan> v = TurnSolver::IdlePassWithAxes(s);
+    CHECK_FALSE(HasClt(v, 1));
+}
+
+TEST_CASE("Combat landfall target: the Titan's attack fetch resolves Phylath at the combat rank, -1 = the front")
+{
+    LoadCardsGaps();
+    auto attack = [](GameState& g)
+    {
+        std::vector<int> atk;
+        for (int i = 0; i < static_cast<int>(g.battlefield.size()); ++i)
+        {
+            const int n = g.battlefield[static_cast<std::size_t>(i)].card.m_number;
+            if (n == 10 || n == 20 || n == 21) { atk.push_back(i); }
+        }
+        FireAttackLandSearch(g, 0, atk);
+    };
+    // The front (swings now, then power): both +4s on the 1/1.
+    GameState f = IdlePhylathTitanBoard();
+    attack(f);
+    CHECK(PowerOfNumber(f, 21) == 9);
+    CHECK(PowerOfNumber(f, 20) == 0);
+    // Rank 1: the 0/1 first (4/5), then -- it now leads on power -- rank 1 is the 1/1 (5/5).
+    GameState k = IdlePhylathTitanBoard();
+    k.scripted_combat_landfall_target = 1;
+    attack(k);
+    CHECK(PowerOfNumber(k, 20) == 4);
+    CHECK(PowerOfNumber(k, 21) == 5);
+    // A MAIN-PHASE policy live around the call (a projection inside ApplyPlanDirect) does not leak into the
+    // combat entries: the combat rank -- here -1, the front -- is installed for them, as in the real combat.
+    GameState m = IdlePhylathTitanBoard();
+    {
+        ScriptedLandfallTarget live(1, m.turn_number);
+        attack(m);
+        CHECK(LandfallTargetPinFor(m) == 1);            // the outer policy is restored on exit
+    }
+    CHECK(PowerOfNumber(m, 21) == 9);
+    CHECK(PowerOfNumber(m, 20) == 0);
+}
+
+TEST_CASE("Combat landfall target: the pin is a post-apply state pin, written write-when-set")
+{
+    GameState s = FreshG(7);
+    TurnSolver::Plan p;
+    p.combat_landfall_target_choice = 2;
+    TurnSolver::WritePostApplyStatePins(s, p);
+    CHECK(s.scripted_combat_landfall_target == 2);
+    TurnSolver::Plan q;   // no rank: the inherited one stands
+    TurnSolver::WritePostApplyStatePins(s, q);
+    CHECK(s.scripted_combat_landfall_target == 2);
+}
