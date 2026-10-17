@@ -8,33 +8,30 @@ primary checkout (untracked there) on 2026-10-17 and asked to analyze it. Work h
 viewer and is shared by other sessions, so nothing is edited there). The deck file was COPIED into the
 worktree; the user's original stays in place.
 
-**State (2026-10-17 ~10:30 UTC; USER: "hold off on pushing ... stabilize everything" -- NOTHING PUSHED):**
+**State (2026-10-17 ~16:20 UTC; USER: "hold off on pushing ... stabilize everything" -- NOTHING PUSHED):**
 `colossus-analysis` tip: see `git log`. Done and committed: all 10 cards; the two bp cast-record fixes
 (`0f3c56499` Magnetic Theft's Equipment pin, `0d410db07` ten more fields); Stage 4 profile (`5e32c4d96`); Scryfall
 snapshot (`7088c2f86`); ALL THREE TIERS with accepted GT (`8c1de4465`; suite_gate 0.43x PASS); the cast-order +
 discard DRAFTS implemented OFF (`795642c39`) and MEASURED (`ac2095d02`: order -0.053 play / -0.056 d3 / -0.048 d0,
 every slower game recovers; buckets neutral); viewer-audit state-gated class (5h now PASS); cost audit 435/435;
 `5b39d898d` card-field audit green for EVERY deck (kicker/storied stripped as param-modelled, stale Glorybringer
-entry dropped). verify_deck (`--no-network`, 10:01): every gate PASS except claude_sweep (6 unresolved = the fixes
-in flight); claude-play sweep 18/18 recorded below.
-IN FLIGHT (Opus fix agents, each in its own worktree under `.claude/worktrees/`, commit locally, no push):
-`colossus-pay` (human-play multi-cast line payment, flag 3), `colossus-aid` (Sigarda's Aid host as a SEARCHED axis,
-flag 2 -- changes Kitty play too), `colossus-fold` (reconfigure-then-equip illegal + waiver, dominated attach folds
-incl. the double-Theft, Path human default; flags 4-6) -- these three off `ac2095d02`; off `5b39d898d`:
-`colossus-idle` (an empty-handed pre-combat PASS gets no combat-pin variants -- Bruna gather / Primeval Titan /
-Arcanum Wings, Raubahn already closed: a greedy pick in the window that moves OTHER decks) and `colossus-depskip`
-(radix jump past equip-dependency-violated positions in the subset odometers; byte-identical, see Stage 5).
-Ardenn searched axis: CANCELLED (USER ruling 2026-10-17, host picks may be heuristic -- see Standing decisions).
-`colossus-idle` LANDED (idle pass through the sub-decision fan-out, 15 post-apply pins covered, smoke byte-identical;
-gap fires only on mid-turn starts) and CONTINUED on (1) the executor dropping a breakpoint re-solve's after-apply pins
-(lockstep) and (2) combat landfall targets always taking the front (no-greedy). `colossus-aid` REDIRECTED to the
-heuristic host per the ruling. `colossus-fold` CONTINUED on the equip/reconfigure host identity fold;
-`colossus-depskip` CONTINUED on the mana-walk cut.
-NEXT: rebase each onto `colossus-analysis` (rebase, never
-merge), build, units, scenarios, smoke + regression (`env -C`), per-deck verdicts on every play change, accept GT
-with `--deck` filters (carry provenance notes), update the sweep flag count, then `leaf_tiebreak_check.py` (5c2) on
-the final engine, verify_deck again, final report. Open USER questions: below + cast-order adoption, discard
-buckets, human main-2 asymmetry, Ardenn's human pick.
+entry dropped). verify_deck (`--no-network`, 10:01): every gate PASS except claude_sweep (then 6 unresolved; now 1 -- the USER's
+cast-order call); claude-play sweep 18/18 recorded below.
+ALL FIX AGENTS DONE (2026-10-17 ~16:15 UTC), everything integrated by rebase / cherry-pick (no merge commits):
+human-play prepay hand demand; MTG_EQUIP_DEP_SKIP + the leaf mana radix cut (byte-identical, Colossus game 0.485x
+instructions); attach folds + no-target equip + Path human default; equip/reconfigure host identity fold; Theft
+every-pair offer + joint mirror fold + per-COPY hand pins + the unlanded-copy equip fold; idle pass through the
+sub-decision fan-out; executor realises a re-solve's after-apply pins AND payment pins; combat landfalls searched
+(+ the main-phase share covers them); breakpoint MISMATCH 3 -> 0 (Snow pre-target occurrences mirrored);
+consume-once CastRiders + the rollout free-cast bank; free-cast hits with no legal target go to the bottom (CR
+702.85a); USER-ruled Sigarda's Aid host heuristic. Colossus SMOKE GT accepted twice (`ac44130d8`, `78c864df6`);
+every later commit measured byte-identical on smoke. Deferred (docs/design/free-cast-target-followups.md): the
+executor's targeted free cast, the rollout's template graveyard card.
+FINAL VALIDATION IN FLIGHT on the final tree: units, scenarios, smoke, then the REGRESSION tier; then per-deck
+verdicts, filtered regression accepts, `leaf_tiebreak_check.py` (5c2), verify_deck, final report.
+Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
+keep-table cache keying, autonomous hand-aware batch prepay, the d0 greedy's self-Path valuation, a lossy
+combat-landfall top-pick prune (all listed in the final report).
 GOTCHA: run `test/regression.sh` ONLY as `env -C <tree> bash test/regression.sh` — it uses the CWD's
 binary/cards.json/results (a smoke run from the primary's cwd at 06:33 zeroed the primary's
 `test/results/smoke.env`, a 10-14 leftover). Research drafts + integrator reports: `logs/colossus/drafts/`.
