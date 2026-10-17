@@ -3198,16 +3198,22 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         if (ok && w >= 0)
         {
-            AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            // MTG_KEEP_BENCH_DEPTH / _BUDGET apply here too (diagnostic-only, like the bench), so a rollout a
+            // bench dump singled out can be re-run ALONE at the bench's settings -- the "is this rollout's
+            // value a function of itself?" test (docs/design/edf-round3-2026-10-17.md).
+            const int rp_depth  = EnvInt("MTG_KEEP_BENCH_DEPTH", cfg.depth);
+            const int rp_budget = EnvInt("MTG_KEEP_BENCH_BUDGET", cfg.budget_ms);
+            AIEngine ai(rollout_profile, rp_depth, rp_budget);
             ai.SetSearchPostCombat(second_main);
             std::cerr << "[replay] H=" << H << " pd=" << rpd << " r=" << rr << " w=" << w
-                      << " depth=" << cfg.depth << " budget=" << cfg.budget_ms << " -> running...\n" << std::flush;
+                      << " depth=" << rp_depth << " budget=" << rp_budget << " -> running...\n" << std::flush;
             const auto t0 = std::chrono::steady_clock::now();
+            const long long u0 = gamework::Used();
             const double wt = run_one(ai, w, rpd, rr);
             const double ms = std::chrono::duration<double, std::milli>(
                                   std::chrono::steady_clock::now() - t0).count();
             std::cerr << "[replay] DONE win_turn=" << wt << " elapsed=" << static_cast<long long>(ms)
-                      << "ms\n" << std::flush;
+                      << "ms units=" << (gamework::Used() - u0) << "\n" << std::flush;
         }
         return;   // diagnostic -> never proceed to the full gen
     }
