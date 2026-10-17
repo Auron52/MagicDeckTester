@@ -10,8 +10,17 @@ one pool against a SHARED apparatus to decide what to adopt), and NOT the adopti
 (`mulligan-profile.md` + `value-leaf.md`). It runs **after** adoption, on two lists that each already
 shipped, and it answers a retrospective question. Nothing here regenerates an artifact.
 
-Worked reference, with all six cells and the full method section:
-`docs/design/v1-vs-current-500k-d7b200.md` (Angels / Critter Lifegain / White Knights, 6M games).
+Worked references, each with three decks, both formats, the win-turn distributions and the full method
+section — copy their shape:
+
+* `docs/design/v1-vs-current-stompy-angels-critter.md`
+* `docs/design/v1-vs-current-fungus-kitty-whiteknights.md`
+
+**Six decks fit badly in one document and three fit well.** The first draft put all six in one file and
+the user split it; a six-deck front page cannot carry both a headline table and a `<=T4` table without
+one of them becoming unreadable. Group decks three at a time, and prefer a grouping that lets the front
+page say something — the Fungus/Kitty/White Knights document is "the three most rebuilt decks", which is
+also where the mean is most misleading.
 
 ## RULE 0 — EACH ARM PLAYS WITH ITS OWN SHIPPED APPARATUS, AND YOU MUST SAY SO
 
@@ -34,6 +43,16 @@ much of the gain came from the cards alone"; that needs both lists against one s
 is `deck-screening.md`'s design and a different (cheaper) experiment. Write the caveat into the
 document rather than leaving a reader to infer it. Quote the margin against it: if the smallest gain is
 ~180x its own se and 10/10 blocks consistent, apparatus bias is not a live alternative explanation.
+
+**READ BOTH `.value.json` FILES — THE ARMS CAN DIFFER IN SEARCH SHAPE, NOT JUST IN CARDS.** The
+appendix-level caveat is not always enough. Fungus v1 ships a 136 KB learned value-leaf table while the
+current list's own v2 generation concluded it was better off **leafless** — a 160-byte config whose
+`value_play.leaf: "none"` substitutes `MidGameEvaluator::Constant()` and sets `value_trust_depth` to 0
+(`apply_leaf_policy`, `src/ai/MulliganProfileIO.h:1251`). That is a different horizon treatment on the
+two arms, and it moves **cost** as much as play — so a 5.7x cost drop cannot be attributed to the cards.
+Diff the sidecars' top-level keys (`value_leaf_table` present or absent, `value_play.leaf`,
+`escalation_skip_r`) and name the difference **on that deck's page**, not only in the appendix. It is
+still inside "did the deck get better", because the leaf decision was the deck's own measured adoption.
 
 ## THE PAIRING CONTRACT — GET THIS WRONG AND THE ARMS SILENTLY STOP BEING PAIRED
 
@@ -136,6 +155,19 @@ rate is not a defect when the mass moved forward; it is the deck converting marg
 fast kills. Report win% as a plain fact without the cautionary gloss. Full ruling:
 `goldfish-late-wins-are-losses-anyway` in agent memory.
 
+**A `0.00%` IN THE TABLE IS A ROUNDING, NOT A ZERO — COUNT THE GAMES BEFORE WRITING "NEVER".** Fungus
+v1 at 2HG shows `T4 0.00%`, and the temptation is to write "v1 never won by turn 4". It won twice in
+50,000 games. Go back to the `.wins` files for the raw count and state that instead ("2 games out of
+50,000"), which is both true and more striking than the rounded zero.
+
+**NEVER PUT A NUMBER IN THE DOCUMENT THAT A RUN HAS NOT PRODUCED — NOT EVEN AS A PLACEHOLDER.** Drafting
+a page while its last cell is still measuring is the right use of the waiting time, but the empty cell
+must be a visible marker (`«PENDING»`) that cannot be mistaken for data. Make the fill-in mechanical: a
+helper that reads the `.wins` files and emits the finished markdown rows, and that **exits non-zero
+rather than printing anything** while the format is short of its expected blocks. Validate the helper by
+running it on a cell that is already in the document and diffing — it confirms the transcription and the
+tool at once.
+
 ## CONFIRM WHAT `avg` MEANS — DO NOT READ IT OFF THE SOURCE
 
 `BatchRunner.cpp:1485-1486` reads as if `average_win_turn = sum / games_won`, i.e. won games only. The
@@ -180,6 +212,11 @@ page carrying the headline table and the method. Per deck page:
    applicable diff. Diff the `main` zone, and **check the sideboard separately** — on the reference run
    the two cards v1 kept as sideboard singletons were the two the new list promoted to 4-ofs, which a
    main-only diff reports as "new cards" and misses the story.
+   **A "cut" may be a DEMOTION.** Kitty Equipment's current list carries a 23-card sideboard against
+   v1's none, and six of its sixteen main-deck "cuts" (Bonesplitter, Umezawa's Jitte, O-Naginata, Sol
+   Ring, Armored Skyhunter, Kor Duelist) reappear there as singletons — so a main-only diff overstates
+   what left the deck. Say "demoted to the sideboard", not "cut". A 16-row removed list also needs a
+   two-wide table to stay on one page.
 3. **Both formats' averages** in one table: win%, non-wins, `avg(won)`, `avg(pen=9)`.
 4. **Block delta range** (`-0.6424 to -0.6579`) and `n/10 blocks better`. A narrow range across
    500,000 games is the evidence that the effect is flat rather than carried by a few blocks.
