@@ -27,8 +27,8 @@ consume-once CastRiders + the rollout free-cast bank; free-cast hits with no leg
 702.85a); USER-ruled Sigarda's Aid host heuristic. Colossus SMOKE GT accepted twice (`ac44130d8`, `78c864df6`);
 every later commit measured byte-identical on smoke. Deferred (docs/design/free-cast-target-followups.md): the
 executor's targeted free cast, the rollout's template graveyard card.
-FINAL VALIDATION DONE (smoke + regression accepted, `953d30538`); `leaf_tiebreak_check.py` (5c2) running, then
-verify_deck and the final report.
+FINAL VALIDATION DONE (smoke + regression accepted, `953d30538`); 5c2 DONE (keep ON, net -8 over 40k pairs); verify_deck
+running, then the final report.
 Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
 keep-table cache keying, autonomous hand-aware batch prepay, the d0 greedy's self-Path valuation, a lossy
 combat-landfall top-pick prune (all listed in the final report).
@@ -220,7 +220,8 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
 
 * **5c2 horizon tie-break (`leaf_tiebreak_check.py`, final engine):** default sample (12 blocks, 12,000 pairs at play
   settings) -- 6 changed games (0.050%), net +0, 3 worse / 3 better: NO SIGN. Re-running at 40 blocks (~40,000 pairs)
-  for a decisive sample; the default (ON) stands unless that shows harm.
+  for a decisive sample; the default (ON) stands unless that shows harm. **40 blocks (40,000 pairs): 21 changed
+  (0.052%), net -8 turns, 13 better / 8 worse, halves +0 / -8 -> VERDICT: KEEP THE DEFAULT (ON).**
 
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
