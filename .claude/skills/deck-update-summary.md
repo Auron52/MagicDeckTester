@@ -108,6 +108,34 @@ head-scaling ones is exactly the shape that shows up as a larger 2HG gain — an
 you look at the params. The default being *true* means **absence of the key is the scaling case**,
 which is the opposite of what a reader expects.
 
+## THE MEAN IS NOT THE HEADLINE — REPORT THE WIN-TURN DISTRIBUTION
+
+**USER 2026-10-17:** *"some games are just losses and even games where you would win on T7 or T8 in a
+goldfish are generally losses in a real game"*, and *"T6 or even T5 will also be losses against a
+reasonably fast opponent."*
+
+So the value of a win **decays steeply with turn number**, and the mean win turn prices a T6→T5 shift
+the same as a T4→T3 shift. It therefore **systematically understates an improvement that lands in the
+fast region** — which is where a good list adoption usually lands.
+
+**It is free to fix.** The `.wins` files already hold every per-game win turn, so one pass gives a
+histogram plus the only two aggregates that matter: **`<=T4` (wins that count)** and **`>=T6`
+(games that are losses in practice, non-wins included)**. Put that table on every deck page, above or
+beside the means.
+
+What it caught on the reference run, where the mean was actively misleading:
+
+* **Kitty**: mean −0.4423t (the middling one of six) but **T3 wins 13.26% → 50.56%** — it kills on turn
+  three in half of all games, up from an eighth — with its `>=T6` tail unchanged (7.30% → 7.21%). All of
+  its extra non-wins sit in the zone that does not matter.
+* **Angels v1 and Fungus v1 were dead-zone decks** — 27% and 31% of games at T6-or-later — and the
+  current lists cut that to ~4–7%. No mean conveys that.
+
+**Corollary: do NOT hedge a faster list for whiffing more at the far tail.** A lower `max_turns 8` win
+rate is not a defect when the mass moved forward; it is the deck converting marginal grind-outs into
+fast kills. Report win% as a plain fact without the cautionary gloss. Full ruling:
+`goldfish-late-wins-are-losses-anyway` in agent memory.
+
 ## CONFIRM WHAT `avg` MEANS — DO NOT READ IT OFF THE SOURCE
 
 `BatchRunner.cpp:1485-1486` reads as if `average_win_turn = sum / games_won`, i.e. won games only. The
