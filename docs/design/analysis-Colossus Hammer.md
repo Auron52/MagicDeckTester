@@ -177,6 +177,13 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   14M skippable positions); smoke 124/124 byte-identical (digests, avg AND units). s7065 gi58: instructions 0.783x,
   wall 0.940x; Kitty ~1.00x. NEXT collapse (same agent): ~13M of the ~15M positions the leaf walk still visits fail
   the scalar mana bound one at a time -- port EnumeratePlans' MTG_MANA_WALK_CUT to it.
+  **LANDED (mana cut in SolveUncached's walk; MTG_MANA_WALK_CUT reused for the plain form, new MTG_MANA_GATE_WALK_CUT
+  for the ManaGateIndex form, `MTG_MANA_WALK_CUT_VERIFY=1`):** verify 0 unsound over the full smoke manifest (659M +
+  4.5M skippable positions); smoke 124/124 byte-identical (digests, avg, units). Instructions vs the committed tree:
+  Colossus s7065 gi58 0.619x (with dep-skip: 10.89G -> 5.28G overall, 0.485x), Mirrorwing d3 0.977x, Snow/Kitty/burn/
+  Knights within +-0.01%. Leaf walk now visits ~1.71M positions (was ~15M). Not pursued: `SubsetHasStrandedEquip` in
+  consider() re-checks what the dependency digits already enforce (1.3% of instructions; sound only where the
+  dependency map covers the frame).
 * **Disk-full incident, ~11:00 UTC 2026-10-17:** the shared Docker disk hit 100% (66 MB free); the cause was the
   keep-table cache `~/.cache/mtg/keeptable` at 359 GB (one copy per worktree per deck -- it is keyed by tree path).
   The depskip agent deleted 913 entries (301.8 GB; regenerable cache, entries of the primary checkout, the colossus
