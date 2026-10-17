@@ -150,7 +150,9 @@ else
   cmake --preset linux >/dev/null
 fi
 
-jobs="$(nproc 2>/dev/null || echo 4)"
+# MTG_BUILD_JOBS caps the compile parallelism so several worktree builds can share the box without
+# oversubscribing it (total threads <= cores; load ~75 has coincided with 9p mount drops). Default: nproc.
+jobs="${MTG_BUILD_JOBS:-$(nproc 2>/dev/null || echo 4)}"
 echo ">>> build: $cfg on $jobs jobs -> build/$cfg/"
 cmake --build build --config "$cfg" -j"$jobs" "${build_args[@]}"
 echo ">>> done: build/$cfg/  (config=$cfg, optimized)"
