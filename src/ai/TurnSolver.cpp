@@ -64031,10 +64031,31 @@ inline bool FsStrictCutOn()
     static const bool v = EnvOn("MTG_FS_STRICT_CUT", true);
     return v;
 }
-static inline int FsChildCut(int cutoff, int best_win, int max_turns, const SearchBudget* budget)
+// MTG_FS_STRICT_CUT_O1 (heurarm FS_STRICT_CUT_O1) -- DEFAULT OFF (2026-10-17): a search whose horizon leaf is
+// O(1) keeps the INCLUSIVE child cut; =1 restores the strict cut there too (the 2026-10-15..17 behaviour). The
+// strict cut's saving is the tie turn a ROLLOUT leaf plays out in full; an O(1) leaf (the learned value model,
+// or the no-leaf constant) costs the same at any cutoff, so there it removes nothing at the leaf -- and
+// measured, the value-leaf ladder's deep passes cost MORE with it (Landfall d5 7.5k -> 11.9k units/pass,
+// Prevent Damage d5 3.6k -> 8.3k, at an unchanged admission rate), while rollout passes cost less (Landfall
+// live d5 5.7k -> 4.1k). Both cuts return the same answer at every node, so this re-prices work only.
+static inline bool FsStrictCutO1On()
+{
+    static const bool env = EnvOn("MTG_FS_STRICT_CUT_O1");
+    return heurarm::Flag(heurarm::FS_STRICT_CUT_O1, env);
+}
+// The horizon leaf below this node is O(1): mirrors the leaf selection in FSLineWin's horizon (the no-leaf
+// constant applies with or without a model; the value model unless the heuristic leaf is forced).
+static inline bool FsLeafIsO1(const GameState& s)
+{
+    if (g_force_constant_leaf) { return true; }
+    return !g_force_heuristic_leaf && s.m_value_model && !s.m_value_model->empty()
+        && (g_force_value_leaf || UseValueModel());
+}
+static inline int FsChildCut(const GameState& s, int cutoff, int best_win, int max_turns, const SearchBudget* budget)
 {
     (void)budget;   // no longer read: the cut is budget-independent (see above)
-    if (best_win <= max_turns && FsStrictCutOn() && !g_probe_val_recording && !DomActive())
+    if (best_win <= max_turns && FsStrictCutOn() && !g_probe_val_recording && !DomActive()
+        && (FsStrictCutO1On() || !FsLeafIsO1(s)))
     { return std::min(cutoff, best_win - 1); }
     return std::min(cutoff, best_win);
 }
@@ -64452,7 +64473,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 {
                     ++g_m2fix_nest;
                     TurnSolver::SearchLine cont =
-                        FSLineTail(s2, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
+                        FSLineTail(s2, depth, max_turns, FsChildCut(s2, cutoff, best.win_turn, max_turns, budget),
                                    second_main, tt, lc, budget);
                     --g_m2fix_nest;
                     if (m2t_here)
@@ -64730,7 +64751,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (!SimulateEndAndStartNextTurn(s3)) { continue; }
                     ExpireStagedCards(s3);
                     TurnSolver::SearchLine sub =
-                        FSLineWin(s3, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
+                        FSLineWin(s3, depth, max_turns, FsChildCut(s3, cutoff, best.win_turn, max_turns, budget),
                                   second_main, tt, lc, budget);
                     if (m2t_here)
                     {
@@ -64738,7 +64759,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         for (const Action& ca : bp3) { cont += ca.card_name.str(); cont += ","; }
                         std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d cont=[%s] sub=%d cutoff=%d\n",
                                      state.turn_number, depth, m2t_sum(q).c_str(), k, cont.c_str(),
-                                     sub.win_turn, FsChildCut(cutoff, best.win_turn, max_turns, budget));
+                                     sub.win_turn, FsChildCut(s3, cutoff, best.win_turn, max_turns, budget));
                         // Level 2: the child's NEXT-TURN start state (s3 is post-EOT here), so a
                         // sub that "should" have won can be diffed against the fixture/control state
                         // -- hand, library top (the next turn's dig window), and untapped sources.
@@ -64823,7 +64844,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // STATE CLOSURE (WinlessDevelopActive / fswdedup): a sibling already searched this
             // exact end-of-turn state, so this line's future IS that line's future.
             if (eot_seen != nullptr
-                && !eot_seen->Visit(BuildDedupKey(s2), s2, FsChildCut(cutoff, best.win_turn, max_turns, budget),
+                && !eot_seen->Visit(BuildDedupKey(s2), s2, FsChildCut(s2, cutoff, best.win_turn, max_turns, budget),
                                     depth, max_turns))
             {
                 if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT closure\n", m2t_sum(q).c_str()); }
@@ -64843,7 +64864,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 }
             }
             TurnSolver::SearchLine sub =
-                FSLineWin(s2, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
+                FSLineWin(s2, depth, max_turns, FsChildCut(s2, cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
             if (m2t_here)
             {
                 std::fprintf(stderr, "[m2t] %s T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
@@ -64940,7 +64961,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (!SimulateEndAndStartNextTurn(s)) { continue; }
                     ExpireStagedCards(s);
                     TurnSolver::SearchLine sub =
-                        FSLineWin(s, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
+                        FSLineWin(s, depth, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget),
                                   second_main, tt, lc, budget);
                     if (sub.win_turn < best.win_turn)
                     {
@@ -65088,7 +65109,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         if (dprobe.prune) { continue; }
                     }
                     TurnSolver::SearchLine sub =
-                        FSLineWin(s2, depth, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
+                        FSLineWin(s2, depth, max_turns, FsChildCut(s2, cutoff, best.win_turn, max_turns, budget),
                                   second_main, tt, lc, budget);
                     if (m2t_here)
                     {
@@ -66580,7 +66601,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         return win;
                     }
                     TurnSolver::SearchLine tail =
-                        FSLineTail(s3, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget),
+                        FSLineTail(s3, depth - 1, max_turns, FsChildCut(s3, cutoff, best.win_turn, max_turns, budget),
                                    second_main, tt, lc, budget, nullptr, eot_ptr);
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
@@ -66809,7 +66830,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 for (const Action& a : p.actions) { g_fsw_path += a.card_name; g_fsw_path += ","; }
                 g_fsw_path += "|";
             }
-            tail = FSLineTail(s, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main,
+            tail = FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget), second_main,
                               tt, lc, budget, &dom_arch, eot_ptr);
             if (s_fsw_path) { g_fsw_path.resize(path_len); }
         }
@@ -66830,7 +66851,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             TurnSolver::SearchLine tail_rel =
                 FSLineTail(s_rel, depth - 1, max_turns,
-                           std::min(FsChildCut(cutoff, best.win_turn, max_turns, budget), tail.win_turn),
+                           std::min(FsChildCut(s_rel, cutoff, best.win_turn, max_turns, budget), tail.win_turn),
                            second_main, tt, lc, budget, &dom_arch, eot_ptr);
             // RELEASE WINS TIES (<=, not <): the hold's only possible payoff is within THIS
             // turn -- every source untaps next turn (the hold rule's own premise) -- so a tail
@@ -67124,7 +67145,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     return win;
                 }
                 TurnSolver::SearchLine tail =
-                    FSLineTail(s, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main,
+                    FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget), second_main,
                                tt, lc, budget, nullptr, eot_ptr);
                 // ...and the tail half of the [fsw-wave] line above (same gate).
                 {
@@ -67265,7 +67286,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     return true;
                 }
                 TurnSolver::SearchLine tail =
-                    FSLineTail(s, depth - 1, max_turns, FsChildCut(cutoff, best.win_turn, max_turns, budget), second_main,
+                    FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget), second_main,
                                tt, lc, budget, nullptr, eot_ptr);
                 // FRESH-SPEND admissibility (mirror of wave 0's check): a freshmode variant is
                 // admitted only when its line realizes a WIN within the horizon; a this-turn kill
