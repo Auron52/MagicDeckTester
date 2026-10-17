@@ -9038,6 +9038,43 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     return true;
 }
 
+// True when SubsetPayableSequential refuses `sel` outright -- the "unmodelled kind -> no rescue" exit at
+// the top of its order build (anything but a Vial put or a hand cast carrying its def). Must stay in
+// LOCKSTEP with that loop: it is what lets the range rescue skip an arrangement whose walk could never
+// run (MTG_RANGE_RESCUE_KINDGATE).
+static bool SubsetHasUnmodelledSeqKind(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return true; }
+    }
+    return false;
+}
+static bool RangeRescueKindGateOn()
+{
+    static const bool v = EnvOn("MTG_RANGE_RESCUE_KINDGATE", true);
+    return v;
+}
+static bool RangeRescueKindGateVerifyOn()
+{
+    static const bool v = EnvOn("MTG_RANGE_RESCUE_KINDGATE_VERIFY");
+    return v;
+}
+namespace rangekind
+{
+inline std::atomic<long long> g_skips{0}, g_mismatch{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!RangeRescueKindGateVerifyOn()) { return; }
+        std::fprintf(stderr, "[range-kindgate] skipped=%lld verify_mismatch=%lld\n", g_skips.load(), g_mismatch.load());
+    }
+};
+inline Dump g_dump;
+}   // namespace rangekind
 static bool SubsetPayableSequentialImpl(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel);
 static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
@@ -41165,6 +41202,32 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 if (cands[uj].kind == Action::Kind::CastFromHand && !cands[uj].sacrifice_land) { rk.push_back(j); }
             }
             if (!aura || !untapper) { return false; }
+            // MTG_RANGE_RESCUE_KINDGATE (DEFAULT ON; =0 restores the old order of work, byte-identical):
+            // the rescue's verdict is `arr != rk && SubsetPayableSequential(...)`, and that walk refuses
+            // a subset holding any action it does not model -- anything but a hand cast with a def or a
+            // Vial put (an activation of Conservatory / Shivan Gorge / a Clue, ...) -- before it walks
+            // anything. Such a subset can therefore never be rescued, whatever the arrangement says, so
+            // the arrangement (the EDF range projection: up to 63 sequential walks plus a whole-turn
+            // prepay) is not computed for it. ArrangeCastOrder is a pure projection (it only reads
+            // the board and prints under MTG_EDF_RANGE_TRACE), so skipping it changes nothing but work.
+            // On EDF at the generation shape most range-rescue subsets differ from a sibling ONLY in
+            // such an activation, which is why the census saw 70% of the range's order walks repeat.
+            // MTG_RANGE_RESCUE_KINDGATE_VERIFY=1 computes the old verdict anyway and counts a true one
+            // (must be 0; printed at exit).
+            if (RangeRescueKindGateOn() && SubsetHasUnmodelledSeqKind(cands, sel))
+            {
+                if (RangeRescueKindGateVerifyOn())
+                {
+                    rangekind::g_skips.fetch_add(1, std::memory_order_relaxed);
+                    std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
+                    { return CastOrderLess(state, cands[static_cast<std::size_t>(x)], cands[static_cast<std::size_t>(y)]); });
+                    arr = rk;
+                    ApplyDeckCastArrangement(state, cands, arr);
+                    if (arr != rk && SubsetPayableSequential(state, cands, sel))
+                    { rangekind::g_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                }
+                return false;
+            }
             std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
             { return CastOrderLess(state, cands[static_cast<std::size_t>(x)], cands[static_cast<std::size_t>(y)]); });
             arr = rk;
