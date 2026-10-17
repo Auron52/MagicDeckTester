@@ -227,7 +227,7 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`); flagged seeds RE-CHECKED on the final engine (`51573d7e5`), see below
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
-- flags: 4 unresolved      # 1 = the USER cast-order call; 3 new human-menu items from the final recheck IN FLIGHT on colossus-fold (all 2-6 FIXED, recheck-confirmed; tutor fail-to-find FIXED 3ad79d509)
+- flags: 1 unresolved      # only flag 1 = the USER cast-order call; 2-6 FIXED + recheck-confirmed; recheck items (tutor shuffle 3ad79d509, Path order / hand-Lizard fold / no-legal-pair Theft 56937ba8a) FIXED
 
 Results (search d5 b200 vs Claude, win turn): 2100001 4/4, 2100002 2/2, 2100003 5/5, 2100004 3/3, 2100005 4/4,
 2100006 5/5, 2100007 **7/2** (Claude kept a 1-lander seeing 6 draws; the static keep mulliganed to 5 -- a keep-table
@@ -314,7 +314,11 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
 * NEW, human-menu only, sent to the fold agent: fold (d)'s Path exemption is order-blind (2100017 T6: 5 unexecutable
   Path-before-Theft plans); a Theft onto a HAND-cast Lizard Blades the plan reconfigures is not folded (2100018 T7);
   a Path that exiles the Theft's only creature lets the Theft be cast with no legal target (2100018 T4; CR 601.2c --
-  it must stay in hand).
+  it must stay in hand). -> ALL THREE FIXED `56937ba8a` (order-aware `SubsetMayFreeHost` + the human cast-order menu
+  drops Path-first orders; clause (c) covers a hand-cast Lizard; `AttachSpellCastLegal` before payment in both worlds).
+  Human menus: 2100017 T6 166 -> 160, 2100018 T7 39 -> 37, T4 22 -> 20. Smoke: searched 0 changed, d0 gi539 same
+  score (loss both) -> accepted `768be587d`; regression 171/171 PASS; refs 600 / 0 drift. Disclosed: the refused
+  Theft's {R} was already tapped into the pool by the whole-line prepay and floats for the phase (card kept, mana not).
 
 ## Open USER questions (provisional defaults TAKEN — the work continues on them)
 
