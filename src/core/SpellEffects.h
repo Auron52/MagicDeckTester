@@ -5391,6 +5391,12 @@ struct EtbOptionalPayerScope
 // Plan::etbcounter_choice pin (-1 = ask the provider; 0 = decline; 1 = pay). Scoped by
 // ApplyPlanDirect and the executor alike, so a scored plan and its realised turn agree.
 inline thread_local int g_etb_counter_pin = -1;
+// How many times this thread has CONSULTED the pin (the optional-counter loop in FireEtbWatchers,
+// its one read site). Monotonic, read as a delta around an apply: an apply that leaves it unmoved
+// never let the pin decide anything, so the same apply under the opposite pin is the same apply
+// (the ETB-counter fold, TurnSolver.cpp EtbcFold). Counted only where the pin is actually asked --
+// a caller-owned payer scope (g_etb_optional_payer) bypasses it, and so does the presence gate.
+inline thread_local unsigned long long g_etb_counter_pin_reads = 0;
 struct ScriptedEtbCounter
 {
     explicit ScriptedEtbCounter(int k) : saved(g_etb_counter_pin) { g_etb_counter_pin = k; }
@@ -5782,11 +5788,14 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         // WHETHER to pay is the PROVIDER's call (DecisionProvider::PaysOptionalEtbCounter), unless a
         // caller owns this payment through its own payer scope (the EDF blink loop).
         // A searched plan's pin (Plan::etbcounter_choice) outranks the provider's default.
-        if (g_etb_optional_payer == nullptr
-            && !(g_etb_counter_pin >= 0
-                     ? g_etb_counter_pin == 1
-                     : ResolveProvider(state).PaysOptionalEtbCounter(state, watcher_ctrl)))
-        { continue; }
+        if (g_etb_optional_payer == nullptr)
+        {
+            ++g_etb_counter_pin_reads;   // the ETB-counter fold's witness (see the declaration)
+            if (!(g_etb_counter_pin >= 0
+                      ? g_etb_counter_pin == 1
+                      : ResolveProvider(state).PaysOptionalEtbCounter(state, watcher_ctrl)))
+            { continue; }
+        }
         if (!PayOptionalTriggerCost(state, c)) { continue; }
         int n = wd->params.other_creature_etb_counters;
         const std::string& usub = wd->params.other_creature_etb_counter_subtype;

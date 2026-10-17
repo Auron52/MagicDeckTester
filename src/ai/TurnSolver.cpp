@@ -454,6 +454,14 @@ static std::atomic<long long> g_nodrop_axis_vars[2]{{0}, {0}};
 // MTG_ROLLOUT_STATS firing counters for the 2026-09-30 plan axes (etb-counter, end-of-main-1 sweep):
 // variants emitted. A zero on a deck that should reach the axis means the step cannot have moved it.
 static std::atomic<long long> g_axis_etbcounter_vars{0};
+// The ETB-counter fold (EtbcFold, MTG_ETBC_FOLD): variants declined before their apply, per host
+// ([0] = SolveWithLookahead's candidate loop, [1] = FSLineWin), and MTG_ETBC_FOLD_VERIFY's verdicts.
+static std::atomic<long long> g_etbc_folded[2]{{0}, {0}};
+static std::atomic<long long> g_etbc_verify_ok{0}, g_etbc_verify_bad{0};
+// ...and why a variant was NOT declined (MTG_ROLLOUT_STATS): indexed by EtbcFold's kWhy* codes.
+enum : int { kWhyNotApplied = 0, kWhyClean, kWhyPending, kWhyReads, kWhyUnits, kWhyBp, kWhyOther,
+             kWhyNoBase, kWhyCount };
+static std::atomic<long long> g_etbc_miss[kWhyCount] = {};
 static std::atomic<long long> g_axis_sweep_vars{0};
 // Axis variants (bp_choice < 0) skipped by the post-apply state dedup -- proves PlanIsAxisVariant's
 // widening of the skip fires (a byte-identical A/B is not evidence on its own).
@@ -1998,6 +2006,17 @@ namespace
                       << " armnew_verify_match=" << g_bp_armnew_verify_match.load()
                       << " armnew_verify_mismatch=" << g_bp_armnew_verify_mismatch.load()
                       << " le_variants=" << g_axis_le_vars.load() << "\n";
+            std::cerr << "[rollout-stats] etbc_fold skipped la_cand=" << g_etbc_folded[0].load()
+                      << " fslinewin=" << g_etbc_folded[1].load()
+                      << " (verify ok=" << g_etbc_verify_ok.load()
+                      << " MISMATCH=" << g_etbc_verify_bad.load() << ")"
+                      << " | applied anyway: base_not_applied=" << g_etbc_miss[kWhyNotApplied].load()
+                      << " base_pending=" << g_etbc_miss[kWhyPending].load()
+                      << " base_read_pin=" << g_etbc_miss[kWhyReads].load()
+                      << " base_spent_units=" << g_etbc_miss[kWhyUnits].load()
+                      << " base_hit_bp=" << g_etbc_miss[kWhyBp].load()
+                      << " base_other=" << g_etbc_miss[kWhyOther].load()
+                      << " no_base=" << g_etbc_miss[kWhyNoBase].load() << "\n";
             std::cerr << "[rollout-stats] nodrop_axes m1: enums=" << g_nodrop_enum[1].load()
                       << " axis_variants=" << g_nodrop_axis_vars[1].load()
                       << " | m2: enums=" << g_nodrop_enum[0].load()
@@ -23048,6 +23067,179 @@ static thread_local int g_fsline_nest = 0;
 inline thread_local unsigned long long g_fs_trunc_events = 0;
 // Leaf rollout TT traffic (SimulateToEnd): lookups and hits (win + bound no-win), per pass deltas.
 inline thread_local long long g_tt_look_n = 0, g_tt_hit_n = 0;
+
+// ---- THE ETB-COUNTER FOLD (MTG_ETBC_FOLD, 2026-10-17) --------------------------------------------
+// The searched optional ETB counter axis (AppendSubdecisionAxes, "SEARCHED OPTIONAL ETB COUNTER":
+// Emiel the Blessed's "you may pay {G/W}") clones EVERY base plan into one variant carrying
+// Plan::etbcounter_choice = the opposite of the provider's default, whenever the payer is on the
+// battlefield. The variant differs from its base ONLY in that pin, and ApplyPlanDirect consumes the
+// pin in exactly one place: it installs g_etb_counter_pin (ScriptedEtbCounter), which is consulted
+// only by FireEtbWatchers' optional-counter loop. MEASURED (MTG_DUP_DIFF, EDF generation shape):
+// 25,962 of 79,841 post-apply duplicates were `PL[etbc] SAMEACTS` -- no creature entered under the
+// payer, so the pin was never asked and the variant's apply reached its base's exact state. The
+// post-apply dedup already refused to SCORE those, but only after the GameState copy and the apply.
+//
+// THE FOLD IS EXACT. A base plan's apply is CLEAN when it never consulted the pin
+// (g_etb_counter_pin_reads unmoved) and moved none of the per-apply / watermark channels the loop
+// or an enclosing frame reads (no budget, decision-work or game-work unit, no greedy-charge
+// residue, no breakpoint of any class, no pending breakpoint node, no truncation event, no
+// condemnation drop, no budget bind, no suppressed searched-only site). Such an apply is a function
+// of the state and of the plan's fields other than the pin -- so the variant's apply, from the same
+// state, is the SAME apply: same post-apply key (already in the post-apply dedup set, which would
+// skip it), same channel values. The loop declines the variant before its GameState copy and apply,
+// and leaves every record the skipped path would have left: the unit charge (so units, budget
+// exhaustion and play are byte-identical -- this is NOT a re-price), the per-apply resets, the
+// walker's records of a no-breakpoint apply, the probe's no-win value, the beam refund and the
+// overrun guard's count. The base is matched by content (Plan::operator== with the pin masked, plus
+// bp_self / bp_wave0, which the apply never reads short of a class-on breakpoint), and only a base
+// that APPLIED cleanly EARLIER IN THIS SAME PASS licenses a skip, so no reorder can make it stale.
+// MTG_ETBC_FOLD_VERIFY=1 declines nothing: each would-be skip applies and its post-apply
+// BuildDedupKey is compared against the base's (MISMATCH must be 0).
+//
+// HOSTS: SolveWithLookahead's candidate loop and FSLineWin's plan loop. Greedy Solve applies only
+// the plan it picks, so it has nothing to fold. FSLineWin's main-2 host (m2_seen_states) is NOT
+// wired: on EDF -- the only deck that stamps deck_has_etb_counter_payer -- its lists never carried
+// an etbcounter variant in measurement, so a skip there could not be verified.
+// MEASURED (EDF, seed 2002: d0 x1000, d3 b10 x100, d5 b20 x60): 67,597 applies declined, digests and
+// units byte-identical, verify 67,597 ok / 0 mismatch. The residual (MTG_ROLLOUT_STATS "applied
+// anyway") is mostly bases whose apply reached a breakpoint (base_hit_bp) or read the pin.
+static bool EtbcFoldOn()
+{
+    static const bool on = EnvOn("MTG_ETBC_FOLD", true);   // DEFAULT ON (identity fold); =0 is the A/B hatch
+    return on;
+}
+static bool EtbcFoldVerifyOn()
+{
+    static const bool on = EnvOn("MTG_ETBC_FOLD_VERIFY");   // diagnostic, default off: applies, checks
+    return on;
+}
+struct EtbcFold
+{
+    bool on = false;
+    bool verify = false;
+    std::vector<int>  base_of;   // per candidate: its pin-free base's index (-1 = none)
+    std::vector<char> is_base;   // per candidate: some variant names it as base
+    std::vector<char> clean;     // per candidate: applied in this pass, proven pin-blind (header)
+    std::vector<char> dug;       // ...and that apply's g_apd_last_dug (published on every exit)
+    std::vector<char> is_var;    // per candidate: an etbcounter variant (stats only)
+    std::vector<char> why;       // per base: the Record verdict (kWhy*; stats only)
+    static bool StatsOn() { static const bool on = EnvOn("MTG_ROLLOUT_STATS"); return on; }
+    std::unordered_map<int, TranspositionTable::Key> base_key;   // verify only
+    // Every channel a clean apply must leave unmoved, snapshotted around the base's apply.
+    struct Witness
+    {
+        unsigned long long reads = 0, any = 0, classon = 0, latent9 = 0, truncasym = 0;
+        unsigned long long trunc = 0, drops = 0, binds = 0;
+        long long dw = 0, gw = 0, units = 0;
+        int dw_acc = 0, gc_acc = 0;
+        static Witness Take(long long units_now)
+        {
+            Witness w;
+            w.reads = g_etb_counter_pin_reads;
+            w.any = g_bp_any_last; w.classon = g_bp_classon_last;
+            w.latent9 = g_bp_latent9_last; w.truncasym = g_bp_truncasym_last;
+            w.trunc = g_fs_trunc_events; w.drops = g_condemn_drops; w.binds = budgetbind::t_binds;
+            w.dw = decisionwork::t_used; w.gw = gamework::t_used; w.units = units_now;
+            w.dw_acc = decisionwork::t_charge_acc; w.gc_acc = g_greedy_charge_acc;
+            return w;
+        }
+        bool operator==(const Witness&) const = default;
+    };
+    // `excluded(i)`: the host's other memos that read candidate i's apply (the put-bounce folds,
+    // the combat-pin share) -- such a candidate is left alone, as variant and as base.
+    template <class Excl>
+    void Build(std::vector<TurnSolver::Plan>& cands, bool enabled, Excl excluded)
+    {
+        on = false;
+        if (!enabled) { return; }
+        bool any = false;
+        for (const TurnSolver::Plan& p : cands) { if (p.etbcounter_choice >= 0) { any = true; break; } }
+        if (!any) { return; }
+        base_of.assign(cands.size(), -1);
+        is_base.assign(cands.size(), 0);
+        clean.assign(cands.size(), 0);
+        dug.assign(cands.size(), 0);
+        is_var.assign(cands.size(), 0);
+        why.assign(cands.size(), kWhyNotApplied);
+        base_key.clear();
+        std::unordered_multimap<std::uint64_t, int> bases;
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            if (cands[i].etbcounter_choice < 0)
+            { bases.emplace(PutBounceFold::MaskedHash(cands[i]), static_cast<int>(i)); }
+        }
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            TurnSolver::Plan& v = cands[i];
+            is_var[i] = v.etbcounter_choice >= 0 ? 1 : 0;
+            // A bounce-grouped or dig-marked clone feeds the bounce / dig memos from its own apply.
+            if (v.etbcounter_choice < 0 || v.bounce_group != 0 || v.dig_choice == 2 || excluded(i)) { continue; }
+            const int  ec = v.etbcounter_choice;
+            const int  vs = v.bp_self;
+            const bool w0 = v.bp_wave0;
+            v.etbcounter_choice = -1;
+            int b = -1;
+            const auto rng = bases.equal_range(PutBounceFold::MaskedHash(v));
+            for (auto it = rng.first; it != rng.second; ++it)
+            {
+                const TurnSolver::Plan& q = cands[static_cast<std::size_t>(it->second)];
+                v.bp_self  = q.bp_self;
+                v.bp_wave0 = q.bp_wave0;
+                if (q == v) { b = it->second; break; }
+            }
+            v.etbcounter_choice = ec;
+            v.bp_self  = vs;
+            v.bp_wave0 = w0;
+            if (b < 0 || excluded(static_cast<std::size_t>(b))) { continue; }
+            base_of[i] = b;
+            is_base[static_cast<std::size_t>(b)] = 1;
+            on = true;
+        }
+        verify = on && EtbcFoldVerifyOn();
+    }
+    // After candidate i's apply (`pending` = it stopped at a breakpoint node): bank a clean base.
+    template <class KeyFn>
+    void Record(std::size_t i, const Witness& before, long long units_now, bool pending, KeyFn key_of)
+    {
+        if (!on || is_base[i] == 0) { return; }
+        const Witness after = Witness::Take(units_now);
+        why[i] = pending ? kWhyPending
+               : g_bp_searchonly_suppressed ? kWhyOther
+               : after.reads != before.reads ? kWhyReads
+               : (after.units != before.units || after.dw != before.dw || after.gw != before.gw
+                  || after.dw_acc != before.dw_acc || after.gc_acc != before.gc_acc) ? kWhyUnits
+               : (after.any != before.any || after.classon != before.classon
+                  || after.latent9 != before.latent9 || after.truncasym != before.truncasym) ? kWhyBp
+               : !(after == before) ? kWhyOther : kWhyClean;
+        if (why[i] != kWhyClean) { return; }
+        clean[i] = 1;
+        dug[i] = g_apd_last_dug ? 1 : 0;
+        if (verify) { base_key[static_cast<int>(i)] = key_of(); }
+    }
+    // The clean base whose apply candidate i's would repeat, or -1.
+    int Skip(std::size_t i) const
+    {
+        if (!on) { return -1; }
+        const int b = base_of[i];
+        if (b >= 0 && clean[static_cast<std::size_t>(b)] != 0) { return b; }
+        // MTG_ROLLOUT_STATS: why an etbcounter variant still applies (see g_etbc_miss).
+        if (StatsOn() && is_var[i] != 0)
+        {
+            g_etbc_miss[b < 0 ? kWhyNoBase : why[static_cast<std::size_t>(b)]]
+                .fetch_add(1, std::memory_order_relaxed);
+        }
+        return -1;
+    }
+    // Verify mode: the variant's own post-apply key against its base's.
+    void Check(int b, const TranspositionTable::Key& vkey, int turn) const
+    {
+        const auto it = base_key.find(b);
+        if (it == base_key.end()) { return; }
+        if (it->second == vkey) { g_etbc_verify_ok.fetch_add(1, std::memory_order_relaxed); return; }
+        const long long n = g_etbc_verify_bad.fetch_add(1, std::memory_order_relaxed);
+        if (n < 5) { std::fprintf(stderr, "[etbc-verify] MISMATCH turn=%d base=%d\n", turn, b); }
+    }
+};
 // MTG_TRUNC_COMPLETE (default ON; =0 restores the pre-audit counting for the A/B). The
 // recoverability audit (docs/design/search-recoverability-audit.md §6.1/§6.2) found searched-
 // structure drops that never bumped the counter above, so the no-win stores cached FILTERED or
@@ -71176,6 +71368,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                               && PutBounceFoldOn() && !BounceFoldVerifyOn() && !ArmNewVerifyOn()
                               && !fsw_verify);
     const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
+    // THE ETB-COUNTER FOLD (see EtbcFold). Only where the post-apply dedup it pre-empts runs
+    // (bp_variants_here: every etbcounter variant is PlanDupSkippable, so it always does), and off
+    // under the diagnostic verify modes that bank a candidate's own post-apply key.
+    EtbcFold etbc_fold;
+    etbc_fold.Build(pre, bp_variants_here && EtbcFoldOn() && !HumanPlayActive() && !ArmNewVerifyOn()
+                         && !fsw_verify,
+                    [&](std::size_t i)
+                    {
+                        return (put_fold.on && (put_fold.is_base[i] != 0 || put_fold.base_of[i] >= 0))
+                            || (etb_fold.on && (etb_fold.is_base[i] != 0 || etb_fold.dev_ord[i] >= 0));
+                    });
     // MTG_BP_NSKIP_GLOBAL only: this node's state dedup key, the cross-node half of the length
     // memo's key (see BpNSkipGlobalMode). Computed ONCE per node and only when the flag is on, so
     // the default path pays nothing and stays byte-identical.
@@ -71536,6 +71739,47 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
             if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
         }
+        // ---- THE ETB-COUNTER FOLD (see EtbcFold) ------------------------------------------------
+        // An etbcounter variant of a base whose apply was proven pin-blind IS that apply, whose post-
+        // apply key bp_seen_states already holds -- the post-apply dedup below would skip it. Declined
+        // AFTER the unit charge (units and play stay byte-identical) and before the copy and the
+        // apply, leaving exactly what that path leaves: the per-apply resets, the dig channel the
+        // apply publishes, the wave-0 / stillborn records of a no-breakpoint apply, the wave probe's
+        // duplicate count, the probe's no-win value and the beam refund.
+        int etbc_expect = -1;   // verify mode: the base this candidate's apply must repeat
+        {
+            const std::size_t ec_i = static_cast<std::size_t>(&p - pre.data());
+            const int ec_b = etbc_fold.Skip(ec_i);
+            if (ec_b >= 0 && etbc_fold.verify) { etbc_expect = ec_b; }
+            else if (ec_b >= 0)
+            {
+                if (BpWaveNSkipOn()) { g_bp_cands_last = 0; g_bp_demoted_last = 0; }
+                if (fsw_chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
+                if (fsw_nobp_here) { g_bp_searchonly_suppressed = false; }
+                g_bp_base_lens.clear();
+                g_apd_last_dug = etbc_fold.dug[static_cast<std::size_t>(ec_b)] != 0;
+                if (fsw_w0_here)
+                {
+                    w0collapse::Record(fsw_w0, p, static_cast<int>(ec_i), g_bp_any_last, g_bp_classon_last,
+                                       fsw_nobp_here, fsw_unif_here, fsw_chain_here);
+                }
+                if (ArmNewDupAll(p, 0, 0, 0, 0))
+                {
+                    armnew_dup_all.emplace(ec_i, TranspositionTable::Key{});
+                    armnew_dlen.emplace(ec_i, g_bp_base_dlen0);
+                }
+                if (BpWaveProbeOn() && p.bp_choice < 0)
+                {
+                    g_bp_wave_probe.pre_seen.fetch_add(1);
+                    g_bp_wave_probe.pre_dup.fetch_add(1);
+                }
+                g_etbc_folded[1].fetch_add(1, std::memory_order_relaxed);
+                if (rec_vals) { node_vals.push_back(max_turns + 1); }
+                if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
+                FswDeclinedTrace(state, depth, p, "etbc-fold", {}, state, -1, best.win_turn);
+                continue;
+            }
+        }
         LpSite _lps(2);   // apply-site attribution (see g_lp_site)
         LoadPlanState(s_buf, state, reuse_s);
         GameState& s = s_buf;
@@ -71566,7 +71810,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const unsigned long long pf_reads0 = combatpin::t_reads;
         const long long pf_units0 = budget != nullptr ? budget->Used() : 0;
         etb_fold.ArmApply(static_cast<std::size_t>(&p - pre.data()), &s);
+        const EtbcFold::Witness ec_w0 = etbc_fold.on ? EtbcFold::Witness::Take(pf_units0) : EtbcFold::Witness{};
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        etbc_fold.Record(static_cast<std::size_t>(&p - pre.data()), ec_w0,
+                         budget != nullptr ? budget->Used() : 0, node_snap.pending,
+                         [&] { return BuildDedupKey(s); });
+        if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(s), state.turn_number); }
         // The in-plan probe records only an apply that spent no unit and stopped at no breakpoint node
         // (see BuildInPlan), with what the walker's records read from it.
         if (etb_fold.armed == static_cast<int>(&p - pre.data()))
@@ -77233,6 +77482,17 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         etb_fold.BuildInPlan(candidates, is_pre_combat && bp_variants_here && state.deck_has_land_search
                                          && !HumanPlayActive() && PutBounceFoldOn());
         const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
+        // ...and the ETB-counter fold (see EtbcFold), where the post-apply dedup it pre-empts runs.
+        // A combat-pin share candidate (base or variant) is left alone: its apply feeds cp_cache.
+        EtbcFold etbc_fold;
+        etbc_fold.Build(candidates, bp_variants_here && EtbcFoldOn() && !HumanPlayActive(),
+                        [&](std::size_t i)
+                        {
+                            return (!cp_base_of.empty() && cp_base_of[i] >= 0)
+                                || (!cp_is_base.empty() && cp_is_base[i] != 0)
+                                || (put_fold.on && put_fold.base_of[i] >= 0)
+                                || (etb_fold.on && (etb_fold.is_base[i] != 0 || etb_fold.dev_ord[i] >= 0));
+                        });
         // ...and the dig fold (see DigFoldMemo), on the same condition.
         DigFoldMemo dig_fold;
         dig_fold.on = bp_variants_here && DigSearchedChoiceOn();
@@ -77553,6 +77813,34 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
             if (s_rollout_stats) { g_cand_scored.fetch_add(1, std::memory_order_relaxed); }
+            // THE ETB-COUNTER FOLD (see EtbcFold): an etbcounter variant of a base whose apply was
+            // proven pin-blind IS that apply, whose post-apply key the dedup below already holds (it
+            // would skip it). Declined AFTER the unit charge (units and play stay byte-identical) and
+            // before the copy and the apply, leaving what that path leaves: the per-apply resets, the
+            // dig channel the apply publishes, the walker's record of a no-breakpoint apply
+            // (w0len_record) and the candidate counted for the overrun guard.
+            int etbc_expect = -1;   // verify mode: the base this candidate's apply must repeat
+            {
+                const std::size_t ec_i = static_cast<std::size_t>(&plan - candidates.data());
+                const int ec_b = etbc_fold.Skip(ec_i);
+                if (ec_b >= 0 && etbc_fold.verify) { etbc_expect = ec_b; }
+                else if (ec_b >= 0)
+                {
+                    if (w0len_here) { g_bp_cands_last = 0; g_bp_demoted_last = 0; }
+                    if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
+                    cand_index = ec_i;
+                    any_before = g_bp_any_last;
+                    classon_before = g_bp_classon_last;
+                    if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = false; }
+                    latent9_before = g_bp_latent9_last;
+                    if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }
+                    g_apd_last_dug = etbc_fold.dug[static_cast<std::size_t>(ec_b)] != 0;
+                    w0len_record(plan);
+                    g_etbc_folded[0].fetch_add(1, std::memory_order_relaxed);
+                    ++candidates_done;
+                    continue;
+                }
+            }
             // Dedup-census cross-tab (see g_dedup_drop_dup): snapshot the per-thread dropped-cast
             // counter so each census block below can ask whether THIS apply dropped one of its own
             // casts -- i.e. whether the duplicate state was manufactured by subset optimism.
@@ -77610,7 +77898,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     const unsigned long long cp_reads0 = combatpin::t_reads;
                     const long long cp_units0 = budget != nullptr ? budget->Used() : 0;
                     etb_fold.ArmApply(cp_i, &copy);
+                    const EtbcFold::Witness ec_w0 =
+                        etbc_fold.on ? EtbcFold::Witness::Take(cp_units0) : EtbcFold::Witness{};
                     ApplyPlanDirect(copy, plan, true);
+                    etbc_fold.Record(cp_i, ec_w0, budget != nullptr ? budget->Used() : 0, false,
+                                     [&] { return BuildDedupKey(copy); });
+                    if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(copy), state.turn_number); }
                     // The in-plan probe records only an apply that spent no unit (see BuildInPlan), with
                     // what the walker's records read from it.
                     if (etb_fold.armed == static_cast<int>(cp_i))
@@ -77887,7 +78180,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 bounce_fold.Arm(plan);
+                const long long ec_units0 = budget != nullptr ? budget->Used() : 0;
+                const EtbcFold::Witness ec_w0 =
+                    etbc_fold.on ? EtbcFold::Witness::Take(ec_units0) : EtbcFold::Witness{};
                 ApplyPlanDirect(copy, plan, false);
+                etbc_fold.Record(cand_index, ec_w0, budget != nullptr ? budget->Used() : 0, false,
+                                 [&] { return BuildDedupKey(copy); });
+                if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(copy), state.turn_number); }
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 pb_fold.Record(plan, true, static_cast<int>(cand_index));
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
