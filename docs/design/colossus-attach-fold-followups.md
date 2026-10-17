@@ -65,19 +65,35 @@ on and are recorded here per the deferred-work rule.
    every pair; the mirror images are folded jointly with the Equips by MTG_EQUIP_HOST_FOLD's canonical
    relabelling (a creature axis and an independent piece axis). Human play keeps the one-per-class menu
    (the person re-picks both targets on the board at resolution).
-7. **Still open, the same defect one zone over: a HAND piece is offered one per NAME.** Both Thefts of a
-   "cast two Colossus Hammers, Theft each onto a different creature" line name the first hand copy, so
-   the second Theft moves the same Hammer again: two freshly cast identical Equipment cannot both be
-   Thefted (reachable only as Theft + Equip). Fixing it needs per-COPY hand variants plus a relabelling
-   over the hand copies that composes with the hand-cast fold (MTG_FOLD_HAND_CASTS) and with apply_one
-   casting an arbitrary copy of a name -- the identity of the copy that materialises is the subtle part.
-8. **Two identical Theft CARDS are still walked in both assignments.** {Theft #22: X, Theft #23: Y} and
-   {Theft #22: Y, Theft #23: X} are one plan (the plan dedup keys a Theft by its pair) but two odometer
-   positions. A card-copy fold must order the restricted-growth strings by something a card swap does
-   not move (they read Theft-card order today), or the two forms conflict -- worked through in the
-   commit that fixed item 6.
+7. **HAND pieces -- FIXED 2026-10-17: one Theft variant per hand COPY.** A same-plan hand Equipment
+   was offered once per name, pinned to the first copy, so "cast two Colossus Hammers, Theft each onto a
+   different creature" was unfindable (both Thefts moved the first copy). The search now pins each copy
+   (Action::attach_equip_hand_ord); the k-th cast of a name takes the first copy still in hand in both
+   worlds, so the copy of ordinal i lands on the (i+1)-th cast -- the Theft is ordered after it
+   (ApplyAttachSpellDependencyOrder), a subset casting no more than i copies is refused (the pin would
+   fall back onto a copy whose own pin is enumerated), and the copies' mirror images are folded by the
+   joint relabelling as a piece class whose rank is the hand ordinal. Human play, and a name with a
+   STAGED copy in hand (cast first, so hand order no longer says which copy lands), keep one per name.
+8. **Two identical Theft CARDS are still walked in both assignments -- deliberately left (2026-10-17).**
+   {Theft #22: X, Theft #23: Y} and {Theft #22: Y, Theft #23: X} are one plan (the plan dedup keys a
+   Theft by its pair) but two odometer positions: work, never a lost line. Not small-and-sound today:
+   (1) the relabelling strings read Thefts in CARD order, so a card-copy canonical form (the odometer
+   copy folds' "digits non-increasing") conflicts with them and can leave a spread assignment with no
+   surviving position; a sound version has to be restricted to subsets where neither Theft names a
+   class member, or replace both with one lexicographic-minimum-over-the-orbit test; (2) swapping the
+   cards also swaps which pair RESOLVES first, which an O-Naginata-style power gate or the hand-piece
+   name fallback can observe; (3) the Aura copy fold's precedent also checks the m1_hand
+   order-condemnation snapshot, which singles hand cards out by number.
 9. **d0 greedy: a self-target Path is priced 0 even when it exiles the plan's only attacker.** Found
    through smoke gi539 (seed 1540) after item 6: the greedy's projection has no win on either plan, so
    {Theft, Theft} and {Path -> Kor Duelist, Theft, Theft} tie on rank (4200) and the smallest mask picks
    the second; the game goes from a T6 win to unwon. The search finds T3 at d6/b100 (stage-1 recovery),
    so this is the depth-0 runner's valuation, not a reachability gap; a heuristic fix needs its own A/B.
+10. **An Equip of a hand Equipment copy that never lands is still enumerated (by code reading, not yet
+   measured).** The Equip block offers
+   one Equip per hand COPY, and SubsetHasStrandedEquip accepts it whenever a cast action names that
+   copy's hand slot -- but the cast materialises the FIRST copy still in hand, so with one Hammer cast,
+   "equip Hammer #2 -> X" pays and does nothing (MTG_EQUIP_PAY_GUARD off). Dominated by the same plan
+   without it (no line is lost), so a pure width item: the copy-ordinal rule the Theft now uses
+   (ordinal < casts of the name) would fold it.
+

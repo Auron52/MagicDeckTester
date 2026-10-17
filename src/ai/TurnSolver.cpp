@@ -15466,13 +15466,16 @@ static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vecto
 //       "reconfigure: unattach" in the trailing pass. The unattach leaves the piece a loose creature
 //       whichever host it was on, so the subset reaches the board of the unattach alone (or, the
 //       unattach unaffordable, the board of the Theft alone).
-// A SAME-PLAN HAND PIECE (attach_equip_hand) is folded by (b) / (c) / (d) only when its IDENTITY is
-// pinned: the subset casts exactly ONE Equipment of that name and no own battlefield permanent of that
-// name entered this turn. Then every Theft naming it resolves to the one copy this plan casts
-// (ResolveAttachSpellPiece: the pinned number, else the name fallback, which prefers the copy that
-// ENTERED THIS TURN), and an Equip of a hand copy of that name either moves that same copy or -- its
-// copy not being the one cast -- refuses (a stranded no-op, dominated by the subset without it). With
-// two copies cast, two Thefts can genuinely take two different copies, so nothing is folded there.
+// A SAME-PLAN HAND PIECE (attach_equip_hand) is pinned to ONE HAND COPY (attach_equip_hand_ord; one
+// variant per copy in the search since 2026-10-17 -- before, one per name pinned to the first copy, so
+// two Thefts could never move two freshly cast identical Hammers). The k-th cast of a name takes the
+// first copy still in hand in both worlds, so the copies of ordinal < (casts of that name) are exactly
+// the ones the subset puts on the battlefield, and the Theft resolves after the cast that lands its own
+// copy (ApplyAttachSpellDependencyOrder). (a) refuses a pin at or above the cast count (an identity
+// fold: the name fallback would land it on a copy whose own pin is enumerated). Given that, and no own
+// battlefield permanent of the name having entered earlier this turn, every pin is EXACT: two Thefts of
+// the same copy, or a Theft and an Equip of that copy, are the redundant attach (b); an Equip of a
+// different live copy is a real second piece; an Equip of a copy that never lands is a no-op.
 // (c) additionally needs the hand piece to start UNATTACHED (its end state is "fell off, unattached",
 // which equals the smaller subset's only from an unattached start): no Sigarda's Aid live (EtbAttachLive).
 // The new hand-piece clauses and (f) use the strict observability guard (any haste / shroud Equipment
@@ -15491,7 +15494,12 @@ static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vect
         const CardDefinition* piece = nullptr;     // the moved piece's definition, for the guard
         if (!a.attach_equip_hand.empty())
         {
-            // (a), and the cast count that pins the piece's identity.
+            // (a), and the cast count that pins the piece's identity. The pinned copy (ordinal
+            // attach_equip_hand_ord among this name's hand copies) materialises on the (ord+1)-th cast
+            // of the name, so a subset casting no more than `ord` of them names a copy that never
+            // lands: refused. That is an IDENTITY fold, not only legality -- such a Theft would fall
+            // back by name onto a copy the subset does cast, which the variant pinned to that copy
+            // reaches exactly, and that variant is enumerated (every hand copy is offered).
             int casts = 0;
             for (int k : sel)
             {
@@ -15500,8 +15508,7 @@ static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vect
                 if (kd != nullptr && kd->params.is_equipment && cands[k].card_name == a.attach_equip_hand)
                 { ++casts; }
             }
-            if (casts == 0) { return true; }
-            if (casts != 1) { continue; }
+            if (casts <= std::max(0, a.attach_equip_hand_ord)) { return true; }
             bool fresh_twin = false;
             for (const Permanent& p : state.battlefield)
             {
@@ -15509,27 +15516,44 @@ static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vect
                     && p.card.m_name == a.attach_equip_hand) { fresh_twin = true; break; }
             }
             if (fresh_twin) { continue; }
-            // "A hand copy of THIS piece's name" -- the identity test for an Equip's source or host.
-            auto is_hand_copy = [&](int num) -> bool
+            // THE IDENTITY OF A HAND COPY. The k-th cast of a name takes the first copy still in hand
+            // (both worlds), so the copies of ordinal < casts are exactly the ones this subset puts on
+            // the battlefield, each a distinct permanent, and the Theft's pin is one of them. An Equip
+            // naming a hand copy of this name (as source or host) therefore names THIS piece when it
+            // names the pinned copy, a DIFFERENT live piece when it names another copy below `casts`,
+            // and a copy that never lands -- the Equip refuses, a no-op -- at or above `casts`.
+            auto copy_ord = [&](int num) -> int
             {
-                if (num <= 0 || OwnPermanentByNumber(state, num) != nullptr) { return false; }
-                const Card* hc = OwnHandCardByNumber(state, num);
-                return hc != nullptr && hc->m_name == a.attach_equip_hand;
+                if (num <= 0 || OwnPermanentByNumber(state, num) != nullptr) { return -1; }
+                int o = 0;
+                for (const Card& hc : state.ActivePlayer().hand)
+                {
+                    if (hc.m_name != a.attach_equip_hand || hc.m_is_staged) { continue; }
+                    if (hc.m_number == num) { return o; }
+                    ++o;
+                }
+                return -1;
+            };
+            auto same_or_dead = [&](int num) -> bool
+            {
+                const int o = copy_ord(num);
+                return o >= 0 && (num == a.attach_equip_id || o >= casts);
             };
             int etb_attach = -1;                   // EtbAttachLive, computed only when (c) needs it
             for (int k : sel)
             {
                 if (k == j) { continue; }
                 const Action& c = cands[k];
-                // (b) another Theft of the same hand piece, or an Equip of a hand copy of it.
-                if (c.kind == Action::Kind::CastFromHand && c.attach_equip_id != 0
+                // (b) another Theft of the same hand COPY, or an Equip of it (or of a copy that never
+                // lands, which does nothing).
+                if (c.kind == Action::Kind::CastFromHand && c.attach_equip_id == a.attach_equip_id
                     && c.attach_equip_hand == a.attach_equip_hand)
                 { twice = true; break; }
-                if (c.kind == Action::Kind::Equip && is_hand_copy(c.sac_source_id))
+                if (c.kind == Action::Kind::Equip && same_or_dead(c.sac_source_id))
                 { twice = true; break; }
                 // (d) an Equip ONTO the hand piece (a reconfigure piece cast as a creature) that this
-                // Theft attaches first.
-                if (c.kind == Action::Kind::Equip && is_hand_copy(c.sac_victim_id)
+                // Theft attaches first (or onto a copy that never lands).
+                if (c.kind == Action::Kind::Equip && same_or_dead(c.sac_victim_id)
                     && !SubsetMayFreeHost(cands, sel, a.enchant_target))
                 { twice = true; break; }
                 // (c) the Theft's battlefield creature target is a piece another action attaches.
@@ -15988,6 +16012,37 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
     // either are battlefield permanents of ours sharing a NAME (interned: a pointer test). Only those
     // can ever share a class, and only they get a key below.
     std::vector<const Permanent*> pair_hosts, pair_pieces;
+    // HAND pieces (a Theft pins one hand copy, Action::attach_equip_hand_ord): a name whose non-staged
+    // hand copies are all IDENTICAL and number >= 2 forms a class whose rank IS the hand ordinal -- the
+    // order the copies materialise in -- so the canonical relabelling (lowest ranks first) only ever
+    // uses copies a subset that casts enough of them puts on the battlefield. A name with a staged copy,
+    // or with copies that differ, gets no class.
+    std::vector<std::vector<int>> hand_classes;   // per class: hand card numbers in hand order
+    {
+        const Player& hp = state.ActivePlayer();
+        std::vector<const std::string*> names;
+        for (const Action& a : cands)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.attach_equip_id == 0 || a.attach_equip_hand.empty()) { continue; }
+            const std::string* nm = &a.attach_equip_hand.str();
+            if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+        }
+        for (const std::string* nm : names)
+        {
+            std::vector<int> nums;
+            bool ok = true;
+            std::uint64_t h0 = 0;
+            for (const Card& c : hp.hand)
+            {
+                if (&c.m_name.str() != nm) { continue; }
+                if (c.m_is_staged) { ok = false; break; }
+                const std::uint64_t h = HandCardContentHash(c);
+                if (nums.empty()) { h0 = h; } else if (h != h0) { ok = false; break; }
+                nums.push_back(c.m_number);
+            }
+            if (ok && nums.size() >= 2) { hand_classes.push_back(std::move(nums)); }
+        }
+    }
     {
         int hosts[32], pieces[32];
         int nh = 0, np = 0;
@@ -16008,7 +16063,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
                 if (a.attach_equip_hand.empty() && !add(pieces, np, a.attach_equip_id)) { return; }
             }
         }
-        if (nh < 2 && np < 2) { return; }
+        if (nh < 2 && np < 2 && hand_classes.empty()) { return; }
         auto pairs_of = [&](const int* v, int n, bool creatures, std::vector<const Permanent*>& out)
         {
             std::vector<const Permanent*> hp;
@@ -16031,7 +16086,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
         };
         if (nh >= 2) { pairs_of(hosts, nh, /*creatures=*/true, pair_hosts); }
         if (np >= 2) { pairs_of(pieces, np, /*creatures=*/false, pair_pieces); }
-        if (pair_hosts.empty() && pair_pieces.empty()) { return; }
+        if (pair_hosts.empty() && pair_pieces.empty() && hand_classes.empty()) { return; }
     }
     if (ResolveProvider(state).ConsolidatesEquips()) { return; }   // AUTO-EQUIP pins one host per family
     // An Equipment cast is member-blind only while nothing it sets off can PICK among our creatures or
@@ -16070,8 +16125,17 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
     };
     const std::vector<Member> hmem = classify(pair_hosts,
         [&](const Permanent& p) { return EquipHostFoldKey(state, p); });
-    const std::vector<Member> pmem = classify(pair_pieces,
+    std::vector<Member> pmem = classify(pair_pieces,
         [&](const Permanent& p) { return AttachPieceFoldKey(state, p); });
+    {
+        int next_cls = 0;
+        for (const Member& m : pmem) { next_cls = std::max(next_cls, m.cls + 1); }
+        for (const std::vector<int>& hc : hand_classes)
+        {
+            for (std::size_t r = 0; r < hc.size(); ++r) { pmem.push_back({ hc[r], next_cls, static_cast<int>(r) }); }
+            ++next_cls;
+        }
+    }
     if (hmem.empty() && pmem.empty()) { return; }
     auto find_in = [](const std::vector<Member>& v, int num) -> const Member*
     {
@@ -16108,6 +16172,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
         {
             if (host_of(a.sac_source_id) != nullptr) { block[j] = 1; continue; }
             if (const Member* pc = piece_of(a.sac_source_id)) { ptouch[j] = pc->cls; }   // the copy fold's digit
+            if (const Member* pv = piece_of(a.sac_victim_id))  { ptouch[j] = pv->cls; }   // onto a hand copy
             const Member* h = host_of(a.sac_victim_id);
             if (h == nullptr) { continue; }                          // onto a non-member: member-blind
             // SOURCE SYMMETRY: a twin onto every member of the class, same cost and eval.
@@ -16137,7 +16202,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
                 || a.hand_index >= static_cast<int>(ap.hand.size()) || host_of(a.attach_equip_id) != nullptr)
             { block[j] = 1; continue; }
             const Member* h  = a.trick_hand_target.empty() ? host_of(a.enchant_target) : nullptr;
-            const Member* pc = a.attach_equip_hand.empty() ? piece_of(a.attach_equip_id) : nullptr;
+            const Member* pc = piece_of(a.attach_equip_id);   // a battlefield piece or a hand copy
             if (h == nullptr && pc == nullptr) { continue; }        // names no member: member-blind
             // JOINT SYMMETRY: from this Theft card, a twin (piece', host') for every piece' in the piece's
             // class and every host' in the creature's class, same cost and eval -- so every relabelling
@@ -25111,6 +25176,7 @@ struct AttachSpellPair
     int          eq_num   = 0;
     int          host_num = 0;
     InternedName eq_hand;          // Equipment target is a same-plan hand cast of this name
+    int          eq_hand_ord = 0;  // ...and which hand copy (Action::attach_equip_hand_ord)
     std::string  host_hand;        // creature target is a same-plan hand cast of this name
     int          eval     = 0;
 };
@@ -25121,7 +25187,7 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
     std::vector<AttachSpellPair> out;
     const int me = state.active_player_index;
     const Player& ap = state.ActivePlayer();
-    struct Piece { int num; const CardDefinition* def; const Card* hand; };
+    struct Piece { int num; const CardDefinition* def; const Card* hand; int ord = 0; };
     std::vector<Piece> eqs, hosts;
 
     // Host class key (see the header), shared by the creature side and a creature-piece Equipment.
@@ -25161,15 +25227,25 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
         }
     }
     {
-        std::unordered_set<std::string> seen_eq_hand, seen_host_hand;
+        // HAND pieces: one variant per hand COPY in the search (the copy of ordinal i materialises on the
+        // (i+1)-th cast of the name -- see Action::attach_equip_hand_ord), one per NAME in human play
+        // (the person re-picks on the board) and for a name with a STAGED copy in hand (apply_one casts
+        // the earliest-expiring staged copy first, so hand order no longer says which copy lands when).
+        std::unordered_set<std::string> seen_eq_hand, seen_host_hand, staged_names;
+        std::unordered_map<std::string, int> copy_ord;
+        for (const Card& hc : ap.hand) { if (hc.m_is_staged) { staged_names.insert(hc.m_name.str()); } }
         for (const Card& hc : ap.hand)
         {
             if (hc.m_number == 0 || hc.m_is_staged) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(hc);
             if (d == nullptr || d->params.protection_from_everything) { continue; }
-            if (d->params.is_equipment && (!d->card.IsCreature() || d->params.reconfigure_cost.has_value())
-                && seen_eq_hand.insert(hc.m_name.str()).second)
-            { eqs.push_back({ hc.m_number, d, &hc }); }
+            if (d->params.is_equipment && (!d->card.IsCreature() || d->params.reconfigure_cost.has_value()))
+            {
+                const int ord = copy_ord[hc.m_name.str()]++;
+                const bool per_copy = !human_menu && staged_names.count(hc.m_name.str()) == 0;
+                if (per_copy ? true : seen_eq_hand.insert(hc.m_name.str()).second)
+                { eqs.push_back({ hc.m_number, d, &hc, per_copy ? ord : 0 }); }
+            }
             if (d->card.IsCreature() && seen_host_hand.insert(hc.m_name.str()).second)
             { hosts.push_back({ hc.m_number, d, &hc }); }
         }
@@ -25190,7 +25266,7 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
             AttachSpellPair pr;
             pr.eq_num   = e.num;
             pr.host_num = h.num;
-            if (e.hand != nullptr) { pr.eq_hand = e.hand->m_name; }
+            if (e.hand != nullptr) { pr.eq_hand = e.hand->m_name; pr.eq_hand_ord = e.ord; }
             if (h.hand != nullptr) { pr.host_hand = h.hand->m_name.str(); }
             out.push_back(std::move(pr));
         }
@@ -27242,6 +27318,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.trick_hand_target = pr.host_hand;
                 a.attach_equip_id   = pr.eq_num;
                 a.attach_equip_hand = pr.eq_hand;
+                a.attach_equip_hand_ord = pr.eq_hand_ord;
                 actions.push_back(std::move(a));
             }
             continue;
