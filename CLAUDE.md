@@ -274,6 +274,30 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   cheap; guessing wrong in the protective direction costs only a couple of cores, guessing
   wrong the other way destroys user work.
 
+- **EVERY OVERNIGHT RUN GETS A SEPARATE 1-HOUR STATUS TIMER — NO EXCEPTIONS (user directive,
+  2026-10-17).** The user's words: *"Any time I give you instructions to run something overnight
+  you MUST set up an additional 1hr timer to check the status of the chain."* and *"I'm tired of
+  broken overnight chains wasting hours of compute time."*
+  * **What it cost.** 2026-10-17, Landfall mulligan profile. The agent launched a detached chain to
+    derive the generation setting and then release the HOLD for `mullgen.sh run`. The settings stage
+    measured that the play setting was the right one and, by design, wrote nothing ("== play
+    settings; emit no override"). The chain's own check had been written from an assumption about
+    that output, called it a failure, and stopped at 14:07 UTC with the generation never started. A
+    detached process cannot notify the agent and nothing else was watching, so the box sat idle until
+    the user asked at 21:18. The user: *"You failed badly here and wasted the overnight."*
+  * **How.** In the same turn that launches the chain, create the timer with `CronCreate`: a
+    recurring hourly cron on an off-minute (e.g. `7 * * * *`), `durable: true` if the session might be
+    closed overnight. Its prompt names the chain and where its status lives (log file, DONE/STOPPED
+    markers, pid). On every fire, read that status. If the chain stopped, stalled, or left the box
+    idle, take the next step yourself: fix and relaunch it, or run the step it should have reached.
+    Then report what you did. `CronDelete` the timer once the chain has finished and its result is
+    reported. The timer comes IN ADDITION to a `run_in_background` waiter on the chain's markers (the
+    immediate notification), never instead of it. Re-arm the waiter before its 2 h cap.
+  * **Test the chain's stop conditions before launching.** Read the code of every tool the chain
+    calls for each outcome it can legitimately produce, and dry-run each check against real output;
+    "nothing to write" is a result, not a failure. A stop should halt only for a genuine hazard (wrong
+    settings, a corrupt artifact), and the hourly timer is what catches the ones that slip through.
+
 - **Long / multi-item runs MUST batch into ONE pooled work queue — never a loop of
   many small invocations.** Launching a run as many separate per-item commands (e.g.
   one `mtg` per seed, per profile, or per A/B arm) strands cores on *each* invocation's
