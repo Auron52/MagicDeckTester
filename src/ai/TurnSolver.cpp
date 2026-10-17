@@ -7161,11 +7161,103 @@ static int McWalkCredit(const McWalkBound& mb, const std::vector<int>& sel)
 //
 // Both need every candidate's mana value >= 0 and an Equip's mana value to be its generic (so a low
 // equip's cost covers its own credit); the tables refuse to arm otherwise.
+//
+// SolveUncached's inline walk carries the PLAIN cut too (its own scalar test is the same
+// `mcost <= mana_bound`; it has no metalcraft addend), under the same flag, and a GATE form of it
+// for the selection-exact path (MTG_MANA_GATE_WALK_CUT; see GateWalkCutDigit).
 static bool ManaWalkCutEnabled()
 {
     static const bool v = EnvOn("MTG_MANA_WALK_CUT", true);   // DEFAULT ON; =0 disables
     return v;
 }
+static bool ManaWalkCutVerify()
+{
+    // MTG_MANA_WALK_CUT_VERIFY=1 -- DIAGNOSTIC, DEFAULT OFF. In SolveUncached's inline walk, do NOT
+    // jump on the plain or the gate cut; walk every position, and check that each one a jump WOULD
+    // have passed over (a) still fails the mana test the cut claimed for its block ("claim_miss") and
+    // (b) reaches consider() ("UNSOUND"). Counts + one summary line at exit. EnumeratePlans' plain cut
+    // is not audited here: its instrument cost +0.05..0.07% Ir on burn/Knights/Kitty in a hot loop
+    // (callgrind, 2026-10-17) for a cut that is exact by inspection; the metalcraft cut keeps its own
+    // audit (MTG_MC_WALK_BOUND_VERIFY).
+    static const bool v = EnvOn("MTG_MANA_WALK_CUT_VERIFY");
+    return v;
+}
+static bool GateWalkCutEnabled()
+{
+    static const bool v = EnvOn("MTG_MANA_GATE_WALK_CUT", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+namespace manawalk
+{
+    // Per site: 0 = SolveUncached inline, scalar path; 1 = SolveUncached inline, gate path.
+    constexpr int kSites = 2;
+    inline std::atomic<std::uint64_t> g_blocks[kSites], g_skipped[kSites], g_unsound{0},
+                                      g_claim_miss{0}, g_nest_miss{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!ManaWalkCutVerify()) { return; }
+            std::fprintf(stderr, "[mana-walk-cut] VERIFY unsound=%llu claim_miss=%llu nest_miss=%llu |",
+                         (unsigned long long)g_unsound.load(), (unsigned long long)g_claim_miss.load(),
+                         (unsigned long long)g_nest_miss.load());
+            static const char* const kSite[kSites] = { "solve", "solvegate" };
+            for (int s = 0; s < kSites; ++s)
+            {
+                std::fprintf(stderr, " %s blocks=%llu skipped=%llu", kSite[s],
+                             (unsigned long long)g_blocks[s].load(),
+                             (unsigned long long)g_skipped[s].load());
+            }
+            std::fprintf(stderr, "\n");
+        }
+    };
+    inline Dumper g_dumper;
+}
+// MTG_MANA_WALK_CUT_VERIFY's per-walk tracker -- DepSkipAudit's shape. A cut found at a position
+// claims every LATER position that agrees with it on digits [L, n): the walk's order runs through
+// exactly those before the high part changes, and once it changes it never comes back. A cut found
+// INSIDE an open claim cannot reach further (its high part is the claim's, and the claim already
+// took the highest digit any part of it refuses), so one pending claim is the whole state; a larger
+// one would be a "nest_miss" (an audit-model error, not a skip error).
+struct ManaCutAudit
+{
+    int              site = 0;
+    int              L    = -1;
+    std::vector<int> hi;
+    std::uint64_t    blocks = 0, skipped = 0;
+    explicit ManaCutAudit(int s) : site(s) {}
+    ~ManaCutAudit()
+    {
+        if (blocks != 0)  { manawalk::g_blocks[site].fetch_add(blocks, std::memory_order_relaxed); }
+        if (skipped != 0) { manawalk::g_skipped[site].fetch_add(skipped, std::memory_order_relaxed); }
+    }
+    // Is `digits` inside the pending claim? Counts it as one the jump would have skipped, or closes
+    // the claim once the walk has left it.
+    bool Inside(const std::vector<int>& digits)
+    {
+        if (L < 0) { return false; }
+        for (std::size_t q = static_cast<std::size_t>(L); q < digits.size(); ++q)
+        { if (digits[q] != hi[q]) { L = -1; return false; } }
+        ++skipped;
+        return true;
+    }
+    // A cut at digit `cut` (> 0) found at `digits`; `inside` = what Inside() said for this position.
+    void Cut(int cut, const std::vector<int>& digits, bool inside)
+    {
+        if (inside) { if (cut > L) { Report("nest_miss", digits, manawalk::g_nest_miss); } return; }
+        L = cut; hi = digits; ++blocks;
+    }
+    void Report(const char* what, const std::vector<int>& digits, std::atomic<std::uint64_t>& ctr)
+    {
+        ctr.fetch_add(1, std::memory_order_relaxed);
+        static thread_local int s_rep = 0;
+        if (s_rep >= 8) { return; }
+        ++s_rep;
+        std::string ds;
+        for (int v : digits) { ds += std::to_string(v) + " "; }
+        std::fprintf(stderr, "[mana-walk-cut] %s site=%d claim_L=%d digits=[%s]\n", what, site, L, ds.c_str());
+    }
+};
 static bool McWalkCutEnabled()
 {
     static const bool v = EnvOn("MTG_MC_WALK_CUT", true);   // DEFAULT ON; =0 disables
@@ -7258,6 +7350,25 @@ static int WalkCutDigit(const McWalkBound& mb, const WalkCutTables& t,
             else if (t.red_min_below[g] != kNone) { on = m_h - eq_h - t.auto_eq + t.red_min_below[g]; }
             if (std::min(off, on) > mb.bound_nomc) { if (mc_hit) { *mc_hit = true; } return g; }
         }
+    }
+    return -1;
+}
+
+// SolveUncached's PLAIN cut -- WalkCutDigit's plain test alone, for a walk with no metalcraft addend.
+// Its own function rather than a second WalkCutDigit caller ON PURPOSE: the shared helper stopped
+// being inlined into EnumeratePlans once it had two callers, and KittyEquipment paid +0.2% Ir for it
+// (callgrind, 2026-10-17). The sum only grows at a non-zero digit, so the first one that crosses the
+// bound, scanning down from the top, is the highest refused high part. Needs every group option's
+// mana value >= 0 (the caller checks once per walk).
+static inline int PlainWalkCutDigit(int bound, const std::vector<std::vector<int>>& groups,
+                                    const std::vector<int>& choice, const std::vector<int>& cand_mv)
+{
+    long long m_h = 0;
+    for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+    {
+        if (choice[g] <= 0) { continue; }
+        m_h += cand_mv[groups[g][choice[g] - 1]];
+        if (m_h > bound) { return g; }
     }
     return -1;
 }
@@ -35517,6 +35628,83 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
     return true;
 }
 
+// THE GATE RADIX CUT (MTG_MANA_GATE_WALK_CUT, default ON; =0 is the hatch) -- MTG_MANA_WALK_CUT's
+// plain cut for the walk's SELECTION-EXACT path, SolveUncached's inline walk only. That walk's outer
+// test passes a position iff
+//     mblock > 0 || ind_block || mcost <= pool_total + mgain + ind_gain_all + Tri(mgy + ind_gy_all)
+// over the terms of the group digits it selects. Fix the high part H (digits >= h) and bound every
+// completion L (one option or none per group below h):
+//   * block: L passes outright when it can select a gate-disabling option, so a cut needs NO such
+//     option in any group below h (h <= lowest_block) and none selected in H;
+//   * net cost: cost_L - gain_L >= -relief_below[h], the sum over those groups of the most any one
+//     option (or none, 0) gives back;
+//   * graveyard ritual term: gy_L <= gy_below[h], and Tri is nondecreasing on gy >= 0.
+// So if  cost_H - gain_H - relief_below[h] > pool_total + ind_gain_all + Tri(gy_H + gy_below[h] +
+// ind_gy_all),  every position of the block fails the outer test, its inner loop never runs, and the
+// walk may zero the digits below h and carry from h exactly as the plain cut does. The bound takes
+// no sign on cost or gain (the relief term is a per-group max with "none" in it); it needs gy >= 0,
+// which the builder checks. MTG_MANA_WALK_CUT_VERIFY audits it at every position it would skip.
+struct GateWalkCutTables
+{
+    int                    lowest_block = 0;   // lowest group holding a block option (n = none)
+    std::vector<long long> relief_below;       // [g] = SUM_{g' < g} max(0, max_j (gain_j - cost_j))
+    std::vector<int>       gy_below;           // [g] = SUM_{g' < g} max_j gy_j
+};
+static bool BuildGateWalkCutTables(const ManaGateIndex& gate, const std::vector<std::vector<int>>& groups,
+                                   GateWalkCutTables& out)
+{
+    if (!GateWalkCutEnabled() || gate.ind_block) { return false; }
+    const int n = static_cast<int>(groups.size());
+    out.lowest_block = n;
+    out.relief_below.assign(n + 1, 0);
+    out.gy_below.assign(n + 1, 0);
+    long long relief = 0;
+    int       gy     = 0;
+    for (int g = 0; g < n; ++g)
+    {
+        out.relief_below[g] = relief;
+        out.gy_below[g]     = gy;
+        long long r = 0;
+        int       y = 0;
+        for (int j : groups[g])
+        {
+            const ManaGateTerm& t = gate.term[j];
+            if (t.gy < 0) { return false; }
+            if (t.block && out.lowest_block == n) { out.lowest_block = g; }
+            r = std::max(r, static_cast<long long>(t.gain) - t.cost);
+            y = std::max(y, t.gy);
+        }
+        relief += r;
+        gy     += y;
+    }
+    out.relief_below[n] = relief;
+    out.gy_below[n]     = gy;
+    return true;
+}
+// The highest digit h whose high part no completion can carry past the gate's outer test; -1 = none.
+static int GateWalkCutDigit(const ManaGateIndex& gate, const GateWalkCutTables& t,
+                            const std::vector<std::vector<int>>& groups, const std::vector<int>& choice)
+{
+    long long net_h = 0;
+    int       gy_h  = 0;
+    for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+    {
+        if (choice[g] > 0)
+        {
+            const ManaGateTerm& x = gate.term[groups[g][choice[g] - 1]];
+            if (x.block) { return -1; }   // every block at or below here selects it: all pass
+            net_h += static_cast<long long>(x.cost) - x.gain;
+            gy_h  += x.gy;
+        }
+        if (g > t.lowest_block) { continue; }
+        if (net_h - t.relief_below[g]
+            > static_cast<long long>(gate.pool_total) + gate.ind_gain_all
+              + ManaGateTriangular(gy_h + t.gy_below[g] + gate.ind_gy_all))
+        { return g; }
+    }
+    return -1;
+}
+
 // ---- TEMPORARY DIAGNOSTIC: mana-side collapse potential (MTG_ENUM_STATS=1) ----------------------
 //
 // Measures the CEILING of the two-stage "enumerate mana separately, then look up per plan" design
@@ -40330,9 +40518,51 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // digit test is sound only if its rejections are a SUBSET of the leaf's, and that is a claim
         // about `sel` (auto + digits + independent bits), not about the digits alone.
         static const bool s_fold_odo_verify = EnvOn("MTG_FOLD_ODO_VERIFY");
+        // THE MANA RADIX CUT (MTG_MANA_WALK_CUT on the scalar path, MTG_MANA_GATE_WALK_CUT on the
+        // gate path; MTG_MANA_WALK_CUT_VERIFY audits both): when no completion of the high part can
+        // pass the outer mana test, carry past the whole block instead of refusing it one position at
+        // a time. Measured on Colossus Hammer s7065 gi58 d5: ~13M of the ~15M positions this walk
+        // visited failed `mcost <= mana_bound` singly (the mcost sum alone was 1.27G Ir). The tables
+        // are built lazily, at the first position that fails the test, so a frame whose every
+        // position passes pays nothing. EnumeratePlans' twin has carried the plain cut since
+        // MTG_MANA_WALK_CUT landed; see WalkCutDigit, PlainWalkCutDigit and GateWalkCutDigit.
+        const bool mana_cut_possible = gate_on
+            ? (GateWalkCutEnabled() && !gate->ind_block)
+            : (ManaWalkCutEnabled() && mana_bound != std::numeric_limits<int>::max());
+        const bool mana_cut_jump  = mana_cut_possible && !ManaWalkCutVerify();
+        const bool mana_audit_on  = mana_cut_possible && ManaWalkCutVerify();
+        int               mana_cut_state = 0;   // 0 = tables unbuilt, 1 = armed, -1 = refused
+        GateWalkCutTables gate_cut_tab;
+        ManaCutAudit      mana_audit(gate_on ? 1 : 0);
+        // VERIFY only: the claimed test, recomputed from the digits (a refused position's own
+        // aggregate is not computed by the walk).
+        auto mana_claim_holds = [&](const std::vector<int>& c) -> bool
+        {
+            long long mc = 0, mg = 0;
+            int my = 0, mb = 0;
+            for (int g = 0; g < num_groups; ++g)
+            {
+                if (c[g] <= 0) { continue; }
+                const int j = groups[g][c[g] - 1];
+                if (gate_on)
+                {
+                    const ManaGateTerm& t = gate->term[j];
+                    mc += t.cost; mg += t.gain; my += t.gy; mb += t.block;
+                }
+                else { mc += cand_mv[j]; }
+            }
+            if (!gate_on) { return mc > mana_bound; }
+            return !(mb > 0 || gate->ind_block
+                     || mc <= gate->pool_total + mg + gate->ind_gain_all
+                              + ManaGateTriangular(my + gate->ind_gy_all));
+        };
         bool done = false;
         while (!done)
         {
+            // MTG_MANA_WALK_CUT_VERIFY: is this a position a mana jump would have passed over?
+            const bool mana_in_claim = mana_audit_on && mana_audit.Inside(choice);
+            if (mana_in_claim && !mana_claim_holds(choice))
+            { mana_audit.Report("claim_miss", choice, manawalk::g_claim_miss); }
             // Fungible identical-Equipment copies: only the canonical (non-increasing) position of a
             // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
@@ -40381,6 +40611,34 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                    || mcost <= gate->pool_total + mgain + gate->ind_gain_all
                                + ManaGateTriangular(mgy + gate->ind_gy_all))
                 : (mcost <= mana_bound));
+            // The mana cut: the highest digit whose high part no completion can carry past the test
+            // above (-1 = none). Only a position that FAILS it can sit in a refused block -- the
+            // block's bound holds at every one of its positions -- so a passing position never scans.
+            // Searched on a dependency / fold-rejected position too (its aggregate was not computed,
+            // and its block can reach past the dependency run); a copy-class violation has its own
+            // jump and is left to it, as in EnumeratePlans.
+            int mana_cut = -1;
+            if (mana_cut_possible && !copy_viol && !outer_ok)
+            {
+                if (mana_cut_state == 0)
+                {
+                    bool armed = true;
+                    if (gate_on) { armed = BuildGateWalkCutTables(*gate, groups, gate_cut_tab); }
+                    else
+                    {
+                        // The plain bound needs every group option to cost >= 0 (PlainWalkCutDigit).
+                        for (const std::vector<int>& gr : groups)
+                        { for (int j : gr) { if (cand_mv[j] < 0) { armed = false; } } }
+                    }
+                    mana_cut_state = armed ? 1 : -1;
+                }
+                if (mana_cut_state > 0)
+                {
+                    mana_cut = gate_on ? GateWalkCutDigit(*gate, gate_cut_tab, groups, choice)
+                                       : PlainWalkCutDigit(mana_bound, groups, choice, cand_mv);
+                }
+                if (mana_audit_on && mana_cut > 0) { mana_audit.Cut(mana_cut, choice, mana_in_claim); }
+            }
             for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
             {
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
@@ -40440,17 +40698,28 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                            + ManaGateTriangular(mgy + pgy))
                     : (mcost + pcost <= mana_bound);
                 if (!ok) { continue; }
-                if (vial_ok(sel)) { foldsel::g_from_odometer = true; consider(sel); }
+                if (vial_ok(sel))
+                {
+                    if (mana_in_claim) { mana_audit.Report("UNSOUND", choice, manawalk::g_unsound); }
+                    foldsel::g_from_odometer = true;
+                    consider(sel);
+                }
             }
             // RADIX CUT (MTG_EQUIP_DEP_SKIP): every position until digit `dep_cut` next changes
             // violates the same piece requirement. 0 = the ordinary step.
             const int dep_cut = (dep_skip_on && dep_viol) ? dep_jump : 0;
+            // RADIX CUT (MTG_MANA_WALK_CUT / MTG_MANA_GATE_WALK_CUT): no completion of digits >=
+            // mana_cut passes the outer mana test. The same "zero below, carry from" shape as the
+            // dependency run, so the two compose as the LARGER digit: a run carried from a higher
+            // digit contains the lower one's. (mana_cut == 0 is the ordinary step.)
+            const int walk_cut = std::max(dep_cut, (mana_cut_jump && mana_cut > 0) ? mana_cut : 0);
             // RADIX CUT (MTG_EQUIP_COPY_SKIP): every position from here until digit `cp_fix_g` next
-            // changes holds the same violating pair, so jump straight past them all. When the
-            // dependency run is carried from a HIGHER digit it contains this whole run (its positions
-            // keep digit cp_fix_g and above), so it goes further and takes precedence.
+            // changes holds the same violating pair, so jump straight past them all. When a run is
+            // carried from a HIGHER digit it contains this whole run (its positions keep digit
+            // cp_fix_g and above), so it goes further and takes precedence. (The mana cut is never
+            // searched on a copy-violated position, so today only the dependency run can.)
             if (copy_viol && cp_fix_g >= 0
-                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()) && dep_cut <= cp_fix_g)
+                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()) && walk_cut <= cp_fix_g)
             {
                 for (int d = 0; d < cp_fix_g; ++d) { choice[d] = 0; }
                 choice[cp_fix_g] = cp_fix_v;
@@ -40460,12 +40729,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 continue;
             }
             int g = 0;
-            if (dep_cut > 0)
+            if (walk_cut > 0)
             {
-                // dep_cut is a group index and the dependency map only exists at <= 64 groups.
-                for (int d = 0; d < dep_cut; ++d) { choice[d] = 0; }
-                sel_mask &= ~((1ull << dep_cut) - 1);
-                g = dep_cut;
+                for (int d = 0; d < walk_cut; ++d)
+                {
+                    choice[d] = 0;
+                    if (d < 64) { sel_mask &= ~(1ull << d); }
+                }
+                g = walk_cut;
             }
             for (; g < num_groups; ++g)
             {
