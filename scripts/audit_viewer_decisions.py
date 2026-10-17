@@ -314,6 +314,10 @@ MANIFEST = {
     # Timeless Witness: "return target card from your graveyard to your hand" -- human play asks the
     # shared `dig` chooser over the graveyard at resolution (no named plan variants under human play).
     "etb_return_gy_to_hand":         ("dig",         truthy),
+    # Forge Anew: "return target Equipment card from your graveyard to the battlefield" -- the same
+    # shared `dig` chooser at resolution, with ONLY the graveyard's Equipment cards legal (mandatory;
+    # a single legal card is not prompted). No named plan variants under human play.
+    "etb_return_equipment_from_gy":  ("dig",         truthy),
     # Slaughter-Priest's "Sacrifice another creature or an enchantment" widens the sac-outlet
     # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
     "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
@@ -1228,6 +1232,8 @@ INERT_PARAMS = {
     "equip_min_power": "equip legality gate (O-Naginata power>=3); narrows is_equipment host variants, no extra choice",
     "equip_sacrifices_prior_host": "mandatory unattach-sac trigger (Grafted Wargear), no choice",
     "metalcraft_equip_zero_artifacts": "static conditional cost modifier (Puresteel metalcraft), no choice",
+    "first_equip_free": "Forge Anew's 'you MAY pay {0} rather than pay the equip cost of the first equip ability you activate during each of your turns' -- an alternative cost auto-taken by dominance ({0} instead of N with an identical board is never worse vs the passive opponent); WHICH equip gets it is the per-plan max-cost fold (StoriedWaivedEquipId), and a human ordering their own activations gets it on their FIRST equip (the per-slice trailing pass) -- no decision to surface",
+    "storied_first_equip_free": "Kili the Resourceful's storied first-equip waiver -- the same alternative cost as first_equip_free (shared predicate FirstEquipWaiverOnBattlefield), auto-taken by dominance; no decision to surface",
     "double_strike_while_equipped": "static conditional keyword grant (Kor Duelist), no choice",
     "double_strike_min_equipment": "static conditional keyword grant threshold (Balan), no choice",
     "draw_on_equipment_etb": "Puresteel may-draw auto-resolved as always-draw (strictly good; disclosed in 6a), no meaningful choice",

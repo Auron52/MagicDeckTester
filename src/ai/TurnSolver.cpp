@@ -6906,6 +6906,18 @@ static int SameTurnMetalcraftEquipCredit(const GameState& state, const std::vect
     return credit;
 }
 
+// A cast that puts a FIRST-EQUIP WAIVER onto the battlefield as it resolves (Forge Anew). Casts are
+// applied before the trailing equip pass in BOTH worlds (ApplyPlanDirect: apply_plan_actions, then
+// apply_trailing_activations; AIEngine::TakeTurn: the cast loop, then exec_trailing_activations), so
+// a waiver cast by the same plan is on the battlefield when StoriedWaivedEquipId reads it. Kili is
+// deliberately NOT here: his waiver needs the enduring story, which RefreshStoriedLatch raises only
+// at the enter cascade, so a same-plan Kili has not latched when this would be read -- exactly the
+// conservative under-credit his block has always taken (byte-identical for a Kili deck).
+static bool CastGrantsFirstEquipWaiver(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.first_equip_free;
+}
+
 // Kili the Resourceful's STORIED waiver: "you may pay {0} rather than pay the equip cost of the
 // FIRST equip ability you activate each turn." The affordability-gate twin of the metalcraft credit
 // above, and it exists for exactly the same reason: the equip's generic was baked at enumeration and
@@ -6924,22 +6936,26 @@ static int SameTurnMetalcraftEquipCredit(const GameState& state, const std::vect
 // EVERY selected equip and this must add nothing. The caller therefore only consults this when the
 // metalcraft credit came back 0 -- which is also precisely the board class where the card earns its
 // slot (no Puresteel out, Colossus Hammer's equip {8} otherwise unpayable before turn 4).
+//
+// FORGE ANEW (first_equip_free, 2026-10-17) is the same alternative cost without the storied gate,
+// and shares this function through FirstEquipWaiverOnBattlefield. Its yield to metalcraft needs no
+// latch argument: a subset the metalcraft credit forgave has no equip generic left to waive.
 static int StoriedFirstEquipWaiverCredit(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel)
 {
     const int     controller = state.active_player_index;
     const Player& ap         = state.players[controller];
-    // The designation must already be held and the turn's first equip must still be unspent. Both
-    // are real state, not projections: the latch is raised by RefreshStoriedLatch at the enter
-    // cascade, so a storied permanent cast by THIS subset has not latched yet when this runs -- a
-    // conservative under-credit, in the safe direction.
-    if (!ap.has_enduring_story || ap.equip_activated_this_turn) { return 0; }
-    bool have_waiver = false;
-    for (const Permanent& p : state.battlefield)
+    // The turn's first equip must still be unspent and a waiver must be live: on the battlefield
+    // now (FirstEquipWaiverOnBattlefield -- Forge Anew, or Kili with the enduring story already
+    // held), or CAST BY THIS SUBSET (Forge Anew only; see CastGrantsFirstEquipWaiver). Both are real
+    // state, not projections. Kili's latch is raised by RefreshStoriedLatch at the enter cascade, so
+    // a storied permanent cast by THIS subset has not latched yet when this runs -- a conservative
+    // under-credit, in the safe direction.
+    if (ap.equip_activated_this_turn) { return 0; }
+    bool have_waiver = FirstEquipWaiverOnBattlefield(state, controller);
+    if (!have_waiver)
     {
-        if (p.controller_index != controller) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.storied_first_equip_free) { have_waiver = true; break; }
+        for (int j : sel) { if (CastGrantsFirstEquipWaiver(cands[j])) { have_waiver = true; break; } }
     }
     if (!have_waiver) { return 0; }
     int best = 0;
@@ -7206,19 +7222,19 @@ static int WalkCutDigit(const McWalkBound& mb, const WalkCutTables& t,
 // actually spent cannot disagree -- and so the two worlds (executor and rollout) agree by
 // construction rather than by audit. Max cost, ties broken by the LOWEST source id so the choice is
 // deterministic and therefore safe to fold into a key.
-int TurnSolver::StoriedWaivedEquipId(const GameState& state, const std::vector<Action>& acts)
+int TurnSolver::StoriedWaivedEquipId(const GameState& state, const std::vector<Action>& acts,
+                                     bool credit_plan_casts)
 {
-    const int     controller = state.active_player_index;
-    const Player& ap         = state.players[controller];
-    if (!ap.has_enduring_story || ap.equip_activated_this_turn) { return 0; }
-    bool have_waiver = false;
-    for (const Permanent& p : state.battlefield)
+    const int controller = state.active_player_index;
+    // The shared predicate (Kili with the story, or Forge Anew). Read at the START of the trailing
+    // pass, after every cast of the plan has resolved, so a Forge Anew this plan cast is counted.
+    if (!FirstEquipWaiverOnBattlefield(state, controller))
     {
-        if (p.controller_index != controller) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.storied_first_equip_free) { have_waiver = true; break; }
+        if (!credit_plan_casts || state.players[controller].equip_activated_this_turn) { return 0; }
+        bool cast = false;
+        for (const Action& a : acts) { if (CastGrantsFirstEquipWaiver(a)) { cast = true; break; } }
+        if (!cast) { return 0; }
     }
-    if (!have_waiver) { return 0; }
     int best_id = 0, best_cost = 0;
     for (const Action& a : acts)
     {
@@ -21866,6 +21882,32 @@ bool TurnSolver::TopLandNewlyPlayable(int top_snapshot, const GameState& state, 
     return n != 0 && n != top_snapshot;
 }
 
+std::vector<int> TurnSolver::GraveyardEquipmentNumbers(const GameState& state)
+{
+    std::vector<int> out;
+    if (!state.deck_has_gy_equipment_return) { return out; }
+    const Player& ap = state.players[state.active_player_index];
+    for (const Card& c : ap.graveyard)
+    {
+        // A numberless card (0) could alias a token on the battlefield -- never snapshot one.
+        if (c.m_number != 0 && CardHasSubtype(ZoneCard(c), "Equipment")) { out.push_back(c.m_number); }
+    }
+    return out;
+}
+
+bool TurnSolver::EquipmentReturnedFromGraveyard(const std::vector<int>& gy_snapshot, const GameState& state)
+{
+    if (gy_snapshot.empty() || !state.deck_has_gy_equipment_return) { return false; }
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (std::find(gy_snapshot.begin(), gy_snapshot.end(), p.card.m_number) != gy_snapshot.end())
+        { return true; }
+    }
+    return false;
+}
+
 bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState& state)
 {
     if (before.empty()) { return false; }
@@ -32633,6 +32675,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // FORGE ANEW post-pass ("When this enchantment enters, return target Equipment card from your
+    // graveyard to the battlefield"): the Witness shape above, restricted to the legal set -- one
+    // cast variant per DISTINCT graveyard EQUIPMENT name, each pinning tutor_target (#FE in the plan
+    // signature keeps the dedup lossless). Same-name copies are interchangeable, so the per-name fan
+    // is a lossless fold. The base keeps an EMPTY pin (the provider's resolution pick on the LIVE
+    // graveyard -- the only way to return an Equipment that reaches the graveyard earlier in the same
+    // plan). Same decision-space gate and the same human-play rule: no named variants, the dig
+    // chooser asks at resolution. Gated on the param.
+    {
+        const bool fa_decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                    && !HumanPlayActive();
+        const std::size_t fa_n = actions.size();
+        for (std::size_t i = 0; fa_decision_space && i < fa_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].def->params.etb_return_equipment_from_gy) { continue; }
+            if (!actions[i].tutor_target.str().empty()) { continue; }
+            const Player& gp = state.players[state.active_player_index];
+            std::vector<std::string> names;
+            for (int g : GraveyardEquipmentIndices(state, state.active_player_index))
+            {
+                const std::string nm = gp.graveyard[static_cast<std::size_t>(g)].m_name.str();
+                if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+            }
+            for (const std::string& nm : names)
+            {
+                Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                v.tutor_target = nm;
+                actions.push_back(std::move(v));
+            }
+        }
+    }
+
     // Identical creature-Aura HOSTS -> the first k of each class (MTG_AURA_HOST_FOLD; see the function).
     // Dominated haste/shroud equip moves (see DropInertHasteShroudEquips): the search's lever or the
     // greedy's by scope, never in human play or an unpruned (viewer / claude-play) enumeration, and only
@@ -37029,6 +37104,31 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Same-subset reveal-or-pay additional cost (Daring Buccaneer) among the candidates -- gates the
     // per-subset SameSubsetRevealSurcharge debit. Inert for every deck without one.
     const bool any_reveal_cost = AnyRevealCostCand(cands);
+    // FIRST-EQUIP WAIVER at the LEAF (Forge Anew / Kili the Resourceful). Without it every playout
+    // beyond the horizon priced a Colossus Hammer equip at its printed {8} on a board where the
+    // real game pays {0}, so every leaf misvalued a waiver board. BATTLEFIELD-ONLY, which is what
+    // makes it EXACT rather than optimistic -- the LeafReducerCreditEnabled law forbids only the
+    // latter: the waiver permanent is already out and the turn's first equip is still unspent (both
+    // real state), the trailing pass pays the subset's most expensive equip {0}
+    // (StoriedWaivedEquipId, the same max-cost fold StoriedFirstEquipWaiverCredit prices), and an
+    // equip whose live cost fell below its stamp (a same-subset metalcraft flip) only makes the bill
+    // smaller. A Forge Anew CAST by the subset is NOT credited here (the enumerator's credit does
+    // that): a cast the executor drops would strand the line, which is the optimism the law is about.
+    // `leaf_waiver_bound` is the scalar bound's addend, as in EnumeratePlans ("the position has to
+    // survive to be priced"). Both 0 for every deck without the card -> byte-identical.
+    bool leaf_waiver       = false;
+    int  leaf_waiver_bound = 0;
+    if (CostTricksEnabled() && FirstEquipWaiverOnBattlefield(state, state.active_player_index))
+    {
+        for (const Action& ra : cands)
+        {
+            if (ra.kind != Action::Kind::Equip || ra.cost.generic <= leaf_waiver_bound) { continue; }
+            const CardDefinition* ed = ra.def ? ra.def : CardDatabase::Instance().Lookup(ra.card_name);
+            if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }   // never waived
+            leaf_waiver_bound = ra.cost.generic;
+        }
+        leaf_waiver = leaf_waiver_bound > 0;
+    }
     // NOTE: the same-turn cost-reducer (Ruby Medallion) generic credit is applied ONLY in
     // EnumeratePlans (the search's / viewer's plan list), NOT here in Solve's greedy consider(). The
     // credit is an OPTIMISTIC affordability hint (it assumes the reducer resolves before the spells it
@@ -37789,6 +37889,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             {
                 combined.generic             = std::max(0, combined.generic - rcred);
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
+            }
+        }
+        // The FIRST-EQUIP WAIVER (Forge Anew / Kili), battlefield-only -- see leaf_waiver above.
+        if (leaf_waiver)
+        {
+            const int wcred = StoriedFirstEquipWaiverCredit(state, cands, sel);
+            if (wcred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - wcred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - wcred);
             }
         }
         // "{cost}, {T}" SELF-FUNDING DEBIT -- applied LAST, after every same-turn credit, because it
@@ -39132,14 +39242,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
 
     // legacy scalar bound (MTG_LEGACY_MANA_BOUND), loosened by the spectacle plan credit's most-forgiven
     // mana (0 unless that credit is live -> byte-identical).
-    const int mana_bound = ManaPruneBound(pool, cands, spec_ctx.bound_credit);
+    // ...plus the first-equip waiver's addend (0 unless leaf_waiver; see its declaration).
+    const int mana_bound = ManaPruneBound(pool, cands, spec_ctx.bound_credit + leaf_waiver_bound);
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
     // branch is the price now; the allocation happens on the rare call that needs it.
     std::unique_ptr<ManaGateIndex> gate_owned;            // selection-exact bound; see BuildManaGateIndex
-    // ...which bakes each cast's printed cost, so it stands down while the spectacle credit is live.
-    if (SelectionExactManaGateEnabled() && gate_relevant && !spec_ctx.live)
+    // ...which bakes each cast's printed cost, so it stands down while the spectacle credit is live
+    // -- and, for the same reason, while the first-equip waiver is (it would charge the free equip).
+    if (SelectionExactManaGateEnabled() && gate_relevant && !spec_ctx.live && !leaf_waiver)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
@@ -42188,6 +42300,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // the plan's own land block, so a top play that leaves another top behind for an extra drop arms
     // too. 0 (one bool test) for every deck without a play-from-top card.
     int top_at_section = PlayableTopLandNumber(state);
+    // ...and the GRAVEYARD-EQUIPMENT half (Forge Anew; EquipmentReturnedFromGraveyard), reset with
+    // the other two at every breakpoint. Empty for every deck without a graveyard-Equipment return.
+    std::vector<int> gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
 
     // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
     // site 5 (searchable by default), a plain cantrip is site 3 (the admitted quality prune). One
@@ -42733,6 +42848,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             seq_at_section  = g_hand_entry_seq;
         }
         top_at_section = PlayableTopLandNumber(state);   // ...and its library-top half (Courser)
+        gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         if (class_on) { ++g_bp_classon_last; }   // monotonic; delta-read by the uniform collapse
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
@@ -43318,6 +43434,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...and the LIBRARY-TOP twin (Courser of Kruphix): the playable top before this cast, for
         // TopLandNewlyPlayable at the arming site below. 0 (one bool test) without a play-from-top card.
         const int top_at_cast = PlayableTopLandNumber(state);
+        // ...and the GRAVEYARD-EQUIPMENT twin (Forge Anew): the graveyard's Equipment before this
+        // cast, for EquipmentReturnedFromGraveyard at the same arming site. Empty (no allocation)
+        // for every deck without a graveyard-Equipment return.
+        const std::vector<int> gyeq_at_cast = TurnSolver::GraveyardEquipmentNumbers(state);
         // MTG_HAND_ENTRY_CENSUS only: mark the window inside which today's arming can SEE a hand
         // entry, so the census can report what happens outside it. Inert (and untouched) otherwise.
         HandEntryCastScope _hec;
@@ -45236,7 +45356,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         // false: those permanents are creatures, and creatures do not reach here).
                         // A byte-identity claim in a comment is a measurement with an expiry date --
                         // re-count against cards.json rather than trusting any of these three.
-                        FireOwnEtbTriggers(state, state.active_player_index, bi);
+                        //
+                        // THE PIN RIDES IN TOO (Forge Anew, 2026-10-17): the executor's
+                        // EnterBattlefield passes `entry.tutor_target`, so a noncreature permanent
+                        // whose ETB reads the cast's searched pick (Forge Anew's graveyard Equipment)
+                        // must get the SAME pin here, or the search scores the provider's pick while
+                        // the real game returns the searched one. `etb_kx` stays -1, as before. Of
+                        // the chosen_tutor readers in FireOwnEtbTriggers (PerformTutor's tutor_to_hand
+                        // / tutor_to_top, the Witness return, the Forge Anew return), no NONCREATURE
+                        // permanent in cards.json carries the first two (counted 2026-10-17), so this
+                        // is byte-identical for every card that reached the line before.
+                        FireOwnEtbTriggers(state, state.active_player_index, bi, tutor_target, -1);
                         break;
                     }
                 }
@@ -45441,7 +45571,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             && !deferred_cantrip_resolve
             && !TurnSolver::ParamKeyedDrawClass(state, def)
             && (TurnSolver::HandGainedACard(hand_at_cast, state)
-                || TurnSolver::TopLandNewlyPlayable(top_at_cast, state, karoo_deferred)))
+                || TurnSolver::TopLandNewlyPlayable(top_at_cast, state, karoo_deferred)
+                // A graveyard Equipment returned to the battlefield (Forge Anew's ETB) is the same
+                // rule: a new equip option the plan's own Equip candidates could not see.
+                || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_cast, state)))
         {
             deferred_cantrip_resolve = true;
             deferred_cantrip_site    = &def;
@@ -47216,7 +47349,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (BpHandEntryEnabled() && !deferred_cantrip_resolve && !s_human_play && sink_stack.empty()
         && ((g_hand_entry_seq != seq_at_section
              && TurnSolver::HandGainedACard(hand_at_section, state))
-            || TurnSolver::TopLandNewlyPlayable(top_at_section, state, karoo_deferred)))
+            || TurnSolver::TopLandNewlyPlayable(top_at_section, state, karoo_deferred)
+            // the graveyard-Equipment half (Forge Anew), likewise outside the sequence pre-filter
+            || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_section, state)))
     {
         deferred_cantrip_resolve = true;
         deferred_hand_before     = hand_at_section;
@@ -49810,26 +49945,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // unspent, a waiver permanent is on the battlefield, and some Equip candidate is still priced
     // above {0}. Every deck without the param, and every turn after the waiver is spent, stays
     // byte-identical and pays only these four tests once per frame.
+    // Forge Anew joins through the SAME predicate (FirstEquipWaiverOnBattlefield), plus its
+    // castable arm: a Forge Anew cast candidate arms the scan too, because the credit forgives a
+    // same-subset cast (see CastGrantsFirstEquipWaiver). Frame-level, so the castable arm only ever
+    // LOOSENS what the per-subset credit and the bound below may forgive -- the safe direction.
     bool any_storied = false;
     if (CostTricksEnabled())
     {
-        const Player& sp = state.players[state.active_player_index];
-        if (sp.has_enduring_story && !sp.equip_activated_this_turn)
+        const int  sap    = state.active_player_index;
+        bool       waiver = FirstEquipWaiverOnBattlefield(state, sap);
+        if (!waiver && state.deck_has_first_equip_waiver && !state.players[sap].equip_activated_this_turn)
         {
-            bool waiver = false;
-            for (const Permanent& p : state.battlefield)
+            for (const Action& ra : cands) { if (CastGrantsFirstEquipWaiver(ra)) { waiver = true; break; } }
+        }
+        if (waiver)
+        {
+            for (const Action& ra : cands)
             {
-                if (p.controller_index != state.active_player_index) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (d && d->params.storied_first_equip_free) { waiver = true; break; }
-            }
-            if (waiver)
-            {
-                for (const Action& ra : cands)
-                {
-                    if (ra.kind == Action::Kind::Equip && ra.cost.generic > 0)
-                    { any_storied = true; break; }
-                }
+                if (ra.kind == Action::Kind::Equip && ra.cost.generic > 0)
+                { any_storied = true; break; }
             }
         }
     }
@@ -51754,6 +51888,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& a : cands)
         { if (a.kind == Action::Kind::Equip) { metalcraft_bound += a.cost.generic; } }
     }
+    // ...and the FIRST-EQUIP WAIVER's addend (Forge Anew / Kili), for the identical reason. Without it
+    // the waiver credit in eval_and_push_body was reachable ONLY under metalcraft: with no Puresteel
+    // out, every "equip Colossus Hammer" position was charged its printed {8} here and skipped at the
+    // odometer before StoriedFirstEquipWaiverCredit could price it -- so on a 3-land board the free
+    // Hammer equip was never offered, to the search or to the human (the viewer lists exactly the
+    // enumerated plans). The credit forgives at most ONE equip's generic (the subset's most expensive),
+    // so the largest Equip candidate's generic is an UPPER bound on it -- the safe direction: raising
+    // the bound only ever prunes LESS. A reconfigure attach is never waived (not an equip ability), so
+    // it is left out of the max. Under metalcraft `metalcraft_bound` already sums every equip, which
+    // covers this, and the waiver credit yields to metalcraft in the body -- so it is added only
+    // without. Zero unless the waiver scan armed -> every deck without the card is byte-identical.
+    int waiver_bound = 0;
+    if (any_storied && !any_metalcraft)
+    {
+        for (const Action& a : cands)
+        {
+            if (a.kind != Action::Kind::Equip || a.cost.generic <= waiver_bound) { continue; }
+            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }
+            waiver_bound = a.cost.generic;
+        }
+    }
     // Same-turn scaled-dork GROWTH the per-subset credit below can grant (the haste-unlock lesson:
     // the credit and the scalar bound must move together, or the bound rejects the very subset the
     // credit exists to rescue BEFORE consider() ever sees it). Upper bound: every matching creature
@@ -51793,7 +51949,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         ? std::numeric_limits<int>::max()
         : ManaPruneBound(pool, cands,
                          // + the spectacle plan credit's most-forgiven mana (0 unless it is live).
-                         haste_unlock_bound + metalcraft_bound + growth_bound + spec_ctx.bound_credit,
+                         haste_unlock_bound + metalcraft_bound + waiver_bound + growth_bound
+                             + spec_ctx.bound_credit,
                          // ETB-untap refund, ENUMERATOR ONLY -- the same asymmetry the extra_credit
                          // terms above already have (Solve passes none). Its consumer is the
                          // MTG_EDF_SEQ_ETB rescue in eval_and_push, which Solve::consider
@@ -51846,8 +52003,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // gone; MTG_MANA_PRUNE=0 "fixed" it only because that hatch happens to disable this gate too).
     // Bail to the scalar bound, which the credit already bails to unbounded.
     // ...and the spectacle plan credit (its terms bake the printed cost) -- the same bail.
+    // ...and the FIRST-EQUIP WAIVER (Forge Anew / Kili): the gate's terms bake each equip's printed
+    // generic, so the waived equip would be charged in full -- the same bail, to the waiver-aware
+    // scalar bound (waiver_bound above). The haste-dork precedent; the gate is default OFF.
     if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork && growth_bound == 0
-        && !any_hinata_credit && !spec_ctx.live)
+        && !any_hinata_credit && !spec_ctx.live && !any_storied)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         // `&state`: the ETB-untap refund, per SELECTION (tighter than the scalar bound's whole-list
@@ -52686,6 +52846,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // pick) -- distinct plans, the #T precedent. Gated on the param.
                         + ((act.def && act.def->params.etb_return_gy_to_hand)
                            ? ("#G" + act.tutor_target.str()) : "")
+                        // Forge Anew: WHICH graveyard Equipment the ETB returns is a real decision
+                        // (one cast variant per distinct graveyard Equipment name + the unpinned
+                        // resolution pick) -- the #G precedent. Gated on the param.
+                        + ((act.def && act.def->params.etb_return_equipment_from_gy)
+                           ? ("#FE" + act.tutor_target.str()) : "")
                         // LAND-AURA HOST (MTG_EDF_AURA_HOST_SIG, default ON; 2026-09-15): WHICH land
                         // carries a Wild Growth / Trace of Abundance is a real decision, not a
                         // sub-decision the host heuristic can be trusted with -- a karoo in the same
@@ -54508,6 +54673,26 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             }
         }
         if (source && (!p.actions.empty() || p.land_from_top)) { mask |= 1 << 10; }
+    }
+    // SITE 10's GRAVEYARD-EQUIPMENT ROUTE (Forge Anew, 2026-10-17). A plan that casts a card whose
+    // ETB returns a graveyard Equipment to the battlefield arms site 10 in both worlds
+    // (TurnSolver::EquipmentReturnedFromGraveyard at the per-cast and section windows): the returned
+    // piece is a NEW equip option the plan's own Equip candidates -- built from battlefield and hand
+    // -- could not see. Without this clause the re-solve fires but its continuation is
+    // BpUnbranchedCanon's cands.front() at any budget, an in-window greedy pick of WHICH equip (if
+    // any) follows the return -- so "Forge Anew -> equip the returned Hammer for {0} -> attack" would
+    // be found only when the canon happened to be it. A SUPERSET, the safe direction every clause here
+    // takes: it marks the cast whether or not the graveyard holds an Equipment yet (a plan that
+    // returns nothing arms nothing, and its variants collapse onto the base -- wasted nodes, never a
+    // wrong answer). Gated on the deck constant: one bool test for every deck without the card.
+    if (state.deck_has_gy_equipment_return && BpPutInHandEnabled() && !(mask & (1 << 10)))
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d && d->params.etb_return_equipment_from_gy) { mask |= 1 << 10; break; }
+        }
     }
     // Site 9, the COUNTER-FILLED activation (Khalni Heart Expedition, 2026-10-15). The clause above
     // keys on a CAST that lands an activatable permanent; an Expedition ALREADY on the battlefield
@@ -61224,6 +61409,22 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
                 Fold(k, 0x67C7);
                 Fold(k, static_cast<uint64_t>(cr_n));
                 Fold(k, cr_acc);
+            }
+        }
+        // GRAVEYARD-EQUIPMENT readers (GyR_EquipmentNames; Forge Anew): which Equipment cards sit
+        // in OUR graveyard decides what the ETB can return and which cast variants exist. Same
+        // shape and the same gate as the creature fold above -> every other deck keeps its key.
+        if (gy_stamped && (state.deck_gy_readers & GyR_EquipmentNames) != 0)
+        {
+            uint64_t eq_acc = 0;
+            int      eq_n   = 0;
+            for (const Card& c : p.graveyard)
+            { if (CardHasSubtype(ZoneCard(c), "Equipment")) { eq_acc += c.m_name_hash; ++eq_n; } }
+            if (eq_n > 0)
+            {
+                Fold(k, 0x67E9);
+                Fold(k, static_cast<uint64_t>(eq_n));
+                Fold(k, eq_acc);
             }
         }
         const bool gy_retrace_possible = !gy_stamped

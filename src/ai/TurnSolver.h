@@ -1664,6 +1664,17 @@ public:
     // section twin), so they count the same breakpoints. Deck-constant gated: false at the first test
     // for every deck without a play-from-top card.
     static bool TopLandNewlyPlayable(int top_snapshot, const GameState& state, bool drop_reserved);
+    // THE GRAVEYARD-EQUIPMENT TWIN (Forge Anew, 2026-10-17): an Equipment CARD that sat in the active
+    // player's graveyard at the snapshot is on their battlefield NOW. The plan's equip candidates were
+    // built from the battlefield and hand only, so a piece returned mid-plan has no Equip action in
+    // the same plan -- "Forge Anew -> equip the returned Hammer this phase" was unreachable at any
+    // budget. It is a NEW OPTION exactly as a card arriving in hand is, so it arms the SAME site 10
+    // (no BpSiteMask renumbering), at the same windows as TopLandNewlyPlayable in both worlds.
+    // `GraveyardEquipmentNumbers` takes the snapshot: the m_numbers of the graveyard's Equipment
+    // cards, EMPTY (no allocation, one bool test) for every deck the stamp proves cannot return one
+    // (GameState::deck_has_gy_equipment_return), which makes the predicate false at its first test.
+    static std::vector<int> GraveyardEquipmentNumbers(const GameState& state);
+    static bool EquipmentReturnedFromGraveyard(const std::vector<int>& gy_snapshot, const GameState& state);
 
     // ---- THE LAND-DROP POSITION (Plan::land_slot, 2026-10-15) -----------------------------------
     static constexpr int8_t kLandSlotFirst      = 0;    // before every cast (the default)
@@ -2231,7 +2242,12 @@ public:
     // so the board is identical under any assignment and waiving the max minimises mana spent).
     // Resolved ONCE per trailing pass, from the same list in the same position in both worlds, so
     // the executor and the rollout cannot disagree about which equip is free.
-    static int StoriedWaivedEquipId(const GameState& state, const std::vector<Action>& acts);
+    // `credit_plan_casts` (DISPLAY ONLY -- the claude-play / viewer plan JSON's `equip_cost`): also
+    // count a first-equip waiver the plan itself CASTS (Forge Anew), i.e. answer as the trailing pass
+    // will once the plan's casts have resolved. Every payment site passes false (the default): it is
+    // called AT the trailing pass, where those casts are already on the battlefield.
+    static int StoriedWaivedEquipId(const GameState& state, const std::vector<Action>& acts,
+                                    bool credit_plan_casts = false);
 
     // Card numbers of battlefield sources a plan with a mana-unlock equip must hold untapped until
     // that equip fires -- the "reserve red" half of the same line. Empty for every other plan.

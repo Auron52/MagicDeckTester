@@ -2425,9 +2425,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ...and the LIBRARY-TOP half (Courser of Kruphix) -- lockstep twin of ApplyPlanDirect's
     // top_at_section: the playable top as the pass opens, reset with the hand half.
     int exec_top_at_section = PlayableTopLandNumber(state);
+    // ...and the GRAVEYARD-EQUIPMENT half (Forge Anew) -- twin of ApplyPlanDirect's gyeq_at_section.
+    std::vector<int> exec_gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
     auto exec_section_reset = [&]()
     {
         exec_top_at_section = PlayableTopLandNumber(state);
+        exec_gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
         if (!BpHandEntryEnabled()) { return; }
         exec_hand_at_section = TurnSolver::HandCardNumbers(state);
         exec_seq_at_section  = g_hand_entry_seq;
@@ -4134,6 +4137,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the cast's; here the hook runs first, and without the freeze this cast would arm site 10 for a
     // top the rollout attributes to the section window (a site-numbering split). Reset with rdb_top.
     int rdb_top_verdict = -1;
+    // The graveyard's Equipment before the current cast (Forge Anew) -- the twin of rdb_top for
+    // put_in_hand_armed's EquipmentReturnedFromGraveyard (rollout twin: apply_one's gyeq_at_cast).
+    // No freeze is needed: nothing a land-search activation does moves a graveyard Equipment.
+    std::vector<int> rdb_gyeq;
     // Name hashes of the committed plan's hand casts -- lockstep twin of ApplyPlanDirect's
     // plan_cast_names. A card the plan casts is never "declined", so the breakpoint filter keeps it.
     std::vector<std::uint64_t> rdb_plan_casts;
@@ -4257,6 +4264,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         rdb_top_verdict = -1;
+        rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
         // committed line that spends the staged copy this turn -- freeing the drawn copy for a later
         // turn -- replays exactly. Mirrors the land-play fix (TryPlaySpecificLand): the burn 6225
@@ -4342,6 +4350,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         rdb_top_verdict = -1;
+        rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
@@ -4372,6 +4381,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
         rdb_top = PlayableTopLandNumber(state);   // the library-top twin (Courser)
         rdb_top_verdict = -1;
+        rdb_gyeq = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (git == ap.graveyard.end()) { return; }
@@ -4535,7 +4545,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // rollout twin: the end of apply_one) -- the shared TopLandNewlyPlayable.
         const bool top_new = rdb_top_verdict >= 0 ? rdb_top_verdict == 1
                            : TurnSolver::TopLandNewlyPlayable(rdb_top, state, karoo_deferred);
-        if (!TurnSolver::HandGainedACard(rdb_hand, state) && !top_new) { return false; }
+        // ...and a graveyard Equipment returned to the battlefield (Forge Anew; rollout twin: the
+        // same OR at the end of apply_one) -- the shared EquipmentReturnedFromGraveyard.
+        const bool gyeq_new = TurnSolver::EquipmentReturnedFromGraveyard(rdb_gyeq, state);
+        if (!TurnSolver::HandGainedACard(rdb_hand, state) && !top_new && !gyeq_new) { return false; }
         cast_draw_engine = true;
         return true;
     };
@@ -7242,7 +7255,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         && ((g_hand_entry_seq != exec_seq_at_section
              && TurnSolver::HandGainedACard(exec_hand_at_section, state))
             // the library-top half, outside the sequence pre-filter (rollout twin: the same OR)
-            || TurnSolver::TopLandNewlyPlayable(exec_top_at_section, state, karoo_deferred)))
+            || TurnSolver::TopLandNewlyPlayable(exec_top_at_section, state, karoo_deferred)
+            // ...and the graveyard-Equipment half (Forge Anew; rollout twin: the same OR)
+            || TurnSolver::EquipmentReturnedFromGraveyard(exec_gyeq_at_section, state)))
     {
         cast_draw_engine = true;
     }

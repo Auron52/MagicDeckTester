@@ -1600,6 +1600,14 @@ struct CardParams
     // slice is boards with NO Puresteel out -- where it is a one-per-turn Puresteel for Colossus
     // Hammer's equip {8}, the only cost on this list that another route cannot reach by turn 4.
     bool storied_first_equip_free = false;
+    // Forge Anew: "You may pay {0} rather than pay the equip cost of the first equip ability you
+    // activate during each of your turns." Kili's waiver WITHOUT the storied gate -- the same
+    // per-plan max-cost assignment through ONE shared predicate (FirstEquipWaiverOnBattlefield,
+    // SpellEffects.h), credited at the affordability gate, the scalar mana bound and the greedy leaf,
+    // and consumed at both payment sites through StoriedWaivedCost. "During each of YOUR turns" is
+    // structural in a goldfish (we act only on our own turns). Reconfigure is not an equip ability
+    // (2023-06-16 ruling): never waived, never spends it.
+    bool first_equip_free = false;
     // "Whenever another Dwarf or Equipment you control enters, draw a card. This ability triggers
     // only once each turn." ONE printed trigger with TWO subtype conditions, so one param holding
     // both, read at ONE site in the universal enter cascade -- beside Puresteel's
@@ -2172,6 +2180,11 @@ struct CardParams
     bool etb_destroy_nonartifact_nonblack       = false;
     bool etb_destroy_artifact_enchantment_land  = false;
     bool etb_return_gy_to_hand                  = false;
+    // Forge Anew: "When this enchantment enters, return target Equipment card from your graveyard to
+    // the battlefield." MANDATORY when our graveyard holds an Equipment card (no "up to", CR 603.3d);
+    // the pick is a searched cast variant per distinct graveyard Equipment NAME (Action::tutor_target,
+    // the Timeless Witness shape); resolved by ResolveEtbReturnGyEquipment (SpellEffects.h).
+    bool etb_return_equipment_from_gy           = false;
     std::optional<ManaCost> eternalize_cost;
     std::optional<ManaCost> transmute_cost;
     std::optional<ManaCost> life_gated_put_creatures_cost;

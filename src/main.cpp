@@ -2232,7 +2232,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                     // re-deriving metalcraft client-side -- the same reason `makes_clue` is a
                     // published flag rather than a card-name test in the viewer. Display/affordance
                     // only: nothing in the search or the executor reads it back.
-                    os << ", \"equip_cost\": " << ac.cost.ManaValue();
+                    // ...and the FIRST-EQUIP WAIVER (Forge Anew / Kili): the one equip of this plan
+                    // the trailing pass will pay {0} for (StoriedWaivedEquipId, crediting a waiver
+                    // the plan itself casts) is published as 0 -- what will actually be charged.
+                    const int waived = TurnSolver::StoriedWaivedEquipId(s, p.actions,
+                                                                        /*credit_plan_casts=*/true);
+                    os << ", \"equip_cost\": "
+                       << ((waived != 0 && ac.sac_source_id == waived) ? 0 : ac.cost.ManaValue());
                 }
             }
             // A hand card with more than ONE way to be played needs a route in the palette for each
@@ -3240,6 +3246,15 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply 0 to reveal the top card and put that land onto the battlefield tapped (its own "
                "enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land "
                "stays on top). Default = reveal.");
+    }
+    else if (source.find("(return Equipment from graveyard)") != std::string::npos)
+    {
+        // Forge Anew's ETB (ResolveEtbReturnGyEquipment): `examined` is the WHOLE graveyard, only its
+        // Equipment cards are legal, and the return is MANDATORY (targeted, no "up to") -- so -1 is
+        // not "nothing", it takes the AI's pick. The card goes ONTO THE BATTLEFIELD, unattached.
+        d.Note("reply a graveyard index to return that Equipment card to the battlefield (it enters "
+               "unattached; Sigarda's Aid may then attach it). The return is mandatory, so -1 takes "
+               "the AI's pick. Default = the AI's pick.");
     }
     else if (source.find("(combat crack)") != std::string::npos)
     {

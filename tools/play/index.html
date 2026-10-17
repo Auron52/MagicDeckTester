@@ -4191,8 +4191,13 @@ function digPanelHtml(d){
   // Destination-aware wording: the shared dig chooser serves into-hand ETB digs (Acclaimed
   // Contender) AND onto-the-battlefield puts (Skyhunter "(attack dig)", Turntimber "(put)").
   const toBf = /\((attack dig|put)\)/.test(d.source||'');
-  let h=`<h3>Dig — ${esc(d.source||'')}</h3>`;
-  h+=`<div class="sub">Look at the top ${ (d.examined||[]).length } cards — put one highlighted card ${toBf?'onto the battlefield':'into your hand (it becomes playable this turn)'}, or take nothing. The rest go to the bottom.</div>`;
+  // Forge Anew's ETB reuses this modal over the GRAVEYARD: only the Equipment cards are takeable and
+  // the return is mandatory (the "Take nothing" button takes the AI's pick).
+  const gyEquip = /\(return Equipment from graveyard\)/.test(d.source||'');
+  let h=`<h3>${gyEquip?'Return an Equipment':'Dig'} — ${esc(d.source||'')}</h3>`;
+  h+= gyEquip
+    ? `<div class="sub">Your graveyard — return one highlighted Equipment card to the battlefield (it enters unattached). The return is mandatory: declining takes the AI's pick.</div>`
+    : `<div class="sub">Look at the top ${ (d.examined||[]).length } cards — put one highlighted card ${toBf?'onto the battlefield':'into your hand (it becomes playable this turn)'}, or take nothing. The rest go to the bottom.</div>`;
   h+=`<div class="tutgrid">`;
   (d.examined||[]).forEach(c=>{
     const def=c.index===d.heuristic_default;

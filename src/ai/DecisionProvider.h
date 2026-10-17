@@ -3052,6 +3052,35 @@ public:
         return best;
     }
 
+    // GyEquipmentReturnPick -- Forge Anew's "return target Equipment card from your graveyard to the
+    // battlefield" when the cast carried no searched pick (a put path, the unpinned cast variant, a
+    // pin whose card has left the graveyard). `legal` = graveyard indices of the Equipment cards,
+    // never empty; returns an index INTO `legal`. A RESOLUTION pick only -- the search branches one
+    // cast variant per distinct graveyard Equipment name, so this never decides a searched line.
+    // DEFAULT (a deliberate ranking): the largest printed power bonus, then the cheapest printed
+    // attach cost (equip, or reconfigure for a reconfigure piece), then the lowest card number.
+    virtual int GyEquipmentReturnPick(const GameState& s, int controller,
+                                      const std::vector<int>& legal) const
+    {
+        const std::vector<Card>& gy = s.players[static_cast<std::size_t>(controller)].graveyard;
+        int best = -1; long long best_key = 0;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        {
+            const Card& gc = gy[static_cast<std::size_t>(legal[static_cast<std::size_t>(k)])];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+            const int bonus = d ? d->params.equip_power_bonus : 0;
+            const int cost  = !d ? 0 : (d->params.reconfigure_cost.has_value()
+                                            ? d->params.reconfigure_cost->generic
+                                            : d->params.equip_cost_generic);
+            // Larger bonus first, then cheaper attach, then the lower card number.
+            const long long key = (static_cast<long long>(bonus + 1000) << 40)
+                                - (static_cast<long long>(cost) << 24)
+                                - static_cast<long long>(gc.m_number & 0xFFFFFF);
+            if (best < 0 || key > best_key) { best = k; best_key = key; }
+        }
+        return best;
+    }
+
     // EtbDestroyTargetPick -- a MANDATORY "When this enters, destroy target <X>" trigger whose legal
     // set (BOTH sides, CR 603.3d: a trigger with a legal target must take one) can be only OUR OWN
     // permanents against the goldfish: Shriekmaw (nonartifact, nonblack creature) and Acidic Slime
