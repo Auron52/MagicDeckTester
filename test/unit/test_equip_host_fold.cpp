@@ -289,21 +289,23 @@ TEST_CASE("Equip host fold: refused when the Speakers differ, or something reads
         ApplyEquip(s, 0, 19, kS2);   // the Lizard on Speaker #2
         CHECK(unfolded(s));
     }
-    {   // a Theft in hand whose creature target is a Speaker: its plans are never folded
+    {   // a Speaker's own tap names it: a subset holding that activation is never folded. (A Theft onto a
+        // Speaker is no longer a refusal -- it joins the canonical form; see the Theft cases below.)
         GameState s = BoardHf();
-        Card th = DefHf("Magnetic Theft").card; th.m_number = 60; s.players[0].hand.push_back(th);
-        Permanent m; m.card = DefHf("Mountain").card; m.card.m_number = 40; m.controller_index = 0; m.owner_index = 0;
-        s.battlefield.push_back(m);
+        s.players[0].life = gamesetup::StartingLife() + 7;     // Speaker of the Heavens' life gate
         const std::vector<TurnSolver::Plan> off = Menu(s, 0), on = Menu(s, 1);
-        auto theft_onto_speaker = [](const TurnSolver::Plan& p)
+        auto taps_speaker = [](const TurnSolver::Plan& p)
         {
             for (const Action& a : p.actions)
-            { if (a.attach_equip_id != 0 && (a.enchant_target == kS1 || a.enchant_target == kS2)) { return true; } }
+            {
+                if (a.kind != Action::Kind::Equip && a.kind != Action::Kind::CastFromHand
+                    && (a.sac_source_id == kS1 || a.sac_source_id == kS2)) { return true; }
+            }
             return false;
         };
         std::size_t n_off = 0, n_on = 0;
-        for (const TurnSolver::Plan& p : off) { if (theft_onto_speaker(p)) { ++n_off; } }
-        for (const TurnSolver::Plan& p : on)  { if (theft_onto_speaker(p)) { ++n_on; } }
+        for (const TurnSolver::Plan& p : off) { if (taps_speaker(p)) { ++n_off; } }
+        for (const TurnSolver::Plan& p : on)  { if (taps_speaker(p)) { ++n_on; } }
         CHECK(n_off > 0);
         CHECK(n_on == n_off);
         CHECK(Compare(s).every_orbit);
@@ -356,4 +358,188 @@ TEST_CASE("Equip host fold: the claude-play sweep's seed-2100003 T5 board, auton
     CHECK(r.subset);
     CHECK(r.every_orbit);
     CHECK(r.on <= r.off);
+}
+
+// ---- Magnetic Theft joins the canonical form (2026-10-17) ------------------------------------------
+// Until then the Theft's pair axis kept ONE creature and ONE Equipment per identity class, so two Thefts
+// could never put one Equipment on EACH of two identical creatures, nor move each of two identical
+// pieces -- unfindable at any budget. Now every pair is offered and the mirror images are folded jointly
+// with the Equips.
+namespace
+{
+// A relabelling: swap the two Speakers and/or the two identical Hammers.
+struct Relabel { bool hosts = false; bool pieces = false; };
+constexpr int kH1 = 4, kH2 = 6;   // two identical loose Colossus Hammers
+int Map(int n, Relabel r)
+{
+    if (r.hosts)  { n = Swap(n); }
+    if (r.pieces) { n = n == kH1 ? kH2 : n == kH2 ? kH1 : n; }
+    return n;
+}
+std::string SigR(const TurnSolver::Plan& p, Relabel r)
+{
+    std::vector<std::string> v;
+    for (const Action& a : p.actions)
+    {
+        // No hand_index: two Theft CARDS are identical, and the plan dedup keys a Theft by its pair.
+        v.push_back(std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str() + ":"
+                    + std::to_string(Map(a.sac_source_id, r)) + ">"
+                    + std::to_string(Map(a.sac_victim_id, r)) + "/e" + std::to_string(Map(a.enchant_target, r))
+                    + "/m" + std::to_string(Map(a.attach_equip_id, r)) + "/t" + a.tutor_target.str());
+    }
+    std::sort(v.begin(), v.end());
+    std::string k = static_cast<const std::string&>(p.land_to_play) + "|";
+    for (const std::string& x : v) { k += x + ";"; }
+    return k;
+}
+std::string OrbitR(const TurnSolver::Plan& p)
+{
+    std::string best = SigR(p, {});
+    for (Relabel r : { Relabel{ true, false }, Relabel{ false, true }, Relabel{ true, true } })
+    { best = std::min(best, SigR(p, r)); }
+    return best;
+}
+std::string BoardKeyR(const GameState& g, Relabel r)
+{
+    std::vector<std::string> v;
+    for (const Permanent& p : g.battlefield)
+    {
+        v.push_back(std::to_string(Map(p.card.m_number, r)) + "@" + std::to_string(Map(p.equipped_to, r))
+                    + (p.tapped ? "T" : "u") + (p.card.IsCreature() ? "c" : "n"));
+    }
+    std::sort(v.begin(), v.end());
+    std::string k;
+    for (const std::string& x : v) { k += x + ";"; }
+    k += "|hand" + std::to_string(g.players[0].hand.size()) + "|gy" + std::to_string(g.players[0].graveyard.size())
+       + "|w" + std::to_string(g.players[0].equip_activated_this_turn ? 1 : 0);
+    return k;
+}
+// Two Speakers, a Kor Duelist, a loose Lizard Blades, two identical loose Hammers, a Loxodon
+// Warhammer, two Magnetic Thefts in hand, four Mountains. Forge Anew keeps a Hammer equip in reach.
+GameState TheftBoard()
+{
+    GameState s = BoardHf();        // Forge Anew, Hammer #4, Kor Duelist, Lizard, Speakers 50/51, 4 Plains
+    auto put = [&](const std::string& name, int number)
+    {
+        Permanent p; p.card = DefHf(name).card; p.card.m_number = number; p.controller_index = 0; p.owner_index = 0;
+        s.battlefield.push_back(p);
+    };
+    put("Colossus Hammer", kH2);
+    put("Loxodon Warhammer", 7);
+    for (int k = 0; k < 4; ++k) { put("Mountain", 70 + k); }
+    Card t1 = DefHf("Magnetic Theft").card; t1.m_number = 60; s.players[0].hand.push_back(t1);
+    Card t2 = DefHf("Magnetic Theft").card; t2.m_number = 62; s.players[0].hand.push_back(t2);
+    return s;
+}
+bool IsTheftHf(const Action& a) { return a.kind == Action::Kind::CastFromHand && a.attach_equip_id != 0; }
+}   // namespace
+
+TEST_CASE("Equip host fold / Theft: two Thefts can now put one Equipment on EACH of two identical Speakers")
+{
+    const GameState s = TheftBoard();
+    auto spread_hosts = [](const TurnSolver::Plan& p)
+    {
+        int on1 = 0, on2 = 0;
+        for (const Action& a : p.actions)
+        {
+            if (!IsTheftHf(a)) { continue; }
+            if (a.enchant_target == kS1) { ++on1; }
+            if (a.enchant_target == kS2) { ++on2; }
+        }
+        return on1 == 1 && on2 == 1;
+    };
+    auto spread_pieces = [](const TurnSolver::Plan& p)
+    {
+        int m1 = 0, m2 = 0;
+        for (const Action& a : p.actions)
+        {
+            if (!IsTheftHf(a)) { continue; }
+            if (a.attach_equip_id == kH1) { ++m1; }
+            if (a.attach_equip_id == kH2) { ++m2; }
+        }
+        return m1 == 1 && m2 == 1;
+    };
+    for (int fold = 0; fold < 2; ++fold)
+    {
+        INFO("fold " << fold);
+        bool sh = false, sp = false;
+        for (const TurnSolver::Plan& p : Menu(s, fold)) { sh = sh || spread_hosts(p); sp = sp || spread_pieces(p); }
+        CHECK(sh);   // one Theft onto each Speaker
+        CHECK(sp);   // one Theft moving each Hammer
+    }
+}
+
+TEST_CASE("Equip host fold / Theft: only mirror images are dropped, every line survives -- Speakers AND Hammers")
+{
+    const GameState s = TheftBoard();
+    const std::vector<TurnSolver::Plan> off = Menu(s, 0), on = Menu(s, 1);
+    std::set<std::string> on_exact, on_orbit, off_exact;
+    for (const TurnSolver::Plan& p : on)  { on_exact.insert(SigR(p, {})); on_orbit.insert(OrbitR(p)); }
+    for (const TurnSolver::Plan& p : off) { off_exact.insert(SigR(p, {})); }
+    std::set<std::string> off_orbit;
+    for (const TurnSolver::Plan& p : off) { off_orbit.insert(OrbitR(p)); }
+    MESSAGE("two-Speaker / two-Hammer / two-Theft board (autonomous menu): " << off_exact.size()
+            << " distinct plans unfolded -> " << on_exact.size() << " folded; " << off_orbit.size()
+            << " distinct lines up to relabelling");
+    CHECK(on_exact.size() < off_exact.size());
+    for (const std::string& k : on_exact) { CHECK_MESSAGE(off_exact.count(k) == 1, k); }
+    for (const TurnSolver::Plan& p : off) { CHECK_MESSAGE(on_orbit.count(OrbitR(p)) == 1, SigR(p, {})); }
+    // A MIXED plan -- the Lizard reconfigured onto one Speaker and a Theft onto the other -- survives.
+    bool mixed = false;
+    for (const TurnSolver::Plan& p : on)
+    {
+        bool reconf = false, theft = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::Equip && a.sac_source_id == 19 && a.sac_victim_id == kS1) { reconf = true; }
+            if (IsTheftHf(a) && a.enchant_target == kS2) { theft = true; }
+        }
+        mixed = mixed || (reconf && theft);
+    }
+    CHECK(mixed);
+}
+
+TEST_CASE("Equip host fold / Theft: a dropped plan and its twin realise the same board up to the relabelling, in BOTH worlds")
+{
+    const GameState s = TheftBoard();
+    const std::vector<TurnSolver::Plan> off = Menu(s, 0), on = Menu(s, 1);
+    std::set<std::string> on_exact;
+    for (const TurnSolver::Plan& p : on) { on_exact.insert(SigR(p, {})); }
+    int checked = 0, thefts = 0;
+    for (const TurnSolver::Plan& d : off)
+    {
+        if (on_exact.count(SigR(d, {}))) { continue; }
+        const TurnSolver::Plan* twin = nullptr;
+        Relabel used{};
+        for (Relabel r : { Relabel{ true, false }, Relabel{ false, true }, Relabel{ true, true } })
+        {
+            for (const TurnSolver::Plan& p : on) { if (SigR(p, {}) == SigR(d, r)) { twin = &p; used = r; break; } }
+            if (twin != nullptr) { break; }
+        }
+        REQUIRE_MESSAGE(twin != nullptr, "a dropped plan has no relabelled twin: ", SigR(d, {}));
+        for (int world = 0; world < 2; ++world)
+        {
+            INFO((world == 0 ? "rollout" : "executor") << " " << SigR(d, {}));
+            const GameState a = world == 0 ? RollHf(s, d) : ExecHf(s, d);
+            const GameState b = world == 0 ? RollHf(s, *twin) : ExecHf(s, *twin);
+            CHECK(BoardKeyR(a, used) == BoardKeyR(b, {}));
+        }
+        for (const Action& a : d.actions) { if (IsTheftHf(a)) { ++thefts; break; } }
+        ++checked;
+        if (checked >= 60) { break; }
+    }
+    CHECK(checked > 0);
+    CHECK(thefts > 0);
+    // ...and every folded-menu plan holding a Theft realises identically in both worlds.
+    int lock = 0;
+    for (const TurnSolver::Plan& p : on)
+    {
+        bool theft = false;
+        for (const Action& a : p.actions) { if (IsTheftHf(a)) { theft = true; } }
+        if (!theft) { continue; }
+        INFO(SigR(p, {}));
+        CHECK(BoardKeyR(RollHf(s, p), {}) == BoardKeyR(ExecHf(s, p), {}));
+        if (++lock >= 80) { break; }
+    }
+    CHECK(lock > 0);
 }
