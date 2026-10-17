@@ -140,7 +140,7 @@ struct StackEntry
                                                // read by EnterBattlefield in the PRE-PUSH window, so
                                                // the executor devours exactly what the scored line
                                                // did (the rollout twin uses apply_one's consume-once
-                                               // cast_devour_count). Unset for every other spell.
+                                               // cast rider, TurnSolver.h CastRiders). Unset for every other spell.
     std::optional<int>  soulfire_own_targets;  // Soulfire Eruption: searched # of own creatures
                                                // added as extra targets (deeper dig). EffectHandler
                                                // passes it to SoulfireDig so the executor's dig
@@ -180,8 +180,8 @@ struct StackEntry
     int                 attach_equip_id = 0;        // Magnetic Theft (attach_target_equipment): the SEARCHED
                                         // Equipment target's card.m_number (the creature target rides
                                         // enchant_target). Stamped by the executor's cast site from
-                                        // Action::attach_equip_id (AIEngine::m_pending_attach_equip,
-                                        // consume-once); read by EffectHandler's resolution through the
+                                        // Action::attach_equip_id (a consume-once cast rider, AIEngine::m_cast_riders,
+                                        // taken by cast_by_name); read by EffectHandler's resolution through the
                                         // shared ResolveAttachTargetEquipment. 0 for every other spell.
     bool                bestow         = false;     // BESTOW (Gnarled Scarhide): this cast is the AURA mode.
                                         // Stamped from Action::bestow at the cast site; the resolver then
@@ -190,7 +190,7 @@ struct StackEntry
     ManaPool            land_put_credit;            // LAND-PUT CREDIT (Search for Tomorrow hard-cast; core/
                                         // LandSearch.h LandSearchCreditGroups): the credit this cast's
                                         // variant was enumerated with (Action::rock_mana), stamped at the
-                                        // cast site (CastSpellFromHand, m_pending_land_put) and handed to
+                                        // cast site (CastSpellFromHand, m_cast_riders.land_put) and handed to
                                         // PerformLandSearch at resolution, which restricts the pick to the
                                         // picks earning it -- the rollout twin passes the same pool from
                                         // apply_one. Empty for every other spell.

@@ -14,10 +14,16 @@ struct MtgTestSeam
     { return e.TapForCost(s, c, avail, for_creature); }
 
     // The executor's hand cast (pays, removes the card, pushes the StackEntry) -- exposed so a test
-    // can read what the real executor carries on the stack entry for a given searched axis.
+    // can read what the real executor carries on the stack entry for a given searched axis. Like
+    // cast_by_name it TAKES whatever cast riders are armed (SetPendingLandPut below; nothing else
+    // arms them here), so a test sees exactly what the real cast entry would.
     static void CastSpellFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail,
                                   int chosen_x)
-    { e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), chosen_x); }
+    {
+        const CastRiders riders = e.m_cast_riders.Take();
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), chosen_x, 0, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, false, false, false, riders);
+    }
 
     // Commit ONE phase plan, so the engine's next TakeTurn for that phase EXECUTES it (the
     // committed-line pop) instead of searching -- the only way a test can hand the real executor a
@@ -31,9 +37,9 @@ struct MtgTestSeam
     }
 
     // What every plan-execution site does before cast_by_name: arm the land-put credit the cast's
-    // variant carries (Action::rock_mana -- Search for Tomorrow hard-cast), consumed by the next
-    // CastSpellFromHand onto StackEntry::land_put_credit.
-    static void SetPendingLandPut(AIEngine& e, const ManaPool& credit) { e.m_pending_land_put = credit; }
+    // variant carries (Action::rock_mana -- Search for Tomorrow hard-cast), a cast rider taken by the
+    // next cast entry onto StackEntry::land_put_credit.
+    static void SetPendingLandPut(AIEngine& e, const ManaPool& credit) { e.m_cast_riders.land_put = credit; }
 
     // How many breakpoint continuations TakeTurn's resolve_draw_breakpoint has run on this engine.
     static long long BpResolves(const AIEngine& e) { return e.m_bp_resolves; }
