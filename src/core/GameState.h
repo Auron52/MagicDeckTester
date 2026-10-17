@@ -953,6 +953,8 @@ struct GameState
     // named the Aura when they committed the line, so the combat window applies THAT Aura without
     // re-asking. Same lifetime as the pin above; consumed with it.
     int                      scripted_combat_aura_swap_in = -1;
+    // (Raubahn's searched attack-attach pin, scripted_attack_attach, lives further down -- beside
+    // free_casts_available, in existing padding -- see its note there.)
     // Searched CLEANUP DISCARD (Plan::discard_choice): which candidate of the provider's ranked
     // CleanupDiscardCandidates this turn's FIRST cleanup shed takes. Same state-pin shape as
     // scripted_cheat_choice and for the same reason -- the decision belongs to the turn's plan but
@@ -1013,6 +1015,18 @@ struct GameState
     // the post-combat main, and AIEngine's own comment warns it "must NOT behave like a standing
     // menu option". Chapter I instead resolves INSIDE the Saga's own resolution (see
     // PerformSagaFreeCast in SpellEffects.h), which is where the card's permission first exists.
+    // Searched RAUBAHN, BULL OF ALA MHIGO attack attach (Plan::attack_attach_choice): which entry of
+    // the attach list FireAttackAttachEquipment builds at declare-attackers -- every rules-legal
+    // (Equipment, attacking creature) pair plus "attach nothing", identity-folded, ordered by the
+    // provider's AttackAttachCandidates -- the trigger takes. -1 = the provider's front. The Bruna
+    // gather pin's shape and lifetime exactly (scripted_bruna_gather above): decided in the main
+    // phase, consumed (and cleared) by the first trigger at declare-attackers, cleared even when no
+    // Raubahn attacked; an index out of range at resolution falls back to the front. Per-turn (cleared
+    // at both turn starts), FUTURE-DETERMINING, folded value-gated into the dedup key and the dominance
+    // key. Placed HERE, not beside the other combat pins, and NARROW (int16_t: the axis width is capped
+    // at kAttackAttachMaxRank in AppendSubdecisionAxes), because that is what fits the padding before
+    // m_provider -- sizeof(GameState) unchanged (measured: an int here or beside the pins costs +8).
+    std::int16_t             scripted_attack_attach = -1;
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
     // Two ETB-cascade-style presence gates (see the deck_has_* family above), 2026-10-17 (Lizard Blades),
     // placed HERE because this is the padding before m_provider (sizeof(GameState) unchanged). RECONFIGURE: RefreshReconfigureCreatures
@@ -1034,6 +1048,11 @@ struct GameState
     // and every greedy-leaf Solve, so a clear bit PROVES the walk finds nothing and skips it. Same
     // DEFAULT TRUE rule.
     bool                     deck_has_first_equip_waiver       = true;
+    // ...and RAUBAHN'S ATTACK ATTACH (CardParams::attack_attach_equipment), same padding: the axis
+    // fan-out (AppendSubdecisionAxes) and the attack projection's CountAttackAttachPump scan for a
+    // Raubahn at every enumeration node / every projection, so a clear bit PROVES both scans find
+    // nothing. Same DEFAULT TRUE rule.
+    bool                     deck_has_attack_attach            = true;
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.

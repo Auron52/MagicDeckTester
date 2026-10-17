@@ -1639,6 +1639,69 @@ DecisionProvider::BeginCombatAttachChoice DecisionProvider::BeginCombatAttach(
     return out;
 }
 
+// Raubahn's attack attach -- see the DecisionProvider.h note. ORDER ONLY: every entry of `legal` is
+// returned (the search branches over all of them through Plan::attack_attach_choice), so this decides
+// nothing but the default. Each pair is scored on the board it would really produce: a PLAIN piece
+// (no reconfigure, no re-host sacrifice) changes nothing but its own equipped_to, so it is priced by
+// a flip-and-restore on ONE scratch board (this runs inside every attack projection on a Raubahn
+// board); a reconfigure piece (Lizard Blades stops being a creature, leaves combat and sheds its own
+// gear) or a Grafted Wargear (re-host sacrifice) goes through the shared ApplyEquip on a copy. A pair
+// the min-power gate refuses never reaches here (the engine folds it as a no-op), but is scored as
+// the unchanged board if it does.
+std::vector<DecisionProvider::AttackAttachCand> DecisionProvider::AttackAttachCandidates(
+    const GameState& s, int controller, int /*source_num*/,
+    const std::vector<AttackAttachCand>& legal, const std::vector<int>& atk_idx) const
+{
+    std::vector<AttackAttachCand> out = legal;
+    if (out.size() <= 1) { return out; }
+    std::vector<int> atk_nums;
+    atk_nums.reserve(atk_idx.size());
+    for (const int i : atk_idx)
+    {
+        if (i >= 0 && i < static_cast<int>(s.battlefield.size()))
+        { atk_nums.push_back(s.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    }
+    GameState scratch = s;
+    const int before = AttackersCombatDamage(scratch, atk_nums);
+    std::vector<int> gain(out.size(), 0);
+    for (std::size_t k = 0; k < out.size(); ++k)
+    {
+        const AttackAttachCand& c = out[k];
+        if (c.equip_num == 0) { continue; }   // attach nothing: gain 0
+        Permanent* ep = nullptr;
+        for (Permanent& q : scratch.battlefield)
+        { if (q.controller_index == controller && q.card.m_number == c.equip_num) { ep = &q; break; } }
+        if (ep == nullptr) { continue; }
+        const CardDefinition* ed = CardDatabase::Instance().LookupCached(ep->card);
+        if (ed == nullptr || !CanAttachEquip(scratch, controller, c.equip_num, c.host_num)) { continue; }
+        if (!ed->params.reconfigure_cost.has_value() && !ed->params.equip_sacrifices_prior_host)
+        {
+            const int was = ep->equipped_to;
+            ep->equipped_to = c.host_num;
+            gain[k] = AttackersCombatDamage(scratch, atk_nums) - before;
+            ep->equipped_to = was;
+            continue;
+        }
+        GameState after = s;
+        ApplyEquip(after, controller, c.equip_num, c.host_num);
+        gain[k] = AttackersCombatDamage(after, atk_nums) - before;
+    }
+    std::vector<std::size_t> ord(out.size());
+    for (std::size_t k = 0; k < ord.size(); ++k) { ord[k] = k; }
+    std::stable_sort(ord.begin(), ord.end(), [&](std::size_t a, std::size_t b)
+    {
+        if (gain[a] != gain[b]) { return gain[a] > gain[b]; }
+        const bool na = out[a].equip_num == 0, nb = out[b].equip_num == 0;
+        if (na != nb) { return na; }   // a tie goes to attaching nothing
+        if (out[a].equip_num != out[b].equip_num) { return out[a].equip_num < out[b].equip_num; }
+        return out[a].host_num < out[b].host_num;
+    });
+    std::vector<AttackAttachCand> ranked;
+    ranked.reserve(out.size());
+    for (const std::size_t k : ord) { ranked.push_back(out[k]); }
+    return ranked;
+}
+
 int DecisionProvider::SoulbondPartner(
     const GameState& s, int controller, const Permanent& source,
     const std::vector<int>& candidate_bf_indices) const

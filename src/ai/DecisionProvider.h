@@ -641,6 +641,31 @@ public:
         const GameState& s, int controller, int source_num,
         const std::vector<int>& host_bf_indices, int pinned_host_num) const;
 
+    // AttackAttachCandidates -- Raubahn, Bull of Ala Mhigo: "whenever Raubahn attacks, attach UP TO
+    // ONE target Equipment you control to target attacking creature". `legal` is the WHOLE rules-legal
+    // set the ENGINE built at declare-attackers (FireAttackAttachEquipment): {0, 0} = attach nothing
+    // (always present -- "up to one"), plus every (Equipment, attacking creature) pair that is a legal
+    // target pair AND would actually move something, identity-folded (interchangeable copies). The
+    // trigger takes entry Plan::attack_attach_choice of the returned list (a SEARCHED combat pin, the
+    // bruna_gather route); the front is the default (rollout leaves past the horizon, the d0 runner,
+    // the human's preselection). The provider ORDERS: it must return the same multiset of entries
+    // (a provider MAY drop entries only as a named, A/B-able prune -- the core invariant's licence --
+    // and must keep the list non-empty). `atk_idx` = the declared attackers (battlefield indices).
+    // Base rule (out-of-line): THIS combat's attack damage on the board each pair produces (every
+    // attacker that is still a creature, CombatPowerOf x double strike -- Kor Duelist's ds, Lizard
+    // Blades leaving combat and its grant, the min-power gate all re-read on that board), best first;
+    // ties to attaching NOTHING, then lower Equipment number, then lower host number. Narrows nothing.
+    struct AttackAttachCand
+    {
+        int equip_num = 0;   // 0 = attach nothing
+        int host_num  = 0;
+        bool operator==(const AttackAttachCand& o) const
+        { return equip_num == o.equip_num && host_num == o.host_num; }
+    };
+    virtual std::vector<AttackAttachCand> AttackAttachCandidates(
+        const GameState& s, int controller, int source_num,
+        const std::vector<AttackAttachCand>& legal, const std::vector<int>& atk_idx) const;
+
     // SoulbondPartner -- CR 702.46b's "you MAY pair this creature with another unpaired creature":
     // WHICH of the legal unpaired creatures to pair with (0 = decline the optional pairing).
     // `candidate_bf_indices` is the rules-legal set the caller built (other unpaired creatures under

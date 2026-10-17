@@ -454,6 +454,13 @@ static_assert(sizeof(Player) == 200,
 // written again; each only skips a walk that provably finds nothing (the site-10 graveyard-Equipment
 // snapshot, FirstEquipWaiverOnBattlefield) -- nothing to fold. The STATE they read is folded already:
 // the graveyard's Equipment under GyR_EquipmentNames above, `equip_activated_this_turn` per player.
+// +0 bytes (2026-10-17, Raubahn, Bull of Ala Mhigo; measured 1112 -> 1112): `scripted_attack_attach`
+// (an int16_t, in the padding before m_provider -- an int cost +8 anywhere it was tried) and the bool
+// `deck_has_attack_attach` (same padding). Classification: the pin is FUTURE-DETERMINING (the Bruna
+// gather pin's class: set in a main phase, consumed at THIS turn's declare-attackers) and is FOLDED in
+// Build(), value-gated; the bool is a DECK CONSTANT stamped once in StampDeckTraits that only skips
+// provably-empty scans (the axis fan-out, CountAttackAttachPump, FireAttackAttachEquipment) -- nothing
+// to fold.
 static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -775,6 +782,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xA5A0000ull + static_cast<std::uint64_t>(s.scripted_combat_aura_swap)); }
     if (s.scripted_combat_aura_swap_in >= 0)   // human-play deferred swap's fixed Aura (value-gated)
     { fold(0xA5B0000ull + static_cast<std::uint64_t>(s.scripted_combat_aura_swap_in)); }
+    // Raubahn's attack-attach pin: the same FUTURE-DETERMINING class as the Bruna pin, value-gated.
+    if (s.scripted_attack_attach >= 0)
+    { fold(0xA77A0000ull + static_cast<std::uint64_t>(s.scripted_attack_attach)); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.

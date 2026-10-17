@@ -4709,6 +4709,26 @@ function promptPanelHtml(d, dec){
       `<span class="spacer"></span><button id="decnoattach" class="ghost">Don't pair</button>`+
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  // Raubahn, Bull of Ala Mhigo's attack attach asks in TWO stages (engine field `pick`): first WHICH
+  // Equipment (or nothing -- "up to one"), then WHICH attacking creature it goes to.
+  if (dec==='attach_host' && d.pick==='equipment'){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    return `<h3>${esc(d.source||'Raubahn')}: attach which Equipment to an attacking creature?</h3>`+
+      `<div class="sub">${esc(d.source||'Raubahn')} attacked: you may attach up to one Equipment you control to an attacking creature (free — not an equip ability; an attached Equipment moves). Click the Equipment, or attach nothing. The attacking creature is picked next. The AI's pick is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">Equipment: <b>${opt?esc(opt.name):'(pick an Equipment)'}</b></span>`+
+      `<span class="spacer"></span><button id="decnoattach" class="ghost">Attach nothing</button>`+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+  }
+  if (dec==='attach_host' && d.pick==='attacker'){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    return `<h3>Attach ${esc(d.source||'the Equipment')} — to which attacking creature?</h3>`+
+      `<div class="sub">Click one of your attacking creatures to attach ${esc(d.source||'it')} to (an attacking Lizard Blades attached this way stops being a creature and leaves combat), or attach nothing after all. The AI's pick (best attacker) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">Attaching to: <b>${opt?esc(opt.name):'(pick an attacker)'}</b></span>`+
+      `<span class="spacer"></span><button id="decnoattach" class="ghost">Attach nothing</button>`+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+  }
   if (dec==='attach_host'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
@@ -4894,6 +4914,7 @@ function wireDecisionPanel(d, dec){
     if (na) na.onclick=()=>pushChoice(d, -1, dec==='flicker' ? `${d.source}: decline flicker`
                                            : dec==='treasurify' ? `${d.source}: no Treasure (${d.side==='opponent'?'opponent':'yours'})`
                                            : (dec==='attach_host' && d.soulbond) ? `${d.source}: soulbond — not paired`
+                                           : (dec==='attach_host' && d.pick) ? `${d.source}: attach nothing`
                                                              : `${d.source}: leave unattached`);
   }
 }
@@ -5355,6 +5376,7 @@ function commitBoardSel(d, dec){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default;
     lab=d.soulbond ? `${d.source}: soulbond → pair with ${opt?opt.name:'creature'}`
+       : d.pick==='equipment' ? `${d.source}: attach ${opt?opt.name:'Equipment'} →`
                    : `${d.source}: attach to ${opt?opt.name:'creature'}`;
   } else if (dec==='flicker'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
@@ -5555,7 +5577,10 @@ function autoResolveDecision(dec){
   // creature OR not pair at all"). The engine flags the pairing consumer of attach_host with
   // `soulbond: true`; a lone legal partner is still a real decision there because "don't pair" is
   // always on the table (CR 702.46b "you MAY pair"). The Equipment attach keeps the auto rule.
-  if ((dec.type in ONE_OPTION_AUTO) && !(dec.type==='attach_host' && dec.soulbond)
+  // ...and so is Raubahn's EQUIPMENT stage (attach_host with `pick: "equipment"`): "attach UP TO ONE
+  // target Equipment" -- attaching nothing is always a real option, so a lone Equipment still asks.
+  // Its ATTACKER stage keeps the auto rule (the Equipment is chosen; a lone attacker is forced).
+  if ((dec.type in ONE_OPTION_AUTO) && !(dec.type==='attach_host' && (dec.soulbond || dec.pick==='equipment'))
       && (dec.options||[]).length<=1){
     const def=(dec.heuristic_default==null?-1:dec.heuristic_default);
     const o=(dec.options||[])[0];

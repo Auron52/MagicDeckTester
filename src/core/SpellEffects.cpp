@@ -1564,6 +1564,213 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
     }
 }
 
+// ---- Raubahn, Bull of Ala Mhigo: "Whenever Raubahn attacks, attach up to one target Equipment you
+// control to target attacking creature." (see the SpellEffects.h declaration note) -------------------
+//
+// RULES (mtg-rules review, 2026-10-17):
+//   * A declare-attackers trigger (CR 508.1m / 603.2): it fires only for a DECLARED Raubahn and resolves
+//     before combat damage, so the moved Equipment pumps this combat.
+//   * It TARGETS both objects (CR 115.1): the Equipment must be one we control and a legal target, the
+//     creature an ATTACKING one that is a legal target -- shroud / protection exclude either
+//     (AttachTargetEquipmentLegal, shared with Magnetic Theft; a creature Equipment only with
+//     reconfigure; never the Equipment onto itself, CR 301.5c). "Up to one" -> attaching nothing is a
+//     legal choice and always offered.
+//   * "Attach" is not the Equip ability: no equip cost, no equip-activation (Player::
+//     equip_activated_this_turn untouched, so Forge Anew's / Kili's first-equip waiver is neither spent
+//     nor granted), but equip_min_power still binds ("can be attached only to ..."; ApplyEquip). An
+//     attached Equipment MOVES. A pair whose attach would do nothing -- already attached there, or the
+//     min-power gate refuses (2025-06-06 ruling: "the Equipment won't move", CR 701.3b) -- reaches the
+//     board "attach nothing" reaches, so it is folded into that entry (a sound identity).
+//   * Lizard Blades (an Equipment creature with reconfigure) is a legal target; once attached it stops
+//     being a creature and is removed from combat (CR 506.4), and its own Equipment falls off
+//     (CR 704.5n) -- ApplyEquip's RefreshReconfigureCreatures does both; `atk_idx` is repaired here.
+// SOUND IDENTITY FOLDS, and only these: interchangeable Equipment (same name, same host, same
+// counters -- and, for a creature piece, the same host class) and interchangeable attacking hosts
+// (AttachHostClassKey: name, eligibility, tapped, until-EOT bonuses, counters, what it wears) reach the
+// same board up to the identity of interchangeable permanents. No width heuristic: the provider only
+// ORDERS (AttackAttachCandidates), and the search branches over every entry (Plan::attack_attach_choice).
+// Legendary, so at most one trigger per combat; several would resolve in attacker order (the approved
+// battlefield-order collapse), the pin consumed by the first.
+void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live)
+{
+    if (!state.deck_has_attack_attach || atk_idx.empty()) { state.scripted_attack_attach = -1; return; }
+    std::vector<int> sources;
+    for (const int ai : atk_idx)
+    {
+        if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(ai)];
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.attack_attach_equipment) { sources.push_back(p.card.m_number); }
+    }
+    if (sources.empty()) { state.scripted_attack_attach = -1; return; }
+    ++combatpin::t_reads;   // reads scripted_attack_attach (GameState.h, COMBAT-PIN READ WITNESS)
+    using Cand = DecisionProvider::AttackAttachCand;
+    for (const int src : sources)
+    {
+        std::string src_name;
+        bool attacking = false;
+        for (const int ai : atk_idx)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(ai)];
+            if (p.card.m_number == src) { attacking = true; src_name = p.card.m_name.str(); break; }
+        }
+        if (!attacking) { continue; }   // left the battlefield / combat mid-resolution
+        // The attacking creatures -- the legal "target attacking creature" set before the shroud test.
+        std::vector<int> atk_now;
+        for (const int ai : atk_idx)
+        {
+            const Permanent& h = state.battlefield[static_cast<std::size_t>(ai)];
+            if (h.controller_index == controller && (h.card.IsCreature() || h.is_animated)) { atk_now.push_back(ai); }
+        }
+        // ---- the legal, identity-folded list: {attach nothing} + every pair that moves something ----
+        std::vector<Cand> legal{ Cand{} };
+        {
+            std::unordered_set<std::string> seen;
+            std::vector<std::string> host_key(atk_now.size());
+            for (std::size_t j = 0; j < atk_now.size(); ++j)
+            { host_key[j] = AttachHostClassKey(state, state.battlefield[static_cast<std::size_t>(atk_now[j])], controller); }
+            for (const Permanent& e : state.battlefield)
+            {
+                if (e.controller_index != controller || e.def_absent) { continue; }
+                const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
+                if (ed == nullptr || !ed->params.is_equipment) { continue; }
+                std::string ek = e.card.m_name.str() + "/@" + std::to_string(e.equipped_to)
+                               + "/c" + e.counters.KeyFragment();
+                if (e.card.IsCreature() || e.is_animated) { ek += "/" + AttachHostClassKey(state, e, controller); }
+                for (std::size_t j = 0; j < atk_now.size(); ++j)
+                {
+                    const int hn = state.battlefield[static_cast<std::size_t>(atk_now[j])].card.m_number;
+                    if (!AttachTargetEquipmentLegal(state, controller, e.card.m_number, hn)) { continue; }
+                    if (EquipmentAttachedTo(state, controller, e.card.m_number, hn))   { continue; }   // no-op
+                    if (!CanAttachEquip(state, controller, e.card.m_number, hn))        { continue; }   // no-op
+                    if (!seen.insert(ek + "->" + host_key[j]).second)                  { continue; }   // identity
+                    legal.push_back(Cand{ e.card.m_number, hn });
+                }
+            }
+        }
+        const DecisionProvider& prov = ResolveProvider(state);
+        std::vector<Cand> ranked = legal.size() > 1
+            ? prov.AttackAttachCandidates(state, controller, src, legal, atk_now) : legal;
+        if (ranked.empty()) { ranked = legal; }
+        const int pin = state.scripted_attack_attach;
+        state.scripted_attack_attach = -1;   // consumed by the first trigger (the Tectonic convention)
+        const int k = (pin >= 0 && pin < static_cast<int>(ranked.size())) ? pin : 0;
+        Cand ch = ranked[static_cast<std::size_t>(k)];
+        // PROOF / CENSUS INSTRUMENT (MTG_TRACE=attackattach; real resolutions only): the list width and
+        // which rank the committed line took (k > 0 = the search beat the provider's front).
+        if (TRACE_ON("attackattach") && g_real_resolution)
+        {
+            TRACE("attackattach", "seed=%llu T%d k=%d n=%zu took=%d->%d front=%d->%d",
+                  static_cast<unsigned long long>(state.game_seed), state.turn_number, k, ranked.size(),
+                  ch.equip_num, ch.host_num, ranked.front().equip_num, ranked.front().host_num);
+        }
+        // HUMAN PLAY: two attach_host board-clicks over the full RULES-legal targets (unfolded), the
+        // searched pair preselected -- first the Equipment (-1 = attach nothing, ALWAYS asked when any
+        // pair would move something: declining is a real choice), then the attacking creature (-1 also
+        // attaches nothing). Nulled by RevealLogPause, so rollouts never reach it; `live` keeps the
+        // projection off it too.
+        if (live && g_play_attach_host_chooser != nullptr && legal.size() > 1)
+        {
+            std::vector<int> eq_idx;
+            int heur = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& e = state.battlefield[static_cast<std::size_t>(i)];
+                if (e.controller_index != controller || e.def_absent) { continue; }
+                bool any = false;
+                for (const int hi : atk_now)
+                {
+                    if (AttachTargetEquipmentLegal(state, controller, e.card.m_number,
+                                                   state.battlefield[static_cast<std::size_t>(hi)].card.m_number))
+                    { any = true; break; }
+                }
+                if (!any) { continue; }
+                if (e.card.m_number == ch.equip_num) { heur = static_cast<int>(eq_idx.size()); }
+                eq_idx.push_back(i);
+            }
+            g_attach_host_pick = "equipment";
+            const int picked = (*g_play_attach_host_chooser)(state, controller, src_name, eq_idx, heur);
+            g_attach_host_pick = nullptr;
+            if (picked == -1) { ch = Cand{}; }
+            else if (picked >= 0 && picked < static_cast<int>(eq_idx.size()))
+            {
+                const Permanent& e = state.battlefield[static_cast<std::size_t>(eq_idx[static_cast<std::size_t>(picked)])];
+                const int en = e.card.m_number;
+                const std::string ename = e.card.m_name.str();
+                std::vector<int> host_idx;
+                std::vector<Cand> per_eq{ Cand{} };
+                for (const int hi : atk_now)
+                {
+                    const int hn = state.battlefield[static_cast<std::size_t>(hi)].card.m_number;
+                    if (!AttachTargetEquipmentLegal(state, controller, en, hn)) { continue; }
+                    host_idx.push_back(hi);
+                    if (!EquipmentAttachedTo(state, controller, en, hn) && CanAttachEquip(state, controller, en, hn))
+                    { per_eq.push_back(Cand{ en, hn }); }
+                }
+                // The provider's best host FOR THIS Equipment (its order over this Equipment's moves).
+                int best_host = ch.equip_num == en ? ch.host_num : 0;
+                if (best_host == 0 && per_eq.size() > 1)
+                {
+                    for (const Cand& c : prov.AttackAttachCandidates(state, controller, src, per_eq, atk_now))
+                    { if (c.equip_num != 0) { best_host = c.host_num; break; } }
+                }
+                int heur2 = host_idx.empty() ? -1 : 0;
+                for (int j = 0; j < static_cast<int>(host_idx.size()); ++j)
+                {
+                    if (state.battlefield[static_cast<std::size_t>(host_idx[static_cast<std::size_t>(j)])].card.m_number == best_host)
+                    { heur2 = j; break; }
+                }
+                g_attach_host_pick = "attacker";
+                const int p2 = (*g_play_attach_host_chooser)(state, controller, ename, host_idx, heur2);
+                g_attach_host_pick = nullptr;
+                if (p2 == -1 || host_idx.empty()) { ch = Cand{}; }
+                else
+                {
+                    const int j = (p2 >= 0 && p2 < static_cast<int>(host_idx.size())) ? p2 : std::max(heur2, 0);
+                    ch = Cand{ en, state.battlefield[static_cast<std::size_t>(host_idx[static_cast<std::size_t>(j)])].card.m_number };
+                }
+            }
+        }
+        if (ch.equip_num == 0 || ch.host_num == 0) { continue; }
+        // CR 608.2b re-check of the final pair (a no-op guard: nothing has resolved in between).
+        if (!AttachTargetEquipmentLegal(state, controller, ch.equip_num, ch.host_num)) { continue; }
+        std::string eq_name, host_name;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (q.card.m_number == ch.equip_num) { eq_name = q.card.m_name.str(); }
+            if (q.card.m_number == ch.host_num)  { host_name = q.card.m_name.str(); }
+        }
+        const bool was_there = EquipmentAttachedTo(state, controller, ch.equip_num, ch.host_num);
+        std::vector<int> nums;
+        nums.reserve(atk_idx.size());
+        for (const int ai : atk_idx) { nums.push_back(state.battlefield[static_cast<std::size_t>(ai)].card.m_number); }
+        ApplyEquip(state, controller, ch.equip_num, ch.host_num);   // indices are stale after this
+        // Repair: re-found by number (a Wargear re-host sacrifice shifts the battlefield), and only
+        // creatures stay in combat (an attached Lizard Blades is removed from combat, CR 506.4). A
+        // permanent removed this way keeps the tap it took when it was declared (CR 508.1f -- this
+        // engine applies that tap in ResolveCombatDamage, which it no longer reaches); becoming
+        // attached neither taps nor untaps it (Lizard Blades ruling).
+        std::vector<int> repaired;
+        for (const int qi : RefindByNumberInOrder(state, nums))
+        {
+            Permanent& q = state.battlefield[static_cast<std::size_t>(qi)];
+            if (q.card.IsCreature() || q.is_animated) { repaired.push_back(qi); }
+            else if (!q.card.HasKeyword(Keyword::Vigilance)) { q.tapped = true; }
+        }
+        atk_idx.swap(repaired);
+        if (live && !was_there && EquipmentAttachedTo(state, controller, ch.equip_num, ch.host_num)
+            && g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger", src_name + ": attach " + eq_name + " -> " + host_name);
+        }
+    }
+    // THIS combat's pin: consumed whether or not a trigger fired (the Bruna convention), so a pinned
+    // variant whose trigger never fired leaves combat in its base plan's state (MTG_COMBAT_PIN_FOLD).
+    state.scripted_attack_attach = -1;
+}
+
 // ---- Bruna, Light of Alabaster: "Whenever Bruna attacks ..., you may attach to it any number of
 // Auras on the battlefield and you may put onto the battlefield attached to it any number of Aura
 // cards that could enchant it from your graveyard and/or hand." ----------------------------------

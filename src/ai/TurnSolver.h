@@ -1290,6 +1290,13 @@ public:
         // provider's damage-max pick at resolution (USER ruling 2026-10-05). Copied onto
         // GameState::scripted_combat_aura_swap, same route as above.
         int combat_aura_swap_choice = -1;
+        // RAUBAHN, BULL OF ALA MHIGO attack-trigger attach ("attach up to one target Equipment you
+        // control to target attacking creature"): which entry of FireAttackAttachEquipment's list --
+        // every rules-legal (Equipment, attacking creature) pair plus "attach nothing", identity-
+        // folded, ORDERED by the provider's AttackAttachCandidates -- the trigger takes. -1 (default)
+        // == the front, byte-identical to no branch. Copied onto GameState::scripted_attack_attach
+        // (decided in main, consumed at declare-attackers -- the bruna_gather_choice route).
+        int attack_attach_choice = -1;
         // Set only on the depth<=0 HORIZON LEAF plan (SolveWithLookahead): the one plan the
         // future-turn rollout combat-swap pin applies to (MTG_ROLLOUT_AURA_SWAP). Never keyed,
         // compared or serialised -- a rollout-local marker.
@@ -2042,6 +2049,10 @@ public:
     // `hosted_demoted` > 0 registers that many for the hosted plan's pend index (AddHostedDemoted).
     // Returns one step per hand-out: which plan, the variant's bp_choice / bp_at, and whether the
     // host would SCORE it (Report returned false) or retire it as a probe.
+    // The attack-damage PROJECTION the search prices a pre-combat state with (PendingAttackDamage:
+    // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
+    // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
+    static int ProjectedAttackDamageForTest(const GameState& state);
     struct WalkerStep { int base; int bp_choice; int bp_at; bool scored; };
     static std::vector<WalkerStep> WaveWalkerTraceForTest(const GameState& state,
                                                           const std::vector<Plan>& plans,

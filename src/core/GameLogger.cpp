@@ -37,6 +37,7 @@ thread_local BounceChooser*  g_play_sacrifice_chooser = nullptr;
 // {0,1} = an ordinary single sacrifice; a burst raises `total` for the span of each iteration.
 thread_local SacBurstDisclosure g_sac_burst_disclosure{};
 thread_local BounceChooser*  g_play_attach_host_chooser = nullptr;
+thread_local const char*    g_attach_host_pick = nullptr;
 thread_local LoyaltyTargetChooser* g_play_loyalty_chooser = nullptr;
 thread_local DigChooser*     g_play_dig_chooser    = nullptr;
 thread_local AttackModeChooser* g_play_attack_mode_chooser = nullptr;

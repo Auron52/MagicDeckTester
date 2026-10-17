@@ -3826,6 +3826,23 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
 // provider-owned (AttackDigPutCandidates / AttackDigAttachHost, human-overridable via the dig /
 // attach-host choosers). Rest bottomed in examined order (approved deterministic collapse).
 void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx);
+// FireAttackAttachEquipment -- body in SpellEffects.cpp. Raubahn, Bull of Ala Mhigo's attack trigger
+// (CardParams::attack_attach_equipment): "whenever Raubahn attacks, attach up to one target Equipment
+// you control to target attacking creature". Called from GameEngine::CombatPhase AND the rollout's
+// SimulateCombat (lockstep, ONE body), immediately BEFORE FireAttackDigAttach, only for a DECLARED
+// Raubahn (CR 508), resolving before damage, so the moved Equipment pumps THIS combat; also run on a
+// scratch copy by the attack projection (CountAttackAttachPump, `live=false`). WHICH pair is the
+// SEARCHED pin GameState::scripted_attack_attach (Plan::attack_attach_choice), a rank into the list
+// the engine builds -- every rules-legal (Equipment, attacking creature) pair that would move
+// something, folded only by sound identities, plus "attach nothing" -- ordered by the provider's
+// DecisionProvider::AttackAttachCandidates; the pin is consumed by the first trigger and cleared even
+// if nothing fired. The attach is the shared ApplyEquip (equip costs bypassed, equip_min_power still
+// binds, a reconfigure piece stops being a creature); it is NOT an equip ability, so
+// Player::equip_activated_this_turn and every first-equip waiver are untouched. REPAIRS `atk_idx`
+// afterwards: re-found by card number (a Wargear re-host sacrifice shifts indices) and filtered to
+// creatures (an attacking Lizard Blades attached this way is removed from combat, CR 506.4). `live`
+// = a real resolution: the human chooser (two attach_host board-clicks) and the play event.
+void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live);
 // Bruna, Light of Alabaster's attack trigger (attack_gather_auras). Fired at declare-attackers in
 // BOTH worlds (GameEngine::CombatPhase / TurnSolver::SimulateCombat) after the attack pumps and
 // BEFORE the damage loop reads power, so the gathered Auras swing THIS combat. Only APPENDS to the
@@ -11217,6 +11234,34 @@ inline bool AttachTargetEquipmentLegal(const GameState& state, int controller, i
     return true;
 }
 
+// The IDENTITY CLASS of a creature as an attach HOST, shared by the two attach-effect enumerations
+// that fold interchangeable targets (Magnetic Theft's pair axis, BuildAttachSpellPairs; Raubahn's
+// attack attach, FireAttackAttachEquipment): two creatures with the same key reach the same board up
+// to the identity of interchangeable permanents when the same piece is attached to either. The key:
+// name, attack eligibility, tapped, until-EOT bonuses and keywords, counters, and the MULTISET of
+// Equipment / Auras it wears (Kor Duelist's double strike and Lizard Blades' grant depend on WHAT it
+// wears, so a bare and an equipped Duelist never fold). Factored out of BuildAttachSpellPairs
+// verbatim (2026-10-17), so the Theft's folds are byte-identical.
+inline std::string AttachHostClassKey(const GameState& state, const Permanent& p, int me)
+{
+    std::string k = p.card.m_name.str();
+    k += CanAttackFull(p, state.battlefield, me) ? "/A" : "/s";
+    k += p.tapped ? "T" : "u";
+    k += "/" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus)
+       + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "") + (p.temp_double_strike ? "D" : "")
+       + "/c" + p.counters.KeyFragment();
+    std::vector<std::string> worn;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        if (q.equipped_to == p.card.m_number || q.aura_attached_to == p.card.m_number)
+        { worn.push_back(q.card.m_name.str() + "/c" + q.counters.KeyFragment()); }
+    }
+    std::sort(worn.begin(), worn.end());
+    for (const std::string& w : worn) { k += "|" + w; }
+    return k;
+}
+
 // The battlefield index of an attach-spell target pinned by card.m_number (`number`), or -1. The exact
 // number first. Otherwise the NAME FALLBACK for a target the plan casts in the same main phase: the
 // variant pinned a HAND copy at enumeration, but apply_one / cast_by_name casts an arbitrary copy of
@@ -17332,6 +17377,28 @@ inline int CombatPowerOf(const Permanent& p, const GameState& state)
         }
     }
     return pw;
+}
+
+// THIS combat's damage from a fixed set of DECLARED attackers, named by card number, on board `g`:
+// each one still on the battlefield AND still a creature contributes max(0, CombatPowerOf) doubled
+// for double strike. A reconfigure piece (Lizard Blades) that an attack trigger attached this combat
+// is no longer a creature, so it has left combat (CR 506.4) and contributes nothing. The objective of
+// Raubahn's attack-attach ordering (DecisionProvider::AttackAttachCandidates) and the measure of its
+// projection addend (CountAttackAttachPump) -- ONE function, so the two cannot disagree.
+inline int AttackersCombatDamage(const GameState& g, const std::vector<int>& atk_nums)
+{
+    int dmg = 0;
+    for (const int num : atk_nums)
+    {
+        for (const Permanent& q : g.battlefield)
+        {
+            if (q.card.m_number != num) { continue; }
+            if (q.card.IsCreature() || q.is_animated)
+            { dmg += std::max(0, CombatPowerOf(q, g)) * (CreatureHasDoubleStrike(q, g) ? 2 : 1); }
+            break;
+        }
+    }
+    return dmg;
 }
 
 // The toughness a LETHAL-DAMAGE state-based action must compare against (CR 704.5g).

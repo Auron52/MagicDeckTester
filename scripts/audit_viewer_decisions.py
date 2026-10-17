@@ -467,6 +467,12 @@ MANIFEST = {
     # (ResolveAttachTargetEquipment, shared executor + ApplyPlan), the searched pair preselected, a
     # forced pick not prompted. The plan JSON flags the cast `trick` (no queue-time enchant dialog).
     "attach_target_equipment":   ("target",           truthy),
+    # Raubahn, Bull of Ala Mhigo, "whenever Raubahn attacks, attach up to one target Equipment you
+    # control to target attacking creature": WHICH pair is a searched combat pin for the engine
+    # (Plan::attack_attach_choice); a HUMAN is asked at declare-attackers through the REUSED attach_host
+    # board-click, twice (FireAttackAttachEquipment): `pick: "equipment"` (-1 = attach nothing, never
+    # auto-taken) then `pick: "attacker"`. No new decision type.
+    "attack_attach_equipment":   ("attach_host",      truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
