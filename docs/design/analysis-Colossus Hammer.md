@@ -163,7 +163,7 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
-- flags: 6 unresolved      # fixes in flight on colossus-pay / colossus-aid / colossus-fold; updated as they land
+- flags: 5 unresolved      # flag 3 FIXED 9674c1cb6; fixes in flight on colossus-aid / colossus-fold; updated as they land
 
 Results (search d5 b200 vs Claude, win turn): 2100001 4/4, 2100002 2/2, 2100003 5/5, 2100004 3/3, 2100005 4/4,
 2100006 5/5, 2100007 **7/2** (Claude kept a 1-lander seeing 6 draws; the static keep mulliganed to 5 -- a keep-table
@@ -178,8 +178,15 @@ Flags, verified against cards.json + the code:
    ignores whether the host can attack -- Hammer onto a sick Lizard Blades over a ready Swiftblade, T4 kill lost. A
    greedy pick in the search window. IN FLIGHT: a searched host axis (branch `colossus-aid`).
 3. **CONFIRMED, human play** (2100016, 2100017): committing a multi-cast line taps the only source of a colour the
-   rest of the hand needs (Snarl for {1}{R} while a Mountain stays up; the only Mountain for a generic {1}). IN
-   FLIGHT (branch `colossus-pay`).
+   rest of the hand needs (Snarl for {1}{R} while a Mountain stays up; the only Mountain for a generic {1}).
+   **FIXED `9674c1cb6`** (MTG_HUMAN_PREPAY_DEMAND, default ON, human play only): the whole-line batch prepay
+   (`BatchPrepayMainCasts` -> `TapForCostBacktrack`, battlefield order, hand-blind) now first holds one source per
+   coloured pip the rest of the hand still owes, releasing holds before any existing hold class. Smoke byte-identical,
+   refs 600 / 0 drift (Eldrazi s6 gi5 repaired index 1152 -> 1144: 8 duplicate menu entries merged, same line).
+   Scenarios `colossus_human_prepay_keeps_{snarl,mountain}`. Design note `docs/design/prepay-hand-demand.md`.
+   OPEN (raised to the USER): autonomous play uses the same hand-blind batch payer -- a line whose main-2 / post-draw
+   cast needed a different tapping could be undervalued (plausible, unproven; mana payment is a standing exemption,
+   so changing it is a quality A/B, not a no-greedy fix).
 4. **CONFIRMED** (2100003): "reconfigure Lizard Blades onto X, then equip the Hammer onto Lizard Blades" is offered;
    the equip has no legal target but still consumes Forge Anew's first-equip waiver. IN FLIGHT (`colossus-fold`).
 5. **Width** (2100003, 2100017, 2100018): dominated no-op attach sequences (a Theft whose host reconfigures away; a
