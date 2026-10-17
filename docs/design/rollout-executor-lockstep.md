@@ -116,6 +116,10 @@ cells): Ponder drew Preordain at the end of the first m2 pass, and the second pa
 before the staged cards. hinata overnight d5 s5005 gi13 -- the executor's index pick discarded a Reality
 Spasm the verified T5 line cast, realised T7 -- is T5 at d8 unbounded.
 
+This was also the mechanism of the 2026-08-25 severe Hinata divergence ov d5 s4004 gi107. It was
+re-checked on 2026-10-17 in `hinata-commit-the-line-fd-diverge.md`: same victim index 8, a different
+card. The layout contract is pinned by `test/unit/test_staged_lockstep.cpp`.
+
 The canonical pick below (`MTG_CANON_TUTOR_DISCARD`) is DELETED. It was briefly made the default
 (2026-10-01, never pushed) and then dropped: it made the two worlds agree by ignoring the layout, not by
 fixing it, and it re-dealt which card every Gamble takes -- every Gamble game became a different game,
@@ -534,9 +538,44 @@ reads a per-cast snapshot of it taken before any nested cast -- but ONLY for the
 the d0 runner) has no rollout twin and leans on re-solving after a no-op cast to find another play:
 gating it as well cost dragonstorm d0 +1351 turns over the overnight tier. gi25: T5.
 
-## #11 — OPEN, unmeasured: the executor's m2 stranded-kill scan cannot see staged cards (found 2026-10-01)
+## #11 — the executor's m2 stranded-kill scan could not see staged cards (found 2026-10-01, FIXED 2026-10-17)
 
-Found while fixing #5, not yet measured. `GameEngine::MainPhase`'s non-committed m2 re-entry calls
+**Measured and fixed 2026-10-17.** The census ran as ONE pooled batch over every hinata / hinata2hg
+row of all three tiers (27 cells, 14,250 games). Only `HinataProvider` opts into the m2 fixpoint
+(`M2FixpointOptIn`), so no other deck reaches this scan. It used the pre-fix executor
+(`MTG_LEGACY_M2_KILL_UNSTAGED=1`) and `MTG_TRACE=m2staged`:
+
+| executor stranded-kill scans | with unexpired staged cards held OUT of hand | kill only WITH them | kill either way | none either way |
+|---|---|---|---|---|
+| 636 | **421** (66%) | **3** | 5 | 413 |
+
+The three are hinata reg d0 s2002 gi611, ov d0 s6006 gi513 and ov d0 s8008 gi488, all on T6. A
+Soulfire-staged burn spell held the kill and the old scan could not cast it.
+
+**Fix.** `TrySecondMainStrandedKill` is a fresh executor decision pass, so it now merges the unexpired
+staged cards exactly as `TakeTurn`'s head does, and returns the unplayed ones on every exit path. That
+covers the kill-scan and the mode-2 re-solve, which also saw a hand missing them while its rollout
+twin did not. The merge and the return are now ONE implementation, `MergeStagedIntoHand` /
+`ReturnStagedFromHand` (AIEngine.h/.cpp), shared by TakeTurn's head, its tail, its early-return
+restore, and the scan, so the copies cannot drift. `MTG_LEGACY_M2_KILL_UNSTAGED=1` restores the old
+scan, for attribution only.
+
+**What it moves.** Same 14,250 games, fix against legacy, both without the trace. The trace is inert:
+legacy with and without it is byte-identical. **Every searched (d3/d5) cell is byte-identical.**
+Committed lines replay a second m2 plan through `TakeTurn`, which already merged, as noted below, and
+mode 2's re-solve only runs off a committed line. Nine d0 games move. **3 faster** are the census
+kills, 7 -> 6 each. **6 digest-only** keep the same win turn: the mode-2 re-solve now casts a staged
+card in main 2, e.g. smoke d0 s1001 gi308 casts a staged Reality Spasm, which is what its rollout twin
+always priced. None is slower. The Hinata smoke and regression cells reproduce the committed GT byte-identically
+under the legacy arm. On the smoke tier with the fix, every other deck's TakeTurn runs through the
+shared helpers: 117 pass and 3 fail. `hinata_smoke_d0_s1001` is gi308, digest-only, the avg is
+unchanged, and it is this fix. `melira_smoke_d3_s1001` / `melira2hg_smoke_d3_s1001` are gi3,
+digest-only. The untouched branch tip (`aecc265d`) gives the same two Melira digests, so their GT
+was already behind the tree; that is not this change. The Hinata OVERNIGHT GT (last accepted
+2026-10-08) is stale against HEAD for reasons unrelated to this change. That is the periodic tier's
+business. Pinned by `test/unit/test_staged_lockstep.cpp`; under the legacy hatch the kill case FAILS.
+
+**Original note (2026-10-01).** Found while fixing #5, not yet measured. `GameEngine::MainPhase`'s non-committed m2 re-entry calls
 `AIEngine::TrySecondMainStrandedKill` AFTER `TakeTurn` has returned -- i.e. after its tail moved every
 unplayed staged card out to `Player::staged_cards` -- and the scan enumerates `EnumerateMainPlans(state)`
 on that hand. Its rollout twins (`ApplySecondMainInSearch`'s kill-scan, FSLineTail's fixpoint kill-scan)
@@ -598,6 +637,12 @@ end-of-main catch-all -- the point the search's deferred re-solve runs at -- and
 fallback re-solves there once (`acq_pending`, the LAST arming cast's site, like
 `deferred_cantrip_site`). Plain cantrips already worked this way; site 6 (Equipment draw) documents
 the same rule. The continuation-loop and depth-0 second-pass routes are unchanged.
+
+**The same fix closed two of the 2026-08-25 severe Hinata divergences** (re-checked 2026-10-17,
+`hinata-commit-the-line-fd-diverge.md`). In ov d3 s4004 gi160 and ov d5 s4004 gi291 the executor
+replayed Gamble's deferred continuation at the cast. Proof for gi291: `fef4a54b` gives T7, diverged,
+and `fef4a54b` + only this fix gives T5. `test/fd_pinned_games.sh` replays both, plus gi25, under the
+oracle.
 
 Found with a TEMP probe at FSLineTail's `OpponentHasLost(s2)` return: re-applying the winning plan
 to an identical state gave opp 8, re-applying with a capture vector gave -2 -- see #15.

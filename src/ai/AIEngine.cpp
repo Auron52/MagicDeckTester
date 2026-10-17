@@ -5,6 +5,7 @@
 #include "AIEngine.h"
 #include "ContPinScope.h"
 #include "DecisionProviders.h"
+#include "EscStats.h"   // escstats::t_job / t_gi: the [fd-diverge] line names its batch job + game
 #include "Dominance.h"   // ModelFeatureMask (stamped onto GameState::m_model_feat_mask)
 #include "ManaPayment.h"
 #include "PayRollback.h"   // MTG_PAY_ROLLBACK: the dig-gate rescue (lockstep with TurnSolver's twin)
@@ -701,7 +702,12 @@ void AIEngine::OnGameEnd(const GameState& state, int win_turn)
     const int realized = win_turn > 0 ? win_turn : m_max_turns + 1;
     if (m_fd_best_win <= m_max_turns && realized > m_fd_best_win)
     {
+        // job= / gi= name the batch job and its game index (both "-" / -1 outside --batch): every
+        // suite deck has an s4004 job, so a seed alone could not say which deck diverged
+        // (docs/design/hinata-commit-the-line-fd-diverge.md). Consumers match the prefix only.
         std::cerr << "[fd-diverge] seed=" << state.game_seed
+                  << " job=" << (escstats::t_job ? escstats::t_job : "-")
+                  << " gi=" << escstats::t_gi
                   << " realized_win=" << realized
                   << " predicted_win=" << m_fd_best_win
                   << " proven_at_turn=" << m_fd_best_turn
@@ -2138,6 +2144,99 @@ bool AIEngine::WantsSecondMainReentry(const GameState& state) const
     return M2FixModeFor(state) != 0 && !m_in_rollout && !HumanPlayActive() && m_m2_exec_drew;
 }
 
+// ---- staged-card bookkeeping (CR 406 "you may play it until ..." exile, modelled as hand cards) ----
+// The executor keeps an unplayed staged card OUT of hand between decision passes, in
+// Player::staged_cards, and merges it back -- flagged m_is_staged, its expiry travelling on the card so
+// the rollout can expire it -- at the head of every pass that may cast it. ONE implementation, shared
+// by TakeTurn and the m2 stranded-kill scan below, so the two cannot drift (lockstep #11).
+// Merge: unexpired staged cards are APPENDED (after every regular hand card -- the layout the rollout
+// reproduces with MergeStagedToHandEnd, lockstep #5). Expired ones are dropped here (end-of-next-turn
+// expiry). EnterHand(StagedMerge) is bookkeeping, not new material (HandEntry.h).
+void MergeStagedIntoHand(GameState& state)
+{
+    Player& ap = state.ActivePlayer();
+    std::vector<StagedCard> snap = ap.staged_cards;
+    ap.staged_cards.clear();
+    for (StagedCard& sc : snap)
+    {
+        if (sc.expiry_turn < state.turn_number) { continue; }  // end-of-next-turn expiry (CR 406)
+        sc.card.m_is_staged     = true;
+        sc.card.m_staged_expiry = sc.expiry_turn;  // travels with the card so the rollout can expire it
+        EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
+    }
+}
+
+// Return: every card still flagged m_is_staged goes back to staged_cards and LEAVES the hand. Cards
+// that were cast were already removed; expired ones were dropped at the merge. The card must be
+// REMOVED from hand, not merely flag-cleared and kept -- doing the latter leaves a permanent
+// (non-staged, never-expiring) hand duplicate of a card also pushed to staged_cards. That was latent
+// until a staging spell (Light Up the Stage) got a second TakeTurn pass with its staged cards still
+// unplayed, which ran this restore on a non-empty merge and duplicated them.
+void ReturnStagedFromHand(GameState& state)
+{
+    Player& ap = state.ActivePlayer();
+    std::vector<Card> regular_hand;
+    for (Card& c : ap.hand)
+    {
+        if (c.m_is_staged)
+        {
+            c.m_is_staged = false;
+            StagedCard sc;
+            sc.card        = c;
+            sc.expiry_turn = c.m_staged_expiry;
+            ap.staged_cards.push_back(sc);
+        }
+        else
+        {
+            regular_hand.push_back(c);
+        }
+    }
+    ap.hand = std::move(regular_hand);
+}
+
+static int UnexpiredStagedCount(const GameState& state)
+{
+    int n = 0;
+    for (const StagedCard& sc : state.ActivePlayer().staged_cards)
+    { if (sc.expiry_turn >= state.turn_number) { ++n; } }
+    return n;
+}
+
+// MTG_TRACE=m2staged -- lockstep #11's census (diagnostic only; nothing here touches the game). One
+// line per executor stranded-kill scan: how many unexpired staged cards the executor holds OUT of hand
+// at that moment, and -- only when it holds any -- whether the kill-scan finds an outright kill on the
+// hand WITHOUT them (the pre-#11 executor) and WITH them merged (the rollout twins' view). A line with
+// kill_unstaged=0 kill_merged=1 is a kill the search could find and the old executor could not.
+static void M2StagedKillAudit(const GameState& state, int held)
+{
+    static const bool s_on = ::trace::StreamEnabled("m2staged");
+    if (!s_on) { return; }
+    int ku = -1, km = -1;
+    if (held > 0)
+    {
+        auto finds_kill = [](const GameState& s) -> int
+        {
+            for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+            {
+                if (p.actions.empty()) { continue; }
+                RevealLogPause _rlp;
+                GameState probe = s;
+                TurnSolver::ApplyPlan(probe, p, /*is_pre_combat=*/false);
+                if (probe.ActivePlayer().life > 0 && OpponentHasLost(probe)) { return 1; }
+            }
+            return 0;
+        };
+        GameState unmerged = state;
+        ReturnStagedFromHand(unmerged);          // idempotent if the caller has not merged
+        GameState merged = unmerged;
+        MergeStagedIntoHand(merged);
+        ku = finds_kill(unmerged);
+        km = finds_kill(merged);
+    }
+    ::trace::Emit("m2staged", "seed=%llu T%d held=%d kill_unstaged=%d kill_merged=%d",
+                  static_cast<unsigned long long>(state.game_seed), state.turn_number, held, ku, km);
+}
+
 // M2 FIXPOINT executor half, KILL-ONLY (see EngineFlags.h M2FixpointEnabled and the
 // GameEngine::MainPhase loop). Enumerate the realized post-draw m2 plan set, probe each on a
 // copy, and execute ONLY a plan that wins outright. No solve, no depth dependence (d0 and d5
@@ -2148,6 +2247,24 @@ bool AIEngine::WantsSecondMainReentry(const GameState& state) const
 // log; the real apply logs normally.
 bool AIEngine::TrySecondMainStrandedKill(GameState& state)
 {
+    // LOCKSTEP #11. GameEngine::MainPhase calls this AFTER TakeTurn returned, i.e. after its tail moved
+    // every unplayed staged card (a Soulfire / Expressive Iteration / Light Up the Stage exile) back out
+    // to Player::staged_cards. Its rollout twins -- ApplySecondMainInSearch's kill-scan and FSLineTail's
+    // fixpoint kill-scan -- run with those cards still in hand (re-laid to the end), so a stranded kill
+    // that needs a staged burn spell was found by the search and not by the executor. The scan is a
+    // fresh executor decision pass, so it merges exactly as TakeTurn's head does and returns the
+    // unplayed ones on every exit path (including the mode-2 re-solve below, which sees them too, as
+    // its rollout twin does). MTG_LEGACY_M2_KILL_UNSTAGED=1 restores the pre-fix scan (attribution
+    // only: it re-opens the lockstep hole).
+    static const bool s_legacy_unstaged = EnvOn("MTG_LEGACY_M2_KILL_UNSTAGED");
+    const int held = UnexpiredStagedCount(state);
+    M2StagedKillAudit(state, held);
+    struct StagedScanScope
+    {
+        GameState& s; const bool on;
+        StagedScanScope(GameState& s_, bool on_) : s(s_), on(on_) { if (on) { MergeStagedIntoHand(s); } }
+        ~StagedScanScope() { if (on) { ReturnStagedFromHand(s); } }
+    } _staged(state, held > 0 && !s_legacy_unstaged);
     std::vector<TurnSolver::Plan> cands =
         TurnSolver::EnumerateMainPlans(state, /*is_pre_combat=*/false);
     for (const TurnSolver::Plan& p : cands)
@@ -2373,19 +2490,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Card& c : state.ActivePlayer().hand) { _m2fx.hand0.push_back(c.m_name); }
     }
     // Merge any unexpired staged cards into hand so the solver and casting logic
-    // can treat them as playable. They are marked m_is_staged = true so we can
-    // identify and restore unplayed ones afterward. The expiry is preserved in
-    // staged_snapshot so it can be restored if the card is not played.
+    // can treat them as playable (MergeStagedIntoHand; restored at the tail by ReturnStagedFromHand).
+    MergeStagedIntoHand(state);
     Player& ap_ref = state.ActivePlayer();
-    std::vector<StagedCard> staged_snapshot = ap_ref.staged_cards;
-    ap_ref.staged_cards.clear();
-    for (StagedCard& sc : staged_snapshot)
-    {
-        if (sc.expiry_turn < state.turn_number) { continue; }  // end-of-next-turn expiry (CR 406)
-        sc.card.m_is_staged     = true;
-        sc.card.m_staged_expiry = sc.expiry_turn;  // travels with the card so the rollout can expire it
-        EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
-    }
 
     // Echo upkeep resolution -- IDEMPOTENT BACKSTOP. The real resolution now runs at true upkeep
     // timing (GameEngine::UpkeepTail -> ResolveEchoUpkeep, BEFORE the draw step): resolving it here
@@ -3140,21 +3247,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Restore unplayed staged cards (mirror the normal end-of-TakeTurn restore):
         // cards cast were removed from hand; the rest, still flagged m_is_staged, go
         // back to staged_cards so they expire correctly (CR 406).
-        Player& ap_after = state.ActivePlayer();
-        std::vector<Card> regular_hand;
-        for (Card& c : ap_after.hand)
-        {
-            if (c.m_is_staged)
-            {
-                c.m_is_staged = false;
-                StagedCard sc;
-                sc.card        = c;
-                sc.expiry_turn = c.m_staged_expiry;
-                ap_after.staged_cards.push_back(sc);
-            }
-            else { regular_hand.push_back(c); }
-        }
-        ap_after.hand = std::move(regular_hand);
+        ReturnStagedFromHand(state);
         // ApplyPlan resolved draw-engine re-solves inline; no second pass -- unless a real cast
         // was dropped (MTG_EXEC_DROP_REPLAN).
         return replan_after_drop();
@@ -7252,33 +7345,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: Mutavault and the token
     // taps are searched plan actions, realised in exec_trailing_activations below.)
 
-    // Restore any unplayed staged cards (still flagged m_is_staged in hand) back to
-    // staged_cards, removing them from hand. Cards that were cast were already removed
-    // from hand; expired ones were dropped at the merge above. The expiry travels on
-    // the card (m_staged_expiry, set at the merge), so no snapshot walk is needed.
-    // IMPORTANT: the card must be REMOVED from hand here, not merely flag-cleared and
-    // kept -- doing the latter leaves a permanent (non-staged, never-expiring) hand
-    // duplicate of a card also pushed to staged_cards. That was latent until a staging
-    // spell (Light Up the Stage) got a second TakeTurn pass with its staged cards still
-    // unplayed, which ran this restore on a non-empty merge and duplicated them.
-    Player& ap_after = state.ActivePlayer();
-    std::vector<Card> regular_hand;
-    for (Card& c : ap_after.hand)
-    {
-        if (c.m_is_staged)
-        {
-            c.m_is_staged = false;
-            StagedCard sc;
-            sc.card        = c;
-            sc.expiry_turn = c.m_staged_expiry;
-            ap_after.staged_cards.push_back(sc);
-        }
-        else
-        {
-            regular_hand.push_back(c);
-        }
-    }
-    ap_after.hand = std::move(regular_hand);
+    // Restore any unplayed staged cards back to staged_cards (see ReturnStagedFromHand).
+    ReturnStagedFromHand(state);
 
     // Commit-the-line (full-depth) handles the draw breakpoint INLINE (replay_recorded
     // for a committed plan, resolve_draw_breakpoint for the fallback), so it must NOT

@@ -47297,6 +47297,7 @@ static void MergeStagedToHandEnd(GameState& state)
     if (!out_of_order) { return; }
     std::stable_partition(hand.begin(), hand.end(), [](const Card& c) { return !c.m_is_staged; });
 }
+void TurnSolver::LayStagedCardsLast(GameState& state) { MergeStagedToHandEnd(state); }
 
 // Deal combat damage: all eligible attackers hit the opponent.
 static void SimulateCombat(GameState& state)

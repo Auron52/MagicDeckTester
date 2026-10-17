@@ -15,6 +15,14 @@
 #include <map>
 #include <vector>
 
+// The executor's staged-card bookkeeping (definitions + rationale in AIEngine.cpp). An unplayed staged
+// card lives in Player::staged_cards between decision passes; every pass that may cast it merges it
+// into hand at its head (appended, flagged m_is_staged) and returns the unplayed ones at its tail.
+// Shared by TakeTurn and the m2 stranded-kill scan (lockstep #11); the rollout's twin of the merge
+// layout is TurnSolver::LayStagedCardsLast (lockstep #5).
+void MergeStagedIntoHand(GameState& state);
+void ReturnStagedFromHand(GameState& state);
+
 class AIEngine
 {
 public:

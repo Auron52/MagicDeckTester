@@ -1870,6 +1870,10 @@ public:
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+    // The rollout's staged-card re-lay at an executor pass head (TurnSolver.cpp MergeStagedToHandEnd,
+    // lockstep #5): staged hand cards move to the END, order kept. Public only so a unit test can hold
+    // it to the executor's layout (AIEngine.h MergeStagedIntoHand); the engine calls the static.
+    static void              LayStagedCardsLast(GameState& state);
     // HUMAN-MENU twin test for a POSITIONED land plan (plans[i].land_slot >= 1): the index of a plan
     // in the same list that plays the same land after ALL its casts (land_slot -1) over the same
     // actions and reaches the identical post-apply state (BuildDedupKey), or -1. `hidden` (optional,
