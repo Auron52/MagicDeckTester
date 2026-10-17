@@ -465,22 +465,58 @@ inline std::atomic<unsigned long long> g_bp_base{0}, g_bp_mismatch{0};
 // "no greedy decisions" bar reads, which must be zero in real play at defaults.
 inline std::atomic<unsigned long long> g_bp_searched{0};
 // ...and of those, the re-solves whose chosen plan carries a POST-APPLY pin -- a state pin read in this
-// turn's combat / cleanup / next upkeep, or the end-of-main sweep / Land's Edge count / dig -- that the
-// executor does NOT realize: the continuation's casts run under ContPins (during-cast pins only), so
-// the realized combat and end step follow the COMMITTED plan's pins. A realized-vs-scored divergence
-// against the re-solve's own scoring (it applied the pin in its rollouts). Diagnostic; see
-// docs/design/no-greedy-in-search-window.md.
+// turn's combat / cleanup / next upkeep, the dork attack/hold choice, or the end-of-main sweep / Land's
+// Edge count / dig (CARRIED) -- and, checked at the end-of-main hand-over (RecordReSolveRealized), how
+// many of those were NOT in force there (UNREALIZED: the executor would play a combat / end step the
+// re-solve did not score). Until 2026-10-17 the executor adopted none of them, so UNREALIZED == CARRIED;
+// it adopts them now (adopt_resolve_post_apply in TakeTurn) and UNREALIZED must read zero. DIG-UNRUN
+// counts a carried dig pin (0/1) on a phase where the executor runs no reactive dig loop at all (a
+// committed line's main, or main 2): the loop, not just its pin, is absent there -- a disclosed residual.
+// Diagnostic; see docs/design/no-greedy-in-search-window.md.
+inline std::atomic<unsigned long long> g_bp_searched_pin_carried{0};
 inline std::atomic<unsigned long long> g_bp_searched_pin_unrealized{0};
-inline void RecordReSolvePins(const TurnSolver::Plan& p)
+inline std::atomic<unsigned long long> g_bp_searched_dig_unrun{0};
+inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
 {
-    if (!Enabled()) { return; }
-    const bool post_apply = p.lackey_choice >= 0 || p.fling_victim_choice != -1
+    return p.lackey_choice >= 0 || p.fling_victim_choice != -1
         || p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0 || p.bruna_gather_choice >= 0
         || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
+        || p.atk_dork_release >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
-    if (post_apply) { g_bp_searched_pin_unrealized.fetch_add(1, std::memory_order_relaxed); }
+}
+inline void RecordReSolvePins(const TurnSolver::Plan& p)
+{
+    if (!Enabled()) { return; }
+    if (CarriesPostApplyPin(p)) { g_bp_searched_pin_carried.fetch_add(1, std::memory_order_relaxed); }
+}
+// At the end-of-main hand-over: every pin the LAST searched re-solve carried, compared with what the
+// realised combat / cleanup / next turn will read. `dig_runs` = the executor runs its reactive dig loop in
+// this phase (main 1 off a committed line), which then reads the re-solve's dig_choice.
+inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p, int discard_pin, int vial_pin,
+                                  int dork_pin, int le_fire_pin, bool dig_runs)
+{
+    if (!Enabled() || !CarriesPostApplyPin(p)) { return; }
+    bool ok = true;
+    if (p.lackey_choice >= 0           && s.scripted_cheat_choice != p.lackey_choice)              { ok = false; }
+    if (p.fling_victim_choice != -1    && s.scripted_fling_victim != p.fling_victim_choice)        { ok = false; }
+    if (p.tectonic_mode_choice >= 0    && s.scripted_tectonic_mode != p.tectonic_mode_choice)      { ok = false; }
+    if (p.tectonic_keep_choice >= 0    && s.scripted_tectonic_keep != p.tectonic_keep_choice)      { ok = false; }
+    if (p.bruna_gather_choice >= 0     && s.scripted_bruna_gather != p.bruna_gather_choice)        { ok = false; }
+    if (p.combat_aura_swap_choice >= 0 && s.scripted_combat_aura_swap != p.combat_aura_swap_choice) { ok = false; }
+    if (p.attack_attach_choice >= 0    && s.scripted_attack_attach != p.attack_attach_choice)      { ok = false; }
+    if (p.attack_land_search_choice >= 0 && s.scripted_attack_land_search != p.attack_land_search_choice) { ok = false; }
+    if (p.combat_crack_choice >= 0     && s.scripted_combat_land_search_crack != p.combat_crack_choice) { ok = false; }
+    if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
+    if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
+    if (p.discard_choice >= 0          && discard_pin != p.discard_choice)                         { ok = false; }
+    if (p.vial_charge_choice >= 0      && vial_pin != p.vial_charge_choice)                        { ok = false; }
+    if (p.atk_dork_release >= 0        && dork_pin != p.atk_dork_release)                          { ok = false; }
+    if (le_fire_pin != p.le_fire_choice) { ok = false; }   // installed unconditionally (-1 = the rule)
+    if (!ok) { g_bp_searched_pin_unrealized.fetch_add(1, std::memory_order_relaxed); }
+    if ((p.dig_choice == 0 || p.dig_choice == 1) && !dig_runs)
+    { g_bp_searched_dig_unrun.fetch_add(1, std::memory_order_relaxed); }
 }
 inline void Record(int depth, bool in_rollout)
 {
@@ -501,10 +537,11 @@ struct Dumper
         if (!Enabled()) { return; }
         std::fprintf(stderr, "=== EXECUTOR GREEDY Solve(): in-rollout=%llu breakpoint-fallback=%llu"
                      " (base=%llu MISMATCH=%llu searched-resolve=%llu, of which post-apply pin"
-                     " UNREALIZED=%llu)"
+                     " CARRIED=%llu UNREALIZED=%llu DIG-UNRUN=%llu)"
                      " | REAL main-phase decisions by depth:", g_rollout.load(), g_bp.load(),
                      g_bp_base.load(), g_bp_mismatch.load(), g_bp_searched.load(),
-                     g_bp_searched_pin_unrealized.load());
+                     g_bp_searched_pin_carried.load(), g_bp_searched_pin_unrealized.load(),
+                     g_bp_searched_dig_unrun.load());
         bool any = false;
         for (int i = 0; i < 12; ++i)
         {
@@ -4030,24 +4067,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                     // re-priced under default rules, so any
                                                     // TapReserve sweep measured a chimera; 0 inert
 
-    // Same for the searched Lackey put -- executor/rollout lockstep: without it the search would
-    // score one Goblin entering and the real game would put a different one.
-    if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
-    // Searched Surtland Flinger victim -- lockstep twin of ApplyPlanDirect's pin. -2 (decline) is
-    // a real pinned choice, so the guard is != -1.
-    if (plan.fling_victim_choice != -1) { state.scripted_fling_victim = plan.fling_victim_choice; }
-    if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
-    if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
-    if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
-    if (plan.combat_aura_swap_choice >= 0)
-    { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; state.scripted_combat_aura_swap_in = -1; }
-    // Raubahn's searched attack attach -- lockstep twin of ApplyPlanDirect's write.
-    if (plan.attack_attach_choice >= 0) { state.scripted_attack_attach = static_cast<std::int16_t>(plan.attack_attach_choice); }
-    // Primeval Titan's searched attack pick -- lockstep twin of ApplyPlanDirect's write.
-    if (plan.attack_land_search_choice >= 0)
-    { state.scripted_attack_land_search = plan.attack_land_search_choice; }
-    if (plan.combat_crack_choice >= 0)
-    { state.scripted_combat_land_search_crack = plan.combat_crack_choice; }
+    // The plan's post-apply STATE pins (the Lackey put, the declare-attackers pins, the Saga target, the
+    // land-search picks) -- ApplyPlanDirect's own body (TurnSolver::WritePostApplyStatePins), so the real
+    // combat and next turn read what the scored line read. Write-when-set; the Saga target and Search for
+    // Tomorrow's pick were already written with the decision above (idempotent).
+    TurnSolver::WritePostApplyStatePins(state, plan);
+    // A BREAKPOINT RE-SOLVE'S post-apply pins (docs/design/no-greedy-in-search-window.md). The searched
+    // re-solve below (resolve_draw_breakpoint and the pod twin) is a SolveWithLookahead at the breakpoint
+    // state, and it scored every candidate through ApplyPlanDirect: the preamble wrote the candidate's
+    // state pins write-when-set over what this state already held (the committed plan's), and its
+    // end-of-main sweep, Land's Edge count and dig loop ran under the candidate's OWN values. The executor
+    // applies the chosen continuation's casts under ContPins; this adopts the rest the same way, so the
+    // realised combat, end step and next turn are the ones the re-solve ranked. The LAST re-solve wins
+    // (each one scored on the state the previous one left). rs_last holds it for the end-of-main block.
+    std::optional<TurnSolver::Plan> rs_last;
+    auto adopt_resolve_post_apply = [&](const TurnSolver::Plan& x)
+    {
+        TurnSolver::WritePostApplyStatePins(state, x);
+        if (x.discard_choice >= 0)     { m_discard_choice_pin = x.discard_choice; }
+        if (x.vial_charge_choice >= 0) { m_vial_choice_pin = x.vial_charge_choice; }
+        if (x.atk_dork_release >= 0)   { m_atk_release_pin = x.atk_dork_release; }
+        rs_last = x;
+    };
 
     // Cast a spell from hand by name.
     // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's
@@ -5090,6 +5131,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                        &bp_budget, true,
                                                        m_search_post_combat, m_shared_tt);
                 execgreedy::RecordReSolvePins(extra);
+                adopt_resolve_post_apply(extra);   // its post-apply pins, as it scored them
             }
             else
             {
@@ -5661,6 +5703,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                                    &bp_budget, true,
                                                                    m_search_post_combat, m_shared_tt);
                             execgreedy::RecordReSolvePins(extra);
+                            adopt_resolve_post_apply(extra);   // its post-apply pins (main site's note)
                         }
                         else
                         {
@@ -7291,13 +7334,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // first. Inert without a Remedy active + an untapped tap_opponent_lifegain land (every deck but
     // Anti-Lifegain).
     // The plan's searched sweep choice (Plan::sweep_choice) -- lockstep with ApplyPlanDirect's pin.
+    // After a searched breakpoint re-solve these end-of-main values are the RE-SOLVE's (rs_last): its
+    // candidates were scored with their own sweep / Land's Edge count, installed unconditionally (-1 =
+    // the rule) by ApplyPlanDirect's scopes, so the committed plan's values no longer describe the line.
+    const TurnSolver::Plan& eom = rs_last ? *rs_last : plan;
     {
-        ScriptedSweep _ssw_exec(plan.sweep_choice);
-        m_le_fire_pin = plan.le_fire_choice;   // Land's Edge fires after TakeTurn returns
+        ScriptedSweep _ssw_exec(eom.sweep_choice);
+        m_le_fire_pin = eom.le_fire_choice;   // Land's Edge fires after TakeTurn returns
         if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
         // Prevent Damage pain sweep -- lockstep twin of ApplyPlanDirect's (armed only).
         if (is_pre_combat_main) { TapPainSourcesIfUseful(state, state.active_player_index); }
     }
+    // MTG_M2_YIELD_STATS: is every post-apply pin the last re-solve carried actually in force here, the
+    // point the executor hands over to combat / cleanup / the next turn? (Diagnostic; no play effect.)
+    if (rs_last) { execgreedy::RecordReSolveRealized(state, *rs_last, m_discard_choice_pin, m_vial_choice_pin,
+                                                     m_atk_release_pin, m_le_fire_pin,
+                                                     is_pre_combat_main && !fd_plan_committed); }
 
     // SAME-MAIN GO-OFF: the realised-game half of ApplyPlanDirect's matching call (lockstep --
     // the search scored this plan WITH the go-off, so the executor must realise it too). Same
@@ -7320,7 +7372,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (is_pre_combat_main && !fd_plan_committed)
     {
         // A drawn land played as the drop (depth 0, DigUsesDrawnLandDrop): re-solve with its mana.
-        if (UseSurplusLandAbilities(state, resolve_stack, plan.dig_choice)) { cast_draw_engine = true; }
+        // The dig pin: the last searched re-solve's when there was one (its candidates ran their own dig
+        // loop under their own dig_choice), else the plan's.
+        if (UseSurplusLandAbilities(state, resolve_stack, eom.dig_choice)) { cast_draw_engine = true; }
     }
     // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: Mutavault and the token
     // taps are searched plan actions, realised in exec_trailing_activations below.)
