@@ -76,7 +76,7 @@ by 60%** (−0.2184 → −0.3492), which has a specific and verified cause — 
 Adopted 2026-09-19 after an 18-screen settling campaign. Predecessor `decks/Angels/v1-thune4-chancery/`.
 The largest gain of the three decks in both formats.
 
-## Current list — 60 cards, 23 lands, no sideboard
+## Current list — 60 cards, 23 lands
 
 | n | card | n | card |
 |---|---|---|---|
@@ -94,8 +94,8 @@ The largest gain of the three decks in both formats.
 
 | | card | v1 → now | |
 |---|---|---|---|
-| **+4** | Lightstall Inquisitor | 0 → 4 | new to main (was 1 in side) |
-| **+4** | Lyra, Archangel of Dawn | 0 → 4 | new to main (was 1 in side) |
+| **+4** | Lightstall Inquisitor | 0 → 4 | **new card** |
+| **+4** | Lyra, Archangel of Dawn | 0 → 4 | **new card** |
 | **+4** | Remote Farm | 0 → 4 | **new card** |
 | **+2** | Giada, Font of Hope | 2 → 4 | up to a 4-of |
 
@@ -108,13 +108,11 @@ The largest gain of the three decks in both formats.
 | **−2** | Archangel of Thune | 4 → 2 | reduced |
 | **−2** | Lyra Dawnbringer | 3 → 1 | down to a 1-of |
 | **−1** | Azorius Chancery | 1 → 0 | **cut** |
-| **−1** | Legion Angel | 1 → 0 | **cut** (+ all 3 side copies) |
+| **−1** | Legion Angel | 1 → 0 | **cut**, with the 3 copies it wished for |
 | **−1** | Swords to Plowshares | 3 → 2 | reduced |
 
-v1 also had a 5-card sideboard (3 Legion Angel, 1 Lyra Archangel of Dawn, 1 Lightstall Inquisitor), now
-empty — and that is the story: **the two cards v1 kept as sideboard singletons are the two now played as
-4-ofs.** Lyra, Archangel of Dawn is legend-capped at one on the battlefield, so it is a genuinely
-different card from "more Lyra Dawnbringer", which is why both Lyras appear at 4 and 1.
+Lyra, Archangel of Dawn is legend-capped at one on the battlefield, so it is a genuinely different card
+from "more Lyra Dawnbringer" — which is why both Lyras appear, at 4 and 1.
 
 ## How the averages changed
 
@@ -142,7 +140,7 @@ different card from "more Lyra Dawnbringer", which is why both Lyras appear at 4
 
 Predecessor `decks/CritterLifegain/v1-thune4-basilica/`.
 
-## Current list — 60 cards, 23 lands, no sideboard
+## Current list — 60 cards, 23 lands
 
 | n | card | n | card |
 |---|---|---|---|
@@ -205,7 +203,7 @@ Predecessor `decks/WhiteKnights/v1-contender-vial/`. **This span covers two adop
 passed through `v2-kinsbaile-cavalier` — so v1 → current is cumulative, consistent with it having the
 most changed slots of the three.
 
-## Current list — 60 cards, 23 lands, no sideboard
+## Current list — 60 cards, 23 lands
 
 | n | card | n | card |
 |---|---|---|---|
