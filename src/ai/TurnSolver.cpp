@@ -8316,10 +8316,52 @@ inline void Record(int fn, const GameState& s, const std::vector<Action>& acts, 
 // and compared, never a bare hash). No probe charges a budget unit, so a hit cannot move units.
 // MTG_PAY_PROBE_MEMO_VERIFY=1 re-runs the real probe on every hit and counts verdict mismatches
 // (must be 0; printed at exit with the hit counts).
+// ---- MTG_PAY_PROBE_CANON (DEFAULT ON; =0 restores the raw-id keys and no SPS memo) ------------------
+// THE COPY FOLD THE NOTE ABOVE ASKED FOR, at the two ORDER probes and the sequential SUBSET probe
+// (SubsetPayableSequential; see its own note for that half). A hand that has
+// drawn its library (EDF's blink loop banked into Mariposa / Clue draws: 40+ cards, four Fertile Grounds,
+// four Overgrowths, three Peregrine Drakes ...) carries several cast candidates that differ ONLY in which
+// physical copy they name, and the enumerator visits every copy-permutation of a subset. The EDF range
+// projection then asks OrderPaysSequentially the same order once per permutation, under different ids,
+// so the exact-id memo never hits (docs/design/edf-slow-rollout-tail-2026-10-17.md).
+//
+// SOUND because the walk (SeqWalkFixedOrder via OrderPaysSequentiallyImpl) never reads a cast action's
+// IDENTITY: not hand_index (it does not remove the cast card from the scratch hand), not equiv_ord (the
+// copy ordinal the subset fold assigns). Every other input is the board (the same object, by the scope)
+// or the payment-context globals (checked by Ctx::Same). So two candidates EQUAL in every member but
+// those two (Action's defaulted operator==, def compared by pointer) are walked identically, and two
+// asked orders that agree position by position under that equivalence return the identical verdict AND
+// fail position. The WHOLE action is compared, not a list of the fields the walk reads today, so a field
+// the walk starts reading later cannot silently merge two orders it distinguishes. Excluded (kept on
+// their own id, i.e. never shared): anything that is not a hand cast carrying its def (Vial puts are read
+// through `sel`; an unfilled def is back-filled on a private copy) and a reveal-or-pay cast
+// (SameSubsetRevealSurcharge reads the hand).
+// OrderPrepaysWholeTurn is keyed the same way: OrderPrepaysWholeTurnImpl copies the asked actions into
+// `sub` and hands them to ComputePlanTraits + BatchPrepayMainCasts, neither of which reads hand_index or
+// equiv_ord (nor the hand at all); the board and context are the scope's, as above.
+// MTG_PAY_PROBE_MEMO_VERIFY=1 re-runs the real probe on every hit (canonical ones included) and counts
+// verdict / fail-position mismatches -- must be 0.
+static bool IsRevealCostCast(const Action& a);
 namespace paymemo
 {
 inline bool On()       { static const bool v = EnvOn("MTG_PAY_PROBE_MEMO", true); return v; }
+inline bool CanonOn()  { static const bool v = EnvOn("MTG_PAY_PROBE_CANON", true); return v; }
 inline bool VerifyOn() { static const bool v = EnvOn("MTG_PAY_PROBE_MEMO_VERIFY"); return v; }
+inline bool WalkCanonical(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && a.def != nullptr && !IsRevealCostCast(a);
+}
+// Equal in every member except the identity pair (hand_index, equiv_ord). Cheap fields first, so the
+// whole-action compare (one copy) runs only for actual copies of one card.
+inline bool WalkEquivalent(const Action& a, const Action& b)
+{
+    if (a.kind != b.kind || a.def != b.def || a.enchant_target != b.enchant_target || !(a.cost == b.cost))
+    { return false; }
+    Action c = b;
+    c.hand_index = a.hand_index;
+    c.equiv_ord  = a.equiv_ord;
+    return a == c;
+}
 inline bool StatsOn()  { static const bool v = VerifyOn() || EnvOn("MTG_PAY_PROBE_MEMO_STATS"); return v; }
 struct Ctx
 {
@@ -8378,6 +8420,26 @@ struct Scope
     Ctx                        ctx;
     std::vector<Entry>         table;   // open addressing, linear probing, power-of-two size
     std::size_t                live = 0;
+    // MTG_PAY_PROBE_CANON: each candidate's walk-equivalence representative (the lowest equivalent
+    // index), built on the scope's first OrderPaysSequentially probe. `acts` is fixed for the scope.
+    std::vector<std::int16_t>  canon;
+    bool                       canon_built = false;
+    void BuildCanon()
+    {
+        canon_built = true;
+        const std::vector<Action>& v = *acts;
+        canon.assign(v.size(), 0);
+        for (std::size_t j = 0; j < v.size(); ++j)
+        {
+            canon[j] = static_cast<std::int16_t>(j);
+            if (j > 32767 || !WalkCanonical(v[j])) { continue; }
+            for (std::size_t i = 0; i < j; ++i)
+            {
+                if (static_cast<std::size_t>(canon[i]) != i || !WalkCanonical(v[i])) { continue; }
+                if (WalkEquivalent(v[i], v[j])) { canon[j] = static_cast<std::int16_t>(i); break; }
+            }
+        }
+    }
     Scope(const GameState& st, const std::vector<Action>& a)
         : s(&st), acts(&a), prev(t_top), armed(On())
     {
@@ -8395,8 +8457,9 @@ inline std::uint64_t IdsHash(int fn, const std::vector<int>& ids)
 }
 // `aux` (optional): a small int the computation reports alongside its verdict, stored with it and
 // handed back on a hit (OrderPaysSequentially's fail position). compute() must write it when non-null.
+inline std::atomic<long long> g_canon_hits{0};
 template <class F>
-inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, const std::vector<int>& ids,
+inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, const std::vector<int>& raw_ids,
                   F&& compute, int* aux = nullptr)
 {
     Scope* sc = t_top;
@@ -8405,8 +8468,21 @@ inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, c
         if (sc != nullptr && StatsOn()) { g_bypass[fn].fetch_add(1, std::memory_order_relaxed); }
         return compute();
     }
-    if (ids.size() > static_cast<std::size_t>(kMaxIds)) { return compute(); }
-    for (int j : ids) { if (j < 0 || j > 32767) { return compute(); } }
+    if (raw_ids.size() > static_cast<std::size_t>(kMaxIds)) { return compute(); }
+    for (int j : raw_ids) { if (j < 0 || j > 32767 || static_cast<std::size_t>(j) >= acts.size()) { return compute(); } }
+    // MTG_PAY_PROBE_CANON: key the sequential-order probe on each id's walk-equivalence representative
+    // (see WalkEquivalent). compute() still walks the RAW order it was asked.
+    // A LOCAL vector, not a thread_local: compute() can re-enter Probe through a nested scope, and the
+    // key is read again after it returns (the insert below).
+    std::vector<int> canon_ids;
+    const bool use_canon = (fn == paycensus::OPS || fn == paycensus::OPWT || fn == paycensus::SPS) && CanonOn();
+    if (use_canon)
+    {
+        if (!sc->canon_built) { sc->BuildCanon(); }
+        canon_ids.reserve(raw_ids.size());
+        for (int j : raw_ids) { canon_ids.push_back(sc->canon[static_cast<std::size_t>(j)]); }
+    }
+    const std::vector<int>& ids = use_canon ? canon_ids : raw_ids;
     const std::uint64_t h = IdsHash(fn, ids);
     if (!sc->table.empty())
     {
@@ -8419,7 +8495,11 @@ inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, c
             {
                 const bool v = e.verdict != 0;
                 const int  stored_aux = e.aux;
-                if (StatsOn()) { g_hits[fn].fetch_add(1, std::memory_order_relaxed); }
+                if (StatsOn())
+                {
+                    g_hits[fn].fetch_add(1, std::memory_order_relaxed);
+                    if (use_canon && canon_ids != raw_ids) { g_canon_hits.fetch_add(1, std::memory_order_relaxed); }
+                }
                 if (VerifyOn() && (compute() != v || (aux != nullptr && *aux != stored_aux)))
                 { g_mismatch[fn].fetch_add(1, std::memory_order_relaxed); }
                 if (aux != nullptr) { *aux = stored_aux; }
@@ -8468,6 +8548,8 @@ struct Dump
                          VerifyOn() ? " VERIFY_MISMATCH=" : " (verify off) ",
                          VerifyOn() ? g_mismatch[f].load() : 0LL);
         }
+        std::fprintf(stderr, "[pay-memo] OrderPaysSequentially canonical-only hits (MTG_PAY_PROBE_CANON)=%lld\n",
+                     g_canon_hits.load());
     }
 };
 inline Dump g_dump;
@@ -9419,6 +9501,8 @@ inline Dump g_dump;
 }   // namespace rangekind
 static bool SubsetPayableSequentialImpl(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel);
+static bool SubsetPayableSequentialTail(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel, std::vector<int>& order);
 static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
 {
@@ -9467,6 +9551,31 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
         if (rx != ry) { return rx < ry; }
         return CastOrderNameTieLess(state, cands[x], cands[y]);
     });
+    // MTG_PAY_PROBE_CANON, the SUBSET half: memoise this whole verdict on the RANK-ORDERED cast sequence,
+    // keyed by copy-equivalence (paymemo::WalkEquivalent) inside the enumerator's scope. From here on the
+    // verdict reads the board, the payment context and cands[order[k]] only -- the deck arrangement (the
+    // EDF range projection and its two order probes), the walks, the payable-order retry -- PROVIDED the
+    // subset holds no Vial put and no reveal-or-pay cast (those two read `sel` and the hand: the surcharge,
+    // the Vial Treasures, the retry's exit list) and this is not human play (whose untapper-hoisted retry
+    // is left exactly as it was). The key is taken AFTER the rank sort, so two subsets share an entry only
+    // when their realised orders agree copy for copy. Exact-id memoisation of this probe was measured
+    // useless (see the MTG_PAY_PROBE_MEMO note): its repeats are copies, which is what this key folds.
+    // Lever off -> the tail runs directly, exactly as before.
+    if (paymemo::CanonOn() && !HumanPlayActive()
+        && std::none_of(sel.begin(), sel.end(), [&](int j)
+                        { const Action& a = cands[static_cast<std::size_t>(j)];
+                          return a.kind == Action::Kind::ActivateVial || IsRevealCostCast(a); }))
+    {
+        const std::vector<int> key(order.begin(), order.end());
+        std::vector<int> work = key;   // `order` is thread_local and the tail rewrites its argument
+        return paymemo::Probe(paycensus::SPS, state, cands, key,
+                              [&] { work = key; return SubsetPayableSequentialTail(state, cands, sel, work); });
+    }
+    return SubsetPayableSequentialTail(state, cands, sel, order);
+}
+static bool SubsetPayableSequentialTail(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel, std::vector<int>& order)
+{
     // The deck's set-level arrangement, as both apply worlds take it (no-op unless the deck arranges:
     // Dragonstorm's earliest-payable Medallion slot, MTG_DRAGONSTORM_USER_ORDER).
     ApplyDeckCastArrangement(state, cands, order);
@@ -9481,8 +9590,25 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
 
     // The walk over one candidate order, extracted so a second order can be priced (see the
     // untapper-hoisted retry below the first call).
+    //
+    // MTG_SPS_WALK_MEMO (DEFAULT ON; =0 always walks here). With no Vial put in the subset and no reveal
+    // surcharge, this walk IS TurnSolver::OrderPaysSequentially(state, cands, ord): OrderPaysSequentiallyImpl
+    // builds the same cast list (every member here is a hand cast with its def), recomputes the same empty
+    // surcharge, and hands SeqWalkFixedOrder the same `ord`; the only other difference is the `sel` argument,
+    // which the walk reads solely for Vial puts. Routing it there lets the walk the EDF range projection
+    // (ApplyDeckCastArrangement above) has just run on this exact order -- the given order, or the candidate
+    // it moved to -- be served from the order-probe memo instead of walked a second time.
+    // docs/design/edf-slow-rollout-tail-2026-10-17.md. The memo's VERIFY mode re-walks every hit.
+    static const bool s_sps_walk_memo = EnvOn("MTG_SPS_WALK_MEMO", true);
+    const bool walk_via_ops = s_sps_walk_memo && seq_rv_charged.empty()
+        && std::none_of(sel.begin(), sel.end(), [&](int j)
+                        { return cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateVial
+                                 || IsRevealCostCast(cands[static_cast<std::size_t>(j)]); });
     auto run_walk = [&](const std::vector<int>& ord) -> bool
-    { return SeqWalkFixedOrder(state, cands, sel, ord, seq_rv_charged); };
+    {
+        if (walk_via_ops) { return TurnSolver::OrderPaysSequentially(state, cands, ord); }
+        return SeqWalkFixedOrder(state, cands, sel, ord, seq_rv_charged);
+    };
     if (run_walk(order)) { return true; }
     // ETB-TREASURE-HOISTED RETRY (MTG_ETB_TREASURE_SPEND): the order both apply worlds realise when
     // the rank order cannot pay (ApplyEtbTreasureFundingOrder -- the maker first, so its Treasure
@@ -54290,6 +54416,21 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
     return sig;
 }
 
+// MTG_RH_MOVED_MEMO_VERIFY counters (see rh_moved in EnumeratePlans' dedup).
+namespace rhmemo
+{
+inline std::atomic<long long> g_hits{0}, g_mismatch{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!EnvOn("MTG_RH_MOVED_MEMO_VERIFY")) { return; }
+        std::fprintf(stderr, "[rh-moved-memo] verified_hits=%lld MISMATCH=%lld\n", g_hits.load(), g_mismatch.load());
+    }
+};
+inline Dump g_dump;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -57845,6 +57986,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         return s;
     };
     // 0 the deck's arrangement keeps the rank order | 1 it moves it
+    //
+    // MTG_RH_MOVED_MEMO (DEFAULT ON; =0 arranges every plan). The verdict is a function of the board (fixed
+    // for this pass) and the rank-ordered CAST actions alone: ApplyDeckCastArrangement reads acts[order[k]]
+    // and nothing else (the EDF range projection, its shroud stack, and the two order probes it asks), and
+    // none of those reads an action's identity (hand_index / equiv_ord -- see paymemo::WalkEquivalent, the
+    // same argument). The duplicates this loop classifies are mostly the SAME casts naming other physical
+    // copies -- on a hand that drew its library (docs/design/edf-slow-rollout-tail-2026-10-17.md) one class
+    // collides hundreds of thousands of times and each collision re-ran the projection's walks -- so the
+    // verdict is memoised on the rank-ordered sequence of copy-equivalence tokens. The key is the exact
+    // token sequence (stored and compared). MTG_RH_MOVED_MEMO_VERIFY=1 re-arranges every hit and counts a
+    // differing verdict (must be 0; printed at exit).
+    static const bool s_rh_memo        = EnvOn("MTG_RH_MOVED_MEMO", true);
+    static const bool s_rh_memo_verify = EnvOn("MTG_RH_MOVED_MEMO_VERIFY");
+    std::vector<Action> rh_tok_reps;                       // one representative (a copy) per token
+    std::map<std::vector<int>, int> rh_memo;
+    auto rh_token = [&](const Action& a) -> int
+    {
+        for (std::size_t t = 0; t < rh_tok_reps.size(); ++t)
+        { if (paymemo::WalkEquivalent(rh_tok_reps[t], a)) { return static_cast<int>(t); } }
+        rh_tok_reps.push_back(a);
+        return static_cast<int>(rh_tok_reps.size()) - 1;
+    };
     auto rh_moved = [&](const TurnSolver::Plan& rp) -> int
     {
         std::vector<int> rk;
@@ -57855,9 +58018,33 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
         { return CastOrderLess(state, rp.actions[static_cast<std::size_t>(x)], rp.actions[static_cast<std::size_t>(y)]); });
-        std::vector<int> arr = rk;
-        ApplyDeckCastArrangement(state, rp.actions, arr);
-        return arr != rk ? 1 : 0;
+        auto compute = [&]() -> int
+        {
+            std::vector<int> arr = rk;
+            ApplyDeckCastArrangement(state, rp.actions, arr);
+            return arr != rk ? 1 : 0;
+        };
+        // Memoised only when every cast is a plain hand cast carrying its def (WalkCanonical): anything
+        // else is arranged fresh, exactly as before.
+        bool memo_ok = s_rh_memo;
+        for (int i : rk) { if (!paymemo::WalkCanonical(rp.actions[static_cast<std::size_t>(i)])) { memo_ok = false; break; } }
+        if (!memo_ok) { return compute(); }
+        std::vector<int> key;
+        key.reserve(rk.size());
+        for (int i : rk) { key.push_back(rh_token(rp.actions[static_cast<std::size_t>(i)])); }
+        auto it = rh_memo.find(key);
+        if (it != rh_memo.end())
+        {
+            if (s_rh_memo_verify)
+            {
+                rhmemo::g_hits.fetch_add(1, std::memory_order_relaxed);
+                if (compute() != it->second) { rhmemo::g_mismatch.fetch_add(1, std::memory_order_relaxed); }
+            }
+            return it->second;
+        }
+        const int v = compute();
+        rh_memo.emplace(std::move(key), v);
+        return v;
     };
     std::unordered_set<std::string> rh_seen;   // one-Aura tier: class signature + host
     // multi-Aura tier: class signature -> {index in `deduped` of the kept member, kept-mask: bit0
@@ -81766,7 +81953,42 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     const int outer_front_only = t_bp_front_only_depth;
     t_bp_front_only_depth = front_only ? g_bp_enum_depth + 1 : -1;
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
+    // MTG_BP_DERIVE_SLOW_MS=<ms> (DIAGNOSTIC, print-only, default 0 = off): one stderr line + the
+    // frame's hand/board for every derivation slower than <ms> wall, with the reason and the
+    // enumerator funnel (set MTG_ENUM_STATS=1 for the subset counts). docs/design/edf-slow-rollout-
+    // tail-2026-10-17.md. Reads counters only -- play is byte-identical either way.
+    static const int s_bp_slow_ms = EnvInt("MTG_BP_DERIVE_SLOW_MS", 0);
+    const auto bp_slow_t0 = s_bp_slow_ms > 0 ? std::chrono::steady_clock::now()
+                                             : std::chrono::steady_clock::time_point{};
+    const std::uint64_t bp_slow_e0 = s_bp_slow_ms > 0 ? enumstats::g_e_enter.load() : 0;
+    const std::uint64_t bp_slow_s0 = s_bp_slow_ms > 0 ? enumstats::g_e_surv.load() : 0;
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    if (s_bp_slow_ms > 0)
+    {
+        const double ms = std::chrono::duration<double, std::milli>(
+                              std::chrono::steady_clock::now() - bp_slow_t0).count();
+        if (ms >= s_bp_slow_ms)
+        {
+            const Player& ap = state.ActivePlayer();
+            std::string hand, board;
+            for (const Card& c : ap.hand) { hand += c.m_name.str() + "; "; }
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                board += p.card.m_name.str() + (p.tapped ? "(T)" : "") + (p.aura_attached_to > 0 ? "(@)" : "") + "; ";
+            }
+            std::fprintf(stderr,
+                "[bp-derive-slow] t%d pre=%d ms=%.0f plans=%zu reason=%d enum_depth=%d rollout_nest=%d"
+                " subsets_entered=%llu emitted=%llu lands_played=%d spells_cast=%d float=%d\n"
+                "  hand(%zu): %s\n  board: %s\n",
+                state.turn_number, is_pre_combat ? 1 : 0, ms, plans.size(), static_cast<int>(bpuse::t_reason),
+                g_bp_enum_depth, g_rollout_nest,
+                static_cast<unsigned long long>(enumstats::g_e_enter.load() - bp_slow_e0),
+                static_cast<unsigned long long>(enumstats::g_e_surv.load() - bp_slow_s0),
+                ap.lands_played_this_turn, state.spells_cast_this_turn, state.floating_mana.Total(),
+                ap.hand.size(), hand.c_str(), board.c_str());
+        }
+    }
     --g_bp_enum_depth;
     t_bp_front_only_depth = outer_front_only;
     // MTG_BP_NEW_ONLY (see BpNewOnlyEnabled): keep only the continuations that USE a card that
