@@ -36120,6 +36120,38 @@ struct ApplyReuseVerifyPrinter
     }
 };
 inline ApplyReuseVerifyPrinter g_ar_printer;
+// ---- THE APPLY TAKES ITS TRIAL'S END STATE (MTG_EDF_ROUTE_APPLY_TAKE, DEFAULT ON; =0 replays live) ------
+// After its silent trial the apply replays the chosen attempt on the real state (Run(cx, attempt),
+// emit on) so the replay can narrate into the play history. Where nothing can receive that narration
+// -- no play hook, no reveal logger, not a real resolution: exactly when a RevealLogPause would be a
+// no-op (its own `noop` test), so the trial's pauses changed nothing -- and the trace is off, the replay
+// computes the state the trial already holds. Run's unforced and forced paths reach the same end state
+// for the attempt the trial reports: the board loop (-1) is Loop from the start state either way (a
+// held DEVELOP is restored to that loop's end); a deploy attempt k is RestoreCtx(start) + ArmAttempt +
+// DeployPieces + Loop either way (the repeat recorder and the periodic exit change no deploy and no
+// nonzero loop); the hand path returns or restores the same attempt's end. `emit` itself writes only
+// through the hooks above. So the apply moves the trial's copy into the real state and returns the
+// trial's verdict. MTG_EDF_ROUTE_APPLY_TAKE_VERIFY=1 also runs the live replay on a copy and compares
+// verdict and state (RouteSig).
+inline bool ApplyTakeOn()     { static const bool v = EnvOn("MTG_EDF_ROUTE_APPLY_TAKE", true); return v; }
+inline bool ApplyTakeVerify() { static const bool v = EnvOn("MTG_EDF_ROUTE_APPLY_TAKE_VERIFY"); return v; }
+inline std::atomic<unsigned long long> g_at_taken{0}, g_at_bad{0};
+struct ApplyTakeVerifyPrinter
+{
+    ~ApplyTakeVerifyPrinter()
+    {
+        if (!ApplyTakeVerify()) { return; }
+        std::fprintf(stderr, "[route-take] verify: %llu applies took the trial's state, %llu MISMATCHES\n",
+                     g_at_taken.load(), g_at_bad.load());
+    }
+};
+inline ApplyTakeVerifyPrinter g_at_printer;
+inline bool ApplyIsSilent()
+{
+    if (TraceOn()) { return false; }
+    const RevealLogPause probe;   // a no-op pause <=> nothing is installed that the replay could write to
+    return probe.noop;
+}
 struct TrialAttempt { std::vector<long long> sig; int r = 0, attempt = -1; };
 struct TrialAttemptCache { std::unordered_multimap<std::uint64_t, TrialAttempt> m; };
 inline TrialAttemptCache& AttemptCache() { static thread_local TrialAttemptCache c; return c; }
@@ -36725,6 +36757,8 @@ int EdfComboRouteApply(GameState& s, int me)
     // the real state, and that live run narrates each step into the play history (the same
     // deterministic route).
     int attempt = -1;
+    // MTG_EDF_ROUTE_APPLY_TAKE: decided before any pause of ours is up (a pause inside a pause is a no-op).
+    const bool take = comboroute::ApplyTakeOn() && comboroute::ApplyIsSilent();
     // MTG_EDF_ROUTE_APPLY_REUSE (see AttemptCacheStore): the trial that emitted this action, if it ran on
     // this very state.
     const comboroute::TrialAttempt* reuse = comboroute::ApplyReuseOn() ? comboroute::AttemptCacheFind(s) : nullptr;
@@ -36752,6 +36786,36 @@ int EdfComboRouteApply(GameState& s, int me)
         }
         if (tr == 0) { return 0; }
         attempt = cx.attempt_used;
+        // MTG_EDF_ROUTE_APPLY_TAKE (see ApplyIsSilent): nothing reads the replay's narration, so the
+        // trial's end state IS the replay's.
+        if (take)
+        {
+            if (comboroute::ApplyTakeVerify())
+            {
+                GameState live = s;
+                int lr = 0;
+                {
+                    ComboOffApplyPause _np;
+                    comboroute::Ctx lcx(live, me);
+                    lcx.emit = true;
+                    lr = comboroute::Run(lcx, attempt);
+                }
+                std::vector<long long> a, b;
+                comboroute::RouteSig(live, a);
+                comboroute::RouteSig(copy, b);
+                comboroute::g_at_taken.fetch_add(1, std::memory_order_relaxed);
+                if (lr != tr || a != b)
+                {
+                    comboroute::g_at_bad.fetch_add(1, std::memory_order_relaxed);
+                    std::fprintf(stderr, "[route-take] MISMATCH t%d: trial r=%d, live r=%d, states %s\n",
+                                 s.turn_number, tr, lr, a == b ? "equal" : "DIFFER");
+                    s = std::move(live);
+                    return lr;
+                }
+            }
+            s = std::move(copy);
+            return tr;
+        }
     }
     ComboOffApplyPause _nochoosers;
     comboroute::Ctx cx(s, me);
