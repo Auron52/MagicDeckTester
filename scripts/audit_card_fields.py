@@ -79,6 +79,12 @@ MODELED_ELSEWHERE_KEYWORDS = {
     #                        and soulbond below, and docs/design/keyword-mask-overflow.md). Grants
     #                        no evasion and changes no combat legality, so stripping it cannot mask
     #                        a missing combat keyword.
+    #                        Glorybringer's exert ("you may exert this creature as it attacks")
+    #                        is the other card that carries it, and there it is NOT modelled: a
+    #                        USER-approved deferral (2026-08-26, docs/design/analysis-Dragons.md),
+    #                        recorded in the card's oracle bracket note, because never exerting is
+    #                        the optimal line. Its old allowlist entry went stale once exert was
+    #                        stripped here, so the bracket note is now the record.
     "fight", "double", "exert",
     # Keyword abilities this engine models via params / oracle logic, not a tag:
     "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
@@ -124,6 +130,17 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # it (KeywordFromString THROWS on an unmapped tag, and the enum is over its 32-bit mask anyway).
     # Not a combat/evasion keyword, so stripping it cannot mask a missing one.
     "partner",
+    # Kicker (CR 702.33, Saproling Migration): modeled structurally via the `kicker_cost` param --
+    # the kicked mode is a DB-synthesized "<name> (Kicked)" face whose cost is the base cost PLUS
+    # the kicker (CR 601.2b), enumerated as a cast variant beside the unkicked one so the search
+    # picks between them. Not a keyword tag; not a combat/evasion keyword, so stripping it cannot
+    # mask a missing one.
+    "kicker",
+    # Storied (Kili the Resourceful): modeled structurally via the `storied_permanents` param ->
+    # Player::has_enduring_story, a per-player one-way designation raised by RefreshStoriedLatch,
+    # the same shape as ascend above. Not a keyword tag; grants no evasion and changes no combat
+    # legality, so stripping it cannot mask a missing combat keyword.
+    "storied",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing: the World rule
 # never fires (one permanent). Legendary (legend rule), Snow (snow mana) and -- since 2026-10-15 --
