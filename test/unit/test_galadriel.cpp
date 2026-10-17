@@ -13,6 +13,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/ManaPayment.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -386,4 +387,27 @@ TEST_CASE("Galadriel scry with Galadriel out: scry-lands kept, a first Crackle o
     CHECK_FALSE(KeepsGal(s, kSkerry));
     s.players[1].life = 20;                 // X = 4: 14 mana needed
     CHECK_FALSE(KeepsGal(s, kCrackle));
+}
+
+// ---- Fed any-colour filters cost their feed in the POOL too (claude-play sweep, seed 90000 T4) ----
+// Crystal Grotto + Rumble Arena + Saprazzan Skerry (UU) + Zhalfirin Void: five raw mana, but both {R}
+// must come through the filters, each eating a {1} -- so {3}{R}{R} (Crackle X=1) is unpayable while
+// {1}{G}{U} (Galadriel: Skerry U + U feeding a filter for G + a {C}) is payable.
+TEST_CASE("Mana pool: a fed filter's colour costs a feed -- {3}{R}{R} off two filters + Skerry + Void is unpayable")
+{
+    EnsureCardsLoadedGal();
+    GameState s = FreshGal();
+    PutGal(s, "Crystal Grotto", 1);
+    PutGal(s, "Rumble Arena", 2);
+    PutGal(s, kSkerry, 3);
+    s.battlefield.back().counters.Add(Counter::Type::Depletion, 2);
+    PutGal(s, "Zhalfirin Void", 4);
+    const ManaPool pool = AvailableManaPool(s);
+    CHECK(pool.Total() == 5);
+    ManaCost crackle1; crackle1.generic = 3; crackle1.red = 2;
+    ManaCost gal;      gal.generic = 1; gal.green = 1; gal.blue = 1;
+    ManaCost three;    three.generic = 3;
+    CHECK_FALSE(pool.CanPay(crackle1));
+    CHECK(pool.CanPay(gal));
+    CHECK(pool.CanPay(three));
 }

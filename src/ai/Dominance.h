@@ -437,7 +437,13 @@ static_assert(sizeof(Player) == 200,
 // StampDeckTraits; it only skips FireScryWatchers' walk that provably finds no watcher, and widens the
 // land-position axis for a deck that holds one -- identical across every pair of states Build()
 // compares, nothing to fold.
-static_assert(sizeof(GameState) == 1120,
+// +16 bytes (2026-10-17, Galadriel claude-play sweep; measured 1120 -> 1136): ManaPool gained
+// `wild_conv` (the fed FREE-mode any-colour filter subset -- a colour from it costs a feed), and
+// GameState embeds three pools (floating_mana, floating_creature_mana, floating_bigspell_mana).
+// Same classification as wild_c / wild_phantom verbatim: a SUBSET COUNT of ManaPool::wild, so
+// wild_conv > 0 implies that pool's Total() > 0, which the mid-turn boundary checks already reject
+// for all three -- nothing to fold.
+static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

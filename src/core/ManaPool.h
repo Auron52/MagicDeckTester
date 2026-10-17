@@ -35,6 +35,15 @@ struct ManaPool
     // amount precheck below subtracts it; with no such filter on the battlefield it is 0 and the
     // precheck is implied by the existing deficit checks, so every other deck is byte-identical.
     int wild_phantom = 0;
+    // A SUBSET COUNT of `wild` (the wild_phantom pattern): units credited by a FED any-colour filter
+    // that HAS a free {C} mode (Crystal Grotto, Rumble Arena, Capital City). Its unit is real supply --
+    // the free {C} -- but taking a COLOUR from it costs a {1} feed out of some other unit of this
+    // pool, so every such unit spent covering a colour deficit lowers the payable AMOUNT by one.
+    // CanPayFlat charges exactly that: the conversions the deficit needs beyond the pool's other
+    // wilds. Without it two fed filters + Skerry (UU) + Zhalfirin Void read as five mana that pays
+    // {3}{R}{R}, and the enumerator offered Crackle X=1 that the payer drops (Galadriel claude-play
+    // sweep, seed 90000 T4, 2026-10-17). 0 with no such filter on the battlefield -> inert.
+    int wild_conv = 0;
     // A SUBSET COUNT of Total() (the wild_c pattern): how many of this pool's units were produced
     // by SNOW sources (battlefield permanents with Supertype::Snow -- real masks there). An {S}
     // pip is payable only from such a unit (CR 106.4b; see ManaCost::snow_pips), so CanPayFlat
@@ -61,7 +70,7 @@ struct ManaPool
     }
 
     void Clear()
-    { white = blue = black = red = green = colorless = wild = wild_c = wild_phantom = snow_units = 0; }
+    { white = blue = black = red = green = colorless = wild = wild_c = wild_phantom = wild_conv = snow_units = 0; }
 
     // Merge another pool into this one, colour for colour (used to retain leftover
     // mana from a payment into the turn-scoped reserve, state.floating_mana).
@@ -69,7 +78,7 @@ struct ManaPool
     {
         white += o.white; blue += o.blue; black += o.black; red += o.red;
         green += o.green; colorless += o.colorless; wild += o.wild; wild_c += o.wild_c;
-        wild_phantom += o.wild_phantom; snow_units += o.snow_units;
+        wild_phantom += o.wild_phantom; wild_conv += o.wild_conv; snow_units += o.snow_units;
     }
 
     // Returns true if this pool can pay the given cost. Two-colour hybrid pips are handled by
@@ -118,6 +127,15 @@ struct ManaPool
                      + colorless_deficit;
 
         if (deficit > wild) { return false; }
+
+        // FED-FILTER conversions (see `wild_conv`): the deficit is covered by the other wilds first;
+        // each conversion unit it still needs eats one feed unit, so the amount must cover those too.
+        {
+            const int phantom = std::min(wild_phantom, wild);
+            const int conv    = std::min(wild_conv, wild - phantom);
+            const int conv_used = std::clamp(deficit - (wild - conv), 0, conv);
+            if (conv_used > 0 && cost.ManaValue() > Total() - phantom - conv_used) { return false; }
+        }
 
         // Remaining wild after covering colored deficits, plus leftover specific mana,
         // must cover the generic requirement.

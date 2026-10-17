@@ -5272,7 +5272,8 @@ inline bool McPoolEq(const ManaPool& a, const ManaPool& b)
 {
     return a.white == b.white && a.blue == b.blue && a.black == b.black && a.red == b.red
         && a.green == b.green && a.colorless == b.colorless && a.wild == b.wild
-        && a.wild_c == b.wild_c && a.wild_phantom == b.wild_phantom && a.snow_units == b.snow_units;
+        && a.wild_c == b.wild_c && a.wild_phantom == b.wild_phantom && a.wild_conv == b.wild_conv
+        && a.snow_units == b.snow_units;
 }
 } // namespace
 static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_creature,

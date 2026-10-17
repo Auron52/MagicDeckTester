@@ -13087,6 +13087,7 @@ static void FoldMixPool(std::uint64_t& h, const ManaPool& p)
     FoldMix(h, static_cast<std::uint64_t>(p.wild));
     FoldMix(h, static_cast<std::uint64_t>(p.wild_c));
     FoldMix(h, static_cast<std::uint64_t>(p.wild_phantom));
+    if (p.wild_conv != 0) { FoldMix(h, 0x57434F4E56ull ^ static_cast<std::uint64_t>(p.wild_conv)); }   // "WCONV"
     FoldMix(h, static_cast<std::uint64_t>(p.snow_units));
 }
 

@@ -27501,6 +27501,7 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
             // +1-per-Astrolabe phantom offers (4 sweep agents confirmed mv-7 plans off 6 real
             // sources) while the wild still covers colour deficits (the conversion is real).
             if (def.params.filter_no_free_colorless) { ++pool.wild_phantom; }
+            else { ++pool.wild_conv; }   // free {C} mode: a colour from it costs a feed (wild_conv)
         }
         // Arcum's Astrolabe: outside its fed quota it contributes NOTHING (no free {C} mode) --
         // crediting the {C} here is the +4-phantom-mana over-credit its param exists to prevent.
