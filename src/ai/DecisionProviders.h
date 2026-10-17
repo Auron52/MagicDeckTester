@@ -674,6 +674,17 @@ public:
                "is +10/+10 on a double striker, so a bound must price every Equipment that can reach "
                "an attacker this combat." }; }
     const char* Name() const override { return "ColossusHammer"; }
+    // SPEAKER OF THE HEAVENS' NARROW SECOND MAIN (MTG_SPEAKER_M2, heurarm SPEAKER_M2; default ON,
+    // PROVISIONAL -- main-1 vs main-2 is the USER's call per deck). The Angels Giada shape: the
+    // deck plays no second main, but lifelink (Colossus Hammer / Loxodon Warhammer on a Speaker or
+    // a double striker) gains the life IN COMBAT, so "attack with the vigilant Speaker, THEN tap it
+    // for a 4/4 Angel" was unfindable at any budget. Opens only when, after combat, some controlled
+    // source with a RELATIVE life gate (CardParams::tap_token_min_life_above_start > 0) passes
+    // TapTokenSourceLive (untapped, not summoning sick, life >= StartingLife() + N); admits ONLY
+    // that TapForTokenPay activation. The main-1 activation stays enumerated (no main-1 prune).
+    // Implementation + soundness argument: DecisionProviders.cpp, "ColossusHammerProvider".
+    bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
 };
 
 // Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other

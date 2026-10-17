@@ -44010,3 +44010,83 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
     }
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
+
+// ---- ColossusHammerProvider -------------------------------------------------------------------
+//
+// Every hook below is this deck's own (the provider derives from DeckProvider == Generic). Later
+// integrators extend THIS section; keep each card's hooks in its own block.
+
+// ---- Speaker of the Heavens: the narrow post-combat main (MTG_SPEAKER_M2) ----------------------
+//
+// THE GAP. Speaker of the Heavens: "Vigilance, lifelink. {T}: Create a 4/4 white Angel creature token
+// with flying. Activate only if you have at least 7 life more than your starting life total and only
+// as a sorcery." In this list the life comes from LIFELINK -- Speaker's own, Loxodon Warhammer's, a
+// Colossus Hammer'd Speaker's +11 in one hit -- and lifelink life is gained IN COMBAT. The deck plays
+// no second main (uses_second_main false; DeckUsesSecondMain has no trigger for it), so the turn the
+// gate first passes the activation could only come next turn's main 1, where tapping Speaker costs
+// its own attack and the Angel is just as summoning sick. "Attack with the vigilant Speaker, then tap
+// it" was unfindable at any budget.
+//
+// THE PHASE OPENS (RestrictedSecondMainLive, a pure function of the post-combat state -- life,
+// tapped, entered_this_turn and the battlefield are all already in the sim and Dominance keys) only
+// when some controlled source whose activation carries a RELATIVE life gate
+// (CardParams::tap_token_min_life_above_start > 0) passes TapTokenSourceLive -- untapped (vigilance
+// kept it so through its own attack), able to {T} (CR 302.6), life >= StartingLife() + N. The cheap
+// integer test runs first: every such gate needs life ABOVE the start, so a board at or below it
+// never scans. A lethal attack never reaches it (every post-combat site sits behind OpponentHasLost).
+//
+// THE MENU (RestrictedSecondMainAdmits) is those TapForTokenPay activations and nothing else: no
+// cast, no land, no equip. The search still branches over it (pass, or each live Speaker), so this
+// is a provider RESTRICTION, never a pick. Main 1's activation stays enumerated -- the search decides
+// between "tap now" and "attack, then tap"; a main-1 prune would be a second USER call.
+//
+// WHY IT LOSES NOTHING. Relative to the deck's existing single-main play the phase did not exist, so
+// the refused options were never offered post-combat before either: the lever only ADDS the one
+// resource combat created. And nothing else this list owns is created in combat -- Raubahn's attack
+// attach and Ardenn's begin-combat attach move Equipment, they add no card and no mana -- so every
+// cast refused here was payable in main 1 from the same pool. (A WIDER post-combat main -- e.g. an
+// equip MOVE onto a fresh creature with this turn's leftover mana, so the attacker keeps the
+// Equipment for its own attack -- is a real line the single-main structure cannot express; it is
+// the deck-level main-2 question, not this lever's.) GOLDFISH-SPECIFIC like the Giada / Omnitool
+// folds: re-derive under a real opponent.
+//
+// DEFAULT ON, PROVISIONAL: main 1 vs main 2 is the USER's call per deck (CLAUDE.md); =0 closes it.
+namespace
+{
+bool SpeakerM2Enabled()
+{
+    static const bool on = EnvOn("MTG_SPEAKER_M2", true);   // DEFAULT ON (PROVISIONAL); =0 closes it
+    return heurarm::Flag(heurarm::SPEAKER_M2, on);
+}
+
+// A TapForTokenPay source whose activation is restricted by a relative life gate (Speaker).
+bool IsLifeGatedTapTokenSource(const CardDefinition* d)
+{
+    return d != nullptr && d->params.tap_token_cost.has_value()
+        && d->params.tap_token_min_life_above_start > 0;
+}
+}   // namespace
+
+bool ColossusHammerProvider::RestrictedSecondMainLive(const GameState& s) const
+{
+    if (!SpeakerM2Enabled()) { return false; }
+    const int me = s.active_player_index;
+    // Cheap integer test first: every gate this hook keys on needs life ABOVE the starting total.
+    if (s.players[me].life <= gamesetup::StartingLife()) { return false; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (IsLifeGatedTapTokenSource(d) && TapTokenSourceLive(s, p, *d)) { return true; }
+    }
+    return false;
+}
+
+bool ColossusHammerProvider::RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+{
+    (void)s;
+    if (a.kind != Action::Kind::TapForTokenPay) { return false; }
+    // CollectActions emitted it only after TapTokenSourceLive passed, so the definition is the whole
+    // remaining test: admit the life-gated source (Speaker), never Sliver Hive / Basri shapes.
+    return IsLifeGatedTapTokenSource(CardDatabase::Instance().Lookup(a.card_name));
+}

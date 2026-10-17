@@ -765,6 +765,13 @@ INERT_PARAMS = {
     "cast_trigger_subtype": "token subtype detail", "tap_token_power": "token P/T",
     "tap_token_toughness": "token P/T", "tap_token_subtypes": "token subtypes",
     "tap_token_requires_subtypes": "token gating detail", "upkeep_token_power": "token P/T",
+    # Speaker of the Heavens (Colossus Hammer, 2026-10-17). Colour and keywords are fixed
+    # characteristics of the forced token (CreateToken, no chooser). The life gate is an activation
+    # RESTRICTION -- it REMOVES the option while life < StartingLife() + N, it never asks anything;
+    # the activation itself rides tap_token_cost -> verb:taptoken (BOARD_ACTIVATIONS).
+    "tap_token_color": "token colour; fixed characteristic of a forced token",
+    "tap_token_keywords": "token keywords; fixed characteristic of a forced token",
+    "tap_token_min_life_above_start": "activation restriction (relative life gate) -- removes the option, no choice",
     "upkeep_token_toughness": "token P/T", "upkeep_token_subtypes": "token subtypes",
     # Luxurious Libation's Citizen. Same shape as the cast_/attack_/upkeep_token_* triples above:
     # ResolveTrickPayload calls CreateToken with these three fixed param values and no chooser, so
@@ -2159,6 +2166,13 @@ def main():
             # whatever the wiring says. Soft, not a miss.
             if max_open_mana.get(name, 0) < _cost_mv(card, cost_from):
                 act_unver.append((name, key, marker + "  [never affordable in this sweep]"))
+                continue
+            # LIFE-GATED (Speaker of the Heavens: "only if you have at least 7 life more than your
+            # starting life total"): never-offered is the NORMAL case in a sweep that never reached
+            # the gate -- the Bilbo argument -- so it is soft, and the targeted search may verify it.
+            if ((card.get("parameters") or {}).get("tap_token_min_life_above_start") or 0) > 0 \
+                    and key == "tap_token_cost":
+                act_unver.append((name, key, marker + "  [life-gated: never offered below the gate]"))
                 continue
             # Source reached play? For a LAND the name shows up as `land=<name>`; for a spell as a
             # cast. Either way `joined` holds the chosen summaries, which is the same evidence the

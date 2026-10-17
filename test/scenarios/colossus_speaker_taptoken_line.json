@@ -1,0 +1,38 @@
+{
+ "_comment": "Speaker of the Heavens' '{T}: create a 4/4 white Angel with flying. Activate only if you have at least 7 life more than your starting life total' as a viewer LINE (`taptoken=`), at exactly the gate: 27 life against the default 20 start. Pins the human-play affordance (Bucket A, the Sliver Hive / Basri verb) on a creature source with an all-zero cost. The sibling colossus_speaker_taptoken_below_gate.json is the same board one life short.",
+ "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 27,
+ "opponent_life": 20,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Speaker of the Heavens",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "taptoken=Speaker of the Heavens",
+ "expect_verdict": "accept"
+}

@@ -1,0 +1,38 @@
+{
+ "_comment": "The other half of colossus_speaker_taptoken_line.json: 26 life is one short of StartingLife() + 7, so TapTokenSourceLive closes the activation and the menu never offers it. CheckLine does not assert the life gate itself (its soundness rule: a line's own casts could in principle gain life first), so the honest grade is legal_not_enumerated -- the enumeration's own gate.",
+ "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 26,
+ "opponent_life": 20,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Speaker of the Heavens",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "taptoken=Speaker of the Heavens",
+ "expect_verdict": "legal_not_enumerated"
+}

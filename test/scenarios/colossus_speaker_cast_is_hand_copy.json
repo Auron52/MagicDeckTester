@@ -1,0 +1,41 @@
+{
+ "_comment": "With a Speaker on the battlefield past the gate AND a second copy in hand, a plain `cast=Speaker of the Heavens` must mean the HAND cast, never the board copy's activation (CheckLine's hand-cast mirror) -- the list runs three Speakers, so this is the ambiguity the taptoken= verb and the mirror exist to close. Exactly one plan matches.",
+ "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 27,
+ "opponent_life": 20,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Speaker of the Heavens",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Speaker of the Heavens"
+ ],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "cast=Speaker of the Heavens",
+ "expect_verdict": "accept",
+ "expect_variants": 1
+}

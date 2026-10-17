@@ -484,6 +484,19 @@ struct CardParams
     // Permanent::skip_next_untap at the single shared activation site (ActivateTapTokensShared), so
     // both worlds get it by construction. Default false keeps Sliver Hive byte-identical.
     bool                     tap_token_exerts    = false;
+    // The token's colour and printed keywords ("a 4/4 WHITE Angel creature token WITH FLYING",
+    // Speaker of the Heavens), passed straight to CreateToken's existing color / keywords
+    // arguments. Empty = the historical colourless, keywordless token, so Sliver Hive and Basri
+    // stay byte-identical.
+    std::string              tap_token_color;
+    std::vector<std::string> tap_token_keywords;
+    // Speaker of the Heavens: "Activate only if you have at least 7 life MORE THAN YOUR STARTING
+    // LIFE TOTAL". An activation RESTRICTION (CR 602.5b: checked when activating, before any cost
+    // is paid), read by TapTokenSourceLive (SpellEffects.h) at enumeration AND at both apply sites.
+    // THE THRESHOLD IS RELATIVE: life >= gamesetup::StartingLife() + N, never a literal 27 -- a
+    // 2HG job (team life 30) needs 37, which is the 2020-06-23 ruling. Same reading as
+    // life_above_start_anthem_life. 0 = no life restriction (Hive, Basri).
+    int                      tap_token_min_life_above_start = 0;
 
     // Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token." A mana-only
     // activated token maker with NO {T} and NO sacrifice -- deliberately NOT tap_token_cost above,
