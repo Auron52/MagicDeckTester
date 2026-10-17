@@ -54162,14 +54162,21 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.etb_blink_permanent) { w.Put("#F"); w.Int(act.chosen_x); }
                 if (d && d->params.etb_treasurify_each_player) { w.Put("#L"); w.Int(act.chosen_x); }
                 if (act.devour_count >= 0) { w.Put("#D"); w.Int(act.devour_count); }
+                if (act.attach_equip_id != 0)
+                {
+                    w.Put("#MT"); w.Int(act.attach_equip_id); w.Put('>'); w.Int(act.enchant_target);
+                    w.Put('/'); w.Put(act.attach_equip_hand); w.Put('/'); w.Put(act.trick_hand_target);
+                }
                 if (rep_sig && act.replicate_count >= 0) { w.Put("#R"); w.Int(act.replicate_count); }   // human play is legacy-only
                 if (act.enchant_target == kTrickBestOwnTarget) { w.Put("#B"); }
+                if (d && RemovalSearchesForController(*d)) { w.Put("#PX"); w.Int(act.enchant_target); }
                 if (d && d->params.loyalty_start > 0 && act.loyalty_ability >= 0) { w.Put("#L"); w.Int(act.loyalty_ability); }
                 if (act.phyrexian_life > 0) { w.Put("#P"); w.Int(act.phyrexian_life); }
                 if (act.twobrid_colored > 0) { w.Put("#W"); w.Int(act.twobrid_colored); }
                 if (d && d->params.x_damage_each_creature_and_player) { w.Put("#Q"); w.Int(act.chosen_x); }
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
+                if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
                 if (d && d->params.is_land_aura && act.enchant_target > 0 && host_sig) { w.Put("#H"); w.Int(act.enchant_target); }
                 if (cre_host_sig && d && d->params.is_aura && !d->params.is_land_aura && act.enchant_target > 0)
                 { w.Put("#A"); w.Int(act.enchant_target); }
