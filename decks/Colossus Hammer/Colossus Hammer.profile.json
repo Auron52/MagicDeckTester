@@ -1,0 +1,85 @@
+{
+  "card_scores": {
+    "Ardenn, Intrepid Archaeologist": [
+      0.10405474731635556
+    ],
+    "Clifftop Retreat": [
+      -0.05204783258594903,
+      -0.1554838709677422
+    ],
+    "Colossus Hammer": [
+      0.4496382539865351,
+      -0.2746883988494728
+    ],
+    "Dragonfire Blade": [
+      -0.3220010607093764
+    ],
+    "Forge Anew": [
+      -0.003517609151411971
+    ],
+    "Furycalm Snarl": [
+      0.08423977271082839,
+      -0.32189973614775713
+    ],
+    "Kor Duelist": [
+      0.2598617996094341,
+      -0.4380952380952383
+    ],
+    "Lizard Blades": [
+      0.12677484787018267
+    ],
+    "Loxodon Warhammer": [
+      -0.07112547329938623
+    ],
+    "Magnetic Theft": [
+      0.12099910866218311,
+      -0.6843853820598005
+    ],
+    "Mountain": [
+      -0.01865866583075837,
+      -0.21444841331469666
+    ],
+    "Open the Armory": [
+      0.2157303370786514
+    ],
+    "Path to Exile": [
+      -0.3787371134020616
+    ],
+    "Plains": [
+      0.26932124035917004,
+      -0.18663967611335996,
+      -0.5777777777777784
+    ],
+    "Raubahn, Bull of Ala Mhigo": [
+      0.11522861356932124
+    ],
+    "Sigarda's Aid": [
+      0.3587479935794544,
+      -0.43220338983050866
+    ],
+    "Speaker of the Heavens": [
+      -0.012478744277305331,
+      -0.07696969696969713
+    ],
+    "Steelshaper's Gift": [
+      0.393620750087627,
+      -0.07616043262730976
+    ],
+    "Swiftblade Vindicator": [
+      -0.03770444347951951,
+      -0.12490953828339846
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
