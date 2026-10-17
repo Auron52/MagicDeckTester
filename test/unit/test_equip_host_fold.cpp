@@ -543,3 +543,149 @@ TEST_CASE("Equip host fold / Theft: a dropped plan and its twin realise the same
     }
     CHECK(lock > 0);
 }
+
+// ---- HAND pieces: one Theft variant per hand COPY (2026-10-17) -------------------------------------
+// A same-plan hand Equipment used to be offered once per NAME, pinned to the first hand copy, so two
+// Thefts of a "cast two Colossus Hammers, Theft each onto a different creature" line both named that
+// copy: the second Theft moved the same Hammer again, and one Hammer on each host was unfindable at any
+// budget. Now each hand copy is its own pin; the copies materialise in hand order (the k-th cast of a
+// name takes the first copy still in hand, both worlds), so a pin onto the i-th copy rides a subset
+// that casts at least i+1 of them and resolves after the (i+1)-th cast.
+namespace
+{
+constexpr int kC1 = 61, kC2 = 63;   // two identical Colossus Hammers in hand
+int MapC(int n, bool swap) { return !swap ? n : n == kC1 ? kC2 : n == kC2 ? kC1 : n; }
+std::string SigC(const TurnSolver::Plan& p, bool swap)
+{
+    std::vector<std::string> v;
+    for (const Action& a : p.actions)
+    {
+        v.push_back(std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str() + ":"
+                    + std::to_string(MapC(a.sac_source_id, swap)) + ">" + std::to_string(MapC(a.sac_victim_id, swap))
+                    + "/e" + std::to_string(a.enchant_target) + "/m" + std::to_string(MapC(a.attach_equip_id, swap)));
+    }
+    std::sort(v.begin(), v.end());
+    std::string k = static_cast<const std::string&>(p.land_to_play) + "|";
+    for (const std::string& x : v) { k += x + ";"; }
+    return k;
+}
+std::string BoardKeyC(const GameState& g, bool swap)
+{
+    std::vector<std::string> v;
+    for (const Permanent& p : g.battlefield)
+    {
+        v.push_back(std::to_string(MapC(p.card.m_number, swap)) + "@" + std::to_string(MapC(p.equipped_to, swap))
+                    + (p.tapped ? "T" : "u"));
+    }
+    std::sort(v.begin(), v.end());
+    std::string k;
+    for (const std::string& x : v) { k += x + ";"; }
+    k += "|hand" + std::to_string(g.players[0].hand.size()) + "|gy" + std::to_string(g.players[0].graveyard.size());
+    return k;
+}
+// Kor Duelist + Swiftblade Vindicator (two DIFFERENT hosts), two identical Hammers and two Thefts in
+// hand, five Mountains: enough for cast + cast + Theft + Theft, not for an {8} equip.
+GameState HandBoard()
+{
+    EnsureCardsHf();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 5;
+    s.players[0].life     = gamesetup::StartingLife();
+    s.players[1].life     = gamesetup::StartingLife();
+    s.players[0].lands_played_this_turn = 1;
+    for (int k = 0; k < 20; ++k) { Card c = DefHf("Plains").card; c.m_number = 900 + k; s.players[0].library.push_back(c); }
+    auto put = [&](const std::string& name, int number)
+    {
+        Permanent p; p.card = DefHf(name).card; p.card.m_number = number; p.controller_index = 0; p.owner_index = 0;
+        s.battlefield.push_back(p);
+    };
+    put("Kor Duelist", 15);
+    put("Swiftblade Vindicator", 57);
+    for (int k = 0; k < 5; ++k) { put("Mountain", 70 + k); }
+    for (int n : { kC1, kC2 }) { Card c = DefHf("Colossus Hammer").card; c.m_number = n; s.players[0].hand.push_back(c); }
+    for (int n : { 60, 62 })   { Card c = DefHf("Magnetic Theft").card;  c.m_number = n; s.players[0].hand.push_back(c); }
+    return s;
+}
+// Does the realised board hold BOTH hand Hammers, each on a different creature?
+bool OneHammerOnEach(const GameState& g)
+{
+    int h1 = -1, h2 = -1;
+    for (const Permanent& p : g.battlefield)
+    {
+        if (p.card.m_number == kC1) { h1 = p.equipped_to; }
+        if (p.card.m_number == kC2) { h2 = p.equipped_to; }
+    }
+    return h1 > 0 && h2 > 0 && h1 != h2;
+}
+}   // namespace
+
+TEST_CASE("Hand-piece Thefts: two freshly cast identical Hammers, each Thefted onto a different creature, is findable")
+{
+    const GameState s = HandBoard();
+    for (int fold = 0; fold < 2; ++fold)
+    {
+        INFO("fold " << fold);
+        bool found = false;
+        for (const TurnSolver::Plan& p : Menu(s, fold))
+        {
+            int thefts = 0;
+            for (const Action& a : p.actions) { if (IsTheftHf(a)) { ++thefts; } }
+            if (thefts != 2) { continue; }
+            if (OneHammerOnEach(RollHf(s, p))) { found = true; break; }
+        }
+        CHECK(found);
+    }
+}
+
+TEST_CASE("Hand-piece Thefts: only mirror images of the two copies are dropped; twins realise the same board in BOTH worlds")
+{
+    const GameState s = HandBoard();
+    const std::vector<TurnSolver::Plan> off = Menu(s, 0), on = Menu(s, 1);
+    std::set<std::string> on_exact, on_orbit, off_exact;
+    for (const TurnSolver::Plan& p : on)  { on_exact.insert(SigC(p, false)); on_orbit.insert(std::min(SigC(p, false), SigC(p, true))); }
+    for (const TurnSolver::Plan& p : off) { off_exact.insert(SigC(p, false)); }
+    MESSAGE("two hand Hammers + two Thefts (autonomous menu): " << off_exact.size() << " distinct plans unfolded -> "
+            << on_exact.size() << " folded");
+    for (const std::string& k : on_exact) { CHECK_MESSAGE(off_exact.count(k) == 1, k); }
+    for (const TurnSolver::Plan& p : off)
+    { CHECK_MESSAGE(on_orbit.count(std::min(SigC(p, false), SigC(p, true))) == 1, SigC(p, false)); }
+    int dropped = 0;
+    for (const TurnSolver::Plan& d : off)
+    {
+        if (on_exact.count(SigC(d, false))) { continue; }
+        const TurnSolver::Plan* twin = nullptr;
+        for (const TurnSolver::Plan& p : on) { if (SigC(p, false) == SigC(d, true)) { twin = &p; break; } }
+        REQUIRE_MESSAGE(twin != nullptr, "a dropped plan has no twin: ", SigC(d, false));
+        for (int world = 0; world < 2; ++world)
+        {
+            INFO((world == 0 ? "rollout" : "executor") << " " << SigC(d, false));
+            const GameState a = world == 0 ? RollHf(s, d) : ExecHf(s, d);
+            const GameState b = world == 0 ? RollHf(s, *twin) : ExecHf(s, *twin);
+            CHECK(BoardKeyC(a, true) == BoardKeyC(b, false));
+        }
+        ++dropped;
+    }
+    CHECK(dropped > 0);
+    // Every folded-menu plan with a Theft realises identically in both worlds, and a Theft pinned to a
+    // hand copy really lands on THAT copy.
+    int lock = 0;
+    for (const TurnSolver::Plan& p : on)
+    {
+        bool theft = false;
+        for (const Action& a : p.actions) { if (IsTheftHf(a)) { theft = true; } }
+        if (!theft) { continue; }
+        INFO(SigC(p, false));
+        const GameState r = RollHf(s, p);
+        CHECK(BoardKeyC(r, false) == BoardKeyC(ExecHf(s, p), false));
+        for (const Action& a : p.actions)
+        {
+            if (!IsTheftHf(a) || a.attach_equip_hand.empty()) { continue; }
+            const Permanent* piece = nullptr;
+            for (const Permanent& q : r.battlefield) { if (q.card.m_number == a.attach_equip_id) { piece = &q; } }
+            CHECK(piece != nullptr);
+        }
+        ++lock;
+    }
+    CHECK(lock > 0);
+}

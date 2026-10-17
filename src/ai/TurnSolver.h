@@ -523,6 +523,14 @@ struct Action
                                        // cast (cast the Hammer, then Theft it onto the Duelist): the
                                        // subset must cast an Equipment of that name
                                        // (SubsetHasStrandedAttachSpell). Empty = battlefield Equipment.
+    int         attach_equip_hand_ord = 0;
+                                       // ...and WHICH hand copy attach_equip_id pins: its ordinal among
+                                       // the hand copies of that name (hand order, 0 = the first). The
+                                       // k-th cast of a name takes the first copy still in hand (both
+                                       // worlds), so the copy of ordinal i materialises on the (i+1)-th
+                                       // cast: the subset must cast > i of them and the Theft resolves
+                                       // after that cast (ApplyAttachSpellDependencyOrder). Redundant
+                                       // with attach_equip_id + the hand, hence in no signature.
     bool        evoke            = false;
                                        // EVOKE (Reveillark, CR 702.75; user-directed 2026-09-05):
                                        // this CastFromHand pays CardParams::evoke_cost instead of

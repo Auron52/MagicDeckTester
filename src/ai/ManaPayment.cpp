@@ -4042,22 +4042,28 @@ void ApplyAttachSpellDependencyOrder(const std::vector<Action>& acts, std::vecto
         {
             const Action& t = acts[static_cast<std::size_t>(order[p])];
             if (!IsDependentAttachSpell(t)) { continue; }
-            // The position of the FIRST cast satisfying each dependency; the Theft must follow both.
+            // The position of the cast satisfying each dependency; the Theft must follow both. For the
+            // Equipment side that is the (ord+1)-th cast of the name, not the first: the k-th cast takes
+            // the first copy still in hand, so the copy the Theft pins (Action::attach_equip_hand_ord)
+            // lands on the (ord+1)-th. A subset casting fewer is refused upstream
+            // (SubsetHasStrandedAttachSpell); here the last one found is the best effort.
             std::size_t need = 0;
             bool need_set = false;
-            auto first_cast = [&](const std::string& nm, bool equipment)
+            auto nth_cast = [&](const std::string& nm, bool equipment, int nth)
             {
+                int seen = 0;
                 for (std::size_t q = 0; q < order.size(); ++q)
                 {
                     if (CastSatisfiesAttachTarget(acts[static_cast<std::size_t>(order[q])], nm, equipment))
                     {
                         if (!need_set || q > need) { need = q; need_set = true; }
-                        return;
+                        if (++seen > nth) { return; }
                     }
                 }
             };
-            if (!t.attach_equip_hand.empty()) { first_cast(t.attach_equip_hand.str(), /*equipment=*/true); }
-            if (!t.trick_hand_target.empty()) { first_cast(t.trick_hand_target, /*equipment=*/false); }
+            if (!t.attach_equip_hand.empty())
+            { nth_cast(t.attach_equip_hand.str(), /*equipment=*/true, std::max(0, t.attach_equip_hand_ord)); }
+            if (!t.trick_hand_target.empty()) { nth_cast(t.trick_hand_target, /*equipment=*/false, 0); }
             if (!need_set || need < p) { continue; }   // already after its targets (or cast elsewhere)
             const int v = order[p];
             order.erase(order.begin() + static_cast<std::ptrdiff_t>(p));
