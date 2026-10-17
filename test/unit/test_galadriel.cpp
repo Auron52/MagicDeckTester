@@ -322,7 +322,13 @@ TEST_CASE("Galadriel scry before Galadriel: missing G/U -> only colour fixers ar
     CHECK(KeepsGal(s, kTemple));            // G/U
     CHECK(KeepsGal(s, "Temple of Deceit")); // U
     CHECK(KeepsGal(s, kSkerry));            // U: acceleration that solves the problem
-    CHECK(KeepsGal(s, "Crystal Grotto"));   // any colour
+    s.turn_number = 3;
+    CHECK_FALSE(KeepsGal(s, "Crystal Grotto")); // early with 2 mana out, a filter is not real G/U (USER)
+    PutGal(s, "Temple of Triumph", 9);          // 3 mana out: the filter is drawn as a 4th source (USER)
+    CHECK(KeepsGal(s, "Crystal Grotto"));
+    s.battlefield.pop_back();
+    s.turn_number = 4;
+    CHECK(KeepsGal(s, "Crystal Grotto"));       // far enough along, it is sufficient (USER)
     CHECK_FALSE(KeepsGal(s, kCrackle));     // bad shape: Crackle does not help
     CHECK_FALSE(KeepsGal(s, "Sol Ring"));   // ...nor colourless acceleration
     CHECK_FALSE(KeepsGal(s, kHavens));
@@ -345,18 +351,22 @@ TEST_CASE("Galadriel scry before Galadriel: colours in hand -> Crackle and accel
     CHECK_FALSE(KeepsGal(s, kGaladriel));
 }
 
-TEST_CASE("Galadriel scry before Galadriel: short on lands -> any land, but only once the colours are in")
+TEST_CASE("Galadriel scry before Galadriel: short on lands -> any land, but only once G and U are in")
 {
     EnsureCardsLoadedGal();
     GameState s = FreshGal();
-    PutGal(s, kTemple, 1);                  // G/U, no R: colours first even though short
+    PutGal(s, "Temple of Malice", 1);       // B/R: no G, no U -- colours first even though short
     HandGal(s, kGaladriel, 2);
     CHECK_FALSE(KeepsGal(s, kHavens));
-    CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));
-    CHECK(KeepsGal(s, "Temple of Malice")); // R
-    PutGal(s, "Temple of Malice", 3);       // G, U and R covered, two lands: short
+    CHECK_FALSE(KeepsGal(s, "Temple of Triumph"));
+    CHECK(KeepsGal(s, "Temple of Plenty")); // G
+    s.turn_number = 2;
+    PutGal(s, "Rumble Arena", 3);           // early, a filter does not cover G/U
+    CHECK_FALSE(KeepsGal(s, kHavens));
+    s.battlefield.pop_back();
+    PutGal(s, kTemple, 3);                  // G/U covered (no red needed), two lands: short
     CHECK(KeepsGal(s, kHavens));
-    CHECK(KeepsGal(s, "Temple of Plenty"));
+    CHECK(KeepsGal(s, "Temple of Triumph"));
 }
 
 TEST_CASE("Galadriel scry with Galadriel out: scry-lands kept, a first Crackle only when next turn is lethal")

@@ -5350,14 +5350,20 @@ int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
 // Crackle and acceleration. Anything else is thrown unless you are short on lands and when you are
 // really in bad shape for colours you might even throw Crackle or acceleration if they don't help
 // solve the problem."
-//   * colours      = G and U (Galadriel's {1}{G}{U}) and R (Crackle's {R}{R}); a source on the
-//                    battlefield or in hand covers its colours, an any-colour filter covers all five.
+//   * colours      = G and U, Galadriel's {1}{G}{U} ONLY (USER: "You don't need red until you have a
+//                    chance to dump a whole bunch of lands and this almost always provides it"); a
+//                    land/rock on the battlefield or in hand covers the colours it NATIVELY makes; an
+//                    any-colour filter covers neither before turn 4 (USER: "you want actually green
+//                    and blue rather than filter lands, since the latter slows you down"; "if you are
+//                    already far enough along in turns the filter land is sufficient" -- turn 4 is the
+//                    agent's threshold), and both from turn 4 on -- or once the battlefield already
+//                    makes 3 mana ("since the filter land will be drawn next turn", USER).
 //                    A top card that covers a MISSING colour is kept.
 //   * bad shape    = G or U missing (Galadriel uncastable): Crackle and acceleration are then thrown
 //                    unless they cover a missing colour (Saprazzan Skerry's U can).
 //   * Crackle, acceleration (mana_rock, or a land producing 2+) -- kept otherwise.
 //   * short on lands = fewer than three lands on the battlefield + in hand: any land is kept --
-//                    but ONLY once G, U and R are all covered (USER: "you still need to prioritize
+//                    but ONLY once G and U are covered (USER: "you still need to prioritize
 //                    getting the colours even if short on lands. It is only beyond that that you
 //                    would accept anything").
 //   * anything else (an extra Galadriel, an off-colour or colourless land) is thrown.
@@ -5451,10 +5457,24 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
     }
     // The USER's pre-Galadriel rule (header comment).
     auto colour_bit = [](Color c) -> unsigned {
-        return c == Color::Green ? 1u : c == Color::Blue ? 2u : c == Color::Red ? 4u : 0u;
+        return c == Color::Green ? 1u : c == Color::Blue ? 2u : 0u;
     };
+    // "...or when you have 3 mana already, since the filter land will be drawn next turn" (USER): the
+    // top card arrives as a fourth source, which pays the feed.
+    int mana_bf = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && (d->card.IsLand() || d->params.mana_rock)) { mana_bf += std::max(1, d->params.produces_amount); }
+    }
+    const bool filter_ok = s.turn_number >= 4 || mana_bf >= 3;
     auto covers = [&](const CardDefinition& d) -> unsigned {
-        if (d.params.any_color_filter) { return 7u; }
+        // "you want actually green and blue rather than filter lands, since the latter slows you down"
+        // (USER): a filter's {1} feed costs Galadriel's turn a mana, so it covers neither -- "But, if
+        // you are already far enough along in turns the filter land is sufficient": from turn 4 on
+        // (agent's threshold: her turn is 3, and a fourth land pays the feed) it covers both.
+        if (d.params.any_color_filter) { return filter_ok ? 3u : 0u; }
         unsigned m = 0;
         for (Color c : d.params.produces) { m |= colour_bit(c); }
         return m;
@@ -5471,8 +5491,8 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d != nullptr && (d->card.IsLand() || d->params.mana_rock)) { have |= covers(*d); }
     }
-    const unsigned missing = 7u & ~have;
-    const bool bad_colours = (missing & 3u) != 0;          // G or U missing: Galadriel uncastable
+    const unsigned missing = 3u & ~have;
+    const bool bad_colours = missing != 0;                 // G or U missing: Galadriel uncastable
     const bool short_lands = lands_bf + lands_hand < 3;
     const bool fixes = (td->card.IsLand() || tp.mana_rock) && (covers(*td) & missing) != 0;
     const bool accel = tp.mana_rock || (td->card.IsLand() && tp.produces_amount > 1);
@@ -5480,8 +5500,8 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
 
     if (fixes) { return true; }
     // "you still need to prioritize getting the colours even if short on lands. It is only beyond
-    // that that you would accept anything" (USER): a non-fixing land is kept only once G, U and R
-    // are all covered.
+    // that that you would accept anything" (USER): a non-fixing land is kept only once G and U are
+    // covered.
     if (td->card.IsLand() && short_lands && missing == 0) { return true; }
     if (tp.scry_reveal_land_to_battlefield) { return gal_hand == 0; }   // agent reading (header)
     if (IsCrackle(*td) || accel) { return !bad_colours; }

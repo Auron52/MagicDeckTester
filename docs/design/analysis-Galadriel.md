@@ -72,9 +72,15 @@ the chain to it alone outside human play.
   G, U (Galadriel) and R (Crackle), covered by any land/rock on the battlefield or in hand (a filter covers
   all); a top card covering a missing colour is kept; "bad shape" = G or U missing, and then Crackle and
   acceleration (Sol Ring, Skerry) are thrown unless they cover a missing colour; "short on lands" = under
-  three lands on the battlefield + in hand, and then any land is kept -- but only once G, U and R are all
-  covered (USER clarification: "you still need to prioritize getting the colours even if short on lands.
-  It is only beyond that that you would accept anything"); everything else is thrown.
+  three lands on the battlefield + in hand, and then any land is kept -- but only once G and U are covered
+  (USER clarification: "you still need to prioritize getting the colours even if short on lands. It is
+  only beyond that that you would accept anything"); everything else is thrown.
+  USER refinements, same day: colours are Galadriel's ONLY ("You don't need red until you have a chance to
+  dump a whole bunch of lands and this almost always provides it"); a filter land does not count as G/U
+  ("you want actually green and blue rather than filter lands, since the latter slows you down") UNLESS
+  far enough along ("if you are already far enough along in turns the filter land is sufficient" -- the
+  agent's threshold is turn >= 4) or the battlefield already makes 3 mana ("since the filter land will be
+  drawn next turn").
   AGENT READING (surfaced): a Galadriel on top while none is in hand or on the battlefield is kept.
 - BUG FIXED with this change: `x_damage_multiplier` DEFAULTS TO 1, so the first version's "Crackle"
   test (`> 0`) matched every card (every hand card counted as a held Crackle; with Galadriel out a Sol
@@ -86,7 +92,10 @@ this works the best." Galadriel is the deck's only land-entry watcher (`PutsLand
 `scry_reveal_land_to_battlefield`), so the Landfall deck's SPOTS rule expresses it: the land right after
 her cast (land_slot k=1, payable prefix) takes the preferred list position, the land-first plan stays
 searched, and Crackle (dispatched after the land) is sized with the chain's lands in play. Human play keeps
-every position. NOT YET COVERED: the beyond-horizon playout / depth-0 runner still play the land first.
+every position. USER on land-first: "there is some argument for trying the land before Galadriel if
+mana requires it. But really, all you get is an extra attack or two from her (the only way to start the
+combo is to actually play it after she has landed)" -- land-first stays searched (and is the only spot
+emitted when her cast needs the land's mana), ranked behind the after-Galadriel spot. NOT YET COVERED: the beyond-horizon playout / depth-0 runner still play the land first.
 
 ## Unit tests (2026-10-17)
 `test/unit/test_galadriel.cpp` (6 cases: printed data, chain to the first nonland, pinned skip, Skerry
