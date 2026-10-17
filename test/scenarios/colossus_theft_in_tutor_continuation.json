@@ -1,0 +1,23 @@
+{
+ "_comment": "Colossus Hammer s1065 gi64 shape (2026-10-17): Magnetic Theft cast INSIDE a breakpoint continuation. Turn 3 with Kor Duelist and Swiftblade Vindicator out, hand Mountain + Steelshaper's Gift + Magnetic Theft, a Colossus Hammer in the library. The line: land, Gift (find the Hammer: site 10 opens the continuation), cast the Hammer, Theft it onto Kor Duelist (11/11 double strike) -- 22 + Swiftblade's 4 = lethal on 19. The Hammer is not in hand until the tutor resolves, so the Theft exists only in the continuation, which the executor REPLAYS from the rollout's cast records. The record carried the creature target but not the Equipment (Action::attach_equip_id), so the replayed Theft did nothing: d0 won T3, every searched depth T5 at any budget. Pins the record field.",
+ "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 19,
+ "battlefield": [
+  {"name": "Plains"},
+  {"name": "Mountain"},
+  {"name": "Kor Duelist", "sick": false},
+  {"name": "Swiftblade Vindicator", "sick": false}
+ ],
+ "hand": ["Mountain", "Steelshaper's Gift", "Magnetic Theft"],
+ "library_filler": "Plains",
+ "library_size": 30,
+ "library_top": ["Plains", "Colossus Hammer"],
+ "depth": 3,
+ "budget_ms": 200,
+ "max_turns": 3,
+ "expect_win_turn": 3
+}
