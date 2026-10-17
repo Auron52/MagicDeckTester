@@ -2210,6 +2210,14 @@ public:
     // The realised order of EVERY hand cast of a canonical (not searched-order) plan, sac-land casts
     // included at the position the apply worlds cast them (PlanCastOrder). Tests and diagnostics.
     static std::vector<std::string> PlanCastOrderNames(const GameState& state, const Plan& plan);
+    // HUMAN cast-ORDER menu legality for Magnetic Theft (TurnSolver.cpp, AttachOrderStrandsPlan): does
+    // `acts`, cast in its realised order (vector order when `explicit_order` -- a searched_order variant;
+    // else the canonical sort + the attach-spell dependency order, RealisedNonSacCastOrder's split), cast
+    // a target-less Path BEFORE a Theft whose piece an Equip in the same plan needs freed again? Only the
+    // order-aware difference from the subset walk's own test. `human` = HumanPlayActive() at the menu (a
+    // parameter so a unit test can drive it).
+    static bool AttachOrderStrandsPlan(const GameState& state, const std::vector<Action>& acts,
+                                       bool explicit_order, bool human);
     // Cheap "is the realised order already the canonical one?" test -- std::is_sorted under the
     // shared comparator, so no allocation and at most k-1 comparisons. Used by the viewer's
     // display cap to pick which ordering of a cast set represents it in the menu.

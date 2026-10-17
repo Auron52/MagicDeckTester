@@ -339,6 +339,7 @@ add_executable(mtg-test
     test/unit/test_forge_anew.cpp
     test/unit/test_attach_folds.cpp
     test/unit/test_equip_host_fold.cpp
+    test/unit/test_attach_order.cpp
     test/unit/test_attack_attach_equipment.cpp
     test/unit/test_d0_epoch.cpp
     test/unit/test_equip_route_key.cpp
