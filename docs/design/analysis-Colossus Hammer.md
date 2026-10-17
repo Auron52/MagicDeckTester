@@ -159,6 +159,17 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   Inside each leaf solve the subset odometer steps through equip-dependency-violated positions one at a time
   (perf: `SolveUncached` 21% self, `EquipPieceDepViolated` 6.8%); the copy predicate already has a radix jump, the
   dependency predicate does not. Charged no work units per position, so a jump is byte-identical -> `colossus-depskip`.
+  **LANDED `e6418081c`** (MTG_EQUIP_DEP_SKIP, default ON; `=0` hatch; `_VERIFY=1` walks and counts unsound skips):
+  jump rule = zero digits [0, L) and carry at L = max over violated requirements of min({g} u R), in all four walks
+  (SolveUncached, EnumeratePlans, the flat fallback, Stage A). Verify 0 unsound over the full smoke manifest (358M +
+  14M skippable positions); smoke 124/124 byte-identical (digests, avg AND units). s7065 gi58: instructions 0.783x,
+  wall 0.940x; Kitty ~1.00x. NEXT collapse (same agent): ~13M of the ~15M positions the leaf walk still visits fail
+  the scalar mana bound one at a time -- port EnumeratePlans' MTG_MANA_WALK_CUT to it.
+* **Disk-full incident, ~11:00 UTC 2026-10-17:** the shared Docker disk hit 100% (66 MB free); the cause was the
+  keep-table cache `~/.cache/mtg/keeptable` at 359 GB (one copy per worktree per deck -- it is keyed by tree path).
+  The depskip agent deleted 913 entries (301.8 GB; regenerable cache, entries of the primary checkout, the colossus
+  trees, live trees and anything < 24 h kept); disk now 68%, cache 46 GB. Only that agent's Profile build hit ENOSPC.
+  OPEN (USER): key the cache by content or give it eviction, so worktrees stop multiplying it.
 
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
