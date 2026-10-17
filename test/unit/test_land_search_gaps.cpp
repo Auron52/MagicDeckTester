@@ -30,12 +30,14 @@
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ContPinScope.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "mtg_test_seam.h"
 
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -946,4 +948,37 @@ TEST_CASE("Combat landfall target: the pin is a post-apply state pin, written wr
     TurnSolver::Plan q;   // no rank: the inherited one stands
     TurnSolver::WritePostApplyStatePins(s, q);
     CHECK(s.scripted_combat_landfall_target == 2);
+}
+
+// ---- A PLAN'S PAYMENT PINS, one body for both worlds (2026-10-17; PlanPaymentPinScope, ai/ContPinScope.h)
+// ApplyPlanDirect installs a plan's tap mode and fresh-spend pair UNCONDITIONALLY for its whole apply, so a
+// searched breakpoint re-solve's candidates were scored under their own pair. The executor now installs the
+// chosen re-solve's pair over the committed plan's for the rest of the phase, through the same scope.
+TEST_CASE("Payment pins: the scope installs both pins unconditionally and restores LIFO")
+{
+    const int tm0 = g_scripted_tapmode, fm0 = g_scripted_freshmode;
+    TurnSolver::Plan committed;
+    committed.tapmode_choice   = 1;
+    committed.freshmode_choice = 1;
+    {
+        PlanPaymentPinScope pay(committed);
+        CHECK(g_scripted_tapmode == 1);
+        CHECK(g_scripted_freshmode == 1);
+        std::optional<PlanPaymentPinScope> rs_pay;   // the executor's re-solve slot
+        TurnSolver::Plan resolve;                     // the re-solve's choice: the shipped rule (0, 0)
+        rs_pay.emplace(resolve);
+        CHECK(g_scripted_tapmode == 0);               // 0 is a value, not "inherit"
+        CHECK(g_scripted_freshmode == 0);
+        TurnSolver::Plan later;                       // a later re-solve replaces it
+        later.freshmode_choice = 1;
+        rs_pay.reset();
+        rs_pay.emplace(later);
+        CHECK(g_scripted_tapmode == 0);
+        CHECK(g_scripted_freshmode == 1);
+        rs_pay.reset();
+        CHECK(g_scripted_tapmode == 1);               // the committed pair again
+        CHECK(g_scripted_freshmode == 1);
+    }
+    CHECK(g_scripted_tapmode == tm0);
+    CHECK(g_scripted_freshmode == fm0);
 }
