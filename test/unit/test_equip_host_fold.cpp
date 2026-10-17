@@ -689,3 +689,188 @@ TEST_CASE("Hand-piece Thefts: only mirror images of the two copies are dropped; 
     }
     CHECK(lock > 0);
 }
+
+// ---- An Equip of a hand copy the subset never lands (MTG_EQUIP_UNLANDED_COPY_FOLD, 2026-10-17) -------
+// The Equip block offers one Equip per hand COPY, but the k-th cast of a name lands the first copy still
+// in hand. With ONE Hammer cast, "equip copy #2" names a card that stays in hand: it pays {8} and does
+// nothing. The board: two identical Hammers in hand that the hand-cast fold keeps apart (copy #2 is not in
+// this turn's main-1 snapshot, so the two slots are separate cast digits -- the "drew the second copy"
+// shape), Kor Duelist + Swiftblade Vindicator, ten Mountains: room for a cast and an {8} equip.
+namespace
+{
+GameState UnlandedBoard()
+{
+    GameState s = HandBoard();     // Kor 15, Swiftblade 57, five Mountains, Hammers 61/63 + Thefts 60/62 in hand
+    s.players[0].hand.erase(std::remove_if(s.players[0].hand.begin(), s.players[0].hand.end(),
+                            [](const Card& c) { return c.m_number == 60 || c.m_number == 62; }),
+                            s.players[0].hand.end());
+    for (int k = 0; k < 5; ++k)
+    {
+        Permanent p; p.card = DefHf("Mountain").card; p.card.m_number = 75 + k; p.controller_index = 0; p.owner_index = 0;
+        s.battlefield.push_back(p);
+    }
+    s.m1_hand_turn = s.turn_number;    // copy #1 was in hand at main 1, copy #2 was not
+    s.m1_hand[0]   = kC1;
+    s.m1_hand_n    = 1;
+    return s;
+}
+std::vector<TurnSolver::Plan> MenuU(const GameState& s, int fold)
+{
+    heurarm::t_arm[heurarm::EQUIP_UNLANDED_COPY_FOLD] = static_cast<std::int8_t>(fold);
+    std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    heurarm::t_arm[heurarm::EQUIP_UNLANDED_COPY_FOLD] = -1;
+    return plans;
+}
+int HammerCasts(const TurnSolver::Plan& p)
+{
+    int n = 0;
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.attach_equip_id == 0 && a.card_name.str() == "Colossus Hammer") { ++n; } }
+    return n;
+}
+bool EquipsCopy2(const TurnSolver::Plan& p)
+{
+    for (const Action& a : p.actions) { if (a.kind == Action::Kind::Equip && a.sac_source_id == kC2) { return true; } }
+    return false;
+}
+// The plan with copy #2's Equip removed (the dominance twin).
+TurnSolver::Plan WithoutCopy2Equip(const TurnSolver::Plan& p)
+{
+    TurnSolver::Plan q = p;
+    q.actions.erase(std::remove_if(q.actions.begin(), q.actions.end(),
+                    [](const Action& a) { return a.kind == Action::Kind::Equip && a.sac_source_id == kC2; }),
+                    q.actions.end());
+    return q;
+}
+// Where everything is attached (lands excluded), plus the zones -- the board up to mana.
+std::string AttachKeyU(const GameState& g)
+{
+    std::vector<std::string> v;
+    for (const Permanent& p : g.battlefield)
+    {
+        if (p.card.IsLand()) { continue; }
+        v.push_back(std::to_string(p.card.m_number) + "@" + std::to_string(p.equipped_to));
+    }
+    std::sort(v.begin(), v.end());
+    std::string k;
+    for (const std::string& x : v) { k += x + ";"; }
+    k += "|hand" + std::to_string(g.players[0].hand.size()) + "|gy" + std::to_string(g.players[0].graveyard.size());
+    return k;
+}
+int UntappedLandsU(const GameState& g)
+{
+    int n = 0;
+    for (const Permanent& p : g.battlefield) { if (p.card.IsLand() && !p.tapped) { ++n; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("Unlanded hand copy: an Equip of a copy the subset never lands is dropped; a strictly cheaper twin stays on the menu")
+{
+    const GameState s = UnlandedBoard();
+    const std::vector<TurnSolver::Plan> off = MenuU(s, 0), on = MenuU(s, 1);
+    std::set<std::string> on_exact, off_exact;
+    for (const TurnSolver::Plan& p : on)  { on_exact.insert(SigC(p, false)); }
+    for (const TurnSolver::Plan& p : off) { off_exact.insert(SigC(p, false)); }
+    int dead_off = 0, dead_on = 0;
+    for (const TurnSolver::Plan& p : off) { if (EquipsCopy2(p) && HammerCasts(p) <= 1) { ++dead_off; } }
+    for (const TurnSolver::Plan& p : on)  { if (EquipsCopy2(p) && HammerCasts(p) <= 1) { ++dead_on; } }
+    MESSAGE("two hand Hammers, one main-1 copy (autonomous menu): " << off_exact.size() << " distinct plans unfolded -> "
+            << on_exact.size() << " folded; plans equipping copy #2 with <= 1 Hammer cast: " << dead_off << " -> " << dead_on);
+    REQUIRE(dead_off > 0);          // the defect is live on this board without the fold
+    CHECK(dead_on == 0);
+    // The fold only removes, and only those plans.
+    for (const std::string& k : on_exact) { CHECK_MESSAGE(off_exact.count(k) == 1, k); }
+    int dropped = 0;
+    for (const TurnSolver::Plan& d : off)
+    {
+        if (on_exact.count(SigC(d, false))) { continue; }
+        INFO("dropped " << SigC(d, false));
+        CHECK(EquipsCopy2(d));
+        CHECK(HammerCasts(d) <= 1);
+        // Its twin -- the same plan without that Equip -- is on the folded menu...
+        const TurnSolver::Plan t = WithoutCopy2Equip(d);
+        const TurnSolver::Plan* twin = nullptr;
+        for (const TurnSolver::Plan& p : on) { if (SigC(p, false) == SigC(t, false)) { twin = &p; break; } }
+        REQUIRE_MESSAGE(twin != nullptr, "no twin on the folded menu: ", SigC(t, false));
+        MESSAGE("dropped " << SigC(d, false) << "  -> twin " << SigC(*twin, false));
+        // ...and reaches the same board for strictly less mana, in BOTH worlds.
+        for (int world = 0; world < 2; ++world)
+        {
+            INFO((world == 0 ? "rollout" : "executor"));
+            const GameState a = world == 0 ? RollHf(s, d) : ExecHf(s, d);
+            const GameState b = world == 0 ? RollHf(s, *twin) : ExecHf(s, *twin);
+            CHECK(AttachKeyU(a) == AttachKeyU(b));
+            CHECK(UntappedLandsU(b) > UntappedLandsU(a));
+        }
+        ++dropped;
+    }
+    CHECK(dropped == dead_off);
+    // Lockstep on the folded menu: every plan that equips realises identically in both worlds.
+    int lock = 0;
+    for (const TurnSolver::Plan& p : on)
+    {
+        bool eq = false;
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::Equip) { eq = true; } }
+        if (!eq) { continue; }
+        INFO(SigC(p, false));
+        CHECK(BoardKeyC(RollHf(s, p), false) == BoardKeyC(ExecHf(s, p), false));
+        ++lock;
+    }
+    CHECK(lock > 0);
+}
+
+TEST_CASE("Unlanded hand copy: refused when a draw watcher could re-solve the turn, and a copy that lands is never dropped")
+{
+    // Two Hammers cast: copy #2 lands, so its Equip is real and every such plan survives.
+    {
+        const GameState s = UnlandedBoard();
+        int live = 0;
+        for (const TurnSolver::Plan& p : MenuU(s, 1)) { if (EquipsCopy2(p) && HammerCasts(p) >= 2) { ++live; } }
+        int live_off = 0;
+        for (const TurnSolver::Plan& p : MenuU(s, 0)) { if (EquipsCopy2(p) && HammerCasts(p) >= 2) { ++live_off; } }
+        CHECK(live == live_off);
+    }
+    // Puresteel Paladin on the battlefield: an Equipment entering draws, which can open a continuation
+    // that casts copy #2 before the trailing pass -- the fold stands down and the menu is unchanged.
+    {
+        GameState s = UnlandedBoard();
+        Permanent p; p.card = DefHf("Puresteel Paladin").card; p.card.m_number = 30; p.controller_index = 0; p.owner_index = 0;
+        s.battlefield.push_back(p);
+        std::set<std::string> a, b;
+        for (const TurnSolver::Plan& q : MenuU(s, 0)) { a.insert(SigC(q, false)); }
+        for (const TurnSolver::Plan& q : MenuU(s, 1)) { b.insert(SigC(q, false)); }
+        CHECK(a == b);
+    }
+    // A STAGED copy of the name in hand is cast first, so hand order no longer says which copy lands.
+    {
+        GameState s = UnlandedBoard();
+        Card c = DefHf("Colossus Hammer").card; c.m_number = 65; c.m_is_staged = true; c.m_staged_expiry = s.turn_number;
+        s.players[0].hand.push_back(c);
+        std::set<std::string> a, b;
+        for (const TurnSolver::Plan& q : MenuU(s, 0)) { a.insert(SigC(q, false)); }
+        for (const TurnSolver::Plan& q : MenuU(s, 1)) { b.insert(SigC(q, false)); }
+        CHECK(a == b);
+    }
+}
+
+TEST_CASE("Unlanded hand copy: the greedy walker (Solve) keeps its pick and never takes a dead Equip")
+{
+    // Solve::consider is the second subset walker (the d0 runner and every rollout leaf). Its pick on
+    // this board, with and without the fold, must be the same line or a strictly better-funded one, and
+    // never an Equip of a copy that does not land.
+    const GameState s = UnlandedBoard();
+    TurnSolver::Plan pick[2];
+    for (int fold = 0; fold < 2; ++fold)
+    {
+        heurarm::t_arm[heurarm::EQUIP_UNLANDED_COPY_FOLD] = static_cast<std::int8_t>(fold);
+        pick[fold] = TurnSolver::Solve(s, /*is_pre_combat=*/true,
+                                       TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+        heurarm::t_arm[heurarm::EQUIP_UNLANDED_COPY_FOLD] = -1;
+        MESSAGE("greedy pick, fold " << fold << ": " << SigC(pick[fold], false));
+    }
+    const bool dead_pick = EquipsCopy2(pick[1]) && HammerCasts(pick[1]) <= 1;
+    CHECK_FALSE(dead_pick);
+    CHECK(AttachKeyU(RollHf(s, pick[0])) == AttachKeyU(RollHf(s, pick[1])));
+    CHECK(UntappedLandsU(RollHf(s, pick[1])) >= UntappedLandsU(RollHf(s, pick[0])));
+}

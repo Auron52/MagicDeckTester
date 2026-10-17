@@ -15870,6 +15870,12 @@ struct SubsetFilterPre
     std::vector<int>  piece_rank;
     std::vector<int>  piece_touch;
     std::vector<int>  rgs_key;
+    // MTG_EQUIP_UNLANDED_COPY_FOLD (SubsetHasEquipOfUnlandedCopy): per candidate, the hand ORDINAL of an
+    // Equip's source when it is a hand copy of ordinal >= 1 (-1 otherwise), and a HAND-ORDER-SAFE bit (an
+    // action that cannot move a hand copy; see BuildEquipUnlandedCopy). EMPTY = not built -> inert. Exact
+    // (the fold's own inputs), so it is built on the instruments-armed path too.
+    std::vector<int>  equip_src_hand_ord;
+    std::vector<char> hand_order_safe;
 };
 
 // ---- Interchangeable equip HOSTS (MTG_EQUIP_HOST_FOLD) -- a canonical relabelling, not a pick -------
@@ -16306,6 +16312,137 @@ static bool SubsetHasNonCanonicalEquipHost(const std::vector<int>& sel, const Su
     return false;
 }
 
+// ---- An Equip of a hand copy that never lands (MTG_EQUIP_UNLANDED_COPY_FOLD) -- a dominance fold ----
+// The Equip block offers one Equip per hand COPY of an Equipment (equips[] walks the hand per card), and
+// SubsetHasStrandedEquip accepts one whenever some cast in the subset names that copy's hand SLOT. But a
+// cast does not land the slot it names: the k-th cast of a name takes the FIRST copy still in hand (the
+// materialisation rule the per-copy Theft pins rest on, Action::attach_equip_hand_ord; both worlds). So
+// with N copies of a name cast, the copies of hand ordinal 0..N-1 land and a copy of ordinal k >= N stays
+// in hand: "cast one Colossus Hammer (the slot of copy #2), equip copy #2 -> Kor Duelist" lands copy #1,
+// then the Equip names a card that is not a permanent. ApplyEquip refuses it in both worlds, but only
+// after TapForCost paid the equip cost (MTG_EQUIP_PAY_GUARD is off) and the turn's first equip was marked
+// spent -- so it pays and does nothing.
+//
+// THE DOMINANCE ARGUMENT (the same shape as SubsetHasStrandedEquip's own, with the copy ordinal in place
+// of the slot): let P hold such an Equip E. (1) E realises nothing: no other action in P can put that
+// copy onto the battlefield or take an earlier copy out of the hand (the whitelist below), so it is still
+// in hand when the trailing pass reaches E. (2) P \ E is enumerated: E is an optional digit of its own
+// group, never forced (the auto-equip collapse forces battlefield Equipment only), and dropping it cannot
+// make any filter reject the rest (those that need a co-selected Equip need a battlefield piece, and the
+// idle-release / relabelling folds that might reject P \ E have their own enumerated twin). (3) P \ E
+// costs no more and reaches P's board with E's mana untapped and the first-equip waiver unspent, every
+// other action applying in the same order. So no line is lost at any budget, and the fold only removes:
+// a subset it does not drop is exactly as before (this runs beside SubsetHasStrandedEquip, never instead).
+//
+// WHERE IT IS PROVEN, i.e. the refusals. The first k copies of the name stay the first k in hand only
+// while nothing else moves a copy, so the fold fires only on a subset whose EVERY action is hand-order
+// safe: an Equip, a reconfigure unattach, or a cast of an Equipment or an attach spell (Magnetic Theft)
+// carrying no cast-carried continuation. None of those discards, puts from hand, or casts another copy;
+// what could still re-solve the phase mid-cast loop (an inline breakpoint continuation can cast copy #2
+// before the trailing pass and make E real) is refused board-wide: a draw watcher on our battlefield
+// (Puresteel Paladin's equipment-ETB draw, Sram's cast-subtype draw, the Dwarf/Equipment-enters draw, a
+// creature-enters draw seeing a living-weapon germ) or a play-from-top source (Courser's site-10 route).
+// A name with a STAGED copy in hand is refused too (a staged copy is cast first, so hand order no longer
+// says which copy lands), as is a copy of ordinal 0 (it lands on the first cast). Human play and
+// MTG_UNPRUNED keep every plan (the viewer offers every option; a saved reference replays by card
+// number). Lockstep: called from both subset walkers behind the same odometer-provenance gate as
+// MTG_EQUIP_HOST_FOLD. Inert for every deck without two copies of one Equipment in hand.
+static bool EquipUnlandedCopyFoldEnabled()
+{
+    static const bool env = EnvOn("MTG_EQUIP_UNLANDED_COPY_FOLD", true);   // DEFAULT ON; =0 keeps every plan
+    return heurarm::Flag(heurarm::EQUIP_UNLANDED_COPY_FOLD, env);
+}
+
+// Builds SubsetFilterPre::equip_src_hand_ord / hand_order_safe. Leaves both EMPTY -- the filter inert --
+// unless some Equip candidate names a hand copy of ordinal >= 1 and no refusal above applies.
+static void BuildEquipUnlandedCopy(const GameState& state, const std::vector<Action>& cands, SubsetFilterPre& pre)
+{
+    pre.equip_src_hand_ord.clear(); pre.hand_order_safe.clear();
+    if (!EquipUnlandedCopyFoldEnabled() || HumanPlayActive() || DecisionUnpruned()) { return; }
+    const Player& ap = state.ActivePlayer();
+    std::vector<int> ord(cands.size(), -1);
+    bool any = false;
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::Equip || a.sac_source_id <= 0) { continue; }
+        if (OwnPermanentByNumber(state, a.sac_source_id) != nullptr) { continue; }
+        int o = -1, k = 0;
+        bool staged = false;
+        for (const Card& hc : ap.hand)
+        {
+            if (hc.m_name != a.card_name) { continue; }
+            if (hc.m_is_staged) { staged = true; break; }
+            if (hc.m_number == a.sac_source_id) { o = k; }
+            ++k;
+        }
+        if (staged || o < 1) { continue; }
+        ord[j] = o;
+        any = true;
+    }
+    if (!any) { return; }
+    if (TopLandPlayStaticSource(state) != nullptr) { return; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.draw_on_equipment_etb || !d->params.draw_on_cast_subtypes.empty()
+            || !d->params.draw_on_other_subtype_enter.empty() || d->params.own_creature_enters_draw > 0)
+        { return; }
+    }
+    std::vector<char> safe(cands.size(), 0);
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const Action& a = cands[j];
+        switch (a.kind)
+        {
+            case Action::Kind::Equip: safe[j] = 1; break;
+            case Action::Kind::ActivatePermAbility:
+                safe[j] = a.ability_mode == Action::AbilityMode::ReconfigureUnattach ? 1 : 0;
+                break;
+            case Action::Kind::CastFromHand:
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                safe[j] = (d != nullptr && (d->params.is_equipment || a.attach_equip_id != 0)
+                           && a.breakpoint_casts.empty()) ? 1 : 0;
+                break;
+            }
+            default: break;
+        }
+    }
+    pre.equip_src_hand_ord.swap(ord);
+    pre.hand_order_safe.swap(safe);
+}
+
+// The per-subset test: true = some Equip in `sel` names a hand copy this subset never lands (drop it).
+static bool SubsetHasEquipOfUnlandedCopy(const std::vector<int>& sel, const SubsetFilterPre& pre,
+                                         const std::vector<Action>& cands)
+{
+    bool any = false;
+    for (int j : sel)
+    {
+        const std::size_t u = static_cast<std::size_t>(j);
+        if (!pre.hand_order_safe[u]) { return false; }
+        if (pre.equip_src_hand_ord[u] >= 1) { any = true; }
+    }
+    if (!any) { return false; }
+    for (int j : sel)
+    {
+        const int o = pre.equip_src_hand_ord[static_cast<std::size_t>(j)];
+        if (o < 1) { continue; }
+        const Action& e = cands[j];
+        int casts = 0;
+        for (int k : sel)
+        {
+            const Action& c = cands[k];
+            if (c.kind == Action::Kind::CastFromHand && c.attach_equip_id == 0 && c.card_name == e.card_name) { ++casts; }
+        }
+        if (casts <= o) { return true; }
+    }
+    return false;
+}
+
     // Aura-target shroud grantors (see the struct / SubsetHasShroudBlockedAura). Grantors first, so a
     // board with no attached shroud Equipment pays one battlefield walk and nothing else.
 static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>& cands,
@@ -16402,6 +16539,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         BuildEquipReleaseOnly(state, cands, p.equip_release_only);
         BuildReplicatePending(state, cands, p.rep_pending);
         BuildEquipHostFold(state, cands, p);
+        BuildEquipUnlandedCopy(state, cands, p);
         return p;
     }
 
@@ -16606,6 +16744,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     if (p.equip) { BuildEquipReleaseOnly(state, cands, p.equip_release_only); }
     BuildReplicatePending(state, cands, p.rep_pending);
     if (p.equip) { BuildEquipHostFold(state, cands, p); }
+    if (p.equip) { BuildEquipUnlandedCopy(state, cands, p); }
 
     // The sac-source table (see the struct). Built only when a filter that reads it can actually
     // run -- otherwise the walk below is itself the waste it exists to remove.
@@ -38936,6 +39075,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
                                                   pre.equip_src_on_bf, pre.equip_vic_on_bf))
         { return; }
+        // ...and an Equip of a hand COPY this subset never lands (the k-th cast of a name takes the first
+        // copy still in hand): it pays and does nothing, and the subset without it is enumerated
+        // (MTG_EQUIP_UNLANDED_COPY_FOLD). Odometer positions only, as MTG_EQUIP_HOST_FOLD. Lockstep twin
+        // in eval_and_push.
+        if (!pre.equip_src_hand_ord.empty() && fold_from_odometer
+            && SubsetHasEquipOfUnlandedCopy(sel, pre, cands)) { return; }
         // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
         // or cast (the cast-and-activate / cast-and-loop pairings). Lockstep twins below.
         if (pre.pod_activation && SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
@@ -52291,6 +52436,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
                                                   pre.equip_src_on_bf, pre.equip_vic_on_bf))
         { return; }
+        // ...and an Equip of a hand copy this subset never lands (MTG_EQUIP_UNLANDED_COPY_FOLD) -- not on a
+        // constructed line (`sat_bypass`: no enumerated twin), as MTG_EQUIP_HOST_FOLD. Lockstep twin in
+        // Solve::consider.
+        if (!pre.equip_src_hand_ord.empty() && (fold_from_odometer || !sat_bypass)
+            && SubsetHasEquipOfUnlandedCopy(sel, pre, cands)) { return; }
         // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
         // or cast -- lockstep twins of Solve::consider's calls (see the helpers).
         if (pre.pod_activation && SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
