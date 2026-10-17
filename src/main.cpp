@@ -7292,6 +7292,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // energy-gated colour mode would otherwise be unreachable from a fixture -- and unreachable
     // code is untested code.
     state.players[0].energy_counters = j.value("energy_counters", 0);
+    // Stage the turn's LAND DROP as already made ("lands_played_this_turn": 1, with "resume_at"). A
+    // mid-turn frame whose drop is spent is exactly the board on which a main with nothing to cast
+    // enumerates ZERO plans (the drop-open path always offers its no-land pass), so the host-appended
+    // idle pass -- and every pin it carries into combat -- was unreachable from a fixture.
+    state.players[0].lands_played_this_turn = j.value("lands_played_this_turn", 0);
     // Stage a FLOATING POOL ("floating_mana": {"W": 1, "G": 2, "C": 1}). A reconstructed mid-turn
     // frame was otherwise always asked with an EMPTY pool (the combo-off sweep's first listed blind
     // spot), so a construct that hinges on WHICH floating colour pays a generic pip -- claude_s6_gi5
