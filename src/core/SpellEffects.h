@@ -11299,6 +11299,25 @@ inline bool AttachTargetEquipmentLegal(const GameState& state, int controller, i
     return true;
 }
 
+// CAN A MAGNETIC THEFT BE CAST AT ALL? (CR 601.2c: a spell with targets needs a legal choice for EACH
+// of them -- here some (Equipment, creature) pair AttachTargetEquipmentLegal accepts.) The ONE test, read
+// by FreeCastHasLegalTargets (a free-cast hit), the rollout's hand cast (TurnSolver's apply_one) and the
+// executor's (AIEngine::CastSpellFromHand) -- both of which return BEFORE paying, so a Theft whose only
+// legal creature left earlier in the line (a Path to Exile that resolved first) stays in hand with its
+// {R} untapped instead of being cast at nothing. Lockstep by construction (one predicate).
+inline bool AttachSpellCastLegal(const GameState& state, int controller)
+{
+    for (const Permanent& e : state.battlefield)
+    {
+        if (e.controller_index != controller) { continue; }
+        for (const Permanent& h : state.battlefield)
+        {
+            if (AttachTargetEquipmentLegal(state, controller, e.card.m_number, h.card.m_number)) { return true; }
+        }
+    }
+    return false;
+}
+
 // The IDENTITY CLASS of a creature as an attach HOST, shared by the two attach-effect enumerations
 // that fold interchangeable targets (Magnetic Theft's pair axis, BuildAttachSpellPairs; Raubahn's
 // attack attach, FireAttackAttachEquipment): two creatures with the same key reach the same board up
@@ -32138,18 +32157,7 @@ inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const Ca
 {
     const CardParams& pp = d.params;
     if (pp.is_aura) { return !LegalEnchantTargets(s, controller, pp).empty(); }
-    if (pp.attach_target_equipment)
-    {
-        for (const Permanent& e : s.battlefield)
-        {
-            if (e.controller_index != controller) { continue; }
-            for (const Permanent& h : s.battlefield)
-            {
-                if (AttachTargetEquipmentLegal(s, controller, e.card.m_number, h.card.m_number)) { return true; }
-            }
-        }
-        return false;
-    }
+    if (pp.attach_target_equipment) { return AttachSpellCastLegal(s, controller); }
     if (RemovalSearchesForController(d))
     {
         return RemovalControllerCastLegal(s, controller, 0, HumanPlayActive() || g_play_target_chooser != nullptr);
@@ -32195,6 +32203,21 @@ inline int RemovalHumanDefaultTarget(const GameState& s, int me)
         if (best < 0 || pw < low) { best = i; low = pw; }
     }
     return best >= 0 ? best : RemovalOpponentTargetIndex(s, me);
+}
+
+// How many creatures a HUMAN-play target-less controller-search removal (Path to Exile's one menu entry)
+// can pick at resolution: the board click offers every legal creature on BOTH sides (our own legal
+// targets, RemovalOwnTargetLegal, and every opponent creature -- RemovalOpponentTargetIndex's set). One
+// means the pick is FORCED, which is what lets the human cast-ORDER menu prove that a Path resolving
+// first takes a later spell's only target (TurnSolver's attach-order probe).
+inline int RemovalHumanLegalTargetCount(const GameState& s, int me)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (RemovalOwnTargetLegal(s, p, me) || (p.controller_index != me && p.card.IsCreature())) { ++n; }
+    }
+    return n;
 }
 
 // THE SELF-TARGET IDENTITY FOLD (Path to Exile's searched target). Two own creatures with equal keys

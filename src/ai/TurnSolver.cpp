@@ -1389,6 +1389,26 @@ thread_local std::uint64_t g_dropped_cast_count = 0;
 // other path, so the drop site pays one null check and the search's rollouts allocate nothing.
 thread_local std::vector<std::string>* g_enum_drop_names = nullptr;
 
+// THE ATTACH-ORDER PROBE (the human cast-ORDER menu only). Armed by AttachCastProbeScope around a trial
+// apply of one ordering; apply_one records, for the top-level plan casts: a HUMAN target-less
+// controller-search removal (Path to Exile) resolving with exactly ONE legal creature (a forced pick,
+// RemovalHumanLegalTargetCount), and a Magnetic Theft refused for having no legal pair afterwards
+// (AttachSpellCastLegal). Both together PROVE the ordering casts the Path into the Theft's only legal
+// creature: every pick the human could make leaves the Theft uncastable (CR 601.2c), so the ordering is
+// not executable as declared and the menu drops it. Disarmed everywhere else (the search, rollouts,
+// the executor), where it is never read.
+struct AttachCastProbe { bool armed = false; bool forced_removal = false; bool stranded = false; };
+thread_local AttachCastProbe g_attach_cast_probe;
+struct AttachCastProbeScope
+{
+    AttachCastProbe saved;
+    explicit AttachCastProbeScope(bool arm) : saved(g_attach_cast_probe)
+    { g_attach_cast_probe = AttachCastProbe{}; g_attach_cast_probe.armed = arm; }
+    ~AttachCastProbeScope() { g_attach_cast_probe = saved; }
+    AttachCastProbeScope(const AttachCastProbeScope&) = delete;
+    AttachCastProbeScope& operator=(const AttachCastProbeScope&) = delete;
+};
+
 // STRANDED ACTIVATIONS -- the twin of g_dropped_cast_count, and the gap it leaves.
 //
 // g_dropped_cast_count counts a declared CAST the apply could not pay. An ACTIVATION that cannot
@@ -15411,7 +15431,19 @@ static const Card* OwnHandCardByNumber(const GameState& state, int num)
 // trailing kinds that cannot remove a creature, so an unforeseen kind errs toward not folding. A
 // removal cast counts only when it names `host` (Path's searched self-target), or names nothing in
 // human play, where the person picks its target at resolution.
-static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vector<int>& sel, int host)
+// ORDER-AWARE for the human target-less removal (claude-play recheck, seed 2100017 T6: the human menu
+// offered "Path to Exile, ..., Magnetic Theft (Lizard Blades) -> Speaker, equip Colossus Hammer -> Lizard
+// Blades"). A Path whose target the board click picks at resolution can free the piece only by exiling
+// the Theft's host AFTER the Theft attached it; one resolving FIRST cannot (it either exiles something
+// else, or the Theft's only creature -- and then the Theft is not cast at all). So with `cast_rank`
+// (each action's position in the realised cast order, -1 = not a cast) such a removal counts only when
+// it is cast after the Theft at `after`. Without it (a subset whose order the human cast-ORDER menu has
+// not fixed yet: every ordering of it is then enumerated) it counts, as before. A removal TARGETING the
+// host frees it in either order (first, the Theft has no creature and is not cast), and every other
+// route keeps its order-blind answer.
+static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vector<int>& sel, int host,
+                              const std::vector<int>* cast_rank = nullptr, int after = -1,
+                              bool human = HumanPlayActive())
 {
     for (int k : sel)
     {
@@ -15420,8 +15452,10 @@ static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vecto
         {
             const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
             if (d == nullptr) { return true; }
+            const bool after_attach = cast_rank == nullptr || after < 0
+                || (*cast_rank)[static_cast<std::size_t>(k)] > (*cast_rank)[static_cast<std::size_t>(after)];
             if (d->tmpl == CardTemplate::Removal
-                && (c.enchant_target == host || (c.enchant_target <= 0 && HumanPlayActive()))) { return true; }
+                && (c.enchant_target == host || (c.enchant_target <= 0 && human && after_attach))) { return true; }
             if (d->params.devour > 0 || c.sac_victim_id != 0) { return true; }
             continue;
         }
@@ -15433,6 +15467,24 @@ static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vecto
         return true;
     }
     return false;
+}
+
+// The Theft's creature target is a same-plan HAND cast (trick_hand_target) pinned to the copy
+// enchant_target names: BuildAttachSpellPairs offers one hand host per NAME, the first non-staged copy,
+// and with no STAGED copy of the name in hand (a staged one is cast first) that copy is the one the
+// name's first cast lands -- the copy ResolveAttachSpellPiece then finds by number. An action naming
+// that copy therefore names the Theft's creature exactly.
+static bool AttachHandHostIsPinnedCopy(const GameState& state, const Action& a)
+{
+    if (a.trick_hand_target.empty() || a.enchant_target <= 0) { return false; }
+    const Card* first = nullptr;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        if (c.m_name.str() != a.trick_hand_target) { continue; }
+        if (c.m_is_staged) { return false; }
+        if (first == nullptr) { first = &c; }
+    }
+    return first != nullptr && first->m_number == a.enchant_target;
 }
 
 // Magnetic Theft subset legality + its sound folds (CardParams::attach_target_equipment; the creature
@@ -15448,12 +15500,21 @@ static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vecto
 //       piece (Lizard Blades) that this subset also attaches (an Equip/reconfigure of it, or another
 //       Theft of it). However the casts interleave, the piece stops being a creature and whatever was
 //       attached to it falls off (CR 704.5n) -- or, attached first, it is no longer a legal target.
+//       The piece may also be CAST by this subset (2026-10-17, seed 2100018 T7: "Lizard Blades, Magnetic
+//       Theft (Colossus Hammer) -> Lizard Blades, equip Lizard Blades -> Kor Duelist" -- dominated by the
+//       same line without the Theft, which keeps the card and its {R}): the Theft pins the copy the
+//       name's first cast lands (AttachHandHostIsPinnedCopy), and nothing may attach that copy on entry
+//       (EtbAttachLive: Sigarda's Aid would make the Theft's creature target illegal first).
 //   (d) ...and the mirror: an Equip whose HOST is such a piece a Theft in this subset attaches. The Theft
 //       resolves before the trailing pass, the host is then no creature, and the Equip is not activated
 //       at all (EquipTargetNotACreatureNow: nothing paid, no waiver spent) -- an identity fold. Only
 //       while nothing in the subset can take the piece's new host away first (SubsetMayFreeHost): a
 //       Path at that host, or a trailing sacrifice, would make the piece a creature again and the
 //       Equip a real move (tightened 2026-10-17; before, (d) folded those too).
+//       ORDER-AWARE for the human's target-less Path (`cast_rank`, see SubsetMayFreeHost): only one cast
+//       AFTER the Theft can free the piece. The subset walk has no order yet (it passes none, so every
+//       ordering survives to the human cast-ORDER menu), and the menu then drops each ordering that
+//       casts the Path first (TurnSolver::AttachOrderStrandsPlan).
 //   (f) THEFT THEN UNATTACH: a Theft of a battlefield reconfigure piece plus that piece's own
 //       "reconfigure: unattach" in the trailing pass. The unattach leaves the piece a loose creature
 //       whichever host it was on, so the subset reaches the board of the unattach alone (or, the
@@ -15475,7 +15536,9 @@ static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vecto
 // Lockstep: called from both subset walkers (Solve::consider and EnumeratePlans::eval_and_push) behind
 // SubsetFilterPre::attach_spell. Inert for every deck without the card.
 static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vector<Action>& cands,
-                                         const std::vector<int>& sel)
+                                         const std::vector<int>& sel,
+                                         const std::vector<int>* cast_rank = nullptr,
+                                         bool human = HumanPlayActive())
 {
     for (int j : sel)
     {
@@ -15546,13 +15609,14 @@ static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vect
                 // (d) an Equip ONTO the hand piece (a reconfigure piece cast as a creature) that this
                 // Theft attaches first (or onto a copy that never lands).
                 if (c.kind == Action::Kind::Equip && same_or_dead(c.sac_victim_id)
-                    && !SubsetMayFreeHost(cands, sel, a.enchant_target))
+                    && !SubsetMayFreeHost(cands, sel, a.enchant_target, cast_rank, j, human))
                 { twice = true; break; }
                 // (c) the Theft's battlefield creature target is a piece another action attaches.
                 const int c_attaches = c.kind == Action::Kind::Equip ? c.sac_source_id
                                      : (c.kind == Action::Kind::CastFromHand && c.attach_equip_hand.empty()
                                         ? c.attach_equip_id : 0);
-                if (a.trick_hand_target.empty() && c_attaches != 0 && c_attaches == a.enchant_target)
+                if ((a.trick_hand_target.empty() || AttachHandHostIsPinnedCopy(state, a))
+                    && c_attaches != 0 && c_attaches == a.enchant_target)
                 {
                     if (etb_attach < 0) { etb_attach = EtbAttachLive(state, cands, sel) ? 1 : 0; }
                     if (etb_attach == 0) { twice = true; break; }
@@ -15578,10 +15642,17 @@ static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vect
                 const int c_attaches = c.kind == Action::Kind::Equip ? c.sac_source_id
                                      : (c.kind == Action::Kind::CastFromHand && c.attach_equip_hand.empty()
                                         ? c.attach_equip_id : 0);
-                if (a.trick_hand_target.empty() && c_attaches != 0 && c_attaches == a.enchant_target)
-                { twice = true; break; }
+                if (c_attaches != 0 && c_attaches == a.enchant_target)
+                {
+                    // (c) onto a battlefield piece -- or onto a HAND-cast one (the copy the Theft pins
+                    // lands on the name's first cast), which an Equipment entering could also attach on
+                    // entry (Sigarda's Aid), making the Theft's creature target illegal first.
+                    if (a.trick_hand_target.empty()) { twice = true; break; }
+                    if (AttachHandHostIsPinnedCopy(state, a) && !EtbAttachLive(state, cands, sel))
+                    { twice = true; break; }
+                }
                 if (c.kind == Action::Kind::Equip && c.sac_victim_id == a.attach_equip_id
-                    && !SubsetMayFreeHost(cands, sel, a.enchant_target))
+                    && !SubsetMayFreeHost(cands, sel, a.enchant_target, cast_rank, j, human))
                 { twice = true; break; }
                 // (f) the moved piece's own reconfigure UNATTACH in this subset.
                 if (c.kind == Action::Kind::ActivatePermAbility
@@ -15596,6 +15667,56 @@ static bool SubsetHasStrandedAttachSpell(const GameState& state, const std::vect
         if (!AttachIntermediateObservable(state, piece, strict)) { return true; }
     }
     return false;
+}
+
+// A plan holding a Magnetic Theft AND a target-less removal cast (the human's one Path to Exile entry,
+// whose creature the board click picks at resolution) -- the only shape the human attach-ORDER checks
+// below can ever reject. A cheap scan, so every other plan skips them.
+static bool PlanHasTheftAndOpenRemoval(const std::vector<Action>& acts)
+{
+    bool theft = false, open_removal = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (a.attach_equip_id != 0) { theft = true; continue; }
+        if (a.enchant_target > 0) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d != nullptr && d->tmpl == CardTemplate::Removal) { open_removal = true; }
+    }
+    return theft && open_removal;
+}
+
+// THE HUMAN CAST-ORDER MENU'S HALF of the order-aware (d) (SubsetHasStrandedAttachSpell; claude-play
+// recheck, seed 2100017 T6). Does `acts`, cast in its REALISED order, hold a Theft plus an Equip onto the
+// piece it attaches that the order-blind subset test kept only because a target-less Path could free the
+// piece -- while that Path is cast BEFORE the Theft, and so cannot? `explicit_order`: the plan plays its
+// casts in vector order (a searched_order variant of the cast-ORDER menu: the explicit route plays it
+// verbatim); otherwise the order both apply worlds sort a plan's casts into -- PlanCastOrder, then the
+// structural ApplyAttachSpellDependencyOrder. `human`: HumanPlayActive() at the menu, a parameter so a
+// unit test can drive it. Only the ORDER-AWARE difference is reported (the test with the realised order
+// AND not without it), so a plan the subset walk accepted is never dropped for an order-independent
+// clause.
+bool TurnSolver::AttachOrderStrandsPlan(const GameState& state, const std::vector<Action>& acts,
+                                        bool explicit_order, bool human)
+{
+    if (!human || !PlanHasTheftAndOpenRemoval(acts)) { return false; }
+    std::vector<int> sel(acts.size());
+    for (std::size_t i = 0; i < acts.size(); ++i) { sel[i] = static_cast<int>(i); }
+    std::vector<int> order;
+    if (explicit_order)
+    {
+        for (int i : sel)
+        { if (acts[static_cast<std::size_t>(i)].kind == Action::Kind::CastFromHand) { order.push_back(i); } }
+    }
+    else
+    {
+        PlanCastOrder(state, acts, sel, order);
+        ApplyAttachSpellDependencyOrder(acts, order);
+    }
+    std::vector<int> rank(acts.size(), -1);
+    for (std::size_t k = 0; k < order.size(); ++k) { rank[static_cast<std::size_t>(order[k])] = static_cast<int>(k); }
+    return SubsetHasStrandedAttachSpell(state, acts, sel, &rank, human)
+        && !SubsetHasStrandedAttachSpell(state, acts, sel, nullptr, human);
 }
 
 // Does the action at `sel` position `px` run before the one at `py` in the trailing pass? The plan's
@@ -45298,6 +45419,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             && !RemovalControllerCastLegal(state, state.active_player_index, enchant_target,
                                            HumanPlayActive() || g_play_target_chooser != nullptr))
         { return; }
+        // Magnetic Theft with no legal (Equipment, creature) pair cannot be cast either (CR 601.2c) -- the
+        // creature a Path that resolved first exiled was its only one. Not cast, nothing paid: the card
+        // stays in hand with its {R}. The SHARED AttachSpellCastLegal; AIEngine::CastSpellFromHand
+        // returns before paying on the same predicate (lockstep). Reported to the attach-order probe.
+        if (def.params.attach_target_equipment && !AttachSpellCastLegal(state, state.active_player_index))
+        {
+            if (g_attach_cast_probe.armed && sink_stack.empty() && g_attach_cast_probe.forced_removal)
+            { g_attach_cast_probe.stranded = true; }
+            return;
+        }
 
         // Cast-time guard for a risky alt payload (Reverent Silence): the search may commit it
         // from a node whose enabler diverges away in the realized line (commit-the-line
@@ -46683,6 +46814,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             int ci = enchant_target > 0 ? RemovalOwnTargetIndex(state, me, enchant_target)
                    : HumanPlayActive()  ? RemovalHumanDefaultTarget(state, me)
                                         : RemovalOpponentTargetIndex(state, me);
+            // The attach-order probe (see AttachCastProbe): a target-less human pick with ONE legal creature.
+            if (g_attach_cast_probe.armed && enchant_target <= 0 && HumanPlayActive() && sink_stack.empty()
+                && RemovalHumanLegalTargetCount(state, me) == 1)
+            { g_attach_cast_probe.forced_removal = true; }
             // HUMAN PLAY (g_play_target_chooser -- null in every search / rollout scope): the board
             // click offers every legal creature on BOTH sides (main.cpp, allow_self_target). Default =
             // the plan's own target when it names one, else our lowest-power creature (the cheapest
@@ -55659,7 +55794,31 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Cast-ordering search (C): expand each action set into the DISTINCT orderings of its
     // non-sacrifice hand casts, deduped by end-of-phase state. Off by default => return
     // the canonical-order sets unchanged (byte-identical). See OrderingSearchEnabled.
-    if (!OrderingSearchEnabled(state)) { return deduped; }
+    // HUMAN ATTACH-ORDER LEGALITY (claude-play rechecks 2026-10-17, seeds 2100017 T6 / 2100018 T4). A plan
+    // of the human menu that casts a target-less Path BEFORE a Magnetic Theft can be unexecutable as
+    // declared in two ways: an Equip onto the piece the Theft attaches needs the Theft's creature removed
+    // AFTER the attach (TurnSolver::AttachOrderStrandsPlan), or the Path's only legal creature is the
+    // Theft's only one, so the Theft cannot be cast at all (CR 601.2c; the attach-order probe on a trial
+    // apply, AttachCastProbe). Either way the line it realises is the same plan without that action, which
+    // the menu offers on its own -- and each ordering with the Path AFTER the Theft is kept. `explicit_order`
+    // = the plan is a searched_order variant; a plan this expansion passes through keeps the order both
+    // apply worlds sort it into. Human play only; every autonomous enumeration is untouched.
+    const bool human_attach = HumanPlayActive();
+    auto attach_order_illegal = [&](const TurnSolver::Plan& pl) -> bool
+    {
+        if (!human_attach || !PlanHasTheftAndOpenRemoval(pl.actions)) { return false; }
+        if (TurnSolver::AttachOrderStrandsPlan(state, pl.actions, pl.searched_order, /*human=*/true)) { return true; }
+        GameState trial = state;
+        AttachCastProbeScope _acp(true);
+        ApplyPlanDirect(trial, pl, is_pre_combat);
+        return g_attach_cast_probe.stranded;
+    };
+    auto drop_attach_illegal = [&](std::vector<TurnSolver::Plan>& v)
+    {
+        if (!human_attach) { return; }
+        v.erase(std::remove_if(v.begin(), v.end(), attach_order_illegal), v.end());
+    };
+    if (!OrderingSearchEnabled(state)) { drop_attach_illegal(deduped); return deduped; }
     // SATURATED CAST-ORDER COLLAPSE (see HumanEnumSaturated). This expansion APPLIES every
     // candidate ordering on a GameState copy -- up to 5! = 120 ApplyPlanDirect calls per surviving
     // action set -- and it is the single biggest term in the deep-go-off click (the seed-8 T3 frame
@@ -55669,7 +55828,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // permanents entered and the canonical one represents them all. viewer_protocol_check's
     // find_plan already re-anchors a recorded pick by (land, casts) precisely to "tolerate a dropped
     // order variant", so a reference recorded under the full fan still resolves.
-    if (sat_enum && HumanSatOrderOn()) { return deduped; }
+    if (sat_enum && HumanSatOrderOn()) { drop_attach_illegal(deduped); return deduped; }
 
     std::vector<TurnSolver::Plan> ordered;
     ordered.reserve(deduped.size());
@@ -55690,7 +55849,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             else if (a.kind == Action::Kind::ActivateVial) { puts.push_back(a); puts_at.push_back(ai); }
             else { fixed.push_back(a); }
         }
-        if (reorder.size() < 2) { ordered.push_back(std::move(p)); continue; }
+        if (reorder.size() < 2) { if (!attach_order_illegal(p)) { ordered.push_back(std::move(p)); } continue; }
 
         // Candidate orderings to try. Dragonstorm (WantsCastOrderingSearch) uses the TARGETED generator
         // (cheapest-first chain + Irencrag-before-finisher + Medallion-position + Desperate/Seething splice
@@ -55713,7 +55872,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             long long perms = 1; bool too_many = false;
             for (size_t i = 2; i <= reorder.size(); ++i)
             { perms *= static_cast<long long>(i); if (perms > 120) { too_many = true; break; } }
-            if (too_many) { ordered.push_back(std::move(p)); continue; }
+            if (too_many) { if (!attach_order_illegal(p)) { ordered.push_back(std::move(p)); } continue; }
             // Permute reorderable casts by NAME (next_permutation over a name-sorted index list yields
             // each distinct multiset ordering once -- identical copies don't multiply).
             std::vector<int> idx(reorder.size());
@@ -55764,13 +55923,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // ...or a Magnetic Theft before the same-plan cast of its Equipment / creature target (it
             // would resolve to nothing; the explicit route plays this order verbatim). No-op without one.
             if (OrderingPlacesAttachSpellBeforeTarget(cand.actions)) { continue; }
+            // ...or a target-less Path BEFORE a Theft whose piece an Equip in this plan needs freed again
+            // (only a Path after the Theft can; see attach_order_illegal above).
+            const bool probe_attach = human_attach && PlanHasTheftAndOpenRemoval(cand.actions);
+            if (probe_attach && TurnSolver::AttachOrderStrandsPlan(state, cand.actions, /*explicit=*/true, true))
+            { continue; }
 
             // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
             std::vector<std::string> dropped;
             if (g_order_drop_label) { g_enum_drop_names = &dropped; }
             GameState copy = state;
-            ApplyPlanDirect(copy, cand, is_pre_combat);
+            bool attach_stranded = false;
+            {
+                // The attach-order probe (see attach_order_illegal): a forced Path into the Theft's only
+                // legal creature makes this ordering's Theft uncastable -- not offered.
+                AttachCastProbeScope _acp(probe_attach);
+                ApplyPlanDirect(copy, cand, is_pre_combat);
+                attach_stranded = g_attach_cast_probe.stranded;
+            }
             g_enum_drop_names = nullptr;
+            if (attach_stranded) { continue; }
             cand.would_drop = std::move(dropped);
             {
                 static const int s_dbg_ord = EnvInt("MTG_DBG_ORDER_PROBE", 0);
@@ -55810,7 +55982,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // rather than deleting it. Deleting a whole plan when no variant survives is exactly the
         // failure mode of OrderingPlacesAuraBeforeCreature above (34abe486's third symptom), and it
         // is not worth reintroducing one loop later.
-        if (ordered.size() == ordered_before) { ordered.push_back(std::move(p)); }
+        if (ordered.size() == ordered_before && !attach_order_illegal(p)) { ordered.push_back(std::move(p)); }
     }
 
     return ordered;

@@ -7994,6 +7994,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // max_casts_after card. See GameState::casts_remaining_this_turn.
     if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
 
+    // Magnetic Theft with no legal (Equipment, creature) pair cannot be cast (CR 601.2c) -- e.g. the only
+    // creature left to a Path to Exile that resolved first. Not cast, nothing paid: the card stays in
+    // hand with its {R}. The SHARED AttachSpellCastLegal; lockstep twin of apply_one's guard.
+    if (def->params.attach_target_equipment && !AttachSpellCastLegal(state, state.active_player_index)) { return; }
+
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
     entry.source           = def->card;

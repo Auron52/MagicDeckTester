@@ -21,6 +21,19 @@ on and are recorded here per the deferred-work rule.
   something can take the Theft's new host away first (a Path at it, a trailing sacrifice), which makes
   the piece a creature again and the Equip a real move.
 * Path to Exile's human default target ranks by real power (`EquipGatePowerOf`).
+* **Final claude-play recheck (seeds 2100017 / 2100018), 2026-10-17.**
+  * Clause (d)'s Path exemption is ORDER-AWARE: a target-less Path (the human's one entry, its creature
+    picked at resolution) frees the Theft's piece only when cast AFTER the Theft. The subset walk has no
+    order yet and keeps the subset; the human cast-ORDER menu then drops each ordering that casts the
+    Path first (`TurnSolver::AttachOrderStrandsPlan`, realised order = vector order for a searched-order
+    variant, else PlanCastOrder + ApplyAttachSpellDependencyOrder).
+  * Clause (c) (a Theft onto a loose Lizard Blades the subset attaches) covers a HAND-CAST Lizard Blades
+    (`AttachHandHostIsPinnedCopy`; refused while Sigarda's Aid could attach it on entry).
+  * CR 601.2c: a Magnetic Theft with no legal (Equipment, creature) pair is not cast, in both worlds
+    (`AttachSpellCastLegal`, SpellEffects.h, also read by `FreeCastHasLegalTargets`). The human menu drops
+    an ordering whose Path is FORCED onto the Theft's only creature (the attach-order probe on the trial
+    apply). The card stays in hand; on a multi-cast line the whole-turn prepay (BatchPrepayMainCasts) has
+    already tapped its {R} into the pool, so the mana floats for the phase rather than staying in a land.
 
 ## Open items
 
