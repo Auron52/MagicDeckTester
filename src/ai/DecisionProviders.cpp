@@ -33644,6 +33644,22 @@ static int Deficit(const ManaCost& demand, const ManaPool& f, Color col)
 { return PipOf(demand, col) - PoolOf(f, col); }
 static int CeilDiv(int a, int b) { return b <= 0 ? a : (a + b - 1) / b; }
 
+// ---- LAZY NARRATION (MTG_EDF_ROUTE_LAZY_LOG, DEFAULT ON; =0 builds every string as before) -------
+// The route narrates as it goes: Note() appends each step to cx.log (and, live, to the play history),
+// Dbg() prints a diagnosis under MTG_EDF_COMBO_ROUTE_TRACE, and Blink keeps a "<outlet>: blink <payload>"
+// label for the log's "xN" runs. Their ARGUMENTS were built unconditionally -- names concatenated,
+// costs and floats formatted (Ctx::Float alone was 0.74% of the probe's instructions) -- and in a
+// silent trial every one of those strings was thrown away: cx.log is read only by the trace print, the
+// live apply's narration (which goes to the play history through Note's emit branch, not the log) and
+// the two verify modes' mismatch reports, and Dbg prints only under the trace. So the strings are built
+// only when something reads them (Ctx::Narrate for Note and the label, the trace for Dbg). Nothing a
+// trial returns -- its verdict and attempt_used -- reads a string.
+inline bool LazyLogOn() { static const bool v = EnvOn("MTG_EDF_ROUTE_LAZY_LOG", true); return v; }
+inline bool PregateVerify();
+inline bool PeriodicVerify();
+inline bool LogWanted() { return !LazyLogOn() || TraceOn() || PregateVerify() || PeriodicVerify(); }
+#define CR_DBG(cx, msg)  do { if (!LazyLogOn() || TraceOn()) { (cx).Dbg(msg); } } while (0)
+#define CR_NOTE(cx, ...) do { if ((cx).Narrate()) { (cx).Note(__VA_ARGS__); } } while (0)
 struct Ctx
 {
     GameState&  s;
@@ -33689,6 +33705,10 @@ struct Ctx
     std::string blink_label;
     std::string log;
     Ctx(GameState& st, int m) : s(st), me(m) {}
+    // Does anything read the narration (cx.log, the blink label / run, the trace)? The LIVE apply
+    // (emit), the trace, and the two verify modes that print a mismatching route's log. A silent
+    // trial is read for its verdict and attempt_used only -- see MTG_EDF_ROUTE_LAZY_LOG.
+    bool Narrate() const { return emit || LogWanted(); }
     void FlushBlinks()
     {
         if (blink_run <= 0) { return; }
@@ -34179,7 +34199,7 @@ static bool Pay(Ctx& cx, const ManaCost& cost)
     if (!ok)
     {
         const ManaPool& f = cx.s.floating_mana;
-        cx.Dbg("pay " + cost.ToString() + " FAILED (rolled back); float w" + std::to_string(f.white) + " u" + std::to_string(f.blue)
+        CR_DBG(cx, "pay " + cost.ToString() + " FAILED (rolled back); float w" + std::to_string(f.white) + " u" + std::to_string(f.blue)
                + " b" + std::to_string(f.black) + " r" + std::to_string(f.red) + " g" + std::to_string(f.green)
                + " c" + std::to_string(f.colorless) + " *" + std::to_string(f.wild) + " lands available=" + std::to_string(lands.size()));
         snapshot.Restore(cx);
@@ -34306,10 +34326,13 @@ static bool Blink(Ctx& cx, int outlet_id, int payload_id, const std::vector<int>
         TapAhead(cx, untaps);
         cx.demand = saved; cx.paying = saved_paying;
     }
-    if (!Pay(cx, cost)) { cx.Dbg("blink: cannot pay " + cost.ToString()); pre_blink.Restore(cx); return false; }
-    const std::string label = cx.s.battlefield[oi].card.m_name.str() + ": blink "
-                            + cx.s.battlefield[pi].card.m_name.str();
-    if (label != cx.blink_label) { cx.FlushBlinks(); cx.blink_label = label; }
+    if (!Pay(cx, cost)) { CR_DBG(cx, "blink: cannot pay " + cost.ToString()); pre_blink.Restore(cx); return false; }
+    if (cx.Narrate())
+    {
+        const std::string label = cx.s.battlefield[oi].card.m_name.str() + ": blink "
+                                + cx.s.battlefield[pi].card.m_name.str();
+        if (label != cx.blink_label) { cx.FlushBlinks(); cx.blink_label = label; }
+    }
     EtbOptionalPayerScope _eops(&DeclinePayer());   // Emiel's {G/W} counter never comes out of the bank
     EtbUntapPriorityScope _prio(&untaps);
     ApplyBlink(cx.s, cx.me, outlet_id, payload_id, od->params.blink_returns_tapped);
@@ -34343,14 +34366,14 @@ static bool CastCreature(Ctx& cx, int hand_idx, const std::vector<int>* tap_ahea
         cx.demand = saved; cx.paying = ManaCost();
     }
     const GameState pre_cast = cx.s;
-    if (!Pay(cx, d->card.m_mana_cost)) { cx.Dbg("cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
+    if (!Pay(cx, d->card.m_mana_cost)) { CR_DBG(cx, "cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
     const int idx = HandIndexByName(cx, name);
     if (idx < 0) { cx.s = pre_cast; return false; }
     EtbOptionalPayerScope _eops(&DeclinePayer());
     EtbUntapPriorityScope _prio(tap_ahead);
     if (!DeployCreatureFromHand(cx.s, cx.me, idx)) { cx.s = pre_cast; return false; }
     ++cx.deploys;
-    cx.Note("cast " + name);
+    CR_NOTE(cx, "cast " + name);
     return true;
 }
 // Cast an enchantment from hand: a land Aura onto `host` (0 = none / not an Aura).
@@ -34373,7 +34396,7 @@ static bool CastEnchantment(Ctx& cx, int hand_idx, int host, bool float_only)
         paid = Pay(cx, d->card.m_mana_cost);
         if (reserve) { cx.s.battlefield[hi].tapped = false; }
     }
-    if (!paid) { cx.Dbg("cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
+    if (!paid) { CR_DBG(cx, "cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
     const int idx = HandIndexByName(cx, name);
     if (idx < 0) { cx.s = pre_cast; return false; }
     Permanent perm;
@@ -34389,7 +34412,7 @@ static bool CastEnchantment(Ctx& cx, int hand_idx, int host, bool float_only)
     FireEtbWatchers(cx.s, cx.me, slot);
     FireOwnEtbTriggers(cx.s, cx.me, slot, std::string(), kEtbKxHeuristic);
     ++cx.deploys;
-    cx.Note("cast " + name + (host != 0 ? " -> land" : ""));
+    CR_NOTE(cx, "cast " + name + (host != 0 ? " -> land" : ""));
     return true;
 }
 // Living Wish / Eladamri's Call for a named card.
@@ -34420,7 +34443,7 @@ static bool CastTutor(Ctx& cx, int hand_idx, const std::string& target)
     PerformTutor(cx.s, cx.me, d->params, target, d->card.m_name.str());
     if (HandIndexByName(cx, target) < 0) { cx.s = pre_cast; return false; }   // not found: undo the cast
     ++cx.deploys;
-    cx.Note("combo finish: " + name + " \xE2\x86\x92 " + target);   // the finish machinery's own wording
+    CR_NOTE(cx, "combo finish: " + name + " \xE2\x86\x92 " + target);   // the finish machinery's own wording
     return true;
 }
 static bool PlayLandDrop(Ctx& cx, int hand_idx)
@@ -34435,7 +34458,7 @@ static bool PlayLandDrop(Ctx& cx, int hand_idx)
     o.honor_entry_chooser = false;
     o.rad_mode            = -1;
     if (!PlayLandFromHand(cx.s, static_cast<std::size_t>(hand_idx), *d, o)) { return false; }
-    cx.Note("land " + name, "land");
+    CR_NOTE(cx, "land " + name, "land");
     return true;
 }
 // A tap ability of a permanent ({T} plus mana), paid from the float only.
@@ -34469,7 +34492,7 @@ static bool Draw(Ctx& cx, bool keep_c)
         }
         return false;
     };
-    if (crack_clue()) { ++cx.draws; cx.Note("Clue -> draw", nullptr); return true; }
+    if (crack_clue()) { ++cx.draws; CR_NOTE(cx, "Clue -> draw", nullptr); return true; }
     for (const Permanent& p : cx.s.battlefield)
     {
         if (p.controller_index != cx.me || p.tapped) { continue; }
@@ -34477,9 +34500,9 @@ static bool Draw(Ctx& cx, bool keep_c)
         if (!IsTapDrawLand(d)) { continue; }
         // The only {C} source feeds a {C} blink every iteration: tapping it to draw leaves the next
         // blink unpayable before the untap can refund it (claude_s9_gi8's Mariposa under Displacer).
-        if (keep_c && MakesC(d)) { cx.Dbg("draw: keep " + p.card.m_name.str() + " -- the only {C} source"); continue; }
+        if (keep_c && MakesC(d)) { CR_DBG(cx, "draw: keep " + p.card.m_name.str() + " -- the only {C} source"); continue; }
         if (TapAbility(cx, p.card.m_number, d->params.tap_draw_cost.value(), PermAbilityMode::TapDraw))
-        { ++cx.draws; cx.Note(p.card.m_name.str() + " -> draw", nullptr); return true; }
+        { ++cx.draws; CR_NOTE(cx, p.card.m_name.str() + " -> draw", nullptr); return true; }
     }
     for (const Permanent& p : cx.s.battlefield)
     {
@@ -34489,14 +34512,14 @@ static bool Draw(Ctx& cx, bool keep_c)
         const std::string nm = p.card.m_name.str();
         ManaCost crack; crack.generic = 2;
         if (!FloatPays(cx, AddManaCosts(d->params.tap_investigate_cost.value(), crack)))
-        { cx.Dbg("draw: " + nm + " investigate+crack unaffordable from float " + cx.Float()); continue; }
+        { CR_DBG(cx, "draw: " + nm + " investigate+crack unaffordable from float " + cx.Float()); continue; }
         if (!TapAbility(cx, p.card.m_number, d->params.tap_investigate_cost.value(),
-                        PermAbilityMode::TapInvestigate)) { cx.Dbg("draw: " + nm + " TapAbility failed"); continue; }
+                        PermAbilityMode::TapInvestigate)) { CR_DBG(cx, "draw: " + nm + " TapAbility failed"); continue; }
         if (cx.s.players[cx.me].hand.size() == hand_before) { crack_clue(); }   // not fused: crack it
-        ++cx.draws; cx.Note(nm + " -> investigate -> draw", nullptr);
+        ++cx.draws; CR_NOTE(cx, nm + " -> investigate -> draw", nullptr);
         return true;
     }
-    cx.Dbg("draw: no untapped draw source (or library too small)");
+    CR_DBG(cx, "draw: no untapped draw source (or library too small)");
     return false;
 }
 
@@ -34985,16 +35008,16 @@ static bool DeployPiecesBody(Ctx& cx, bool auras_first)
                     const int cur_net = YieldOfSet(cx, ChooseUntaps(cx, cur_n, b.outlet_needs_c ? 1 : 0, 0)) - blink;
                     const int new_net = refund - blink;
                     loop_better = new_net > 0 && new_net > cur_net;
-                    cx.Dbg("loop rule " + d->card.m_name.str() + ": net " + std::to_string(new_net)
+                    CR_DBG(cx, "loop rule " + d->card.m_name.str() + ": net " + std::to_string(new_net)
                            + " vs payload " + std::to_string(cur_net));
                 }
                 if (!loop_better)
-                { cx.Dbg("skip " + d->card.m_name.str() + ": refund " + std::to_string(refund) + " < cost"); continue; }
+                { CR_DBG(cx, "skip " + d->card.m_name.str() + ": refund " + std::to_string(refund) + " < cost"); continue; }
                 cx.loop_untapper_fired = true;
             }
             const int avail = AvailableTotal(cx);
             if (avail < d->card.m_mana_cost.ManaValue())
-            { cx.Dbg("skip " + d->card.m_name.str() + ": avail " + std::to_string(avail) + " < cost"); continue; }
+            { CR_DBG(cx, "skip " + d->card.m_name.str() + ": avail " + std::to_string(avail) + " < cost"); continue; }
             if (CastCreature(cx, idx, &set, /*float_only=*/false)) { did = true; break; }
         }
         if (did) { continue; }
@@ -35051,7 +35074,7 @@ static bool DeployPiecesBody(Ctx& cx, bool auras_first)
         {
             const CardDefinition* d = DefOf(ap.hand[idx]);
             if (AvailableTotal(cx) < d->card.m_mana_cost.ManaValue())
-            { cx.Dbg("skip outlet " + d->card.m_name.str() + ": avail < cost"); continue; }
+            { CR_DBG(cx, "skip outlet " + d->card.m_name.str() + ": avail < cost"); continue; }
             if (CastCreature(cx, idx, nullptr, /*float_only=*/false)) { did = true; break; }
         }
         if (did) { break; }
@@ -35061,8 +35084,8 @@ static bool DeployPiecesBody(Ctx& cx, bool auras_first)
         break;
     }
     const Board b = ScanBoard(cx);
-    if (b.outlet == 0)  { cx.Dbg("deploy: no outlet on the battlefield"); }
-    if (b.payload == 0) { cx.Dbg("deploy: no untapper on the battlefield"); }
+    if (b.outlet == 0)  { CR_DBG(cx, "deploy: no outlet on the battlefield"); }
+    if (b.payload == 0) { CR_DBG(cx, "deploy: no untapper on the battlefield"); }
     return b.outlet != 0 && b.payload != 0;
 }
 
@@ -35129,7 +35152,7 @@ static bool Develop(Ctx& cx)
         if (SameSnap(now, prev) || ++stall > 40) { break; }
         prev = now;
     }
-    if (casts > 0) { cx.Note("developed: " + std::to_string(casts) + " creature(s) cast off the loop"); }
+    if (casts > 0) { CR_NOTE(cx, "developed: " + std::to_string(casts) + " creature(s) cast off the loop"); }
     return casts > 0;
 }
 // ---- THE PERIODIC-STATE EXIT (MTG_EDF_ROUTE_PERIODIC, DEFAULT ON; =0 restores the full stall walk) ----
@@ -35294,21 +35317,21 @@ static int LoopBody(Ctx& cx)
         if (RouteDiagOn() && stall == 0) { dhist.clear(); drep = -1; }
         if (per_on && stall == 0) { pw.Reset(!cx.periodic_pred); }
         if (RouteWon(cx)) { cx.exit_why = 1; return 1; }
-        if (cx.s.players[cx.me].life <= 0) { cx.Note("route would kill us"); cx.exit_why = 2; return 0; }
+        if (cx.s.players[cx.me].life <= 0) { CR_NOTE(cx, "route would kill us"); cx.exit_why = 2; return 0; }
         Board b = ScanBoard(cx);
         Hand  h = ScanHand(cx);
-        if (b.outlet == 0 || b.payload == 0) { cx.Note("loop broke"); cx.exit_why = 3; return 0; }
+        if (b.outlet == 0 || b.payload == 0) { CR_NOTE(cx, "loop broke"); cx.exit_why = 3; return 0; }
         Fin f = Decide(cx, b, h);
         if (f.k == Fin::None)
         {
             if (guard == 0 && Develop(cx)) { cx.exit_why = 4; return 2; }
-            cx.Note("no finisher route"); cx.exit_why = 5; return 0;
+            CR_NOTE(cx, "no finisher route"); cx.exit_why = 5; return 0;
         }
         SetDemand(cx, f, h);
         const int n_untap = std::min(b.payload_untaps, std::max(1, b.lands));
         if (TraceOn())
         {
-            cx.Dbg("fin k=" + std::to_string(static_cast<int>(f.k)) + " id=" + std::to_string(f.id)
+            CR_DBG(cx, "fin k=" + std::to_string(static_cast<int>(f.k)) + " id=" + std::to_string(f.id)
                    + " hand=" + std::to_string(f.hand) + " wish=" + std::to_string(f.wish)
                    + (f.target.empty() ? std::string() : " -> " + f.target)
                    + " act=" + f.act.ToString() + " x" + std::to_string(f.acts)
@@ -35320,7 +35343,7 @@ static int LoopBody(Ctx& cx)
         if (f.k == Fin::Gorge && f.id == 0 && f.land >= 0)
         {
             if (PlayLandDrop(cx, f.land)) { prev = TakeSnap(cx); stall = 0; continue; }
-            cx.Note("Gorge land drop failed"); cx.exit_why = 6; return 0;
+            CR_NOTE(cx, "Gorge land drop failed"); cx.exit_why = 6; return 0;
         }
 
         // float-only improvements to the loop itself: cheaper blinks, a bigger untapper, the switch
@@ -35338,7 +35361,7 @@ static int LoopBody(Ctx& cx)
             }
         }
         if (!did && f.need_switch && h.pipfree_outlet >= 0
-            && CastCreature(cx, h.pipfree_outlet, nullptr, /*float_only=*/true)) { did = true; cx.Note("outlet switch"); }
+            && CastCreature(cx, h.pipfree_outlet, nullptr, /*float_only=*/true)) { did = true; CR_NOTE(cx, "outlet switch"); }
         if (did) { prev = TakeSnap(cx); stall = 0; continue; }
 
         // the finish, whenever the float pays it
@@ -35358,10 +35381,10 @@ static int LoopBody(Ctx& cx)
                 return FloatPays(cx, all);
             };
             while (!OpponentHasLost(cx.s) && keeps_blink() && Activate(cx, f)) { ++fired; }
-            if (RouteWon(cx)) { cx.Note("finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); cx.exit_why = 7; return 1; }
-            if (OpponentHasLost(cx.s)) { cx.Note("lethal but we are dead"); cx.exit_why = 8; return 0; }
+            if (RouteWon(cx)) { CR_NOTE(cx, "finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); cx.exit_why = 7; return 1; }
+            if (OpponentHasLost(cx.s)) { CR_NOTE(cx, "lethal but we are dead"); cx.exit_why = 8; return 0; }
             if (fired > 0) { prev = TakeSnap(cx); stall = 0; continue; }
-            cx.Dbg("finish: " + f.act.ToString() + " not payable from float " + cx.Float());
+            CR_DBG(cx, "finish: " + f.act.ToString() + " not payable from float " + cx.Float());
         }
         // the finisher in hand, then the Wish that fetches it (Wish plus finisher both from the float)
         if (f.hand >= 0 && CastCreature(cx, f.hand, nullptr, /*float_only=*/true)) { prev = TakeSnap(cx); stall = 0; continue; }
@@ -35374,7 +35397,7 @@ static int LoopBody(Ctx& cx)
                 if (f.wish_is_land) { PlayLandDrop(cx, HandIndexByName(cx, f.target)); }
                 prev = TakeSnap(cx); stall = 0; continue;
             }
-            cx.Dbg(std::string("wish: ") + (pays ? "CastTutor failed" : "float does not pay wish+cast ")
+            CR_DBG(cx, std::string("wish: ") + (pays ? "CastTutor failed" : "float does not pay wish+cast ")
                    + both.ToString() + " float " + cx.Float());
         }
         // the dig, when the float carries the draw and the next blink
@@ -35388,7 +35411,7 @@ static int LoopBody(Ctx& cx)
             reserve.generic = b.blink.ManaValue() + 6;
             const bool pays = FloatPays(cx, reserve);
             if (pays && Draw(cx, b.outlet_needs_c && b.c_sources <= 1)) { prev = TakeSnap(cx); stall = 0; continue; }
-            cx.Dbg(std::string("dig: ") + (pays ? "Draw() failed" : "float below blink+6") + " float " + cx.Float());
+            CR_DBG(cx, std::string("dig: ") + (pays ? "Draw() failed" : "float below blink+6") + " float " + cx.Float());
         }
 
         // otherwise blink: BANK until the float carries the whole finish, then the FINISH set
@@ -35415,14 +35438,14 @@ static int LoopBody(Ctx& cx)
             last_target = bank_target;
             if (TraceOn())
             {
-                cx.Dbg("bank: float=" + std::to_string(cx.s.floating_mana.Total()) + " target=" + std::to_string(bank_target)
+                CR_DBG(cx, "bank: float=" + std::to_string(cx.s.floating_mana.Total()) + " target=" + std::to_string(bank_target)
                        + " ready=" + std::to_string(ready ? 1 : 0) + " income=" + std::to_string(income)
                        + " per_iter=" + std::to_string(per_iter) + " n_untap=" + std::to_string(n_untap));
             }
         }
-        if (!Blink(cx, b.outlet, b.payload, set)) { cx.Note("blink unpayable"); cx.exit_why = 9; return 0; }
+        if (!Blink(cx, b.outlet, b.payload, set)) { CR_NOTE(cx, "blink unpayable"); cx.exit_why = 9; return 0; }
         const Snap now = TakeSnap(cx);
-        if (SameSnap(now, prev)) { cx.Note("no progress"); cx.exit_why = 10; return 0; }
+        if (SameSnap(now, prev)) { CR_NOTE(cx, "no progress"); cx.exit_why = 10; return 0; }
         prev = now;
         if (RouteDiagOn())
         {
@@ -35437,17 +35460,17 @@ static int LoopBody(Ctx& cx)
                 if (drep >= 0) { g_st_rep.fetch_add(1); g_st_save.fetch_add(static_cast<unsigned long long>(stall - drep)); g_st_rep_at.fetch_add(static_cast<unsigned long long>(drep)); }
                 else { g_st_norep.fetch_add(1); }
             }
-            cx.Note("stalled: " + std::to_string(stall) + " blinks without a step firing"); cx.exit_why = 11; return 0;
+            CR_NOTE(cx, "stalled: " + std::to_string(stall) + " blinks without a step firing"); cx.exit_why = 11; return 0;
         }
         // THE PERIODIC-STATE EXIT (see PeriodicWatch): this blink's state repeats one of this window's.
         if (per_on && pw.Step(cx))
         {
-            if (!PeriodicVerify()) { cx.Note("periodic: the loop repeats a state without a step"); cx.exit_why = 13; return 0; }
+            if (!PeriodicVerify()) { CR_NOTE(cx, "periodic: the loop repeats a state without a step"); cx.exit_why = 13; return 0; }
             cx.periodic_pred = true;   // verify: run the walk out, the wrapper checks the 0
             pw.armed = false;
         }
     }
-    cx.Note("iteration cap"); cx.exit_why = 12;
+    CR_NOTE(cx, "iteration cap"); cx.exit_why = 12;
     return RouteWon(cx) ? 1 : 0;
 }
 
@@ -35649,11 +35672,11 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
             cx.protect_blink = false;
             if (r == 1 || (forced >= 0 && r != 0))
             {
-                cx.Dbg(std::string("board deploy ") + AttemptName(at, attempt) + " kills");
+                CR_DBG(cx, std::string("board deploy ") + AttemptName(at, attempt) + " kills");
                 cx.attempt_used = attempt;
                 return r;
             }
-            cx.Dbg(std::string("board deploy ") + AttemptName(at, attempt) + " does not kill");
+            CR_DBG(cx, std::string("board deploy ") + AttemptName(at, attempt) + " does not kill");
         }
         if (forced >= 0) { return 0; }
         // No deploy kills: the route is what the loop as it stood made of it (no / DEVELOP).
@@ -35686,7 +35709,7 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
             if (r == 2 && held == 0)
             { held = 2; held_attempt = attempt; held_state = cx.s; held_ctx.emplace(cx); }
         }
-        else { cx.Dbg(std::string("deploy order ") + AttemptName(at, attempt) + " leaves no loop"); }
+        else { CR_DBG(cx, std::string("deploy order ") + AttemptName(at, attempt) + " leaves no loop"); }
     }
     if (held != 0)
     {
@@ -35694,10 +35717,13 @@ static int Run(Ctx& cx, int forced = kRunUnforced)
         cx.attempt_used = held_attempt;
         return held;
     }
-    cx.Note("no loop: neither deploy order reaches a finish");
+    CR_NOTE(cx, "no loop: neither deploy order reaches a finish");
     return 0;
 }
 }   // namespace comboroute
+
+#undef CR_DBG
+#undef CR_NOTE
 
 bool EdfComboRoutePiecesInPlace(const GameState& s, int me)
 {
