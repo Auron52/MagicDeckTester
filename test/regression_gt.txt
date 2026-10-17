@@ -6,6 +6,7 @@
 # accepted-with-regressions (smoke, 2026-10-17): colossus + colossus2hg: deck ADDED to all three tiers (4 NEW smoke keys; analysis-Colossus Hammer.md). melira + melira2hg: play-only change at the SAME avg (d3 s1001 gi3, still T4) from the breakpoint cast-record fix 0d410db07 -- the committed T4 continuation convokes Chord of Calling, which the old replay could not pay and skipped. Every other smoke cell byte-identical (116/116).
 # accepted-with-regressions (regression, 2026-10-17): colossus: deck ADDED to all three tiers (5 NEW regression keys; analysis-Colossus Hammer.md), measured on 0d410db07 (the breakpoint cast-record fixes). Every other regression cell byte-identical (166/166), references 600 / 0 drift.
 # accepted-with-regressions (overnight, 2026-10-17): colossus: deck ADDED to all three tiers with the overnight ENTRY set (12 NEW keys, d0 4x2000, d3 4x400 b10, d5 4x300 b20; analysis-Colossus Hammer.md), PGO binary of 0d410db07, makespan 2m23s. Expands to the FULL set just before a keep table is adopted.
+# accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17: attach folds (7b5863d22) + USER-ruled Sigarda's Aid host heuristic (8f2b54551); 0 slower; searched 13 same-turn line changes, d0 7 faster; every other deck byte-identical in the same combined run
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -101,7 +102,7 @@ critter2hg_smoke_d3_s1001=4.7600/a5edfe66f0792867
 melira2hg_smoke_d3_s1001=4.8400/7d182c91725b79a6
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=4.9800/eded3f2b34b85d3a
-colossus2hg_smoke_d3_s1001=4.4800/6e315bcbd5964469
+colossus2hg_smoke_d3_s1001=4.4800/18bf02b0e5ba6571
 pd2hg_smoke_d3_s1001=5.6000/3ec18a53def26c00
 fluctuator_smoke_d0_s1001=4.9870/51bdb352a7a5fc23
 fluctuator_smoke_d3_s1001=3.5400/68f1f512c6091db9

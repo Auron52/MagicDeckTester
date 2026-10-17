@@ -190,10 +190,16 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   trees, live trees and anything < 24 h kept); disk now 68%, cache 46 GB. Only that agent's Profile build hit ENOSPC.
   OPEN (USER): key the cache by content or give it eviction, so worktrees stop multiplying it.
 
+* **Combined smoke on `8f2b54551` (pay + dep-skip + attach folds + idle fan-out + host fold + mana cut + Aid
+  heuristic), 2026-10-17 ~14:40 UTC:** 120/124 configs byte-identical to GT; only the four Colossus configs moved --
+  searched 0 slower / 0 faster / 13 same-turn line changes (fold 9 + Aid 4, each matching its agent's list), d0 0
+  slower / 7 faster (fold 1 + Aid 6) / 49 play-changed. ACCEPTED (smoke, `--deck=colossus,colossus2hg`, scoped note);
+  check_gt_logs consistent. Regression tier NOT yet re-run (after the last play-changing fixes land).
+
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`)
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
-- flags: 2 unresolved      # 3 FIXED 9674c1cb6; 4-6 FIXED (fold commit, rebased onto 4e823e60e); 1 = USER cast-order call; 2 in flight (colossus-aid)
+- flags: 1 unresolved      # 2 FIXED (Aid heuristic, USER ruling); 3 FIXED 9674c1cb6; 4-6 FIXED; 1 = the USER cast-order call (fixed by the OFF draft)
 
 Results (search d5 b200 vs Claude, win turn): 2100001 4/4, 2100002 2/2, 2100003 5/5, 2100004 3/3, 2100005 4/4,
 2100006 5/5, 2100007 **7/2** (Claude kept a 1-lander seeing 6 draws; the static keep mulliganed to 5 -- a keep-table
@@ -207,7 +213,13 @@ Flags, verified against cards.json + the code:
 2. **CONFIRMED, autonomous** (2100011): Sigarda's Aid's host is ONE provider pick (`EquipmentEtbAttachHost`) that
    ignores whether the host can attack -- Hammer onto a sick Lizard Blades over a ready Swiftblade, T4 kill lost. A
    greedy pick in the search window. USER RULING 2026-10-17: a heuristic pick is fine -- rank DS potential, then
-   can-attack, always attach (Standing decisions). IN FLIGHT on `colossus-aid` as that heuristic.
+   can-attack, always attach (Standing decisions). **FIXED** (`ColossusHammerProvider::EquipmentEtbAttachHost`,
+   lexicographic: DS after the attach > can attack this turn (`CanAttackFull` / a haste grant) > resulting power >
+   card number; always attaches except an entering Lizard Blades that gives no host DS). s2100011 now T4 at b5 / b20 /
+   b100 / d8 b0 (was T5 at all). Scenarios `colossus_aid_ready_host`, `colossus_aid_host_in_tutor_continuation`.
+   Smoke: only Colossus moved, 0 slower anywhere; d0 6 faster (4.9670 -> 4.9610), searched 4 same-turn play changes.
+   Kitty keeps the base hook (the same rule would move 13 Kitty d0 games, all same score). Follow-up IN FLIGHT: Magnetic
+   Theft's pending Equipment target is not reset when the executor's cast misses (a skipped Theft can hand it on).
 3. **CONFIRMED, human play** (2100016, 2100017): committing a multi-cast line taps the only source of a colour the
    rest of the hand needs (Snarl for {1}{R} while a Mountain stays up; the only Mountain for a generic {1}).
    **FIXED `9674c1cb6`** (MTG_HUMAN_PREPAY_DEMAND, default ON, human play only): the whole-line batch prepay
