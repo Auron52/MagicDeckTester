@@ -298,6 +298,24 @@ Flags, verified against cards.json + the code:
    is lethal; two same-name permanents carry identical labels; two Sigarda's Aids fire ONE attach trigger (CR 603.2
    says each triggers -- outcome-inert here: only the final host matters and nothing reads an attach event).
 
+### Final-engine recheck of the 7 flagged seeds (2026-10-17 ~18:00 UTC, Opus, `build/scratch/colossus/sweep2/`)
+Each agent replayed its original choices to the flagged decision on the final engine, checked it, then played out.
+Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 2100014 3/2, 2100016 3/3, 2100017 6/6,
+2100018 4/4 -- Claude never slower.
+* FIXED, confirmed in play: flag 2 (Aid: Hammer onto the ready Swiftblade, 22 for the T4 kill, autonomous via
+  `--choices-then-auto` AND the human default), flag 3 (multi-cast payment keeps Snarl / the Mountain; follow-up W/R
+  cards offered), flag 4 (no reconfigure-then-equip-onto-Lizard plan; waiver kept), flag 5 (no double-Theft; 2100003
+  T5 menu >147 -> 65; genuine one-on-each lines still offered and execute: 24 dmg), flag 6 (Path default = the bare
+  creature, by equipped power).
+* Flag 1 STILL OPEN (USER cast-order call): 2100014 -- shipped generic order T3 at d5 b200 AND at d8 b0 (the T2 line
+  is unfindable); `MTG_COLOSSUS_ORDER=1` T2 at both (Aid, then Hammer onto Kor Duelist, 22).
+* NEW, confirmed: human fail-to-find at Steelshaper's Gift / Open the Armory skipped the mandatory shuffle (CR
+  701.19b) -> FIXED in this tree (`HumanFailToFindShuffles`, unit test `test_tutor_fail_to_find.cpp`).
+* NEW, human-menu only, sent to the fold agent: fold (d)'s Path exemption is order-blind (2100017 T6: 5 unexecutable
+  Path-before-Theft plans); a Theft onto a HAND-cast Lizard Blades the plan reconfigures is not folded (2100018 T7);
+  a Path that exiles the Theft's only creature lets the Theft be cast with no legal target (2100018 T4; CR 601.2c --
+  it must stay in hand).
+
 ## Open USER questions (provisional defaults TAKEN — the work continues on them)
 
 1. **Provider** — `ColossusHammerProvider` derives from `DeckProvider` (Generic). It does NOT inherit

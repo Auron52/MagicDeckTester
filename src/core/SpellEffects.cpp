@@ -173,6 +173,18 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
 // `human_repick` = "this tutor is resolving from a CAST in a committed plan". Set ONLY at the two
 // cast-resolution sites (EffectHandler's spell resolution and ApplyPlanDirect's apply_one); it makes
 // the human chooser fire even though the plan already baked a target. See the note at that branch.
+// A human "-1" at a tutor's search is a FAIL TO FIND (CR 701.19b) for a library search the card
+// requires ("search your library for ..., then shuffle": Steelshaper's Gift, Open the Armory), so the
+// shuffle still happens. It is a true decline -- no search, no shuffle -- only for a "you MAY search"
+// card (tutor_optional), and neither a wish (the sideboard is not searched) nor a regrowth (the
+// graveyard) shuffles at all, matching the found-a-card path's `!wish && !regrow` gate below.
+// Human play only: both callers sit behind g_play_tutor_chooser, which every search / rollout /
+// autonomous scope nulls.
+static bool HumanFailToFindShuffles(const CardParams& pp)
+{
+    return !pp.tutor_optional && !pp.wish_from_sideboard && !pp.tutor_from_graveyard;
+}
+
 void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& target_name,
                          const std::string& source_name,
@@ -233,7 +245,14 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
             std::string chosen;
             const TutorAskResult r = AskHumanTutorPick(state, controller_index, pp, source_name,
                                                        /*baked=*/std::string{}, chosen);
-            if (r == TutorAskResult::Declined) { return; }   // declined the optional search
+            if (r == TutorAskResult::Declined)
+            {
+                // A "search ... then shuffle" the human FAILS TO FIND on still shuffles (CR 701.19b
+                // lets the search come up empty; the printed shuffle is unconditional). Only a
+                // "you MAY search" decline skips the search -- and with it the shuffle.
+                if (HumanFailToFindShuffles(pp)) { ShuffleAfterSearch(state, controller_index); }
+                return;
+            }
             if (r == TutorAskResult::Chosen)   { want = chosen; }
         }
     }
@@ -261,7 +280,11 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         std::string chosen;
         const TutorAskResult r = AskHumanTutorPick(state, controller_index, pp, source_name,
                                                    /*baked=*/want, chosen);
-        if (r == TutorAskResult::Declined) { return; }   // declined, or the baked target is gone
+        if (r == TutorAskResult::Declined)   // declined, or the baked target is gone
+        {
+            if (HumanFailToFindShuffles(pp)) { ShuffleAfterSearch(state, controller_index); }   // CR 701.19b, as above
+            return;
+        }
         if (r == TutorAskResult::Chosen)   { want = chosen; }
     }
     // NAME-RESTRICTED WISH resolution guard (Legion Angel: "a card ... named Legion Angel").

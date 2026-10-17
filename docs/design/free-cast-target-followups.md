@@ -23,3 +23,12 @@ from the executor's. Anything that later reads graveyard identity by number (a r
 that de-duplicates, reference replay) can disagree. Same class as the Green Sun's Zenith shuffle fix. Fix shape: move
 the actual cast copy through the stack into the graveyard in the rollout, as the executor does. Test: cast an instant
 in both worlds and compare graveyard card numbers.
+
+## 3. (related, autonomous) A required library search with NO candidates returns without shuffling
+
+`PerformTutor` returns at `if (cands.empty()) { return; }` before `ShuffleAfterSearch`, in both worlds. Per CR 701.19b
+a "search your library for ..., then shuffle" that finds nothing still shuffles. The HUMAN decline path was fixed on
+2026-10-17 (`HumanFailToFindShuffles`); this autonomous twin moves the post-search library order -- and so every later
+draw -- on any game that casts a tutor into an empty pool, so it is a play change owed a smoke/regression run with
+per-deck verdicts. Caveat before fixing: check whether `LiveTutorCandidates` can be empty because of a PROVIDER cut
+rather than the library contents; only the true "no legal card" case is a fail-to-find.
