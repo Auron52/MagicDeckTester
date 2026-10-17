@@ -9,6 +9,7 @@
 # accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17: attach folds (7b5863d22) + USER-ruled Sigarda's Aid host heuristic (8f2b54551); 0 slower; searched 13 same-turn line changes, d0 7 faster; every other deck byte-identical in the same combined run
 # accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17 (2): Magnetic Theft every-pair offer + joint mirror fold (aecb9c84f); searched 0 slower / 3 same-turn; d0 gi539 T6->unwon (d0 greedy tie-break picks a self-Path that exiles its only attacker; RECOVERS stage 1, d6 b100 T3), gi344 T7->T6; every other deck byte-identical
 # accepted-with-regressions (regression, 2026-10-17): colossus + snow regression 2026-10-17: colossus = attach folds, USER-ruled Sigarda's Aid host heuristic, Theft every-pair/per-copy offers (searched 16 same-turn line changes, d0 6 faster); snow d3 s2002 gi31 = the breakpoint MISMATCH fix (pre-target occurrences mirror the scored line), same T7; 0 slower anywhere; every other deck byte-identical; refs 600/0 drift
+# accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17 (3): a Magnetic Theft with no legal pair is not cast (CR 601.2c, 56937ba8a) -- d0 gi539 same score (loss both), its two Thefts now stay in hand after Path exiles the only creature; searched 0 changed; every other deck byte-identical; regression 171/171 PASS, refs 600/0 drift
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
