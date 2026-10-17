@@ -163,6 +163,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // is an empty DeckProvider derivation, as SelesnyaLifegainProvider is, so the move is
         // play-neutral by construction.
         {"Landfall", "Landfall"},
+        // Colossus Hammer (onboarded 2026-10-17): its OWN provider, routed by the three attach routes
+        // no other deck carries (Raubahn's attack_attach_equipment, Magnetic Theft's
+        // attach_target_equipment, Lizard Blades' reconfigure_cost) -- never KittyEquipment's
+        // EquipmentProvider, which Kor Duelist / Sigarda's Aid / Ardenn would otherwise select.
+        {"Colossus Hammer", "ColossusHammer"},
     };
 
     namespace fs = std::filesystem;
