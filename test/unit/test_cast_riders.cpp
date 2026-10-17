@@ -292,9 +292,11 @@ TEST_CASE("Free cast: a SKIPPED Archangel free cast does not make the next cast 
 TEST_CASE("Free cast: a REFUSED cascade hit does not make the next cast free (rollout)")
 {
     EnsureCardsLoaded();
-    // Throes of Chaos cascades into Path to Exile, which has no legal target (no creature anywhere) and
-    // is refused at apply_one's Path guard -- after the cascade walk armed the free-cast one-shot. Four
-    // Mountains pay for Throes; nothing pays the Duelist's {W}, so only a stray free cast could cast it.
+    // Throes of Chaos cascades into Path to Exile, which has no legal target (no creature anywhere). It
+    // used to be refused at apply_one's Path guard AFTER the cascade walk armed the free-cast one-shot;
+    // since FreeCastHasLegalTargets the walk does not cast it at all (it is bottomed -- see the cascade
+    // cases below). Either way: four Mountains pay for Throes, nothing pays the Duelist's {W}, so only a
+    // stray free cast could cast it.
     GameState s = Fresh({ "Path to Exile" });
     for (int k = 0; k < 4; ++k) { Put(s, "Mountain", 50 + k); }
     Hand(s, "Throes of Chaos", 30);
@@ -304,4 +306,98 @@ TEST_CASE("Free cast: a REFUSED cascade hit does not make the next cast free (ro
     TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/true);
     REQUIRE_FALSE(InHand(roll, "Throes of Chaos"));
     CHECK(InHand(roll, "Kor Duelist"));
+}
+
+// ---- a cascade hit that CANNOT be cast is not cast (CR 702.85a + 601.2c) ------------------------
+//
+// Throes of Chaos ({3}{R}, cascade) with Path to Exile on top of the library and no creature anywhere:
+// Path needs a target it cannot have, so it is not cast and goes to the BOTTOM with the other exiled
+// cards (here none: it is the first card), exactly as a declined hit. The one shared test is
+// FreeCastHasLegalTargets. Before it the rollout put Path into HAND (its walk EnterHands the hit, then
+// apply_one's Path guard refused the cast) and the executor's PushFreeCast CAST it with no target.
+
+namespace
+{
+// Where the (only) card named `name` is: "hand", "graveyard", "exile", "battlefield", "library-bottom",
+// "library", "?". By NAME, not number: the rollout files a resolved spell as its definition's card.
+std::string ZoneOf(const GameState& s, const std::string& name)
+{
+    for (const Card& c : s.players[0].hand)      { if (c.m_name.str() == name) { return "hand"; } }
+    for (const Card& c : s.players[0].graveyard) { if (c.m_name.str() == name) { return "graveyard"; } }
+    for (const Card& c : s.exile)                { if (c.m_name.str() == name) { return "exile"; } }
+    for (const Permanent& p : s.battlefield)     { if (p.card.m_name.str() == name) { return "battlefield"; } }
+    const Library& lib = s.players[0].library;
+    for (std::size_t i = 0; i < lib.size(); ++i)
+    {
+        if (lib[i].m_name.str() == name) { return i + 1 == lib.size() ? "library-bottom" : "library"; }
+    }
+    return "?";
+}
+
+GameState ThroesIntoPath(bool opponent_creature)
+{
+    GameState s = Fresh({ "Path to Exile" });   // Path = the top card
+    for (int k = 0; k < 4; ++k) { Put(s, "Mountain", 50 + k); }
+    Hand(s, "Throes of Chaos", 30);
+    if (opponent_creature)
+    {
+        Permanent p;
+        p.card             = Def("Kor Duelist").card;
+        p.card.m_number    = 700;
+        p.controller_index = 1;
+        p.owner_index      = 1;
+        s.battlefield.push_back(p);
+    }
+    return s;
+}
+
+std::string RollPathZone(bool opponent_creature)
+{
+    GameState roll = ThroesIntoPath(opponent_creature);
+    TurnSolver::ApplyPlan(roll, PlanOf({ CastAct("Throes of Chaos") }), /*is_pre_combat=*/true);
+    REQUIRE(ZoneOf(roll, "Throes of Chaos") == "graveyard");   // Throes itself was cast
+    return ZoneOf(roll, "Path to Exile");
+}
+
+std::string ExecPathZone(bool opponent_creature)
+{
+    GameState exec = ThroesIntoPath(opponent_creature);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, PlanOf({ CastAct("Throes of Chaos") }), true);
+    eng.TakeTurn(exec, true, ResolveAll);
+    REQUIRE(ZoneOf(exec, "Throes of Chaos") == "graveyard");
+    return ZoneOf(exec, "Path to Exile");
+}
+}   // namespace
+
+TEST_CASE("Cascade (rollout): a hit with no legal target is not cast -- bottomed, not left in hand")
+{
+    EnsureCardsLoaded();
+    CHECK(RollPathZone(false) == "library-bottom");
+}
+
+TEST_CASE("Cascade (executor): a hit with no legal target is not cast -- bottomed, not cast targetless")
+{
+    EnsureCardsLoaded();
+    CHECK(ExecPathZone(false) == "library-bottom");
+}
+
+TEST_CASE("Cascade: both worlds put the hit in the same zone -- with and without a legal target")
+{
+    EnsureCardsLoaded();
+    CHECK(RollPathZone(false) == ExecPathZone(false));
+    // An opponent creature makes Path castable: both worlds cast it (it ends in the graveyard).
+    CHECK(RollPathZone(true) == "graveyard");
+    CHECK(ExecPathZone(true) == RollPathZone(true));
+}
+
+TEST_CASE("Cascade: the shared legality test, per target class")
+{
+    EnsureCardsLoaded();
+    GameState s = ThroesIntoPath(false);
+    CHECK_FALSE(FreeCastHasLegalTargets(s, 0, Def("Path to Exile")));
+    CHECK(FreeCastHasLegalTargets(s, 0, Def("Throes of Chaos")));    // no target
+    CHECK(FreeCastHasLegalTargets(ThroesIntoPath(true), 0, Def("Path to Exile")));
+    CHECK_FALSE(FreeCastHasLegalTargets(s, 0, Def("Searing Blood")));   // target creature, none
+    CHECK_FALSE(FreeCastHasLegalTargets(s, 0, Def("Magnetic Theft")));  // no Equipment / creature pair
 }

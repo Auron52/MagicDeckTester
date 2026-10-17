@@ -1029,6 +1029,10 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
 {
     auto def = CardDatabase::Instance().LookupCached(card);
     if (!def) { return false; }
+    // CR 601.2c: a spell that needs a target it cannot have is not cast -- the caller puts the card in
+    // its walk's not-cast zone (cascade: the bottom). The shared test (SpellEffects.h), read by the
+    // rollout's walks too; the callers below also skip the human prompt on it.
+    if (!FreeCastHasLegalTargets(state, controller, *def)) { return false; }
     // Irencrag "one more spell" budget: a forbidden cast is not made -- the caller decides the
     // card's fallback zone (cascade bottoms it, Breaching Dragonstorm hands it, Creative
     // Technique strands it in exile). Inert (-1) for every deck without a max_casts_after card.
@@ -1098,10 +1102,12 @@ void EffectHandler::ResolveCascadeTrigger(GameState& state, const StackEntry& en
     // "You may cast it": provider-owned default (DecisionProvider::TakeFreeCast, Generic =
     // always take -- disclosed in Stage 6a), human chooser overrides at real resolution. A
     // decline, or a cast a restriction forbids, bottoms the hit under the walked cards.
-    bool take = true;
+    // A hit that cannot be cast (FreeCastHasLegalTargets: no legal target, CR 601.2c) is not offered
+    // and goes to the bottom with the walked cards, as a declined one (CR 702.85a).
     const CardDefinition* hd = CardDatabase::Instance().LookupCached(hit);
-    if (hd) { take = ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *hd); }
-    if (g_play_free_cast_chooser)
+    const bool castable = hd != nullptr && FreeCastHasLegalTargets(state, entry.controller_index, *hd);
+    bool take = castable && ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *hd);
+    if (castable && g_play_free_cast_chooser)
     {
         std::vector<Card> cands{ hit };
         take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
@@ -1140,8 +1146,12 @@ void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& 
     const int mv = fd ? fd->card.m_mana_cost.ManaValue() : found.m_mana_cost.ManaValue();
     // The MV gate bounds only the free cast, not the walk (oracle constant, 8 here).
     bool take = (mv <= def.params.etb_exile_free_cast_max_mv);
+    // ...and a hit with no legal target cannot be cast at all (FreeCastHasLegalTargets): to hand.
     if (take && fd)
-    { take = ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *fd); }
+    {
+        take = FreeCastHasLegalTargets(state, entry.controller_index, *fd)
+            && ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *fd);
+    }
     if (take && g_play_free_cast_chooser)
     {
         std::vector<Card> cands{ found };
@@ -1225,9 +1235,10 @@ void EffectHandler::ResolveShuffleRevealFreecast(GameState& state, const StackEn
         return;
     }
     const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
-    bool take = fd ? ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *fd)
-                   : false;
-    if (g_play_free_cast_chooser)
+    // A hit with no legal target cannot be cast (FreeCastHasLegalTargets): not offered, stays exiled.
+    const bool castable = fd != nullptr && FreeCastHasLegalTargets(state, entry.controller_index, *fd);
+    bool take = castable && ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *fd);
+    if (castable && g_play_free_cast_chooser)
     {
         std::vector<Card> cands{ found };
         take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
