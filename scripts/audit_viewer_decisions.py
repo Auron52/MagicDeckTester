@@ -1033,6 +1033,14 @@ INERT_PARAMS = {
     "aura_enchant_requires": "aura enchant-target restriction (narrows the is_aura main_phase variants)",
     "aura_self_buff_power": "Kor static per-aura self-buff, computed P/T", "aura_self_buff_tough": "Kor static per-aura self-buff, computed P/T",
     "draw_on_aura_cast": "Kor may-draw auto-resolved as always-draw (strictly good in goldfish), no meaningful choice",
+    # ---- NivMizzetCombo (2026-10-17): the draw/damage loop, resolved by the shared iterative
+    # ResolveDrawTriggers (SpellEffects.h). The only real choices on these cards are Curiosity's HOST
+    # (is_aura -> main_phase enchant-target variant) and Lookout's PARTNER (soulbond -> attach_host).
+    "draw_trigger_damage": "Niv-Mizzet's 'whenever you draw a card, 1 damage to ANY TARGET' -- any-target collapses to the opponent's face in the goldfish (the etb_damage_any / dragon_ping_on_enter precedent; the face hit is also what a Curiosity / paired Lookout on the Niv draws off). Automatic, not asked of a human (disclosed)",
+    "cast_trigger_instant_sorcery_draw": "Niv-Mizzet, Parun's 'whenever a player casts an instant or sorcery spell, you draw a card' -- MANDATORY, no target, no mode, no 'may'",
+    "aura_damage_trigger_draw": "Curiosity's 'you MAY draw a card' auto-resolved as draw iff the library is non-empty (PROVISIONAL dominance fold, the draw_on_aura_cast precedent; declining from an empty library is forced). WHICH creature it enchants is the is_aura main_phase enchant-target variant",
+    "soulbond_damage_trigger_draw": "Tandem Lookout's soulbond PAYLOAD -- a granted MANDATORY draw trigger on both halves of the pair; no target, no mode, no 'may'. The decision on the card is WHICH partner, which is the soulbond attach_host board-click (with a decline arm)",
+    "cant_be_countered": "Niv-Mizzet, Parun's 'this spell can't be countered' -- a static property, no choice (inert vs the passive opponent; read by a self-targeted Remand)",
     "draw_on_cast_subtypes": "Sram's on-cast draw is MANDATORY -- there is no 'may' at all (unlike Puresteel and Kor), so nothing is auto-resolved and there is no choice to surface",
     "equip_scale_power_per_equipment": "Golem-Skin Gauntlets' dynamic +1/+0 per Equipment attached to the host. A static characteristic-modifying value with no target, mode, division or 'may'; the only decision on the card is WHICH host, which is the existing equip plan-line axis",
     "equip_scale_tough_per_equipment": "toughness twin of equip_scale_power_per_equipment; same reasoning -- a static value, no choice",

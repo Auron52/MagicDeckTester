@@ -1368,6 +1368,96 @@
    }
   },
   {
+   "name": "Niv-Mizzet, the Firemind",
+   "mana_cost": "{2}{U}{U}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Dragon",
+    "Wizard"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Flying\nWhenever you draw a card, Niv-Mizzet deals 1 damage to any target.\n{T}: Draw a card. [Flying inert (no blockers). Every clause modelled: the draw trigger is draw_trigger_damage 1: one ping per card YOU draw (draw step, cantrips, activations, Curiosity/Lookout draws), resolved after the effect that drew has finished (CR 603.3 -- a Brainstorm puts back first) by the shared iterative loop ResolveDrawTriggers, which stops the instant the opponent has lost. 'Any target' collapses to the opponent's FACE (the etb_damage_any / Pashalik Mons precedent: nothing else is worth hitting in the goldfish, and the face hit is what a Curiosity or a paired Tandem Lookout on this Niv draws off); a human is not asked. '{T}: Draw a card' rides tap_draw_cost {0} -- the shared TapDraw activation (Frost Augur / Troyan), a searched main-phase plan action; summoning sickness applies through CanTapNow (haste lifts it), and tapping forfeits the attack. A card it draws is castable the same turn (the activation opens the hand-entry breakpoint). Legend rule modelled.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "draw_trigger_damage": 1,
+    "tap_draw_cost": "{0}"
+   }
+  },
+  {
+   "name": "Niv-Mizzet, Parun",
+   "mana_cost": "{U}{U}{U}{R}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Dragon",
+    "Wizard"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "This spell can't be countered.\nFlying\nWhenever you draw a card, Niv-Mizzet deals 1 damage to any target.\nWhenever a player casts an instant or sorcery spell, you draw a card. [Flying inert (no blockers). 'Can't be countered' is cant_be_countered -- inert against the passive opponent, who casts no counterspell; its reader is the self-targeted Remand (which then fails to counter it). The draw trigger is draw_trigger_damage 1: one ping per card YOU draw (draw step, cantrips, activations, Curiosity/Lookout draws), resolved after the effect that drew has finished (CR 603.3 -- a Brainstorm puts back first) by the shared iterative loop ResolveDrawTriggers, which stops the instant the opponent has lost. 'Any target' collapses to the opponent's FACE (the etb_damage_any / Pashalik Mons precedent: nothing else is worth hitting in the goldfish, and the face hit is what a Curiosity or a paired Tandem Lookout on this Niv draws off); a human is not asked. The cast trigger is cast_trigger_instant_sorcery_draw 1, fired from the shared FireOnCastTriggers at every cast site (a COPY is not cast, CR 707.10, so it never fires): Parun's controller draws a card, mandatory (an empty library loses), and that draw's pings resolve ABOVE the spell, before it resolves. Legend rule modelled.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "draw_trigger_damage": 1,
+    "cast_trigger_instant_sorcery_draw": 1,
+    "cant_be_countered": true
+   }
+  },
+  {
+   "name": "Curiosity",
+   "mana_cost": "{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nWhenever enchanted creature deals damage to an opponent, you may draw a card. [Enchant creature: is_aura -- WHICH creature is a SEARCHED plan variant (one cast variant per legal host, the shared LegalEnchantTargets; surfaced to a human as the enchant-target choice), and it falls off with its host (SweepOrphanedAuras). The trigger is aura_damage_trigger_draw: whenever the HOST deals damage to an opponent -- a Niv-Mizzet draw-trigger ping, or a combat-damage step -- Curiosity's controller may draw a card; ONE trigger per damage event, never per point. 'You may' is folded to 'draw iff the library is non-empty' (PROVISIONAL dominance fold, user sign-off owed: drawing is weakly dominant except near deck-out with a loop that cannot kill; declining from an empty library is forced). On a Niv this is the infinite draw/ping loop, resolved iteratively until the opponent is dead or the library is empty. NOT modelled: non-combat damage by a host that is not a Niv (an ETB ping) does not fire it -- the engine tracks no source there, and no such host exists in any list running Curiosity.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "aura_damage_trigger_draw": true
+   }
+  },
+  {
+   "name": "Tandem Lookout",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Scout"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Soulbond (You may pair this creature with another unpaired creature when either enters. They remain paired for as long as you control both of them.)\nAs long as Tandem Lookout is paired with another creature, each of those creatures has \"Whenever this creature deals damage to an opponent, draw a card.\" [Soulbond modelled structurally (the `soulbond` param -- Silverblade Paladin's machinery: both pairing triggers in the universal enter cascade, a read-time-verified Permanent::paired_with, so a pair breaks the moment either half leaves and the Lookout may pair with the next creature to enter). WHICH partner is the provider's SoulbondPartner (highest effective power), surfaced to a human as the `attach_host` board-click with a decline arm; with only a weak partner up the search also scores 'wait' (the soulbond_decline twin). The payload is soulbond_damage_trigger_draw: BOTH halves of the live pair have the granted trigger -- one MANDATORY draw per damage event (a Niv ping, a combat-damage step), resolved by the shared loop, which stops the instant the opponent has lost so it never decks us past the kill; a draw from an empty library loses (CR 704.5b).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "soulbond": true,
+    "soulbond_damage_trigger_draw": true
+   }
+  },
+  {
    "name": "Hero of Bladehold",
    "mana_cost": "{2}{W}{W}",
    "types": [

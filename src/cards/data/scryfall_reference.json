@@ -1175,6 +1175,17 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Curiosity": {
+    "cmc": 1.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Enchant creature\nWhenever enchanted creature deals damage to an opponent, you may draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Daring Buccaneer": {
     "cmc": 1.0,
     "keywords": [],
@@ -3389,6 +3400,28 @@
     "toughness": null,
     "type_line": "Legendary Planeswalker — Bolas"
   },
+  "Niv-Mizzet, Parun": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{U}{U}{U}{R}{R}{R}",
+    "oracle_text": "This spell can't be countered.\nFlying\nWhenever you draw a card, Niv-Mizzet deals 1 damage to any target.\nWhenever a player casts an instant or sorcery spell, you draw a card.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Dragon Wizard"
+  },
+  "Niv-Mizzet, the Firemind": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{2}{U}{U}{R}{R}",
+    "oracle_text": "Flying\nWhenever you draw a card, Niv-Mizzet deals 1 damage to any target.\n{T}: Draw a card.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Dragon Wizard"
+  },
   "Nykthos Paragon": {
     "cmc": 6.0,
     "keywords": [],
@@ -4941,6 +4974,17 @@
     "power": "2",
     "toughness": "4",
     "type_line": "Creature — Spirit"
+  },
+  "Tandem Lookout": {
+    "cmc": 3.0,
+    "keywords": [
+      "Soulbond"
+    ],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Soulbond (You may pair this creature with another unpaired creature when either enters. They remain paired for as long as you control both of them.)\nAs long as Tandem Lookout is paired with another creature, each of those creatures has \"Whenever this creature deals damage to an opponent, draw a card.\"",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Scout"
   },
   "Tarnished Citadel": {
     "cmc": 0.0,
