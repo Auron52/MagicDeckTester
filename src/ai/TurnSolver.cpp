@@ -33614,7 +33614,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // the provider-front class's credit, and in the DECISION space (searched collect, executor) one
     // variant per further credit class is appended beside it (same hand_index -> mutually exclusive;
     // plan_signature's #LP keeps the dedup from folding them). Each variant's resolution is restricted
-    // to its own class (StackEntry::land_put_credit / apply_one's cast_land_put), so the variants
+    // to its own class (StackEntry::land_put_credit / apply_one's cast rider land_put), so the variants
     // PARTITION the picks: no pick is lost and no colour is promised that the pick cannot make. A
     // rollout leaf (estimating -- the phyrexian precedent) keeps the front class only, which resolves
     // exactly the provider-front pick the playout always took.
@@ -43803,24 +43803,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // list no-ops. Lockstep twin: AIEngine::TakeTurn's rdb_leftovers / bp_trunc_exec.
     std::vector<Action> lo_pending;
     bool lo_pending_set = false;
-    // Same-turn loyalty activation riding a CAST action (Action::loyalty_ability). Set by the
-    // Action-based apply_one callers right before the call, consumed (and reset) at apply_one's
-    // head; -1 = none. A captured local rather than a 21st apply_one parameter.
-    int cast_loyalty_ability = -1;
-    // Devour count riding a CAST action (Action::devour_count, Mycoloth). Same idiom and same
-    // reason as cast_loyalty_ability directly above: set by the Action-based apply_one callers
-    // immediately before the call and consumed at apply_one's head, rather than becoming a 22nd
-    // positional parameter on a std::function that ten call sites already pass by position.
-    // -1 = not a devour cast.
-    int cast_devour_count = -1;
-    int cast_twobrid_colored = 0;   // Beseech twobrid variant (Action::twobrid_colored), consume-once like cast_devour_count
-    // Magnetic Theft's searched EQUIPMENT target (Action::attach_equip_id), consume-once like
-    // cast_devour_count; the creature target rides apply_one's enchant_target. Executor twin:
-    // AIEngine::m_pending_attach_equip -> StackEntry::attach_equip_id. 0 = not an attach spell.
-    int cast_attach_equip = 0;
-    // Land-put credit (Search for Tomorrow hard-cast; Action::rock_mana on a LandSearchPutsUntapped cast),
-    // consume-once like the two above; restricts the resolution's pick (executor twin: m_pending_land_put).
-    ManaPool cast_land_put{};
+    // The CAST RIDERS riding a CAST action (TurnSolver.h CastRiders): a walker's same-cast loyalty
+    // activation, Mycoloth's devour count, Beseech's twobrid pips, Magnetic Theft's Equipment target
+    // (the creature target rides apply_one's enchant_target) and Search for Tomorrow's land-put
+    // credit. Armed by the Action-based apply_one callers with CastRiders::Of(a) right before the call
+    // and TAKEN as apply_one's first statement -- before the breakpoint-truncation and karoo-hold
+    // returns as well as every later one -- rather than five more positional parameters on a
+    // std::function that ten call sites pass by position. Executor twin: AIEngine::m_cast_riders.
+    CastRiders cast_riders{};
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
@@ -44809,10 +44799,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     int replicate_count, int convoke_green, int convoke_other, int phyrexian_life,
                     bool evoke, bool adventure, bool kicked)
     {
-        // The land-put credit (Search for Tomorrow): consumed FIRST, before any early return, so a
-        // skipped cast can never hand its credit to a later apply_one call that does not set it.
-        const ManaPool cast_put_credit = cast_land_put;
-        cast_land_put = ManaPool{};
+        // The cast's riders (CastRiders): TAKEN FIRST, before any early return, so a skipped cast can
+        // never hand one to a later apply_one call that arms none (the karoo-held Aura release, the
+        // Aura recast, the alt-payload loop, a cascade hit).
+        const CastRiders riders = cast_riders.Take();
+        const ManaPool cast_put_credit = riders.land_put;
+        const int      cast_loyalty    = riders.loyalty_ability;
+        const int      cast_devour     = riders.devour_count;
+        const int      cast_twobrid    = riders.twobrid_colored;
+        const int      cast_attach     = riders.attach_equip_id;
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
@@ -44837,14 +44832,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (kd && kd->params.is_land_aura && !host_on_bf)
             { karoo_host_auras.emplace_back(name, enchant_target); return; }
         }
-        const int cast_loyalty = cast_loyalty_ability;   // consume the caller's same-cast activation
-        cast_loyalty_ability = -1;
-        const int cast_devour = cast_devour_count;       // ditto, for Mycoloth's devour count
-        cast_devour_count = -1;
-        const int cast_twobrid = cast_twobrid_colored;   // ditto, Beseech's coloured twobrid pips
-        cast_twobrid_colored = 0;
-        const int cast_attach = cast_attach_equip;       // ditto, Magnetic Theft's Equipment target
-        cast_attach_equip = 0;
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
         // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
@@ -45454,8 +45441,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // re-cast the same card as a CREATURE and realise a different board (the fd-diverge
             // class the chosen_float_color note above documents).
             rec.bestow             = bestow;
-            // MAGNETIC THEFT's Equipment target (the consume-once cast_attach_equip) must ride the
-            // record as well: replay_recorded hands it back through m_pending_attach_equip. Without it
+            // MAGNETIC THEFT's Equipment target (the consume-once CastRiders::attach_equip_id) must ride the
+            // record as well: replay_recorded hands it back through AIEngine::m_cast_riders. Without it
             // a Theft cast inside a breakpoint continuation -- the Hammer tutored by Steelshaper's
             // Gift, then cast and Theft'd onto Kor Duelist in the same main -- replayed with NO
             // Equipment and did nothing, while the rollout had attached it and counted the kill
@@ -47234,7 +47221,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         }
                     }
                     const bool tb = bp_truncate;
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                    cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     lo_pending_set = false; lo_pending.clear();
                     fire_unlock();
                     slot_hook(a, tb);
@@ -47388,7 +47375,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); const bool tb = bp_truncate; cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -47415,7 +47402,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                        cast_riders = CastRiders::Of(a); apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -47472,7 +47459,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // a.sacrifice_land is true here only under SacLandCastsInOrder; the trailing sac
                     // loop then skips it (spec_hoisted_sac).
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock();
+                    prep_free(a); cast_riders = CastRiders::Of(a); apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock();
                     lo_pending_set = false; lo_pending.clear();
                     slot_hook(a, tb);
                     dbg_cast("ord", a, dbg_before);
@@ -47513,7 +47500,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }   // cast here, not in the trailing pass
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                    cast_riders = CastRiders::Of(a); apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     fire_unlock();
                     slot_hook(a, tb);
                 }
@@ -47528,7 +47515,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 prep_free(a);
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                cast_riders = CastRiders::Of(a); apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
             }
         }
@@ -47537,7 +47524,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
                 const bool tb = bp_truncate;
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_attach_equip = a.attach_equip_id; cast_twobrid_colored = a.twobrid_colored; cast_land_put = a.rock_mana; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
             }
         }

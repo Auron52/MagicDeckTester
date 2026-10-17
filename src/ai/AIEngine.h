@@ -382,20 +382,14 @@ private:
     // mirrors the rollout semantics byte-for-byte. -1 = no pin (heuristic / probe as before).
     // Saved/restored around shared-engine rollouts alongside m_committed_line.
     // See docs/design/searched-discard-as-search-node.md (stage 1).
-    // Devour count (Mycoloth) riding a CAST action, set by the plan-execution sites immediately
-    // before cast_by_name and consumed at CastSpellFromHand's stack-entry stamp. A member rather
-    // than a 20th positional parameter on cast_by_name, matching TurnSolver's cast_devour_count
-    // idiom in the rollout twin. -1 = not a devour cast.
-    int m_pending_devour_count = -1;
-    int m_pending_twobrid = 0;   // Beseech twobrid variant (Action::twobrid_colored); consume-once in CastSpellFromHand
-    // Magnetic Theft's searched EQUIPMENT target (Action::attach_equip_id), set beside
-    // m_pending_devour_count at every plan-execution cast site and consumed (consume-once, before any
-    // early return) by CastSpellFromHand onto StackEntry::attach_equip_id. 0 = not an attach spell.
-    int m_pending_attach_equip = 0;
-    // Land-put credit (Search for Tomorrow hard-cast; Action::rock_mana on a LandSearchPutsUntapped
-    // cast): consume-once in CastSpellFromHand onto StackEntry::land_put_credit, so the resolution
-    // restricts the pick exactly as the rollout's apply_one does (cast_land_put). Empty elsewhere.
-    ManaPool m_pending_land_put{};
+    // Mycoloth's devour count, Beseech's twobrid pips, Magnetic Theft's Equipment target and Search
+    // for Tomorrow's land-put credit riding a CAST action: the CAST RIDERS (TurnSolver.h), ONE
+    // consume-once slot (a member rather than a 20th positional parameter on cast_by_name). Every
+    // plan-execution site arms it with CastRiders::Of(action) immediately before cast_by_name /
+    // cast_alt, which TAKE it as their first statement (before any early return) and hand it to
+    // CastSpellFromHand -- so a skipped cast never leaves a value for the next one. Rollout twin:
+    // ApplyPlanDirect's cast_riders, taken at apply_one's head.
+    CastRiders m_cast_riders{};
     // The main phase TakeTurn is playing (scoped there, restored on exit): true in the POST-combat main.
     // Read by CastSpellFromHand's main-2 stager stamp (NoteMain2StagerCast), the executor twin of
     // TurnSolver's apply_one, which knows its phase from ApplyPlanDirect's is_pre_combat.
@@ -567,13 +561,17 @@ private:
                                                         // resolution the card goes to staged_cards
                                                         // (this engine's castable exile) so the
                                                         // creature half can be cast from there later
-                           bool kicked = false);        // Kicker (Saproling Migration, CR 702.33):
+                           bool kicked = false,         // Kicker (Saproling Migration, CR 702.33):
                                                         // PAY the kicker -- swap in the "(Kicked)"
                                                         // face, whose cost is printed + kicker
                                                         // (ADDED, CR 601.2b -- the one way this
                                                         // differs from bestow/evoke above, which
                                                         // REPLACE) and whose payload is the kicked
                                                         // clause (four tokens, not two)
+                           const CastRiders& riders = CastRiders{});   // the cast's consume-once
+                                                        // riders, already TAKEN by the caller
+                                                        // (cast_by_name / cast_alt); empty for every
+                                                        // caller that arms none (TurnSolver.h)
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;

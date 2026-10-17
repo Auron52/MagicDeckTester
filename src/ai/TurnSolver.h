@@ -515,9 +515,9 @@ struct Action
                                        // identity folds (sharing hand_index -> mutually exclusive), so
                                        // the SEARCH picks the pair; plan_signature keys it (#MT) so the
                                        // dedup cannot collapse pairs. Threaded to resolution through
-                                       // apply_one's consume-once cast_attach_equip (rollout) and
-                                       // AIEngine::m_pending_attach_equip -> StackEntry::attach_equip_id
-                                       // (executor), both into ResolveAttachTargetEquipment.
+                                       // the consume-once CastRiders (apply_one's cast_riders in the
+                                       // rollout; AIEngine::m_cast_riders -> StackEntry::attach_equip_id
+                                       // in the executor), both into ResolveAttachTargetEquipment.
                                        // 0 = not an attach spell.
     InternedName attach_equip_hand;    // ...and the Equipment target's NAME when it is a same-plan HAND
                                        // cast (cast the Hammer, then Theft it onto the Duelist): the
@@ -700,6 +700,52 @@ struct Action
     // SolveWithLookahead (Plan::operator==), which must prove a variant IS its base plan but for the
     // combat pins; a member compared by identity (cont_pins, def) only makes the test stricter.
     bool operator==(const Action&) const = default;
+};
+
+// CAST RIDERS -- the per-cast values a plan action hands to ONE cast that are NOT positional parameters
+// of the executor's cast_by_name / cast_alt or the rollout's apply_one (each already takes ~20): Magnetic
+// Theft's Equipment target, Mycoloth's devour count, Beseech's coloured twobrid pips, Search for
+// Tomorrow's land-put credit and a walker's same-cast loyalty activation.
+//
+// CONSUME-ONCE, ONE BODY FOR BOTH WORLDS. Every plan-execution site arms them with Of(action)
+// immediately before the cast; the cast entry TAKES them (copies them out, resets the slot) as its
+// FIRST statement, before any early return. So a cast that does not happen -- card not in hand, held
+// for a deferred karoo, cut by a breakpoint truncation, unknown, over the Irencrag budget, unpayable,
+// an illegal target -- can never hand a value to a later cast that arms nothing of its own (cast_alt,
+// the dig rebuy, the Aura recast, the held-Aura release, a cascade hit). Holders: AIEngine::
+// m_cast_riders (taken by cast_by_name and cast_alt, passed to CastSpellFromHand) and ApplyPlanDirect's
+// cast_riders (taken at apply_one's head). Before this the two worlds reset different subsets on
+// different returns: the executor kept Theft's target and the devour count across a cast_by_name miss
+// (the rollout consumed both), the rollout kept four of the five across a breakpoint truncation and a
+// karoo hold, and the executor never armed them for an alt-cost cast at all (the rollout did).
+// Each field's default is the Action's own "not this kind of cast" value.
+struct CastRiders
+{
+    int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
+                                     // the executor's walker_cast_activation reads the Action, gated on
+                                     // the cast having been paid)
+    int      devour_count    = -1;   // Action::devour_count (Mycoloth)
+    int      twobrid_colored = 0;    // Action::twobrid_colored (Beseech the Queen)
+    int      attach_equip_id = 0;    // Action::attach_equip_id (Magnetic Theft's Equipment target)
+    ManaPool land_put{};             // Action::rock_mana on a LandSearchPutsUntapped cast (Search for Tomorrow)
+
+    static CastRiders Of(const Action& a)
+    {
+        CastRiders r;
+        r.loyalty_ability = a.loyalty_ability;
+        r.devour_count    = a.devour_count;
+        r.twobrid_colored = a.twobrid_colored;
+        r.attach_equip_id = a.attach_equip_id;
+        r.land_put        = a.rock_mana;
+        return r;
+    }
+    // Copy out and reset: the ONLY way a cast reads them.
+    CastRiders Take()
+    {
+        CastRiders r = *this;
+        *this = CastRiders{};
+        return r;
+    }
 };
 
 // Finds the optimal set of spells to cast in one main phase by exhaustive

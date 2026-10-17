@@ -4,7 +4,7 @@
 //  main phase may spend it. The cast now carries a LAND-PUT CREDIT on Action::rock_mana, emitted once
 //  per credit class of its legal picks, and its resolution is RESTRICTED to the picks earning that
 //  credit (core/LandSearch.h LandSearchCreditGroups / LandSearchCreditFilter) -- in the rollout through
-//  apply_one's cast_land_put, in the executor through StackEntry::land_put_credit. Pinned:
+//  apply_one's land_put cast rider, in the executor through StackEntry::land_put_credit. Pinned:
 //   * the credit is the pick's own colour, split per class, front class first;
 //   * "Search for Tomorrow, then Rampant Growth off the fetched Forest" is ENUMERATED (4 mana of board
 //     for 5 of cost), and the variant credits {G} even though the provider's FRONT pick is a Mountain;
