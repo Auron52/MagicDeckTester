@@ -56127,6 +56127,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.freshmode_choice = fresh_tag ? 1 : 0;   // fresh-spend priced at the base (MTG_MINT_CREDIT_EXACT)
         plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
         plan.atk_forfeit    = SubsetAttackForfeit(state, cands, sel);   // ordering-only (gated OFF)
+        // MTG_ENUM_PLAN_RESERVE (DEFAULT ON; =0 restores the grow-as-you-push loop): size the action vector
+        // once. Capacity is not observable by anything downstream (copies allocate their own size), so
+        // the plan is unchanged; perf put the 1->2->4->8 regrowth (each a copy of every Action so far) at
+        // ~2.9% of EDF's generation shape, at roughly two million emitted plans per probe run.
+        static const bool s_plan_reserve = EnvOn("MTG_ENUM_PLAN_RESERVE", true);
+        if (s_plan_reserve) { plan.actions.reserve(sel.size()); }
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
         // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER
         // its enabler aura, so stable-sort those conditional payoffs to the end (key 1 vs 0). Apply's own
