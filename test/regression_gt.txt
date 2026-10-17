@@ -7,6 +7,7 @@
 # accepted-with-regressions (regression, 2026-10-17): colossus: deck ADDED to all three tiers (5 NEW regression keys; analysis-Colossus Hammer.md), measured on 0d410db07 (the breakpoint cast-record fixes). Every other regression cell byte-identical (166/166), references 600 / 0 drift.
 # accepted-with-regressions (overnight, 2026-10-17): colossus: deck ADDED to all three tiers with the overnight ENTRY set (12 NEW keys, d0 4x2000, d3 4x400 b10, d5 4x300 b20; analysis-Colossus Hammer.md), PGO binary of 0d410db07, makespan 2m23s. Expands to the FULL set just before a keep table is adopted.
 # accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17: attach folds (7b5863d22) + USER-ruled Sigarda's Aid host heuristic (8f2b54551); 0 slower; searched 13 same-turn line changes, d0 7 faster; every other deck byte-identical in the same combined run
+# accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17 (2): Magnetic Theft every-pair offer + joint mirror fold (aecb9c84f); searched 0 slower / 3 same-turn; d0 gi539 T6->unwon (d0 greedy tie-break picks a self-Path that exiles its only attacker; RECOVERS stage 1, d6 b100 T3), gi344 T7->T6; every other deck byte-identical
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 

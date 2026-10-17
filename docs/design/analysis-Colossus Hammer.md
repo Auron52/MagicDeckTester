@@ -220,6 +220,11 @@ Flags, verified against cards.json + the code:
    Smoke: only Colossus moved, 0 slower anywhere; d0 6 faster (4.9670 -> 4.9610), searched 4 same-turn play changes.
    Kitty keeps the base hook (the same rule would move 13 Kitty d0 games, all same score). Follow-up IN FLIGHT: Magnetic
    Theft's pending Equipment target is not reset when the executor's cast misses (a skipped Theft can hand it on).
+   **FIXED `9e33088f8`** (`CastRiders`, TurnSolver.h): the Theft target, devour count, twobrid pips, land-put credit and
+   same-cast loyalty activation are taken consume-once at the TOP of every cast entry in both worlds (executor
+   `cast_by_name` / `cast_alt`, rollout `apply_one`), before any early return; alt-cost casts now set them too.
+   Every one of the five leaked in at least one world. Smoke 124/124 byte-identical. Follow-up IN FLIGHT: the
+   rollout's `cascade_free` bank survives a skipped free cast and makes the next rollout cast free.
 3. **CONFIRMED, human play** (2100016, 2100017): committing a multi-cast line taps the only source of a colour the
    rest of the hand needs (Snarl for {1}{R} while a Mountain stays up; the only Mountain for a generic {1}).
    **FIXED `9674c1cb6`** (MTG_HUMAN_PREPAY_DEMAND, default ON, human play only): the whole-line batch prepay
@@ -242,7 +247,15 @@ Flags, verified against cards.json + the code:
    1 faster (gi448 T7 -> T6). Follow-ups in `docs/design/colossus-attach-fold-followups.md`; the equip/reconfigure
    host identity fold LANDED `335e01fa8` (MTG_EQUIP_HOST_FOLD, plan-level canonical relabelling so "one on
    each" survives; play byte-identical, work -0.3% d3); the Theft creature-class fold's completeness gap (two Thefts
-   cannot put one Equipment on each of two identical creatures -- unfindable at any budget) is IN FLIGHT on the same agent.
+   cannot put one Equipment on each of two identical creatures -- unfindable at any budget) **FIXED `aecb9c84f`**:
+   autonomous play offers every legal (Equipment, creature) Theft pair; mirror images are folded by the joint
+   relabelling (equips then Thefts per identical-creature class; Thefts per identical-Equipment class). ~311 lines on a
+   two-Speaker / two-Hammer / two-Theft board were unreachable. Smoke (its agent): searched 0 slower / 3 same-turn
+   (both identical Hammers Theft'd), d0 1 faster / 1 slower (gi539 T6 -> unwon: the d0 greedy ties "Theft, Theft"
+   with "Path own Kor Duelist, Theft, Theft" at rank 4200 and the smallest-mask tie-break exiles its only attacker;
+   RECOVERS at stage 1, d6 b100 -> T3). d0 avg 4.9610 -> 4.9630. Raised to the USER: the d0 greedy prices a
+   self-target Path at 0 even when it removes the plan's attacker (a depth-0-runner A/B, optional). Follow-up IN
+   FLIGHT: the same gap for two freshly cast identical HAND Hammers (deck runs 4).
 6. **CONFIRMED, human default only** (2100005, 2100017): Path to Exile's preselected target ranks by printed power
    (Equipment ignored), so it defaults to the Hammer carrier. **FIXED** (fold commit): `RemovalHumanDefaultTarget` ranks by
    `EquipGatePowerOf` (s2100017: default moves from the 13/13 Lizard Blades to Speaker).
