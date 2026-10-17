@@ -1271,6 +1271,16 @@ public:
         // plan holding both such an activation and a cast whose ETB counts lands (see the axis in
         // AppendSubdecisionAxes); every other plan keeps -1.
         int8_t land_search_act_slot = -1;
+        // SEARCHED COMBAT LANDFALL TARGET (2026-10-17; placed after land_search_act_slot, in its padding --
+        // measured no size cost). The RANK every targeted landfall trigger (Phylath) takes for the lands
+        // THIS turn's combat puts -- Primeval Titan's attack fetch and the in-combat Khalni crack. Distinct
+        // from landfall_target_choice, the MAIN-phase policy (installed for the apply only): one shared
+        // rank would have made "rank k in main, the front in combat" inexpressible. A state pin like the
+        // crack mask: written write-when-set (TurnSolver::WritePostApplyStatePins) into
+        // GameState::scripted_combat_landfall_target, read in combat by both worlds' land entries.
+        // -1 = the provider's front. Emitted by AppendSubdecisionAxes beside an attacking Titan with a
+        // targeted landfall watcher on the battlefield or cast by the plan; width <= 4.
+        int8_t combat_landfall_target_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);

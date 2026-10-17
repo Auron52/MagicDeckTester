@@ -483,7 +483,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
-        || p.atk_dork_release >= 0
+        || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
 inline void RecordReSolvePins(const TurnSolver::Plan& p)
@@ -508,6 +508,9 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.attack_attach_choice >= 0    && s.scripted_attack_attach != p.attack_attach_choice)      { ok = false; }
     if (p.attack_land_search_choice >= 0 && s.scripted_attack_land_search != p.attack_land_search_choice) { ok = false; }
     if (p.combat_crack_choice >= 0     && s.scripted_combat_land_search_crack != p.combat_crack_choice) { ok = false; }
+    if (p.combat_landfall_target_choice >= 0
+        && s.scripted_combat_landfall_target != p.combat_landfall_target_choice)                   { ok = false; }
+    if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
     if (p.discard_choice >= 0          && discard_pin != p.discard_choice)                         { ok = false; }
@@ -4087,6 +4090,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (x.discard_choice >= 0)     { m_discard_choice_pin = x.discard_choice; }
         if (x.vial_charge_choice >= 0) { m_vial_choice_pin = x.vial_charge_choice; }
         if (x.atk_dork_release >= 0)   { m_atk_release_pin = x.atk_dork_release; }
+        // ...and its MAIN-PHASE landfall-target policy, for the rest of this phase (its own land drop and
+        // casts first): the re-solve's ApplyPlanDirect installed it before its land block, -1 installing
+        // nothing (the committed plan's policy stays) -- the same rule here.
+        if (x.landfall_target_choice >= 0)
+        { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.turn_number); }
         rs_last = x;
     };
 
