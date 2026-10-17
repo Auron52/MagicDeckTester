@@ -145,6 +145,43 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   (normal + 2HG, still T4: its committed continuation convokes Chord of Calling, which the old replay could
   not pay and skipped). Full regression ALL PASS 166/166, play-changed=0, references 600 / 0 drift.
 
+## Claude-play sweep
+- commit: `8c1de4465` (engine identical through `ac2095d02`)
+- seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
+- flags: 6 unresolved      # fixes in flight on colossus-pay / colossus-aid / colossus-fold; updated as they land
+
+Results (search d5 b200 vs Claude, win turn): 2100001 4/4, 2100002 2/2, 2100003 5/5, 2100004 3/3, 2100005 4/4,
+2100006 5/5, 2100007 **7/2** (Claude kept a 1-lander seeing 6 draws; the static keep mulliganed to 5 -- a keep-table
+question, not play), 2100008 4/4, 2100009 4/4, 2100010 4/4, 2100011 4/4, 2100012 2/2, 2100013 3/3, 2100014 **3/2**,
+2100015 5/5, 2100016 3/3, 2100017 6/6, 2100018 4/4. Claude never slower.
+
+Flags, verified against cards.json + the code:
+1. **CONFIRMED -> FIXED by the order draft, OPEN under the shipped order** (2100014): under the generic order Sigarda's
+   Aid ties every Equipment at rank 20 and plan order casts the Equipment first, so "Aid, then Hammer" is unfindable
+   at any budget (T3 vs T2). The AI-drafted order (default OFF, USER's call) restores it. See the cast-order draft.
+2. **CONFIRMED, autonomous** (2100011): Sigarda's Aid's host is ONE provider pick (`EquipmentEtbAttachHost`) that
+   ignores whether the host can attack -- Hammer onto a sick Lizard Blades over a ready Swiftblade, T4 kill lost. A
+   greedy pick in the search window. IN FLIGHT: a searched host axis (branch `colossus-aid`).
+3. **CONFIRMED, human play** (2100016, 2100017): committing a multi-cast line taps the only source of a colour the
+   rest of the hand needs (Snarl for {1}{R} while a Mountain stays up; the only Mountain for a generic {1}). IN
+   FLIGHT (branch `colossus-pay`).
+4. **CONFIRMED** (2100003): "reconfigure Lizard Blades onto X, then equip the Hammer onto Lizard Blades" is offered;
+   the equip has no legal target but still consumes Forge Anew's first-equip waiver. IN FLIGHT (`colossus-fold`).
+5. **Width** (2100003, 2100017, 2100018): dominated no-op attach sequences (a Theft whose host reconfigures away; a
+   Theft a later equip overwrites, on a same-plan hand-cast Equipment; ONE hand Hammer Theft'd twice). IN FLIGHT (`colossus-fold`).
+6. **CONFIRMED, human default only** (2100005, 2100017): Path to Exile's preselected target ranks by printed power
+   (Equipment ignored), so it defaults to the Hammer carrier. IN FLIGHT (`colossus-fold`).
+7. DISMISSED as by-design, raised to the USER (every agent): human play gets a FULL post-combat main
+   (`AIEngine.cpp` play_this_phase `|| use_external`), the search only Speaker's narrow one -- so a hand-played
+   reference can use a post-combat Theft re-host / reconfigure the search cannot express. See USER question 5.
+8. Raised to the USER (2100006, 2100010): Ardenn's begin-combat attach -- a human's host pick can move NOTHING (the
+   provider still picks the pieces by this combat's damage; it would not move the Hammer onto a lifelinking Speaker
+   on a non-lethal turn). The prompt also appears with no Equipment/Aura out. Under USER question 4.
+9. Cosmetic / human defaults (not fixed): the folded Steelshaper's Gift / Open the Armory menu entry and its
+   tutor_etb default name the first-enumerated variant (Lizard Blades / Dragonfire / Warhammer) even when the Hammer
+   is lethal; two same-name permanents carry identical labels; two Sigarda's Aids fire ONE attach trigger (CR 603.2
+   says each triggers -- outcome-inert here: only the final host matters and nothing reads an attach event).
+
 ## Open USER questions (provisional defaults TAKEN — the work continues on them)
 
 1. **Provider** — `ColossusHammerProvider` derives from `DeckProvider` (Generic). It does NOT inherit
