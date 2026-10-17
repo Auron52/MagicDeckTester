@@ -44176,6 +44176,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Equipment and did nothing, while the rollout had attached it and counted the kill
             // (Colossus Hammer s1065 gi64: d0 won T3, every searched depth T5 at any budget).
             rec.attach_equip_id    = cast_attach;
+            // ...and so must every OTHER value the cast was made with. replay_recorded already feeds
+            // all of them back (the m_pending_* channels and cast_by_name's tail arguments), but the
+            // record never captured them, so a continuation cast replayed each one at its default:
+            // Mycoloth's searched devour count, Beseech's coloured twobrid pips, Search for
+            // Tomorrow's land-put credit, a walker's same-cast loyalty activation, the replicate
+            // count, Chord's convoke split, Phyrexian life, evoke, the adventure half and kicker --
+            // the same lockstep class as the float colour above. Each field has the Action's own
+            // default as its "not this kind of cast" value, so a cast that sets none records exactly
+            // what it recorded before.
+            rec.devour_count       = cast_devour;
+            rec.twobrid_colored    = cast_twobrid;
+            rec.rock_mana          = cast_put_credit;
+            rec.loyalty_ability    = cast_loyalty;
+            rec.replicate_count    = replicate_count;
+            rec.convoke_green      = convoke_green;
+            rec.convoke_other      = convoke_other;
+            rec.phyrexian_life     = phyrexian_life;
+            rec.evoke              = evoke;
+            rec.adventure          = adventure;
+            rec.kicked             = kicked;
             // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
             // the executor's replay traits (ComputePlanTraits over the records) count the same mana
             // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0
