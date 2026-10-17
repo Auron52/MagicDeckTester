@@ -1283,6 +1283,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // The landfall dispatch (see GameState::deck_has_landfall): the same DefHasLandfallTrigger
         // disjunction the per-definition landfall_watcher byte is computed from.
         bool landfall = false;
+        // The scry-watcher walk (see GameState::deck_has_scry_watcher): the param FireScryWatchers tests.
+        bool scry_watcher = false;
         // Courser of Kruphix's top-of-library land drop (see GameState::deck_has_top_land_play): the
         // same param TopLandPlayStaticSource tests on the battlefield.
         bool top_land = false;
@@ -1318,6 +1320,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (DefHasLandfallTrigger(d->params))      { landfall = true; }
+                if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
                 if (!d->params.draw_on_other_subtype_enter.empty()) { subtype_enter_draw = true; }
@@ -1354,6 +1357,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // (the stamp and the walk's per-definition byte are one disjunction), so this is dead-code
         // elimination for every deck without a landfall card -- every suite deck at landing.
         state.deck_has_landfall          = garth || landfall;
+        // Same reasoning, no lever: a clear bit proves FireScryWatchers' walk finds no scry watcher.
+        state.deck_has_scry_watcher      = garth || scry_watcher;
         // Same reasoning, no lever: a clear bit PROVES TopLandPlayStaticSource's walk finds no
         // play-from-top permanent, so every library-top land read is dead code for that deck.
         state.deck_has_top_land_play     = garth || top_land;

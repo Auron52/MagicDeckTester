@@ -21691,7 +21691,10 @@ bool TurnSolver::PutsLandfallWatcher(const Action& a)
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
         && a.kind != Action::Kind::ActivateVial) { return false; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-    return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents);
+    // A SCRY WATCHER (Galadriel) counts too: the land's own ETB scry is what fires it, so a land
+    // played after the watcher is cast starts a reveal chain and one played before it does not.
+    return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents
+                            || d->params.scry_reveal_land_to_battlefield);
 }
 
 void TurnSolver::LandSlotWatchersFirst(const std::vector<Action>& acts, std::vector<int>& order)
@@ -55781,9 +55784,29 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             std::vector<Card> looked;
             looked.reserve(static_cast<std::size_t>(look));
             for (int lk = 0; lk < look; ++lk) { looked.push_back(ap.library[static_cast<std::size_t>(lk)]); }
-            const std::size_t k = TopDispositionCandidates(
-                state, looked, surveil ? LookKind::Surveil : LookKind::Scry).size();
-            for (std::size_t c = 1; c < std::min(k, ScrySearchWidth()); ++c)
+            // A SCRY-WATCHER CHAIN (Galadriel): the pin indexes ScryChainCandidates -- one skip
+            // count per distinct chain policy -- instead of the one look's dispositions. Live when a
+            // watcher is on the battlefield, or when the plan casts one BEFORE its land (a non-first
+            // land_slot: the land is played after the watcher resolves). Not width-capped: k is the
+            // whole decision of a chain that can run a dozen looks deep, and each distinct value is a
+            // different line (MTG_SCRY_WIDTH bounds a single look's ordered subsets, not this).
+            bool chain = !surveil && look == 1
+                      && ScryWatcherCopies(state, state.active_player_index) > 0;
+            if (!chain && !surveil && look == 1 && state.deck_has_scry_watcher && p.land_slot != 0)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    const CardDefinition* wd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    if (wd != nullptr && wd->params.scry_reveal_land_to_battlefield) { chain = true; break; }
+                }
+            }
+            const std::size_t k = chain
+                ? ScryChainCandidates(state).size()
+                : TopDispositionCandidates(state, looked,
+                                           surveil ? LookKind::Surveil : LookKind::Scry).size();
+            const std::size_t width = chain ? k : ScrySearchWidth();
+            for (std::size_t c = 1; c < std::min(k, width); ++c)
             {
                 TurnSolver::Plan v = p;
                 v.scry_choice = static_cast<int>(c);
@@ -59027,7 +59050,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 }
             }
         }
-        if (state.deck_has_landfall && !land_name.empty() && !karoo_drop)
+        if (LandOrderMatters(state) && !land_name.empty() && !karoo_drop)
         { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face, from_top }); }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
@@ -59217,7 +59240,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // every re-derived continuation loop, and its commit-the-line replay walks the record, which holds
     // the PlayLand where it was played). Breakpoint candidate lists only grow for a deck with a
     // landfall card, so every other deck's bp_choice numbering is byte-identical.
-    if (state.deck_has_landfall)
+    if (LandOrderMatters(state))
     {
         const auto watchers_in = [](const TurnSolver::Plan& p)
         {

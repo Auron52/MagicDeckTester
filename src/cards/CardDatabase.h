@@ -640,6 +640,15 @@ struct CardParams
     // heuristic as ScryTop; see SurveilTop.
     int etb_surveil = 0;
 
+    // Galadriel of Lothlorien: "Whenever you scry, you may reveal the top card of your library. If a
+    // land card is revealed this way, put it onto the battlefield tapped." A SCRY WATCHER, fired at
+    // the tail of the one scry chokepoint (ScryTop -> FireScryWatchers, core/SpellEffects.h) once per
+    // copy we control. The land enters through EnterLand (tapped, not a land drop, landfall fires) and
+    // its own etb_scry is a new scry, so the trigger CHAINS. The chain's dispositions are one searched
+    // policy (GaladrielChainCandidates), bound by the land drop's scry pin. Gated per game by
+    // GameState::deck_has_scry_watcher, so every deck without one is byte-identical.
+    bool scry_reveal_land_to_battlefield = false;
+
     // Pain land (e.g. Fiery Islet): tapping this land for mana costs the controller
     // this much life. Applied at tap time in TapForCost / TapForCostDirect.
     int tap_self_damage = 0;
@@ -1380,6 +1389,14 @@ struct CardParams
     // tap_source / the backtracker override the static per-tap amount with the colour count.
     // The static `produces` list is kept (WUBRG) only as the in-hand fixing-heuristic hint.
     bool domain_mana = false;
+
+    // The Grey Havens: "{T}: Add one mana of any color among legendary creature cards in your
+    // graveyard." DYNAMIC colours, the `reflecting` shape: EffectiveProduces returns the static
+    // `produces` (its free {C}) plus every colour of a LEGENDARY CREATURE card in the controller's
+    // graveyard (GraveyardLegendColors). Read raw, `produces` is the {C} mode alone -- the
+    // conservative under-credit, so a site that has not learned the dynamic union can never offer a
+    // colour the land cannot make.
+    bool mana_colors_of_graveyard_legends = false;
 
     // Planeswalkers (Jared Carthalion / Nicol Bolas, Planeswalker / Oko, Thief of Crowns).
     // loyalty_start > 0 marks a planeswalker card (enters with that many loyalty; the dedicated

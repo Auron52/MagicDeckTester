@@ -163,6 +163,10 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // is an empty DeckProvider derivation, as SelesnyaLifegainProvider is, so the move is
         // play-neutral by construction.
         {"Landfall", "Landfall"},
+        // Galadriel (onboarded 2026-10-17): its own `galadriel` signature (Galadriel of Lothlorien's
+        // scry_reveal_land_to_battlefield, The Grey Havens' mana_colors_of_graveyard_legends). Rode
+        // Generic before Stage 4a; GaladrielProvider is an empty DeckProvider derivation.
+        {"Galadriel", "Galadriel"},
     };
 
     namespace fs = std::filesystem;

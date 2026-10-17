@@ -672,6 +672,12 @@ struct GameState
     // entrants keep the walk (OpponentDeck.h's list is not described by the stamp). DEFAULT TRUE ==
     // walk, the only-err-true rule.
     bool                     deck_has_other_subtype_enter_draw = true;
+    // AND 2026-10-17 -- a SCRY WATCHER (Galadriel of Lothlorien, CardParams::
+    // scry_reveal_land_to_battlefield): gates FireScryWatchers' battlefield walk at the tail of every
+    // ScryTop, and (with deck_has_landfall) the land-drop POSITION axis -- a land played after
+    // Galadriel is cast starts a reveal chain, one played before it does not (LandOrderMatters).
+    // Stamped from the param, mainboard + sideboard, Garth holding it open. DEFAULT TRUE == walk.
+    bool                     deck_has_scry_watcher           = true;  // Galadriel of Lothlorien
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later
@@ -1079,6 +1085,15 @@ struct GameState
         return (m1start_hand_mask[c.m_number >> 6] >> (c.m_number & 63)) & 1ULL;
     }
 };
+
+// Can WHERE in a plan the land drop happens change the outcome? Only when a cast can put a permanent
+// that watches the land's entry: a landfall payoff (deck_has_landfall), or a scry watcher whose
+// trigger the land's own ETB scry fires (deck_has_scry_watcher -- Galadriel). Gates the land-POSITION
+// axis (Plan::land_slot) in the enumeration; every other deck keeps the land-first order only.
+inline bool LandOrderMatters(const GameState& s)
+{
+    return s.deck_has_landfall || s.deck_has_scry_watcher;
+}
 
 // THE win predicate. Every "have we won?" test in BOTH worlds goes through here.
 //

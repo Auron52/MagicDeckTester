@@ -5339,6 +5339,67 @@ int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
     return td ? SnowUserScry(*this, s, *td, card).firm : -1;
 }
 
+// ---- GaladrielProvider::ScryKeepOnTop (USER 2026-10-17: "smart scry heuristics") ----------------
+// The deck wants, in order: ONE Galadriel and three mana to cast her; then lands (her reveal chain
+// turns every land drop into several); then ONE Crackle with Power with 3X+2 mana behind it. So:
+//   * Galadriel of Lothlorien -- keep only while none is on the battlefield or in hand (a second copy
+//     is dead to the legend rule; bottoming it digs, and inside a chain CONTINUES it).
+//   * Crackle (the X finisher)  -- keep while none is in hand; a second copy is bottomed (more lands
+//     beat a second Crackle: X=4 off one cast is 20 for 14 mana, two X=2 casts are 20 for 16).
+//   * Sol Ring (a mana rock)    -- keep only while we are short of Galadriel's three mana.
+//   * A LAND with no Galadriel out -- keep while lands on the battlefield + in hand are under three
+//     (her cost); past that, dig for her / the Crackle.
+//   * A LAND with Galadriel out -- only a scry-LESS land reaches this (a scry-land in a chain is kept
+//     by dominance, ScryChainLand): Saprazzan Skerry. Bottom it, so the chain continues into lands that
+//     tap every turn rather than stopping on one that taps twice.
+// Card roles are read from PARAMS (scry_reveal_land_to_battlefield / x_damage_multiplier / mana_rock),
+// never names. Anything else falls through to the Generic rule.
+static bool GaladrielScryOn()
+{
+    static const bool on = EnvOn("MTG_GALADRIEL_SCRY", true);
+    return on;
+}
+
+bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    if (!GaladrielScryOn()) { return GenericProvider::ScryKeepOnTop(s, top_card); }
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(top_card);
+    if (td == nullptr) { return GenericProvider::ScryKeepOnTop(s, top_card); }
+    const int me = s.active_player_index;
+    const Player& pl = s.players[me];
+
+    int gal_bf = 0, lands_bf = 0, rocks_bf = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.scry_reveal_land_to_battlefield) { ++gal_bf; }
+        if (d->card.IsLand())                          { ++lands_bf; }
+        else if (d->params.mana_rock)                  { ++rocks_bf; }
+    }
+    int gal_hand = 0, crackle_hand = 0, lands_hand = 0;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.scry_reveal_land_to_battlefield) { ++gal_hand; }
+        if (d->params.x_damage_multiplier > 0)         { ++crackle_hand; }
+        if (d->card.IsLand())                          { ++lands_hand; }
+    }
+
+    const CardParams& tp = td->params;
+    if (tp.scry_reveal_land_to_battlefield) { return gal_bf == 0 && gal_hand == 0; }
+    if (tp.x_damage_multiplier > 0)         { return crackle_hand == 0; }
+    if (td->card.IsLand())
+    {
+        if (gal_bf > 0) { return false; }   // a scry-less land in a chain: keep the chain going
+        return lands_bf + lands_hand + 2 * rocks_bf < 3;
+    }
+    if (tp.mana_rock) { return gal_bf == 0 && lands_bf + lands_hand + 2 * rocks_bf < 3; }
+    return GenericProvider::ScryKeepOnTop(s, top_card);
+}
+
 bool SnowProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
     const int variant = SnowScryVariant();
@@ -18675,6 +18736,7 @@ namespace
     const CritterLifegainProvider g_critter;
     const SelesnyaLifegainProvider g_selesnya_lifegain;
     const LandfallProvider       g_landfall;
+    const GaladrielProvider      g_galadriel;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -20647,12 +20709,19 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // play_lands_from_library_top and landfall_lifegain (Courser of Kruphix is a green value
     // staple any ramp list may add), and Searing Blaze's landfall_damage (Burn).
     bool landfall = false;
+    // GALADRIEL (scry-land reveal chain into Crackle with Power). Signature = two params OR'd across
+    // two different cards (Galadriel of Lothlorien's scry_reveal_land_to_battlefield, The Grey
+    // Havens' mana_colors_of_graveyard_legends), both new in the 2026-10-17 onboarding and carried by
+    // no other card in cards.json. Deliberately EXCLUDES etb_scry (every Temple: Treasure Hunt runs
+    // Temple of Epiphany) and Crackle's params (Hinata).
+    bool galadriel = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
         if (p.attack_gather_auras) { bruna = true; }
+        if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
 
         if (p.landfall_creates_tokens > 0 || p.landfall_counters_each > 0
             || p.landfall_target_counters > 0 || p.landfall_quest_counters > 0)
@@ -21102,6 +21171,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // once it has a measured hook to hold, and until then it gets no narrowing at all.
     // Bruna: at the very top -- its signature is carried by no other card, so the position is free,
     // and it must beat `anti` (Open the Armory / Glittering Wish tutor_to_hand).
+    // Galadriel: its signature is carried by no other card, so the position is free.
+    if (galadriel)   { return g_galadriel; }
     if (bruna)       { return g_bruna; }
     if (prevent_damage) { return g_prevent_damage; }
     // SelesnyaLifegain ABOVE BOTH `stompy` and `critter`, and that position is load-bearing twice

@@ -4174,6 +4174,20 @@ function digPanelHtml(d){
        `<button class="ghost" data-opt="-1">Keep it (the AI's default)</button></div>`;
     return h;
   }
+  // Galadriel of Lothlórien's scry trigger reuses this modal ("(galadriel reveal)" in the source):
+  // the one tile is the library top, a land; taking it puts it onto the battlefield tapped.
+  if (/\(galadriel reveal\)/.test(d.source||'')) {
+    let h=`<h3>Galadriel of Lothlórien — reveal the top card?</h3>`;
+    h+=`<div class="sub">You scried, so you may reveal the top card of your library. It is a land: revealing it puts it onto the battlefield tapped, and its own enter trigger (a scry) triggers Galadriel again.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig def" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — reveal it and put it onto the battlefield tapped">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em><span class="deftag">AI pick</span></span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Don't reveal (the land stays on top)</button></div>`;
+    return h;
+  }
   // Destination-aware wording: the shared dig chooser serves into-hand ETB digs (Acclaimed
   // Contender) AND onto-the-battlefield puts (Skyhunter "(attack dig)", Turntimber "(put)").
   const toBf = /\((attack dig|put)\)/.test(d.source||'');

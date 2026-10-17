@@ -1137,6 +1137,17 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Crystal Grotto": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "When this land enters, scry 1.\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Crystalline Sliver": {
     "cmc": 2.0,
     "keywords": [],
@@ -1855,6 +1866,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Galadriel of Lothlórien": {
+    "cmc": 3.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "{1}{G}{U}",
+    "oracle_text": "Whenever the Ring tempts you, if you chose a creature other than Galadriel as your Ring-bearer, scry 3.\nWhenever you scry, you may reveal the top card of your library. If a land card is revealed this way, put it onto the battlefield tapped.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Elf Noble"
   },
   "Galerider Sliver": {
     "cmc": 1.0,
@@ -3997,6 +4019,18 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Rumble Arena": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry",
+      "Vigilance"
+    ],
+    "mana_cost": "",
+    "oracle_text": "Vigilance\nWhen this land enters, scry 1. (Look at the top card of your library. You may put it on the bottom.)\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Rundvelt Hordemaster": {
     "cmc": 2.0,
     "keywords": [],
@@ -4844,6 +4878,61 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Temple of Malady": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {B} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Temple of Malice": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {B} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Temple of Mystery": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {G} or {U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Temple of Plenty": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {G} or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Temple of Triumph": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {R} or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Terastodon": {
     "cmc": 8.0,
     "keywords": [],
@@ -4910,6 +4999,17 @@
     "power": "0",
     "toughness": "5",
     "type_line": "Creature — Fungus"
+  },
+  "The Grey Havens": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "When The Grey Havens enters, scry 1.\n{T}: Add {C}.\n{T}: Add one mana of any color among legendary creature cards in your graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Land"
   },
   "The Mycotyrant": {
     "cmc": 3.0,
@@ -5442,5 +5542,16 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Swamp Forest Island"
+  },
+  "Zhalfirin Void": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   }
 }

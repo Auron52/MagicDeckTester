@@ -11884,6 +11884,264 @@
     "gy_return_requires_creature": true,
     "gy_return_at_random": true
    }
+  },
+  {
+   "name": "Temple of Abandon",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {R} or {G}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Temple of Deceit",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {U} or {B}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Temple of Enlightenment",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {W} or {U}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Temple of Malady",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {B} or {G}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "G"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Temple of Malice",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {B} or {R}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "R"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Temple of Mystery",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {G} or {U}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Temple of Plenty",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {G} or {W}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "W"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Temple of Triumph",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {R} or {W}. [All three clauses modelled, the Temple of Epiphany shape: enters_tapped, etb_scry 1 (the searched land-ETB scry axis, Plan::scry_choice; under Galadriel of Lothlórien the same pin selects the reveal chain's policy), and a two-colour tap. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W"
+    ],
+    "enters_tapped": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Zhalfirin Void",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {C}. [Both clauses modelled: an UNTAPPED {C} land with etb_scry 1. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Crystal Grotto",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this land enters, scry 1.\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color. [All clauses modelled. etb_scry 1; '{T}: Add {C}' + '{1}, {T}: Add one mana of any color' is the Capital City shape, any_color_filter (the free {C} mode is implicit; `produces` lists the FED mode's colours). Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "any_color_filter": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "Rumble Arena",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Vigilance"
+   ],
+   "oracle_text": "Vigilance\nWhen this land enters, scry 1. (Look at the top card of your library. You may put it on the bottom.)\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color. [All clauses modelled. etb_scry 1; '{T}: Add {C}' + '{1}, {T}: Add one mana of any color' is the Capital City shape, any_color_filter (the free {C} mode is implicit; `produces` lists the FED mode's colours). VIGILANCE is printed on a land that is never a creature (nothing in this pool animates it), so it has no game effect; carried as a keyword for faithfulness. Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "any_color_filter": true,
+    "etb_scry": 1
+   }
+  },
+  {
+   "name": "The Grey Havens",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When The Grey Havens enters, scry 1.\n{T}: Add {C}.\n{T}: Add one mana of any color among legendary creature cards in your graveyard. [All clauses modelled. Untapped, etb_scry 1, '{T}: Add {C}'. The second mana ability is mana_colors_of_graveyard_legends: EffectiveProduces (core/SpellEffects.h, the dynamic-colour accessor Reflecting Pool / domain mana use) returns {C} plus every colour of a LEGENDARY CREATURE card in its controller's graveyard -- read off the definition (LookupCached), never the zone placeholder. In this deck the only such card is Galadriel of Lothlórien (G/U), which reaches the graveyard by the legend rule or a cleanup discard. LEGENDARY: a second copy is legend-ruled by EnforceLegendRule at the engine's beginning-of-combat SBA checkpoint (mana-equivalent for main 1: a real player may tap the first copy before playing the second). Nothing deferred.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "etb_scry": 1,
+    "mana_colors_of_graveyard_legends": true
+   }
+  },
+  {
+   "name": "Galadriel of Lothlórien",
+   "mana_cost": "{1}{G}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Elf",
+    "Noble"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Whenever the Ring tempts you, if you chose a creature other than Galadriel as your Ring-bearer, scry 3.\nWhenever you scry, you may reveal the top card of your library. If a land card is revealed this way, put it onto the battlefield tapped. [CLAUSE 2 MODELLED -- scry_reveal_land_to_battlefield: FireScryWatchers runs at the tail of ScryTop (the ONE scry chokepoint, shared by the land drop, EnterLand and every scry spell in executor and rollout alike), once per Galadriel we control: reveal the top card; a LAND is popped and enters TAPPED through EnterLand (ForcedTapped; not a land drop; landfall fires), and its own etb_scry is a new scry, so the trigger chains down the library. THE CHAIN IS SEARCHED as ONE policy per chain, a skip count k (bottom the first k STOP cards -- nonlands and scry-less lands -- and stop at the next): GaladrielChainCandidates, provider default first, bound by the land's existing searched scry pin (Plan::scry_choice) and clamped at resolution. Two PROVISIONAL DOMINANCE collapses for the AUTONOMOUS search (the human keeps both choices, per look): a scry-land on top is always KEPT (bottoming it reveals the same next card with one fewer land and no look at it), and 'you may reveal' is always TAKEN (a revealed land onto the battlefield beats the same card drawn later; a revealed nonland changes nothing). Human play: every look is the normal `scry` decision and a revealed land asks `dig` '(galadriel reveal)' -- -1 declines the reveal. CLAUSE 1 PROVISIONALLY DEFERRED: 'Whenever the Ring tempts you, if you chose a creature other than Galadriel as your Ring-bearer, scry 3' -- this pool has no card that makes the Ring tempt you, so the trigger can never fire in this deck (the engine does not model the Ring). Galadriel's 3/3 body attacks the passive opponent.]",
+   "template": "custom",
+   "parameters": {
+    "scry_reveal_land_to_battlefield": true
+   }
   }
  ]
 }

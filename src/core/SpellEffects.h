@@ -25430,6 +25430,31 @@ inline const std::vector<Color>& DomainColors(const GameState& state, int contro
     return cols;
 }
 
+// The Grey Havens (CardParams::mana_colors_of_graveyard_legends): its static `produces` (the free
+// {C}) plus every colour of a LEGENDARY CREATURE card in the controller's graveyard, WUBRG then C.
+// Types, supertypes and colours are read off the DEFINITION (LookupCached), never the zone card --
+// a zone card may be a placeholder with empty masks. Same thread_local buffer contract as
+// ReflectedColors / DomainColors (consume within one source's loop).
+inline const std::vector<Color>& GraveyardLegendColors(const GameState& state, int controller,
+                                                       const CardDefinition& def)
+{
+    static thread_local std::vector<Color> buf;
+    bool have[6] = { false, false, false, false, false, false };   // W,U,B,R,G,C
+    for (Color c : def.params.produces) { have[static_cast<int>(c)] = true; }
+    for (const Card& gc : state.players[controller].graveyard)
+    {
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+        if (!gd || !gd->card.IsCreature() || !gd->card.HasSupertype(Supertype::Legendary)) { continue; }
+        for (int ci = 0; ci < 5; ++ci)
+        { if (gd->card.HasColor(static_cast<Color>(ci))) { have[ci] = true; } }
+    }
+    buf.clear();
+    const Color order[6] = { Color::White, Color::Blue, Color::Black,
+                             Color::Red, Color::Green, Color::Colorless };
+    for (Color c : order) { if (have[static_cast<int>(c)]) { buf.push_back(c); } }
+    return buf;
+}
+
 // ---- One-shot "lump" sac sources as PAYMENT sources (§2a) -------------------------------------
 // MTG_TREASURE_PAY_SOURCE -- DEFAULT ON, adopted 2026-08-26 (=0 disables). Routes a 1-mana sac source
 // (Treasure Token) through the mana PAYMENT solver instead of the plan enumerator's per-colour
@@ -26387,6 +26412,10 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
     {
         return EnergySpentColors(def);
     }
+    // The Grey Havens. IN HAND the static {C} only: the coloured mode depends on the graveyard at
+    // the time it is tapped, and the fixing heuristics must not count it as a colour source before then.
+    if (def.params.mana_colors_of_graveyard_legends && !in_hand)
+    { return GraveyardLegendColors(state, controller, def); }
     if (!def.params.reflecting) { return def.params.produces; }
     return ReflectedColors(state, controller, in_hand);
 }
@@ -28763,6 +28792,129 @@ struct ScriptedReorder
     int saved;
 };
 
+// ---- SCRY WATCHERS: Galadriel of Lothlorien ---------------------------------------------------
+// "Whenever you scry, you may reveal the top card of your library. If a land card is revealed this
+// way, put it onto the battlefield tapped." (CardParams::scry_reveal_land_to_battlefield.)
+//
+// FIRED FROM ScryTop, the one scry chokepoint -- the land drop's etb_scry (LandPlay), EnterLand's,
+// and every scry spell call it -- so the executor and the rollout fire it identically. The revealed
+// land enters through EnterLand (tapped, NOT a land drop, landfall fires), and EnterLand resolves the
+// land's own etb_scry: a new scry, so the trigger CHAINS down the library until a look keeps a card
+// that does not continue it.
+//
+// THE CHAIN IS ONE SEARCHED DECISION, NOT A RUN OF GREEDY LOOKS. Every look in it is a choice, and a
+// chain from one land drop can be a dozen looks deep. Two PROVISIONAL dominance collapses (the human
+// keeps both choices -- every look is the normal `scry` decision and every land reveal asks):
+//   * a SCRY-LAND on top is always KEPT (ScryChainLand). Bottoming it reveals the same next card with
+//     one fewer land in play and no look at that card, so its outcomes are a subset of keeping it
+//     (bar a deck-out or a lone legend, neither reachable in a goldfish game of this length).
+//   * "you may reveal" is always TAKEN: a revealed land onto the battlefield beats the same card
+//     drawn later; a revealed nonland changes nothing.
+// What is left is a single integer per chain: SKIP k of the STOP cards (a nonland, or a land with no
+// scry of its own -- Saprazzan Skerry, which ends the chain if taken) by bottoming them, and stop at
+// the next. k is the decision: ScryChainCandidates lists every distinct k, the provider's default
+// first, and the land drop's existing searched scry pin (Plan::scry_choice, consumed by the FIRST
+// look -- which is the dropped land's own scry) indexes into it, clamped at resolution. So the chain
+// rides every site that already installs that pin (both worlds, breakpoint continuations, the plan
+// identity keys) with no new plumbing.
+//
+// Gated per game (GameState::deck_has_scry_watcher), so every deck without a watcher never walks.
+
+// How many scry watchers `controller` controls (each copy triggers once per scry).
+inline int ScryWatcherCopies(const GameState& state, int controller)
+{
+    if (!state.deck_has_scry_watcher) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.scry_reveal_land_to_battlefield) { ++n; }
+    }
+    return n;
+}
+
+// A land whose own entry scries, so revealing it CONTINUES the chain (read off the definition: a
+// library card may be a placeholder with empty masks).
+inline bool ScryChainLand(const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return d != nullptr && d->card.IsLand() && d->params.etb_scry > 0;
+}
+
+// The chain's candidate skip counts, the provider's default FIRST, then every other distinct k in
+// ascending order. With S stop cards in the library the distinct policies are k = 0..S (k = S bottoms
+// every stop card and lets every scry-land in; any larger k is the same chain). The default walks the
+// library and bottoms stop cards while the provider's ScryKeepOnTop would bottom them, stopping at
+// the first it keeps -- the per-look heuristic, expressed as one k so the search's alternatives can
+// be deduplicated against it.
+inline std::vector<int> ScryChainCandidates(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    const DecisionProvider& prov = ResolveProvider(state);
+    int stops = 0, def_k = 0;
+    bool def_done = false;
+    for (std::size_t i = 0; i < ap.library.size(); ++i)
+    {
+        const Card& c = ap.library[i];
+        if (ScryChainLand(c)) { continue; }
+        ++stops;
+        if (!def_done)
+        {
+            if (prov.ScryKeepOnTop(state, c)) { def_done = true; }
+            else                              { ++def_k; }
+        }
+    }
+    std::vector<int> out;
+    out.reserve(static_cast<std::size_t>(stops) + 1);
+    out.push_back(def_k);
+    for (int k = 0; k <= stops; ++k) { if (k != def_k) { out.push_back(k); } }
+    return out;
+}
+
+// The live chain. `depth` counts nested ScryTop frames inside one chain (the RAII scope below);
+// `bound` is set by the chain's first one-card look, which consumes the scry pin; `policy` is false
+// when the human is choosing every look instead.
+struct ScryChainState { int depth = 0; bool bound = false; bool policy = false; int skips_left = 0; };
+extern thread_local ScryChainState g_scry_chain;
+
+struct ScryChainScope
+{
+    ScryChainScope() { ++g_scry_chain.depth; }
+    ~ScryChainScope() { if (--g_scry_chain.depth == 0) { g_scry_chain = ScryChainState{}; } }
+    ScryChainScope(const ScryChainScope&) = delete;
+    ScryChainScope& operator=(const ScryChainScope&) = delete;
+};
+
+// Bind the chain's policy at its first look: the scripted pin (the search) first, then the human,
+// then the provider default (candidate 0). Returns true when the policy decides the looks.
+inline bool ScryChainPolicyBind(const GameState& state)
+{
+    if (g_scry_chain.bound) { return g_scry_chain.policy; }
+    g_scry_chain.bound = true;
+    int k = -1;
+    if (g_scripted_top_choice >= 0) { k = g_scripted_top_choice; g_scripted_top_choice = -1; }
+    else if (g_play_top_chooser != nullptr) { g_scry_chain.policy = false; return false; }
+    const std::vector<int> cands = ScryChainCandidates(state);
+    const std::size_t idx = k < 0 ? 0 : std::min(static_cast<std::size_t>(k), cands.size() - 1);
+    g_scry_chain.skips_left = cands[idx];
+    g_scry_chain.policy     = true;
+    return true;
+}
+
+// One look under the bound policy: keep a scry-land (dominance), bottom a stop card while skips
+// remain, keep the first stop card after that (the chain ends on it).
+inline TopDisposition ScryChainDisposition(const Card& c)
+{
+    TopDisposition d;
+    if (ScryChainLand(c) || g_scry_chain.skips_left <= 0) { d.top_order.push_back(0); }
+    else                                                   { --g_scry_chain.skips_left; }
+    return d;
+}
+
+// Defined after EnterLand (it puts the revealed land through it).
+inline void FireScryWatchers(GameState& state);
+
 // Scry N (e.g. Temple of Epiphany): look at the top N cards and bottom the unwanted ones using a
 // deck-aware heuristic (HeuristicTopDisposition), then keep the rest on top in look order. Under
 // --claude-play g_play_top_chooser is set (and RevealLogPause nulls it during the search, so this
@@ -28775,7 +28927,15 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
     if (look <= 0) { return; }
 
     std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
-    TopDisposition disp = ChooseTopDisposition(state, source, looked, LookKind::Scry);
+    // A scry WATCHER (Galadriel) makes this look part of a reveal chain: the chain's policy decides
+    // a one-card look (see the SCRY WATCHERS block above), and the watchers fire after it. The scope
+    // spans the nested scries the chain's lands make, so they share the one bound policy.
+    const bool watched = ScryWatcherCopies(state, state.active_player_index) > 0;
+    std::optional<ScryChainScope> chain_scope;
+    if (watched) { chain_scope.emplace(); }
+    TopDisposition disp = (watched && look == 1 && ScryChainPolicyBind(state))
+                        ? ScryChainDisposition(looked[0])
+                        : ChooseTopDisposition(state, source, looked, LookKind::Scry);
 
     // Reveal capture (real play only; null during search): seen cards in look order, and which
     // were kept on top vs bottomed -- read from the chosen disposition BEFORE looked is consumed.
@@ -28796,6 +28956,7 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
     ApplyTopDisposition(state, looked, disp, LookKind::Scry);
+    if (watched) { FireScryWatchers(state); }
 }
 
 // Ponder-style "look at the top N, put them back in ANY ORDER, you may shuffle, then draw".
@@ -29717,6 +29878,44 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     if (fire_landfall) { OnLandEntered(state, perm.controller_index, perm.card.m_number); }
 }
 
+// Galadriel of Lothlorien's trigger, once per watcher copy (see the SCRY WATCHERS block above
+// ScryTop). Reveal the top card; a LAND card enters tapped through EnterLand, whose own etb_scry
+// re-enters ScryTop -- the chain. "You may reveal" is taken autonomously (dominance); the human is
+// asked through the dig chooser, "(galadriel reveal)", only when the top IS a land, since revealing
+// a nonland does nothing.
+inline void FireScryWatchers(GameState& state)
+{
+    const int me     = state.active_player_index;
+    const int copies = ScryWatcherCopies(state, me);
+    for (int t = 0; t < copies; ++t)
+    {
+        Player& ap = state.players[me];
+        if (ap.library.empty()) { return; }
+        const Card top = ap.library[0];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(top);
+        const bool is_land = d != nullptr && d->card.IsLand();
+        if (is_land && g_play_dig_chooser != nullptr && !g_scry_chain.policy)
+        {
+            const std::vector<Card> examined{ top };
+            const std::vector<int>  legal{ 0 };
+            const int pick = (*g_play_dig_chooser)(state, me,
+                                                   "Galadriel of Lothl\xC3\xB3rien (galadriel reveal)",
+                                                   examined, legal, 0);
+            if (pick < 0) { continue; }   // declined the reveal: the land stays on top
+        }
+        if (RevealVisible())
+        {
+            EmitReveal(state.turn_number, "Galadriel of Lothl\xC3\xB3rien (reveal)",
+                       { top.m_number }, { top.m_name.str() }, {}, {},
+                       { is_land ? "battlefield (tapped)" : "stays on top" });
+        }
+        if (!is_land) { continue; }
+        const Card c = ap.library.DrawTop();
+        EnterLand(state, *d, c.m_number, /*resolve_full_etb=*/true, /*fire_landfall=*/true,
+                  LandEntryTap::ForcedTapped);
+    }
+}
+
 // Execute a fetchland (Windswept Heath etc.): pull `target_name` (empty -> the heuristic's
 // top FetchCandidates pick) from the library, make it enter the battlefield (resolving the
 // fetched land's own enters-tapped/shock choice), and pay 1 life. The caller is responsible
@@ -30205,6 +30404,8 @@ namespace tapstats
     // on the unmodified engine. Both are node counts, so the share to compare them against is
     // `total nodes` -- a prune also removes the subtree below, so the realised saving is larger.
     inline std::atomic<std::uint64_t> g_colgate_prune{0};
+    inline std::atomic<std::uint64_t> g_acf_prune{0};      // exact any-colour-filter check proved infeasible
+    inline std::atomic<std::uint64_t> g_acf_interior_prune{0}; // ...at an interior DFS node
     inline std::atomic<std::uint64_t> g_colgate_probe{0};
     struct Dumper {
         ~Dumper()
@@ -30574,7 +30775,7 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
         return;
     }
     if (dd.params.reflecting || dd.params.domain_mana || IsScaledManaLand(dd)
-        || dd.params.untap_creature_cost.has_value())
+        || dd.params.untap_creature_cost.has_value() || dd.params.mana_colors_of_graveyard_legends)
     { mask = kAll; return; }
     // KAROO / BUNDLE, exact amount (BundleExactEnabled): the DFS's bundle_src branch adds ONE unit
     // per `produces` entry and has no single-colour branch, so the most of any one colour a tap can

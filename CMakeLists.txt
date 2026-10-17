@@ -350,6 +350,7 @@ add_executable(mtg-test
     test/unit/test_bruna_sideboard.cpp
     test/unit/test_mycotyrant.cpp
     test/unit/test_landfall.cpp
+    test/unit/test_galadriel.cpp
     test/unit/test_courser.cpp
     test/unit/test_land_search.cpp
     test/unit/test_land_search_gaps.cpp

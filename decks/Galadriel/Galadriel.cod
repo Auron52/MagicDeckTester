@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Galadriel of Lothlórien"/>
+        <card number="2" name="Crackle with Power"/>
+        <card number="4" name="Crystal Grotto"/>
+        <card number="4" name="Temple of Abandon"/>
+        <card number="4" name="Temple of Deceit"/>
+        <card number="4" name="Temple of Enlightenment"/>
+        <card number="4" name="Temple of Epiphany"/>
+        <card number="4" name="Temple of Malady"/>
+        <card number="3" name="Temple of Malice"/>
+        <card number="4" name="Temple of Mystery"/>
+        <card number="4" name="Temple of Plenty"/>
+        <card number="4" name="Temple of Triumph"/>
+        <card number="2" name="The Grey Havens"/>
+        <card number="4" name="Zhalfirin Void"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="4" name="Rumble Arena"/>
+        <card number="4" name="Saprazzan Skerry"/>
+    </zone>
+</cockatrice_deck>

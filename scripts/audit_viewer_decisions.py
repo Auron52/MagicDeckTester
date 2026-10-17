@@ -73,6 +73,9 @@ MANIFEST = {
     "etb_scry":              ("scry",                 positive),
     "cast_scry":             ("scry",                 positive),
     "etb_surveil":           ("surveil",              positive),
+    # Galadriel of Lothlorien (2026-10-17): "you may reveal the top card ... if a land, put it onto the
+    # battlefield tapped" -- asked as `dig` "(galadriel reveal)" when the top is a land (FireScryWatchers).
+    "scry_reveal_land_to_battlefield": ("dig",        truthy),
     "cast_reorder":          ("reorder",              positive),
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
@@ -587,6 +590,8 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # ---- Galadriel (2026-10-17) ----
+    "mana_colors_of_graveyard_legends": "The Grey Havens' colour mode -- WHICH colour a tapped mana source makes is a payment question (the standing mana-payment exemption), not a player-facing decision",
     # ---- Landfall triggers (2026-10-15; OnLandEntered, core/SpellEffects.h) ----
     "landfall_creates_tokens": "automatic landfall token (Rampaging Baloths' 4/4 Beast, Omnath's 5/5 Elemental) -- MANDATORY in the current Oracle of both, no choice",
     "landfall_token_power": "landfall token spec constant", "landfall_token_toughness": "landfall token spec constant",

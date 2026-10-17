@@ -25,6 +25,9 @@
 #include "SpellEffects.h"
 #include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 
+// The live scry-watcher chain (Galadriel; see the SCRY WATCHERS block in SpellEffects.h).
+thread_local ScryChainState g_scry_chain;
+
 // ---- Human-play tutor pick, asked at RESOLUTION off the LIVE zone -----------------------------
 // Shared by both of PerformTutor's human routes: the no-baked-target route (an ETB off a PUT) and
 // the CAST route (`human_repick`, below). Returns Chosen + `out` = the fetched name, Declined
@@ -2482,6 +2485,114 @@ static thread_local std::uint8_t  g_flow_col_mask[64] = {};
 // top-level call and read by the recursion, so a nested node never consults a stale mask.
 static thread_local bool          g_flow_order_live = false;
 
+// ---- EXACT any-colour-filter feasibility (MTG_ACF_EXACT) ---------------------------------------
+// The gross oracle below prices an any_color_filter ("{T}: Add {C}. {1},{T}: Add one mana of any
+// color" -- Capital City, Crystal Grotto, Rumble Arena; Astrolabe without the free {C}) as a free
+// RAINBOW source: it ignores the {1} the coloured mode eats. That over-credit is sound (it can only
+// refuse to prune), but on a board whose colour comes from filters it means the oracle can NEVER prove
+// a short-colour cost unpayable, and the DFS proves it instead -- the Galadriel deck walked 8-14
+// MILLION nodes per failed Crackle with Power (X=5, {15}{R}{R}) on 15 lands + Sol Ring with one red
+// land and three filters: the second {R} must come from a filter whose feed leaves 16 for 17.
+//
+// THE EXACT MODEL. A payment that uses k filters in their coloured mode consumes exactly k feed units
+// (each one unit of mana of any colour, from any source or the float), and gets k units of any colour
+// from those filters, which then make no {C}. So: for k = 0..F, keep the gross graph but (a) route a
+// filter's coloured edges through a shared CONV node capped at k, (b) keep its free {C} edge, and (c)
+// add k to the generic demand. The cost is payable only if SOME k saturates demand + k.
+//   SOUND (never prunes a payable cost): a real payment with j conversions is a flow of the k=j graph
+//     -- its j coloured filter units cross CONV, its j feeds are j units of extra generic.
+//   Not claimed to be tight in the other direction, and it need not be: it only ever says INFEASIBLE.
+// Every other source keeps its gross edges exactly as built above, so their over-credit carries over.
+struct AcfSrc { std::uint8_t bits; int amt; int per_col; bool acf; };
+
+static bool AcfExactEnabled()
+{
+    static const bool v = EnvOn("MTG_ACF_EXACT", true);
+    return v;
+}
+
+static bool AcfExactInfeasible(const std::vector<AcfSrc>& srcs, const ManaCost& cost,
+                               const ManaPool& floating, int n_acf)
+{
+    // Nodes: 0=S, 1=T, 2=GEN, 3=WILD, 4..9 = colours (W,U,B,R,G,C), 10=CONV (one unit per converting
+    // filter in), 11=GATE (CONV -> GATE capped at k; GATE -> W..G), 12.. = sources.
+    constexpr int S = 0, T = 1, GEN = 2, WILD = 3, COL0 = 4, CONV = 10, GATE = 11, FIRST_SRC = 12;
+    constexpr int INF = 1 << 20;
+    struct E { int to, cap; };
+    static thread_local std::vector<E> edges;
+    static thread_local std::vector<std::vector<int>> adj;
+    static thread_local std::vector<int> prev_edge, q;
+    const int m = static_cast<int>(srcs.size());
+    const int N = FIRST_SRC + m;
+    const int strict[6] = { cost.white, cost.blue, cost.black, cost.red, cost.green, cost.colorless };
+    const int fl[6] = { floating.white, floating.blue, floating.black, floating.red, floating.green,
+                        floating.colorless };
+    const int cbit = static_cast<int>(Color::Colorless);
+    for (int k = 0; k <= n_acf; ++k)
+    {
+        edges.clear();
+        if (static_cast<int>(adj.size()) < N) { adj.resize(N); }
+        for (int i = 0; i < N; ++i) { adj[i].clear(); }
+        auto add = [&](int u, int v, int cap)
+        {
+            adj[u].push_back(static_cast<int>(edges.size())); edges.push_back({ v, cap });
+            adj[v].push_back(static_cast<int>(edges.size())); edges.push_back({ u, 0 });
+        };
+        for (int c = 0; c < 6; ++c)
+        {
+            if (strict[c] > 0) { add(COL0 + c, T, strict[c]); }
+            add(COL0 + c, GEN, INF);
+            if (fl[c] > 0)     { add(S, COL0 + c, fl[c]); }
+            add(WILD, COL0 + c, INF);
+        }
+        if (cost.generic + k > 0) { add(GEN, T, cost.generic + k); }   // + the k feeds
+        if (floating.wild > 0)    { add(S, WILD, floating.wild); }
+        if (k > 0)
+        {
+            add(CONV, GATE, k);
+            for (int c = 0; c < 5; ++c) { add(GATE, COL0 + c, INF); }
+        }
+        for (int s = 0; s < m; ++s)
+        {
+            const AcfSrc& sc = srcs[s];
+            add(S, FIRST_SRC + s, sc.amt);
+            if (!sc.acf)
+            {
+                for (int c = 0; c < 6; ++c)
+                { if (sc.bits & (1u << c)) { add(FIRST_SRC + s, COL0 + c, sc.per_col); } }
+                continue;
+            }
+            if (sc.bits & (1u << cbit)) { add(FIRST_SRC + s, COL0 + cbit, 1); }   // free {C} mode
+            if (k > 0)                  { add(FIRST_SRC + s, CONV, 1); }          // coloured (fed) mode
+        }
+        const int demand = cost.ManaValue() + k;
+        int flow = 0;
+        while (flow < demand)
+        {
+            prev_edge.assign(N, -1);
+            q.clear(); q.push_back(S); prev_edge[S] = -2;
+            for (std::size_t qi = 0; qi < q.size() && prev_edge[T] == -1; ++qi)
+            {
+                const int u = q[qi];
+                for (int eid : adj[u])
+                {
+                    const E& e = edges[eid];
+                    if (e.cap > 0 && prev_edge[e.to] == -1) { prev_edge[e.to] = eid; q.push_back(e.to); }
+                }
+            }
+            if (prev_edge[T] == -1) { break; }
+            int bott = INF;
+            for (int v = T; v != S; )
+            { const E& e = edges[prev_edge[v]]; bott = std::min(bott, e.cap); v = edges[prev_edge[v] ^ 1].to; }
+            for (int v = T; v != S; )
+            { edges[prev_edge[v]].cap -= bott; edges[prev_edge[v] ^ 1].cap += bott; v = edges[prev_edge[v] ^ 1].to; }
+            flow += bott;
+        }
+        if (flow >= demand) { return false; }   // some k pays it -> not proven infeasible
+    }
+    return true;
+}
+
 static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool for_creature,
                               const ManaPool& floating, const std::vector<Color>* rp_colors,
                               std::uint64_t reserved_mask,
@@ -2536,7 +2647,9 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     // per_col = the most one tap can put into a SINGLE colour (the src->colour cap). They differ only
     // for a DOMAIN source: a normal source picks ONE colour and puts all `amt` there (per_col == amt),
     // whereas domain makes one of EACH colour in its set at once (amt == |set|, per_col == 1).
-    struct SrcColset { std::uint8_t bits; int amt; int per_col; int bf; };
+    // acf: an any_color_filter (Capital City / Crystal Grotto / Astrolabe), whose fed colour mode the
+    // EXACT filter check below prices with its feed (see AcfExactInfeasible).
+    struct SrcColset { std::uint8_t bits; int amt; int per_col; int bf; bool acf = false; };
     static thread_local std::vector<SrcColset> srcs;
     srcs.clear();
     bool rp_ready = (rp_colors != nullptr);
@@ -2683,7 +2796,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                 // joined; the fed mode's colours are its whole reachable set.
                 if (!def->params.filter_no_free_colorless)
                 { fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless)); }
-                srcs.push_back({ fbits, 1, 1, i });
+                srcs.push_back({ fbits, 1, 1, i, true });
             }
             else if (def->params.is_filter)
             {
@@ -2737,8 +2850,16 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         // stays lossless -- and without it the oracle would price a Snow board as five-colour while
         // the DFS it guards is two-colour, which is the one direction that costs nodes rather than
         // correctness. Param-gated on the single card that carries it -> byte-identical elsewhere.
+        // The Grey Havens' graveyard-legend colours (EffectiveProduces' dynamic branch, inlined like
+        // the reflecting one). COPIED: GraveyardLegendColors returns a thread_local buffer that a
+        // deeper source's resolution would refill under this reference. Empty (no allocation) for
+        // every other source.
+        std::vector<Color> gl_cols;
+        if (def->params.mana_colors_of_graveyard_legends)
+        { gl_cols = GraveyardLegendColors(state, active, *def); }
         const std::vector<Color>& produces =
               def->params.reflecting                                  ? *rp_colors
+            : def->params.mana_colors_of_graveyard_legends            ? gl_cols
             : (def->params.etb_choose_color && EtbBtLockEnabled())
                   ? EffectiveProducesFor(state, active, *def, &state.battlefield[i], /*in_hand=*/false)
                   : def->params.produces;
@@ -2951,6 +3072,27 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         }
         g_flow_src_valid = true;
     }
+    // EXACT ANY-COLOUR-FILTER CHECK (MTG_ACF_EXACT, default ON; =0 reverts). Only consulted when the
+    // gross model above says FEASIBLE, so the verdict and the published hint of every payable cost are
+    // untouched -- this can only turn a would-be DFS failure into an immediate one (byte-identical play).
+    if (flow >= demand && AcfExactEnabled())
+    {
+        int n_acf = 0;
+        for (const SrcColset& sc : srcs) { if (sc.acf) { ++n_acf; } }
+        if (n_acf > 0)
+        {
+            std::vector<AcfSrc> asrcs;
+            asrcs.reserve(srcs.size());
+            for (const SrcColset& sc : srcs) { asrcs.push_back({ sc.bits, sc.amt, sc.per_col, sc.acf }); }
+            if (AcfExactInfeasible(asrcs, cost, floating, n_acf))
+            {
+                if (tapstats::Enabled()) { tapstats::g_acf_prune.fetch_add(1, std::memory_order_relaxed); }
+                g_flow_src_valid = false;
+                g_flow_src_mask  = 0;
+                return true;
+            }
+        }
+    }
     return flow < demand;   // could not saturate the full cost -> DEFINITELY infeasible
 }
 
@@ -2973,6 +3115,16 @@ static thread_local int g_bt_restricted = 0;
 // for a QUALIFYING spell whether or not it is a creature, so the fed-filter skip below reads this
 // counter on every payment rather than only on a creature one. 0 on every board without one.
 static thread_local int g_bt_restricted_big = 0;
+
+// Interior feasibility cut state (see MTG_ACF_INTERIOR in the worker): per top-level payment.
+static thread_local int  t_bt_nodes     = 0;
+static thread_local bool t_bt_acf_board = false;
+constexpr int kAcfInteriorAfter = 256;
+static bool AcfInteriorEnabled()
+{
+    static const bool v = EnvOn("MTG_ACF_INTERIOR", true);
+    return v;
+}
 
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
@@ -3113,6 +3265,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             { s_src_cands_buf.push_back({ i, d }); }
         }
         src_cands = &s_src_cands_buf;
+        // Arm the interior feasibility cut (below) for this payment: a filter on the board, fresh count.
+        t_bt_nodes = 0;
+        t_bt_acf_board = false;
+        for (const auto& sc : s_src_cands_buf)
+        { if (sc.second->params.any_color_filter) { t_bt_acf_board = true; break; } }
     }
 
     // Does the memo's 64-bit tapped-set bitmask fit? It indexes SOURCES (by position in the list
@@ -3669,6 +3826,27 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         }
         if (tapstats::Enabled() && bailed) { tapstats::g_flow_bail.fetch_add(1, std::memory_order_relaxed); }
     }
+    // INTERIOR FEASIBILITY CUT (MTG_ACF_INTERIOR, default ON; =0 reverts). The oracle above runs at the
+    // TOP of a payment only, so once the DFS is inside the tree it proves every dead partial tap set by
+    // exhausting it. On a filter board that is the whole cost: the Galadriel deck spent ~1.8M nodes per
+    // PAYABLE {12}{R}{R} Crackle, wandering subtrees whose floating pool / remaining sources could no
+    // longer pay. The same oracle (gross model + the exact filter check) reads the CURRENT tapped flags
+    // and floating pool, so it is a valid infeasibility proof at any node: cut and memo the subtree.
+    // LOSSLESS AND BYTE-IDENTICAL: it only cuts subtrees that would have failed (failures restore all
+    // state), so the first payment found -- and every source it leaves tapped -- is unchanged.
+    // CHEAP WHERE IT DOES NOT HELP: armed only on a board holding an any_color_filter, only after this
+    // payment has already walked kAcfInteriorAfter nodes, and never while the flow-order hint is live
+    // (TapFlowInfeasible would overwrite the published assignment the recursion reads).
+    else if (!top_level && t_bt_acf_board && !g_flow_order_live && FlowPruneEnabled()
+             && AcfInteriorEnabled() && ++t_bt_nodes > kAcfInteriorAfter)
+    {
+        if (TapFlowInfeasible(state, cost, for_creature, floating, rp_colors, reserved_mask, cands))
+        {
+            if (tapstats::Enabled()) { tapstats::g_acf_interior_prune.fetch_add(1, std::memory_order_relaxed); }
+            if (fail_memo) { fail_memo->insert(key); }
+            return false;
+        }
+    }
 
     // Colour-branch collapse. A multi-colour source (Birds of Paradise: W/U/B/R/G) spawns one recursion
     // per producible colour. But the `cost` is INVARIANT for the whole backtrack, so a produced colour
@@ -3764,8 +3942,16 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // permanent and `def.params.produces` for an unlocked one, so the reference is stable for
         // the whole loop body (no thread_local aliasing -- the reflecting branch above is the only
         // buffer-returning shape and it is taken first).
+        // The Grey Havens' graveyard-legend colours (EffectiveProduces' dynamic branch, inlined like
+        // the reflecting one). COPIED: GraveyardLegendColors returns a thread_local buffer that a
+        // deeper source's resolution would refill under this reference. Empty (no allocation) for
+        // every other source.
+        std::vector<Color> gl_cols;
+        if (def->params.mana_colors_of_graveyard_legends)
+        { gl_cols = GraveyardLegendColors(state, active, *def); }
         const std::vector<Color>& produces_base =
               def->params.reflecting                                  ? *rp_colors
+            : def->params.mana_colors_of_graveyard_legends            ? gl_cols
             : (def->params.etb_choose_color && EtbBtLockEnabled())
                   ? EffectiveProducesFor(state, active, *def, &state.battlefield[i], /*in_hand=*/false)
                   : def->params.produces;
@@ -4844,7 +5030,8 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         // Reflecting source (Reflecting Pool): its produces = union of the controller's OTHER lands'
         // colours (state-dependent). Hash that exact effective colour set so two boards where it can
         // make different colours get different keys -> byte-identical replay.
-        if (d->params.reflecting)
+        // (The Grey Havens' graveyard-legend colours are state-dependent the same way.)
+        if (d->params.reflecting || d->params.mana_colors_of_graveyard_legends)
         {
             const std::vector<Color>& rc = EffectiveProduces(state, active, *d);
             smix(0xEFEC71'11ull, 0xEFEC71'22ull);
@@ -4996,11 +5183,41 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                          ManaPool* out_full_pool,
                          const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
 {
+    // DIAGNOSTIC (MTG_TAP_STATS + MTG_TAP_SLOW_NODES=N): a top-level payment that walked more than N
+    // backtracker nodes prints its cost, outcome and the untapped sources, so a blow-up can be read
+    // off a concrete board. Off by default (no tapstats -> nothing counted, nothing printed).
+    struct SlowDump
+    {
+        const GameState& s; const ManaCost& c; const ManaPool& f; std::uint64_t n0; bool on;
+        bool ok = false;
+        SlowDump(const GameState& st, const ManaCost& co, const ManaPool& fl)
+            : s(st), c(co), f(fl), n0(tapstats::g_nodes.load(std::memory_order_relaxed)), on(tapstats::Enabled()) {}
+        ~SlowDump()
+        {
+            static const long long thr = []{ const char* v = std::getenv("MTG_TAP_SLOW_NODES");
+                                              return v ? std::atoll(v) : 0LL; }();
+            if (!on || thr <= 0) { return; }
+            const std::uint64_t dn = tapstats::g_nodes.load(std::memory_order_relaxed) - n0;
+            if (dn < static_cast<std::uint64_t>(thr)) { return; }
+            std::fprintf(stderr, "[tap-slow] nodes=%llu ok=%d turn=%d cost=%s x=%d float=W%dU%dB%dR%dG%dC%d*%d srcs:",
+                         static_cast<unsigned long long>(dn), ok ? 1 : 0, s.turn_number, c.ToString().c_str(),
+                         c.has_x ? 1 : 0, f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild);
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != s.active_player_index || p.tapped) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!d || !(d->card.IsLand() || d->params.mana_rock || d->tmpl == CardTemplate::ManaDork)) { continue; }
+                std::fprintf(stderr, " %s|", p.card.m_name.str().c_str());
+            }
+            std::fprintf(stderr, "\n");
+        }
+    } slow_dump(state, cost, floating);
     if (!state.dmg_events_armed || dmgev::t_pay_cap.live)
     {
-        return TapForCostBacktrackTop(state, cost, for_creature, floating, rp_colors, fail_memo,
+        slow_dump.ok = TapForCostBacktrackTop(state, cost, for_creature, floating, rp_colors, fail_memo,
                                       out_leftover, tapped_mask, untapped_max, reserved_mask,
                                       out_full_pool, src_cands);
+        return slow_dump.ok;
     }
     ManaPool leftover_best, full_best;
     // The whole-turn prepay (out_full_pool) must decline rather than commit a lethal batch.

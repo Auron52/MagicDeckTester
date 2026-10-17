@@ -431,7 +431,13 @@ static_assert(sizeof(Player) == 200,
 // +16 bytes (2026-10-15, burn): GameState::m2_stage_turn + m2_prestaged_mask (folded value-gated above).
 // Both +16s (the land-search cluster above, burn here) were made against 1080 on parallel branches; together
 // 1112, measured (the static_assert compiles) on the rebased tree, 2026-10-16.
-static_assert(sizeof(GameState) == 1112,
+// +8 bytes (2026-10-17, Galadriel -- the bool run before casts_remaining_this_turn was full, so one
+// more bool costs an alignment step; measured 1112 -> 1120): `deck_has_scry_watcher`. Classification:
+// DECK CONSTANT, stamped once in
+// StampDeckTraits; it only skips FireScryWatchers' walk that provably finds no watcher, and widens the
+// land-position axis for a deck that holds one -- identical across every pair of states Build()
+// compares, nothing to fold.
+static_assert(sizeof(GameState) == 1120,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

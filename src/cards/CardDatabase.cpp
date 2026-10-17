@@ -959,6 +959,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.etb_untap_reveal_subtypes.push_back(s);
     p.etb_scry         = params.value("etb_scry", 0);
     p.etb_surveil      = params.value("etb_surveil", 0);
+    p.scry_reveal_land_to_battlefield = params.value("scry_reveal_land_to_battlefield", false);
     p.tap_self_damage  = params.value("tap_self_damage", 0);
     p.tap_self_damage_any_mode = params.value("tap_self_damage_any_mode", false);
     if (params.contains("cycling_cost"))
@@ -1141,6 +1142,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.mana_rock                 = params.value("mana_rock", false);
     p.reflecting                = params.value("reflecting", false);
     p.domain_mana               = params.value("domain_mana", false);
+    p.mana_colors_of_graveyard_legends = params.value("mana_colors_of_graveyard_legends", false);
     p.domain_self_pump          = params.value("domain_self_pump", false);
     p.loyalty_start             = params.value("loyalty_start", 0);
     if (params.contains("loyalty_abilities"))

@@ -3200,6 +3200,15 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply an examined index to put that card onto the battlefield, or -1 to put "
                "nothing; the rest go to the bottom. Default = the AI's pick.");
     }
+    else if (source.find("(galadriel reveal)") != std::string::npos)
+    {
+        // Galadriel of Lothlorien's scry trigger (SpellEffects.h FireScryWatchers) reuses this modal:
+        // the one examined card is the library TOP, a land, and taking it reveals it and puts it onto
+        // the battlefield tapped (its own enter scry then chains). Asked only when the top is a land.
+        d.Note("reply 0 to reveal the top card and put that land onto the battlefield tapped (its own "
+               "enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land "
+               "stays on top). Default = reveal.");
+    }
     else if (source.find("(combat crack)") != std::string::npos)
     {
         // Khalni Heart Expedition's in-combat window (LandSearch.h FireCombatLandSearchCracks) reuses

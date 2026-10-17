@@ -2913,6 +2913,31 @@ public:
 // ran two Waves. SelesnyaLifegainProvider is an EMPTY DeckProvider derivation, so this one is too --
 // play-neutral by construction (every judgement hook is the Generic one); what it adds is a place
 // for a certificate and a name in scripts/provider_audit.py.
+// Galadriel (Galadriel of Lothlorien + 52 scry lands + Sol Ring, Crackle with Power as the finisher;
+// onboarded 2026-10-17). Its OWN provider from day one (Stage 4a): before this branch the deck rode
+// GenericProvider. An EMPTY DeckProvider derivation (== Generic behaviour) -- play-neutral by
+// construction. The deck's one big decision, the Galadriel reveal chain, is SEARCHED in the engine
+// (ScryChainCandidates, core/SpellEffects.h); its default (candidate 0) is the inherited
+// ScryKeepOnTop expressed as a skip count, so no judgement is added here until one is measured.
+class GaladrielProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage reaches the opponent through Galadriel's "
+               "3/3 attack and Crackle with Power (5X to the face, one target in a 1-head game). A "
+               "winless-this-turn bound must price the reveal chain: a land drop with Galadriel out "
+               "can put a dozen TAPPED lands in, which cannot pay for anything this turn but fund a "
+               "Crackle next turn -- so the bound is this turn's untapped mana + Sol Ring against "
+               "3X+2 for Crackle, plus Galadriel's combat damage." }; }
+    const char* Name() const override { return "Galadriel"; }
+    // THE DECK'S SCRY POLICY (USER 2026-10-17: "Realistically we will want some smart scry
+    // heuristics"). A DEFAULT, never a narrowing: every per-look scry is still searched on the land
+    // drop (Plan::scry_choice), and a reveal chain's candidate 0 is this rule walked as a skip count,
+    // with every other k still enumerated (ScryChainCandidates). Behind MTG_GALADRIEL_SCRY (default
+    // ON; =0 -> the Generic rule). See the .cpp for the rule.
+    bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
+};
+
 class LandfallProvider : public DeckProvider
 {
 public:
