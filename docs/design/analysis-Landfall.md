@@ -474,6 +474,37 @@ with a distinct number in case we choose to do condemnation later"*.
   other discard keeps T6. Read as a visible-info miss, not clairvoyance. Two amendments for the USER (not
   built): castability as a GATE (can it be cast within the window?) with the rank deciding among the
   castable; and pricing the mana target by mana produced, not cards.
+- **Amendments, 2026-10-17** (USER: "Let's try your discard amendment"; `logs/castorder/amend/`). Three levers:
+  - **Khalni** (`MTG_LANDFALL_KHALNI_NEEDS_RAMP`, the USER's rule, default ON): *"Khalni can be counted as
+    ramp, but I wouldn't keep it unless we have enough other ramp active to activate it quickly"*, *"Khalni
+    is not great unless you have a lot of lands coming down"*, *"it should still be kept if we cannot fill our
+    ramp spots otherwise"*, *"It is more ramp than land except arguably Myriad Landscape"*. Kept as ramp when
+    the hand and board bring its three landfalls by the turn after it is cast (land drops from hand lands, at
+    most 2, + other kept Rampant Growth / SfT / Cultivate + fetch lands in hand or uncracked out: Wilds 1,
+    Myriad 2; no hoped-for draws); otherwise it fills a ramp spot the other ramp leaves, after Myriad and
+    before the other extra lands; otherwise it sheds right after a capped copy.
+  - **Gate** (`MTG_LANDFALL_DISCARD_GATE`, default ON, **USER-approved 2026-10-17**): the land-only castability model
+    could not see ramp in hand, so it first credits the kept ramp as mana (one spell a turn from next turn,
+    its basic usable the turn after; Khalni +2 a turn later). A threat is castable when P(castable within
+    four turns) >= 0.5; the castable come first, the rank decides among them; Phylath stays first.
+  - **Mana target in mana** (Khalni / Cultivate / Myriad / Turf count 2): no gain in either measurement; DELETED
+    on the USER's approval (it was OFF, so play is unchanged -- Landfall smoke digests identical).
+  - A/B, 7,000 paired games per arm on the castorder seeds (unwon = 9): every lever within noise because real
+    sheds are rare -- the strict Khalni rule changes NO game; with the gate, play 4 faster / 1 slower and d0
+    3 / 1 (t ~ -1.3); mana counting 2 / 1. With all three levers off the policy reproduces the shipped one
+    game for game (7,000 / 7,000, 16 / 16 digests).
+  - Paired labels (one process per arm on the SAME seeds, 7,000 games each): on the 91 shed states identical
+    in every arm (28 not all-tie), the castability order, the Khalni rule (both versions) and mana counting
+    0 regrets; every gate arm 1 (s2702457 T2 sheds Courser; best Wave / Khalni / SfT). The strict Khalni rule
+    changes the pick on 3 of 91 (Khalni shed instead of Cultivate, all ties). The gate changes it on 23 of
+    91: the castability order sheds the least castable threat (Avenger 6 times, Omnath, Wave, Titan) and
+    almost never Courser; under the gate the rank decides, so Courser (ranked last, the author's rank) is the
+    usual shed. An earlier UNPAIRED run (arms on different seeds) read the gate 0 / 146 vs 1-5 elsewhere --
+    seed luck, which the paired run corrected.
+  - Tiers with the Khalni rule + gate on: every other case byte-identical (119 smoke / 164 regression);
+    Landfall digests only (3 + 6 games play-changed, 0 slower, 0 faster). Accepted with `--deck=landfall`.
+  - USER 2026-10-17 ("that sounds sensible"): the gate ON, the mana lever deleted. Still open: Courser's place
+    in the rank (last, the author's call), now the gate's usual shed.
 
 ## Hand-played references s1-s10 — bench before the value leaf (2026-10-16, de730cadf)
 `ref_bench.py` at the shipped play setting (d5 b20, no value leaf, no keep table): human 6.000, search

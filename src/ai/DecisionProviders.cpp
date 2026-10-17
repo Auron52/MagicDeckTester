@@ -3142,6 +3142,9 @@ const char* LandfallProvider::CastOrderTierName(int rank) const
 //             better later") -- under 3 lands out Search > Rampant Growth > Khalni > Cultivate, later
 //             Cultivate > Search > Rampant Growth > Khalni. Fungible upward: a hand short of ramp keeps more
 //             lands, a hand short of lands more ramp, up to P.
+//             KHALNI only with lands coming down (USER 2026-10-17, MTG_LANDFALL_KHALNI_NEEDS_RAMP): ramp when
+//             the hand and board bring its three landfalls by the turn after it is cast; otherwise only a
+//             ramp spot the other ramp leaves (ahead of extra lands but Myriad), else it sheds after a capped copy.
 //   THREATS   the catch-all, FLOOR 2 (USER: "2 threats sounds fine"). PHYLATH FIRST (USER: "it seems to be the
 //             fastest"), the rest by CASTABILITY (USER: "If we can't cast the threat we should use another"),
 //             the shared discard_dist factor (Genesis Wave priced at X = 3); exact ties by the author's rank
@@ -3149,16 +3152,30 @@ const char* LandfallProvider::CastOrderTierName(int rank) const
 //             AT MOST ONE Primeval Titan (USER: no kill potential in this list) and one copy of a legend,
 //             net of board.
 //   CAPPED    a copy beyond its cap: shed right after a dead card.
+//   THREAT GATE (MTG_LANDFALL_DISCARD_GATE, default ON, USER 2026-10-17): castable first (kept ramp credited), rank among them.
 //   DEAD      a legendary whose namesake is on our battlefield (Phylath, Omnath): no quota, shed first.
 // Keep order: colour coverage, lands to Lq, ramp to its sub-quota, the fungible fill to P, the threat floor,
-// the rest of the threats ("extra spells should always be threats"), the mana overflow, a capped copy, then
-// the dead. The
+// the rest of the threats ("extra spells should always be threats"), the mana overflow, a Khalni the rule
+// does not keep, a capped copy, then the dead. The
 // shed is the LAST of that order, returned as ONE index (5i rule 5) through CleanupDiscardRankingWithOrder;
 // MTG_LANDFALL_DISCARD_FAN=1 (testing only) returns the whole order for the rule-vs-searched check.
 static bool LandfallBucketDiscardEnabled()
 {
     static const bool on = EnvOn("MTG_LANDFALL_BUCKET_DISCARD", true);   // DEFAULT ON (provisional); =0 -> generic
     return heurarm::Flag(heurarm::LANDFALL_BUCKET_DISCARD, on);
+}
+// USER 2026-10-17: "Khalni can be counted as ramp, but I wouldn't keep it unless we have enough other ramp
+// active to activate it quickly." See the MANA section below.
+static bool LandfallKhalniNeedsRamp()
+{
+    static const bool on = EnvOn("MTG_LANDFALL_KHALNI_NEEDS_RAMP", true);   // DEFAULT ON (the USER's rule)
+    return heurarm::Flag(heurarm::LANDFALL_KHALNI_NEEDS_RAMP, on);
+}
+// The castability gate, from the rule-vs-searched labels (2026-10-17; USER approved the same day).
+static bool LandfallDiscardGate()
+{
+    static const bool on = EnvOn("MTG_LANDFALL_DISCARD_GATE", true);   // DEFAULT ON (USER 2026-10-17); =0 -> castability order
+    return heurarm::Flag(heurarm::LANDFALL_DISCARD_GATE, on);
 }
 
 std::vector<int> LandfallProvider::CleanupDiscardCandidates(
@@ -3358,13 +3375,74 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
             if (land_kind(def_of(ap.hand[lands[x]])) != land_kind(def_of(ap.hand[lands[y]]))) { two_kinds = true; break; }
     const int land_quota  = cover + ((board_lands < 4 || two_kinds) ? 2 : 1);
     const int mana_parent = std::max(land_quota, 7 - board_lands);
-    int kept_lands = cover, kept_ramp = 0;
+    int kept_lands = cover, mana_kept = cover;   // mana CARDS kept, the colour lands first
     for (int i : lands)
-    { if (kept_lands < land_quota && !kept[static_cast<std::size_t>(i)]) { take(i); ++kept_lands; } }
+    {
+        if (kept_lands < land_quota && !kept[static_cast<std::size_t>(i)])
+        { take(i); ++kept_lands; ++mana_kept; }
+    }
+    // KHALNI (USER 2026-10-17, MTG_LANDFALL_KHALNI_NEEDS_RAMP): "Khalni can be counted as ramp, but I wouldn't
+    // keep it unless we have enough other ramp active to activate it quickly", "Khalni is not great unless you
+    // have a lot of lands coming down", and "it should still be kept if we cannot fill our ramp spots
+    // otherwise". LANDS COMING DOWN, from the hand and the battlefield only (no hoped-for draws): it is kept
+    // as ramp when its three landfalls arrive by the end of the turn after it is cast -- the land drops from
+    // lands in hand (at most 2), plus the other kept ramp (Rampant Growth / Search for Tomorrow / Cultivate 1
+    // each), plus fetch lands in hand or uncracked on our battlefield (Evolving Wilds / Terramorphic 1,
+    // Myriad 2). Otherwise it is kept only to fill a ramp spot the other ramp leaves -- ahead of the extra lands
+    // except Myriad (below), while the mana target is still short -- and sheds right after a capped copy.
+    const bool khalni_rule = LandfallKhalniNeedsRamp();
+    auto is_khalni = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d != nullptr && d->params.landfall_quest_counters > 0; };
+    std::vector<int> weak;
     for (int i : ramp)
-    { if (kept_lands + kept_ramp < mana_parent) { take(i); ++kept_ramp; } }
-    for (int i : lands)   // fungible upward: a hand short of ramp keeps more lands, up to the parent
-    { if (kept_lands + kept_ramp < mana_parent && !kept[static_cast<std::size_t>(i)]) { take(i); ++kept_lands; } }
+    {
+        if (khalni_rule && is_khalni(i)) { continue; }
+        if (mana_kept < mana_parent) { take(i); ++mana_kept; }
+    }
+    std::vector<int> khalni_late;   // a Khalni short of lands coming down: a ramp spot only nothing else fills
+    if (khalni_rule)
+    {
+        int landfalls = std::min(2, static_cast<int>(lands.size()));
+        for (int i : lands)
+        { const CardDefinition* d = def_of(ap.hand[i]); if (d != nullptr) { landfalls += d->params.land_search_count; } }
+        for (int i : keep)
+        {
+            const CardDefinition* d = def_of(ap.hand[i]);
+            if (d != nullptr && !d->card.IsLand() && d->params.land_search_on_resolve) { ++landfalls; }
+        }
+        for (const Permanent& perm : s.battlefield)
+        {
+            if (perm.controller_index != me || !perm.card.IsLand()) { continue; }
+            const CardDefinition* d = def_of(perm.card);
+            if (d != nullptr) { landfalls += d->params.land_search_count; }
+        }
+        constexpr int kKhalniLandfalls = 3;   // its quest: cracked the turn after it is cast
+        for (int i : ramp)
+        {
+            if (!is_khalni(i)) { continue; }
+            if (landfalls < kKhalniLandfalls) { khalni_late.push_back(i); continue; }
+            if (mana_kept < mana_parent) { take(i); ++mana_kept; }
+        }
+    }
+    // Fungible upward: a hand short of ramp keeps more lands, up to the parent. A Khalni short of lands coming
+    // down still precedes those lands -- "It is more ramp than land except arguably Myriad Landscape" (USER
+    // 2026-10-17) -- so the fill is Myriad, then that Khalni, then the other lands.
+    auto fill_land = [&](int i)
+    {
+        if (mana_kept < mana_parent && !kept[static_cast<std::size_t>(i)])
+        { take(i); ++kept_lands; ++mana_kept; }
+    };
+    if (!khalni_late.empty())
+    {
+        for (int i : lands)
+        { const CardDefinition* d = def_of(ap.hand[i]); if (d != nullptr && d->params.land_search_count >= 2) { fill_land(i); } }
+        for (int i : khalni_late)
+        {
+            if (mana_kept < mana_parent) { take(i); ++mana_kept; }
+            else                         { weak.push_back(i); }
+        }
+    }
+    for (int i : lands) { fill_land(i); }
 
     // ---- THREATS: Phylath first, then CASTABILITY, then the rank -----------------------------------
     // USER: "keep Phylath first as it seems to be the fastest" and "The order of the others could be based on
@@ -3379,30 +3457,79 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
         const CardDefinition* d = def_of(ap.hand[i]);
         if (d != nullptr && d->card.IsLand()) { kept_drops.push_back(discard_dist::LandDropOf(d)); }
     }
+    // THE GATE (MTG_LANDFALL_DISCARD_GATE, amendment A; the labels' one regret, s2312103 T2, shed Avenger
+    // because the land-only model read it uncastable beside Titan and Wave). The kept RAMP is credited as
+    // mana -- one spell a turn from our next turn, its basic usable the turn after (a kept Khalni two basics,
+    // a turn later still for its counters), red first while the threat is short of red -- and a threat is
+    // CASTABLE when P(castable within our next four turns) >= 0.5. The castable come first and the rank
+    // decides among them ("If we can't cast the threat we should use another"); the rest keep castability
+    // then the rank. Phylath stays first.
+    const bool gate = LandfallDiscardGate();
+    std::array<int, discard_dist::kHorizon> credit{};   // basics the kept ramp has added by our t-th next turn
+    if (gate)
+    {
+        int j = 0;
+        for (int i : keep)
+        {
+            const CardDefinition* d = def_of(ap.hand[i]);
+            if (d == nullptr || !is_ramp(d)) { continue; }
+            const bool khalni = d->params.landfall_quest_counters > 0;
+            const int from = j + 2 + (khalni ? 1 : 0), amount = khalni ? 2 : 1;
+            for (int t = from; t <= discard_dist::kHorizon; ++t) { credit[static_cast<std::size_t>(t - 1)] += amount; }
+            ++j;
+        }
+    }
+    int red_have = census.board_src[3];
+    for (const discard_dist::LandDrop& ld : kept_drops) { if (ld.colours & (1u << 3)) { ++red_have; } }
     std::vector<double> fac(static_cast<std::size_t>(n), 0.0);
+    std::vector<char> castable(static_cast<std::size_t>(n), 0);
     for (int i : threats)
     {
         const CardDefinition* d = def_of(ap.hand[i]);
         if (d == nullptr) { continue; }
         const int cost = d->params.reveal_x_put_permanents ? d->card.m_mana_cost.ManaValue() + 3 : -1;
-        fac[static_cast<std::size_t>(i)] = discard_dist::CastFactorFor(census, *d, kept_drops, cost);
+        if (!gate) { fac[static_cast<std::size_t>(i)] = discard_dist::CastFactorFor(census, *d, kept_drops, cost); continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        const std::array<int, 5> pips = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        const int red_short = std::max(0, static_cast<int>(mc.red) - red_have);
+        discard_dist::ColourCredit cc{};
+        for (int t = 0; t < discard_dist::kHorizon; ++t)
+        {
+            const int c = credit[static_cast<std::size_t>(t)], r = std::min(c, red_short);
+            cc[static_cast<std::size_t>(t)][3] = r;
+            cc[static_cast<std::size_t>(t)][4] = c - r;
+        }
+        const std::array<double, discard_dist::kHorizon> p =
+            discard_dist::CastProbByTurn(census, cost >= 0 ? cost : mc.ManaValue(), pips, kept_drops, &credit, &cc);
+        fac[static_cast<std::size_t>(i)] = discard_dist::CastFactor(p);
+        castable[static_cast<std::size_t>(i)] = p[discard_dist::kHorizon - 1] >= 0.5 ? 1 : 0;
     }
     auto phylath_first = [&](int i) { return ap.hand[i].m_name == "Phylath, World Sculptor"; };
     std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
     {
         const bool pa = phylath_first(a), pb = phylath_first(b);
         if (pa != pb) { return pa; }
+        const int ra = threat_rank(ap.hand[a]), rb = threat_rank(ap.hand[b]);
+        if (gate)
+        {
+            const bool ca = castable[static_cast<std::size_t>(a)] != 0, cb = castable[static_cast<std::size_t>(b)] != 0;
+            if (ca != cb) { return ca; }
+            if (ca && ra != rb) { return ra > rb; }
+        }
         const double fa = fac[static_cast<std::size_t>(a)], fb = fac[static_cast<std::size_t>(b)];
         if (fa != fb) { return fa > fb; }
-        const int ra = threat_rank(ap.hand[a]), rb = threat_rank(ap.hand[b]);
         if (ra != rb) { return ra > rb; }
         return CleanupDiscardManaValue(ap.hand[a]) < CleanupDiscardManaValue(ap.hand[b]);
     });
     for (int i : threats) { take(i); }   // the floor (2) and the catch-all share one order: best first
 
-    // ---- overflow: the mana beyond its parent, then a capped copy, then the dead ------------------
-    for (int i : ramp)  { if (!kept[static_cast<std::size_t>(i)]) { take(i); } }
+    // ---- overflow: the mana beyond its parent, a Khalni the rule does not keep, a capped copy, the dead
+    for (int i : ramp)
+    {
+        if (!kept[static_cast<std::size_t>(i)] && std::find(weak.begin(), weak.end(), i) == weak.end()) { take(i); }
+    }
     for (int i : lands) { if (!kept[static_cast<std::size_t>(i)]) { take(i); } }
+    for (int i : weak)  { take(i); }
     for (int i : capped) { take(i); }
     for (int i : dead)  { take(i); }
 
