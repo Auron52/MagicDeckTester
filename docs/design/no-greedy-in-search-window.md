@@ -441,9 +441,30 @@ changed games at searched depths and at d0. Across the smoke (19 searched re-sol
 smoke's searched cases at three fresh seeds (30,045 games, 63 searched re-solves), CARRIED = 0. No
 re-solve's chosen plan held a post-apply pin, so the pre-fix executor dropped nothing in this sample, and
 UNREALIZED = 0 after the fix. The fix closes a path that budgeted play rarely takes. The same counter line
-reads MISMATCH = 3 (smoke) and 13 (probe), identical before and after this change: a committed
-continuation the executor could not replay. Its own comment says it must read zero, so that is a separate
-open item.
+read MISMATCH = 3 (smoke) and 13 (probe), identical before and after this change; fixed separately (below).
+
+**The MISMATCH counter (2026-10-17, follow-up): two causes, both fixed.** It read 3 on smoke and 16 on a
+40,060-game probe (the smoke's searched cases plus three fresh seeds). Every case was Snow, on an
+unverified (estimate) committed line. The causes, from a `[bp-mismatch]` line naming each one (deck, game
+seed, turn, occurrence vs `bp_at`, the continuation-list size):
+
+1. CLASSIFICATION (12 of 16). The split read "the plan carries a choice", so an occurrence the plan did NOT
+   target counted as a failed replay whenever the plan targeted a different one. On an unverified line
+   that occurrence is re-solved by design: the rollout scored the canon there, and the estimate commit
+   re-solves because "the search never saw past the find". Now MISMATCH means THIS occurrence carried the
+   plan's searched continuation and could not be replayed (`TurnSolver::ClassifyBpOccurrence`: Target /
+   PreTarget / Untargeted / None).
+2. A REAL LOCKSTEP BREAK (3 of 16, plus the occurrence before each). An occurrence BEFORE the plan's target
+   (a Frost Augur / Scrying Sheets look) was re-solved instead of mirrored. That left the scored line before
+   the plan's own searched decision, and the targeted Ice-Fang Coatl / Arcum's Astrolabe draw then found an
+   EMPTY continuation list. The search chose the target's continuation on the line that played the canon
+   up to it. So the executor now mirrors the canon at every occurrence before its target on an unverified
+   line too (`TurnSolver::ExecMirrorsUnreplayedBp`); after the target the estimate re-solve resumes. Both
+   breakpoint sites (the main one and the pod twin) use the same two helpers.
+
+Measured on the same probe: MISMATCH 16 -> 0, searched re-solves 82 -> 69 (the pre-target occurrences now
+mirror), and two Snow jobs changed digest at unchanged averages (5.7400, 5.6100). Unit test:
+test_land_search_gaps.cpp, "Breakpoint occurrences: ...".
 
 **Disclosed residual (DIG-UNRUN):** on a committed line's main, and in main 2, the executor runs no reactive
 dig loop at all, so a re-solve whose candidate ran ApplyPlanDirect's dig loop is realized without it. That

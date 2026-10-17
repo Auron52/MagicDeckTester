@@ -82895,6 +82895,17 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     { s.scripted_combat_landfall_target = static_cast<std::int8_t>(p.combat_landfall_target_choice); }
 }
 
+TurnSolver::BpOccurrence TurnSolver::ClassifyBpOccurrence(const Plan& p, int idx)
+{
+    if (p.bp_choice < 0 || idx < 0)        { return BpOccurrence::None; }
+    if (p.bp_all || idx == p.bp_at)        { return BpOccurrence::Target; }
+    return idx < p.bp_at ? BpOccurrence::PreTarget : BpOccurrence::Untargeted;
+}
+bool TurnSolver::ExecMirrorsUnreplayedBp(BpOccurrence o, bool committed, bool verified)
+{
+    return committed && (verified || o == BpOccurrence::PreTarget);
+}
+
 // The apply's canon default at a breakpoint the plan does not branch on (nested canon, enum/base canon),
 // moved verbatim out of ApplyPlanDirect's bp_searched_plan so the executor can mirror it on a committed
 // line instead of re-solving (USER 2026-10-03: "We should not search again"). False = EMPTY.

@@ -453,12 +453,15 @@ namespace execgreedy
 inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
 inline std::atomic<unsigned long long> g_exec[12] = {};
 inline std::atomic<unsigned long long> g_rollout{0}, g_bp{0};
-// CAUSE split of the executor breakpoint fallback (g_bp), because the two kinds differ in what
-// they mean: BASE (the committed plan carries no searched continuation, bp_choice < 0) is
-// realized-equals-scored -- the scoring rollout ran the SAME greedy Solve at the same state
-// through the twin applier; MISMATCH (a searched continuation existed but the executor could
-// not replay it: bp_seen counting drifted or bp_choice overran the re-enumerated list) is a
-// realized-vs-scored DIVERGENCE and must read zero.
+// CAUSE split of the executor breakpoint re-solve (its searched half is g_bp_searched): BASE (an
+// occurrence the plan did NOT target -- no searched continuation at THIS breakpoint -- re-solved on an
+// unverified line by design: the rollout scored the canon there, the executor's stronger solver decides)
+// versus MISMATCH (THIS occurrence carried the plan's searched continuation and the executor could not
+// replay it: bp_seen counting drifted, or bp_choice overran the re-enumerated list). MISMATCH is a
+// realized-vs-scored DIVERGENCE and must read zero. (Until 2026-10-17 the split read "the plan carries a
+// choice", so every untargeted occurrence of a plan targeting ANOTHER one read as a mismatch; the real
+// ones were all downstream of such an occurrence re-solved BEFORE the target -- now mirrored.) A
+// [bp-mismatch] line names each MISMATCH under MTG_M2_YIELD_STATS.
 inline std::atomic<unsigned long long> g_bp_base{0}, g_bp_mismatch{0};
 // Executor breakpoint continuations REDIRECTED to the searched re-solve (MTG_EXEC_BP_SEARCHED,
 // 2026-09-05): these used to be the g_bp greedy fallbacks. g_bp now counts only fallbacks that
@@ -5108,6 +5111,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             ~RdbLandGuard() { if (l.pending) { l.pending = false; --held; } }
         } _rdb_land_guard{ rdb_land, exec_cont_lands_held };
         const int bp_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
+        int dbg_cands = -2, dbg_resolved = -9;   // MTG_M2_YIELD_STATS mismatch trace only
         // bp_all -> candidate k at EVERY breakpoint (Plan::bp_all). The search scored the turn
         // that way, so the executor must realise it that way or the committed line is not the
         // line that was ranked -- the same divergence class the comment above guards against.
@@ -5141,6 +5145,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     : std::vector<TurnSolver::Plan>{};
             const std::size_t dj = TurnSolver::IsBpDemotedChoice(plan.bp_choice)
                 ? static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice) : 0;
+            dbg_cands = static_cast<int>(cands.size()); dbg_resolved = bp_idx_resolved;
             if (plan.bp_choice == TurnSolver::kBpEmptyChoice
                 || (TurnSolver::IsBpDemotedChoice(plan.bp_choice) && dj >= demoted.size()))
             {
@@ -5187,7 +5192,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // d8 b0 games for hours on a line already verified -- and realised a turn the search never scored.
         // A one-turn ESTIMATE commit (not verified) still re-solves below: the search never saw past the
         // find (mirroring those cost Snow +7 at d3/d5 b10 -- smoke gi82, T7 vs T8).
-        if (!bp_searched_here && fd_plan_committed && fd_plan_verified)
+        // EXCEPT an occurrence BEFORE the plan's own targeted one (2026-10-17, LOCKSTEP): the search chose
+        // the continuation at bp_at on the line that played the canon here, so re-solving here first
+        // leaves that line before the plan's searched decision, and the target is then replayed by
+        // index onto a state the rollout never had -- or, when the re-solve spent what the target's
+        // continuations needed, onto an EMPTY list (the MISMATCH counter's every case on smoke and a
+        // 40k-game probe, all Snow: a Frost Augur / Scrying Sheets look re-solved, then the targeted
+        // Ice-Fang Coatl / Arcum's Astrolabe draw found no continuation). Up to the target the line is
+        // the scored one, so it is mirrored; after it the estimate re-solve resumes.
+        const TurnSolver::BpOccurrence rdb_occ = TurnSolver::ClassifyBpOccurrence(plan, bp_idx);
+        if (!bp_searched_here && TurnSolver::ExecMirrorsUnreplayedBp(rdb_occ, fd_plan_committed, fd_plan_verified))
         {
             extra              = TurnSolver::Plan{};
             extra.land_decided = true;
@@ -5223,7 +5237,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // continuations, in the conservative direction: the realized continuation is chosen
             // by a strictly stronger solver than the one that scored it.
             // There is no hatch back to a greedy fallback at depth > 0 (deleted 2026-09-17).
-            execgreedy::RecordBpCause(plan.bp_choice >= 0);
+            // MISMATCH = THIS occurrence carried the plan's searched continuation and it could not be
+            // replayed; an occurrence the plan did not target (BASE) has no continuation to replay.
+            const bool rdb_targeted = rdb_occ == TurnSolver::BpOccurrence::Target;
+            execgreedy::RecordBpCause(rdb_targeted);
+            if (execgreedy::Enabled() && rdb_targeted)
+            {
+                std::fprintf(stderr, "[bp-mismatch] main %s seed=%llu T%d %s depth=%d bp_depth=%d idx=%d bp_at=%d "
+                             "choice=%d all=%d cands=%d resolved=%d committed=%d verified=%d site=%s rollout=%d bot=%d\n",
+                             ResolveProvider(state).Name(), static_cast<unsigned long long>(state.game_seed),
+                             state.turn_number, is_pre_combat_main ? "pre" : "post", m_lookahead_depth, bp_depth,
+                             bp_idx, plan.bp_at, plan.bp_choice, plan.bp_all ? 1 : 0, dbg_cands, dbg_resolved,
+                             fd_plan_committed ? 1 : 0, fd_plan_verified ? 1 : 0,
+                             rdb_site ? rdb_site->card.m_name.c_str() : "-", m_in_rollout ? 1 : 0,
+                             m_shared_tt != nullptr ? 1 : 0);
+            }
             // depth > 0 REQUIRED: at d0 there IS no search (the d0 runner is the greedy
             // configuration by design), and SolveWithLookahead(d0) is not byte-equal to
             // Solve() -- an unscoped first version moved a d0 GT cell (melira gi382).
@@ -5786,7 +5814,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // an untargeted occurrence with bp_searched_plan's canon default or EMPTY
                     // (TurnSolver::BpUnbranchedCanon, shared); re-solving here instead ran a deck-depth
                     // SolveWithLookahead on a line already scored, and realised a different turn.
-                    if (!pod_bp_searched && fd_plan_committed && fd_plan_verified)
+                    // ...and an occurrence BEFORE the plan's targeted one, on an unverified line too: the
+                    // main site's PRE-TARGET rule (lockstep up to the plan's own searched decision).
+                    const TurnSolver::BpOccurrence pod_occ = TurnSolver::ClassifyBpOccurrence(plan, pod_bp_idx);
+                    if (!pod_bp_searched
+                        && TurnSolver::ExecMirrorsUnreplayedBp(pod_occ, fd_plan_committed, fd_plan_verified))
                     {
                         if (!TurnSolver::BpUnbranchedCanon(state, is_pre_combat_main, plan, pod_bp_idx,
                                                            /*class_on=*/true, extra))
@@ -5802,7 +5834,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                         // Same searched re-solve as the main breakpoint site above (the pod
                         // trailing-pass twin); see the comment there. No greedy hatch.
-                        execgreedy::RecordBpCause(plan.bp_choice >= 0);
+                        const bool pod_targeted = pod_occ == TurnSolver::BpOccurrence::Target;
+                        execgreedy::RecordBpCause(pod_targeted);
+                        if (execgreedy::Enabled() && pod_targeted)
+                        {
+                            std::fprintf(stderr, "[bp-mismatch] pod %s seed=%llu T%d %s depth=%d idx=%d bp_at=%d "
+                                         "choice=%d all=%d committed=%d verified=%d rollout=%d\n",
+                                         ResolveProvider(state).Name(), static_cast<unsigned long long>(state.game_seed),
+                                         state.turn_number, is_pre_combat_main ? "pre" : "post", m_lookahead_depth,
+                                         pod_bp_idx, plan.bp_at, plan.bp_choice, plan.bp_all ? 1 : 0,
+                                         fd_plan_committed ? 1 : 0, fd_plan_verified ? 1 : 0, m_in_rollout ? 1 : 0);
+                        }
                         // depth > 0 REQUIRED -- see the main site's note (d0 is greedy by design);
                         // never gated on m_in_rollout (USER HARD RULE 2026-09-30).
                         if (m_lookahead_depth > 0)
