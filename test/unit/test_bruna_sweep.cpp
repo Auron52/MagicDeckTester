@@ -1564,3 +1564,87 @@ TEST_CASE("Continuation cast section: a recorded Greaves release lands before th
         CHECK(EquipHostOf(t, greaves) == sage);
     }
 }
+
+// ---- THE IDLE PASS's combat pins (2026-10-17; TurnSolver.cpp AppendIdlePassAxes) ----------------
+// A pre-combat main with the drop spent and nothing to cast enumerates ZERO plans and the host appends
+// the pass after the post-dedup fan-out ran -- so Bruna's gather and the Wings combat swap took the
+// provider's front. The pass now goes through the fan-out itself. End-to-end form:
+// test/scenarios/bruna_idle_pass_gather_skips_almost_perfect.json.
+namespace
+{
+bool HasPins(const std::vector<TurnSolver::Plan>& v, int gather, int swap)
+{
+    for (std::size_t i = 1; i < v.size(); ++i)
+    {
+        if (v[i].bruna_gather_choice == gather && v[i].combat_aura_swap_choice == swap) { return true; }
+    }
+    return false;
+}
+BoardBs IdleBrunaBoard()
+{
+    BoardBs b;
+    b.s.players[0].lands_played_this_turn = 1;   // the drop spent: the enumeration is empty
+    const int bruna = b.Put("Bruna, Light of Alabaster");
+    const int birds = b.Put("Birds of Paradise");
+    Permanent ap;
+    ap.card = CardBs("Almost Perfect", 70); ap.controller_index = 0; ap.owner_index = 0;
+    ap.aura_attached_to = birds;
+    b.s.battlefield.push_back(ap);
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 71); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = bruna;
+    b.s.battlefield.push_back(w);
+    for (int i = 0; i < 3; ++i) { b.Put("Forest"); }
+    return b;
+}
+}   // namespace
+
+TEST_CASE("Idle pass: an empty main 1 still searches Bruna's gather subset and the Wings combat swap")
+{
+    const BoardBs b = IdleBrunaBoard();
+    REQUIRE(TurnSolver::EnumerateMainPlans(b.s, /*is_pre_combat=*/true).empty());
+    const std::vector<TurnSolver::Plan> fresh = TurnSolver::IdlePassWithAxes(b.s);
+    REQUIRE_FALSE(fresh.empty());
+    CHECK(fresh[0].actions.empty());
+    CHECK(fresh[0].bruna_gather_choice == -1);        // the pass itself is the front of both
+    CHECK(fresh[0].combat_aura_swap_choice == -1);
+    CHECK(HasPins(fresh, 1, -1));                     // skip Almost Perfect (the front takes it)
+    CHECK(HasPins(fresh, -1, 71));                    // swap in combat
+    CHECK_FALSE(HasPins(fresh, 0, -1));               // the front is never a duplicate variant
+}
+
+TEST_CASE("Idle pass: on a state already holding the pins the FRONT of each is the variant")
+{
+    // The executor's breakpoint re-solve: the committed plan wrote both pins before the draw, so the
+    // pass inherits them -- skip-Almost-Perfect and the swap are the base plan, and taking it (gather 0)
+    // and declining the swap (the explicit no-swap pin, 0) are what the variants must reach.
+    BoardBs b = IdleBrunaBoard();
+    b.s.scripted_bruna_gather     = 1;
+    b.s.scripted_combat_aura_swap = 71;
+    const std::vector<TurnSolver::Plan> inh = TurnSolver::IdlePassWithAxes(b.s);
+    CHECK(HasPins(inh, 0, -1));
+    CHECK_FALSE(HasPins(inh, 1, -1));
+    CHECK(HasPins(inh, -1, 0));
+    CHECK_FALSE(HasPins(inh, -1, 71));
+}
+
+TEST_CASE("Idle pass: the explicit no-swap pin (0) declines a payable combat swap")
+{
+    BoardBs b = WingsOnMother(/*mother_sick=*/false);
+    std::vector<int> atk;
+    for (int i = 0; i < static_cast<int>(b.s.battlefield.size()); ++i)
+    { if (b.s.battlefield[static_cast<std::size_t>(i)].card.m_name.str() == "Mother of Runes") { atk.push_back(i); } }
+    REQUIRE(atk.size() == 1);
+    GameState yes = b.s;
+    yes.scripted_combat_aura_swap = 70;
+    std::vector<int> a1 = atk;
+    ApplyCombatAuraSwap(yes, 0, a1);
+    CHECK(CountOnBf(yes, "Colossification") == 1);    // control: this swap is payable and fires
+    GameState no = b.s;
+    no.scripted_combat_aura_swap = 0;
+    std::vector<int> a2 = atk;
+    ApplyCombatAuraSwap(no, 0, a2);
+    CHECK(CountOnBf(no, "Colossification") == 0);
+    CHECK(CountOnBf(no, "Arcanum Wings") == 1);
+    CHECK(no.scripted_combat_aura_swap == -1);        // consumed like any pin
+}

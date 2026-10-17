@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "THE IDLE PASS's combat pins (2026-10-17). A pre-combat main with the land drop spent and nothing to cast enumerates ZERO plans",
+    "(the drop-open path always offers its no-land pass, so 'lands_played_this_turn': 1 is what makes this board idle), and the",
+    "HOST appends the pass after the post-dedup axis fan-out ran -- so before the fix Bruna's attack-trigger gather took the",
+    "provider's FRONT, a greedy pick inside the search window. Board: Bruna, Light of Alabaster (5/5 flying vigilance) and a",
+    "Birds of Paradise wearing Almost Perfect (base 9/10), both able to attack; empty hand; opponent at 14. The front gather",
+    "subset TAKES the host-dependent Almost Perfect (BrunaGatherCandidates' take-first order): Bruna 9 + Birds 0 = 9, no kill.",
+    "Skipping it -- the searched Plan::bruna_gather_choice = 1 variant the pass now carries -- swings Bruna 5 + Birds 9 = 14 = the",
+    "opponent's life, a T6 kill. Front-only play wins T7."
+  ],
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 14,
+  "battlefield": [
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Bruna, Light of Alabaster" },
+    { "name": "Birds of Paradise" },
+    { "name": "Almost Perfect", "equips": "Birds of Paradise" }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 50,
+  "max_turns": 7,
+  "expect_win_turn": 6
+}
