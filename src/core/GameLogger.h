@@ -416,6 +416,15 @@ extern thread_local BounceChooser* g_play_treasurify_chooser;
 // chosen index into the list, or -1 to leave the equipment unattached). Nulled by
 // RevealLogPause for every search/rollout scope, so autonomous play is byte-identical.
 extern thread_local BounceChooser* g_play_attach_host_chooser;
+// ...and WHICH STAGE of a two-stage attach_host consumer is asking. nullptr (the default) = the single-
+// stage consumers (the Skyhunter put, soulbond, Sigarda's Aid, Ardenn's target), whose JSON is
+// unchanged. Raubahn, Bull of Ala Mhigo's attack attach (FireAttackAttachEquipment) asks TWICE through
+// the same chooser and sets this around each call: "equipment" (the options are the Equipment you
+// control that have a legal attacking host; -1 = attach nothing -- the printed "up to one") and then
+// "attacker" (the attacking creatures that Equipment may attach to; -1 = attach nothing). The emitter
+// writes it as the decision's `pick` field, which the viewer keys its wording and its one-option
+// auto-take exemption on.
+extern thread_local const char* g_attach_host_pick;
 
 // ---- Human-play planeswalker LOYALTY-ABILITY TARGET chooser --------------------------------
 // A loyalty ability that says "target ..." (Oko's +1 "target artifact or creature", Bolas's +3

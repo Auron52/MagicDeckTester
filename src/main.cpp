@@ -3842,6 +3842,28 @@ static void WriteAttachHostDecisionJson(std::ostream& os, const GameState& s,
     // not pair at all" (USER 2026-10-06, WhiteKnights viewer seed 13 T3: the Paladin's only legal
     // partner was Adeline and the pairing was taken silently).
     d.Bool("soulbond", sd != nullptr && sd->params.soulbond);
+    // A TWO-STAGE consumer names its stage (GameLogger.h g_attach_host_pick): Raubahn, Bull of Ala
+    // Mhigo's attack attach asks "equipment" (source = Raubahn) and then "attacker" (source = the
+    // chosen Equipment). Absent for every single-stage consumer, so their JSON is unchanged. The
+    // viewer keys its wording on it, and exempts the "equipment" stage from the one-option auto-take:
+    // attaching NOTHING is always on the table ("up to one"), so a lone Equipment is still a choice.
+    if (g_attach_host_pick != nullptr && std::string(g_attach_host_pick) == "equipment")
+    {
+        d.Str("pick", "equipment");
+        d.Note("reply an option index -- the Equipment you control that " + source + "'s attack "
+               "trigger attaches to an attacking creature (an attached one MOVES; free -- not an equip "
+               "ability), or -1 to attach NOTHING (\"up to one\"). The attacking creature is asked "
+               "next. Default = the AI's pick (-1 when it would attach nothing).");
+        return;
+    }
+    if (g_attach_host_pick != nullptr && std::string(g_attach_host_pick) == "attacker")
+    {
+        d.Str("pick", "attacker");
+        d.Note("reply an option index -- the ATTACKING creature that " + source + " attaches to (an "
+               "attacking Lizard Blades attached this way stops being a creature and leaves combat), "
+               "or -1 to attach nothing after all. Default = the AI's pick (best attacker for it).");
+        return;
+    }
     if (sd != nullptr && sd->params.soulbond)
     {
         d.Note("reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), "

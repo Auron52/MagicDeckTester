@@ -145,6 +145,22 @@ selection for that host moves (every piece whose move does not lower this combat
 pieces included). A piece-by-piece multi-select would need a new decision shape; disclosed in the
 deck's Stage 6a as a known gap rather than wired.
 
+Colossus Hammer reuse note (2026-10-17): **Raubahn, Bull of Ala Mhigo**, "whenever Raubahn attacks,
+attach up to one target Equipment you control to target attacking creature" → reuses **`attach_host`**
+TWICE, consulted from `FireAttackAttachEquipment` (SpellEffects.cpp, shared executor+rollout combat,
+at declare-attackers immediately before the Skyhunter dig). No new chooser typedef: the emitter adds a
+**stage discriminator** `pick` (thread-local `g_attach_host_pick`, GameLogger.h, set around each call):
+**`pick: "equipment"`** — options = every Equipment you control that is a legal target with some legal
+attacking host (the full rules-legal set, not the search's identity-folded list), source = Raubahn, the
+searched pair's Equipment preselected (`heuristic_default` -1 when the search attaches nothing), `-1` =
+attach NOTHING ("up to one"); then **`pick: "attacker"`** — options = the attacking creatures that
+Equipment may target, source = the Equipment, the provider's best host for it preselected, `-1` also
+attaches nothing. Asked only when at least one pair would actually move something. The viewer
+(`promptPanelHtml`) words both stages from `pick`, and **exempts the equipment stage from
+`ONE_OPTION_AUTO`** (declining is a real choice even with one Equipment — the soulbond ruling of
+2026-10-06); the attacker stage keeps the one-option auto-take (the target is then forced). Both ride
+the positional `--choices` stream in chronological order (equipment, then attacker).
+
 Turntimber Symbiosis reuse note (2026-08-21): the `look_top_put_creature_count` put also reuses the
 `dig` type (`PerformLookTopPutCreature` → `g_play_dig_chooser`, source = `"<card> (put)"` — the
 marker keys the onto-the-battlefield wording in both the emitter note and `digPanelHtml`). Under

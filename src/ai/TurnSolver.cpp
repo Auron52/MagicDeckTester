@@ -877,12 +877,17 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
 {
     return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
         || p.attack_land_search_choice >= 0    // Primeval Titan's attack pick: read in THIS combat only
-        || p.combat_crack_choice >= 0;         // ...and the in-combat Khalni crack
+        || p.combat_crack_choice >= 0          // ...and the in-combat Khalni crack
+        || p.attack_attach_choice >= 0;        // Raubahn's attack attach: read in THIS combat only
 }
 // Firing counters (printed with the rollout stats): pin variants NOT emitted for a post-combat list,
 // and pinned candidates folded after combat (la_cand loop / FSLineWin).
 static std::atomic<long long> g_combat_pin_m2_skipped{0};
 static std::atomic<long long> g_combat_pin_folded[2]{{0}, {0}};
+// Raubahn's attack-attach axis (AppendSubdecisionAxes): enumeration nodes that fanned it, and the
+// variants emitted (printed with the rollout stats).
+static std::atomic<long long> g_attack_attach_axis_nodes{0}, g_attack_attach_axis_variants{0};
+static std::atomic<long long> g_attack_attach_idle_nodes{0}, g_attack_attach_idle_variants{0};
 // COMBAT-PIN MAIN-PHASE SHARE firing counters (SolveWithLookahead; printed with the rollout stats):
 // base applies cached, variant applies replaced by the cached state.
 static std::atomic<long long> g_cpshare_cached{0}, g_cpshare_used{0};
@@ -1482,6 +1487,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("fresh", first.freshmode_choice != dup.freshmode_choice);
     pl("gather", first.bruna_gather_choice != dup.bruna_gather_choice);
     pl("cswap", first.combat_aura_swap_choice != dup.combat_aura_swap_choice);
+    pl("aattach", first.attack_attach_choice != dup.attack_attach_choice);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
@@ -1559,6 +1565,23 @@ inline void PinClass(const GameState& s, const TurnSolver::Plan& plan, bool dup)
         }
         k = std::string("SWAP w=") + (on_bf ? "bf" : (cast ? "cast" : "hand-uncast"))
           + " otherAurasInHand=" + (other_auras > 0 ? "y" : "n") + " planAdds=" + (adds ? "y" : "n");
+    }
+    else if (plan.attack_attach_choice >= 0)
+    {
+        int eq_bf = 0, eq_cast = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.is_equipment) { ++eq_bf; }
+        }
+        for (const Action& a : plan.actions)
+        {
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (a.kind == Action::Kind::CastFromHand && d && d->params.is_equipment) { ++eq_cast; }
+        }
+        k = std::string("AATTACH k=") + std::to_string(plan.attack_attach_choice)
+          + " eqBf=" + std::to_string(eq_bf) + " eqCast=" + std::to_string(eq_cast);
     }
     else
     {
@@ -1907,6 +1930,10 @@ namespace
                       << " fslinewin=" << g_etb_bounce_folded_fs.load()
                       << " (verify ok=" << g_put_bounce_verify_ok.load()
                       << " bad=" << g_put_bounce_verify_bad.load() << ")\n";
+            std::cerr << "[rollout-stats] attack_attach_axis nodes=" << g_attack_attach_axis_nodes.load()
+                      << " variants=" << g_attack_attach_axis_variants.load()
+                      << " idle_pass_nodes=" << g_attack_attach_idle_nodes.load()
+                      << " idle_pass_variants=" << g_attack_attach_idle_variants.load() << "\n";
             std::cerr << "[rollout-stats] plan_axes etbcounter_variants=" << g_axis_etbcounter_vars.load()
                       << " sweep_variants=" << g_axis_sweep_vars.load()
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
@@ -9081,6 +9108,41 @@ static int CountAttackLandSearchPump(const GameState& state, int active,
     return after - before;
 }
 
+// Projection twin of Raubahn, Bull of Ala Mhigo's attack trigger (FireAttackAttachEquipment): the
+// Equipment it moves lands on an attacker at declare-attackers, before damage, so it pumps THIS
+// combat (and an attacking Lizard Blades it attaches leaves combat). The very same body runs on a
+// COPY with the same pin (GameState::scripted_attack_attach, `live=false`: no chooser, no play event)
+// and the attackers' damage is measured after minus before by the one function the provider's
+// ordering also uses (AttackersCombatDamage: still a creature, CombatPowerOf x double strike) -- the
+// CountAttackGatherPump shape, so the search cannot credit an attach the combat will not perform, nor
+// miss the one it will (the Dwalin lesson). Composes with Ardenn: the PendingAttackDamage wrapper
+// applies the begin-combat attach to the board first. Free unless the deck holds a Raubahn AND one is
+// attacking.
+static int CountAttackAttachPump(const GameState& state, int active,
+                                 const std::vector<const Permanent*>& attackers)
+{
+    if (!state.deck_has_attack_attach || attackers.empty()) { return 0; }
+    bool live = false;
+    for (const Permanent* p : attackers)
+    {
+        if (p->def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p->card);
+        if (d != nullptr && d->params.attack_attach_equipment) { live = true; break; }
+    }
+    if (!live) { return 0; }
+    std::vector<int> atk_idx;
+    std::vector<int> nums;
+    for (const Permanent* p : attackers)
+    {
+        atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
+        nums.push_back(p->card.m_number);
+    }
+    const int before = AttackersCombatDamage(state, nums);
+    GameState t = state;
+    FireAttackAttachEquipment(t, active, atk_idx, /*live=*/false);
+    return AttackersCombatDamage(t, nums) - before;
+}
+
 static int PendingAttackDamageImpl(const GameState& state);
 
 // Ardenn, Intrepid Archaeologist (begin_combat_attach_all): the realised combat re-attaches the
@@ -9098,6 +9160,13 @@ static int PendingAttackDamage(const GameState& state)
     GameState pre = state;
     FireBeginCombatAttach(pre, active, /*live=*/false);
     return PendingAttackDamageImpl(pre);
+}
+
+// Test hook: the attack projection exactly as the search reads it (Ardenn's begin-combat attach
+// applied first, every attack-trigger addend included).
+int TurnSolver::ProjectedAttackDamageForTest(const GameState& state)
+{
+    return PendingAttackDamage(state);
 }
 
 static int PendingAttackDamageImpl(const GameState& state)
@@ -9169,6 +9238,8 @@ static int PendingAttackDamageImpl(const GameState& state)
     dmg += CountAttackGatherPump(state, active, attackers);
     // Primeval Titan's attack trigger: the fetched lands' landfall pumps land on attackers THIS combat.
     dmg += CountAttackLandSearchPump(state, active, attackers);
+    // Raubahn's attack attach: the moved Equipment lands on an attacker THIS combat.
+    dmg += CountAttackAttachPump(state, active, attackers);
     // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
     // resolved through the same ResolveAttackModalMode the combat uses, so the projection cannot
     // credit damage a mode-B trigger will not deal (the overshoot/fd-diverge class).
@@ -18693,6 +18764,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // deck without either card keeps its exact signature value.
     if (p.bruna_gather_choice != -1) { fold(static_cast<uint64_t>(p.bruna_gather_choice + 2) * 79); }
     if (p.combat_aura_swap_choice != -1) { fold(static_cast<uint64_t>(p.combat_aura_swap_choice + 2) * 83); }
+    // Raubahn's attack attach -- same must-fold rule, value-gated (own domain tag).
+    if (p.attack_attach_choice != -1) { fold(0xA77A0000ull + static_cast<uint64_t>(p.attack_attach_choice + 2)); }
     // LAND-SEARCH picks (core/LandSearch.h) -- same must-fold rule; value-gated so every deck without
     // a land-search card keeps its exact signature value.
     if (!p.land_search_pins.empty())
@@ -18986,6 +19059,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
         && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
+        && p.attack_attach_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0
@@ -23993,25 +24067,8 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
     std::vector<Piece> eqs, hosts;
 
     // Host class key (see the header), shared by the creature side and a creature-piece Equipment.
-    auto host_key = [&](const Permanent& p) -> std::string
-    {
-        std::string k = p.card.m_name.str();
-        k += CanAttackFull(p, state.battlefield, me) ? "/A" : "/s";
-        k += p.tapped ? "T" : "u";
-        k += "/" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus)
-           + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "") + (p.temp_double_strike ? "D" : "")
-           + "/c" + p.counters.KeyFragment();
-        std::vector<std::string> worn;
-        for (const Permanent& q : state.battlefield)
-        {
-            if (q.controller_index != me) { continue; }
-            if (q.equipped_to == p.card.m_number || q.aura_attached_to == p.card.m_number)
-            { worn.push_back(q.card.m_name.str() + "/c" + q.counters.KeyFragment()); }
-        }
-        std::sort(worn.begin(), worn.end());
-        for (const std::string& w : worn) { k += "|" + w; }
-        return k;
-    };
+    // ONE definition with Raubahn's attack attach (SpellEffects.h AttachHostClassKey).
+    auto host_key = [&](const Permanent& p) -> std::string { return AttachHostClassKey(state, p, me); };
 
     {
         std::unordered_set<std::string> seen_eq, seen_host;
@@ -36292,6 +36349,7 @@ namespace solvememo
             || a.tectonic_keep_choice != b.tectonic_keep_choice
             || a.bruna_gather_choice != b.bruna_gather_choice
             || a.combat_aura_swap_choice != b.combat_aura_swap_choice
+            || a.attack_attach_choice != b.attack_attach_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.land_slot != b.land_slot
@@ -42136,6 +42194,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
     if (plan.combat_aura_swap_choice >= 0)
     { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; state.scripted_combat_aura_swap_in = -1; }
+    // Searched Raubahn attack attach: same reasoning -- the trigger fires at declare-attackers.
+    if (plan.attack_attach_choice >= 0) { state.scripted_attack_attach = static_cast<std::int16_t>(plan.attack_attach_choice); }
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
     // after this function returns, so it rides the STATE rather than a scoped guard.
     if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
@@ -47636,6 +47696,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || plan.fling_victim_choice != -1 || plan.tectonic_mode_choice >= 0
                         || plan.tectonic_keep_choice >= 0 || plan.bruna_gather_choice >= 0
                         || plan.combat_aura_swap_choice >= 0 || plan.saga_target_choice >= 0
+                        || plan.attack_attach_choice >= 0
                         || plan.saga_ch1_choice != -1 || !plan.sac_pins.empty()
                         || plan.tapmode_choice != 0 || plan.freshmode_choice != 0
                         || plan.bounce_choice >= 1 || plan.etbcounter_choice >= 0
@@ -48041,6 +48102,10 @@ static void SimulateCombat(GameState& state)
                                            fb_payer); }
     }
 
+    // Raubahn's attack attach (the searched pin; repairs atk_idx). Mirrors GameEngine::CombatPhase
+    // (lockstep, ONE shared body, same position); the human chooser inside is nulled by RevealLogPause.
+    FireAttackAttachEquipment(state, active, atk_idx, /*live=*/true);
+
     // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
     // the damage loop reads power. Mirrors GameEngine::CombatPhase (lockstep); the human choosers
     // inside are nulled by RevealLogPause, so rollouts always take the provider picks.
@@ -48285,6 +48350,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
+    state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
     ap.lands_played_this_turn     = 0;
@@ -56405,6 +56471,130 @@ static void AppendIdleDigSiblings(const GameState& state, std::vector<TurnSolver
     list.insert(list.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
 }
 
+// The width of Raubahn's attack-attach axis from `state` (see the SEARCHED RAUBAHN ATTACK ATTACH note in
+// AppendSubdecisionAxes): 1 + E * H while a Raubahn can attack this turn, else 1 (no axis). ONE
+// function for the post-dedup fan-out and the idle-pass hosts (AppendIdleAttackAttachSiblings).
+static int AttackAttachAxisWidth(const GameState& state)
+{
+    if (!state.deck_has_attack_attach) { return 1; }
+    const int me = state.active_player_index;
+    const Player& bp = state.players[me];
+    auto gives_haste = [](const CardDefinition* d)
+    {
+        return d != nullptr
+            && (d->params.grants_haste || d->params.equip_grants_haste || d->params.grants_temp_haste
+                || d->params.haste_on_flying_enter || d->params.sac_outlet_grants_haste
+                || d->params.team_pump_grants_haste);
+    };
+    bool haste = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (haste) { break; }
+        if (p.controller_index == me && !p.def_absent && gives_haste(CardDatabase::Instance().LookupCached(p.card)))
+        { haste = true; }
+    }
+    for (const Card& c : bp.hand)
+    {
+        if (haste) { break; }
+        if (!c.m_is_staged && gives_haste(CardDatabase::Instance().LookupCached(c))) { haste = true; }
+    }
+    bool raubahn_live = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.attack_attach_equipment) { continue; }
+        if (haste || CanAttackFull(p, state.battlefield, me)) { raubahn_live = true; break; }
+    }
+    if (!raubahn_live && haste)
+    {
+        for (const Card& c : bp.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!c.m_is_staged && d != nullptr && d->params.attack_attach_equipment) { raubahn_live = true; break; }
+        }
+    }
+    int attach_width = 1;
+    if (raubahn_live)
+    {
+        int e = 0, h = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.is_equipment) { ++e; }
+            if (p.tapped) { continue; }
+            if (p.card.IsCreature() || p.is_animated)
+            { if (haste || CanAttackFull(p, state.battlefield, me)) { ++h; } }
+            else if (d != nullptr && d->params.reconfigure_cost.has_value() && !p.entered_this_turn) { ++h; }
+        }
+        for (const Card& c : bp.hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { continue; }
+            if (d->params.is_equipment || d->params.etb_return_equipment_from_gy
+                || (d->params.tutor_to_hand
+                    && std::find(d->params.tutor_types.begin(), d->params.tutor_types.end(), "Equipment")
+                           != d->params.tutor_types.end()))
+            { ++e; }
+            if (haste && d->card.IsCreature()) { ++h; }
+        }
+        // kAttackAttachMaxRank: the GameState pin is an int16_t (it lives in padding); 1 + E*H is
+        // far below it on any reachable board (E, H < 20), so the clamp can never bind in play.
+        constexpr int kAttackAttachMaxRank = 32767;
+        attach_width = std::min(1 + e * h, kAttackAttachMaxRank);
+    }
+    return attach_width;
+}
+
+// The ranks Raubahn's attack-attach variants carry, given the axis width `w`: 1 .. w-1 -- the base plan
+// carries the front (it writes no pin) -- EXCEPT on a state that already holds a pin (a re-solve inside
+// the same main phase, the state written by an earlier apply): there the base plan inherits THAT rank,
+// so the front (0) must be a variant and the inherited rank is the base's. Every rank 0 .. w-1 is then
+// reachable from every state.
+static std::vector<int> AttackAttachVariantRanks(const GameState& state, int w)
+{
+    std::vector<int> ks;
+    const int inherited = state.scripted_attack_attach;
+    for (int k = 0; k < w; ++k)
+    {
+        if (inherited < 0 ? k == 0 : k == inherited) { continue; }
+        ks.push_back(k);
+    }
+    return ks;
+}
+
+// THE IDLE PASS A HOST APPENDS gets Raubahn's attack-attach variants too (the AppendIdleDigSiblings
+// shape). A pre-combat main with nothing to cast and no drop enumerates ZERO plans, and the host
+// appends the pass AFTER the axes ran -- so without this the trigger in that turn's combat took the
+// provider's front: a greedy pick inside the search window on exactly the empty-handed turns where
+// re-hosting the board's Equipment is the whole decision. `idle_index` = the pass plan (any dig
+// siblings already appended stay as they are; the variants clone the pass only, additive). Pre-combat
+// hosts only; never inside a breakpoint continuation derivation (the outer plan carries the pin) and
+// never in human play. One bool test for every deck without a Raubahn.
+static void AppendIdleAttackAttachSiblings(const GameState& state, std::vector<TurnSolver::Plan>& list,
+                                           std::size_t idle_index)
+{
+    if (!state.deck_has_attack_attach || HumanPlayActive() || g_bp_enum_depth > 0) { return; }
+    if (idle_index >= list.size()) { return; }
+    const int w = AttackAttachAxisWidth(state);
+    if (w <= 1) { return; }
+    const TurnSolver::Plan base = list[idle_index];
+    const std::vector<int> ks = AttackAttachVariantRanks(state, w);
+    for (const int k : ks)
+    {
+        TurnSolver::Plan v = base;
+        v.attack_attach_choice = k;
+        list.push_back(std::move(v));
+    }
+    if (s_rollout_stats)
+    {
+        g_attack_attach_idle_nodes.fetch_add(1, std::memory_order_relaxed);
+        g_attack_attach_idle_variants.fetch_add(static_cast<long long>(ks.size()), std::memory_order_relaxed);
+    }
+}
+
 // ---- Post-dedup sub-decision axis fan-out (factored out of the m1 host, 2026-09-06) --------
 // This whole block used to live inline at the tail of EnumeratePlansWithLandUncached's full body,
 // which made every axis M1-HOST-ONLY: the second-main enumerations (EnumeratePlansM2Memoized, and
@@ -57227,6 +57417,76 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED RAUBAHN ATTACK ATTACH (Plan::attack_attach_choice) -- the Bruna gather fan-out's shape
+    // exactly (base plans only, the same filter, so the axis is additive with the others and crossed
+    // with the tutor picks; decided in main, consumed at declare-attackers through
+    // GameState::scripted_attack_attach). "Attach up to one target Equipment you control to target
+    // attacking creature": WHICH pair is a rank into the list FireAttackAttachEquipment builds AT
+    // RESOLUTION (every legal pair that moves something, identity-folded, plus "attach nothing";
+    // provider-ORDERED by AttackAttachCandidates, which narrows nothing). k = 0 is the front, which the
+    // base plan already carries, so the variants are k = 1 .. W-1 (on a state that already holds a pin,
+    // 0 .. W-1 minus the inherited rank -- AttackAttachVariantRanks).
+    //
+    // THE WIDTH IS STATE-LEVEL, an upper bound on that list for ANY plan from this state, because a
+    // breakpoint continuation does not re-fan combat pins (cont_axes_only) -- the outer plan's rank
+    // must already reach whatever its continuation casts. W = 1 + E * H with
+    //   E = our Equipment on the battlefield + Equipment cards in hand + hand cards that can bring one
+    //       (an Equipment tutor -- Steelshaper's Gift, Open the Armory -- or Forge Anew's graveyard
+    //       return), one each;
+    //   H = our creatures that can attack this turn (untapped; able now, or any untapped one when a
+    //       haste source is reachable) + an attached reconfigure piece that could be unattached and
+    //       attack (not new this turn) + hand creature cards when a haste source is reachable.
+    // A rank past the list at resolution falls back to the front (the Bruna convention): a duplicate
+    // that MTG_COMBAT_PIN_FOLD collapses after combat, never a lost pair. Unconditional, no lever (a
+    // missing searched capability is not a heuristic -- the no-greedy rule). Fanned only while a
+    // Raubahn can attack THIS turn: on the battlefield and untapped, and able to attack now or with a
+    // haste source reachable; or in hand with a haste source reachable (an enumerated param list:
+    // grants_haste, equip_grants_haste, grants_temp_haste, haste_on_flying_enter,
+    // sac_outlet_grants_haste, team_pump_grants_haste -- none on the Colossus Hammer list).
+    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_attack_attach)
+    {
+        const int attach_width = AttackAttachAxisWidth(state);
+        if (pin_list_dead && attach_width > 1)
+        {
+            if (s_rollout_stats)
+            {
+                g_combat_pin_m2_skipped.fetch_add(static_cast<long long>(all.size()) * (attach_width - 1),
+                                                  std::memory_order_relaxed);
+            }
+        }
+        else if (attach_width > 1)
+        {
+            std::vector<TurnSolver::Plan> extra;
+            const std::vector<int> ranks = AttackAttachVariantRanks(state, attach_width);
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                    || p.tectonic_keep_choice >= 0
+                    || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                    || p.attack_attach_choice >= 0)
+                { continue; }
+                for (const int k : ranks)
+                {
+                    TurnSolver::Plan v = p;
+                    v.attack_attach_choice = k;
+                    extra.push_back(std::move(v));
+                }
+            }
+            if (s_rollout_stats && !extra.empty())
+            {
+                g_attack_attach_axis_variants.fetch_add(static_cast<long long>(extra.size()), std::memory_order_relaxed);
+                g_attack_attach_axis_nodes.fetch_add(1, std::memory_order_relaxed);
+            }
+            TRACE("raubahnaxis", "T%d %zu plan(s) -> %zu variant(s) (width %d)",
+                  state.turn_number, all.size(), extra.size(), attach_width);
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
     // SEARCHED PONDER KEEP-vs-SHUFFLE -- the post-dedup fan-out that makes the decision real. Both
     // ponder_keep values are always legal, so unlike the tutor/dig axes there is no candidate list to
     // size: emit the two pinned alternatives and let the base plan carry the heuristic. One of the
@@ -57698,6 +57958,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
                         || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                        || p.attack_attach_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -57792,6 +58053,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
                         || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                        || p.attack_attach_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -58061,6 +58323,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0
                     || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                    || p.attack_attach_choice >= 0
                     || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
@@ -58365,6 +58628,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
                 && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
                 && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
+                && p.attack_attach_choice == -1
                 && p.freshmode_choice == 0 && p.tapmode_choice == 0 && p.dig_choice == -1
                 && !p.soulbond_decline && p.land_search_pins.empty()
                 && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
@@ -58900,7 +59164,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 456;   // pinned; see the static_assert below (+8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
+static constexpr std::size_t kPlanDomAssertedSize = 464;   // pinned; see the static_assert below (+8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -59043,7 +59307,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.tutor_choice); add(pl.tapmode_choice); add(pl.freshmode_choice);
             add(pl.lackey_choice); add(pl.fling_victim_choice);
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
-            add(pl.bruna_gather_choice); add(pl.combat_aura_swap_choice);
+            add(pl.bruna_gather_choice); add(pl.combat_aura_swap_choice); add(pl.attack_attach_choice);
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
@@ -62672,9 +62936,10 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
     // value gate, distinct slots, so a deck that never sets them keeps its exact key.
     if (DedupKeyCombatPinsOn())
     {
+        // + Raubahn's attack attach (2026-10-17), a new LAST slot so every earlier slot's tag is unmoved.
         const int cpins[] = { state.scripted_bruna_gather, state.scripted_combat_aura_swap,
-                              state.scripted_combat_aura_swap_in };
-        for (int i = 0; i < 3; ++i)
+                              state.scripted_combat_aura_swap_in, state.scripted_attack_attach };
+        for (int i = 0; i < 4; ++i)
         {
             if (cpins[i] != -1)
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
@@ -66517,6 +66782,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // ...and the pass is where the empty-of-gas dig fires: offer its no-dig twin
             // (MTG_DIG_SEARCHED_CHOICE; see AppendIdleDigSiblings).
             AppendIdleDigSiblings(state, pre);
+            // ...and Raubahn's attack-attach variants of the pass (this is a pre-combat node).
+            AppendIdleAttackAttachSiblings(state, pre, 0);
         }
         if (winlesscert::StatsOn())
         {
@@ -71653,7 +71920,12 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         plans = EnumeratePlansWithLand(state, true);
         // Nothing to cast: the pass and (MTG_DIG_SEARCHED_CHOICE) its no-dig twin, so the empty-of-gas
         // dig is ranked by the reshuffle average rather than taken. One plan = byte-identical.
-        if (plans.empty()) { plans.push_back(TurnSolver::Plan{}); AppendIdleDigSiblings(state, plans); }
+        if (plans.empty())
+        {
+            plans.push_back(TurnSolver::Plan{});
+            AppendIdleDigSiblings(state, plans);
+            AppendIdleAttackAttachSiblings(state, plans, 0);
+        }
     }
     else
     {
@@ -72018,6 +72290,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     {
         candidates.push_back(Plan{});
         AppendIdleDigSiblings(state, candidates);
+        // ...and Raubahn's attack-attach variants of the pass (pre-combat only; see the helper).
+        if (is_pre_combat) { AppendIdleAttackAttachSiblings(state, candidates, 0); }
         if (candidates.size() == 1) { report(max_turns + 1, 0); return Plan{}; }
     }
 

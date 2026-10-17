@@ -273,6 +273,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
+    state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
@@ -794,6 +795,14 @@ void GameEngine::CombatPhase(GameState& state)
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, state.active_player_index) : 0;
 
+
+    // Raubahn, Bull of Ala Mhigo's attack trigger ("attach up to one target Equipment you control to
+    // target attacking creature"): a declared Raubahn only, BEFORE the damage loop reads power, so the
+    // moved Equipment swings this combat. Pair = the searched Plan::attack_attach_choice pin (the human
+    // picks through two attach_host board-clicks). Repairs atk_idx (an attached Lizard Blades leaves
+    // combat, CR 506.4). Immediately before the Skyhunter dig so the trigger order is one place in both
+    // worlds. Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared body). Param-gated inert.
+    FireAttackAttachEquipment(state, state.active_player_index, atk_idx, /*live=*/true);
 
     // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
     // the damage loop reads power, so a put-and-attached Colossus Hammer swings this combat.

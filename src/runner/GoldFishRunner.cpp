@@ -1300,6 +1300,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool gy_equipment_return = false;
         // Forge Anew / Kili: the first-equip waiver walk (GameState::deck_has_first_equip_waiver).
         bool first_equip_waiver = false;
+        // Raubahn's attack attach: the axis fan-out + projection scans (GameState::deck_has_attack_attach).
+        bool attack_attach = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1335,6 +1337,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.etb_return_equipment_from_gy)   { gy_equipment_return = true; }
                 if (d->params.first_equip_free || d->params.storied_first_equip_free)
                 { first_equip_waiver = true; }
+                if (d->params.attack_attach_equipment)        { attack_attach = true; }
                 if (d->params.storied_permanents > 0)      { storied = true; }
                 // HasEndStepTokenTrigger, not `endstep_lifegain_tokens > 0`: The Mycotyrant's count
                 // is dynamic (endstep_tokens_equal_descend) so it leaves that field at 0, and this
@@ -1387,6 +1390,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves FirstEquipWaiverOnBattlefield's walk finds no
         // waiver source (the stamp tests the very params the walk tests).
         state.deck_has_first_equip_waiver  = garth || first_equip_waiver;
+        // Same reasoning, no lever: a clear bit proves no Raubahn can exist, so the attack-attach axis
+        // scan and the projection's CountAttackAttachPump scan are provably empty.
+        state.deck_has_attack_attach       = garth || attack_attach;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

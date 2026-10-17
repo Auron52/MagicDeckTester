@@ -4021,6 +4021,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (plan.bruna_gather_choice >= 0) { state.scripted_bruna_gather = plan.bruna_gather_choice; }
     if (plan.combat_aura_swap_choice >= 0)
     { state.scripted_combat_aura_swap = plan.combat_aura_swap_choice; state.scripted_combat_aura_swap_in = -1; }
+    // Raubahn's searched attack attach -- lockstep twin of ApplyPlanDirect's write.
+    if (plan.attack_attach_choice >= 0) { state.scripted_attack_attach = static_cast<std::int16_t>(plan.attack_attach_choice); }
     // Primeval Titan's searched attack pick -- lockstep twin of ApplyPlanDirect's write.
     if (plan.attack_land_search_choice >= 0)
     { state.scripted_attack_land_search = plan.attack_land_search_choice; }
