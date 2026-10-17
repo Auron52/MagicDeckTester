@@ -527,6 +527,8 @@ enum Slot : int
     LANDFALL_SPOTS,           // MTG_LANDFALL_SPOTS  the USER's spots for the land drop and the abilities (2026-10-16): the land drop is tried FIRST or at its LATEST payable spot up to after the last landfall source (the in-between positions are not emitted), and land-search activations run only at the END (no position twins before an Avenger / Phylath). Pruned like the land-pick rule (human play and MTG_UNPRUNE=landpick keep every spot). Default ON; =0 -> every spot
     LANDFALL_BUCKET_DISCARD,  // MTG_LANDFALL_BUCKET_DISCARD  Landfall's analyze-deck 5i BUCKET discard (authored 2026-10-16, PROVISIONAL until the USER signs off): MANA parent max(land quota, 7 - board lands) -- LANDS colour coverage + 2 (<4 lands out) / + 1 (by stage: untapped first when next turn needs one, Myriad else, Wilds late not early), RAMP the rest (castability, then by stage: Search early, Cultivate later), fungible upward -- THREATS floor 2 then the catch-all (USER: Phylath first, the rest by castability -- the shared discard_dist factor -- ties by Avenger > Titan > Baloths > Wave > Omnath > Terastodon > Courser; at most ONE Titan and one copy of a legend, net of board), dead legends then capped copies shed first; ONE index. Default ON; =0 -> GenericProvider's max-MV ranking
     SPEAKER_M2,               // MTG_SPEAKER_M2  Colossus Hammer: a NARROW post-combat main (the Angels Giada shape) for Speaker of the Heavens' "{T}: create a 4/4 Angel. Activate only if you have at least 7 life more than your starting life total". Opens ONLY when the life gate passes AFTER combat (lifelink is the deck's only life source, and it lands IN combat) and a Speaker-type source is still live (untapped through its vigilant attack, not summoning sick); admits ONLY that activation. A sound identity fold in a goldfish: nothing else in this list is generated during combat, so every refused option was available in main 1. Default ON, PROVISIONAL -- main-1 vs main-2 is the USER's call per deck; =0 closes it
+    COLOSSUS_ORDER,           // MTG_COLOSSUS_ORDER  Colossus Hammer's AI-DRAFTED cast order (2026-10-17, docs/design/colossus-hammer-cast-order-draft.md; awaiting the USER): Equipment tutors > Sigarda's Aid > double-strike hosts > other creatures > Lizard Blades > Forge Anew > Equipment > Magnetic Theft > the rest; mana value then name inside a class; land drop first. Default OFF (a draft); =1 -> the draft
+    COLOSSUS_BUCKET_DISCARD,  // MTG_COLOSSUS_BUCKET_DISCARD  Colossus Hammer's AI-DRAFTED 5i cleanup buckets (2026-10-17, docs/design/colossus-hammer-discard-policy-proposal.md; awaiting the USER): colour coverage (1 R, 2 W) + lands to 4 counting the board, 1 Hammer (a tutor stands in), 1 cheat, 1 double-strike host, each net of the board; overflow Path > Dragonfire > Speaker > Loxodon > lands > tutor > Raubahn > Ardenn > cheat > host > Hammer; ONE index. Default OFF (a draft); =1 -> the buckets, =0 -> GenericProvider's max-MV ranking
     COUNT
 };
 
@@ -1004,6 +1006,8 @@ inline const char* Name(int slot)
         "MTG_LANDFALL_SPOTS",
         "MTG_LANDFALL_BUCKET_DISCARD",
         "MTG_SPEAKER_M2",
+        "MTG_COLOSSUS_ORDER",
+        "MTG_COLOSSUS_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

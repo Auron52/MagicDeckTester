@@ -2,8 +2,8 @@
 
 **Status: PROPOSAL.** Cast order is USER-owned (CLAUDE.md; USER 2026-10-14: *"The generic order is never a
 good option ... It should be edited by you and then presented to me for additional feedback"*). This
-draft ships behind `MTG_COLOSSUS_ORDER` (heurarm `COLOSSUS_ORDER`), **default OFF** until the USER
-approves; with it off the deck rides `GenericProvider`'s param tiers. The measurement of ON vs OFF is
+draft ships behind `MTG_COLOSSUS_ORDER` (heurarm `COLOSSUS_ORDER`; `ColossusHammerProvider::CastOrderRank`
+and its siblings), **default OFF** until the USER approves; with it off the deck rides `GenericProvider`'s param tiers. The measurement of ON vs OFF is
 recorded at the bottom when it has run.
 
 ## The deck's ordering problem in one paragraph
@@ -32,8 +32,11 @@ the phase, so a tutor first leaves the most of the phase to spend on what it fou
 | 9 | Path to Exile | Removal template | last: it removes a body; only the self-target ramp line is offered |
 
 TOTAL order, as every agreed order here is (USER 2026-10-14: *"fully order the cards in each list
-inasmuch as possible"*): `rank = slot << 16 | sub-key << 12 | name ordinal` — plan / hand order never
-decides. Activations (equip, reconfigure, Speaker's token) stay in the engine's trailing pass after the
+inasmuch as possible"*): `rank = slot * 4096 + mana value * 256`, then the card NAME
+(`CastOrderTotalByName`, the KittyEquipment shape) — plan / hand order never decides. The land drop is
+pinned FIRST (`LandDropCastOrderRank` = 0: holding the drop never pays in this list — no landfall, Karoo
+or storage land — and nothing forces the defer branch), and order-opaque casts sort by rank too
+(`OrderOpaqueCastsByRank`). Both are part of the draft and both switch off with it. Activations (equip, reconfigure, Speaker's token) stay in the engine's trailing pass after the
 casts. Speaker's token activation is ALSO offered in the narrow post-combat main (`MTG_SPEAKER_M2`).
 
 ## Where order should NOT matter (said so, per the USER's ask)
