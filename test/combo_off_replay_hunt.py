@@ -65,6 +65,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -85,7 +86,16 @@ OUTDIR = os.path.join(ROOT, "logs/combo_off_hunt")
 # The viewer's own display cap is 200; the reference anchoring walk turns it OFF so a recorded pick
 # beyond the cap is still addressable (see viewer_protocol_check.replay).  Kept off here too, so a
 # combo-off plan can never be missed because it sat past a truncation.
-REPLAY_ENV = {"MTG_PLAY_PLANS_CAP": "0"}
+#
+# AND the replay's PLAN-SPACE CAP must be viewer_protocol_check's own (vpc.VALVE_POSITIONS, passed as
+# MTG_VIEWER_PLAN_CAP_POSITIONS): check_reference resolves every recorded pick UNDER that cap, and the
+# cap shapes the human-play menu, so the same index names a different plan without it. Replaying the
+# resolved stream at the engine default (65,536) walked claude_s6_gi5 onto the wrong board from T4 on
+# ("walked 70 picks without reaching a terminal") and reported its T4 frames SHORT
+# (docs/design/edf-handoff-shortfalls-2026-10-17.md section 1). Every walker that consumes
+# check_reference's `resolved` stream goes through this dict (Session, run, ref_handoff.py,
+# ref_handoff_sweep.py), so the cap is set exactly once, here.
+REPLAY_ENV = {"MTG_PLAY_PLANS_CAP": "0", "MTG_VIEWER_PLAN_CAP_POSITIONS": str(vpc.VALVE_POSITIONS)}
 
 # ...except on the DRIVEN walks, which use the viewer's own default cap.  Two reasons, and
 # neither is a fidelity compromise: (a) the cap changes only the emitted SLICE, never the
@@ -93,7 +103,7 @@ REPLAY_ENV = {"MTG_PLAY_PLANS_CAP": "0"}
 # pick and every repro is unaffected; (b) the verified/offered COMBO OFF plan has a RESERVED slot
 # that the cap cannot evict (src/main.cpp, "THE VERIFIED COMBO OFF PLAN IS NEVER CAPPED OUT"), so
 # no offer can be missed.  What it buys is not paying to serialise and parse 11,453 plans per
-# frame on a mid-go-off board.  The reference walks stay UNCAPPED, matching
+# frame on a mid-go-off board.  The reference walks stay UNCAPPED (display slice) and at vpc's plan-space cap, matching
 # viewer_protocol_check's own replay so the two harnesses see literally the same menus.
 DRIVEN_ENV = {"MTG_PLAY_PLANS_CAP": "200"}
 
@@ -224,6 +234,21 @@ def repro_cmd(argv, env_extra=None):
     pre = " ".join("%s=%s" % kv for kv in sorted(env.items()))
     body = " ".join(q(a) for a in [os.path.relpath(argv[0], ROOT)] + argv[1:])
     return (pre + " " + body).strip()
+
+
+def pasteable_cmd(argv, env_kv=()):
+    """Shell-safe one-liner for a hand-off `argv` run under REPLAY_ENV plus `env_kv` ("K=V" strings,
+    later wins): every word goes through shlex, so a --choices list, a --force-mulligan hand with
+    `|`/`;`/`'`, or a `*` in a card name pastes back verbatim. The REPLAY_ENV prefix is part of the
+    command because it is part of the replay -- without the plan-space cap the same --choices walk
+    a different board."""
+    env = dict(REPLAY_ENV)
+    for kv in env_kv:
+        k, _, v = kv.partition("=")
+        env[k] = v
+    words = ["%s=%s" % kv for kv in sorted(env.items())]
+    words += [os.path.relpath(a, ROOT) if a.startswith(ROOT) else a for a in argv]
+    return shlex.join(words)
 
 
 def decision_of(out):

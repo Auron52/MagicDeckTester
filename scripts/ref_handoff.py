@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(ROOT, "test"))
 import viewer_protocol_check as vpc          # noqa: E402
 import combo_off_replay_hunt as hunt         # noqa: E402  -- Session (persistent child walk)
 
-MTG = os.path.join(ROOT, "build", "Release", "mtg")
+MTG = os.environ.get("MTG_BIN", os.path.join(ROOT, "build", "Release", "mtg"))
 
 
 def walk_to_frame(ref_path, c, turn, frame_no, phase):
@@ -138,8 +138,7 @@ def main():
            "engine_win_turn": (res or {}).get("win_turn") if isinstance(res, dict) else None,
            "engine_won": (res or {}).get("won") if isinstance(res, dict) else None,
            "play": play, "board": board_line(frame),
-           "cmd": " ".join(args.env) + (" " if args.env else "")
-                  + " ".join(os.path.relpath(a, ROOT) if a.startswith(ROOT) else a for a in argv)}
+           "cmd": hunt.pasteable_cmd(argv, args.env)}   # shell-safe, REPLAY_ENV (plan-space cap) included
     if args.json:
         print(json.dumps(out, indent=1))
     else:

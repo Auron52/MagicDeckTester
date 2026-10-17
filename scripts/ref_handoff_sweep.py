@@ -97,8 +97,7 @@ def run_handoff(c, fr, env_kv, max_turns, stderr_path):
     out = {"rc": p.returncode, "secs": round(time.time() - t0, 1),
            "engine_win_turn": (res or {}).get("win_turn") if isinstance(res, dict) else None,
            "engine_won": (res or {}).get("won") if isinstance(res, dict) else None,
-           "cmd": " ".join(env_kv) + (" " if env_kv else "")
-                  + " ".join(os.path.relpath(a, ROOT) if a.startswith(ROOT) else a for a in argv)}
+           "cmd": hunt.pasteable_cmd(argv, env_kv)}   # shell-safe, REPLAY_ENV (plan-space cap) included
     if not isinstance(res, dict):
         out["stderr_tail"] = "\n".join(p.stderr.splitlines()[-8:])
     return out
