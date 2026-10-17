@@ -52,3 +52,21 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.put_bounce  = PutBouncePinOf(p.bounce_choice, p.land_decided, p.land_to_play);
     return c;
 }
+
+// A plan's WHOLE-APPLY PAYMENT PINS: the searched hold-vs-tap of the mana creatures (Plan::tapmode_choice)
+// and the fresh-mint release (Plan::freshmode_choice). Installed UNCONDITIONALLY -- 0 is the shipped rule,
+// and an outer value must not leak in -- and NOT consumed by a reader: every payment of the apply sees the
+// same pair, or one plan would be scored under two payment policies. ONE body for three sites: ApplyPlanDirect's
+// preamble, the executor's committed plan (AIEngine::TakeTurn), and the executor's SEARCHED breakpoint
+// re-solve, whose candidates ApplyPlanDirect scored under their own pair (adopt_resolve_post_apply). A
+// rollout breakpoint CONTINUATION is different: it is paid inside the outer plan's apply, under the outer
+// plan's pair, so it never installs one (ContPins holds during-cast pins only).
+struct PlanPaymentPinScope
+{
+    ScriptedTapMode   tapmode;
+    ScriptedFreshMode freshmode;
+    explicit PlanPaymentPinScope(const TurnSolver::Plan& p)
+        : tapmode(p.tapmode_choice), freshmode(p.freshmode_choice) {}
+    PlanPaymentPinScope(const PlanPaymentPinScope&) = delete;
+    PlanPaymentPinScope& operator=(const PlanPaymentPinScope&) = delete;
+};

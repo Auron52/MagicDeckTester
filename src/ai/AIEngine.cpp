@@ -464,7 +464,8 @@ inline std::atomic<unsigned long long> g_bp_base{0}, g_bp_mismatch{0};
 // actually ran GREEDY (rollout twins, or the lever's =0 hatch) -- the number the user's
 // "no greedy decisions" bar reads, which must be zero in real play at defaults.
 inline std::atomic<unsigned long long> g_bp_searched{0};
-// ...and of those, the re-solves whose chosen plan carries a POST-APPLY pin -- a state pin read in this
+// ...and of those, the re-solves whose chosen plan carries a POST-APPLY pin -- or a PAYMENT pair (tap mode,
+// fresh-spend) different from the committed plan's -- a state pin read in this
 // turn's combat / cleanup / next upkeep, the dork attack/hold choice, or the end-of-main sweep / Land's
 // Edge count / dig (CARRIED) -- and, checked at the end-of-main hand-over (RecordReSolveRealized), how
 // many of those were NOT in force there (UNREALIZED: the executor would play a combat / end step the
@@ -486,19 +487,26 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
-inline void RecordReSolvePins(const TurnSolver::Plan& p)
+// A re-solve's payment pair (tap mode, fresh-spend) matters exactly when it differs from the committed
+// plan's, which the executor had installed for the phase.
+inline bool PaymentPairDiffers(const TurnSolver::Plan& x, const TurnSolver::Plan& committed)
+{ return x.tapmode_choice != committed.tapmode_choice || x.freshmode_choice != committed.freshmode_choice; }
+inline void RecordReSolvePins(const TurnSolver::Plan& p, const TurnSolver::Plan& committed)
 {
     if (!Enabled()) { return; }
-    if (CarriesPostApplyPin(p)) { g_bp_searched_pin_carried.fetch_add(1, std::memory_order_relaxed); }
+    if (CarriesPostApplyPin(p) || PaymentPairDiffers(p, committed))
+    { g_bp_searched_pin_carried.fetch_add(1, std::memory_order_relaxed); }
 }
 // At the end-of-main hand-over: every pin the LAST searched re-solve carried, compared with what the
 // realised combat / cleanup / next turn will read. `dig_runs` = the executor runs its reactive dig loop in
 // this phase (main 1 off a committed line), which then reads the re-solve's dig_choice.
-inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p, int discard_pin, int vial_pin,
-                                  int dork_pin, int le_fire_pin, bool dig_runs)
+inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p, const TurnSolver::Plan& committed,
+                                  int discard_pin, int vial_pin, int dork_pin, int le_fire_pin, bool dig_runs)
 {
-    if (!Enabled() || !CarriesPostApplyPin(p)) { return; }
+    if (!Enabled() || !(CarriesPostApplyPin(p) || PaymentPairDiffers(p, committed))) { return; }
     bool ok = true;
+    // The payment pair in force for the rest of the phase must be the re-solve's (PlanPaymentPinScope).
+    if (g_scripted_tapmode != p.tapmode_choice || g_scripted_freshmode != p.freshmode_choice) { ok = false; }
     if (p.lackey_choice >= 0           && s.scripted_cheat_choice != p.lackey_choice)              { ok = false; }
     if (p.fling_victim_choice != -1    && s.scripted_fling_victim != p.fling_victim_choice)        { ok = false; }
     if (p.tectonic_mode_choice >= 0    && s.scripted_tectonic_mode != p.tectonic_mode_choice)      { ok = false; }
@@ -4059,16 +4067,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ...and the put-Karoo bounce pin (Genesis Wave's put Karoo; ApplyPlanDirect's twin). Always
     // installed, -1 included.
     ScriptedPutBounce _spb_exec(PutBouncePinOf(plan.bounce_choice, plan.land_decided, plan.land_to_play));
-    ScriptedFreshMode _sfm_exec(plan.freshmode_choice);  // executor/rollout lockstep for the
-                                                    // fresh-spend branch: the committed lethal's
-                                                    // payment may crack the same-turn mint, so the
-                                                    // replay must pay in the same world; 0 inert
-    ScriptedTapMode _stm_exec(plan.tapmode_choice); // executor/rollout lockstep for the tapmode
-                                                    // (TapReserve) axis -- the searched-choice
-                                                    // audit's §C latent gap: the solver pinned
-                                                    // this in ApplyPlanDirect but the executor
-                                                    // re-priced under default rules, so any
-                                                    // TapReserve sweep measured a chimera; 0 inert
+    // The committed plan's WHOLE-APPLY PAYMENT PINS (tap mode, fresh-spend) -- ApplyPlanDirect's own
+    // body (PlanPaymentPinScope): the committed lethal's payment may crack the same-turn mint, and a
+    // TapReserve choice re-priced under default rules would make any sweep measure a chimera, so the
+    // replay pays in the world the line was scored in. A searched breakpoint re-solve replaces the
+    // pair for the rest of the phase (rs_pay, below).
+    PlanPaymentPinScope _pay_exec(plan);
 
     // The plan's post-apply STATE pins (the Lackey put, the declare-attackers pins, the Saga target, the
     // land-search picks) -- ApplyPlanDirect's own body (TurnSolver::WritePostApplyStatePins), so the real
@@ -4084,8 +4088,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // realised combat, end step and next turn are the ones the re-solve ranked. The LAST re-solve wins
     // (each one scored on the state the previous one left). rs_last holds it for the end-of-main block.
     std::optional<TurnSolver::Plan> rs_last;
+    // ...and its PAYMENT PINS: the re-solve's ApplyPlanDirect installed each candidate's own tap mode /
+    // fresh-spend pair (unconditionally, 0 = the rule) for every payment of its apply -- its land, its
+    // casts and the rest of the phase -- so from the re-solve on the executor pays under the CHOSEN
+    // plan's pair, not the committed plan's. Declared after _pay_exec: LIFO restores the committed pair,
+    // then the outer one, at phase end.
+    std::optional<PlanPaymentPinScope> rs_pay;
     auto adopt_resolve_post_apply = [&](const TurnSolver::Plan& x)
     {
+        rs_pay.reset();
+        rs_pay.emplace(x);
         TurnSolver::WritePostApplyStatePins(state, x);
         if (x.discard_choice >= 0)     { m_discard_choice_pin = x.discard_choice; }
         if (x.vial_charge_choice >= 0) { m_vial_choice_pin = x.vial_charge_choice; }
@@ -5138,7 +5150,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                        m_lookahead_depth, m_max_turns,
                                                        &bp_budget, true,
                                                        m_search_post_combat, m_shared_tt);
-                execgreedy::RecordReSolvePins(extra);
+                execgreedy::RecordReSolvePins(extra, plan);
                 adopt_resolve_post_apply(extra);   // its post-apply pins, as it scored them
             }
             else
@@ -5710,7 +5722,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                                    m_lookahead_depth, m_max_turns,
                                                                    &bp_budget, true,
                                                                    m_search_post_combat, m_shared_tt);
-                            execgreedy::RecordReSolvePins(extra);
+                            execgreedy::RecordReSolvePins(extra, plan);
                             adopt_resolve_post_apply(extra);   // its post-apply pins (main site's note)
                         }
                         else
@@ -7355,7 +7367,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     // MTG_M2_YIELD_STATS: is every post-apply pin the last re-solve carried actually in force here, the
     // point the executor hands over to combat / cleanup / the next turn? (Diagnostic; no play effect.)
-    if (rs_last) { execgreedy::RecordReSolveRealized(state, *rs_last, m_discard_choice_pin, m_vial_choice_pin,
+    if (rs_last) { execgreedy::RecordReSolveRealized(state, *rs_last, plan, m_discard_choice_pin, m_vial_choice_pin,
                                                      m_atk_release_pin, m_le_fire_pin,
                                                      is_pre_combat_main && !fd_plan_committed); }
 
