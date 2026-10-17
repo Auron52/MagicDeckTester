@@ -1,0 +1,23 @@
+{
+  "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+  "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Furycalm Snarl", "controller": 0, "tapped": false },
+    { "name": "Swiftblade Vindicator", "controller": 0, "tapped": false, "sick": false }
+  ],
+  "hand": ["Colossus Hammer", "Loxodon Warhammer", "Magnetic Theft", "Mountain", "Sigarda's Aid", "Speaker of the Heavens"],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 3,
+  "human_lines": ["land=Mountain;cast=Colossus Hammer;cast=Magnetic Theft", "cast=Speaker of the Heavens"],
+  "human_variants": ["Swiftblade Vindicator", ""],
+  "expect_human_summary_contains": "cast: Speaker of the Heavens",
+  "comment": "HUMAN-PLAY PREPAY HAND DEMAND (MTG_HUMAN_PREPAY_DEMAND; Colossus Hammer claude-play sweep, seed 2100016 T3, 2026-10-17). The human commits {land Mountain; Colossus Hammer {1}; Magnetic Theft {R} -> Swiftblade} and then, in the SAME main, Speaker of the Heavens {W}. The two-cast line is paid by the whole-turn prepay's joint solve, which took sources in battlefield order and tapped Mountain + Furycalm Snarl -- the board's only {W} -- leaving the fresh Mountain up, so the second line was NOT offered (no white source). With the hand-demand hold the line pays with the two Mountains and the Snarl stays up for Speaker. =0 reproduces the defect (this fixture then FAILS)."
+}

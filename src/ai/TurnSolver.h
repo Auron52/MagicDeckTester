@@ -2138,8 +2138,19 @@ public:
     // so the two stay in lockstep. Off-switch: MTG_NO_BATCH_PAY.
     // `mint_prefix`: the bill is a hoisted-minter line's BASE-POOL PREFIX (BatchPrepayMintPrefix
     // below), which no later Treasure can meet -- the mint-line hold decline does not apply to it.
+    // `hand_demand`: HUMAN PLAY's committed line only (ApplyPlanDirect passes HumanPlayActive()) --
+    // hold, if the line can pay without them, the sources the REST of the hand needs for its
+    // coloured pips (MTG_HUMAN_PREPAY_DEMAND; see HumanPrepayDemandHolds). Every other caller
+    // (the executor, rollouts, the payability probes) passes false: byte-identical.
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
-                                     bool mint_prefix = false);
+                                     bool mint_prefix = false, bool hand_demand = false);
+    // The hold masks behind `hand_demand`, exposed for tests: one untapped source per coloured pip
+    // the hand minus `acts`' casts still owes (scarcest colour first, narrowest source, tie lower
+    // card number), written to `out` as PREFIX masks over battlefield indices, largest first --
+    // out[0] holds every pick, out[k-1] only the first. Returns k (0: nothing to hold, or the board
+    // exceeds the 64-bit mask). `out` must hold 64 entries.
+    static int HumanPrepayDemandHolds(const GameState& state, const std::vector<Action>& acts,
+                                      std::uint64_t* out);
     // A CAST ORDER'S PAYABILITY, AS THE APPLY WORLDS REALISE IT -- the projection a provider's
     // ArrangeCastOrder uses when an order may only move "when the line is otherwise unpayable" (the
     // EDF land-Aura range, MTG_EDF_AURA_RANGE). Both work on a scratch copy; `state` is untouched.
@@ -2169,9 +2180,10 @@ public:
     // mint_prefix mode with that sub-list: same decline rules, same hold ladder, and the plain
     // unrestricted solve where every hold fails (the prefix has no Treasure to meet). Shared by
     // ApplyPlanDirect and AIEngine::TakeTurn (lockstep). Only reached when the minter is hoisted
-    // (MintHoistAfterMagnets) -> nothing changes with the lever off.
+    // (MintHoistAfterMagnets) -> nothing changes with the lever off. `hand_demand`: as for
+    // BatchPrepayMainCasts (ApplyPlanDirect passes HumanPlayActive(); the executor passes false).
     static bool BatchPrepayMintPrefix(GameState& state, const std::vector<Action>& acts,
-                                      const std::vector<int>& ena);
+                                      const std::vector<int>& ena, bool hand_demand = false);
 
     // PlanTraits builder (docs/design/mana-order-and-reserve-overhaul.md layer 3): distil what the
     // plan DOES (own-creature pump + its projected target, copy magnet, scaler food, phase, attack

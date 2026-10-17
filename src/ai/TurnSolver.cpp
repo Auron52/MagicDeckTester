@@ -40554,7 +40554,7 @@ void TurnSolver::CarryPendingActivations(PlanTraits& into, const PlanTraits* out
 }
 
 bool TurnSolver::BatchPrepayMintPrefix(GameState& state, const std::vector<Action>& acts,
-                                       const std::vector<int>& ena)
+                                       const std::vector<int>& ena, bool hand_demand)
 {
     std::vector<Action> prefix;
     bool has_minter = false;
@@ -40564,7 +40564,9 @@ bool TurnSolver::BatchPrepayMintPrefix(GameState& state, const std::vector<Actio
         if (HoistedMinterCast(acts[i])) { has_minter = true; break; }
     }
     if (!has_minter) { return false; }
-    return BatchPrepayMainCasts(state, prefix, /*mint_prefix=*/true);
+    // The rest of the hand, seen from the prefix, includes this line's own later casts -- which is
+    // exactly what a hand-demand hold should protect from the prefix's generic pips.
+    return BatchPrepayMainCasts(state, prefix, /*mint_prefix=*/true, hand_demand);
 }
 
 // MTG_PREPAY_ENERGY_RESTORE (DEFAULT ON; =0 disables): a rolled-back prepay solve gives back the {E}
@@ -40575,8 +40577,143 @@ static bool PrepayEnergyRestoreOn()
     return heurarm::Flag(heurarm::PREPAY_ENERGY_RESTORE, s_env);
 }
 
+// HUMAN-PLAY HAND-DEMAND HOLD (MTG_HUMAN_PREPAY_DEMAND, DEFAULT ON; =0 restores the demand-blind joint
+// solve byte-identically). heurarm-routed so a unit test (and a pooled A/B) can pin either arm.
+//
+// THE DEFECT (Colossus Hammer claude-play sweep, 2026-10-17, confirmed twice). A human builds a main
+// phase as several committed LINES. A line with two or more hand casts is paid up front by this
+// function's joint solve (TapForCostBacktrack over the COMBINED bill), and the casts then drain the
+// pre-loaded pool -- which is why MTG_TAPDBG shows `[paydbg] cost={1} taps:(none)` for them. The
+// joint solve is a DFS that keeps its FIRST solution in candidate (battlefield) order, and nothing in
+// it reads the hand. So on seed 2100016 T3 -- Furycalm Snarl, Mountain #26, a fresh Mountain #27;
+// hand Hammer, Magnetic Theft, Sigarda's Aid {W}, Speaker of the Heavens {W} -- the line
+// {Colossus Hammer {1}, Magnetic Theft {R}} tapped Mountain #26 and the SNARL (the board's only {W})
+// and left Mountain #27 up, so the human's next line could cast neither white card. Seed 2100017 T6
+// is the mirror: {Speaker {W}, Hammer {1}} spent the only Mountain on the {1} with two Plains idle and
+// two Magnetic Thefts in hand. A ONE-cast line never reaches the joint solve (the eligible < 2 fast
+// decline), so it pays through the scarcity payer, whose MTG_HUMAN_TAP_DEMAND tiebreak (ManaPayment.cpp)
+// spends the source the hand needs least -- that is the whole reason Hammer alone was paid right.
+//
+// THE FIX, in the prepay's own idiom ("leave out if you can", the depletion / dork / activation holds):
+// reserve one untapped source per coloured pip the REST of the hand owes -- the hand minus this line's
+// casts, which leave it -- and try the joint solve with that reserve held first, releasing it one pick
+// at a time (last pick first) before any existing hold class gives way, then the ladder exactly as it
+// was. Lossless: a hold only ever removes options from a solve that is retried without it, so every
+// line pays exactly when it paid before. Colours are reserved SCARCEST first (fewest untapped
+// producers), each from its NARROWEST producer (fewest colours; tie lower card number, position-free),
+// so a dual is the last thing the reserve takes and the first thing the line may spend.
+//
+// HUMAN PLAY ONLY, by the caller: ApplyPlanDirect passes HumanPlayActive() -- at its whole-turn prepay
+// and at its hoisted-minter prefix prepay (BatchPrepayMintPrefix) -- which is false in every rollout
+// (HumanPlaySuppress) and every autonomous game; the executor and the payability probes pass false
+// outright. The engine's own plan is the whole phase's cast set, so the search prices what a
+// later main can afford through the same prepay; the human's next line is a choice the payment
+// cannot see, which is the FilterCFirst / MTG_HUMAN_TAP_DEMAND precedent exactly.
+static bool HumanPrepayDemandOn()
+{
+    static const bool s_env = EnvOn("MTG_HUMAN_PREPAY_DEMAND", true);
+    return heurarm::Flag(heurarm::HUMAN_PREPAY_DEMAND, s_env);
+}
+
+int TurnSolver::HumanPrepayDemandHolds(const GameState& state, const std::vector<Action>& acts,
+                                       std::uint64_t* out)
+{
+    const int active = state.active_player_index;
+    const int n      = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }
+    // What the rest of the hand owes, per colour: every hand card's pips except one copy per card this
+    // line takes out of the hand -- a hand cast (sac-land and alt-cost casts included: they leave it
+    // too) or an Aether Vial put -- matched by name (a same-name copy has the same cost). Costs via the
+    // DEFINITION, as the MTG_HUMAN_TAP_DEMAND scan reads them (a zone Card carries the name, not the cost).
+    int dem[5] = { 0, 0, 0, 0, 0 };
+    std::vector<char> used(acts.size(), 0);
+    for (const Card& hc : state.players[active].hand)
+    {
+        bool cast_now = false;
+        for (std::size_t k = 0; k < acts.size(); ++k)
+        {
+            const Action& a = acts[k];
+            const bool leaves_hand = a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial;
+            if (used[k] != 0 || !leaves_hand || a.card_name != hc.m_name) { continue; }
+            used[k] = 1;
+            cast_now = true;
+            break;
+        }
+        if (cast_now) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr) { continue; }
+        const ManaCost& m = hd->card.m_mana_cost;   // hybrid/phyrexian pips baked flat
+        dem[static_cast<int>(Color::White)] += m.white;
+        dem[static_cast<int>(Color::Blue)]  += m.blue;
+        dem[static_cast<int>(Color::Black)] += m.black;
+        dem[static_cast<int>(Color::Red)]   += m.red;
+        dem[static_cast<int>(Color::Green)] += m.green;
+    }
+    if (dem[0] + dem[1] + dem[2] + dem[3] + dem[4] == 0) { return 0; }
+    // The candidate sources: the same set the MTG_HUMAN_TAP_DEMAND supply scan counts (own untapped
+    // lands, mana dorks, mana rocks), minus a dork that cannot tap this turn (holding it saves nothing).
+    std::uint8_t cmask[64] = {};
+    int prod_n[5] = { 0, 0, 0, 0, 0 };
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != active || q.tapped || q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        if (!q.card.IsLand() && qd->tmpl != CardTemplate::ManaDork && !qd->params.mana_rock) { continue; }
+        if (qd->tmpl == CardTemplate::ManaDork && !CanTapNow(q, state.battlefield)) { continue; }
+        std::uint8_t m = 0;
+        for (Color c : EffectiveProducesFor(state, active, *qd, &q))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5) { m = static_cast<std::uint8_t>(m | (1u << ci)); }
+        }
+        cmask[i] = m;
+        for (int c = 0; c < 5; ++c) { if ((m & (1u << c)) != 0) { ++prod_n[c]; } }
+    }
+    // Demanded colours, scarcest first (fewest producers; tie colour ordinal).
+    int order_c[5];
+    int nc = 0;
+    for (int c = 0; c < 5; ++c) { if (dem[c] > 0 && prod_n[c] > 0) { order_c[nc++] = c; } }
+    for (int a = 1; a < nc; ++a)
+    {
+        for (int b = a; b > 0 && prod_n[order_c[b]] < prod_n[order_c[b - 1]]; --b)
+        { std::swap(order_c[b], order_c[b - 1]); }
+    }
+    std::uint64_t taken = 0;
+    int picks[64];
+    int k = 0;
+    for (int oc = 0; oc < nc; ++oc)
+    {
+        const int c = order_c[oc];
+        for (int need = dem[c]; need > 0; --need)
+        {
+            int best = -1, best_w = 99;
+            for (int i = 0; i < n; ++i)
+            {
+                if ((cmask[i] & (1u << c)) == 0 || (taken & (1ull << i)) != 0) { continue; }
+                const int w = std::popcount(static_cast<unsigned>(cmask[i]));   // MSVC: no builtin
+                if (best < 0 || w < best_w
+                    || (w == best_w && state.battlefield[static_cast<std::size_t>(i)].card.m_number
+                                       < state.battlefield[static_cast<std::size_t>(best)].card.m_number))
+                { best = i; best_w = w; }
+            }
+            if (best < 0) { break; }   // every producer of c is already reserved
+            taken |= 1ull << best;
+            picks[k++] = best;
+        }
+    }
+    std::uint64_t prefix = 0;
+    for (int j = 0; j < k; ++j)
+    {
+        prefix |= 1ull << picks[j];
+        out[k - 1 - j] = prefix;   // out[0] = the whole reserve ... out[k-1] = the first pick alone
+    }
+    return k;
+}
+
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
-                                      bool mint_prefix)
+                                      bool mint_prefix, bool hand_demand)
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
     if (!s_enabled) { return false; }
@@ -41214,15 +41351,23 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // from zero: releasing a source with the dork/depletion reservations dropped would let the
     // re-solve tap the very creature the ladder just spent rungs protecting.
     std::uint64_t won_hold = 0;
-    for (int r = 0; r < n_rungs && !ok; ++r)
+    // HUMAN-PLAY HAND-DEMAND HOLD (MTG_HUMAN_PREPAY_DEMAND -- see HumanPrepayDemandHolds): the reserve's
+    // prefix masks, largest first. hp_n is 0 on every call that does not pass hand_demand (the executor,
+    // every rollout, every payability probe), so each rung below is tried exactly once, as before.
+    std::uint64_t hp_dem[64];
+    const int hp_n = (hand_demand && n <= 64 && HumanPrepayDemandOn())
+                   ? TurnSolver::HumanPrepayDemandHolds(state, acts, hp_dem) : 0;
+    // One held solve: pays wild-free under `hold` -> accepted; otherwise the state is restored for the
+    // next attempt (or the plain solve). `r` only labels the trace line.
+    auto held_attempt = [&](std::uint64_t hold, int r) -> bool
     {
         if (tapstats::Enabled()) { tapstats::g_site_prepay_held.fetch_add(1, std::memory_order_relaxed); }
-        ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
+        const bool paid = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
-                                 /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/rungs[r],
+                                 /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/hold,
                                  /*out_full_pool=*/&produced)
              && produced.wild == 0;
-        if (ok) { won_hold = rungs[r]; }
+        if (paid) { won_hold = hold; }
         // MTG_PREPAY_HOLD_TRACE=1 (diagnosis only, print-only): each rung tried, the creatures it
         // held, and whether it paid -- the read that shows WHICH body a hold ladder spent.
         static const bool s_hold_trace = EnvOn("MTG_PREPAY_HOLD_TRACE");
@@ -41231,14 +41376,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             std::string held;
             for (int i = 0; i < n && i < 64; ++i)
             {
-                if (!(rungs[r] & (1ull << i)) || !state.battlefield[i].card.IsCreature()) { continue; }
+                if (!(hold & (1ull << i)) || !state.battlefield[i].card.IsCreature()) { continue; }
                 held += (held.empty() ? "" : ",") + state.battlefield[i].card.m_name.str();
             }
             std::fprintf(stderr, "[hold] T%d cost=%d victim=%d rung=%d/%d held=[%s] %s\n",
                          state.turn_number, combined.ManaValue(), _sac_victim, r, n_rungs,
-                         held.c_str(), ok ? "PAID" : "no");
+                         held.c_str(), paid ? "PAID" : "no");
         }
-        if (!ok)   // this hold is infeasible/ambiguous -> restore for the next rung (or the plain solve)
+        if (!paid)   // this hold is infeasible/ambiguous -> restore for the next rung (or the plain solve)
         {
             state.battlefield                  = bf_snap;
             state.floating_mana                = fm_snap;
@@ -41248,6 +41393,15 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (energy_restore) { state.players[active].energy_counters = ea; }
             produced = ManaPool{};
         }
+        return paid;
+    };
+    for (int r = 0; r < n_rungs && !ok; ++r)
+    {
+        // The human-play reserve rides ON TOP of each rung and is released one pick at a time before
+        // the rung itself gives way: the existing classes (the line's own trailing activations, the
+        // attackers, depletion counters, one-shots) stay held harder than the next line's colours.
+        for (int dj = 0; dj < hp_n && !ok; ++dj) { ok = held_attempt(rungs[r] | hp_dem[dj], r); }
+        if (!ok) { ok = held_attempt(rungs[r], r); }
     }
     // MINT-LINE HOLD DECLINE (MTG_MINT_CREDIT_EXACT). Every rung above judged "payable with this
     // hold" against the turn's BOARD sources -- the joint solve cannot see the Treasures a minter in
@@ -41269,6 +41423,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     {
         return Pp(PP_MINT_HOLD);   // the failed rung already restored the state
     }
+    // ...and the human-play reserve on its own, before the unrestricted solve (largest first). Placed
+    // after the mint-line decline on purpose: that decline is about the EXISTING holds, and a line it
+    // routes to the per-cast payer is paid there under MTG_HUMAN_TAP_DEMAND's own tiebreak.
+    for (int dj = 0; dj < hp_n && !ok; ++dj) { ok = held_attempt(hp_dem[dj], n_rungs); }
     if (!ok)   // nothing reservable, or every hold failed: the original unrestricted solve
     {
         if (tapstats::Enabled()) { tapstats::g_site_prepay_plain.fetch_add(1, std::memory_order_relaxed); }
@@ -46100,7 +46258,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // minter -- is paid JOINTLY (BatchPrepayMintPrefix; executor twin in TakeTurn --
                 // lockstep): the whole-turn prepay above could not pay a mint-funded line, and the
                 // per-cast greedy's one-cast-at-a-time holds strand the minter's colour.
-                if (mint_hoist) { TurnSolver::BatchPrepayMintPrefix(state, acts, ena); }
+                // HUMAN PLAY: hold what the rest of the hand needs (MTG_HUMAN_PREPAY_DEMAND), as the
+                // whole-turn prepay below does; false in every rollout and autonomous game.
+                if (mint_hoist) { TurnSolver::BatchPrepayMintPrefix(state, acts, ena, HumanPlayActive()); }
                 // MTG_DBG_MULTI=<turn>: the realised order of this opaque set and each cast's
                 // outcome (left_in_hand=1 -> the cast did not happen), diagnostic only.
                 static const int s_dbg_apply = EnvInt("MTG_DBG_MULTI", 0);
@@ -47346,7 +47506,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
     else
     {
-        TurnSolver::BatchPrepayMainCasts(state, plan.actions);
+        // HUMAN PLAY: hold what the rest of the hand needs (MTG_HUMAN_PREPAY_DEMAND). HumanPlayActive()
+        // is false in every rollout (HumanPlaySuppress) and every autonomous game -> byte-identical.
+        TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false,
+                                         /*hand_demand=*/HumanPlayActive());
     }
 
 

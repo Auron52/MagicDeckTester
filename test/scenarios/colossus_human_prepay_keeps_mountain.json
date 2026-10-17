@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+  "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Plains", "controller": 0, "tapped": false },
+    { "name": "Dragonfire Blade", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Plains", "controller": 0, "tapped": false },
+    { "name": "Plains", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Colossus Hammer", "Magnetic Theft", "Magnetic Theft", "Path to Exile", "Speaker of the Heavens"],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "human_lines": ["cast=Speaker of the Heavens;cast=Colossus Hammer", "cast=Magnetic Theft"],
+  "human_variants": ["", ""],
+  "expect_human_summary_contains": "cast: Magnetic Theft",
+  "comment": "HUMAN-PLAY PREPAY HAND DEMAND (MTG_HUMAN_PREPAY_DEMAND; Colossus Hammer claude-play sweep, seed 2100017 T6, 2026-10-17). The human commits {Speaker of the Heavens {W}, Colossus Hammer {1}} and then, in the SAME main, a Magnetic Theft {R} (two in hand). The joint prepay took sources in battlefield order and paid the {1} with the Mountain -- the board's only {R} -- with two Plains idle, so no Theft was offered afterwards. With the hand-demand hold the line pays with two Plains and the Mountain stays up. =0 reproduces the defect (this fixture then FAILS)."
+}

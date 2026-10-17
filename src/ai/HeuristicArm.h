@@ -535,6 +535,7 @@ enum Slot : int
     SPEAKER_M2,               // MTG_SPEAKER_M2  Colossus Hammer: a NARROW post-combat main (the Angels Giada shape) for Speaker of the Heavens' "{T}: create a 4/4 Angel. Activate only if you have at least 7 life more than your starting life total". Opens ONLY when the life gate passes AFTER combat (lifelink is the deck's only life source, and it lands IN combat) and a Speaker-type source is still live (untapped through its vigilant attack, not summoning sick); admits ONLY that activation. A sound identity fold in a goldfish: nothing else in this list is generated during combat, so every refused option was available in main 1. Default ON, PROVISIONAL -- main-1 vs main-2 is the USER's call per deck; =0 closes it
     COLOSSUS_ORDER,           // MTG_COLOSSUS_ORDER  Colossus Hammer's AI-DRAFTED cast order (2026-10-17, docs/design/colossus-hammer-cast-order-draft.md; awaiting the USER): Equipment tutors > Sigarda's Aid > double-strike hosts > other creatures > Lizard Blades > Forge Anew > Equipment > Magnetic Theft > the rest; mana value then name inside a class; land drop first. Default OFF (a draft); =1 -> the draft
     COLOSSUS_BUCKET_DISCARD,  // MTG_COLOSSUS_BUCKET_DISCARD  Colossus Hammer's AI-DRAFTED 5i cleanup buckets (2026-10-17, docs/design/colossus-hammer-discard-policy-proposal.md; awaiting the USER): colour coverage (1 R, 2 W) + lands to 4 counting the board, 1 Hammer (a tutor stands in), 1 cheat, 1 double-strike host, each net of the board; overflow Path > Dragonfire > Speaker > Loxodon > lands > tutor > Raubahn > Ardenn > cheat > host > Hammer; ONE index. Default OFF (a draft); =1 -> the buckets, =0 -> GenericProvider's max-MV ranking
+    HUMAN_PREPAY_DEMAND,      // MTG_HUMAN_PREPAY_DEMAND  HUMAN PLAY ONLY: the whole-turn prepay of a committed multi-cast line (TurnSolver::BatchPrepayMainCasts from ApplyPlanDirect) first tries to HOLD one untapped source per coloured pip the REST of the hand still owes (scarcest colour first, narrowest source), releasing it pip by pip before any existing hold class -- so a generic pip no longer spends the only source of a colour the human's next line needs (Colossus Hammer seed 2100016 T3: {Hammer, Magnetic Theft} tapped Furycalm Snarl, the only {W}, and left a Mountain up; Sigarda's Aid/Speaker uncastable). Lossless (held-first, then the existing ladder unchanged). Autonomous play and rollouts never pass the demand: byte-identical. Default ON; =0 -> the demand-blind joint solve
     COUNT
 };
 
@@ -1020,6 +1021,7 @@ inline const char* Name(int slot)
         "MTG_SPEAKER_M2",
         "MTG_COLOSSUS_ORDER",
         "MTG_COLOSSUS_BUCKET_DISCARD",
+        "MTG_HUMAN_PREPAY_DEMAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
