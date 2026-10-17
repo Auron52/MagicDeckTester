@@ -970,6 +970,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Clifftop Retreat": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control a Mountain or a Plains.\n{T}: Add {R} or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Cloud of Faeries": {
     "cmc": 2.0,
     "keywords": [
@@ -1771,6 +1780,15 @@
     "toughness": null,
     "type_line": "Basic Land — Forest"
   },
+  "Forge Anew": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "When this enchantment enters, return target Equipment card from your graveyard to the battlefield.\nDuring your turn, you may activate equip abilities any time you could cast an instant.\nYou may pay {0} rather than pay the equip cost of the first equip ability you activate during each of your turns.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Forgotten Cave": {
     "cmc": 0.0,
     "keywords": [
@@ -1846,6 +1864,15 @@
     "power": "3",
     "toughness": "4",
     "type_line": "Instant — Adventure"
+  },
+  "Furycalm Snarl": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As this land enters, you may reveal a Mountain or Plains card from your hand. If you don't, this land enters tapped.\n{T}: Add {R} or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Fyndhorn Elves": {
     "cmc": 1.0,
@@ -2869,6 +2896,18 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Lizard Blades": {
+    "cmc": 2.0,
+    "keywords": [
+      "Double strike",
+      "Reconfigure"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Double strike\nEquipped creature has double strike.\nReconfigure {2} ({2}: Attach to target creature you control; or unattach from a creature. Reconfigure only as a sorcery. While attached, this isn't a creature.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Artifact Creature — Equipment Lizard"
+  },
   "Llanowar Elves": {
     "cmc": 1.0,
     "keywords": [],
@@ -2982,6 +3021,15 @@
     ],
     "mana_cost": "{6}{U}{R}",
     "oracle_text": "Magma Opus deals 4 damage divided as you choose among any number of targets. Tap two target permanents. Create a 4/4 blue and red Elemental creature token. Draw two cards.\n{U/R}{U/R}, Discard this card: Create a Treasure token.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Magnetic Theft": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Attach target Equipment to target creature. (Control of the Equipment doesn't change.)",
     "power": null,
     "toughness": null,
     "type_line": "Instant"
@@ -3450,6 +3498,15 @@
     "toughness": "2",
     "type_line": "Legendary Creature — Goblin Warrior"
   },
+  "Path to Exile": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Peat Bog": {
     "cmc": 0.0,
     "keywords": [],
@@ -3747,6 +3804,17 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Creature — Human Soldier Ranger"
+  },
+  "Raubahn, Bull of Ala Mhigo": {
+    "cmc": 2.0,
+    "keywords": [
+      "Ward"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Ward—Pay life equal to Raubahn's power.\nWhenever Raubahn attacks, attach up to one target Equipment you control to target attacking creature.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Human Warrior"
   },
   "Ravenous Chupacabra": {
     "cmc": 4.0,
@@ -4550,6 +4618,18 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Speaker of the Heavens": {
+    "cmc": 1.0,
+    "keywords": [
+      "Lifelink",
+      "Vigilance"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "Vigilance, lifelink (Attacking doesn't cause this creature to tap. Damage dealt by this creature also causes you to gain that much life.)\n{T}: Create a 4/4 white Angel creature token with flying. Activate only if you have at least 7 life more than your starting life total and only as a sorcery.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
   "Spellshock": {
     "cmc": 3.0,
     "keywords": [],
@@ -4678,6 +4758,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Steelshaper's Gift": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Search your library for an Equipment card, reveal that card, put it into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Stingscourger": {
     "cmc": 2.0,
     "keywords": [
@@ -4769,6 +4858,19 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Swiftblade Vindicator": {
+    "cmc": 2.0,
+    "keywords": [
+      "Double strike",
+      "Trample",
+      "Vigilance"
+    ],
+    "mana_cost": "{R}{W}",
+    "oracle_text": "Double strike (This creature deals both first-strike and regular combat damage.)\nVigilance (Attacking doesn't cause this creature to tap.)\nTrample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Soldier"
   },
   "Swords to Plowshares": {
     "cmc": 1.0,
