@@ -8,23 +8,24 @@ primary checkout (untracked there) on 2026-10-17 and asked to analyze it. Work h
 viewer and is shared by other sessions, so nothing is edited there). The deck file was COPIED into the
 worktree; the user's original stays in place.
 
-**State (2026-10-17 ~06:40 UTC):** 9/10 cards integrated. Chain A (`colossus-analysis`, this tree):
-base `5fad63a1d` → Lizard Blades `84feaa456` → pin `bbace743e` → Magnetic Theft `b8f6e1e4c` → Forge Anew
-`51533fbb8`; **Raubahn integrator RUNNING in this tree** (brief + draft + 3 prior reports). Chain B
-(`colossus-b`, `.claude/worktrees/colossus-b`) rebased onto `51533fbb8`: Speaker `4906508f6` → Path
-`d2f56aecb` → test fix `ddaa8771d` — 1338/1338 units. **Smoke tier RUNNING on chain B's tip** (from
-`env -C <colossus-b>`; scenarios 209/209) — byte-identity check for every other deck.
-SMOKE on chain B tip `ddaa8771d` (everything but Raubahn): **ALL PASS, 120/120, play-changed=0
-searched and d0, scenarios 209/209** (makespan 6m31s) — every other deck byte-identical.
-RAUBAHN LANDED `312383bde` (all 10 cards integrated). NEXT: (2) rebase colossus-b onto `312383bde`
-(re-measure sizeof(GameState) — the padding before m_provider is now full), build, units, smoke again on
-the merged tip, then fast-forward `colossus-analysis` to it; (3) implement the DRAFT cast order + discard buckets in ColossusHammerProvider
-behind DEFAULT-OFF levers (`MTG_COLOSSUS_ORDER`, `MTG_COLOSSUS_BUCKET_DISCARD`; docs
-`colossus-hammer-cast-order-draft.md`, `colossus-hammer-discard-policy-proposal.md`) and measure ON vs
-OFF; (4) Stage 4: `analyze_deck.py --no-rebuild` profile, `provider_audit.py --check`, Scryfall snapshot
-(`audit_card_fields.py --update`) + `audit_card_costs.py`; (5) Stage 4-bis/5j: rows in all three tiers +
-GT (timing probe first, `suite_gate.py --cost`); (6) Stage 5: verify_deck.py, nonconv/fd-diverge,
-multi-depth, leaf_tiebreak_check, viewer audit 5h, claude-play sweep (~18 Opus agents, vary SEED).
+**State (2026-10-17 ~08:45 UTC):** all 10 cards integrated, chains merged. `colossus-b` rebased onto
+Raubahn and `colossus-analysis` fast-forwarded to it (`225538213`; smoke on the merged tip ALL PASS 120/120,
+play-changed=0, scenarios 209/209). Since then on `colossus-analysis`:
+`795642c39` the DRAFT cast order + 5i buckets (both DEFAULT OFF, levers `MTG_COLOSSUS_ORDER` /
+`MTG_COLOSSUS_BUCKET_DISCARD`), `5e32c4d96` Stage 4 profile, `0f3c56499` FIX: a Magnetic Theft cast inside a
+breakpoint continuation replayed with no Equipment (the bp cast RECORD lacked `attach_equip_id`; found by the
+5b depth check, s1001 gi64 d0 T3 vs searched T5 at every budget; scenario
+`colossus_theft_in_tutor_continuation`). IN FLIGHT: a second commit recording the OTHER consume-once/tail
+fields in the bp record (devour, twobrid, land-put, loyalty, replicate, convoke, phyrexian, evoke, adventure,
+kicked) -- same defect class, latent for other decks -> needs a full smoke + regression to attribute.
+Uncommitted: suite rows in all 3 tiers (`test/regression_cases.sh`, smoke shape d0 1000 / d3 150 b10 / d5 75
+b20, regression x2 seeds, overnight ENTRY set, `colossus2hg` smoke canary) -- smoke probe: d3 1.21 s/game,
+d5 1.93 s/game (~1x Hinata); Scryfall snapshot +4 cards (6 deck cards still 429'd: re-run
+`audit_card_fields.py --update --throttle 1.0`). Provider audit `--check` rc=0 (ColossusHammer). Discard
+evidence: 7 cleanup decisions / 400 games, all ties (STATUS_QUO_OK).
+NEXT: smoke + regression on the record fix; accept the colossus GT in all three tiers; `suite_gate --cost`;
+cast-order/discard A/B (`build/scratch/colossus/order_ab/make_ab.py`); Stage 5 (verify_deck, nonconv /
+fd-diverge, leaf_tiebreak, 5h viewer audit, claude-play sweep ~18 Opus agents).
 GOTCHA: run `test/regression.sh` ONLY as `env -C <tree> bash test/regression.sh` — it uses the CWD's
 binary/cards.json/results (a smoke run from the primary's cwd at 06:33 zeroed the primary's
 `test/results/smoke.env`, a 10-14 leftover). Research drafts + integrator reports: `logs/colossus/drafts/`.
@@ -109,6 +110,40 @@ Opus integrator per card working from `logs/colossus/INTEGRATOR_BRIEF.md` + its 
 
 Smoke / regression / multi-deck batches are run centrally by the orchestrator only (one heavy batch at a
 time on the box).
+
+## Stage 4 — baseline profile (2026-10-17, `5e32c4d96`)
+
+`analyze_deck.py --no-rebuild`: profile written (defaults / static keep; NO mulligan generation).
+Cost diagnostic NO_COST_INTERACTIONS. Discard evidence (5i): 7 cleanup decisions in 400 games d3, every one
+multi-optimal (STATUS_QUO_OK) -- the deck almost never discards, and never with stakes. `provider_audit.py
+--check` rc=0: Colossus Hammer -> `ColossusHammer` (own provider, `cert=NotAssessed`). Scryfall snapshot:
+the ten new cards added (`audit_card_fields.py --update`), no hard field mismatch on any deck card.
+
+## Stage 4-bis / 5j — suite rows (2026-10-17)
+
+All three tiers in one change: smoke d0 1000 / d3 150 b10 / d5 75 b20 (s1001) + `colossus2hg` d3 50 b10
+canary (Speaker's gate reads the 2HG starting life); regression the same counts on s2002 + s3003; overnight
+the ENTRY set (d0 4x2000, d3 4x400 b10, d5 4x300 b20 on 4004-10010). Probe (smoke rows, quiet box): d3 b10
+1.21 s/game, d5 b20 1.93 s/game -- about Hinata's per-game cost. **`suite_gate.py --cost`: PASS, 0.43x**
+(colossus 1,161 ms/game at its worst searched regression case vs pd 2,695, the reference; limit 3x).
+GT ACCEPTED in all three tiers (filtered accepts, so every prior provenance note is carried; `check_gt_logs`
+708 consistent / 0 stale): smoke d0 4.968 / d3 3.6467 / d5 3.6933 / 2hg d3 4.48; regression d0 5.166, d3
+3.8533 / 3.6867, d5 3.7333 / 3.5867; overnight d0 5.026-5.075, d3 3.7125-3.8275, d5 3.72-3.8367 (makespan
+2m23s on the PGO binary). Depth is monotone paired per game in every tier (d0 -> d3 -> d5) except ONE
+game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
+
+## Stage 5 — verification findings
+
+* **5b depth sweep, s1001 gi64: d0 won T3, d3 and d5 won T5 at EVERY budget (b10 .. unlimited, one digest).**
+  Root cause: the breakpoint cast RECORD (rollout -> `AIEngine::replay_recorded`) carried Magnetic Theft's
+  creature target but not its Equipment target (`Action::attach_equip_id`), so a Theft cast inside a
+  continuation (Steelshaper's Gift finds the Hammer at site 10, the continuation casts it and Thefts it onto
+  Kor Duelist) did nothing in the real game. FIXED `0f3c56499` + scenario
+  `colossus_theft_in_tutor_continuation` (fails before). The same record also dropped TEN more fields the
+  replay already forwards (devour, twobrid, land-put, loyalty, replicate, convoke, phyrexian, evoke,
+  adventure, kicked) -- FIXED `0d410db07`. Full smoke: every deck byte-identical except Melira Pod gi3
+  (normal + 2HG, still T4: its committed continuation convokes Chord of Calling, which the old replay could
+  not pay and skipped). Full regression ALL PASS 166/166, play-changed=0, references 600 / 0 drift.
 
 ## Open USER questions (provisional defaults TAKEN — the work continues on them)
 
