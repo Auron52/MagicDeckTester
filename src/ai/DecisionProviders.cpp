@@ -33581,6 +33581,10 @@ inline bool On()
 }
 inline bool TraceOn() { static const bool v = EnvOn("MTG_EDF_COMBO_ROUTE_TRACE"); return v; }
 inline int  MaxIter() { static const int v = EnvInt("MTG_EDF_COMBO_ROUTE_MAX_ITER", 600); return v; }
+// MTG_EDF_ROUTE_DIAG (print-only, default OFF): Loop exits by reason -- count, blinks, wall.
+inline bool RouteDiagOn() { static const bool v = EnvOn("MTG_EDF_ROUTE_DIAG"); return v; }
+inline std::atomic<unsigned long long> g_lx_n[16], g_lx_blinks[16], g_lx_ns[16];
+inline std::atomic<unsigned long long> g_run_n{0}, g_run_ns{0}, g_dep_n{0}, g_dep_ns{0};
 
 static const CardDefinition* DefOf(const Card& c) { return CardDatabase::Instance().LookupCached(c); }
 static bool IsOutlet(const CardDefinition* d)
@@ -33660,6 +33664,7 @@ struct Ctx
     ManaCost    paying;
     int         attempt_used = -1;      // which deploy order Run carried to its result (see Run)
     int         iters = 0, deploys = 0, draws = 0, acts = 0;
+    int         exit_why = 0;           // MTG_EDF_ROUTE_DIAG: which Loop exit fired (print-only)
     bool        emit = false;           // the LIVE apply narrates every step into the play history
     // MTG_EDF_ROUTE_BOARD_DEPLOY's deploy attempts only (see Run): a deploy pays from the lands, so the
     // loop can start with every land tapped and the deploy's leftover floating -- and the finish step
@@ -34631,7 +34636,18 @@ static int PickDeployAura(Ctx& cx, const Hand& h)
     }
     return pick;
 }
+static bool DeployPiecesBody(Ctx& cx, bool auras_first);
 static bool DeployPieces(Ctx& cx, bool auras_first)
+{
+    if (!RouteDiagOn()) { return DeployPiecesBody(cx, auras_first); }
+    const auto t0 = std::chrono::steady_clock::now();
+    const bool r = DeployPiecesBody(cx, auras_first);
+    g_dep_n.fetch_add(1, std::memory_order_relaxed);
+    g_dep_ns.fetch_add(static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
+    return r;
+}
+static bool DeployPiecesBody(Ctx& cx, bool auras_first)
 {
     Player& ap = cx.s.players[cx.me];
     DeployDemand(cx);
@@ -34880,28 +34896,57 @@ static bool Develop(Ctx& cx)
     if (casts > 0) { cx.Note("developed: " + std::to_string(casts) + " creature(s) cast off the loop"); }
     return casts > 0;
 }
-// THE LOOP, from a board that already holds the outlet and the payload: 0 no, 1 kill, 2 develop.
-static int Loop(Ctx& cx)
+// MTG_EDF_ROUTE_DIAG: a wide state hash for the periodicity census (print-only).
+static std::uint64_t DiagLoopHash(const Ctx& cx)
 {
-    if (RouteWon(cx)) { return 1; }
+    std::uint64_t h = 1469598103934665603ULL;
+    auto mx = [&](long long v) { h ^= static_cast<std::uint64_t>(v) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+    const GameState& s = cx.s;
+    const ManaPool& f = s.floating_mana;
+    mx(f.white); mx(f.blue); mx(f.black); mx(f.red); mx(f.green); mx(f.colorless); mx(f.wild); mx(f.wild_c); mx(f.wild_phantom);
+    mx(s.floating_creature_mana.Total()); mx(s.next_token_number); mx(static_cast<long long>(s.exile.size()));
+    for (const Player& p : s.players)
+    {
+        mx(p.life); mx(p.energy_counters); mx(static_cast<long long>(p.library.size())); mx(p.lands_played_this_turn);
+        for (const Card& c : p.hand) { mx(c.m_number); }
+        mx(-1);
+        for (const Card& c : p.graveyard) { mx(c.m_number); }
+        mx(-2);
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        mx(p.card.m_number); mx(p.controller_index); mx(p.tapped); mx(p.entered_this_turn); mx(p.aura_attached_to);
+        mx(p.equipped_to); mx(p.damage); mx(p.temp_power_bonus); mx(p.temp_tough_bonus); mx(p.storage_counters);
+        for (std::size_t i = 0; i < p.counters.size(); ++i) { mx(static_cast<int>(p.counters[i].type)); mx(p.counters[i].count); }
+        mx(-3);
+    }
+    return h;
+}
+inline std::atomic<unsigned long long> g_st_rep{0}, g_st_norep{0}, g_st_save{0}, g_st_rep_at{0};
+// THE LOOP, from a board that already holds the outlet and the payload: 0 no, 1 kill, 2 develop.
+static int LoopBody(Ctx& cx)
+{
+    if (RouteWon(cx)) { cx.exit_why = 1; return 1; }
     Snap prev = TakeSnap(cx);
     // A blink that changes the float is "progress" to the snapshot guard, so a line whose next step
     // can never fire (a colour no land makes, a draw that never pays) used to bank until MaxIter.
     // The banking phase of a REAL line is bounded by its own target, so: that many blinks past the
     // target without a step firing, and the route says so.
     int stall = 0, last_target = 0;
+    std::vector<std::uint64_t> dhist; int drep = -1;
     for (int guard = 0; guard < MaxIter(); ++guard)
     {
-        if (RouteWon(cx)) { return 1; }
-        if (cx.s.players[cx.me].life <= 0) { cx.Note("route would kill us"); return 0; }
+        if (RouteDiagOn() && stall == 0) { dhist.clear(); drep = -1; }
+        if (RouteWon(cx)) { cx.exit_why = 1; return 1; }
+        if (cx.s.players[cx.me].life <= 0) { cx.Note("route would kill us"); cx.exit_why = 2; return 0; }
         Board b = ScanBoard(cx);
         Hand  h = ScanHand(cx);
-        if (b.outlet == 0 || b.payload == 0) { cx.Note("loop broke"); return 0; }
+        if (b.outlet == 0 || b.payload == 0) { cx.Note("loop broke"); cx.exit_why = 3; return 0; }
         Fin f = Decide(cx, b, h);
         if (f.k == Fin::None)
         {
-            if (guard == 0 && Develop(cx)) { return 2; }
-            cx.Note("no finisher route"); return 0;
+            if (guard == 0 && Develop(cx)) { cx.exit_why = 4; return 2; }
+            cx.Note("no finisher route"); cx.exit_why = 5; return 0;
         }
         SetDemand(cx, f, h);
         const int n_untap = std::min(b.payload_untaps, std::max(1, b.lands));
@@ -34919,7 +34964,7 @@ static int Loop(Ctx& cx)
         if (f.k == Fin::Gorge && f.id == 0 && f.land >= 0)
         {
             if (PlayLandDrop(cx, f.land)) { prev = TakeSnap(cx); stall = 0; continue; }
-            cx.Note("Gorge land drop failed"); return 0;
+            cx.Note("Gorge land drop failed"); cx.exit_why = 6; return 0;
         }
 
         // float-only improvements to the loop itself: cheaper blinks, a bigger untapper, the switch
@@ -34957,8 +35002,8 @@ static int Loop(Ctx& cx)
                 return FloatPays(cx, all);
             };
             while (!OpponentHasLost(cx.s) && keeps_blink() && Activate(cx, f)) { ++fired; }
-            if (RouteWon(cx)) { cx.Note("finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); return 1; }
-            if (OpponentHasLost(cx.s)) { cx.Note("lethal but we are dead"); return 0; }
+            if (RouteWon(cx)) { cx.Note("finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); cx.exit_why = 7; return 1; }
+            if (OpponentHasLost(cx.s)) { cx.Note("lethal but we are dead"); cx.exit_why = 8; return 0; }
             if (fired > 0) { prev = TakeSnap(cx); stall = 0; continue; }
             cx.Dbg("finish: " + f.act.ToString() + " not payable from float " + cx.Float());
         }
@@ -35019,15 +35064,43 @@ static int Loop(Ctx& cx)
                        + " per_iter=" + std::to_string(per_iter) + " n_untap=" + std::to_string(n_untap));
             }
         }
-        if (!Blink(cx, b.outlet, b.payload, set)) { cx.Note("blink unpayable"); return 0; }
+        if (!Blink(cx, b.outlet, b.payload, set)) { cx.Note("blink unpayable"); cx.exit_why = 9; return 0; }
         const Snap now = TakeSnap(cx);
-        if (SameSnap(now, prev)) { cx.Note("no progress"); return 0; }
+        if (SameSnap(now, prev)) { cx.Note("no progress"); cx.exit_why = 10; return 0; }
         prev = now;
+        if (RouteDiagOn())
+        {
+            const std::uint64_t dh = DiagLoopHash(cx);
+            if (drep < 0 && std::find(dhist.begin(), dhist.end(), dh) != dhist.end()) { drep = stall + 1; }
+            dhist.push_back(dh);
+        }
         if (++stall > std::max(60, last_target + 20))
-        { cx.Note("stalled: " + std::to_string(stall) + " blinks without a step firing"); return 0; }
+        {
+            if (RouteDiagOn())
+            {
+                if (drep >= 0) { g_st_rep.fetch_add(1); g_st_save.fetch_add(static_cast<unsigned long long>(stall - drep)); g_st_rep_at.fetch_add(static_cast<unsigned long long>(drep)); }
+                else { g_st_norep.fetch_add(1); }
+            }
+            cx.Note("stalled: " + std::to_string(stall) + " blinks without a step firing"); cx.exit_why = 11; return 0;
+        }
     }
-    cx.Note("iteration cap");
+    cx.Note("iteration cap"); cx.exit_why = 12;
     return RouteWon(cx) ? 1 : 0;
+}
+
+static int Loop(Ctx& cx)
+{
+    if (!RouteDiagOn()) { return LoopBody(cx); }
+    const int it0 = cx.iters;
+    cx.exit_why = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    const int r = LoopBody(cx);
+    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+    const int w = cx.exit_why & 15;
+    g_lx_n[w].fetch_add(1, std::memory_order_relaxed);
+    g_lx_blinks[w].fetch_add(static_cast<unsigned long long>(cx.iters - it0), std::memory_order_relaxed);
+    g_lx_ns[w].fetch_add(static_cast<unsigned long long>(ns), std::memory_order_relaxed);
+    return r;
 }
 static void RestoreCtx(Ctx& cx, const GameState& snapshot, const Ctx& saved)
 {
@@ -35361,6 +35434,83 @@ static std::uint64_t BoardKey(const GameState& s, int me)
     Mix(h, static_cast<std::uint64_t>(f.red + 31 * f.green + 961 * f.colorless + 29791 * f.wild));
     return h;
 }
+// MTG_EDF_ROUTE_DIAG: BoardKey with one field group dropped (print-only diagnosis of memo misses).
+// Groups: 0 lib8, 1 float, 2 tapped bits, 3 my life, 4 my library size, 5 turn, 6 energy,
+// 7 opp life+lib, 8 land drops, 9 hand, 10 battlefield ids.
+static std::uint64_t BoardKeyDrop(const GameState& s, int me, int g)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    Mix(h, static_cast<std::uint64_t>(g));
+    if (g != 5) { Mix(h, static_cast<std::uint64_t>(s.turn_number)); }
+    if (g != 7) { Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life)); Mix(h, static_cast<std::uint64_t>(s.players[1 - me].library.size())); }
+    const Player& ap = s.players[me];
+    if (g != 3) { Mix(h, static_cast<std::uint64_t>(ap.life)); }
+    if (g != 4) { Mix(h, static_cast<std::uint64_t>(ap.library.size())); }
+    if (g != 6) { Mix(h, static_cast<std::uint64_t>(ap.energy_counters)); }
+    if (g != 8) { Mix(h, static_cast<std::uint64_t>(ap.lands_played_this_turn)); }
+    if (g != 9) { for (const Card& c : ap.hand) { Mix(h, static_cast<std::uint64_t>(c.m_number) * 3 + 1); } }
+    for (const Card& c : ap.sideboard) { Mix(h, static_cast<std::uint64_t>(c.m_number) * 5 + 2); }
+    if (g != 0) { for (std::size_t i = 0; i < ap.library.size() && i < 8; ++i) { Mix(h, static_cast<std::uint64_t>(ap.library[i].m_number) * 7 + 3); } }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        Mix(h, (g != 10 ? static_cast<std::uint64_t>(p.card.m_number) * 11 : 0) + (g != 2 && p.tapped ? 1 : 0)
+               + (p.aura_attached_to != 0 ? 64ULL * static_cast<std::uint64_t>(p.aura_attached_to) : 0));
+        Mix(h, p.equipped_to != 0 ? 1315423911ULL * static_cast<std::uint64_t>(p.equipped_to) + 17 : 0);
+    }
+    if (g != 1)
+    {
+        const ManaPool& f = s.floating_mana;
+        Mix(h, static_cast<std::uint64_t>(f.white + 31 * f.blue + 961 * f.black));
+        Mix(h, static_cast<std::uint64_t>(f.red + 31 * f.green + 961 * f.colorless + 29791 * f.wild));
+    }
+    return h;
+}
+constexpr int kKdGroups = 11;
+inline std::atomic<unsigned long long> g_kd_same[kKdGroups], g_kd_diff[kKdGroups], g_kd_n{0};
+struct KeyDiagMemo { std::unordered_map<std::uint64_t, int> m[kKdGroups]; };
+inline KeyDiagMemo& KdMemo() { static thread_local KeyDiagMemo k; return k; }
+static void KeyDiagRecord(const GameState& s, int me, int r)
+{
+    KeyDiagMemo& k = KdMemo();
+    g_kd_n.fetch_add(1, std::memory_order_relaxed);
+    for (int g = 0; g < kKdGroups; ++g)
+    {
+        const std::uint64_t key = BoardKeyDrop(s, me, g);
+        const auto it = k.m[g].find(key);
+        if (it == k.m[g].end()) { k.m[g][key] = r; continue; }
+        (it->second == r ? g_kd_same : g_kd_diff)[g].fetch_add(1, std::memory_order_relaxed);
+    }
+}
+struct RouteDiagPrinter
+{
+    ~RouteDiagPrinter()
+    {
+        if (!RouteDiagOn()) { return; }
+        static const char* why[13] = { "?", "won-entry", "kills-us", "loop-broke", "develop", "no-finisher",
+                                       "gorge-fail", "finisher-kill", "blink-unpayable", "no-progress", "stalled",
+                                       "", "iter-cap" };
+        why[11] = "stalled"; why[9] = "blink-unpayable"; why[10] = "no-progress"; why[8] = "dead-lethal";
+        std::fprintf(stderr, "[route-diag] run n=%llu ms=%.1f | deploy n=%llu ms=%.1f\n", g_run_n.load(), g_run_ns.load() / 1e6,
+                     g_dep_n.load(), g_dep_ns.load() / 1e6);
+        for (int w = 0; w < 13; ++w)
+        {
+            if (g_lx_n[w].load() == 0) { continue; }
+            std::fprintf(stderr, "[route-diag] loop exit %-16s n=%llu blinks=%llu ms=%.1f\n", why[w], g_lx_n[w].load(),
+                         g_lx_blinks[w].load(), g_lx_ns[w].load() / 1e6);
+        }
+        std::fprintf(stderr, "[route-diag] stalled: periodic=%llu (first repeat at blink %.1f avg, %llu blinks after it) aperiodic=%llu\n",
+                     g_st_rep.load(), g_st_rep.load() ? (double)g_st_rep_at.load() / g_st_rep.load() : 0.0, g_st_save.load(), g_st_norep.load());
+        static const char* gn[kKdGroups] = { "lib8", "float", "tapped", "mylife", "mylibsize", "turn", "energy",
+                                             "opp", "landdrops", "hand", "bf-ids" };
+        for (int g = 0; g < kKdGroups; ++g)
+        {
+            std::fprintf(stderr, "[route-diag] keydrop %-10s of %llu misses: would-hit same=%llu diff=%llu\n", gn[g],
+                         g_kd_n.load(), g_kd_same[g].load(), g_kd_diff[g].load());
+        }
+    }
+};
+inline RouteDiagPrinter g_rd_printer;
 }   // namespace comboroute
 
 // PER GAME, not only on overflow. The memo is board-keyed and NOT decision-scoped (its two siblings,
@@ -35374,6 +35524,7 @@ void EdfComboRouteClearMemo()
 {
     comboroute::TrialMemo& memo = comboroute::Memo();
     memo.m.clear();
+    if (comboroute::RouteDiagOn()) { for (auto& m : comboroute::KdMemo().m) { m.clear(); } }
 }
 
 // MTG_EDF_ROUTE_STATS (diagnostic, off by default): process-wide trial counters -- the memo's own
@@ -35891,6 +36042,7 @@ int EdfComboRouteTrial(const GameState& s, int me)
         }
         if (comboroute::TraceOn())
         { std::fprintf(stderr, "[combo-route] t%d TRIAL no (pre-gate)\n", s.turn_number); }
+        if (comboroute::RouteDiagOn()) { comboroute::KeyDiagRecord(s, me, r); }
         if (s_memo) { memo.m[key] = r; }
         return r;
     }
@@ -35899,7 +36051,15 @@ int EdfComboRouteTrial(const GameState& s, int me)
     ComboOffApplyPause _nochoosers;
     comboroute::Ctx cx(copy, me);
     const auto rs_t0 = rs ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const auto rd_t0 = std::chrono::steady_clock::now();
     const int r = comboroute::Run(cx);
+    if (comboroute::RouteDiagOn())
+    {
+        comboroute::g_run_n.fetch_add(1, std::memory_order_relaxed);
+        comboroute::g_run_ns.fetch_add(static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - rd_t0).count()), std::memory_order_relaxed);
+        comboroute::KeyDiagRecord(s, me, r);
+    }
     if (rs)
     {
         comboroute::g_rs_miss.fetch_add(1, std::memory_order_relaxed);
