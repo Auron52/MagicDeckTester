@@ -434,14 +434,42 @@ re-solve had scored its own. Now:
 dig loop at all, so a re-solve whose candidate ran ApplyPlanDirect's dig loop is realized without it. That
 is the loop missing, not its pin. The counter shows how often it happens.
 
-**DEFERRED gap 2 -- a landfall trigger in COMBAT takes the front for every plan.**
-`Plan::landfall_target_choice` (Phylath's target) is installed by `ScriptedLandfallTarget` for the
-main-phase apply only, in both worlds (`ApplyPlanDirect` and the executor's main-phase optional). Primeval
-Titan's attack fetch and the in-combat Khalni crack put lands in the declare-attackers step, so their
-landfall targets are the provider's front with no searched alternative. The axis also skips a plan with
-no land and no cast, so it never reaches the idle pass either. Fix shape: carry the policy to the end of
-the turn as a state pin (the combat-pin route), and widen the axis's "a land can enter" gate to include
-an attacking land-search Titan or a crackable Expedition.
+**Gap 2 -- a landfall trigger in COMBAT took the front for every plan. FIXED 2026-10-17.**
+`Plan::landfall_target_choice` (Phylath's target) is a MAIN-phase policy: `ScriptedLandfallTarget` installs
+it for the apply only, in both worlds. Primeval Titan's attack fetch and the in-combat Khalni crack put
+lands in the declare-attackers step, after it has gone out of scope, so their targeted landfalls took the
+provider's front with no searched alternative. Now:
+
+* A separate COMBAT rank, `Plan::combat_landfall_target_choice` -> `GameState::scripted_combat_landfall_target`
+  (the crack mask's state-pin route): written write-when-set by `WritePostApplyStatePins`, cleared with the
+  combat pins at both turn starts, folded value-gated into the dominance key and the post-apply dedup key
+  (outside the `MTG_DEDUP_KEY_COMBAT_PINS` lever). A separate field, not the main policy extended into
+  combat, because one shared rank would make "rank k in main 1, the front in combat" inexpressible.
+* Read by `CombatLandfallTargetScope` (core/LandSearch.h) around both combat land entries
+  (`FireAttackLandSearch`, `FireCombatLandSearchCracks`), -1 included. Installing -1 too means a projection
+  run while a main-phase policy is live (`CountAttackLandSearchPump`) resolves as the real combat does.
+* The axis (AppendSubdecisionAxes, the land-search block's (2c)) fires beside an attacking Titan with a
+  targeted watcher on the battlefield or cast by the plan, the idle pass included. It is additive (base
+  plans only). Width = the watcher subtype's identity classes on the board + 1 when a class can split
+  before a later trigger or the plan casts something, capped at 4. It follows the inherited-pin rule.
+* The main-phase axis now follows the inherited-pin rule too: on a state where a policy is already live
+  (the executor's re-solve under the committed plan's policy) the front is an explicit-0 variant. After
+  a searched re-solve, the executor installs the re-solve's own main-phase policy for the rest of the
+  phase (`adopt_resolve_post_apply`), as its scoring did.
+* No win-turn fixture exists for it. In this deck's goldfish the combat front is never worse: at the
+  attack trigger the attackers are untapped and can attack, so the front's "swings now" key puts the
+  counters on an attacker, and every attacking Plant connects for its full power. Any attacker is worth
+  the same this turn, and every Plant attacks next turn. A double-strike host would make the order
+  matter, but none exists in the deck. A Lizard Blades fixture is a chimera: Landfall's deck-trait
+  stamps clear `deck_has_equip_ds_grant` and `deck_has_reconfigure`, so the staged Blades grants nothing.
+  The unit tests (test_land_search_gaps.cpp, "Combat landfall target: ...") cover both halves: the axis
+  fans beside an attacking Titan (the idle pass included) under the inherited-pin rule, and the attack
+  fetch resolves Phylath at the pinned rank. So this axis is no-greedy compliance, not a measured win.
+  A provider prune that restricts combat targets to the front class would remove its cost; that is a
+  user decision.
+* Not extended: the COMBAT-PIN MAIN-PHASE SHARE (SolveWithLookahead) shares a base plan's main-phase
+  apply only with its Titan-pick / crack variants. A combat-landfall variant still re-applies its base's
+  main phase. That is work, not a lost line.
 
 **Disclosed limit.** A post-combat pass keeps only its no-dig twin. The next-turn pins it could still
 carry (Saga target, Search for Tomorrow, cleanup discard) are fanned on the main-1 plan that sets them,

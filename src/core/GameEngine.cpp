@@ -273,6 +273,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
+    state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();

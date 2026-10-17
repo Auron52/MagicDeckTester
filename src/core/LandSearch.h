@@ -972,6 +972,28 @@ inline std::vector<int> RefindByNumberInOrder(const GameState& state, const std:
     return out;
 }
 
+// THE COMBAT LANDFALL-TARGET RANK (GameState::scripted_combat_landfall_target, Plan::
+// combat_landfall_target_choice; 2026-10-17). The lands a combat puts (the two consumers below) fire
+// their TARGETED landfall triggers (Phylath) here, after the main-phase apply returned -- so the
+// main-phase policy (Plan::landfall_target_choice, ScriptedLandfallTarget) is not live, and every such
+// trigger used to take the provider's front for every plan. This installs the main-1 plan's COMBAT rank
+// for exactly these entries, -1 (the front) included: installing -1 too makes a projection that runs
+// while a main-phase policy is live (CountAttackLandSearchPump under ApplyPlanDirect) resolve exactly as
+// the real combat does. Turn-scoped like the policy it shadows; restores the outer pin on exit.
+struct CombatLandfallTargetScope
+{
+    int saved, saved_turn;
+    explicit CombatLandfallTargetScope(const GameState& s)
+        : saved(g_landfall_target_pin), saved_turn(g_landfall_target_pin_turn)
+    {
+        g_landfall_target_pin      = s.scripted_combat_landfall_target;
+        g_landfall_target_pin_turn = s.turn_number;
+    }
+    ~CombatLandfallTargetScope() { g_landfall_target_pin = saved; g_landfall_target_pin_turn = saved_turn; }
+    CombatLandfallTargetScope(const CombatLandfallTargetScope&) = delete;
+    CombatLandfallTargetScope& operator=(const CombatLandfallTargetScope&) = delete;
+};
+
 // Primeval Titan's ATTACK half ("whenever this creature enters OR ATTACKS"), at the CR 508.4 point
 // in BOTH worlds (GameEngine::CombatPhase and TurnSolver's SimulateCombat call it right after
 // ApplyAttackModalTriggers, before the attack-token block): once per DECLARED attacker carrying
@@ -998,6 +1020,7 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
         { any = true; }
     }
     if (!any) { return; }
+    const CombatLandfallTargetScope _clt(state);   // the combat landfalls' target rank (above)
     int attack_ordinal = 0;   // the packed stream's ordinal (the put-bounce probe's key)
     for (std::size_t ai = 0; ai < nums.size(); ++ai)
     {
@@ -1075,6 +1098,7 @@ inline void FireCombatLandSearchCracks(GameState& state, int controller, std::ve
         if (p.controller_index == controller && IsQuestLandSearchSource(p, d)) { order.push_back(p.card.m_number); }
     }
     if (order.empty()) { return; }
+    const CombatLandfallTargetScope _clt(state);   // the combat landfalls' target rank (see the struct)
     auto crack = [&](int num) -> bool
     {
         for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
