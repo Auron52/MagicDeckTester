@@ -430,6 +430,15 @@ re-solve had scored its own. Now:
 * `MTG_M2_YIELD_STATS=1` reports CARRIED (re-solves whose plan holds a post-apply pin), UNREALIZED (of
   those, the pins not in force at the end-of-main hand-over; must read 0) and DIG-UNRUN (below).
 
+**Measured (2026-10-17, rebased onto `ac44130d8`).** The smoke tier is byte-identical: 124/124, 0
+changed games at searched depths and at d0. Across the smoke (19 searched re-solves) and a probe of the
+smoke's searched cases at three fresh seeds (30,045 games, 63 searched re-solves), CARRIED = 0. No
+re-solve's chosen plan held a post-apply pin, so the pre-fix executor dropped nothing in this sample, and
+UNREALIZED = 0 after the fix. The fix closes a path that budgeted play rarely takes. The same counter line
+reads MISMATCH = 3 (smoke) and 13 (probe), identical before and after this change: a committed
+continuation the executor could not replay. Its own comment says it must read zero, so that is a separate
+open item.
+
 **Disclosed residual (DIG-UNRUN):** on a committed line's main, and in main 2, the executor runs no reactive
 dig loop at all, so a re-solve whose candidate ran ApplyPlanDirect's dig loop is realized without it. That
 is the loop missing, not its pin. The counter shows how often it happens.
@@ -467,6 +476,9 @@ provider's front with no searched alternative. Now:
   fetch resolves Phylath at the pinned rank. So this axis is no-greedy compliance, not a measured win.
   A provider prune that restricts combat targets to the front class would remove its cost; that is a
   user decision.
+* Measured (same smoke): byte-identical, Landfall included. The axis fired at 10 of 1,742 enumerations
+  in the Landfall smoke games (8-108 variants each), but the cases' work units are unchanged
+  (1,934,233 / 1,620,510). At those budgets the appended variants are never reached.
 * Not extended: the COMBAT-PIN MAIN-PHASE SHARE (SolveWithLookahead) shares a base plan's main-phase
   apply only with its Titan-pick / crack variants. A combat-landfall variant still re-applies its base's
   main phase. That is work, not a lost line.
