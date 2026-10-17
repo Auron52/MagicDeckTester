@@ -20477,7 +20477,7 @@ struct PutBounceFold
     std::vector<int>  base_of;  // per candidate: its attack-pin base's index (-1 = none)
     std::vector<char> is_base;  // per candidate: some variant names it as base
     std::vector<char> clean;    // per candidate (FSLineWin): its apply was proven pin-blind (header)
-    struct BaseInfo { TranspositionTable::Key prefix; int upkeep = -1; int crack = -1; };
+    struct BaseInfo { TranspositionTable::Key prefix; int upkeep = -1; int crack = -1; int clt = -1; };
     std::unordered_map<int, BaseInfo> base_info;   // FSLineWin: a clean base's post-apply key parts
     std::vector<int> dev_ord;   // per candidate: the one attack ordinal it deviates at (-1 = none)
     std::vector<int> dev_val;   // ...and the packed slot's value there
@@ -60961,6 +60961,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         cmemo.emplace_back(sub, r);
                         return r;
                     };
+                    ++combatpin::t_reads;   // reads scripted_combat_landfall_target (COMBAT-PIN READ WITNESS)
                     const int clt_inh = state.scripted_combat_landfall_target;
                     std::vector<TurnSolver::Plan> clt_extra;
                     for (const TurnSolver::Plan& p : all)
@@ -65023,24 +65024,20 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
         }
     }
-    // ...and the COMBAT LANDFALL-TARGET RANK (2026-10-17): a combat-landfall variant's main phase IS its
-    // base plan's, so without this slot its post-apply state collided with the base's and was skipped as a
-    // duplicate. Its own slot (36), value-gated, and NOT under the lever above: this soundness has no
-    // off switch.
-    if (state.scripted_combat_landfall_target != -1)
-    { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(36) << 40)
-                 ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(state.scripted_combat_landfall_target))); }
     return k;
 }
 // ...and the LAND-SEARCH state pins (Primeval Titan's attack pick, Search for Tomorrow's off-suspend
 // pick, the in-combat Khalni crack): pending and future-determining like every pin above, and a
 // land-search variant IS skippable on this key (PlanIsAxisVariant). Value-gated, own slots. LAST, so
 // the prefix above is shareable (see BuildDedupKeyBeforeLandSearchPins).
-// ...from the three pin VALUES (the put-bounce fold finishes a variant's key it never applied).
-static void FoldLandSearchPinValues(TranspositionTable::Key& k, int attack, int upkeep, int crack)
+// ...from the four pin VALUES (the put-bounce fold finishes a variant's key it never applied).
+// ...and the COMBAT LANDFALL-TARGET RANK (GameState::scripted_combat_landfall_target), the fourth slot: like
+// the attack pick and the crack mask it is a pin a combat-pin variant differs from its base in ONLY, so it
+// belongs to this suffix -- the combat-pin share finishes a sharing variant's key with it.
+static void FoldLandSearchPinValues(TranspositionTable::Key& k, int attack, int upkeep, int crack, int clt)
 {
-    const int lpins[] = { attack, upkeep, crack };
-    for (int i = 0; i < 3; ++i)
+    const int lpins[] = { attack, upkeep, crack, clt };
+    for (int i = 0; i < 4; ++i)
     {
         if (lpins[i] != -1)
         { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 48) << 40)
@@ -65051,7 +65048,7 @@ static void FoldLandSearchStatePins(TranspositionTable::Key& k, const GameState&
 {
     ++combatpin::t_reads;   // reads the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
     FoldLandSearchPinValues(k, state.scripted_attack_land_search, state.scripted_upkeep_land_search,
-                            state.scripted_combat_land_search_crack);
+                            state.scripted_combat_land_search_crack, state.scripted_combat_landfall_target);
 }
 static TranspositionTable::Key BuildDedupKey(const GameState& state)
 {
@@ -69293,7 +69290,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     const PutBounceFold::BaseInfo& bi = put_fold.base_info[pf_b];
                     TranspositionTable::Key vkey = bi.prefix;
-                    FoldLandSearchPinValues(vkey, p.attack_land_search_choice, bi.upkeep, bi.crack);
+                    FoldLandSearchPinValues(vkey, p.attack_land_search_choice, bi.upkeep, bi.crack, bi.clt);
                     if (BpWaveNSkipOn()) { g_bp_cands_last = 0; }
                     if (fsw_chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
                     if (fsw_nobp_here) { g_bp_searchonly_suppressed = false; }
@@ -69446,6 +69443,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 bi.prefix = BuildDedupKeyBeforeLandSearchPins(s);
                 bi.upkeep = s.scripted_upkeep_land_search;
                 bi.crack  = s.scripted_combat_land_search_crack;
+                bi.clt    = s.scripted_combat_landfall_target;
             }
         }
         dig_fold.Record(p, !node_snap.pending, static_cast<int>(&p - pre.data()));
@@ -74439,8 +74437,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     bool         have_prev2   = false;
 
     // ---- COMBAT-PIN MAIN-PHASE SHARE (perf, 2026-10-15) -----------------------------------------
-    // Primeval Titan's attack pick (Plan::attack_land_search_choice) and the in-combat Khalni crack
-    // (Plan::combat_crack_choice) are pins a variant carries into COMBAT: AppendSubdecisionAxes
+    // Primeval Titan's attack pick (Plan::attack_land_search_choice), the in-combat Khalni crack
+    // (Plan::combat_crack_choice) and the combat landfall-target rank (Plan::combat_landfall_target_choice,
+    // joined 2026-10-17 -- same shape, same proof) are pins a variant carries into COMBAT: AppendSubdecisionAxes
     // clones a base plan and changes only those two fields, and ApplyPlanDirect merely writes them
     // into the state for the declare-attackers step. So a variant's MAIN PHASE is its base plan's
     // main phase -- one per Titan pick (~24 per attacking Titan), and on a Titan board those
@@ -74466,7 +74465,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool any_pinned = false;
         for (const Plan& p : candidates)
         {
-            if ((p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0) && p.bounce_group == 0)
+            if ((p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0
+                 || p.combat_landfall_target_choice >= 0) && p.bounce_group == 0)
             { any_pinned = true; break; }
         }
         if (any_pinned)
@@ -74501,19 +74501,23 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             for (std::size_t i = 0; i < candidates.size(); ++i)
             {
                 const Plan& p = candidates[i];
-                if (p.attack_land_search_choice < 0 && p.combat_crack_choice < 0 && p.bounce_group == 0)
+                if (p.attack_land_search_choice < 0 && p.combat_crack_choice < 0
+                    && p.combat_landfall_target_choice < 0 && p.bounce_group == 0)
                 { bases.emplace(masked_hash(p), static_cast<int>(i)); }
             }
             for (std::size_t i = 0; i < candidates.size(); ++i)
             {
                 Plan& v = candidates[i];
-                if (v.attack_land_search_choice < 0 && v.combat_crack_choice < 0) { continue; }
+                if (v.attack_land_search_choice < 0 && v.combat_crack_choice < 0
+                    && v.combat_landfall_target_choice < 0) { continue; }
                 if (v.bounce_group != 0) { continue; }
                 const int a = v.attack_land_search_choice;
                 const int c = v.combat_crack_choice;
+                const std::int8_t clt = v.combat_landfall_target_choice;
                 const bool w0 = v.bp_wave0;
-                v.attack_land_search_choice = -1;
-                v.combat_crack_choice       = -1;
+                v.attack_land_search_choice    = -1;
+                v.combat_crack_choice          = -1;
+                v.combat_landfall_target_choice = -1;
                 int b = -1;
                 const auto rng = bases.equal_range(masked_hash(v));
                 for (auto it = rng.first; it != rng.second; ++it)
@@ -74526,9 +74530,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     v.bp_wave0 = q.bp_wave0;
                     if (it->second < static_cast<int>(i) && q == v) { b = it->second; break; }
                 }
-                v.attack_land_search_choice = a;
-                v.combat_crack_choice       = c;
-                v.bp_wave0                  = w0;
+                v.attack_land_search_choice    = a;
+                v.combat_crack_choice          = c;
+                v.combat_landfall_target_choice = clt;
+                v.bp_wave0                     = w0;
                 if (b >= 0) { cp_base_of[i] = b; cp_is_base[static_cast<std::size_t>(b)] = 1; }
             }
         }
@@ -75349,6 +75354,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     { copy.scripted_attack_land_search = plan.attack_land_search_choice; }
                     if (plan.combat_crack_choice >= 0)
                     { copy.scripted_combat_land_search_crack = plan.combat_crack_choice; }
+                    if (plan.combat_landfall_target_choice >= 0)
+                    { copy.scripted_combat_landfall_target = plan.combat_landfall_target_choice; }
                     g_cpshare_used.fetch_add(1, std::memory_order_relaxed);
                 }
                 else
