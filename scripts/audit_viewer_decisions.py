@@ -1465,6 +1465,19 @@ DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\n(.*?)\n<<<END_DECISION>>>", re.S)
 RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 
 
+# STATE-GATED decision types: (param, type) -> why a sweep that CASTS the card still never sees the
+# decision, and the unit test that proves it is wired. The Boros Garrison / Stingscourger lesson (see the
+# ESCALATE note in the diff) and the life-gated activation exemption above, for a decision whose gate the
+# targeted seed-search cannot reach either: a forward driver can only cast cards, it cannot stock a
+# graveyard. Keep this list SHORT and every entry backed by a test that exercises the human chooser.
+STATE_GATED_TYPES = {
+    ("etb_return_equipment_from_gy", "dig"):
+        "Forge Anew asks only with TWO OR MORE Equipment in the graveyard (one is a forced pick, none has no "
+        "target), and Equipment almost never reaches this list's graveyard; the multi-card prompt is pinned by "
+        "test/unit/test_forge_anew.cpp 'Forge Anew (human): the dig chooser shows the graveyard ...'",
+}
+
+
 def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_side=False):
     names = set()
     if deck_path.lower().endswith(".cod"):
@@ -2082,7 +2095,7 @@ def main():
             return 1
 
     # ---- diff -------------------------------------------------------------
-    hard_miss, unverified = [], []
+    hard_miss, unverified, gated = [], [], []
     joined = " ".join(cast_text)
     for name, exp in per_card.items():
         missing = exp - obs_types
@@ -2090,8 +2103,18 @@ def main():
             continue
         # Did the sweep actually cast this card? (heuristic: card name appears in a summary)
         cast = name.lower() in joined
+        params = next(((c.get("parameters") or {}) for c in cards if c.get("name") == name), {})
         for m in missing:
+            why = next((r for (k, t), r in STATE_GATED_TYPES.items() if t == m and params.get(k)), None)
+            if cast and why:
+                gated.append((name, m, why))
+                continue
             (hard_miss if cast else unverified).append((name, m, cast))
+    if gated:
+        print("\nSTATE-GATED (soft): cast, but the decision exists only in a board state a forward sweep "
+              "of this list does not reach; each is pinned by the unit test named:")
+        for name, m, why in gated:
+            print(f"  {name}: expected '{m}' -> {why}")
 
     # ESCALATE before accusing. "The sweep cast this card and the type never appeared" is NOT the
     # same as "a human cannot reach the decision" -- and conflating them made this gate cry wolf on

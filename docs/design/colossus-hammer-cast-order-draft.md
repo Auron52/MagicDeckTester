@@ -50,3 +50,27 @@ casts. Speaker's token activation is ALSO offered in the narrow post-combat main
    land on a creature Lizard; the alternative is Lizard with the other Equipment (slot 7).
 2. Should Forge Anew precede Sigarda's Aid when the graveyard holds no Equipment? (It does not matter
    then — the draft keeps one fixed slot for simplicity.)
+
+## Measurement (2026-10-17, PGO binary of `8c1de4465`, ONE pooled batch, heurarm arms per job)
+
+Held-out seeds (13100001+, disjoint from every suite seed), every arm the same games, loss = 9, paired per
+game, diff = draft - generic (negative = faster). Script: `build/scratch/colossus/order_ab/make_ab.py`.
+
+| cell | n | generic | draft | diff (se) | faster / slower | search units |
+|---|---|---|---|---|---|---|
+| play settings (d5 b20) | 3000 | 3.7917 | 3.7387 | **-0.0530** (.0043) | 160 / 2 | 0.944x |
+| d3 b10 | 4000 | 3.8185 | 3.7630 | **-0.0555** (.0038) | 219 / 3 | 0.948x |
+| d0 | 20000 | 5.0282 | 4.9804 | **-0.0478** (.0025) | 512 / 16 | -- |
+| 2HG play settings | 1000 | 4.4500 | 4.4040 | **-0.0460** (.0071) | 49 / 3 | 0.965x |
+
+**Every searched slower game recovers** (the adoption bar): all at stage 1 (same depth, budget 100) except
+s13102419 (play cell, T5 -> T7), which recovers at stage 2 (d8, unlimited budget: T5).
+
+**WHY it wins (the mechanism, from the logs and claude-play seed 2100014):** under the generic order Sigarda's
+Aid and every Equipment tie at rank 20 and fall to PLAN order, which casts the Equipment first -- so the Aid
+is not on the battlefield when the Hammer enters and its attach trigger never fires. "Aid, then Hammer
+onto a host" is the deck's cheapest kill (T2 off Kor Duelist + {W} + {1}) and under the generic order it is
+**unfindable at any depth or budget** (seed 2100014: generic T3 at d1..d5 unlimited; draft T2). Slot 2 (Aid
+before every Equipment) is the slot that matters; the rest of the draft is tie-break.
+
+**Status: still OFF.** Adoption is the USER's call; the measurement recommends adopting the draft as written.
