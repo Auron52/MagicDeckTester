@@ -65710,7 +65710,61 @@ static bool PositionPrefixChoiceMayAddMana(const GameState& state, const TurnSol
     return (PlanOpensBreakpoint(state, p) & ~(1 << 9)) != 0;
 }
 
+static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const GameState& state,
+                                                                    bool is_pre_combat);
+static const char* PlanDumpKindName(Action::Kind k);
+static const char* PlanDumpModeName(PermAbilityMode m);
+static std::string VampDumpAction(const Action& a)
+{
+    std::string s = PlanDumpKindName(a.kind);
+    if (a.kind == Action::Kind::ActivatePermAbility) { s += std::string("/") + PlanDumpModeName(a.ability_mode); }
+    if (a.kind == Action::Kind::ActivatePump) { s += "/m" + std::to_string(a.gy_exile_mode); }
+    s += ":" + a.card_name.str();
+    if (a.sac_source_id) { s += "@" + std::to_string(a.sac_source_id); }
+    if (!a.discard_name.empty()) { s += " D=" + a.discard_name.str(); }
+    if (a.madness_choice >= 0) { s += " M" + std::to_string((int)a.madness_choice) + "." + std::to_string((int)a.madness_arm); }
+    if (a.sac_victim_id) { s += " V#" + std::to_string(a.sac_victim_id); }
+    if (!a.victim_name.empty()) { s += " V~" + a.victim_name.str(); }
+    if (a.convoke_green || a.convoke_other) { s += " C" + std::to_string(a.convoke_green) + "/" + std::to_string(a.convoke_other) + "+" + std::to_string((int)a.convoke_plan_pip) + "/" + std::to_string((int)a.convoke_plan_other); }
+    if (a.vamp_casts_needed) { s += " k" + std::to_string((int)a.vamp_casts_needed); }
+    if (a.steal_spec) { s += " S" + std::to_string(a.enchant_target) + "/" + StealSpecText(a.steal_spec); }
+    if (a.chosen_x) { s += " x" + std::to_string(a.chosen_x); }
+    if (a.equiv_tag) { s += " e" + std::to_string(a.equiv_tag) + "." + std::to_string(a.equiv_ord); }
+    return s;
+}
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
+                                                                    bool is_pre_combat)
+{
+    std::vector<TurnSolver::Plan> all = EnumeratePlansWithLandUncachedBody(state, is_pre_combat);
+    // MTG_VAMP_PLAN_DUMP=<min plans> (inert by default; Vampires Stage 5f): print every enumeration of at
+    // least that many plans -- turn, phase, hand, our board, and each plan with its Vampires pins (discard,
+    // madness, victim, convoke arm, Blood k, steal spec, breakpoint choice) -- at most MTG_VAMP_PLAN_DUMP_N
+    // (default 20) times per process. Single-threaded runs only.
+    static const int s_min = EnvInt("MTG_VAMP_PLAN_DUMP", 0);
+    static std::atomic<int> s_left{EnvInt("MTG_VAMP_PLAN_DUMP_N", 20)};
+    if (s_min > 0 && static_cast<int>(all.size()) >= s_min && s_left.fetch_sub(1) > 0)
+    {
+        const Player& ap = state.ActivePlayer();
+        std::string h, b;
+        for (const Card& c : ap.hand) { h += c.m_name.str() + (c.m_is_staged ? "(st)" : "") + "; "; }
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index == state.active_player_index) { b += q.card.m_name.str() + "#" + std::to_string(q.card.m_number) + (q.tapped ? "(T)" : "") + "; "; } }
+        std::fprintf(stderr, "[vamp-dump] T%d %s plans=%zu search=%d opp=%d lands_played=%d\n  hand: %s\n  bf: %s\n",
+                     state.turn_number, is_pre_combat ? "m1" : "m2", all.size(), g_search_candidate_enum ? 1 : 0,
+                     state.players[1 - state.active_player_index].life, ap.lands_played_this_turn, h.c_str(), b.c_str());
+        for (const TurnSolver::Plan& p : all)
+        {
+            std::string s;
+            if (!p.land_to_play.empty()) { s += "Land:" + p.land_to_play; }
+            for (const Action& a : p.actions) { if (!s.empty()) { s += " + "; } s += VampDumpAction(a); }
+            if (p.bp_choice >= 0) { s += " | bp" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at); }
+            if (p.combat_transform_choice >= 0) { s += " | ctx" + std::to_string((int)p.combat_transform_choice); }
+            std::fprintf(stderr, "    %s\n", s.empty() ? "(pass)" : s.c_str());
+        }
+    }
+    return all;
+}
+static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const GameState& state,
                                                                     bool is_pre_combat)
 {
     RevealLogPause _rlp_enum;   // candidate scoring is hypothetical -- see EnumeratePlans
@@ -78594,6 +78648,63 @@ static bool LaNestedBailOn()
     return heurarm::Flag(heurarm::LA_NESTED_BAIL, env);
 }
 
+// ---- MTG_VAMP_CAND_CENSUS (inert by default; Vampires Stage 5f, docs/design/vampires-search-cost.md) ----
+// WHAT THE la_cand UNITS BUY: every candidate SolveWithLookahead charges a unit for is classified by the
+// Vampires axes it carries (main 1 / 2, a breakpoint variant, Falkenrath Pit Fighter, Stromkirk Condemned,
+// a madness cast, a second-main discard-only pump, Blood, steal / transform, a convoke arm) and the masks
+// are printed at exit, largest first. Single-threaded runs read cleanly; the counters are process-wide.
+// It is how the post-combat discard-pump fold (subset rule 9) was found: 24.8% of a slow game's units.
+namespace vampcand
+{
+    inline std::atomic<long long> g_n[512];
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            static const bool on = EnvOn("MTG_VAMP_CAND_CENSUS");
+            if (!on) { return; }
+            long long tot = 0;
+            for (int i = 0; i < 512; ++i) { tot += g_n[i].load(); }
+            std::fprintf(stderr, "[vamp-cand] total=%lld  (bits: m1 bp pitf cond madcast condM0m2 blood steal/xf convoke)\n", tot);
+            std::vector<std::pair<long long, int>> v;
+            for (int i = 0; i < 512; ++i) { if (g_n[i].load()) { v.push_back({ g_n[i].load(), i }); } }
+            std::sort(v.rbegin(), v.rend());
+            for (const auto& e : v)
+            {
+                const int m = e.second;
+                std::fprintf(stderr, "[vamp-cand] %9lld %5.1f%%  %s%s%s%s%s%s%s%s%s\n", e.first, 100.0 * e.first / std::max(1LL, tot),
+                             (m & 1) ? "m1 " : "m2 ", (m & 2) ? "bp " : "", (m & 4) ? "pitf " : "", (m & 8) ? "cond " : "",
+                             (m & 16) ? "madcast " : "", (m & 32) ? "condM0m2 " : "", (m & 64) ? "blood " : "",
+                             (m & 128) ? "steal/xf " : "", (m & 256) ? "convoke " : "");
+            }
+        }
+    };
+    inline Dumper g_dumper;
+}
+static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
+{
+    static const bool on = EnvOn("MTG_VAMP_CAND_CENSUS");
+    if (!on) { return; }
+    int m = is_pre_combat ? 1 : 0;
+    if (plan.bp_choice >= 0) { m |= 2; }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::SacCreatureOutlet && !a.discard_name.empty()) { m |= 4; }
+        if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4)
+        {
+            m |= 8;
+            if (!is_pre_combat && a.madness_choice <= 0) { m |= 32; }
+        }
+        if (a.madness_choice >= 1) { m |= 16; }
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && (a.ability_mode == Action::AbilityMode::TapBlood || a.ability_mode == Action::AbilityMode::BloodDraw)) { m |= 64; }
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && (a.ability_mode == Action::AbilityMode::TapSubtypeSteal || a.ability_mode == Action::AbilityMode::TransformSelf)) { m |= 128; }
+        if (a.kind == Action::Kind::CastFromHand && (a.convoke_green || a.convoke_other)) { m |= 256; }
+    }
+    vampcand::g_n[m].fetch_add(1, std::memory_order_relaxed);
+}
+
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
                                                   SearchBudget* budget, bool enforce_budget,
@@ -79720,6 +79831,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             pbsite::Note(is_pre_combat ? pbsite::kLaPre : pbsite::kLaPost, plan, budget);
             cantripattr::Scope _cas(cantripattr::AxisOf(plan));   // MTG_CANTRIP_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
+            VampCandCensus(plan, is_pre_combat);
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
