@@ -114,13 +114,13 @@
    "total_core_ms": 50178,
    "worst_case": "fluctuator_regression_d3_s2002"
   },
-  "fungusv2": {
+  "fungusv3": {
    "cost_per_game_ms": 89.76,
    "jobs": 5,
-   "key": "fungusv2",
+   "key": "fungusv3",
    "tier": "regression",
    "total_core_ms": 59724,
-   "worst_case": "fungusv2_regression_d5_s2002"
+   "worst_case": "fungusv3_regression_d5_s2002"
   },
   "galadriel": {
    "cost_per_game_ms": 2969.1,

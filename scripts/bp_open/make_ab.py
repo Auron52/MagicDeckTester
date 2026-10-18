@@ -18,8 +18,7 @@ from collections import defaultdict
 # primary checkout.
 PRIMARY = os.environ.get("BP_DATA_ROOT", "/workspaces/MagicDeckTester")
 ALL_DECKS = [  # (key, deck, profile) -- test/regression_cases.sh DECK_FILE / DECK_PROF, in that order
-    ("fungus", "decks/Fungus/Fungus.cod", "decks/Fungus/Fungus.profile.json"),
-    ("fungusb", "decks/Fungus/candidate-b-2026-09/Fungus.cod", "decks/Fungus/candidate-b-2026-09/Fungus.profile.json"),
+    ("fungusv3", "decks/Fungus/Fungus.cod", "decks/Fungus/Fungus.profile.json"),
     ("slivers", "decks/slivers_vial/slivers_vial.txt", "decks/slivers_vial/slivers_vial.profile.json"),
     ("burn", "decks/burn/burn.txt", "decks/burn/burn.profile.json"),
     ("th", "decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),

@@ -24,13 +24,13 @@ declare -A DECK_FILE=(
   # key at the NEW list would have silently diffed a different deck against v1's ground truth, which
   # is the +2.2620 repoint. It stays until the new list's own artifacts are generated and validated,
   # then it is removed with its GT keys.
-  # fungusv2: THE SHIPPED LIST (adopted 2026-10-16). 39-round screen, ~1.06M games; beats the
+  # fungusv3: THE SHIPPED LIST (adopted 2026-10-16). 39-round screen, ~1.06M games; beats the
   # candidate-b base by -0.4697 std / -0.5817 2hg on four disjoint seed blocks. The retiring
   # incumbent (v1) and the losing candidate (candidate-b) are ARCHIVED, not mapped: their rows and
   # GT keys come out with this change, per the kitty v3 promotion precedent. Both decklists remain
   # at decks/Fungus/v1-sporesower-shelldweller/ and decks/Fungus/candidate-b-2026-09/ with their
   # own fitted artifacts, so either can be restored to the suite as its own key if ever needed.
-  [fungusv2]=decks/Fungus/Fungus.cod
+  [fungusv3]=decks/Fungus/Fungus.cod
   [slivers]=decks/slivers_vial/slivers_vial.txt
   [burn]=decks/burn/burn.txt
   [th]=decks/treasure_hunt/treasure_hunt.txt
@@ -71,7 +71,7 @@ declare -A DECK_FILE=(
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
 )
 declare -A DECK_PROF=(
-  [fungusv2]=decks/Fungus/Fungus.profile.json
+  [fungusv3]=decks/Fungus/Fungus.profile.json
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
   [burn]=decks/burn/burn.profile.json
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
@@ -124,19 +124,19 @@ SMOKE_CASES=(
   # 2.6x snow. Smoke makespan 71s -> 112s, regression 159s -> 318s; both well inside their 15 min /
   # 45 min budgets, which is why it goes in now and the cost is an optimization target rather than
   # a blocker (USER: "Fungus should be in the suite unless there is a performance blocker").
-  # fungusv2 takes the retiring incumbent's FULL sizing, which is exactly what the fungusb note
+  # fungusv3 takes the retiring incumbent's FULL sizing, which is exactly what the fungusb note
   # below anticipated ("re-sizing upward is fair game once the list is adopted and the incumbent's
   # cases come out"). Net effect on every tier is a SAVING: two Fungus lists leave, one arrives.
-  "fungusv2  0 1001 1000 0"
-  "fungusv2  3 1001  150 10"
-  "fungusv2  5 1001   75 20"
-  # fungusv22hg: the searched d3 2HG canary every deck is supposed to have (regression-testing
+  "fungusv3  0 1001 1000 0"
+  "fungusv3  3 1001  150 10"
+  "fungusv3  5 1001   75 20"
+  # fungusv32hg: the searched d3 2HG canary every deck is supposed to have (regression-testing
   # skill, "2HG variant cases"), 50 games, SMOKE ONLY -- same shape as kittyv32hg_smoke_d3_s1001.
   # This archetype had NO 2HG coverage in ANY tier before today, which was a real hole rather than
   # a sizing choice: the list adoption reads std and 2HG as CO-EQUAL, and this deck's whole 2HG
   # edge runs through Beastmaster Ascension (4->2 costs +0.0214 std but +0.1321 2hg), so a change
   # that broke 2HG play here would have moved nothing the suite watches.
-  "fungusv22hg 3 1001 50 10"
+  "fungusv32hg 3 1001 50 10"
   # fungusb (adoption candidate): HALF the incumbent's searched counts, deliberately. The point of
   # these cases is a DIGEST that tracks this list's play through the multi-day mulligan generation --
   # a digest does that at any game count, while the per-game cost here is ~14x the incumbent's
@@ -557,11 +557,11 @@ REGRESSION_CASES=(
   # The GATED figure is test/suite_cost.json (refill with `suite_gate.py --measure-all` off ONE pooled
   # tier run, never a per-deck loop). See docs/design/fungus-token-search-cost.md and
   # docs/design/fungus-slow-rollout-diagnosis-2026-09-30.md.
-  "fungusv2  0 2002 1000 0"
-  "fungusv2  3 2002  200 10"
-  "fungusv2  3 3003  200 10"
-  "fungusv2  5 2002  100 20"
-  "fungusv2  5 3003  100 20"
+  "fungusv3  0 2002 1000 0"
+  "fungusv3  3 2002  200 10"
+  "fungusv3  3 3003  200 10"
+  "fungusv3  5 2002  100 20"
+  "fungusv3  5 3003  100 20"
   "slivers 0 2002 1000 0"
   "slivers 3 2002  400 10"
   "slivers 3 3003  400 10"
@@ -826,18 +826,18 @@ OVERNIGHT_CASES=(
   # (Superseded guidance kept below for the record:) EXPAND to the full set just BEFORE the keep table is
   # adopted, re-accepting these keys table-ABSENT first so the adoption diff is like-for-like -- a GT
   # key does not encode the game count, so a resize re-defines an existing key.
-  "fungusv2  0  4004 2000 0"
-  "fungusv2  0  6006 2000 0"
-  "fungusv2  0  8008 2000 0"
-  "fungusv2  0 10010 2000 0"
-  "fungusv2  3  4004 1000 20"
-  "fungusv2  3  5005 1000 20"
-  "fungusv2  3  6006 1000 20"
-  "fungusv2  3  7007 1000 20"
-  "fungusv2  5  4004  500 40"
-  "fungusv2  5  5005  500 40"
-  "fungusv2  5  6006  500 40"
-  "fungusv2  5  7007  500 40"
+  "fungusv3  0  4004 2000 0"
+  "fungusv3  0  6006 2000 0"
+  "fungusv3  0  8008 2000 0"
+  "fungusv3  0 10010 2000 0"
+  "fungusv3  3  4004 1000 20"
+  "fungusv3  3  5005 1000 20"
+  "fungusv3  3  6006 1000 20"
+  "fungusv3  3  7007 1000 20"
+  "fungusv3  5  4004  500 40"
+  "fungusv3  5  5005  500 40"
+  "fungusv3  5  6006  500 40"
+  "fungusv3  5  7007  500 40"
   "slivers 0 4004 2000 0"
   "slivers 0  6006 2000 0"
   "slivers 0  8008 2000 0"

@@ -7,10 +7,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-fungusv2_smoke_d0_s1001=5.3520/4193485423f6f812
-fungusv2_smoke_d3_s1001=4.5267/0073191c5120a559
-fungusv2_smoke_d5_s1001=4.5067/1f0a3dbcf1a774d4
-fungusv22hg_smoke_d3_s1001=4.8400/e51424bca4b5f7c7
+fungusv3_smoke_d0_s1001=5.3520/4193485423f6f812
+fungusv3_smoke_d3_s1001=4.5267/0073191c5120a559
+fungusv3_smoke_d5_s1001=4.5067/1f0a3dbcf1a774d4
+fungusv32hg_smoke_d3_s1001=4.8400/e51424bca4b5f7c7
 slivers_smoke_d0_s1001=4.6530/48022af0fb5c16f4
 slivers_smoke_d3_s1001=4.2440/032dc5c7e1115fd2
 slivers_smoke_d5_s1001=4.1867/145078195f97d144
@@ -137,11 +137,11 @@ colossus_smoke_d3_s1001=3.2533/3fccee818433ea10
 colossus_smoke_d5_s1001=3.2133/2f155b640caca7f2
 
 # --- regression ---
-fungusv2_regression_d0_s2002=5.3740/3e4466ecbee3860b
-fungusv2_regression_d3_s2002=4.5450/2b64b198c45c44dd
-fungusv2_regression_d3_s3003=4.5750/b028e948a9e93f76
-fungusv2_regression_d5_s2002=4.5500/e779bb71ffa6da52
-fungusv2_regression_d5_s3003=4.6100/a5dc6a95fb07b404
+fungusv3_regression_d0_s2002=5.3740/3e4466ecbee3860b
+fungusv3_regression_d3_s2002=4.5450/2b64b198c45c44dd
+fungusv3_regression_d3_s3003=4.5750/b028e948a9e93f76
+fungusv3_regression_d5_s2002=4.5500/e779bb71ffa6da52
+fungusv3_regression_d5_s3003=4.6100/a5dc6a95fb07b404
 slivers_regression_d0_s2002=4.6880/f65eab993476143d
 slivers_regression_d3_s2002=4.2200/954ce1d81cfffb5c
 slivers_regression_d3_s3003=4.2500/1c4f958c6afd149a
@@ -317,18 +317,18 @@ colossus_regression_d5_s2002=3.4133/13a4d6f6acc3731f
 colossus_regression_d5_s3003=3.4400/fd10158d8dd88d0e
 
 # --- overnight ---
-fungusv2_overnight_d0_s4004=5.3810/218363fba321b400
-fungusv2_overnight_d0_s6006=5.3520/a726a3f2dabf9a22
-fungusv2_overnight_d0_s8008=5.3510/0496037d673cf4ab
-fungusv2_overnight_d0_s10010=5.3730/1ac676cdc32a2106
-fungusv2_overnight_d3_s4004=4.6250/51adf5f18a37015f
-fungusv2_overnight_d3_s5005=4.5625/4929bda5f6fc1757
-fungusv2_overnight_d3_s6006=4.5575/eee2c4066013cdfc
-fungusv2_overnight_d3_s7007=4.6075/eff9ac0f1e5c8cb6
-fungusv2_overnight_d5_s4004=4.6533/8588a12eda566291
-fungusv2_overnight_d5_s5005=4.5567/eb6f770b1336f1ab
-fungusv2_overnight_d5_s6006=4.5633/19c74a7de40844ea
-fungusv2_overnight_d5_s7007=4.5667/fc9aa31736aacf7b
+fungusv3_overnight_d0_s4004=5.3810/218363fba321b400
+fungusv3_overnight_d0_s6006=5.3520/a726a3f2dabf9a22
+fungusv3_overnight_d0_s8008=5.3510/0496037d673cf4ab
+fungusv3_overnight_d0_s10010=5.3730/1ac676cdc32a2106
+fungusv3_overnight_d3_s4004=4.6250/51adf5f18a37015f
+fungusv3_overnight_d3_s5005=4.5625/4929bda5f6fc1757
+fungusv3_overnight_d3_s6006=4.5575/eee2c4066013cdfc
+fungusv3_overnight_d3_s7007=4.6075/eff9ac0f1e5c8cb6
+fungusv3_overnight_d5_s4004=4.6533/8588a12eda566291
+fungusv3_overnight_d5_s5005=4.5567/eb6f770b1336f1ab
+fungusv3_overnight_d5_s6006=4.5633/19c74a7de40844ea
+fungusv3_overnight_d5_s7007=4.5667/fc9aa31736aacf7b
 slivers_overnight_d0_s4004=4.6540/9dd76cf4a01e3493
 slivers_overnight_d0_s6006=4.6560/538bfc056828ebfb
 slivers_overnight_d0_s8008=4.6375/781e664a3095276f
