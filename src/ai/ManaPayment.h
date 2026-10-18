@@ -331,6 +331,21 @@ void ApplyAttachSpellDependencyOrder(const std::vector<Action>& actions, std::ve
 // shape). The explicit route plays a searched order verbatim, so the fix above never reaches it.
 bool OrderingPlacesAttachSpellBeforeTarget(const std::vector<Action>& acts);
 
+// ---- CONVOKE ARRIVAL DEPENDENCY ORDER (Markov Baron; Vampires sweep item B) -- STRUCTURAL -----------
+// A creature-spell convoke cast whose arm counts bodies the SAME plan puts onto the battlefield first
+// (Action::convoke_plan_pip / convoke_plan_other: that many pip-coloured / other creature arrivals --
+// hand casts and Vial puts of creatures) must be cast AFTER those arrivals, or its bodies do not exist
+// and the cast taps fewer (pays more, or drops). A legality constraint on the realised order of that
+// variant, the attach-spell precedent: each such cast moves to just after the earliest position where
+// enough arrivals of each class precede it (minimal displacement, stable otherwise). Arms with no plan
+// need -- every other deck, every other Baron arm -- are untouched (no-op). Both forms of
+// ApplyPayableCastOrder end with it, after the attach dependency.
+void ApplyConvokeArrivalDependencyOrder(const std::vector<Action>& actions, std::vector<int>& order);
+// True iff `acts`, IN THIS ORDER, cast a plan-body convoke arm before the arrivals it counts on -- the
+// human-play / searched cast-ORDERING expansion drops such an ordering (the explicit route plays it
+// verbatim, so the fix above never reaches it).
+bool OrderingPlacesConvokeBeforeArrivals(const std::vector<Action>& acts);
+
 // ---- The EXACT order walk (docs/design/dragonstorm-user-cast-order.md) ------------------------
 // FirstUnpayablePos's walk plus the four SAME-TURN terms a ritual-combo turn's order turns on, every
 // one POSITIONAL (it depends on what was cast before it in this order, which a stamped Action::cost /

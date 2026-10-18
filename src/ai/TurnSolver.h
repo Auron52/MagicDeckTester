@@ -451,6 +451,13 @@ struct Action
     std::int8_t madness_choice = -1;
     std::int8_t madness_arm    = 0;
     std::int8_t madness_mv     = 0;
+    // VAMPIRES sweep item B (2026-10-18): a CREATURE-SPELL convoke arm (Markov Baron) that counts bodies
+    // the SAME plan puts onto the battlefield first -- this many pip-coloured / other creature arrivals
+    // (hand casts, Vial puts) must precede the cast (the subset rule requires them; ConvokeArrivalsFirst
+    // orders the cast after them in both worlds). They are INCLUDED in convoke_green / convoke_other.
+    // 0 for every other action (and every other deck).
+    std::int8_t convoke_plan_pip   = 0;
+    std::int8_t convoke_plan_other = 0;
     int         gy_exile_mode  = 0;    // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
                                        // loses N (Deathrite {B}); 2 = exile creature -> gain N ({G}).
     int         loyalty_ability = -1;  // ActivateLoyalty: index into the walker's loyalty_abilities.
@@ -490,6 +497,9 @@ struct Action
                                        // only), so the payment machinery is untouched; the apply
                                        // pre-pass (ApplyConvokeTaps, both worlds) taps the actual
                                        // bodies -- deterministic shared order, free bodies first.
+                                       // A CREATURE spell (Markov Baron: "green" = its PIP colour)
+                                       // taps AT THE CAST instead (ConvokeCastTaps, SpellEffects.h)
+                                       // and is reduced by the bodies ACTUALLY tapped.
     int         soulfire_own_targets = 0;
                                        // Soulfire Eruption: searched COUNT of own creatures to add
                                        // as extra targets (0..#own creatures). CollectActions emits
@@ -2551,6 +2561,12 @@ public:
     // and this returns immediately when every rank is 0 -- so no list is copied, no sort runs, and
     // every deck that declares no order is byte-identical.
     static void OrderTrailingActivations(const GameState& state, std::vector<Action>& acts);
+    // The Vampires sweep subset rules, exposed for the unit tests (a human-play selection cannot be
+    // built there -- HumanPlayActive() is a process static): rule 7 = SubsetConvokeBodiesInvalid (the
+    // convoke body books, items A / B), rule 8 = SubsetDiscardOutletsUnpayable (every discard outlet
+    // can discard in the executed order, items E / J). True = the selection is rejected.
+    static bool VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
+                                           const std::vector<int>& sel, int rule);
     // VAMPIRES B: does the pass hold a count-READING activation (Captivating Vampire's steal, Bloodline
     // Keeper's transform)? Then OrderTrailingActivations applies the engine's COUNT BANDS (raisers ->
     // the steal -> the transform -> creature sacrifices) ahead of the provider rank, and both trailing

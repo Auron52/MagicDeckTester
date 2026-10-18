@@ -4229,11 +4229,83 @@ bool OrderingPlacesAttachSpellBeforeTarget(const std::vector<Action>& acts)
     return fixed != order;
 }
 
+// The convoke dependency's two predicates (ManaPayment.h). An ARRIVAL = a creature the action puts onto
+// the battlefield in the cast section: a hand cast (not bestowed / an adventure / a sacrifice-land cast)
+// or a Vial put, of a creature card; `pip` decides its colour class.
+static bool ConvokeNeedsArrivals(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && (a.convoke_plan_pip > 0 || a.convoke_plan_other > 0);
+}
+static int ConvokeArrivalClass(const Action& a, Color pip)   // 1 = pip colour, 2 = other, 0 = none
+{
+    const bool cast = a.kind == Action::Kind::CastFromHand && !a.bestow && !a.adventure && !a.sacrifice_land;
+    if (!cast && a.kind != Action::Kind::ActivateVial) { return 0; }
+    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr || !d->card.IsCreature()) { return 0; }
+    return d->card.HasColor(pip) ? 1 : 2;
+}
+// The earliest position (an index into `order`, the cast then goes AT it, i.e. after order[0..pos-1])
+// at which `order[p]`'s plan need is met by the arrivals before it, ignoring itself; order.size() if
+// never (it then goes last -- the cast taps what is there).
+static std::size_t ConvokeNeedMetAt(const std::vector<Action>& acts, const std::vector<int>& order, std::size_t p)
+{
+    const Action& c = acts[static_cast<std::size_t>(order[p])];
+    const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+    const Color pip = cd != nullptr ? ConvokePipColor(*cd) : Color::Black;
+    int np = c.convoke_plan_pip, no = c.convoke_plan_other;
+    if (np <= 0 && no <= 0) { return 0; }
+    for (std::size_t q = 0; q < order.size(); ++q)
+    {
+        if (q == p) { continue; }
+        const int cls = ConvokeArrivalClass(acts[static_cast<std::size_t>(order[q])], pip);
+        if (cls == 1) { --np; } else if (cls == 2) { --no; }
+        if (np <= 0 && no <= 0) { return q + 1; }
+    }
+    return order.size();
+}
+
+void ApplyConvokeArrivalDependencyOrder(const std::vector<Action>& acts, std::vector<int>& order)
+{
+    bool any = false;
+    for (int i : order) { if (ConvokeNeedsArrivals(acts[static_cast<std::size_t>(i)])) { any = true; break; } }
+    if (!any) { return; }
+    for (std::size_t guard = 0; guard <= order.size() * order.size(); ++guard)
+    {
+        bool moved = false;
+        for (std::size_t p = 0; p < order.size() && !moved; ++p)
+        {
+            if (!ConvokeNeedsArrivals(acts[static_cast<std::size_t>(order[p])])) { continue; }
+            const std::size_t at = ConvokeNeedMetAt(acts, order, p);   // a position in the ORIGINAL order
+            if (at <= p) { continue; }                                    // its arrivals already precede it
+            const int v = order[p];
+            order.erase(order.begin() + static_cast<std::ptrdiff_t>(p));
+            // After the erase every position past p shifted down by one: `at` (exclusive) -> at - 1.
+            const std::size_t ins = std::min(order.size(), at - 1);
+            order.insert(order.begin() + static_cast<std::ptrdiff_t>(ins), v);
+            moved = ins != p;
+        }
+        if (!moved) { return; }
+    }
+}
+
+bool OrderingPlacesConvokeBeforeArrivals(const std::vector<Action>& acts)
+{
+    std::vector<int> order(acts.size());
+    for (std::size_t i = 0; i < acts.size(); ++i) { order[i] = static_cast<int>(i); }
+    for (std::size_t p = 0; p < order.size(); ++p)
+    {
+        if (!ConvokeNeedsArrivals(acts[p])) { continue; }
+        if (ConvokeNeedMetAt(acts, order, p) > p) { return true; }
+    }
+    return false;
+}
+
 void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
 {
     if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); }
     else { PayableCastOrderCore(state, acts, order, nullptr, 0, /*site=*/0); }
     ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
+    ApplyConvokeArrivalDependencyOrder(acts, order);   // structural (Vampires item B)
 }
 
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& acts,
@@ -4243,6 +4315,7 @@ void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& 
     if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); }
     else { PayableCastOrderCore(state, acts, order, &hand_exits, extra_wild, /*site=*/1); }
     ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
+    ApplyConvokeArrivalDependencyOrder(acts, order);   // structural (Vampires item B)
 }
 
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,
