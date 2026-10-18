@@ -12034,8 +12034,11 @@ static bool SubsetHasComboRouteWithOthers(const std::vector<Action>& cands, cons
 //      plan casts / puts (needs_cast_mask bit1 + victim_name) with no such cast / put -> a no-op.
 //   3. THE WRONG BLOOD COST VARIANT: Voldaren Estate's TapBlood variant k (Action::vamp_casts_needed:
 //      k exact, or k+16 = "k or more" on the top variant) must match the number of Vampire creatures
-//      the selection adds before its trailing pass. Exactly ONE variant survives per selection -- the
-//      one whose books equal the true activation cost (a looser variant is the same line over-priced).
+//      the selection adds BEFORE THAT ACTIVATION RUNS in the executed order (VampArrivalsBeforeBlood:
+//      the cast section's casts / Vial puts, then every trailing activation TurnSolver::TrailingRunsBefore
+//      places ahead of it -- a Bloodline Keeper token tap, a madness cast, a steal -- net of a sacrifice
+//      of one; defect M, 2026-10-18). Exactly ONE variant survives per selection -- the one whose books
+//      equal the true activation cost (a looser variant is the same line over-priced).
 //   4. (odometer positions only -- a constructed line has no enumerated twin) TWO IDENTICAL Stromkirk
 //      Condemned in a NON-CANONICAL assignment: copies whose LandfallTargetFoldKey matches are the same
 //      permanent up to their number, so "#1 discards A, #2 discards B" and "#1 discards B, #2 discards
@@ -12237,13 +12240,126 @@ static bool SubsetPostCombatPumpDiscardDominated(const GameState& state, const s
     return true;
 }
 
+static bool BloodVariantMismatch(const GameState& state, const std::vector<Action>& cands,
+                                 const std::vector<int>& sel, std::size_t pi);   // rule 3, below
 bool TurnSolver::VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
                                             const std::vector<int>& sel, int rule)
 {
+    if (rule == 3)
+    {
+        for (std::size_t pi = 0; pi < sel.size(); ++pi)
+        { if (BloodVariantMismatch(state, cands, sel, pi)) { return true; } }
+        return false;
+    }
     if (rule == 9) { return SubsetPostCombatPumpDiscardDominated(state, cands, sel, /*is_pre_combat=*/false); }
     if (rule == 7) { return SubsetConvokeBodiesInvalid(state, cands, sel); }
     if (rule == 8) { return SubsetDiscardOutletsUnpayable(state, cands, sel); }
     return false;
+}
+
+// RULE 3'S BOOKS (Voldaren Estate: "This ability costs {1} less to activate for each Vampire you
+// control" -- counted AT ACTIVATION, TapBloodCostNow): how many more `sub` creatures we control when the
+// TapBlood at `sel` position `pb` fires than at the plan's start (the enumeration state, which already
+// holds the plan's land drop -- and the Bloodghast that land returns -- for a land-first / position-k
+// plan; a land-after-the-activations plan returns it only after the whole trailing pass). Walked in the
+// EXECUTED order, never assumed:
+//   + every `sub` creature the CAST SECTION puts onto the battlefield (hand casts, Vial puts): the whole
+//     cast section runs before the trailing pass, in both worlds;
+//   + every trailing activation that runs BEFORE this Blood (TurnSolver::TrailingRunsBefore -- the very
+//     keys both passes sort by) and adds one: a `sub` token tap (Bloodline Keeper / Lord of Lineage), a
+//     madness CAST pin of a `sub` creature on a discard outlet (Condemned's pump, the Blood crack, Pit
+//     Fighter), a steal whose target is or becomes a `sub` (Captivating Vampire);
+//   - every trailing SACRIFICE of a `sub` creature that runs before it (Pit Fighter's "Sacrifice a
+//     Vampire").
+// Under the shipped orders that is the casts and Keeper's token tap (rank 0, ahead of Blood's rank 1;
+// VampiresProvider::ActivationOrderRank); the pump / crack / Pit Fighter ranks and the steal's count band
+// all run AFTER Blood, so their arrivals do NOT lower its cost and are NOT counted -- counting them would
+// under-price the variant. Any other order (MTG_VAMP_DRAFT_ORDERS=0) is read the same way. Floored at 0:
+// no variant prices a dearer Blood (one an earlier sacrifice made dearer pays the TRUE cost at apply, or
+// no-ops in both worlds -- the k=0 variant books it, as before). Human play pins no discard, so its
+// unpinned outlets count nothing here: the human's madness answer is asked at resolution.
+static int VampArrivalsBeforeBlood(const GameState& state, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel, std::size_t pb, const std::string& sub)
+{
+    if (sub.empty()) { return 0; }
+    auto def_of = [](const Action& c) -> const CardDefinition*
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    auto sub_creature = [&](const CardDefinition* d)
+    { return d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, sub); };
+    bool bands = false;
+    for (int idx : sel)
+    {
+        const Action& d = cands[static_cast<std::size_t>(idx)];
+        if (d.kind == Action::Kind::ActivatePermAbility
+            && (d.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                || d.ability_mode == Action::AbilityMode::TransformSelf)) { bands = true; break; }
+    }
+    const Action& blood = cands[static_cast<std::size_t>(sel[pb])];
+    const int me = state.active_player_index;
+    int net = 0;
+    for (std::size_t pj = 0; pj < sel.size(); ++pj)
+    {
+        if (pj == pb) { continue; }
+        const Action& d = cands[static_cast<std::size_t>(sel[pj])];
+        const CardDefinition* dd = def_of(d);
+        if (d.kind == Action::Kind::CastFromHand || d.kind == Action::Kind::ActivateVial)
+        {
+            if (!d.bestow && !d.adventure && sub_creature(dd)) { ++net; }   // bestow / adventure: no creature
+            continue;
+        }
+        if (!TurnSolver::IsTrailingActivation(d.kind)) { continue; }
+        if (!TurnSolver::TrailingRunsBefore(state, d, pj, blood, pb, bands)) { continue; }
+        if (d.kind == Action::Kind::TapForTokenPay && dd != nullptr)
+        {
+            const auto& ts = dd->params.tap_token_subtypes;
+            if (std::find(ts.begin(), ts.end(), sub) != ts.end()) { ++net; }
+        }
+        if (d.kind == Action::Kind::ActivatePermAbility && d.ability_mode == Action::AbilityMode::TapSubtypeSteal
+            && dd != nullptr)
+        {
+            bool becomes = dd->params.steal_adds_subtype == sub;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (becomes) { break; }
+                if (q.card.m_number == d.enchant_target && q.controller_index != me
+                    && q.card.IsCreature() && CardHasSubtype(q.card, sub)) { becomes = true; }
+            }
+            if (becomes) { ++net; }
+        }
+        if (!d.discard_name.empty() && d.madness_choice > 0
+            && sub_creature(CardDatabase::Instance().Lookup(d.discard_name.str()))) { ++net; }   // a madness CAST
+        if (d.kind == Action::Kind::SacCreatureOutlet && dd != nullptr)
+        {
+            bool victim_sub = dd->params.sac_creature_requires_subtype == sub;
+            if (!victim_sub && !d.victim_name.empty())
+            { victim_sub = sub_creature(CardDatabase::Instance().Lookup(d.victim_name.str())); }
+            if (!victim_sub && d.sac_victim_id > 0 && d.sac_victim_id != kSameLineSacVictim)
+            {
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.card.m_number != d.sac_victim_id || q.controller_index != me) { continue; }
+                    victim_sub = q.card.IsCreature() && CardHasSubtype(q.card, sub);
+                    break;
+                }
+            }
+            if (victim_sub) { --net; }
+        }
+    }
+    return std::max(0, net);
+}
+
+// Rule 3 for the action at `sel` position `pi`: true = it is a TapBlood whose cost variant (k exact, or
+// "k or more" on the top variant, k+16) is not the one its arrivals book. False for every other action.
+static bool BloodVariantMismatch(const GameState& state, const std::vector<Action>& cands,
+                                 const std::vector<int>& sel, std::size_t pi)
+{
+    const Action& c = cands[static_cast<std::size_t>(sel[pi])];
+    if (c.kind != Action::Kind::ActivatePermAbility || c.ability_mode != Action::AbilityMode::TapBlood) { return false; }
+    const CardDefinition* bd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+    const int added = VampArrivalsBeforeBlood(state, cands, sel, pi,
+        bd != nullptr ? bd->params.tap_blood_cost_less_per_subtype : std::string());
+    const int v = c.vamp_casts_needed;
+    return (v >= 16) ? (added < v - 16) : (added != v);
 }
 
 static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Action>& cands,
@@ -12268,8 +12384,9 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
     // Rule 1 + rule 2 + rule 3 in one pass over the selection.
     std::vector<std::pair<std::string, int>> pins;   // name -> pinned discards
     int mode4 = 0;
-    for (int idx : sel)
+    for (std::size_t pi = 0; pi < sel.size(); ++pi)
     {
+        const int idx = sel[pi];
         const Action& c = cands[static_cast<std::size_t>(idx)];
         if (!c.discard_name.empty())
         {
@@ -12280,26 +12397,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
         if (c.kind == Action::Kind::SacCreatureOutlet && (c.needs_cast_mask & 2) != 0
             && !c.victim_name.empty() && puts_name(c.victim_name.str()) == 0)
         { return true; }   // rule 2
-        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::TapBlood)
-        {
-            const CardDefinition* bd = def_of(c);
-            const std::string sub = bd != nullptr ? bd->params.tap_blood_cost_less_per_subtype : std::string();
-            int added = 0;
-            if (!sub.empty())
-            {
-                for (int jdx : sel)
-                {
-                    const Action& d = cands[static_cast<std::size_t>(jdx)];
-                    if (d.kind != Action::Kind::CastFromHand && d.kind != Action::Kind::ActivateVial) { continue; }
-                    if (d.bestow || d.adventure) { continue; }   // no creature enters
-                    const CardDefinition* dd = def_of(d);
-                    if (dd != nullptr && dd->card.IsCreature() && CardHasSubtype(dd->card, sub)) { ++added; }
-                }
-            }
-            const int v = c.vamp_casts_needed;
-            const bool ok = (v >= 16) ? (added >= v - 16) : (added == v);
-            if (!ok) { return true; }   // rule 3
-        }
+        if (BloodVariantMismatch(state, cands, sel, pi)) { return true; }   // rule 3
         if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { ++mode4; }
         // Rule 6 (Vampires B): Captivating Vampire's steal / Bloodline Keeper's transform.
         //   6a. A HAND-SOURCE activation (needs_cast_mask bit0) without a cast / put of its source's name
@@ -33966,29 +34064,45 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // runs after the plan's casts -- so the pre-plan cost OVER-states it whenever the plan casts
             // Vampires first ("cast two Vampires, then Blood for {0}" would be priced unaffordable and
             // never emitted, and site 9 cannot rescue it: the ability was available at plan start).
-            // SOUND + COMPLETE: one COST VARIANT per k = 0..kmax Vampires the plan adds before the
-            // trailing pass, a.cost = {5} - (V0 + k) floored at {0}; SubsetVampOutletInvalid keeps
-            // exactly the variant whose k matches the subset (k == added, or the top variant for
-            // added >= kmax), so no subset is enumerated twice and none is over-priced; both trailing
-            // passes pay the TRUE cost at activation (TapBloodCostNow). Whether / when = subset
-            // membership; the {T} is paid before the mana, so the Estate never pays itself.
+            // SOUND + COMPLETE: one COST VARIANT per k = 0..kmax Vampires the plan adds before THIS
+            // activation runs, a.cost = {5} - (V0 + k) floored at {0}; SubsetVampOutletInvalid rule 3
+            // keeps exactly the variant whose k matches the subset's arrivals AHEAD OF IT IN THE
+            // EXECUTED ORDER (VampArrivalsBeforeBlood: k == added, or the top variant for added >=
+            // kmax), so no subset is enumerated twice and none is over-priced; both trailing passes pay
+            // the TRUE cost at activation (TapBloodCostNow). Whether / when = subset membership; the {T}
+            // is paid before the mana, so the Estate never pays itself.
+            // kmax is an UPPER BOUND on those arrivals (a variant above the real count is rejected by
+            // rule 3 for every subset, never mis-kept; one too few would book "k or more" at a dearer
+            // cost than an arrival-richer subset pays): every Vampire creature card in hand (cast, Vial
+            // put or madness-cast -- one arrival per card whichever way) + every live Vampire TOKEN tap
+            // source (Bloodline Keeper / Lord of Lineage: "{T}: Create a 2/2 black Vampire", rank 0, run
+            // ahead of Blood's rank 1 -- defect M, 2026-10-18: "Captain, Keeper token, Blood for {0}" was
+            // priced at {1} and never offered). A steal never runs ahead of Blood (its count band), and
+            // the land drop's Bloodghast is already in V0 (a land-first plan is enumerated on the
+            // post-drop board).
             if (sd->params.tap_blood_cost.has_value() && !src.tapped
                 && CanTapNow(src, state.battlefield))
             {
                 const int me     = state.active_player_index;
                 const int base   = sd->params.tap_blood_cost->generic;
-                const int v0     = CountControlledSubtypeCreatures(
-                    state, me, sd->params.tap_blood_cost_less_per_subtype);
-                int hand_vamps = 0;
-                if (!sd->params.tap_blood_cost_less_per_subtype.empty())
+                const std::string& vsub = sd->params.tap_blood_cost_less_per_subtype;
+                const int v0     = CountControlledSubtypeCreatures(state, me, vsub);
+                int arrivals_max = 0;
+                if (!vsub.empty())
                 {
                     for (const Card& hc : ap.hand)
+                    { if (HandCardIsSubtypeCreature(hc, vsub)) { ++arrivals_max; } }
+                    for (const Permanent& tq : state.battlefield)
                     {
-                        if (HandCardIsSubtypeCreature(hc, sd->params.tap_blood_cost_less_per_subtype))
-                        { ++hand_vamps; }
+                        if (tq.controller_index != me || tq.def_absent) { continue; }
+                        const CardDefinition* td = CardDatabase::Instance().LookupCached(tq.card);
+                        if (td == nullptr || !td->params.tap_token_cost.has_value()) { continue; }
+                        const auto& ts = td->params.tap_token_subtypes;
+                        if (std::find(ts.begin(), ts.end(), vsub) == ts.end()) { continue; }
+                        if (TapTokenSourceLive(state, tq, *td)) { ++arrivals_max; }
                     }
                 }
-                const int kmax = std::max(0, std::min(hand_vamps, base - v0));
+                const int kmax = std::max(0, std::min(arrivals_max, base - v0));
                 for (int k = 0; k <= kmax; ++k)
                 {
                     ManaCost c = sd->params.tap_blood_cost.value();
@@ -46883,16 +46997,51 @@ bool TurnSolver::TrailingHasCountBands(const std::vector<Action>& acts)
     return false;
 }
 
+// THE EXECUTED TRAILING ORDER'S TWO KEYS, one definition for OrderTrailingActivations (which sorts both
+// worlds' passes by them) and TrailingRunsBefore (which reads them pairwise for the subset rules), so
+// the two can never disagree. The provider's rank (0 for a non-trailing kind) and the count band (only
+// consulted when the pass holds a count-band activation -- see OrderTrailingActivations).
+static int TrailingRankOf(const DecisionProvider& prov, const GameState& state, const Action& a)
+{
+    if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
+}
+static int TrailingBandOf(const Action& a)
+{
+    if (a.kind == Action::Kind::ActivatePermAbility
+        && a.ability_mode == Action::AbilityMode::TapSubtypeSteal) { return 1; }
+    if (a.kind == Action::Kind::ActivatePermAbility
+        && a.ability_mode == Action::AbilityMode::TransformSelf)   { return 2; }
+    if (a.kind == Action::Kind::SacCreatureOutlet)                 { return 3; }
+    return 0;
+}
+
+// See the header. The composition both passes apply: OrderTrailingActivations' STABLE sort on (band when
+// `bands`, rank) -- equal keys keep plan-vector order, which is also what its no-opinion early-out
+// keeps -- then DeferSameLineSacs' STABLE move of every same-line sacrifice to the end.
+bool TurnSolver::TrailingRunsBefore(const GameState& state, const Action& x, std::size_t px,
+                                    const Action& y, std::size_t py, bool bands)
+{
+    const bool sx = x.kind == Action::Kind::SacCreatureOutlet && x.sac_victim_id == kSameLineSacVictim;
+    const bool sy = y.kind == Action::Kind::SacCreatureOutlet && y.sac_victim_id == kSameLineSacVictim;
+    if (sx != sy) { return sy; }
+    if (bands)
+    {
+        const int bx = TrailingBandOf(x), by = TrailingBandOf(y);
+        if (bx != by) { return bx < by; }
+    }
+    const DecisionProvider& prov = ResolveProvider(state);
+    const int rx = TrailingRankOf(prov, state, x), ry = TrailingRankOf(prov, state, y);
+    if (rx != ry) { return rx < ry; }
+    return px < py;
+}
+
 void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Action>& acts)
 {
     if (acts.size() < 2) { return; }
     const DecisionProvider& prov = ResolveProvider(state);
-    auto rank_of = [&](const Action& a) -> int
-    {
-        if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
-    };
+    auto rank_of = [&](const Action& a) -> int { return TrailingRankOf(prov, state, a); };
     // VAMPIRES B -- THE COUNT BANDS (design_B §4 "Trailing order"). Bloodline Keeper's transform reads
     // the Vampire count ("activate only if you control five or more") and Captivating Vampire's steal
     // needs five untapped Vampires, so the pass runs: everything else (token taps -- Keeper's own
@@ -46913,18 +47062,9 @@ void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Ac
                          [&](const Action& x, const Action& y) { return rank_of(x) < rank_of(y); });
         return;
     }
-    auto band_of = [](const Action& a) -> int
-    {
-        if (a.kind == Action::Kind::ActivatePermAbility
-            && a.ability_mode == Action::AbilityMode::TapSubtypeSteal) { return 1; }
-        if (a.kind == Action::Kind::ActivatePermAbility
-            && a.ability_mode == Action::AbilityMode::TransformSelf)   { return 2; }
-        if (a.kind == Action::Kind::SacCreatureOutlet)                 { return 3; }
-        return 0;
-    };
     std::stable_sort(acts.begin(), acts.end(), [&](const Action& x, const Action& y)
     {
-        const int bx = band_of(x), by = band_of(y);
+        const int bx = TrailingBandOf(x), by = TrailingBandOf(y);
         if (bx != by) { return bx < by; }
         return rank_of(x) < rank_of(y);
     });
