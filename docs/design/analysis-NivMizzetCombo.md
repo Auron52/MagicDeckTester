@@ -31,6 +31,40 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
+## RESUME STATE (2026-10-18 ~03:45 UTC, written before a context compaction)
+Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
+- `niv` = branch `niv-analysis` (integration; HEAD `0b955f153` + this note). Build there = T2
+  (`c52ed5c9d` src); do NOT rebuild while the Stage-4 analyzer below is running off it.
+- `niv-core`, `niv-remand`, `niv-mana`, `niv-d0`: merged into niv-analysis (keep; T1 binary = niv-mana).
+- `niv-base`: detached at `42480e6c6` (origin src), built -- the BASE arm for attribution.
+- `niv-bs`: AGENT RUNNING (Brainstorm put-back search cost: lossless memo, sound folds, a budget
+  PRICE in the equip-route good shape; report pending). Integrate when it reports.
+- `niv-aura`: UNCOMMITTED fix (TurnSolver.cpp + test_generator_servant.cpp, built, its unit test
+  passes): `SubsetHasHostSacrificedForMana` -- reject a subset whose Aura spell / soulbond pairing
+  targets a creature the same subset cracks for mana (Generator Servant; SacForMana is applied in the
+  pre-pass, so the host is gone on resolution -> silent fallback; [enchant-retarget] read 3.7M on the
+  analyzer pass). Identity/dominance fold, lockstep in Solve's consider + eval_and_push +
+  RetargetSolveAuraHosts. Negative control running (`logs/arms/aura_niv*.txt`: 20 games d3 b10
+  s5001, retarget count + win turns, niv vs niv-aura). Then commit + integrate.
+Running: Stage 4 `logs/stage4.sh` (status `logs/stage4.status`; analyzer JSON
+`logs/stage4_analyze.json`, err `logs/stage4_analyze.err`). Card scores DONE (2h, a slow tail of
+games stuck in PutBackCandidates per perf), `decks/NivMizzetCombo/NivMizzetCombo.profile.json`
+WRITTEN (uncommitted); the cost-aggregate diagnostic batch (reframe A/B, ~400 games d5/b20) is in
+its own slow tail.
+NEXT, in order: (1) aura negative control -> commit `niv-aura`, ff into niv-analysis; (2) Stage 4
+finishes -> read `stage4_analyze.json` (mulligan_flags, card scores), commit the profile;
+`python3 scripts/provider_audit.py --check` (the deck is audited once it has a profile);
+(3) integrate niv-bs; rebuild niv; (4) `python3 logs/add_niv_rows.py` (suite rows, all three tiers,
+key `niv` + `niv2hg`), `python3 scripts/suite_gate.py --measure decks/NivMizzetCombo` -> the 3x
+rule (budget 8086 ms/game = 3 x pd 2695). OVER 3x -> the deck goes in NO tier and getting it under
+becomes the first goal (Brainstorm fan, second main) -- report to the user; (5) if in: run each
+tier `--deck=niv,niv2hg` + full smoke/regression for the integrated tree, analyze every searched
+slower game, accept (smoke/regression full; overnight --deck=niv,niv2hg only), check_gt_logs;
+(6) Stage 5: verify_deck.py, nonconv/fd-diverge, multi-depth d0/3/5, 5c2 leaf_tiebreak_check,
+5h audit_viewer_decisions (full sweep), 5d claude-play sweep (Opus/Sonnet fan-out ~15-20 games),
+5i discard buckets (AUTHOR + REPORT, user approves); (7) push niv-analysis onto
+phase-1-2-deck-analyzer (rebase first), watch CI, ff primary, check_references_safe.
+
 ## Stage 1 — coverage (2026-10-17)
 Missing (8): Niv-Mizzet, the Firemind; Niv-Mizzet, Parun; Curiosity; Tandem Lookout; Generator
 Servant; Brainstorm; Gitaxian Probe; Sulfur Falls.
