@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e03dd1e07  date 2026-10-18
+# Regression ground truth -- commit 78ecca2ee  date 2026-10-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
@@ -15,6 +15,8 @@
 # accepted-with-regressions (smoke, 2026-10-18): colossus2hg only (the narrowed Lizard amendment c10464762, after the USER's '+10/+10 will beat double strike'): 4.44->4.46, the ONE changed game s1001 gi22 T4->T5 is the case the narrowing drops on purpose -- one Gift and no Hammer on T1, the Lizard paid only because a second Gift is drawn on T4 (clairvoyance; non-clairvoyant run8nc: the narrowed and broad forms are identical)
 # accepted-with-regressions (smoke, 2026-10-18): colossus only (e03dd1e07, the USER's tutor rule as stated: 'There is no reason to include it if we have both a body and a source to free-equip'): d3 3.5933->3.6000 (s1001 gi118, Ardenn + Theft: the Hammer, not Lizard Blades) and 2hg 4.46->4.48 (gi33, a different T1 tutor fetch; draws diverge from T2) -- the cases the USER's rule decides, by the USER's ruling
 # accepted-with-regressions (regression, 2026-10-18): colossus only (e03dd1e07, the USER's tutor rule as stated): d3 s2002 3.8000->3.8133 and d5 s2002 3.7067->3.7200 (gi25 at d3/d5, gi112: a body + a free attach -> the Hammer, not Lizard Blades) -- by the USER's ruling; refs 630 / 0 drift
+# accepted-with-regressions (smoke, 2026-10-18): colossus + colossus2hg only (4f984afac, the USER's Lizard amendment: Lizard Blades when it lands before every other creature, or when free equip cannot cover every Hammer held): d3 3.6000->3.5933 (gi118 4->3, the gi118 trace), 2HG 4.48->4.44 (gi22, gi33 5->4); 0 slower; every other deck byte-identical on the rebase onto 42d189e58
+# accepted-with-regressions (regression, 2026-10-18): colossus only (4f984afac, the USER's Lizard amendment): d3 s2002 3.8133->3.8000 (gi25, gi112 4->3), d5 s2002 3.7200->3.7067 (gi25 4->3) -- the games the rule as stated lost, back; 0 slower; every other deck byte-identical, refs 630 / 0 drift on the rebase onto 42d189e58
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -110,7 +112,7 @@ critter2hg_smoke_d3_s1001=4.7600/a5edfe66f0792867
 melira2hg_smoke_d3_s1001=4.8400/7d182c91725b79a6
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=4.9800/eded3f2b34b85d3a
-colossus2hg_smoke_d3_s1001=4.4800/0bdd396abc6a9ac8
+colossus2hg_smoke_d3_s1001=4.4400/aae36d676660cd76
 pd2hg_smoke_d3_s1001=5.6000/3ec18a53def26c00
 fluctuator_smoke_d0_s1001=4.9870/51bdb352a7a5fc23
 fluctuator_smoke_d3_s1001=3.5400/68f1f512c6091db9
@@ -145,7 +147,7 @@ galadriel_smoke_d3_s1001=4.9667/d06b6f2bf7b4ed5b
 galadriel_smoke_d5_s1001=4.8400/fda321d419d9000c
 galadriel2hg_smoke_d3_s1001=4.8933/ed5856657c53139a
 colossus_smoke_d0_s1001=4.7370/2a31be5c5bc074e4
-colossus_smoke_d3_s1001=3.6000/b2502e7a06e5fea7
+colossus_smoke_d3_s1001=3.5933/9d160417d1498579
 colossus_smoke_d5_s1001=3.6400/a71c3b3bb9881698
 
 # --- regression ---
@@ -323,9 +325,9 @@ galadriel_regression_d5_s3003=5.0533/a74da1870c077bb9
 galadriel2hg_regression_d3_s2002=4.8200/120ec60f361f2e7a
 galadriel2hg_regression_d5_s2002=4.7200/5b5f24bc24ab520d
 colossus_regression_d0_s2002=4.8740/f45b7b7e8a8effad
-colossus_regression_d3_s2002=3.8133/37f299d98c0a2491
+colossus_regression_d3_s2002=3.8000/7ecba2865b245d6e
 colossus_regression_d3_s3003=3.6333/eaef7006cbea0562
-colossus_regression_d5_s2002=3.7200/e4b7c57361c2405f
+colossus_regression_d5_s2002=3.7067/0727c066ee93e59b
 colossus_regression_d5_s3003=3.4933/47c3ed04e5c3c392
 
 # --- overnight ---
