@@ -2425,6 +2425,12 @@ struct ConvokeRules
     Color pip                = Color::Green;
     bool  all_free           = false;   // after combat / at cleanup: no body can attack any more
     bool  tap_ability_costly = false;   // a body with a live non-mana {T} ability is COSTLY
+    // Vampires sweep item C (2026-10-18): rank bodies by their TRUE combat power (CombatPowerOf --
+    // printed + counters + LORDS + Auras + Equipment), not Permanent::EffectivePower (which has no lord
+    // term). A lord-pumped 3/2 Gorger sorted as a 2-power body tied with a 2/2 Baron, so "tap the Baron,
+    // keep the Gorger attacking" was never the lowest-power arm. Creature-spell rules only; Chord's
+    // legacy order (EffectivePower) is untouched, so Melira Pod is byte-identical.
+    bool  true_power         = false;
 };
 // Does a convoke body have a LIVE non-mana {T} ability (one the convoke tap would forfeit)? The {T}
 // rows of the activation tables (PermAbilityTaps), read off the definition, and the body able to tap
@@ -2453,6 +2459,7 @@ inline bool ConvokeBodyTapAbilityLive(const GameState& s, const Permanent& p, co
     if (pp.tap_token_cost.has_value() && TapTokenSourceLive(s, p, *d)) { return true; }
     return has_tap_ability && CanTapNow(p, s.battlefield, nullptr);
 }
+inline int CombatPowerOf(const Permanent& p, const GameState& state);   // defined far below
 inline ConvokeClasses ClassifyConvokeBodiesEx(const GameState& s, int controller, const ConvokeRules& r)
 {
     ConvokeClasses out;
@@ -2464,7 +2471,7 @@ inline ConvokeClasses ClassifyConvokeBodiesEx(const GameState& s, int controller
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         const bool live_dork = d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield, nullptr);
         if (live_dork) { continue; }
-        const int  pw   = p.EffectivePower();
+        const int  pw   = r.true_power ? std::max(0, CombatPowerOf(p, s)) : p.EffectivePower();
         const bool atk  = !r.all_free && CanAttackFull(p, s.battlefield, controller) && pw > 0;
         const bool tapc = r.tap_ability_costly && ConvokeBodyTapAbilityLive(s, p, d);
         ents.push_back(Ent{pw, p.card.m_number, p.card.HasColor(r.pip), !atk && !tapc});
@@ -2516,6 +2523,7 @@ inline ConvokeRules ConvokeRulesFor(const CardDefinition& d, bool post_combat_or
     r.pip                = ConvokePipColor(d);
     r.all_free           = post_combat_or_cleanup;
     r.tap_ability_costly = true;
+    r.true_power         = true;
     return r;
 }
 
@@ -15344,13 +15352,29 @@ inline void ApplyConvokeTapsEx(GameState& state, int controller, int green, int 
         }
     };
     int g = green, o = other;
+    const std::size_t first = tapped_out != nullptr ? tapped_out->size() : 0;
     tap_ids(cc.free_green, g); tap_ids(cc.atk_green, g);
     tap_ids(cc.free_other, o); tap_ids(cc.atk_other, o);
     if (g_play_event_sink && !g_tap_speculating && (green - g + other - o) > 0)
     {
+        // Creature-spell rules (a madness Markov Baron -- Vampires sweep item D): name the bodies. Chord's
+        // legacy event text is unchanged.
+        std::string names;
+        if (r.true_power && tapped_out != nullptr)
+        {
+            for (std::size_t k = first; k < tapped_out->size(); ++k)
+            {
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.card.m_number != (*tapped_out)[k] || p.controller_index != controller) { continue; }
+                    names += (names.empty() ? ": " : ", ") + p.card.m_name.str() + " #" + std::to_string(p.card.m_number);
+                    break;
+                }
+            }
+        }
         EmitPlayEvent(state.turn_number, "convoke",
                       "\xF0\x9F\x99\x8C Convoke -- tapped "
-                      + std::to_string(green - g + other - o) + " creature(s)");
+                      + std::to_string(green - g + other - o) + " creature(s)" + names);
     }
 }
 inline void ApplyConvokeTaps(GameState& state, int controller, int green, int other)
@@ -15360,33 +15384,207 @@ inline void ApplyConvokeTaps(GameState& state, int controller, int green, int ot
 // The apply-side twin every CastFromHand convoke site calls (both worlds, the payability walks): the
 // card's own rules (ConvokeRulesFor -- Chord's legacy rules, a creature spell's pip / post-combat /
 // {T} terms) at the CURRENT phase, so the bodies tapped are exactly the ones the enumeration counted.
+// CREATURE-SPELL convoke (Markov Baron) taps AT THE CAST instead (ConvokeCastTaps below; Vampires sweep
+// items A / B / K): this pre-pass is a no-op for it, so every pre-pass site (executor, rollout, the
+// recorded-continuation replays, the provider order probes) leaves the bodies untapped for the cast.
+inline bool ConvokeTapsAtCast(const CardDefinition* d)
+{
+    return d != nullptr && d->params.convoke && d->card.IsCreature();
+}
 inline void ApplyConvokeTapsForCard(GameState& state, int controller, const CardDefinition* d,
                                     int green, int other)
 {
     if (green <= 0 && other <= 0) { return; }
+    if (ConvokeTapsAtCast(d)) { return; }   // tapped at the cast (ConvokeCastTaps)
     const ConvokeRules r = d != nullptr ? ConvokeRulesFor(*d, state.phase == Phase::PostCombatMain)
                                         : ConvokeRules{};
     ApplyConvokeTapsEx(state, controller, green, other, r);
 }
+
+// ---- CREATURE-SPELL CONVOKE AT THE CAST (Vampires sweep items A / B / K, 2026-10-18) ----------------
+// THE DEFECT (A, seed 91011 T3): the convoke bodies were tapped in a PRE-PASS over the whole plan, each
+// cast's committed (pip, other) counts against the pre-plan board, while every payment site reduced the
+// cost by the COMMITTED counts. Two Markov Barons each committing the same three bodies tapped three
+// creatures in total, the second Baron's taps silently fell short, and both were still reduced by
+// three: the plan "Unclaimed Territory; Baron, Baron" (6 mana) resolved with all three lands untapped --
+// phantom mana, and the shipped search took that line. And because the pre-pass ran before any cast, a
+// creature the SAME plan casts (summoning-sick, so a free body) could never convoke (B).
+// THE RULE NOW, shared by every cast site in both worlds (the executor's CastSpellFromHand, the rollout's
+// apply_one, the sequential-payability walk): the bodies tap AT THE CAST, on the board as it stands then
+// (a creature cast earlier in the plan is there, sick, hence FREE), cheapest first in each colour class
+// (ClassifyConvokeBodiesEx under the card's creature rules: free bodies, then would-attack bodies by
+// true power), and the cost is reduced by the bodies ACTUALLY tapped -- a reduction can never exceed the
+// taps, so a shortfall pays more mana or drops the cast (never phantom mana). If the payment then fails
+// the bodies untap (the destructor), so a dropped cast leaves the board as it found it.
+// DISPLAY RECORDER (Vampires sweep item D): when armed, the rollout apply's committed cast-time convoke
+// taps at apply depth `g_convoke_record_depth` (the probe's own top-level apply -- never a nested search
+// rollout) append what they asked for and the bodies they really tapped, so the viewer labels a plan's
+// convoke arms off a probe apply (main.cpp ConvokeLabelsFor) instead of a projection. Null everywhere else.
+struct ConvokeTapRecord { std::string spell; int want_pip = 0, want_other = 0; std::vector<std::string> bodies; };
+inline thread_local std::vector<ConvokeTapRecord>* g_convoke_tap_record = nullptr;
+inline thread_local int g_convoke_record_depth = 1;
+struct ConvokeCastTaps
+{
+    GameState*       st  = nullptr;
+    int              ctl = -1;
+    int              pip = 0, other = 0;   // bodies actually tapped (pip colour / other)
+    std::vector<int> nums;                 // their card numbers, in tap order
+    bool             committed = false;
+    std::string      spell;                // the recorder's key (item D)
+    int              want_pip = 0, want_other = 0;
+    ConvokeCastTaps() = default;
+    ConvokeCastTaps(const ConvokeCastTaps&) = delete;
+    ConvokeCastTaps& operator=(const ConvokeCastTaps&) = delete;
+    // Tap up to (want_pip, want_other) bodies for `d` and reduce `cost` by what was tapped. No-op (and
+    // `cost` untouched) for anything but a creature spell with convoke.
+    void Tap(GameState& s, int controller, const CardDefinition& d, int want_pip, int want_other, ManaCost& cost)
+    {
+        if (!ConvokeTapsAtCast(&d) || (want_pip <= 0 && want_other <= 0)) { return; }
+        st = &s; ctl = controller;
+        spell = d.card.m_name.str(); this->want_pip = want_pip; this->want_other = want_other;
+        const ConvokeRules r = ConvokeRulesFor(d, s.phase == Phase::PostCombatMain);
+        const ConvokeClasses cc = ClassifyConvokeBodiesEx(s, controller, r);
+        auto take = [&](const std::vector<int>& ids, int& want, int& got)
+        {
+            for (int id : ids)
+            {
+                if (want <= 0) { return; }
+                for (Permanent& p : s.battlefield)
+                {
+                    if (p.controller_index == controller && p.card.m_number == id && !p.tapped)
+                    { p.tapped = true; --want; ++got; nums.push_back(id); break; }
+                }
+            }
+        };
+        int wp = want_pip, wo = want_other;
+        take(cc.free_green, wp, pip); take(cc.atk_green, wp, pip);
+        take(cc.free_other, wo, other); take(cc.atk_other, wo, other);
+        ApplyConvokeReduction(cost, pip, other, r.pip);
+    }
+    // The cast is paid: keep the taps, and say which bodies (the viewer's event names them -- item D).
+    void RecordInto(std::vector<ConvokeTapRecord>& out) const
+    {
+        if (st == nullptr) { return; }
+        ConvokeTapRecord rec;
+        rec.spell = spell; rec.want_pip = want_pip; rec.want_other = want_other;
+        for (int id : nums)
+        {
+            for (const Permanent& p : st->battlefield)
+            {
+                if (p.card.m_number != id || p.controller_index != ctl) { continue; }
+                rec.bodies.push_back(p.card.m_name.str() + " #" + std::to_string(id));
+                break;
+            }
+        }
+        out.push_back(std::move(rec));
+    }
+    void Commit()
+    {
+        committed = true;
+        if (st == nullptr || nums.empty() || !g_play_event_sink || g_tap_speculating) { return; }
+        std::string names;
+        for (int id : nums)
+        {
+            for (const Permanent& p : st->battlefield)
+            {
+                if (p.card.m_number != id || p.controller_index != ctl) { continue; }
+                if (!names.empty()) { names += ", "; }
+                names += p.card.m_name.str() + " #" + std::to_string(id);
+                break;
+            }
+        }
+        EmitPlayEvent(st->turn_number, "convoke",
+                      "\xF0\x9F\x99\x8C Convoke -- tapped " + std::to_string(nums.size())
+                      + " creature(s): " + names);
+    }
+    ~ConvokeCastTaps()
+    {
+        if (committed || st == nullptr) { return; }
+        for (int id : nums)
+        {
+            for (Permanent& p : st->battlefield)
+            { if (p.card.m_number == id && p.controller_index == ctl) { p.tapped = false; break; } }
+        }
+    }
+};
 inline Color ConvokePipColorOf(const CardDefinition* d) { return d != nullptr ? ConvokePipColor(*d) : Color::Green; }
+
+// What a creature-spell convoke arm would tap on board `s`, for DISPLAY (Vampires sweep item D: plans that
+// differ only in their convoke arm printed identically). The cast taps cheapest first per colour class
+// (ConvokeCastTaps), and a plan-body arm's same-plan creatures sit between the free board bodies and the
+// costly ones, so this names, per class: the free board bodies, then "<n> creature(s) cast this plan",
+// then the would-attack bodies. Each named body reads "<name> #<card number>". A projection on the
+// PRE-plan board: the realised set can only be cheaper (a creature the plan casts earlier is free).
+inline std::vector<std::string> ConvokeArmBodyLabels(const GameState& s, int controller, const CardDefinition& d,
+                                                     int pip, int other, int plan_pip, int plan_other)
+{
+    std::vector<std::string> out;
+    if (!ConvokeTapsAtCast(&d) || (pip <= 0 && other <= 0)) { return out; }
+    const ConvokeRules r = ConvokeRulesFor(d, s.phase == Phase::PostCombatMain);
+    const ConvokeClasses cc = ClassifyConvokeBodiesEx(s, controller, r);
+    auto name_of = [&](int num) -> std::string
+    {
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == num && p.controller_index == controller) { return p.card.m_name.str() + " #" + std::to_string(num); } }
+        return "#" + std::to_string(num);
+    };
+    auto take = [&](const std::vector<int>& fr, const std::vector<int>& atk, int want, int plan)
+    {
+        for (int id : fr) { if (want <= 0) { break; } out.push_back(name_of(id)); --want; }
+        const int pn = std::min(std::max(0, plan), want);
+        if (pn > 0)
+        {
+            out.push_back(std::to_string(pn) + (pn == 1 ? " creature" : " creatures") + " cast this plan");
+            want -= pn;
+        }
+        for (int id : atk) { if (want <= 0) { break; } out.push_back(name_of(id)); --want; }
+    };
+    take(cc.free_green, cc.atk_green, pip, plan_pip);
+    take(cc.free_other, cc.atk_other, other, plan_other);
+    return out;
+}
 
 inline bool& PayingCreatureAbility();   // defined far below (the D12 ability pay scope)
 
-// ---- CREATURE-SPELL CONVOKE ARMS (Vampires A1, design_A1 §2.7) ----------------------------------
-// The convoke arms of a creature spell's `base` cost under rules `r` (ConvokeRulesFor), in order:
-//   arm 0 -- every FREE body that helps (pip-coloured bodies cover the pip first, then generic; other
-//            bodies cover generic; leftover pip bodies cover generic -- the Chord assignment);
-//   arm k -- arm 0 plus the k lowest-power COSTLY bodies that still help (a body that would attack, or
-//            one with a live non-mana {T} ability), each a distinct reduction. Lowest power first is the
-//            classifier's order (ledger open question 5 -- the USER may prefer a provider order that
-//            keeps attack-trigger bodies such as Drana / Mavren Fein untapped).
-// Arms are PREFIXES within each colour class, which is exactly what ApplyConvokeTapsEx taps by count
-// (free first, then costly, ascending power), so a count pair names one body set in both worlds.
-// After combat / at cleanup (r.all_free) every untapped body without a live {T} ability is free, so
-// arm 0 already taps everything that helps and the costly arms are only {T}-ability bodies.
-struct ConvokeArmSpec { int pip = 0, other = 0; ManaCost reduced; };
+// ---- CREATURE-SPELL CONVOKE ARMS (Vampires A1, design_A1 §2.7; reworked by sweep items A / B / C) -----
+// The convoke arms of a creature spell's `base` cost under rules `r` (ConvokeRulesFor). An arm is a pair
+// of COUNTS -- (pip, other) = how many bodies of the spell's pip colour / of other colours it taps --
+// realised AT THE CAST cheapest first in each colour class (ConvokeCastTaps): free bodies first, then
+// would-attack / live-{T} bodies by ascending TRUE power (r.true_power, item C). Every arm is a distinct
+// line; the search branches over them (no greedy pick), and a rollout leaf keeps the FRONT (arm 0).
+//   * THE GRID (item C): every (pip, other) pair whose bodies all help. A pip-coloured body pays the
+//     pip or {1}, any other body only {1}, so "tap the black Baron (pays {B})" and "tap the red Gorger
+//     (pays {1})" are different reduced costs and both are offered -- the old arms were PREFIXES of one
+//     power-ordered list, so one of them was never reachable. For the SAME reduced cost and the same
+//     plan-body need, only the arm that gives up the least attacking power is kept (ties: fewer costly
+//     bodies, then fewer pip-coloured bodies -- they are the ones a later convoke cast wants); the
+//     tapped bodies are interchangeable otherwise (both are bodies nobody else reads).
+//   * PLAN BODIES (item B): `plan_pip_avail` / `plan_other_avail` = creature cards the SAME plan could put
+//     onto the battlefield BEFORE this cast (hand creatures other than this one, by colour class). A
+//     creature cast this turn is summoning-sick, so it is a FREE body; an arm may count some of them
+//     (ConvokeArmSpec::plan_pip / plan_other) -- it then requires that many arrivals ahead of it in the
+//     plan (the subset rule) and is cast after them (TurnSolver::ConvokeArrivalsFirst, both worlds).
+//     Past the free board bodies, every split of a class's remaining bodies between same-plan arrivals
+//     and would-attack board bodies is its own arm ("one arrival + one attacker" is a different line
+//     from "two arrivals"); at the cast, cheapest-first taps a present arrival before any attacker.
+//   * DOMINANCE (ledger question 16): an arm that leaves a FREE board body unused when it would still
+//     reduce the cost is dropped -- the free body has no other use against the passive opponent --
+//     EXCEPT under `contention` (another convoke cast or a tap-five steal may want the same bodies this
+//     turn): then fewer-free arms, down to the plain cast, are offered too, so "Baron A takes the three
+//     bodies, Baron B pays with lands" stays findable once a body can only be tapped once (item A).
+// Arm 0 (the front) is the board-only arm tapping every free body that helps and no costly one -- the
+// old arm 0, the rollout leaf's choice. A pre-plan arm is a COUNT pair: a madness pin (MadnessOptionsNow)
+// reads the list on the board at the trigger, so its arms are always exactly realisable there.
+struct ConvokeArmSpec
+{
+    int pip = 0, other = 0;
+    ManaCost reduced;
+    int plan_pip = 0, plan_other = 0;   // arrivals of the plan this arm counts on (item B)
+    int lost_power = 0;                 // summed true power of the would-attack bodies it taps
+};
 inline std::vector<ConvokeArmSpec> CreatureConvokeArms(const GameState& s, int controller, const ManaCost& base,
-                                                       const ConvokeRules& r)
+                                                       const ConvokeRules& r, int plan_pip_avail = 0,
+                                                       int plan_other_avail = 0, bool contention = false)
 {
     std::vector<ConvokeArmSpec> arms;
     const ConvokeClasses cc = ClassifyConvokeBodiesEx(s, controller, r);
@@ -15402,36 +15600,92 @@ inline std::vector<ConvokeArmSpec> CreatureConvokeArms(const GameState& s, int c
         ApplyConvokeReduction(a.reduced, a.pip, a.other, r.pip);
         return a;
     };
-    const int fp = static_cast<int>(cc.free_green.size());
-    const int fo = static_cast<int>(cc.free_other.size());
-    arms.push_back(assign(fp, fo));
-    // The costly bodies, merged lowest power first (ties: m_number) across the two colour classes.
     auto power_of = [&](int num) -> int
     {
         for (const Permanent& p : s.battlefield)
-        { if (p.card.m_number == num && p.controller_index == controller) { return p.EffectivePower(); } }
+        {
+            if (p.card.m_number == num && p.controller_index == controller)
+            { return r.true_power ? std::max(0, CombatPowerOf(p, s)) : p.EffectivePower(); }
+        }
         return 0;
     };
-    std::size_t ip = 0, io = 0;
-    int tp = 0, to = 0;
-    while (arms.back().reduced.ManaValue() > 0)
+    const int Fp = static_cast<int>(cc.free_green.size());
+    const int Fo = static_cast<int>(cc.free_other.size());
+    const int Cp = static_cast<int>(cc.atk_green.size());
+    const int Co = static_cast<int>(cc.atk_other.size());
+    const int Hp = std::max(0, plan_pip_avail);
+    const int Ho = std::max(0, plan_other_avail);
+    std::vector<int> pre_p(static_cast<std::size_t>(Cp) + 1, 0), pre_o(static_cast<std::size_t>(Co) + 1, 0);
+    for (int k = 0; k < Cp; ++k) { pre_p[k + 1] = pre_p[k] + power_of(cc.atk_green[static_cast<std::size_t>(k)]); }
+    for (int k = 0; k < Co; ++k) { pre_o[k + 1] = pre_o[k] + power_of(cc.atk_other[static_cast<std::size_t>(k)]); }
+    const int maxP = std::min(Fp + Hp + Cp, pip_need + base.generic);
+    const int maxO = std::min(Fo + Ho + Co, base.generic);
+    struct Cand { ConvokeArmSpec a; int costly; int fam; };
+    std::vector<Cand> cands;
+    for (int P = 0; P <= maxP; ++P)
     {
-        ManaCost last = arms.back().reduced;
-        const bool pip_useful   = *ConvokePipField(last, r.pip) > 0 || last.generic > 0;
-        const bool other_useful = last.generic > 0;
-        const bool has_p = pip_useful && ip < cc.atk_green.size();
-        const bool has_o = other_useful && io < cc.atk_other.size();
-        if (!has_p && !has_o) { break; }
-        bool take_p = has_p;
-        if (has_p && has_o)
+        for (int O = 0; O <= maxO; ++O)
         {
-            const int pp = power_of(cc.atk_green[ip]), po = power_of(cc.atk_other[io]);
-            take_p = pp < po || (pp == po && cc.atk_green[ip] < cc.atk_other[io]);
+            ConvokeArmSpec base_a = assign(P, O);
+            if (base_a.pip != P || base_a.other != O) { continue; }   // a counted body would pay nothing
+            if (!contention)
+            {
+                // An unused FREE board body that would still help dominates (question 16).
+                if (P < Fp) { const ConvokeArmSpec b = assign(P + 1, O);
+                              if (b.pip == P + 1 && b.reduced.ManaValue() < base_a.reduced.ManaValue()) { continue; } }
+                if (O < Fo) { const ConvokeArmSpec b = assign(P, O + 1);
+                              if (b.other == O + 1 && b.reduced.ManaValue() < base_a.reduced.ManaValue()) { continue; } }
+            }
+            // Beyond the free board bodies, each class's remaining bodies split between same-plan
+            // arrivals (jp / jo -- free, they cannot attack) and would-attack board bodies (kp / ko):
+            // every split is its own arm ("one arrival + one attacker" is not "two arrivals").
+            const int restP = std::max(0, P - Fp), restO = std::max(0, O - Fo);
+            for (int jp = 0; jp <= std::min(restP, Hp); ++jp)
+            {
+                for (int jo = 0; jo <= std::min(restO, Ho); ++jo)
+                {
+                    const int kp = restP - jp, ko = restO - jo;
+                    if (kp > Cp || ko > Co) { continue; }
+                    ConvokeArmSpec a = base_a;
+                    a.plan_pip = jp; a.plan_other = jo;
+                    a.lost_power = pre_p[static_cast<std::size_t>(kp)] + pre_o[static_cast<std::size_t>(ko)];
+                    cands.push_back(Cand{ a, kp + ko, (jp + jo) > 0 ? 1 : 0 });
+                }
+            }
         }
-        if (take_p) { ++ip; ++tp; } else { ++io; ++to; }
-        const ConvokeArmSpec a = assign(fp + tp, fo + to);
-        if (a.reduced.ManaValue() < arms.back().reduced.ManaValue()) { arms.push_back(a); }
     }
+    // One arm per (reduced cost, plan need): the least attacking power given up.
+    auto better = [](const Cand& x, const Cand& y)
+    {
+        if (x.a.lost_power != y.a.lost_power) { return x.a.lost_power < y.a.lost_power; }
+        if (x.costly != y.costly) { return x.costly < y.costly; }
+        return x.a.pip < y.a.pip;
+    };
+    std::vector<Cand> kept;
+    for (const Cand& c : cands)
+    {
+        bool merged = false;
+        for (Cand& k : kept)
+        {
+            if (k.a.reduced == c.a.reduced && k.a.plan_pip == c.a.plan_pip && k.a.plan_other == c.a.plan_other)
+            { if (better(c, k)) { k = c; } merged = true; break; }
+        }
+        if (!merged) { kept.push_back(c); }
+    }
+    // Order: board-only first; fewest costly bodies; least power given up; MORE bodies first (so the
+    // front is "every free body that helps"); then fewer pip-coloured bodies.
+    std::stable_sort(kept.begin(), kept.end(), [](const Cand& x, const Cand& y)
+    {
+        if (x.fam != y.fam) { return x.fam < y.fam; }
+        if (x.costly != y.costly) { return x.costly < y.costly; }
+        if (x.a.lost_power != y.a.lost_power) { return x.a.lost_power < y.a.lost_power; }
+        const int bx = x.a.pip + x.a.other, by = y.a.pip + y.a.other;
+        if (bx != by) { return bx > by; }
+        return x.a.pip < y.a.pip;
+    });
+    arms.reserve(kept.size());
+    for (const Cand& c : kept) { arms.push_back(c.a); }
+    if (arms.empty()) { arms.push_back(ConvokeArmSpec{ 0, 0, base, 0, 0, 0 }); }
     return arms;
 }
 
@@ -15592,6 +15846,15 @@ inline int ResolvePendingMadness(GameState& state, std::vector<MadnessPending>& 
                                                          + (mc.convoke_taps == 1 ? " creature" : " creatures")
                                                          + " (convoke)"
                                                        : std::string());
+                // Name the bodies (Vampires sweep item D): two arms with the same count read alike.
+                if (mc.convoke_taps > 0)
+                {
+                    const std::vector<std::string> bodies =
+                        ConvokeArmBodyLabels(state, pend.owner, *d, o.conv_pip, o.conv_other, 0, 0);
+                    std::string list;
+                    for (const std::string& b : bodies) { if (!list.empty()) { list += ", "; } list += b; }
+                    if (!list.empty()) { mc.label += ": " + list; }
+                }
                 menu.push_back(mc);
             }
             const int got = (*g_play_madness_chooser)(state, pend.owner, pend.cause, pend.card, menu, choice);
