@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Risen Reef"/>
+        <card number="1" name="Island"/>
+        <card number="4" name="Mountain"/>
+        <card number="3" name="Forest"/>
+        <card number="4" name="Akoum Hellhound"/>
+        <card number="4" name="Brushfire Elemental"/>
+        <card number="4" name="Flamekin Harbinger"/>
+        <card number="1" name="Fulminator Mage"/>
+        <card number="4" name="Mossborn Hydra"/>
+        <card number="4" name="Smokebraider"/>
+        <card number="2" name="Fury"/>
+        <card number="4" name="Secluded Courtyard"/>
+        <card number="4" name="Myriad Landscape"/>
+        <card number="4" name="Terramorphic Expanse"/>
+        <card number="3" name="Aether Vial"/>
+        <card number="4" name="Unclaimed Territory"/>
+        <card number="1" name="Incandescent Soulstoke"/>
+        <card number="1" name="Metallic Mimic"/>
+        <card number="1" name="Foundation Breaker"/>
+        <card number="1" name="Gruul Turf"/>
+        <card number="1" name="Fiery Islet"/>
+        <card number="1" name="Waterlogged Grove"/>
+    </zone>
+    <zone name="side">
+        <card number="2" name="Mulldrifter"/>
+    </zone>
+</cockatrice_deck>
