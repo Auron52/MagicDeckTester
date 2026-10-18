@@ -411,3 +411,17 @@ TEST_CASE("Mana pool: a fed filter's colour costs a feed -- {3}{R}{R} off two fi
     CHECK(pool.CanPay(gal));
     CHECK(pool.CanPay(three));
 }
+
+TEST_CASE("Galadriel scry with no Galadriel anywhere: keep only Galadriel (USER)")
+{
+    EnsureCardsLoadedGal();
+    GameState s = FreshGal();
+    PutGal(s, "Temple of Malice", 1);       // one land: short on lands, missing G and U
+    HandGal(s, kCrackle, 2);
+    CHECK(KeepsGal(s, kGaladriel));
+    CHECK_FALSE(KeepsGal(s, kTemple));      // even the G/U land the rule above would keep
+    CHECK_FALSE(KeepsGal(s, "Crystal Grotto"));
+    CHECK_FALSE(KeepsGal(s, kCrackle));
+    CHECK_FALSE(KeepsGal(s, "Sol Ring"));
+    CHECK_FALSE(KeepsGal(s, kSkerry));
+}

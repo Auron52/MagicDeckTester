@@ -5457,8 +5457,9 @@ int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
 //                    getting the colours even if short on lands. It is only beyond that that you
 //                    would accept anything").
 //   * anything else (an extra Galadriel, an off-colour or colourless land) is thrown.
-//   AGENT READING, surfaced to the user: a Galadriel when NONE is in hand or on the battlefield is
-//   kept (the rule presumes she is held; the required-piece keep makes the no-Galadriel case rare).
+// NO GALADRIEL ANYWHERE (USER 2026-10-17): keep only a Galadriel; everything else -- lands, Crackle,
+//   acceleration -- goes to the bottom ("You will get plenty of land just as a matter of course").
+//   The rule above applies only while a Galadriel is in hand.
 // Card roles come from PARAMS (scry_reveal_land_to_battlefield / x_damage_multiplier / mana_rock /
 // etb_scry), never names. MTG_GALADRIEL_SCRY=0 -> the Generic rule.
 static bool GaladrielScryOn()
@@ -5545,7 +5546,12 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         if (IsCrackle(*td)) { return crackle_hand == 0 && GaladrielCrackleLethalNextTurn(s); }
         return false;
     }
-    // The USER's pre-Galadriel rule (header comment).
+    // NO GALADRIEL AT ALL (neither out nor in hand) -- USER 2026-10-17: "If you don't have Galadriel you
+    // must scry away everything that is not Galadriel until you find her. You will get plenty of land
+    // just as a matter of course" / "without Galadriel the deck does essentially nothing". Overrides the
+    // colour / land / Crackle rule below, which applies only while she is in hand.
+    if (gal_hand == 0) { return tp.scry_reveal_land_to_battlefield; }
+    // The USER's pre-Galadriel rule (header comment) -- Galadriel in hand, not yet cast.
     auto colour_bit = [](Color c) -> unsigned {
         return c == Color::Green ? 1u : c == Color::Blue ? 2u : 0u;
     };
@@ -5593,7 +5599,7 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
     // that that you would accept anything" (USER): a non-fixing land is kept only once G and U are
     // covered.
     if (td->card.IsLand() && short_lands && missing == 0) { return true; }
-    if (tp.scry_reveal_land_to_battlefield) { return gal_hand == 0; }   // agent reading (header)
+    if (tp.scry_reveal_land_to_battlefield) { return false; }   // a second copy (one is in hand)
     if (IsCrackle(*td) || accel) { return !bad_colours; }
     return false;
 }

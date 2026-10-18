@@ -5490,8 +5490,12 @@ const AUTO_RESOLVABLE = {
   jitte:           "Umezawa's Jitte — how many charge counters to spend",
   choose_color:    'As it enters — choose a color (locked for the game)',
   choose_abilities:'As it enters — choose two abilities (locked for the game)',
+  // Not a dec.type: the `dig` modal's "(galadriel reveal)" source, special-cased in autoResolveDecision.
+  galadriel_reveal:'Galadriel of Lothlórien — reveal a land and put it onto the battlefield',
 };
-const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
+// galadriel_reveal OFF by default (USER 2026-10-17: "the process is too click intensive for little
+// benefit. I would like to make the reveal decision off-by-default").
+const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry', 'galadriel_reveal']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
 function surfaceStore(){ try { return JSON.parse(localStorage.getItem('mdt_surface')||'{}'); } catch(e){ return {}; } }
 function surfaceEnabled(type){ const s=surfaceStore(); return (type in s) ? !!s[type] : surfaceDefault(type); }
@@ -5586,6 +5590,16 @@ function autoResolveDecision(dec){
     const o=(dec.options||[])[0];
     dec._autoStep = true;
     pushChoice(dec, def, `${dec.source||dec.type}: ${ONE_OPTION_AUTO[dec.type]}${o?' → '+o.name:' (none)'} · auto`);
+    return true;
+  }
+  // Galadriel's reveal rides the generic `dig` modal, so it is keyed by SOURCE, not type. Off (the
+  // default) => take the engine default (0 = reveal the land) without the modal; the answer still
+  // rides --choices, so a recorded game replays identically whichever way the toggle was set.
+  if (dec.type==='dig' && /\(galadriel reveal\)/.test(dec.source||'') && !surfaceEnabled('galadriel_reveal')){
+    const def=(dec.heuristic_default==null?0:dec.heuristic_default);
+    const ex=(dec.examined||dec.options||[])[0];
+    dec._autoStep = true;
+    pushChoice(dec, def, `Galadriel: ${def<0?"don't reveal":'reveal'}${ex&&ex.name?' → '+ex.name:''} · auto`);
     return true;
   }
   if (!(dec.type in AUTO_RESOLVABLE)) return false;
