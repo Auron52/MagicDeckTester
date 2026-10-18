@@ -341,3 +341,153 @@ revive, vial_charge}, oracle cross-check clean. `test/viewer_decision_types_chec
 - Bloodline Keeper is still a name-only placeholder in the deck (cost "" in the viewer); it is never castable
   until B lands.
 
+
+## Track B -- cluster B integrated (2026-10-18, integrator; branch `vampires-analysis`, NOT pushed)
+Commits `8a0faa4cf` (engine + cards + viewer + unit tests) and `d63ce1889` (Scryfall snapshot, audit rows).
+Cards (cards.json, verbatim Scryfall costs): **Captivating Vampire** {1}{B}{B}, **Bloodline Keeper** {2}{B}{B}
+(was a name-only placeholder -- never in cards.json), **Lord of Lineage** (back face, `mana_cost ""`, colour
+indicator B); the design §7 note lines appended to **Unclaimed Territory** / **Secluded Courtyard**; both
+Keeper faces' card-level `Transform` keyword allowlisted in `scryfall_divergences.json`.
+
+**Engine (shared resolvers, both worlds):**
+- `PermAbilityMode::TapSubtypeSteal` (appended last; in `PermAbilityTaps`' exclusion list). Params
+  `steal_tap_count` / `steal_tap_subtype` / `steal_adds_subtype`. Liveness (`PermAbilitySourceLive`, under a
+  `StealPinScope`): the pinned target is still a creature we do not control and the pinned tap classes still
+  have their untapped members -- no substitution. The apply (`ApplyPermAbility` case) chooses the TARGET
+  first (CR 601.2c), then pays the cost through ONE payer `PayTapSubtypeCost` (never `CanTapNow`: sick bodies
+  and the source itself are legal -- the 2010-08-15 ruling), then: `controller_index`, `gained_control_this_
+  turn`, `+Vampire` (if absent), tapped status untouched, owner kept. `SacrificePermanentAt` now puts a card in
+  its OWNER's graveyard (a stolen spawn sacrificed to Pit Fighter goes to the opponent's; byte-identical for
+  every owned permanent).
+- `PermAbilityMode::TransformSelf` (appended last; no {T}). Params `transform_back_name` / `transform_front_name`
+  / `transform_cost` / `transform_min_controlled_subtype` / `_count` (NOT the daybound params). Liveness counts
+  Vampire PERMANENTS (`CountControlledSubtypePermanents`) at activation; the {B} is paid under
+  `CreatureAbilityPayScope` (Courtyard yes, Territory / Estate restricted mana no). The swap reuses
+  `SwapDayboundFace` (same Permanent: number, counters, tapped, `entered_this_turn`; no enter cascade).
+  Leaving: `NormalizeLeftDayboundFace` keys on `transform_front_name` too (Lord of Lineage -> Bloodline Keeper
+  card). `CardDatabase::MdfcBackFaceNames` lists Lord of Lineage.
+- In-combat window: `Plan::combat_transform_choice` (int8, sizeof(Plan) stays 464) -> `GameState::
+  scripted_combat_transform` (int8 in padding, sizeof(GameState) stays 1136) -> `ApplyCombatTransforms`
+  (SpellEffects.h) right after `ApplyCombatAuraSwap` in `GameEngine::CombatPhase` and `SimulateCombat`, plus
+  the projection twin `CountCombatTransformPump`. Folded in the plan hash, SamePlan, IsApplyEmptyPlan,
+  PlanIsAxisVariant, PlanHasCombatPin, the census, the dedup key's combat-pin slots, dominance::Build, the
+  executor's realised-pin check; cleared at both turn starts.
+- Keeper's live token tap makes it a COSTLY convoke body (`ConvokeBodyTapAbilityLive`, via `TapTokenSourceLive`;
+  only creature-spell convoke reads it -- Markov Baron).
+- Deck stamps `deck_has_transform` / `deck_has_tap_steal` (padding).
+
+**Search (everything branched; nothing collapsed to one option in the window):**
+- STEAL variants (`EmitStealVariants`): target = one per identity class of creature we do not control
+  (`LandfallTargetFoldKey`), representative = lowest number; tap set = one per distinct count vector over the
+  body classes summing to 5 -- FREE (cannot attack this turn: colour mask + live {T} ability) and ATTACK
+  (full identity, `StealAttackBodyKey`) -- counting the bodies the plan can still ADD before its trailing pass
+  (hand Vampires cast / Vial-put / madness-cast, Keeper tokens, a graveyard Bloodghast while the drop is open).
+  The spec is interned (`StealTapSpec`, `Action::steal_spec` in the hole after `kind` -- sizeof(Action) stays
+  480); every key folds its CONTENT (plan_signature `#T<target>#S<spec>`, ActionFoldSig, BpCandFingerprint,
+  PlanDomKey, the diff printer). Both mains. A Captivating cast THIS plan is a source (needs_cast_mask bit0,
+  re-resolved by name at apply: `ResolveHandSourceActivation`).
+- TRANSFORM (`EmitTransformAction`): one per untransformed source (board or same-plan cast), gated on the
+  UPPER BOUND of Vampires the plan can add (`SubtypeCountUpperBound`), exact restriction at apply.
+- Combat window axis (AppendSubdecisionAxes): one variant per non-empty subset of the transform sources at
+  the window (<= 3), pre-combat outer lists only, only while an attack-token source of the subtype is on our
+  side or cast by the plan, and only when the plan's pre-combat Vampire count CANNOT already reach 5 (the
+  identity fold: then the main-1 transform of the same plan reaches the same board).
+- Subset rule 6 (`SubsetVampOutletInvalid`): a hand-source activation needs its source's cast; a variant whose
+  arrivals (`vamp_casts_needed`) exceed what the selection can possibly add is a no-op duplicate (a necessary
+  condition, counted generously).
+- Trailing COUNT BANDS (`OrderTrailingActivations`, both worlds; only when a steal / transform is in the
+  pass): everything else in provider order (Keeper token taps, Blood creation, Condemned, Blood crack) ->
+  the steal -> the transform -> creature sacrifices (Pit Fighter). Sound: "token, then transform" and
+  "Condemned's madness Baron, then steal with it" are both findable.
+- Attack projection: a steal's ATTACK-class bodies are discounted (`AttackTapCtx::cand_mask`).
+- Rollout leaves emit only the front steal variant (the madness / convoke-arm precedent -- the permitted
+  playout policy). Unpinned autonomous steals are counted (`g_steal_unpinned`, must read 0 in the window).
+- Routing: VampiresProvider's signature ORs `steal_tap_subtype == "Vampire"` and
+  `transform_min_controlled_subtype == "Vampire"`.
+
+**Viewer:** verbs `steal=` / `transform=` (plan JSON `verb`, LineSpec, CheckLine legality + matching + the
+pass-check list, GUI labels at the three sites); the steal's target and five bodies are board-click `target`
+prompts at resolution (forced picks not prompted); the combat transform is `dig` "(combat transform)"
+(emitter note + `digPanelHtml` branch). DECISIONS.md: the verbs table, a `target` reuse row, a `dig` reuse
+row, the `taptoken=` row names both Keeper faces. Auditor: MANIFEST `steal_tap_count` -> target,
+`transform_back_name` -> dig, BOARD_ACTIVATIONS `verb:steal` / `verb:transform`, MAINPHASE `transform_cost`,
+INERT the detail params, two STATE-GATED rows, the oracle cross-check models the steal's target.
+
+**Deviations from design_B (and why):**
+1. Tap set = an interned CLASS multiset (FREE colour/{T} codes + ATTACK representatives), not five pinned
+   card numbers: bodies the plan itself adds have no number at enumeration, and a convoke cast that taps one
+   twin is absorbed by the other. The FREE key drops "is source": tapping the source vs a same-colour body is
+   unobservable (nothing reads Captivating being tapped).
+2. `PayTapSubtypeCost` is called INSIDE the `ApplyPermAbility` case (which both trailing passes reach), not by
+   the two apply sites before it -- still one shared payer, and target-before-cost holds there.
+3. Trailing bands: the steal runs AFTER the provider-ordered band-0 activations (not beside the token taps):
+   Condemned's / the crack's madness casts can then pay it; Blood creation loses nothing (with five Vampires
+   out it already costs {0}).
+4. Combat window: also seeds an empty "pass" variant when the drop is spent (the enumeration offers no empty
+   plan then, and Solve's own pass never reaches the fan) -- otherwise "attack with the Keeper, transform on
+   Mavren's token" was unfindable on drop-spent turns.
+5. No site-9 activation keys / BP_NEW_ONLY availability bits for the two modes: a continuation's steal or
+   transform therefore always reads as NEW (the safe direction; never drops a line).
+6. Lord of Lineage's battlefield MV stays 0 (PROVISIONAL): not cheap -- Card has no MV field separate from
+   its mana cost, and copying the front's cost would give the face a mana cost (devotion).
+7. The steal variants' ORDER (move ordering + the rollout leaf's front) is a neutral engine eval (target power
+   first, then least attack power given up, then fewest arrivals), not a provider hook (open question 22).
+
+**Verification (B, 2026-10-18):** `mtg-test` **1514/1514** (new `test/unit/test_vampires_lords.cpp`, 16 cases:
+card data + back-face art list; Keeper token (sick -> none; 2/2 black flying sick Vampire, Lieutenant +1;
+live tap = costly convoke body); transform restriction 4 vs 5 (token counts, opponent's Vampire does not;
+sick / tapped Keeper legal); swap fidelity (number, counter, tapped, sick; no Socialite counter; others +2/+2,
+not itself; one-shot); Lord sacrificed -> Bloodline Keeper card; payment (Swamp / Courtyard yes, Territory
+no); reachability (fifth Vampire cast this plan with rule 6b; token-then-transform in both action orders; a
+Keeper cast this plan); the combat window (axis fans it; unpinned holds; pinned transforms after Mavren's
+token, pays {B}, +2 to the attacker; no fifth Vampire = clean no-op); steal legality (4 no, 5 with sick
+source yes, tapped source no, no target no); steal effect (five tapped incl. sick + itself, controller /
+owner / sickness / Vampire / three lords, next-turn attack, owner's graveyard); folds (three 1/1s = one
+target class; tap classes fold the source with same-colour bodies -- 4 sets of 6 choose 5); stale pin = no-op;
+same-plan bodies + self-tap of a Captivating cast this plan; rollout-vs-executor lockstep over every steal /
+transform / token plan in both mains with `g_steal_unpinned` unchanged; routing on the B cards alone).
+**Smoke** (`regression.sh --smoke`, NOT accepted): `120 passed, 8 failed` -- EVERY case digest identical to the
+A1 run, i.e. exactly cluster C's 8 rows (critter d0/d3/d5/2hg, angels d0/d3/d5/2hg), searched faster=19
+play-changed=136, d0 faster=65 play-changed=459, 0 slower; nothing else moved. **Sanity**
+`--games 40 --seed 777 --depth 3 --budget-ms 20 --threads 16`: avg **4.4250** (24 T4 / 15 T5 / 1 T6, 0 unwon;
+was 4.5000), 4.87 s wall (was 4.05 s), 931 core-ms/game; `--games 20 --depth 5 --budget-ms 40`: avg **4.4000**,
+5.46 s wall, 1,291 core-ms/game; no game over 10 s (`--batch`, MTG_SLOW_GAME_MS=10000). Well under the 8,907
+ms/game suite cap. `audit_card_costs.py` **rc 0** (450/450 compared). `audit_card_fields.py --update`
+(targeted) + offline: every hard field matches (rc 1 = the pre-existing unfetched Temple of Abandon).
+`audit_viewer_decisions.py --no-sweep` **rc 0**, oracle cross-check clean; `viewer_decision_types_check.js`
+37/37; `provider_audit.py --check` rc 0 (Vampires NOT AUDITED: no profile yet).
+**Viewer repros** (claude-play, real resolution paths):
+- steal TARGET: `build/Release/mtg decks/Vampires/Vampire.cod --claude-play --seed 128 --game-index 8
+  --max-turns 9 --choices 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0` -> exit 70 `target` (source Captivating Vampire,
+  "taken under your control (it becomes a Vampire)", 6/6 and 1/1); the T5 menu's plan 0 carries
+  `"verb": "transform"` + `"verb": "steal"`; reply 0 -> the 6/6 is ours (the five bodies were forced: exactly
+  five untapped Vampires).
+- steal BODIES: `--choices 1` + eighteen `0` -> `target` "tapped to pay its cost (1 of 5)" (T6; the lone 1/1
+  is a forced target), Captivating itself and the stolen 6/6 among the legal bodies.
+- combat transform: `--seed 254 --game-index 8 --max-turns 9 --choices 1,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,1`
+  -> exit 70 `dig` "Bloodline Keeper (combat transform)", default -1; reply 0 -> "Bloodline Keeper transforms
+  into Lord of Lineage", the attack deals 19 (13 with -1).
+- `--validate-line "transform=Bloodline Keeper;steal=Captivating Vampire"` (same T5 state) -> accept plan 0;
+  `steal=` alone -> plan 2, `transform=` alone -> plan 1.
+
+**PROVISIONAL (user sign-off owed):** own creatures not steal targets; no opponent-turn window (steal, token
+tap); attached Auras/Equipment on a stolen creature unmodelled (spawns carry none); Lord of Lineage MV 0;
+Flying (Keeper, Lord, tokens) inert; one steal per Captivating per main phase.
+
+## Open questions -- cluster B (work continues on the stated default)
+20. **Steal targets exclude our own creatures** (a legal no-op; the Bolas -2 precedent). [default: excluded,
+    PROVISIONAL]
+21. **Rollout leaves take only the front steal variant** (the playout policy beyond the horizon; the searched
+    collect and the executor keep every variant). [default: on, PROVISIONAL]
+22. **Steal variant ORDER lives in the enumerator** (target power, then least attack power given up, then
+    fewest arrivals) -- ordering only, and the rollout leaf's front. Should it be a VampiresProvider hook
+    (USER-owned like the other Vampires draft orders)? [default: engine-neutral order, keep]
+23. **Combat-transform fold**: no combat variant for a plan whose pre-combat count can already reach five (its
+    main-1 transform reaches the same board from the same mana). [default: on -- an identity fold]
+24. **The combat transform's {B} has no main-phase mana hold**: if the plan's casts tap the only black source a
+    combat variant resolves as its base plan (a duplicate). Not observed in the repros; a hold (the aura-swap
+    shape) is a follow-up if the sweep shows it. [default: no hold]
+25. **Lord of Lineage's battlefield mana value reads 0** (CR 712.8e says 4) -- unobservable in this list.
+    [default: disclose, PROVISIONAL]
+26. **A sacrificed permanent goes to its OWNER's graveyard** (SacrificePermanentAt) -- a rules fix for every
+    deck, byte-identical in the suite (no suite deck sacrifices a creature it does not own). [default: keep]
