@@ -5715,6 +5715,37 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
         {
+            // Falkenrath Pit Fighter (Vampires A2) -- executor twin of the rollout's sequence:
+            // liveness first, then the mana under the creature-source scope, then the shared apply.
+            const CardDefinition* sod = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (sod != nullptr && IsDiscardSacOutlet(sod->params))
+            {
+                if (SacOutletLive(state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                                  a.victim_name.str(), a.discard_name.str()))
+                {
+                    CreatureAbilityPayScope sac_pay_scope;
+                    ManaPool avail = AvailableManaPool(state);
+                    if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                    {
+                        const bool done = ApplyDiscardSacOutlet(state, state.active_player_index,
+                                                                a.sac_source_id, a.sac_victim_id,
+                                                                a.victim_name.str(), a.discard_name.str());
+                        if (m_logger && done)
+                        {
+                            m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                                 "discard + sacrifice: draw (discarded "
+                                                 + (a.discard_name.empty() ? std::string("chosen card")
+                                                                           : a.discard_name.str()) + ")");
+                        }
+                    }
+                }
+                continue;
+            }
+            // Courtyard pay-scope fix (MTG_SAC_OUTLET_PAY_SCOPE; lockstep twin of the rollout's).
+            std::optional<CreatureAbilityPayScope> sac_pay_scope;
+            if (SacOutletPayScopeOn()
+                && PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+            { sac_pay_scope.emplace(); }
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
@@ -6095,7 +6126,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::ActivatePermAbility)
         {
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
-                                                          a.sac_source_id, a.ability_mode))
+                                                          a.sac_source_id, a.ability_mode,
+                                                          &a.discard_name.str()))
             {
                 // {T} half first -- see the rollout twin and SetPermTapped.
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
@@ -6104,10 +6136,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 std::optional<CreatureAbilityPayScope> creature_ability_scope;
                 if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
                 { creature_ability_scope.emplace(); }
+                // Voldaren Estate's TRUE Blood cost at activation (lockstep twin of the rollout's).
+                const ManaCost act_cost = (a.ability_mode == Action::AbilityMode::TapBlood)
+                    ? TapBloodCostNow(state, state.active_player_index, *a.def) : a.cost;
+                const ActivationDiscardPinScope _discard_pin(&a.discard_name.str());   // BloodDraw
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
-                ActLinePayScope _act_line_pay(a.cost);   // this activation's pips are NOT hold demand
+                ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
                 ManaPool avail = AvailableManaPool(state);
-                if (!TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                if (!TapForCost(state, act_cost, avail, /*for_creature=*/false))
                 {
                     if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
                     // MTG_ACT_DROP_AUDIT "unpaid": the mana half failed and rolled back, so a pip the
@@ -6239,11 +6275,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // are always creatures -- the params only exist on them), so Secluded Courtyard's
             // coloured mana is legal here (D12).
             CreatureAbilityPayScope pump_pay_scope;
+            // Stromkirk Condemned (mode 4): liveness first -- lockstep twin of the rollout's.
+            if (a.gy_exile_mode == 4
+                && !DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
+                                        a.discard_name.str())) { continue; }
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
                 const int n = ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
-                                                a.gy_exile_mode, a.chosen_x);
+                                                a.gy_exile_mode, a.chosen_x, a.discard_name.str());
                 // Label built from the PARAMS, not hardcoded. It used to read "team pump + haste"
                 // for every mode != 1, which was already wrong for mode 3 (Resplendent Angel's self
                 // pump + lifelink) and became wrong again for Valiant Knight's double-strike grant
@@ -6255,6 +6295,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     std::string what;
                     if (a.gy_exile_mode == 1)      { what = "pump (discard)"; }
                     else if (a.gy_exile_mode == 3) { what = "self pump + lifelink"; }
+                    else if (a.gy_exile_mode == 4)
+                    {
+                        // Stromkirk Condemned's discard-cost team pump (Vampires A2).
+                        what = "team +" + std::to_string(ad ? ad->params.discard_team_pump_power : 0) + "/+"
+                             + std::to_string(ad ? ad->params.discard_team_pump_toughness : 0)
+                             + " (discarded " + (a.discard_name.empty() ? std::string("chosen card")
+                                                                        : a.discard_name.str()) + ")";
+                    }
                     else
                     {
                         if (ad && ad->params.team_pump_power != 0)

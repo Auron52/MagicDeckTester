@@ -711,6 +711,41 @@ int DecisionProvider::SacExpendabilityRank(const GameState& s, const Permanent& 
     return ::DefaultSacExpendabilityRank(v, source_id, doomed_creators);
 }
 
+std::vector<std::string> DecisionProvider::ActivationDiscardCandidates(
+    const GameState& s, const CardDefinition& src_def, const std::vector<std::string>& names) const
+{
+    (void)src_def;
+    // The provider's own cleanup ranking (most expendable first), mapped onto the classes by first
+    // appearance; a name the ranking never lists keeps its hand order at the back. Order only.
+    const std::vector<int> rank = CleanupDiscardCandidates(s, nullptr);
+    const Player& ap = s.players[s.active_player_index];
+    std::vector<std::string> out;
+    out.reserve(names.size());
+    for (const int hi : rank)
+    {
+        if (hi < 0 || hi >= static_cast<int>(ap.hand.size())) { continue; }
+        const std::string& nm = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
+        if (std::find(names.begin(), names.end(), nm) == names.end()) { continue; }
+        if (std::find(out.begin(), out.end(), nm) == out.end()) { out.push_back(nm); }
+    }
+    for (const std::string& nm : names)
+    { if (std::find(out.begin(), out.end(), nm) == out.end()) { out.push_back(nm); } }
+    return out;
+}
+
+std::vector<int> DecisionProvider::SacOutletVictimCandidates(
+    const GameState& s, const Permanent& src, const std::vector<int>& reps) const
+{
+    std::vector<int> out = reps;
+    const std::vector<int> doomed = DoomedTokenCreators(s);
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b)
+    {
+        return SacExpendabilityRank(s, s.battlefield[static_cast<std::size_t>(a)], src.card.m_number, &doomed)
+             < SacExpendabilityRank(s, s.battlefield[static_cast<std::size_t>(b)], src.card.m_number, &doomed);
+    });
+    return out;
+}
+
 int DecisionProvider::EtbDestroyVictimClass(const GameState& s, int controller, const Permanent& q) const
 {
     return ::DefaultEtbDestroyVictimClass(s, controller, q);
@@ -19405,6 +19440,105 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     return out;
 }
 
+// ---- VampiresProvider (Vampires A2, 2026-10-18) -----------------------------------------------
+// AGENT-DRAFTED ORDERS (design_A2 §8), PENDING USER REVIEW. See the class note in DecisionProviders.h:
+// every hook ORDERS the engine's candidates and never drops one.
+static bool VampDraftOrdersOn()
+{
+    static const bool v = EnvOn("MTG_VAMP_DRAFT_ORDERS", true);   // DEFAULT ON; =0 = inherited / base orders
+    return v;
+}
+
+static bool VampHandHasLand(const GameState& s)
+{
+    for (const Card& c : s.players[s.active_player_index].hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { return true; }
+    }
+    return false;
+}
+
+std::vector<std::string> VampiresProvider::ActivationDiscardCandidates(
+    const GameState& s, const CardDefinition& src_def, const std::vector<std::string>& names) const
+{
+    // The inherited ranking first (VialProvider's cleanup rule mapped onto the names): the draft below
+    // re-orders it STABLY, so every tie keeps the inherited order.
+    std::vector<std::string> out = VialProvider::ActivationDiscardCandidates(s, src_def, names);
+    if (!VampDraftOrdersOn()) { return out; }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const bool land_back = VampHandHasLand(s);
+    int lands_bf = 0, lands_hand = 0;
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == me && q.card.IsLand()) { ++lands_bf; } }
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { ++lands_hand; }
+    }
+    // "The curve's need": this list tops out at four mana (Bloodline Keeper, Captivating Vampire), so
+    // lands past four in play + hand are surplus. A draft constant -- the USER owns the real number.
+    const bool land_surplus = (lands_bf + lands_hand) > 4;
+    ManaPool have = AvailableManaPool(s);
+    have.AddPool(s.floating_mana);
+    const int pool = static_cast<int>(have.Total());
+    auto tier = [&](const std::string& nm) -> int
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { return 4; }
+        if (d->gy_landfall_watcher && land_back) { return 0; }        // Bloodghast: comes back on the land
+        if (d->card.IsLand()) { return land_surplus ? 1 : 5; }        // surplus land, else keep lands
+        if (d->card.m_mana_cost.ManaValue() > pool) { return 2; }      // uncastable this turn
+        return 3;
+    };
+    std::stable_sort(out.begin(), out.end(),
+                     [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
+    return out;
+}
+
+std::vector<int> VampiresProvider::SacOutletVictimCandidates(
+    const GameState& s, const Permanent& src, const std::vector<int>& reps) const
+{
+    std::vector<int> out = VialProvider::SacOutletVictimCandidates(s, src, reps);   // SacExpendabilityRank
+    if (!VampDraftOrdersOn()) { return out; }
+    const bool land_back = VampHandHasLand(s);
+    auto tier = [&](int bi) -> int
+    {
+        const Permanent& v = s.battlefield[static_cast<std::size_t>(bi)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
+        if (d != nullptr && d->gy_landfall_watcher && land_back) { return 0; }   // returnable Bloodghast
+        const bool lord = d != nullptr && !d->params.subtypes_affected.empty()
+                       && (d->params.power_bonus > 0 || d->params.tough_bonus > 0);
+        if (lord) { return 5; }                                                  // lords last
+        if (v.entered_this_turn && !v.is_token) { return 1; }                   // cannot attack yet anyway
+        if (v.card.m_number == src.card.m_number) { return 2; }                 // the outlet itself
+        if (v.is_token) { return 3; }
+        return 4;
+    };
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b)
+    {
+        const int ta = tier(a), tb = tier(b);
+        if (ta != tb) { return ta < tb; }
+        return s.battlefield[static_cast<std::size_t>(a)].EffectivePower()
+             < s.battlefield[static_cast<std::size_t>(b)].EffectivePower();
+    });
+    return out;
+}
+
+int VampiresProvider::ActivationOrderRank(const GameState& s, const CardDefinition& d) const
+{
+    if (!VampDraftOrdersOn()) { return VialProvider::ActivationOrderRank(s, d); }
+    const CardParams& p = d.params;
+    if (p.tap_blood_cost.has_value())                                       { return 1; }   // reads the Vampire count
+    if (p.discard_team_pump_power > 0 || p.discard_team_pump_toughness > 0) { return 2; }
+    if (p.blood_draw_cost.has_value())                                      { return 3; }
+    if (p.sac_outlet_discard_cost > 0)                                      { return 4; }   // lowers the count
+    return VialProvider::ActivationOrderRank(s, d);
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -19419,6 +19553,7 @@ namespace
     const KnightsProvider        g_knights;
     const WhiteKnightsProvider   g_white_knights;
     const SoldiersProvider       g_soldiers;
+    const VampiresProvider       g_vampires;
     const AntiLifegainProvider   g_antilife;
     const TreasureHuntProvider   g_treasure;
     const VialProvider           g_vial;
@@ -21437,11 +21572,23 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Unpredictable Cyclone), Remand's counters_target_spell_to_hand (Hinata) and the bare `soulbond`
     // keyword (Silverblade Paladin: WhiteKnights).
     bool niv = false;
+    // VAMPIRES (onboarding 2026-10-18). MUST return ABOVE `melira_pod` (Markov Baron's convoke -- cluster
+    // A1), `goblin` (Falkenrath Pit Fighter's sac_creature_outlet) and `vial` (Aether Vial): the
+    // archetype-neutral misroute class. Signature = Vampires-only params OR'd across FOUR different cards
+    // (Pit Fighter's discard-cost outlet + its lost-life restriction, Stromkirk Condemned's discard pump,
+    // Voldaren Estate's Blood ability, Bloodghast's graveyard landfall), all new in this onboarding and
+    // carried by no other card in cards.json. Later integrators OR in the madness / combat / transform
+    // params (grants_madness_creature_subtype, madness_cost, ...) so a list that cuts the A2 cards keeps it.
+    bool vampires = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        if (p.sac_outlet_discard_cost > 0 || p.activate_only_if_opp_lost_life
+            || p.discard_team_pump_power > 0 || p.tap_blood_cost.has_value()
+            || p.landfall_return_self_from_gy)
+        { vampires = true; }
         if (p.attack_gather_auras) { bruna = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
@@ -21907,6 +22054,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // NivMizzetCombo: likewise (four params no other card carries), and it must beat `white_knights`
     // (Tandem Lookout's soulbond once tripped it -- see the flag).
     if (niv)         { return g_niv_mizzet_combo; }
+    // Vampires: its signature is carried by no other card, so the position is free (see the flag).
+    if (vampires)    { return g_vampires; }
     if (galadriel)   { return g_galadriel; }
     if (bruna)       { return g_bruna; }
     // Colossus Hammer: above `equipment` and `anti` (see the flag). Its signature is carried by no

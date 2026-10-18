@@ -176,6 +176,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // cast_trigger_instant_sorcery_draw, aura_damage_trigger_draw, soulbond_damage_trigger_draw).
         // Rode Generic before Stage 4a; NivMizzetComboProvider is an empty DeckProvider derivation.
         {"NivMizzetCombo", "NivMizzetCombo"},
+        // Vampires (onboarding 2026-10-18, Stage 4a): its OWN provider, routed at the top by Vampires-
+        // only params (Falkenrath Pit Fighter / Stromkirk Condemned / Voldaren Estate / Bloodghast).
+        // Without it the deck would ride GoblinsProvider (Pit Fighter's sac_creature_outlet) and, once
+        // Markov Baron's convoke lands, MeliraPodProvider; before this onboarding it rode Vial, which
+        // VampiresProvider derives from. The list file is decks/Vampires/Vampire.cod (the user's name).
+        {"Vampires", "Vampires"},
     };
 
     namespace fs = std::filesystem;
@@ -194,6 +200,17 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
             for (char& ch : lower) { ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); }
             const fs::path cand_lc = root / folder / (lower + ext);
             if (fs::exists(cand_lc)) { deck = cand_lc; break; }
+        }
+        // decks/Vampires/Vampire.cod: the folder's ONLY decklist under another name.
+        if (deck.empty())
+        {
+            std::vector<fs::path> lists;
+            for (const auto& e : fs::directory_iterator(root / folder))
+            {
+                const std::string ext = e.path().extension().string();
+                if (e.is_regular_file() && (ext == ".cod" || ext == ".txt")) { lists.push_back(e.path()); }
+            }
+            if (lists.size() == 1) { deck = lists.front(); }
         }
         REQUIRE_MESSAGE(!deck.empty(), "no decklist for ", folder);
         const DecisionProvider& p = DetectDecisionProvider(DeckLoader::LoadFromFile(deck));
@@ -219,6 +236,20 @@ TEST_CASE("Pirates routing: the signature survives cutting any ONE of its five c
                                          [&](const Card& c) { return c.m_name.str() == cut; }),
                           d.mainboard.end());
         CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "Pirates", "cutting ", cut);
+    }
+}
+
+TEST_CASE("Vampires routing: the signature survives cutting any ONE of its four A2 cards")
+{
+    EnsureCardsPp();
+    const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod"));
+    for (const char* cut : {"Falkenrath Pit Fighter", "Stromkirk Condemned", "Voldaren Estate", "Bloodghast"})
+    {
+        Decklist d = full;
+        d.mainboard.erase(std::remove_if(d.mainboard.begin(), d.mainboard.end(),
+                                         [&](const Card& c) { return c.m_name.str() == cut; }),
+                          d.mainboard.end());
+        CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "Vampires", "cutting ", cut);
     }
 }
 

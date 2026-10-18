@@ -414,6 +414,7 @@ void CardDatabase::RebuildInternedIndex()
     {
         kv.second.enter_watcher    = DefHasCreatureEnterWatcher(kv.second.params);
         kv.second.landfall_watcher = DefHasLandfallTrigger(kv.second.params);   // same contract
+        kv.second.gy_landfall_watcher = kv.second.params.landfall_return_self_from_gy;   // Bloodghast
     }
 }
 
@@ -1755,6 +1756,22 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.nightbound_front_name = params.value("nightbound_front_name", std::string{});
     p.etb_or_transform_exile_opp_creature_until_leaves =
         params.value("etb_or_transform_exile_opp_creature_until_leaves", false);
+
+    // ---- Vampires A2 (2026-10-18) -- see CardParams for each field's oracle clause.
+    p.sac_outlet_discard_cost        = params.value("sac_outlet_discard_cost", 0);
+    p.activate_only_if_opp_lost_life = params.value("activate_only_if_opp_lost_life", false);
+    p.discard_team_pump_power        = params.value("discard_team_pump_power", 0);
+    p.discard_team_pump_toughness    = params.value("discard_team_pump_toughness", 0);
+    for (const std::string& s : params.value("discard_team_pump_subtypes", json::array()))
+        p.discard_team_pump_subtypes.push_back(s);
+    p.activate_once_each_turn        = params.value("activate_once_each_turn", false);
+    if (params.contains("tap_blood_cost"))
+        p.tap_blood_cost = ManaCostFromString(params["tap_blood_cost"].get<std::string>());
+    p.tap_blood_cost_less_per_subtype = params.value("tap_blood_cost_less_per_subtype", std::string{});
+    if (params.contains("blood_draw_cost"))
+        p.blood_draw_cost = ManaCostFromString(params["blood_draw_cost"].get<std::string>());
+    p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
+    p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
 
     return p;
 }

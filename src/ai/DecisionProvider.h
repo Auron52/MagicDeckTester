@@ -1717,6 +1717,24 @@ public:
     virtual int SacExpendabilityRank(const GameState& s, const Permanent& v, int source_id,
                                      const std::vector<int>* doomed_creators = nullptr) const;
 
+    // ---- Vampires A2 (2026-10-18): the two SEARCHED axes of the discard-cost activations ----------
+    // ActivationDiscardCandidates -- the DISCARD axis of a discard-cost activation (Falkenrath Pit
+    // Fighter, Stromkirk Condemned, the Blood token). `names` = every distinct non-staged hand-card
+    // name, hand order (the engine's sound identity fold: one class per name). The engine emits ONE
+    // searched variant per returned name, in the returned order. A provider may ORDER (move ordering
+    // and the beyond-horizon depth-0 pick) and, only with a measurement, RESTRICT -- never collapse
+    // the search to one option it did not branch on. Human play never consults it (one unpinned
+    // entry; the card is asked at resolution). Default: the provider's own CleanupDiscardCandidates
+    // ranking mapped onto the names (most expendable first), every name kept.
+    virtual std::vector<std::string> ActivationDiscardCandidates(
+        const GameState& s, const CardDefinition& src_def, const std::vector<std::string>& names) const;
+    // SacOutletVictimCandidates -- the VICTIM axis of a discard-cost sac outlet (Falkenrath Pit
+    // Fighter). `reps` = one battlefield index per identity class of legal victims (the engine's sound
+    // fold). Same contract as above: order, and restrict only with a measurement. Default: stable by
+    // SacExpendabilityRank (most expendable first), every class kept.
+    virtual std::vector<int> SacOutletVictimCandidates(
+        const GameState& s, const Permanent& src, const std::vector<int>& reps) const;
+
     // EtbDestroyVictimClass -- Terastodon's own-permanent victim ORDER class for `q` (lower = eaten
     // first, -1 = not a victim). Shared by the resolution loop, the emission's K cap and the K
     // projection, so the searched K can never exceed what resolution destroys. Default = the
