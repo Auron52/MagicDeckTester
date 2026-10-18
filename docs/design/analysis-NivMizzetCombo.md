@@ -289,6 +289,20 @@ case with T2 (`logs/niv/t2_t3_cmp.py`), then per game.
   author. (Measured before the Aura / payment / perf fixes; with every decision tied, they cannot
   plausibly change it.)
 
+### Stage 5 -- verify_deck full run (2026-10-18 15:05-15:20, rebased tip `5354901ca`)
+PASS: coverage (19/19 full), card_costs (Scryfall), viewer (self-guard + surface sweep), viewer_wiring
+(attach_host, dig, reorder, scry), **mismatch: no [nonconv] / [fd-diverge] across seeds 7001, 8001 x 60
+games**. SKIP: card_fields (the snapshot lacks 3 Temples from another deck), clause_ledger (covered).
+FAIL, all expected / the user's: regression_tiers + suite (the 3x rule -- sign-off keys
+`regression_tiers:too_slow`, `suite:not_a_case`), claude_sweep (the 3 deferred items).
+**play_invariants** first FAILED on a HARNESS gap: the driver did not know the `attach_host` decision
+type (Tandem Lookout's soulbond pairing; viewer_wiring was already green). Added to its KNOWN_TYPES (a
+one-int decision whose engine pick is `heuristic_default`, which the generic reply follows) -> 8 games,
+200 decisions, 0 hard, 0 advisories. 14 other emitted types (attack_mode, echo, jitte, revive, ...) are
+still unknown to the driver; each needs its reply shape checked when a deck reaches it.
+5b multi-depth (from the suite cells and the held-out A/B): d0 6.573 > d3 4.675-4.725 >= d5 4.633-4.70 --
+monotone and on the deck's T4-T5 clock.
+
 ### Stage 5j — the 3x cost rule: FAIL (2026-10-18 ~09:45)
 `suite_gate.py --measure decks/NivMizzetCombo` on the niv-aura tree (`d09f881e7` src), the rows of
 `logs/add_niv_rows.py` in place (uncommitted): **124,303.95 ms/game** at the worst searched case
@@ -324,7 +338,7 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
 ## Claude-play sweep
 - commit: `d09f881e7` (niv-aura; workflow `wf_64ca898c-6fa`, Opus players + an Opus skeptic per flag)
 - seeds: 71000-71015 games: 16 (claude-play varies by SEED; AI benchmark = one pooled batch, d5 b20)
-- flags: 5 unresolved at the sweep; 2 since fixed (P1/P2), 3 deferred (low/cosmetic, the user's sign-off)
+- flags: 3 unresolved (5 at the sweep; P1/P2 since FIXED -- `d9e002b8e`/`de36ef8ae`; the 3 left are the deferred low/cosmetic items below, awaiting the user's sign-off)
 - Win turns: AI 7xT4 / 9xT5. Claude = AI on 12, FASTER on 3 (s71004, s71011, s71014: T4 vs T5),
   slower on 1 (s71006). s71004 / s71014 used exactly the payment shapes of P1/P2 below (a Servant-
   hasted Niv + Curiosity; a filter-fed Parun) -> acceptance checks for the payment fix; s71011's player

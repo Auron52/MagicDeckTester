@@ -58,6 +58,12 @@ KNOWN_TYPES = {
     # tutor pick at RESOLUTION (main.cpp WriteTutorDecisionJson): every tutor CAST since 543f540d
     # (2026-09-10) and a tutor ETB off a put. Single int, engine pick exposed as heuristic_default.
     "tutor_etb",
+    # attach host / soulbond pairing (main.cpp WriteAttachHostDecisionJson: Armored Skyhunter's
+    # attach, Raubahn's two stages, Silverblade Paladin's and Tandem Lookout's soulbond). One int,
+    # the engine pick exposed as heuristic_default -- the generic fallback below follows it.
+    # (Other emitted types still absent here -- attack_mode, echo, jitte, revive, ... -- have not
+    # been checked for single-int shape; add each with its reply rule when a deck reaches it.)
+    "attach_host",
 }
 D_START, D_END = "<<<CLAUDE_DECISION>>>", "<<<END_DECISION>>>"
 R_START, R_END = "<<<CLAUDE_RESULT>>>", "<<<END_RESULT>>>"
