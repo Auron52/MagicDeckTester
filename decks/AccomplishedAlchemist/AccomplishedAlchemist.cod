@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="3" name="Accomplished Alchemist"/>
+        <card number="4" name="Living Wish"/>
+        <card number="4" name="Crab Umbra"/>
+        <card number="4" name="Utopia Sprawl"/>
+        <card number="4" name="Stroke of Genius"/>
+        <card number="18" name="Forest"/>
+        <card number="4" name="Nourish"/>
+        <card number="4" name="Staff of Domination"/>
+        <card number="4" name="Elvish Harbinger"/>
+        <card number="1" name="Ezuri, Renegade Leader"/>
+        <card number="1" name="Seedcradle Witch"/>
+        <card number="3" name="Arbor Elf"/>
+        <card number="1" name="Wild Growth"/>
+        <card number="1" name="Weather the Storm"/>
+        <card number="4" name="Feed the Clan"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Accomplished Alchemist"/>
+        <card number="2" name="Galvanic Alchemist"/>
+        <card number="1" name="Trufflesnout"/>
+        <card number="2" name="Scholar of Athreos"/>
+        <card number="1" name="Forest"/>
+        <card number="1" name="Island"/>
+        <card number="1" name="Eternal Witness"/>
+        <card number="1" name="Arbor Elf"/>
+        <card number="1" name="Brindle Boar"/>
+    </zone>
+</cockatrice_deck>
