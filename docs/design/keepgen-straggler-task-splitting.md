@@ -1,6 +1,12 @@
 # Pull a blocked cell's remaining rollouts in and run them in parallel
 
-**Status: PROPOSED (user-directed 2026-10-04). Not implemented.**
+**Status: IMPLEMENTED for the sub-table batches (kind 1 / kind 2) on 2026-10-18 -- split at feed time,
+folded in r order through one commit function, byte-identical; see `keepgen-barrier-free-2026-10-18.md`
+§2 (`MTG_KEEP_BATCH_SPLIT`, default ON). Size-7 rollouts were already one task each. The co-consumable
+cursor of §4 and the cancellation of §7 were not needed for sub batches (fixed ranges, always folded whole);
+cancelling an unneeded in-flight SPECULATIVE rollout remains open (same doc, §5).**
+
+(Original status: PROPOSED, user-directed 2026-10-04.)
 
 > *"In the ideal design we would eventually pull in the blocked games and run them in parallel, so
 > that is another change I would like to make going forward."* — USER
