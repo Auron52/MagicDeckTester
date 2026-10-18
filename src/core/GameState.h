@@ -111,6 +111,11 @@ enum GyReader : std::uint32_t
     // Equipment cards sit in our graveyard, so two states differing only there reach different
     // boards (a returned Colossus Hammer vs a Loxodon Warhammer). Folds the EQUIPMENT card names.
     GyR_EquipmentNames  = 1u << 9,
+    // GRAVEYARD LANDFALL (Bloodghast, Vampires A2 2026-10-18: "Whenever a land you control enters, you
+    // may return this card from your graveyard to the battlefield"). The landfall chokepoint reads
+    // WHICH of our graveyard cards carry that ability, so "Bloodghast in the graveyard" and "Bloodghast
+    // exiled / absent" reach different boards on the next land. Folds the gy-landfall card names.
+    GyR_GyLandfallNames = 1u << 10,
 };
 
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
@@ -319,6 +324,14 @@ struct GameState
     // CONSERVATIVE answer (true), so an entry point that never stamps it loses nothing but the
     // MTG_LA_TIE_PRUNE shortcut that reads it.
     bool                     inf_life_possible            = true;
+    // BLOODGHAST'S OPPONENT-LIFE CONDITIONAL HASTE (CardParams::haste_if_opp_life_at_most; Vampires A2
+    // 2026-10-18): the deck_has_* presence-gate family -- RefreshOppLifeHaste's beginning-of-combat
+    // battlefield walk (both worlds) runs only while this is set, so a clear bit PROVES the walk finds
+    // no such permanent. DEFAULT TRUE == walk (an unstamped GameState keeps it), the only-err-true rule.
+    // Placed HERE, in the padding after inf_life_possible (the deck_has_* run before m_provider has no
+    // room left: a bool there cost sizeof(GameState) +8, measured), so sizeof(GameState) does not move.
+    // A deck constant: never folded into any key.
+    bool                     deck_has_cond_haste          = true;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack

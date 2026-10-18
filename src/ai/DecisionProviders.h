@@ -1072,6 +1072,50 @@ public:
     bool CleanupDiscardShedStable() const override { return true; }
 };
 
+// VAMPIRES (B/R/W Vampire tribal on Aether Vial, onboarding 2026-10-18; analyze-deck Stage 4a).
+// DERIVES FROM VialProvider -- the provider this deck ROUTES TO TODAY on its non-accidental signature
+// (Aether Vial is the only signature-bearing card it held before this onboarding, the Knights /
+// Soldiers precedent). Its other routes are the archetype-NEUTRAL misroute class: Falkenrath Pit
+// Fighter's sac_creature_outlet would set `goblin` (GoblinsProvider's sac-outlet deferral) and Markov
+// Baron's convoke (cluster A1) would set `melira_pod` (MeliraPodProvider's persist-combo rules) -- so the
+// deck has its own signature, routed at the top of the chain (see `vampires` in DetectDecisionProvider),
+// OR'd across several Vampires-only params from DIFFERENT cards (Pit Fighter, Stromkirk Condemned,
+// Voldaren Estate, Bloodghast; the madness / combat / transform params are OR'd in by later
+// integrators) so no single deckbuilding swap can lose it.
+//
+// INHERITED BYTE-FOR-BYTE from VialProvider: the root Vial charge policy, the Knights cast order
+// (param-gated, inert here) and -- USER QUESTION OPEN -- slivers_vial's cleanup-discard buckets
+// (MTG_SLIVERS_BUCKET_DISCARD), which this deck rode before it had a provider. Discard buckets are
+// USER-owned; nothing here changes them.
+//
+// HOLDS (AGENT-DRAFTED 2026-10-18, design_A2 §8 -- PENDING USER REVIEW; MTG_VAMP_DRAFT_ORDERS, default
+// ON, =0 restores the inherited/base orders): three ORDERING hooks for the A2 activations. Each ORDERS
+// the candidates the engine emits and never removes one -- inside the search window every variant is
+// still branched; the order decides move ordering and the beyond-horizon (depth <= 0) pick only:
+//   * ActivationDiscardCandidates -- which hand card an outlet discards: a graveyard-landfall card
+//     (Bloodghast) while a land in hand will bring it back -> lands beyond the curve's need -> the
+//     highest-MV card the board cannot cast this turn -> the inherited ranking for the rest;
+//   * SacOutletVictimCandidates -- which Vampire Falkenrath Pit Fighter eats: a returnable Bloodghast ->
+//     a summoning-sick low-power body -> the Pit Fighter itself -> tokens -> other bodies -> lords last;
+//   * ActivationOrderRank -- the trailing pass: Blood creation (it reads the Vampire count) -> Stromkirk
+//     Condemned's pump -> Blood cracks -> Falkenrath Pit Fighter (it LOWERS the Vampire count).
+class VampiresProvider : public VialProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat is the main route to the opponent's "
+               "life, but several things must be priced before any winless-this-turn bound is sound: "
+               "Aether Vial and madness put creatures onto the battlefield at instant speed, Stromkirk "
+               "Condemned pumps the team after the board is read, Bloodghast returns with haste on a "
+               "land drop, and Drana / Stromkirk Captain change combat damage (first strike)." }; }
+    const char* Name() const override { return "Vampires"; }
+    std::vector<std::string> ActivationDiscardCandidates(
+        const GameState& s, const CardDefinition& src_def, const std::vector<std::string>& names) const override;
+    std::vector<int> SacOutletVictimCandidates(
+        const GameState& s, const Permanent& src, const std::vector<int>& reps) const override;
+    int ActivationOrderRank(const GameState& s, const CardDefinition& d) const override;
+};
+
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
 // lands in play (its curve tops at mana value 2), it BANKS further land drops so a future
 // topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1). Its other

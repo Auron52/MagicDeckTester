@@ -393,7 +393,23 @@ struct Action
     // emitted. The apply re-resolves either piece BY NAME when its number is not on the battlefield
     // (the cast may have taken a different copy of the same name -- the hand-Pod precedent).
     int         needs_cast_mask = 0;
-    InternedName victim_name;           // ActivateBlink: the payload's name (for the re-resolve)
+    InternedName victim_name;           // ActivateBlink: the payload's name (for the re-resolve).
+                                       // ALSO a discard-cost SacCreatureOutlet's SAME-PLAN victim
+                                       // (Falkenrath Pit Fighter, needs_cast_mask bit1): a Vampire the
+                                       // plan itself casts / Vial-puts, resolved by name at apply.
+    // VAMPIRES A2 (2026-10-18): the SEARCHED DISCARD of a discard-cost activation -- Falkenrath Pit
+    // Fighter (SacCreatureOutlet with sac_outlet_discard_cost), Stromkirk Condemned (ActivatePump mode
+    // 4), the Blood token (ActivatePermAbility BloodDraw). The NAME of the hand card discarded: one
+    // variant per DISTINCT name (two Swamps are one variant -- a sound identity fold), so the search,
+    // not a ranking, decides which card goes (it decides whether a Bloodghast returns, which land stays,
+    // and -- cluster A1 -- whether a madness creature is cast). Empty = unpinned: asked at resolution
+    // (human play only; an unpinned autonomous apply inside the window is counted and must read 0).
+    // FOLDED into plan_signature / ActionFoldSig / BpCandFingerprint / PlanDomKey (gated on non-empty,
+    // so every other deck keeps its exact keys) -- a sub-decision missing from the signature silently
+    // collapses to the first variant (the Gamble tutor_target lesson). The ONLY 8-byte field the A2
+    // work adds: sizeof(Action) 472 -> 480 (no padding hole holds a pointer; measured 2026-10-18).
+    // Cluster A1 adds its madness pin beside it (design_A1 §2.5: madness_choice / conv counts / mv).
+    InternedName discard_name;
     int         sac_count      = 1;    // SacCreatureOutlet: how many creatures this activation sacs.
                                        // 1 (default) = the single-victim action (uses sac_victim_id).
                                        // >1 = the multi-sac BURST (Siege-Gang saccing the swarm for
@@ -407,6 +423,12 @@ struct Action
                                        // single-sac + burst pair -- those also differ in sac_count, and
                                        // grouping them reordered goblins' enumeration (14 d0 games, 11
                                        // worse). False for every action while the lever is off.
+    // VAMPIRES A2: Voldaren Estate's Blood ability (ActivatePermAbility TapBlood) COST VARIANT -- the
+    // number of Vampire creatures the SAME plan adds (casts / Vial puts) before its trailing pass,
+    // which this variant's a.cost assumes ({5} - (Vampires now + k), floor 0). The subset must add at
+    // least that many (SubsetVampOutletInvalid); the apply pays the TRUE cost at activation
+    // (TapBloodCostNow). 0 for every other action. In padding (sizeof(Action) unchanged by it).
+    std::int8_t vamp_casts_needed = 0;
     int         gy_exile_mode  = 0;    // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
                                        // loses N (Deathrite {B}); 2 = exile creature -> gain N ({G}).
     int         loyalty_ability = -1;  // ActivateLoyalty: index into the walker's loyalty_abilities.
@@ -1762,6 +1784,14 @@ public:
     // built on: the enumeration emits a position after each such action, and both worlds' cast
     // loops count exactly these actions to find position k (lockstep by construction).
     static bool PutsLandfallWatcher(const Action& a);
+    // Vampires A2: does this ACTIVATION put a GRAVEYARD-landfall card (Bloodghast) into our graveyard --
+    // a pinned discard of one, or a sacrifice of one? Read ONLY by the land-after-ALL-casts (-1) clone
+    // emission (EnumeratePlansWithLandUncached), so a plan that discards / sacrifices Bloodghast is
+    // offered "then play the land" (it returns). Deliberately NOT part of PutsLandfallWatcher, which
+    // also counts the k-slot positions over CAST dispatch order -- activations never enter that order.
+    // Human play (no pins): any discard-cost activation with one in hand / an unbaked victim with one on
+    // the battlefield counts. Cluster A1: a madness pin that CASTS the card must not count.
+    static bool PutsGyLandfallFeeder(const GameState& state, const Action& a);
     // A position-k plan's cast ORDER: stable-partition `order` (indices into `acts`) so the
     // landfall-watcher actions come first. Applied BEFORE the stable CastOrderLess sort, so it moves
     // only the otherwise-arbitrary plan-order tie-break inside a rank -- never a provider rank. Both

@@ -283,6 +283,17 @@ enum class PermAbilityMode
     // QuestSacLandSearch block, never through the ModeSpec tables (whose {T}-less rows get a K-count
     // block). Its attach half is the Equip action. Appended LAST.
     ReconfigureUnattach,
+    // {5}, {T}: Create a Blood token. This ability costs {1} less to activate for each Vampire you
+    // control  (Voldaren Estate; CardParams::tap_blood_cost / tap_blood_cost_less_per_subtype). A {T}
+    // mode on a LAND (the Conservatory shape): the {T} is paid BEFORE the mana half, so the Estate can
+    // never pay its own cost. The reduction is counted AT ACTIVATION (TapBloodCostNow, recomputed by
+    // both trailing passes), so the plan's own earlier Vampire casts make it cheaper. Appended LAST.
+    TapBlood,
+    // {1}, {T}, Discard a card, Sacrifice this token: Draw a card  (the "Blood Token" named token def;
+    // CardParams::blood_draw_cost). A {T} mode (absent from PermAbilityTaps' exclusion list); an
+    // artifact is never summoning sick, so a Blood made this turn cracks now. WHICH card is discarded
+    // is a SEARCHED pin (Action::discard_name, one variant per distinct hand name). Appended LAST.
+    BloodDraw,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -482,7 +493,28 @@ struct Permanent
     // copy NO LONGER TRIGGERS, rather than triggering and resolving to nothing. FLIPS MID-TURN,
     // so it needs the full fold treatment its neighbour has -- fungibility, sim key, dominance and
     // the payment parity check -- not just BuildSimKey.
-    bool      storied_draw_used_this_turn = false;
+    //
+    // THREE 1-BIT FIELDS IN ONE BYTE (Vampires A2, 2026-10-18): Kili's flag and the two below share the
+    // byte Kili's bool used to occupy, so sizeof(Permanent) stays 304 (two plain bools crossed an
+    // alignment boundary and cost +8 per permanent, measured -- GameState deep copy is a hotspot). A
+    // bit-field reads and assigns exactly like a bool at every site; only `&field` / offsetof would
+    // notice, and nothing takes either.
+    bool      storied_draw_used_this_turn : 1 = false;
+    // "Activate only once each turn" (CR 602.5b) on an ACTIVATED ability, PER OBJECT (Stromkirk
+    // Condemned, CardParams::activate_once_each_turn): set when the activation is made, reset at OUR
+    // untap step in BOTH worlds (GameEngine::UntapStep + TurnSolver's per-turn reset). FLIPS MID-TURN,
+    // so it carries the full fold treatment (BuildSimKey bit, PermIsPlainForFoldImpl refusal,
+    // FungibilityKey, dominance::Build, LandfallTargetFoldKey, RemovalSelfTargetFoldKey, the payment
+    // parity check) -- a used Condemned and an unused one are not interchangeable. Never set for any
+    // other deck -> every key gated on it is byte-identical elsewhere.
+    bool      once_per_turn_used   : 1 = false;
+    // DERIVED conditional haste (Bloodghast: "has haste as long as an opponent has 10 or less life";
+    // CardParams::haste_if_opp_life_at_most). Read by CanAttackFull (both overloads) and CanTapNow
+    // beside temp_haste, and RECOMPUTED (set AND cleared) by RefreshOppLifeHaste -- at the permanent's
+    // entry and at the beginning of combat in both worlds -- never written by anything else, so it
+    // cannot collide with temp_haste's owners. A function of the permanent's definition and the
+    // opponent's life, both already in every key, so it is folded nowhere.
+    bool      cond_haste           : 1 = false;
     bool      lifegain_counters_used_this_turn = false; // Nykthos Paragon's "Do this only once each
                                            // turn" on "whenever you gain life, you may put that many
                                            // +1/+1 counters on each creature you control". PER

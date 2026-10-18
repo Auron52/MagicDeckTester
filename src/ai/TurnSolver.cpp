@@ -629,7 +629,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
          // 131072 on the two sides of the rebase. Sharing a bit would alias two distinct states into
          // one sim key -- a silent search-correctness bug, not a cosmetic clash -- so Kili's flag
          // moved to the next free bit (1<<18; 1<<19 and up are still unused here).
-         | (p.storied_draw_used_this_turn ? 262144ull : 0ull));     // Kili once-each-turn draw
+         | (p.storied_draw_used_this_turn ? 262144ull : 0ull)       // Kili once-each-turn draw
+         | (p.once_per_turn_used ? 524288ull : 0ull));              // Stromkirk Condemned once-each-turn activation (1<<19)
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -2948,9 +2949,49 @@ static const int   s_dork_ramp     = s_dork_ramp_env ? std::atoi(s_dork_ramp_env
 // main 2 genuinely adds is a land that ARRIVED since (drawn, tutored, revealed), so that is all it
 // offers. Measured: the held-land copies were 35% of all main-2 plans (units 1.41x -> 1.12x of the
 // pre-purge tree on antilife/melira). Human play is exempt -- the viewer never narrows a choice.
+// THE NARROW EXEMPTION (MTG_VAMP_GY_LANDFALL_HELD_LAND, default ON; Vampires A2 0.5 -- USER QUESTION
+// OPEN, ledger open question 1; see VampGyLandfallHeldLandOn for the full argument). The rule's premise
+// -- a held land played post-combat re-derives a main-1 line -- is FALSE for a GRAVEYARD-landfall card:
+// "main 2: sacrifice / discard Bloodghast, THEN play the held land -> it returns" ends the turn with
+// Bloodghast on the battlefield, which no main-1 line can reach (Falkenrath Pit Fighter is illegal before
+// combat damage). So a held land is exempt exactly when such a card is in our graveyard NOW, or one is in
+// hand / on the battlefield with a LIVE outlet this main can feed it to (a discard-cost activation for a
+// hand copy; a discard-cost sac outlet for a battlefield copy). Everything else keeps the USER rule.
+static bool GyLandfallHeldLandExempt(const GameState& s)
+{
+    if (!VampGyLandfallHeldLandOn()) { return false; }
+    if ((s.deck_gy_readers & GyR_GyLandfallNames) == 0) { return false; }   // deck constant: no such card
+    const int me = s.active_player_index;
+    auto is_gl = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->gy_landfall_watcher;
+    };
+    for (const Card& g : s.players[me].graveyard) { if (is_gl(g)) { return true; } }
+    bool in_hand = false, on_bf = false;
+    for (const Card& h : s.players[me].hand) { if (!h.m_is_staged && is_gl(h)) { in_hand = true; break; } }
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == me && is_gl(q.card)) { on_bf = true; break; } }
+    if (!in_hand && !on_bf) { return false; }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        if (IsDiscardSacOutlet(p) && SacOutletLive(s, me, q.card.m_number, 0, std::string(), std::string()))
+        { return true; }   // discards (a hand copy) AND sacrifices (a battlefield copy)
+        if (!in_hand) { continue; }
+        if ((p.discard_team_pump_power > 0 || p.discard_team_pump_toughness > 0)
+            && DiscardTeamPumpLive(s, me, q.card.m_number, std::string())) { return true; }
+        if (p.blood_draw_cost.has_value()
+            && PermAbilitySourceLive(s, me, q.card.m_number, PermAbilityMode::BloodDraw)) { return true; }
+    }
+    return false;
+}
 static bool HeldLandBarredFromMain2(const GameState& s, const Card& c)
 {
-    return !HumanPlayActive() && s.HeldSinceMain1(c);
+    return !HumanPlayActive() && s.HeldSinceMain1(c) && !GyLandfallHeldLandExempt(s);
 }
 static bool M2DropLive(const GameState& s)
 {
@@ -5090,12 +5131,23 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         // counter-costed twin is the out-of-band clause below.
         { PermAbilityMode::SacLandSearch,
           sd.params.land_search_activation_taps ? &sd.params.land_search_activation_cost : &kNoLandSearchCost },
+        // Vampires A2 -- appended LAST, same order as the other tables.
+        { PermAbilityMode::TapBlood,           &sd.params.tap_blood_cost                 },
+        { PermAbilityMode::BloodDraw,          &sd.params.blood_draw_cost                },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
     {
         if (!m.cost->has_value()) { continue; }
         if (PermAbilityTaps(m.mode) && (src.tapped || !CanTapNow(src, state.battlefield))) { continue; }
+        // Voldaren Estate: the Vampire-reduced cost NOW; the Blood crack: a card to discard.
+        if (m.mode == PermAbilityMode::TapBlood)
+        {
+            if (pool.CanPay(TapBloodCostNow(state, ctrl, sd))) { bits |= 1u << static_cast<int>(m.mode); }
+            continue;
+        }
+        if (m.mode == PermAbilityMode::BloodDraw
+            && !ActivationDiscardPayable(state, ctrl, std::string())) { continue; }
         // Bilbo's "Activate only if you have 111 or more life" (the shared gate).
         if (m.mode == PermAbilityMode::LifeGatedPutCreatures
             && !PermAbilitySourceLive(state, ctrl, src.card.m_number, m.mode)) { continue; }
@@ -11620,6 +11672,150 @@ static bool SubsetHasComboRouteWithOthers(const std::vector<Action>& cands, cons
     return false;
 }
 
+// ---- VAMPIRES A2 SUBSET RULES (2026-10-18; design_A2) ----------------------------------------------
+// Rejects a selection that is a DEGENERATE DUPLICATE of another enumerated selection -- never a real
+// line (every rule is lossless; the comments say why):
+//   1. DISCARDS OVER-PINNED: the selection pins more discards of a name than the hand holds non-staged
+//      copies, net of its own casts / Vial puts of that name (staged copies are spent first, so the
+//      count only ever UNDER-states the use -- the rule can only accept a dud, never refuse a real
+//      line). The surplus pinned activation would no-op at apply (its premise failed), i.e. the plan
+//      without it. (design_A2 §0.1's SubsetOversubscribesDiscards.)
+//   2. A SAME-PLAN VICTIM WITHOUT ITS CAST: a discard-cost sac outlet whose victim is a creature this
+//      plan casts / puts (needs_cast_mask bit1 + victim_name) with no such cast / put -> a no-op.
+//   3. THE WRONG BLOOD COST VARIANT: Voldaren Estate's TapBlood variant k (Action::vamp_casts_needed:
+//      k exact, or k+16 = "k or more" on the top variant) must match the number of Vampire creatures
+//      the selection adds before its trailing pass. Exactly ONE variant survives per selection -- the
+//      one whose books equal the true activation cost (a looser variant is the same line over-priced).
+//   4. (odometer positions only -- a constructed line has no enumerated twin) TWO IDENTICAL Stromkirk
+//      Condemned in a NON-CANONICAL assignment: copies whose LandfallTargetFoldKey matches are the same
+//      permanent up to their number, so "#1 discards A, #2 discards B" and "#1 discards B, #2 discards
+//      A" are one line; keep only the selection whose copies are a PREFIX of the class (battlefield
+//      order) carrying NON-DECREASING discard indices (the shared pin order) -- the multiset form.
+static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel, bool fold_from_odometer)
+{
+    const Player& ap = state.ActivePlayer();
+    auto def_of = [](const Action& c) -> const CardDefinition*
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    auto puts_name = [&](const std::string& nm) -> int
+    {
+        int n = 0;
+        for (int jdx : sel)
+        {
+            const Action& d = cands[static_cast<std::size_t>(jdx)];
+            if ((d.kind == Action::Kind::CastFromHand || d.kind == Action::Kind::ActivateVial)
+                && d.card_name.str() == nm) { ++n; }
+        }
+        return n;
+    };
+    // Rule 1 + rule 2 + rule 3 in one pass over the selection.
+    std::vector<std::pair<std::string, int>> pins;   // name -> pinned discards
+    int mode4 = 0;
+    for (int idx : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(idx)];
+        if (!c.discard_name.empty())
+        {
+            bool found = false;
+            for (auto& pr : pins) { if (pr.first == c.discard_name.str()) { ++pr.second; found = true; break; } }
+            if (!found) { pins.emplace_back(c.discard_name.str(), 1); }
+        }
+        if (c.kind == Action::Kind::SacCreatureOutlet && (c.needs_cast_mask & 2) != 0
+            && !c.victim_name.empty() && puts_name(c.victim_name.str()) == 0)
+        { return true; }   // rule 2
+        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::TapBlood)
+        {
+            const CardDefinition* bd = def_of(c);
+            const std::string sub = bd != nullptr ? bd->params.tap_blood_cost_less_per_subtype : std::string();
+            int added = 0;
+            if (!sub.empty())
+            {
+                for (int jdx : sel)
+                {
+                    const Action& d = cands[static_cast<std::size_t>(jdx)];
+                    if (d.kind != Action::Kind::CastFromHand && d.kind != Action::Kind::ActivateVial) { continue; }
+                    if (d.bestow || d.adventure) { continue; }   // no creature enters
+                    const CardDefinition* dd = def_of(d);
+                    if (dd != nullptr && dd->card.IsCreature() && CardHasSubtype(dd->card, sub)) { ++added; }
+                }
+            }
+            const int v = c.vamp_casts_needed;
+            const bool ok = (v >= 16) ? (added >= v - 16) : (added == v);
+            if (!ok) { return true; }   // rule 3
+        }
+        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { ++mode4; }
+    }
+    // Rule 1.
+    for (const auto& pr : pins)
+    {
+        int nonstaged = 0, staged = 0;
+        for (const Card& hc : ap.hand)
+        {
+            if (hc.m_name.str() != pr.first) { continue; }
+            if (hc.m_is_staged) { ++staged; } else { ++nonstaged; }
+        }
+        const int uses_nonstaged = std::max(0, puts_name(pr.first) - staged);
+        if (pr.second + uses_nonstaged > nonstaged) { return true; }
+    }
+    // Rule 4.
+    if (mode4 >= 2 && fold_from_odometer)
+    {
+        // The shared pin order: distinct discard names in candidate order (every copy's fan is the
+        // same ActivationDiscardClasses list, so first appearance IS that order).
+        std::vector<std::string> order;
+        for (const Action& c : cands)
+        {
+            if (c.kind != Action::Kind::ActivatePump || c.gy_exile_mode != 4 || c.discard_name.empty()) { continue; }
+            if (std::find(order.begin(), order.end(), c.discard_name.str()) == order.end())
+            { order.push_back(c.discard_name.str()); }
+        }
+        struct Pick { std::uint64_t key; bool keyed; int bf; int pin; };
+        std::vector<Pick> picks;
+        for (int idx : sel)
+        {
+            const Action& c = cands[static_cast<std::size_t>(idx)];
+            if (c.kind != Action::Kind::ActivatePump || c.gy_exile_mode != 4) { continue; }
+            Pick p{0, false, -1, -1};
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.card.m_number != c.sac_source_id || q.controller_index != state.active_player_index) { continue; }
+                p.bf = i;
+                p.keyed = LandfallTargetFoldKey(state, q, p.key);
+                break;
+            }
+            for (int k = 0; k < static_cast<int>(order.size()); ++k)
+            { if (order[static_cast<std::size_t>(k)] == c.discard_name.str()) { p.pin = k; break; } }
+            if (p.bf < 0 || !p.keyed || p.pin < 0) { continue; }   // unkeyable: never folded
+            picks.push_back(p);
+        }
+        for (const Pick& a : picks)
+        {
+            // Every class member that sits BEFORE `a` on the battlefield and offers a mode-4 activation
+            // must be selected too (prefix), with a discard index <= a's (non-decreasing).
+            for (int i = 0; i < a.bf; ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.controller_index != state.active_player_index) { continue; }
+                std::uint64_t k2 = 0;
+                if (!LandfallTargetFoldKey(state, q, k2) || k2 != a.key) { continue; }
+                bool offered = false;
+                for (const Action& c : cands)
+                {
+                    if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4
+                        && c.sac_source_id == q.card.m_number) { offered = true; break; }
+                }
+                if (!offered) { continue; }
+                const Pick* earlier = nullptr;
+                for (const Pick& b : picks) { if (b.bf == i) { earlier = &b; break; } }
+                if (earlier == nullptr) { return true; }        // not a prefix of the class
+                if (earlier->pin > a.pin) { return true; }      // discard indices decrease
+            }
+        }
+    }
+    return false;
+}
+
 static bool SubsetHasStrandedHandBlink(const std::vector<Action>& cands,
                                        const std::vector<int>& sel)
 {
@@ -13041,6 +13237,8 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     why = foldcensus::kLifegainCountersUsed;
     if (p.lifegain_counters_used_this_turn) { return false; }
     if (p.storied_draw_used_this_turn)      { return false; }
+    // Stromkirk Condemned: a used copy cannot pump again this turn, an unused one can (Vampires A2).
+    if (p.once_per_turn_used)               { return false; }
     why = foldcensus::kChosenColor;
     if (p.chosen_color != -1) { return false; }
     why = foldcensus::kIceAge;
@@ -13442,6 +13640,13 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
+    // Vampires A2: the searched discard pin, the Blood cost variant and a discard-cost outlet's
+    // same-plan victim. Folded only when set, so every other deck's signature is byte-identical.
+    if (!a.discard_name.empty())
+    { FoldMix(h, 0xD15Cull); FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.discard_name.str()))); }
+    if (a.vamp_casts_needed != 0) { FoldMix(h, 0xB100Dull + static_cast<std::uint64_t>(a.vamp_casts_needed)); }
+    if (a.kind == Action::Kind::SacCreatureOutlet && !a.victim_name.empty())
+    { FoldMix(h, 0x5A1Cull); FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.victim_name.str()))); }
     // Magnetic Theft's Equipment target is a searched axis too (the creature rides enchant_target,
     // above). Folded only when set, so every other deck's signature is byte-identical.
     if (a.attach_equip_id != 0)
@@ -15989,6 +16194,10 @@ struct SubsetFilterPre
     // Equip candidate attaches -- the filter's exact necessary condition (it needs both in one
     // selection). Same placement / lowering contract as attach_spell.
     bool equip_onto_piece = true;
+    // SubsetVampOutletInvalid (Vampires A2): some candidate carries a discard pin, a same-plan victim, a
+    // Blood cost variant or Stromkirk Condemned's mode 4 -- the filter's exact necessary condition.
+    // Same placement / lowering contract as attach_spell.
+    bool vamp_outlet = true;
     // MTG_EQUIP_HOST_FOLD (SubsetHasNonCanonicalEquipHost): per candidate, the interchangeable-host CLASS
     // of an Equip's host (-1 = none) and its member RANK, plus a BLOCK bit for a candidate whose presence
     // makes a subset unfoldable. EMPTY = not built -> the filter never runs. Exact (the fold's own inputs,
@@ -16684,6 +16893,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
                          false, false, false, false, false, false, false, false, false };
     p.attach_spell = false;
     p.equip_onto_piece = false;
+    p.vamp_outlet = false;
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
     bool best_target = false;   // a kTrickBestOwnTarget cand (MTG_MINT_CREDIT_EXACT, Mirrorwing)
     for (const Action& a : cands)
@@ -16725,6 +16935,11 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
                 break;
             default: break;
         }
+        if (!a.discard_name.empty() || a.vamp_casts_needed != 0
+            || (a.kind == Action::Kind::SacCreatureOutlet && (a.needs_cast_mask & 2) != 0)
+            || (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapBlood)
+            || (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4))
+        { p.vamp_outlet = true; }   // Vampires A2 (SubsetVampOutletInvalid)
         if (a.free_cast)          { p.dup_source = true; }   // bank slots, and the paid/free pair
         if (a.equiv_tag != 0)     { p.dup_source = true; }   // canonical-prefix fold (see the note above)
         if (a.alt_cost)           { p.alt_payload = true; }
@@ -20077,6 +20292,12 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
              + static_cast<uint64_t>(a.convoke_other));
         fold(static_cast<uint64_t>(a.gy_exile_mode + 2) * 11
              + static_cast<uint64_t>(a.loyalty_ability + 2));
+        // Vampires A2: the searched discard pin / Blood cost variant / same-plan victim -- must-folds
+        // like devour_count (two pins are two plays). Gated on set -> every other fingerprint unchanged.
+        if (!a.discard_name.empty()) { fold(0x44495343ull); folds(a.discard_name.str()); }   // "DISC"
+        if (a.vamp_casts_needed != 0) { fold(0x424C4F44ull + static_cast<uint64_t>(a.vamp_casts_needed)); }   // "BLOD"
+        if (a.kind == Action::Kind::SacCreatureOutlet && !a.victim_name.empty())
+        { fold(0x56494354ull); folds(a.victim_name.str()); }   // "VICT"
         // The LAND-PUT CREDIT class (Search for Tomorrow): a must-fold like devour_count -- the
         // credit restricts the searched basic, so two classes are two different plays. Gated on the
         // param + a stamped credit, so every other deck's fingerprint is unchanged.
@@ -20294,6 +20515,13 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
            std::to_string(static_cast<long long>(y.devour_count))); }
     if (x.attach_equip_id != y.attach_equip_id)
     { add("attach_equip_id", std::to_string(x.attach_equip_id), std::to_string(y.attach_equip_id)); }
+    if (x.discard_name != y.discard_name)
+    { add("discard_name", x.discard_name.str(), y.discard_name.str()); }
+    if (x.vamp_casts_needed != y.vamp_casts_needed)
+    { add("vamp_casts_needed", std::to_string(static_cast<int>(x.vamp_casts_needed)),
+           std::to_string(static_cast<int>(y.vamp_casts_needed))); }
+    if (x.victim_name != y.victim_name)
+    { add("victim_name", x.victim_name.str(), y.victim_name.str()); }
     if (static_cast<long long>(x.replicate_count) != static_cast<long long>(y.replicate_count))
     { add("replicate_count", std::to_string(static_cast<long long>(x.replicate_count)),
            std::to_string(static_cast<long long>(y.replicate_count))); }
@@ -21480,11 +21708,31 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::ActivatedDig,       &pp.activated_dig_cost             },     // appended LAST (Recruitment Officer)
         { PermAbilityMode::SacLandSearch,                                                         // appended LAST (Wilds / Myriad)
           pp.land_search_activation_taps ? &pp.land_search_activation_cost : &kNoLandSearchCost },
+        // Vampires A2 -- appended LAST (slots are table INDEX): Voldaren Estate's Blood creation and the
+        // Blood token's crack. A Blood MADE mid-plan is newly crackable, which is what opens site 9 for it.
+        { PermAbilityMode::TapBlood,           &pp.tap_blood_cost                 },
+        { PermAbilityMode::BloodDraw,          &pp.blood_draw_cost                },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
         if (!modes[i].cost->has_value()) { continue; }
         if (PermAbilityTaps(modes[i].mode) && (p.tapped || !CanTapNow(p, state.battlefield))) { continue; }
+        // TapBlood's cost is {5} minus our Vampires NOW (TapBloodCostNow) -- price THAT, total-only
+        // like ActAffordable; the crack also needs a card to discard (its cost includes one).
+        if (modes[i].mode == PermAbilityMode::TapBlood)
+        {
+            if (total_cache < 0)
+            {
+                ManaPool have = AvailableManaPool(state);
+                have.AddPool(state.floating_mana);
+                total_cache = static_cast<int>(have.Total());
+            }
+            if (TapBloodCostNow(state, ctrl, *d).ManaValue() <= total_cache)
+            { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
+            continue;
+        }
+        if (modes[i].mode == PermAbilityMode::BloodDraw
+            && !ActivationDiscardPayable(state, ctrl, std::string())) { continue; }
         if (ActAffordable(state, ctrl, p.card, *modes[i].cost, total_cache))
         { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
     }
@@ -21516,6 +21764,12 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if ((!pp.team_pump_taps_source || (!p.tapped && CanTapNow(p, state.battlefield)))
         && ActAffordable(state, ctrl, p.card, pp.team_pump_cost, total_cache))
     { out.push_back(ActKey(num, kActTeamPump)); }
+    // Stromkirk Condemned's discard-cost pump (ActivatePump mode 4; Vampires A2): no mana, so the key is
+    // its own liveness -- unused this turn and a card to discard. A Condemned the plan CAST is newly
+    // activatable, which is what opens site 9 for it in the same main.
+    else if ((pp.discard_team_pump_power > 0 || pp.discard_team_pump_toughness > 0)
+             && DiscardTeamPumpLive(state, ctrl, num, std::string()))
+    { out.push_back(ActKey(num, kActTeamPump)); }
     if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && CanTapNow(p, state.battlefield)))
         && ActAffordable(state, ctrl, p.card, pp.pod_activation_cost, total_cache))
     { out.push_back(ActKey(num, kActPod)); }
@@ -21525,7 +21779,12 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
             || ActAffordable(state, ctrl, p.card, pp.sac_creature_cost, total_cache)))
     {
         bool ok = true;
-        if (pp.sac_outlet_self_only)
+        // Falkenrath Pit Fighter (Vampires A2): the outlet's own legality predicate -- the "opponent
+        // lost life this turn" restriction, a card to discard and a legal Vampire -- the same one the
+        // enumerator and both applies read (SacOutletLive).
+        if (IsDiscardSacOutlet(pp))
+        { ok = SacOutletLive(state, ctrl, num, 0, std::string(), std::string()); }
+        else if (pp.sac_outlet_self_only)
         {
             // The enumerator's own dominated-action gate: a self-only outlet is only an option
             // while a death payoff is live, so the site never opens for an activation it would
@@ -23305,6 +23564,51 @@ bool TurnSolver::PutsLandfallWatcher(const Action& a)
     // played after the watcher is cast starts a reveal chain and one played before it does not.
     return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents
                             || d->params.scry_reveal_land_to_battlefield);
+}
+
+bool TurnSolver::PutsGyLandfallFeeder(const GameState& state, const Action& a)
+{
+    const bool discards = !a.discard_name.empty()
+        || (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4)
+        || (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::BloodDraw)
+        || (a.kind == Action::Kind::SacCreatureOutlet && a.def != nullptr
+            && a.def->params.sac_outlet_discard_cost > 0);
+    if (!discards && a.kind != Action::Kind::SacCreatureOutlet) { return false; }
+    const int me = state.active_player_index;
+    auto is_gl = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->gy_landfall_watcher;
+    };
+    if (discards)
+    {
+        if (!a.discard_name.empty())
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.discard_name.str());
+            if (d != nullptr && d->gy_landfall_watcher) { return true; }
+        }
+        else
+        {
+            for (const Card& hc : state.players[me].hand) { if (!hc.m_is_staged && is_gl(hc)) { return true; } }
+        }
+    }
+    if (a.kind == Action::Kind::SacCreatureOutlet)
+    {
+        if (!a.victim_name.empty())
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.victim_name.str());
+            if (d != nullptr && d->gy_landfall_watcher) { return true; }
+        }
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me) { continue; }
+            const bool hit = (a.sac_victim_id != 0) ? (q.card.m_number == a.sac_victim_id)
+                                                    : (a.victim_name.empty() && a.def != nullptr
+                                                       && a.def->params.sac_outlet_discard_cost > 0);
+            if (hit && is_gl(q.card)) { return true; }
+        }
+    }
+    return false;
 }
 
 void TurnSolver::LandSlotWatchersFirst(const std::vector<Action>& acts, std::vector<int>& order)
@@ -25623,6 +25927,62 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
         }
     }
     return out;
+}
+
+// ---- VAMPIRES A2 EMISSION HELPERS (2026-10-18; docs/design/vampires/design_A2_outlets.md) ----------
+// The DISCARD CLASSES of a discard-cost activation (Falkenrath Pit Fighter, Stromkirk Condemned, the
+// Blood token): one per DISTINCT non-staged hand-card NAME, in the provider's order
+// (DecisionProvider::ActivationDiscardCandidates -- which may ORDER and, measured, RESTRICT; the
+// engine never narrows). Two copies of one name are ONE class: same name => same definition => the
+// same card, so which copy goes is unobservable (a sound identity fold, design_A2 §0.1). A staged card
+// is in exile, never a legal discard.
+static std::vector<std::string> ActivationDiscardClasses(const GameState& state, const CardDefinition& src_def)
+{
+    std::vector<std::string> names;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const std::string& nm = c.m_name.str();
+        if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+    }
+    if (names.size() <= 1) { return names; }
+    return ResolveProvider(state).ActivationDiscardCandidates(state, src_def, names);
+}
+
+// The VICTIM CLASSES of a discard-cost sac outlet on the PRE-PLAN board: one battlefield index per
+// identity class of legal victims (LandfallTargetFoldKey -- full-state and conservative: name, types,
+// P/T, subtypes, tapped / summoning-sick / control-age state, counters, token provenance, no
+// attachment; an unkeyable permanent is its own class). Sacrificing either of two equal-key permanents
+// reaches the same board up to which per-copy number survives -- a relabelling no rule observes. The
+// provider orders (and may, measured, restrict) the classes (SacOutletVictimCandidates).
+static std::vector<int> DiscardSacVictimClasses(const GameState& state, const Permanent& src,
+                                                const CardParams& op)
+{
+    const int me = state.active_player_index;
+    std::vector<int> reps;
+    std::vector<std::uint64_t> keys;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!DiscardSacVictimLegal(q, me, op)) { continue; }
+        std::uint64_t k = 0;
+        if (LandfallTargetFoldKey(state, q, k))
+        {
+            if (std::find(keys.begin(), keys.end(), k) != keys.end()) { continue; }
+            keys.push_back(k);
+        }
+        reps.push_back(i);
+    }
+    if (reps.size() <= 1) { return reps; }
+    return ResolveProvider(state).SacOutletVictimCandidates(state, src, reps);
+}
+
+// "Is this a creature card of `sub`" off the DEFINITION's card (a hand Card carries identity only --
+// the type masks are filled when it becomes a permanent; the PerformSagaFreeCast trap).
+static bool HandCardIsSubtypeCreature(const Card& c, const std::string& sub)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return d != nullptr && d->card.IsCreature() && (sub.empty() || CardHasSubtype(d->card, sub));
 }
 
 // The card definition CollectActions' closing pass stamps on every action ("Resolve each action's card
@@ -31129,6 +31489,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // Vampires A2: the Blood token's crack is emitted from ONE canonical (first untapped) Blood --
+        // every untapped Blood is the same permanent up to its number (no counters, no other ability),
+        // so which one cracks is unobservable; further cracks come through the draw's hand-entry
+        // breakpoint with fresh discard choices (the no-K-block rule: each pick is its own decision).
+        bool blood_crack_emitted = false;
         // Call of the Wild "{2}{G}{G}: reveal top; creature -> battlefield, else graveyard"
         // (repeatable) + Wirewood Lodge "{G}, {T}: Untap target Elf". StompySurprise battlefield
         // abilities; param-gated -> no other deck emits them.
@@ -31818,6 +32183,90 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
 
+            // ---- Voldaren Estate: "{5}, {T}: Create a Blood token. This ability costs {1} less to
+            // activate for each Vampire you control." (PermAbilityMode::TapBlood; Vampires A2.) NOT in
+            // the ModeSpec table: its cost depends on the board AT ACTIVATION, and the trailing pass
+            // runs after the plan's casts -- so the pre-plan cost OVER-states it whenever the plan casts
+            // Vampires first ("cast two Vampires, then Blood for {0}" would be priced unaffordable and
+            // never emitted, and site 9 cannot rescue it: the ability was available at plan start).
+            // SOUND + COMPLETE: one COST VARIANT per k = 0..kmax Vampires the plan adds before the
+            // trailing pass, a.cost = {5} - (V0 + k) floored at {0}; SubsetVampOutletInvalid keeps
+            // exactly the variant whose k matches the subset (k == added, or the top variant for
+            // added >= kmax), so no subset is enumerated twice and none is over-priced; both trailing
+            // passes pay the TRUE cost at activation (TapBloodCostNow). Whether / when = subset
+            // membership; the {T} is paid before the mana, so the Estate never pays itself.
+            if (sd->params.tap_blood_cost.has_value() && !src.tapped
+                && CanTapNow(src, state.battlefield))
+            {
+                const int me     = state.active_player_index;
+                const int base   = sd->params.tap_blood_cost->generic;
+                const int v0     = CountControlledSubtypeCreatures(
+                    state, me, sd->params.tap_blood_cost_less_per_subtype);
+                int hand_vamps = 0;
+                if (!sd->params.tap_blood_cost_less_per_subtype.empty())
+                {
+                    for (const Card& hc : ap.hand)
+                    {
+                        if (HandCardIsSubtypeCreature(hc, sd->params.tap_blood_cost_less_per_subtype))
+                        { ++hand_vamps; }
+                    }
+                }
+                const int kmax = std::max(0, std::min(hand_vamps, base - v0));
+                for (int k = 0; k <= kmax; ++k)
+                {
+                    ManaCost c = sd->params.tap_blood_cost.value();
+                    c.generic = std::max(0, c.generic - (v0 + k));
+                    Action a;
+                    a.kind              = Action::Kind::ActivatePermAbility;
+                    a.card_name         = src.card.m_name;
+                    a.def               = sd;
+                    a.hand_index        = -1;
+                    a.sac_source_id     = src.card.m_number;
+                    a.ability_mode      = Action::AbilityMode::TapBlood;
+                    a.chosen_x          = 1;
+                    // k exact, or (the top variant) "k or more" -- encoded +16 (see the guard).
+                    a.vamp_casts_needed = static_cast<std::int8_t>(k == kmax ? k + 16 : k);
+                    a.cost              = c;
+                    a.eval              = 1;   // a banked card (ordering / depth-0 only)
+                    a.is_noncreature    = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+            // ---- The Blood token: "{1}, {T}, Discard a card, Sacrifice this token: Draw a card."
+            // (PermAbilityMode::BloodDraw; Vampires A2.) WHICH card is discarded is SEARCHED: one
+            // variant per distinct hand-card NAME (ActivationDiscardClasses), all sharing the source's
+            // activation family (one crack per plan). Human play: ONE unpinned entry, the card asked at
+            // resolution (the `discard` decision). Emitted from one canonical Blood (see
+            // blood_crack_emitted). NOT a Clue-style fusion into its creation: that would PICK the
+            // discard, which is a decision (the no-greedy rule).
+            if (sd->params.blood_draw_cost.has_value() && !blood_crack_emitted
+                && PermAbilitySourceLive(state, state.active_player_index, src.card.m_number,
+                                         Action::AbilityMode::BloodDraw))
+            {
+                blood_crack_emitted = true;
+                const ManaCost bcost = EffectiveActivationCost(state, state.active_player_index,
+                                                               src.card, *sd->params.blood_draw_cost);
+                std::vector<std::string> pins;
+                if (HumanPlayActive()) { pins.push_back(std::string()); }
+                else { pins = ActivationDiscardClasses(state, *sd); }
+                for (const std::string& pin : pins)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePermAbility;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.ability_mode   = Action::AbilityMode::BloodDraw;
+                    a.chosen_x       = 1;
+                    a.discard_name   = pin;
+                    a.cost           = bcost;
+                    a.eval           = 0;   // card-neutral (discard one, draw one); the rollout scores it
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+
             // ---- Spore outlet: "Remove three spore counters: create a 1/1 green Saproling" --------
             // Deliberately NOT in the ModeSpec table above: that table is keyed on an
             // optional<ManaCost> and none of its affordability machinery applies here, because THE
@@ -32471,6 +32920,57 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     actions.push_back(std::move(a));
                 }
             }
+
+            // ---- Stromkirk Condemned (Vampires A2): "Discard a card: Vampires you control get +1/+1
+            // until end of turn. Activate only once each turn." ActivatePump MODE 4. No mana and no {T},
+            // so it is legal the turn Condemned is cast (reached in the same main through breakpoint site
+            // 9 -- kActTeamPump keys it). WHICH card is discarded is SEARCHED: one variant per distinct
+            // hand-card NAME, all sharing the source's activation family (ActivationFamilyKey: the
+            // once-each-turn restriction -- one activation per copy per plan). WHETHER = subset
+            // membership; WHERE = the plan's trailing pass, after its casts (so every Vampire the plan
+            // casts is pumped -- the maximal set). Two IDENTICAL Condemned copies would otherwise reach
+            // each discard pair twice (A-then-B / B-then-A): SubsetVampOutletInvalid keeps the canonical
+            // assignment (sound symmetry fold, odometer positions only). Human play: ONE unpinned entry,
+            // the card asked at resolution through the `discard` decision.
+            if ((sd->params.discard_team_pump_power > 0 || sd->params.discard_team_pump_toughness > 0)
+                && DiscardTeamPumpLive(state, state.active_player_index, src.card.m_number, std::string()))
+            {
+                // Ordering / depth-0 only (the rollout scores the truth): pre-combat each matching
+                // creature that can still attack gains a point; the discarded card is a card.
+                int atk = 0;
+                if (is_pre_combat)
+                {
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        bool m = sd->params.discard_team_pump_subtypes.empty();
+                        for (const std::string& sub : sd->params.discard_team_pump_subtypes)
+                        { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
+                        if (m && !q.tapped && CanAttackFull(q, state.battlefield, state.active_player_index))
+                        { ++atk; }
+                    }
+                }
+                constexpr int DMG = 100;
+                std::vector<std::string> pins;
+                if (HumanPlayActive()) { pins.push_back(std::string()); }
+                else { pins = ActivationDiscardClasses(state, *sd); }
+                for (const std::string& pin : pins)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePump;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.chosen_x       = 1;
+                    a.gy_exile_mode  = 4;
+                    a.discard_name   = pin;
+                    a.cost           = ManaCost{};
+                    a.eval           = atk * sd->params.discard_team_pump_power * DMG - DMG;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
         }
 
         // Costed VALUE outlets (Siege-Gang "{1}{R}, Sac a Goblin: 2 damage"; Pashalik "{3}{R}, Sac a
@@ -32494,11 +32994,121 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             drain_memo.emplace_back(sub, d);
             return d;
         };
+        // Vampires A2: discard-cost outlets already emitted (by definition) -- see the pooling note below.
+        std::vector<const CardDefinition*> discard_outlet_done;
         for (const Permanent& src : state.battlefield)
         {
             if (src.controller_index != state.active_player_index) { continue; }
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
             if (!sd || !sd->params.sac_creature_outlet) { continue; }
+            // ---- FALKENRATH PIT FIGHTER (Vampires A2): "{1}{R}, Discard a card, Sacrifice a Vampire:
+            // Draw two cards. Activate only if an opponent lost life this turn." The discard-cost value
+            // outlet, emitted HERE and nowhere below (its own shape; every pre-existing outlet keeps its
+            // exact path). BOTH CHOICES ARE SEARCHED (the no-greedy rule; design_A2 §1.2):
+            //   * VICTIM -- one variant per identity class of legal victims on the pre-plan board
+            //     (DiscardSacVictimClasses; the source itself is a legal class), PLUS one per distinct
+            //     Vampire creature NAME in hand: a creature the SAME plan casts / Vial-puts before this
+            //     trailing activation ("cast Vampire of the Dire Moon, then sacrifice it, keeping the
+            //     attackers") is invisible to the pre-plan board and site 9 does not fire for it (the
+            //     ability is not newly available) -- victim_name + needs_cast_mask bit1, and
+            //     SubsetVampOutletInvalid requires the subset to cast / put that name;
+            //   * DISCARD -- crossed with one variant per distinct hand-card name (ActivationDiscardClasses).
+            // SOURCE POOLING (sound): no {T} and no source-referencing payload, so WHICH Pit Fighter
+            // activates is unobservable -- the family is emitted once, from the first (oldest) copy, and
+            // every variant shares its sac_source_id -> one ActivationFamilyKey group -> one activation
+            // per plan. Further activations come through the draw's hand-entry breakpoint with fresh
+            // victim / discard choices (no K block: each activation's picks are their own decisions).
+            // HUMAN PLAY: ONE entry, nothing baked -- the card and the Vampire are asked at resolution
+            // (`discard`, then `sacrifice`), against the live board.
+            if (IsDiscardSacOutlet(sd->params))
+            {
+                if (std::find(discard_outlet_done.begin(), discard_outlet_done.end(), sd)
+                    != discard_outlet_done.end()) { continue; }
+                discard_outlet_done.push_back(sd);
+                const int me = state.active_player_index;
+                if (!SacOutletLive(state, me, src.card.m_number, 0, std::string(), std::string())) { continue; }
+                constexpr int DMG = 100;
+                const CardParams& op = sd->params;
+                Action base;
+                base.kind           = Action::Kind::SacCreatureOutlet;
+                base.card_name      = src.card.m_name;
+                base.def            = sd;
+                base.hand_index     = -1;
+                base.sac_source_id  = src.card.m_number;
+                base.cost           = op.sac_creature_cost.value_or(ManaCost{});
+                base.is_noncreature = true;
+                const int net_cards = op.sac_outlet_draw - op.sac_outlet_discard_cost;
+                if (HumanPlayActive())
+                {
+                    // Never offer a human an activation the real payment cannot make (the Minotaur
+                    // ActivatePump re-prompt loop): the pool is colour-blind about Unclaimed Territory /
+                    // Voldaren Estate, whose colours may not pay this ability. Same probe, same pay scope
+                    // as the apply; human play only, so every rollout / autonomous run is unaffected.
+                    {
+                        GameState scratch = state;
+                        CreatureAbilityPayScope probe_pay_scope;
+                        if (!TapForCostDirect(scratch, base.cost, /*for_creature=*/false)) { continue; }
+                    }
+                    Action a = base;
+                    a.sac_victim_id = 0;   // asked at resolution
+                    a.eval          = net_cards * DMG;
+                    actions.push_back(std::move(a));
+                    continue;
+                }
+                // A land in hand means a graveyard-landfall victim (Bloodghast) comes straight back
+                // (this turn's drop or next turn's): its loss is ~nothing. Ordering / depth-0 only.
+                bool land_in_hand = false;
+                for (const Card& hc : ap.hand)
+                {
+                    if (hc.m_is_staged) { continue; }
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd != nullptr && hd->card.IsLand()) { land_in_hand = true; break; }
+                }
+                const std::vector<std::string> pins = ActivationDiscardClasses(state, *sd);
+                // Board victims.
+                for (const int vi : DiscardSacVictimClasses(state, src, op))
+                {
+                    const Permanent& v = state.battlefield[static_cast<std::size_t>(vi)];
+                    const CardDefinition* vd = CardDatabase::Instance().LookupCached(v.card);
+                    int pw = v.EffectivePower()
+                           + ComputeLordBonus(v.card, state, v.controller_index, v.AnimatedAllTypes(), &v).first;
+                    if (pw < 0) { pw = 0; }
+                    const int loss = (vd != nullptr && vd->gy_landfall_watcher && land_in_hand) ? 0 : pw;
+                    for (const std::string& pin : pins)
+                    {
+                        Action a = base;
+                        a.sac_victim_id = v.card.m_number;
+                        a.discard_name  = pin;
+                        a.eval          = (net_cards - loss) * DMG;
+                        actions.push_back(std::move(a));
+                    }
+                }
+                // Same-plan victims: one per distinct Vampire creature NAME in hand (staged castables too).
+                std::vector<std::string> hv;
+                for (const Card& hc : ap.hand)
+                {
+                    if (!HandCardIsSubtypeCreature(hc, op.sac_creature_requires_subtype)) { continue; }
+                    const std::string& nm = hc.m_name.str();
+                    if (std::find(hv.begin(), hv.end(), nm) == hv.end()) { hv.push_back(nm); }
+                }
+                for (const std::string& vn : hv)
+                {
+                    const CardDefinition* vd = CardDatabase::Instance().Lookup(vn);
+                    const int pw   = (vd != nullptr) ? std::max(0, vd->card.m_power.value_or(0)) : 0;
+                    const int loss = (vd != nullptr && vd->gy_landfall_watcher && land_in_hand) ? 0 : pw;
+                    for (const std::string& pin : pins)
+                    {
+                        Action a = base;
+                        a.sac_victim_id   = 0;
+                        a.victim_name     = vn;
+                        a.needs_cast_mask = 2;   // the victim must be cast / put by this plan
+                        a.discard_name    = pin;
+                        a.eval            = (net_cards - loss) * DMG;
+                        actions.push_back(std::move(a));
+                    }
+                }
+                continue;
+            }
             // THE shared reader, not `!sac_outlet_add_mana_color.empty()`. Utopia Mycon adds mana of
             // ANY colour and so leaves that string empty; spelling the test the old way routed it
             // into the VALUE branch below, which emitted an action that sacrifices a Saproling for
@@ -34326,7 +34936,18 @@ static int ActivationFamilyKey(const Action& a)
         // distinct victims is real coverage). Distinct key base: a source id could in principle
         // collide with the -1000 activation space above.
         case Action::Kind::SacCreatureOutlet:
+            // Falkenrath Pit Fighter (Vampires A2): every (victim, discard) variant of the pooled
+            // family is an ALTERNATIVE for the plan's one activation (further activations come through
+            // the draw breakpoint) -- one group per source, so V x H variants cost V*H+1 positions and
+            // never 2^(V*H). Param-gated: every other outlet keeps its exact key.
+            if (a.def != nullptr && a.def->params.sac_outlet_discard_cost > 0 && a.sac_source_id >= 0)
+            { return -4000000 - a.sac_source_id; }
             return (a.sac_count > 1 && a.sac_source_id >= 0) ? -3000000 - a.sac_source_id : 0;
+        // Stromkirk Condemned's mode-4 discard pump (Vampires A2): "activate only once each turn", so
+        // its discard variants are alternatives -- one group per copy. Mode 4 only: Burning-Fist /
+        // Sethron / Valiant Knight keep their independent bits (byte-identical).
+        case Action::Kind::ActivatePump:
+            return (a.gy_exile_mode == 4 && a.sac_source_id >= 0) ? -5000000 - a.sac_source_id : 0;
         default:
             return 0;
     }
@@ -39222,6 +39843,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // or cast (the cast-and-activate / cast-and-loop pairings). Lockstep twins below.
         if (pre.pod_activation && SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
         if (pre.hand_blink     && SubsetHasStrandedHandBlink(cands, sel)) { return; }
+        // Vampires A2 duplicates (over-pinned discards, a same-plan victim without its cast, the wrong
+        // Blood cost variant, a non-canonical identical-Condemned pair). Lockstep twin in eval_and_push.
+        if (pre.vamp_outlet    && SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer)) { return; }
         if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
         if (pre.persist_loop   && SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
@@ -48287,6 +48911,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
         {
+            // Falkenrath Pit Fighter (Vampires A2): the discard-cost shape. LIVENESS FIRST (the
+            // restriction, the pinned discard, the baked victim) so a stale activation pays nothing;
+            // then the mana under the creature-source scope; then the shared apply. Executor twin:
+            // AIEngine::TakeTurn's trailing pass (identical sequence).
+            const CardDefinition* sod = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (sod != nullptr && IsDiscardSacOutlet(sod->params))
+            {
+                const std::string& pin = a.discard_name.str();
+                if (pin.empty() && !HumanPlayActive() && greedywindow::InWindow(0))
+                { g_activation_discard_unpinned.fetch_add(1, std::memory_order_relaxed); }
+                if (SacOutletLive(state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                                  a.victim_name.str(), pin))
+                {
+                    CreatureAbilityPayScope sac_pay_scope;
+                    if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                    {
+                        ApplyDiscardSacOutlet(state, state.active_player_index, a.sac_source_id,
+                                              a.sac_victim_id, a.victim_name.str(), pin);
+                    }
+                }
+                continue;
+            }
+            // Every other sac outlet: its {cost} is an ability of a CREATURE source, so Secluded
+            // Courtyard's coloured mana may pay it (MTG_SAC_OUTLET_PAY_SCOPE, design_A2 0.4).
+            std::optional<CreatureAbilityPayScope> sac_pay_scope;
+            if (SacOutletPayScopeOn()
+                && PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+            { sac_pay_scope.emplace(); }
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
                 if (a.sac_count > 1 && a.sac_victim_id != 0)
@@ -48440,7 +49092,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // The {T} half of the cost is paid BEFORE the mana half, so the source cannot tap
             // itself toward its own activation (see SetPermTapped). Restored if the mana fails.
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
-                                                          a.sac_source_id, a.ability_mode))
+                                                          a.sac_source_id, a.ability_mode,
+                                                          &a.discard_name.str()))
             {
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 // A CREATURE source's ability may be paid with Secluded Courtyard's coloured mana
@@ -48448,9 +49101,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::optional<CreatureAbilityPayScope> creature_ability_scope;
                 if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
                 { creature_ability_scope.emplace(); }
+                // Voldaren Estate's Blood ability costs {1} less per Vampire we control AT ACTIVATION:
+                // pay the TRUE cost now (TapBloodCostNow), not the enumeration variant's estimate.
+                // Executor twin: AIEngine. Every other mode pays a.cost exactly as before.
+                const ManaCost act_cost = (a.ability_mode == Action::AbilityMode::TapBlood)
+                    ? TapBloodCostNow(state, state.active_player_index, *a.def) : a.cost;
+                // The Blood token's searched discard pin, consumed by ApplyPermAbility's BloodDraw case.
+                const ActivationDiscardPinScope _discard_pin(&a.discard_name.str());
+                if (a.ability_mode == Action::AbilityMode::BloodDraw && a.discard_name.empty()
+                    && !HumanPlayActive() && greedywindow::InWindow(0))
+                { g_activation_discard_unpinned.fetch_add(1, std::memory_order_relaxed); }
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
-                ActLinePayScope _act_line_pay(a.cost);   // this activation's pips are NOT hold demand
-                if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
+                if (TapForCostDirect(state, act_cost, /*for_creature=*/false))
                 {
                     _act_line_pay.Paid();
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
@@ -48712,10 +49375,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // activations. Stranded (cost unpayable, or the source left) -> full no-op, both worlds.
             // Creature-source ability payment scope: Secluded Courtyard's coloured mana is legal (D12).
             CreatureAbilityPayScope pump_pay_scope;
+            // Stromkirk Condemned (mode 4, Vampires A2): liveness FIRST -- unused this turn and the
+            // pinned card in hand -- so a stale activation is a clean no-op (it costs no mana anyway).
+            if (a.gy_exile_mode == 4)
+            {
+                if (a.discard_name.empty() && !HumanPlayActive() && greedywindow::InWindow(0))
+                { g_activation_discard_unpinned.fetch_add(1, std::memory_order_relaxed); }
+                if (!DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
+                                         a.discard_name.str())) { continue; }
+            }
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
                 ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
-                                  a.gy_exile_mode, a.chosen_x);
+                                  a.gy_exile_mode, a.chosen_x, a.discard_name.str());
             }
         }
         else if (a.kind == Action::Kind::UntapCreature)
@@ -49992,6 +50664,7 @@ static void SimulateCombat(GameState& state)
     // CR 704.5m orphaned-Aura SBA checkpoint -- mirror GameEngine::CombatPhase (lockstep).
     SweepOrphanedAuras(state);
     RefreshReconfigureCreatures(state);   // reconfigure checkpoint -- mirror GameEngine::CombatPhase
+    RefreshOppLifeHaste(state);           // Bloodghast's conditional haste -- mirror GameEngine::CombatPhase
 
     // Ardenn's beginning-of-combat attach (begin_combat_attach_all): BEFORE attackers are declared,
     // so the moved pieces pump this combat and a moved haste piece makes a sick creature eligible.
@@ -50399,6 +51072,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
+            p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
             p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
@@ -52612,6 +53286,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // or cast -- lockstep twins of Solve::consider's calls (see the helpers).
         if (pre.pod_activation && SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
         if (pre.hand_blink     && SubsetHasStrandedHandBlink(cands, sel)) { return; }
+        // Vampires A2 duplicates -- lockstep twin of Solve::consider's call (the symmetry rule only on an
+        // odometer position: a constructed `sat_bypass` line has no enumerated twin).
+        if (pre.vamp_outlet    && SubsetVampOutletInvalid(state, cands, sel,
+                                                          fold_from_odometer || !sat_bypass)) { return; }
         if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
         if (pre.persist_loop   && SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
@@ -54964,7 +55642,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::SacCreatureOutlet:
                     msf.push_back("SAC#" + std::to_string(act.sac_source_id)
                                   + ">" + std::to_string(act.sac_victim_id)
-                                  + "x" + std::to_string(act.sac_count)); break;
+                                  + "x" + std::to_string(act.sac_count)
+                                  // Falkenrath Pit Fighter (Vampires A2): WHICH card is discarded and a
+                                  // same-plan victim's name are distinct plans (the Gamble lesson).
+                                  // Empty for every other outlet -> byte-identical signatures.
+                                  + (act.victim_name.empty() ? std::string() : "~" + act.victim_name.str())
+                                  + (act.discard_name.empty() ? std::string() : "#D" + act.discard_name.str())); break;
                 // Birthing Pod: victim AND fetch target are both real decisions -- key on both
                 // (the Gamble tutor-dedup lesson: drop the target and every Pod variant collapses
                 // to the first-enumerated fetch).
@@ -55061,7 +55744,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::ActivatePump:
                     msf.push_back("APUMP#" + std::to_string(act.sac_source_id)
                                   + "m" + std::to_string(act.gy_exile_mode)
-                                  + "x" + std::to_string(act.chosen_x)); break;
+                                  + "x" + std::to_string(act.chosen_x)
+                                  // Stromkirk Condemned (mode 4): the discarded card (Vampires A2).
+                                  + (act.discard_name.empty() ? std::string() : "#D" + act.discard_name.str())); break;
                 // Blink: which outlet, WHICH CREATURE, and how many times are three DISTINCT
                 // decisions and all three ride the signature. Dropping the target would be the
                 // Gamble-tutor bug verbatim (the dedup keeping one of several real alternatives);
@@ -55079,7 +55764,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::ActivatePermAbility:
                     msf.push_back("PABIL#" + std::to_string(act.sac_source_id)
                                   + "m" + std::to_string(static_cast<int>(act.ability_mode))
-                                  + "x" + std::to_string(act.chosen_x));
+                                  + "x" + std::to_string(act.chosen_x)
+                                  // The Blood token's discard / Voldaren Estate's cost variant (Vampires
+                                  // A2) -- empty / 0 for every other ability -> byte-identical.
+                                  + (act.discard_name.empty() ? std::string() : "#D" + act.discard_name.str())
+                                  + (act.vamp_casts_needed == 0 ? std::string()
+                                                                : "#V" + std::to_string(static_cast<int>(act.vamp_casts_needed))));
                     break;
             }
         }
@@ -61519,6 +62209,9 @@ static std::string PlanDomKey(const Action& a)
     k += '|'; k += std::to_string(a.sac_source_id);
     k += '|'; k += a.tutor_target.str();
     k += '|'; k += std::to_string(a.chosen_x);
+    if (!a.discard_name.empty()) { k += "|D"; k += a.discard_name.str(); }   // Vampires A2 pin
+    if (!a.victim_name.empty())  { k += "|V"; k += a.victim_name.str(); }
+    if (a.vamp_casts_needed != 0) { k += "|B"; k += std::to_string(static_cast<int>(a.vamp_casts_needed)); }
     return k;
 }
 
@@ -62484,6 +63177,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             for (const Action& a : p.actions) { if (TurnSolver::PutsLandfallWatcher(a)) { ++n; } }
             return n;
         };
+        // Vampires A2: a plan whose ACTIVATION puts a graveyard-landfall card (Bloodghast) into our
+        // graveyard -- a discard or a sacrifice -- is offered "land after the activations" too: the
+        // trailing pass runs before the deferred land in both worlds, so the land returns it. The
+        // -1 clone only (activations have no position among the casts).
+        const auto feeds_gy = [&state](const TurnSolver::Plan& p)
+        {
+            for (const Action& a : p.actions) { if (TurnSolver::PutsGyLandfallFeeder(state, a)) { return true; } }
+            return false;
+        };
         std::vector<TurnSolver::Plan> after;
         if (!offered_lands.empty() && defer_end > defer_begin)
         {
@@ -62491,7 +63193,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             {
                 const TurnSolver::Plan& p = all[i];
                 if (p.actions.empty()) { continue; }   // nothing cast: land-after == land-first
-                if (watchers_in(p) == 0) { continue; }
+                if (watchers_in(p) == 0 && !feeds_gy(p)) { continue; }
                 for (const LandOption& lo : offered_lands)
                 {
                     TurnSolver::Plan v = p;
@@ -63938,6 +64640,26 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
                 Fold(k, eq_acc);
             }
         }
+        // GRAVEYARD-LANDFALL readers (GyR_GyLandfallNames; Bloodghast): whether a copy sits in OUR
+        // graveyard decides whether the next land returns it, so "Bloodghast in the graveyard" and
+        // "Bloodghast exiled / absent" must not share a memo / TT entry. Same shape and gate as the two
+        // folds above -> every other deck keeps its exact key.
+        if (gy_stamped && (state.deck_gy_readers & GyR_GyLandfallNames) != 0)
+        {
+            uint64_t gl_acc = 0;
+            int      gl_n   = 0;
+            for (const Card& c : p.graveyard)
+            {
+                const CardDefinition* gd = CardDatabase::Instance().LookupCached(c);
+                if (gd != nullptr && gd->gy_landfall_watcher) { gl_acc += c.m_name_hash; ++gl_n; }
+            }
+            if (gl_n > 0)
+            {
+                Fold(k, 0x67B1);
+                Fold(k, static_cast<uint64_t>(gl_n));
+                Fold(k, gl_acc);
+            }
+        }
         const bool gy_retrace_possible = !gy_stamped
                                       || (state.deck_gy_readers & GyR_RetraceNames) != 0;
         const bool gy_fuel_possible    = !gy_stamped
@@ -64225,6 +64947,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // Folded ONLY when SET, so every other deck keeps the EXACT prior key (no GT moves).
         if (perm.lifegain_counters_used_this_turn) { Fold(tk, 0x9A8A6); }
         if (perm.storied_draw_used_this_turn)      { Fold(tk, 0x57091); }
+        if (perm.once_per_turn_used)               { Fold(tk, 0x0CE7A); }   // Stromkirk Condemned (Vampires A2)
         // Marked damage: coarse drop #3 (combat leftovers; state-based actions already ran, so
         // by the time an m2 solve sees the board the survivors' damage is history, not future).
         if (g_simkey_m2coarse == 0)
@@ -81234,6 +81957,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                                                        &bd->params.sac_lifegain_per_creature_cost },
                 // Recruitment Officer's "{3}{W}: look at the top four ..." (a real mana cost).
                 { Action::AbilityMode::ActivatedDig,   &bd->params.activated_dig_cost   },
+                // Vampires A2: Voldaren Estate's Blood creation (priced below at its Vampire-reduced cost
+                // NOW -- the printed {5} would grade an affordable Blood Illegal) and the Blood token's
+                // {1} crack -- both named by `cast=<source>`.
+                { Action::AbilityMode::TapBlood,       &bd->params.tap_blood_cost       },
+                { Action::AbilityMode::BloodDraw,      &bd->params.blood_draw_cost      },
             };
             for (const auto& m : modes)
             {
@@ -81242,6 +81970,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                                                       m.second->value());
                 if (m.first == Action::AbilityMode::TapDraw && bd->params.tap_draw_cost_less_per_rad)
                 { ac.generic = std::max(0, ac.generic - s.players[s.active_player_index].rad_counters); }
+                if (m.first == Action::AbilityMode::TapBlood)
+                { ac = TapBloodCostNow(s, s.active_player_index, *bd); }
                 if (ac.ManaValue() > 0) { board_acts.push_back({ on_battlefield, bd, ac }); }
                 break;
             }
@@ -82799,7 +83529,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "None", "TapDamage", "TapInvestigate", "TapDraw", "SacDraw", "Drain", "ExileTop",
         "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
-        "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach"
+        "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

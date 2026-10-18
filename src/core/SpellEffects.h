@@ -882,6 +882,10 @@ inline void OnLandEntered(GameState& state, int controller, int land_number,
                           const std::vector<int>* target_snapshot = nullptr);
 inline void FireLandfallTriggers(GameState& state, int controller, int land_number,
                                  const std::vector<int>* target_snapshot);
+// Bloodghast's graveyard landfall return (FireLandfallTriggers) puts a card through the shared
+// battlefield put, defined far below; the default for `minus_counters` is added at the definition.
+inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
+                                  const std::string& source_name, int minus_counters);
 inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
@@ -5049,6 +5053,8 @@ inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefi
     // "Gains haste until end of turn" (Expedite): haste lifts the summoning-sick {T} restriction
     // too (CR 302.6), so a hasted fresh mana dork may tap for mana the turn it arrives.
     if (p.temp_haste) { return true; }
+    // Bloodghast's opponent-life conditional haste (the derived bit; RefreshOppLifeHaste).
+    if (p.cond_haste) { return true; }
     // Goblin Tomb Raider's conditional haste (artifact controlled) lifts the {T} restriction too.
     if (HasConditionalSelfHaste(p.card, battlefield, p.controller_index)) { return true; }
     if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.AnimatedAllTypes(),
@@ -5109,6 +5115,7 @@ inline bool CanAttackFull(
     if (!p.entered_this_turn && !p.gained_control_this_turn) { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
     if (p.temp_haste)                           { return true; }
+    if (p.cond_haste)                           { return true; }   // Bloodghast (RefreshOppLifeHaste)
     if (HasConditionalSelfHaste(p.card, battlefield, controller_index)) { return true; }   // Tomb Raider
     if (HasHasteFromLords(p.card, battlefield, controller_index, p.AnimatedAllTypes(),
                           hs ? &hs->lords : nullptr)) { return true; }
@@ -5132,6 +5139,7 @@ inline bool CanAttackFull(
     if (!p.entered_this_turn && !p.gained_control_this_turn) { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
     if (p.temp_haste)                           { return true; }   // Expedite until-EOT haste
+    if (p.cond_haste)                           { return true; }   // Bloodghast (RefreshOppLifeHaste)
     // Goblin Tomb Raider: "as long as you control an artifact, ... has haste" -- evaluated AT
     // declare-attackers against the live board, in both worlds (this is the one legality gate).
     if (HasConditionalSelfHaste(p.card, battlefield, controller_index)) { return true; }
@@ -7056,7 +7064,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.quest_counters != 0 || p.hone_counters != 0)                         { return false; }
     if (p.storage_hold_this_turn || p.loyalty_activated_this_turn
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
-        || p.lifegain_counters_used_this_turn)                                    { return false; }
+        || p.lifegain_counters_used_this_turn || p.once_per_turn_used)            { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty())           { return false; }
@@ -7235,7 +7243,18 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
         if (wd == nullptr || !wd->landfall_watcher) { continue; }
         watchers.push_back(w.card.m_number);
     }
-    if (watchers.empty()) { return; }
+    // GRAVEYARD watchers (Bloodghast; CardDefinition::gy_landfall_watcher), snapshotted by per-copy
+    // number AT THE MOMENT OF ENTRY: the ability functions only from the graveyard (CR 113.6k) and only
+    // for a copy already there when the land enters (Scryfall ruling 2009-10-01) -- one that arrives
+    // later in this cascade does not trigger. Resolved after the battlefield watchers (our own
+    // simultaneous triggers, ordered by us -- CR 603.3b; no payload in the pool interacts).
+    std::vector<int> gy_watchers;
+    for (const Card& gc : state.players[controller].graveyard)
+    {
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+        if (gd != nullptr && gd->gy_landfall_watcher) { gy_watchers.push_back(gc.m_number); }
+    }
+    if (watchers.empty() && gy_watchers.empty()) { return; }
     const bool log = (g_play_event_sink != nullptr) && !g_tap_speculating;
     std::string land_name = "a land";
     if (log)
@@ -7355,6 +7374,59 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
                 }
                 break;
             }
+        }
+    }
+
+    // ---- "you MAY return this card from your graveyard to the battlefield" (Bloodghast) ----------
+    // AUTONOMOUS: YES, by DOMINANCE (PROVISIONAL, design_A2 §4.2 / ledger open question 7): returning
+    // adds an untapped 2/1 Vampire; against the passive opponent no permanent is ever worse off for it
+    // (lords, Voldaren Estate's Blood cost and convoke want MORE Vampires, Falkenrath Pit Fighter wants it
+    // ON the battlefield as fodder), nothing in the pool reads our graveyard except this ability, and
+    // declining only preserves a later return whose every use is weakly worse than returning now (later
+    // = sick again next turn; now = unsick next turn). HUMAN PLAY is asked: the existing `revive`
+    // decision (g_play_revive_chooser, one 0/1 flag per graveyard copy, all preselected) -- nulled by
+    // RevealLogPause in every search/rollout scope, so autonomous play is unaffected by it.
+    if (!gy_watchers.empty())
+    {
+        std::vector<int> chosen = gy_watchers;
+        if (g_play_revive_chooser != nullptr)
+        {
+            std::vector<Card> cands;
+            for (const int num : gy_watchers)
+            {
+                for (const Card& gc : state.players[controller].graveyard)
+                { if (gc.m_number == num) { cands.push_back(gc); break; } }
+            }
+            std::vector<int> heur;
+            for (int i = 0; i < static_cast<int>(cands.size()); ++i) { heur.push_back(i); }
+            const std::vector<int> picked = (*g_play_revive_chooser)(
+                state, controller, cands.empty() ? std::string("landfall")
+                                                 : cands.front().m_name.str() + " (landfall)",
+                cands, static_cast<int>(cands.size()), heur);
+            chosen.clear();
+            for (const int ci : picked)
+            {
+                if (ci >= 0 && ci < static_cast<int>(cands.size()))
+                { chosen.push_back(cands[static_cast<std::size_t>(ci)].m_number); }
+            }
+        }
+        for (const int num : chosen)
+        {
+            Player& gp = state.players[controller];
+            int gi = -1;
+            for (int i = 0; i < static_cast<int>(gp.graveyard.size()); ++i)
+            { if (gp.graveyard[static_cast<std::size_t>(i)].m_number == num) { gi = i; break; } }
+            if (gi < 0) { continue; }   // left the graveyard mid-cascade (nothing in the pool can)
+            Card back = gp.graveyard[static_cast<std::size_t>(gi)];
+            gp.graveyard.erase(gp.graveyard.begin() + gi);
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x8C\x8D " + back.m_name.str() + " (landfall: " + land_name
+                              + "): returns from the graveyard to the battlefield");
+            }
+            GraveyardEnterScope from_gy;   // a graveyard-enter watcher (Celes) reads this
+            PutCardOntoBattlefield(state, controller, back, "landfall", 0);
         }
     }
 }
@@ -8617,6 +8689,16 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
     const CardParams& p = def->params;
+
+    // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." Derived at
+    // ENTRY (here, the shared own-ETB site every enter route reaches -- cast, Vial put, a graveyard
+    // return) so the main-phase attack projection sees it, and re-derived at the beginning of combat
+    // in both worlds (RefreshOppLifeHaste) for attack legality. Param-gated -> byte-identical.
+    if (p.haste_if_opp_life_at_most > 0)
+    {
+        Permanent& me = state.battlefield[entered_index];
+        me.cond_haste = state.players[1 - me.controller_index].life <= p.haste_if_opp_life_at_most;
+    }
 
     // SAGA (CR 714.2a): record the enter so the first lore counter -- and therefore chapter I --
     // lands at the next drain point. RECORDED, not resolved: chapter I free-casts a creature, and
@@ -11118,6 +11200,27 @@ inline std::vector<std::pair<int, int>> FreeAttachableEquipment(const GameState&
 //
 // Presence-gated on GameState::deck_has_reconfigure (stamped false for every deck without
 // reconfigure_cost), so every other deck pays one bool test. Defaults TRUE (the only-err-true rule).
+// Bloodghast's "has haste as long as an opponent has 10 or less life" (CardParams::
+// haste_if_opp_life_at_most): RE-DERIVE the Permanent::cond_haste bit (set AND clear) against the
+// opponent's life NOW (team life in 2HG lives in players[1]). Called at the beginning-of-combat
+// checkpoint in BOTH worlds (GameEngine::CombatPhase and TurnSolver::SimulateCombat, beside the
+// reconfigure checkpoint) -- the moment attack legality is decided -- and at entry (FireOwnEtbTriggers).
+// Haste only matters while summoning sick (CR 302.6), so only a permanent controlled since this turn
+// is looked up; every other permanent just has the bit cleared, and a deck without the param pays
+// one bool test per combat (GameState::deck_has_cond_haste). Never writes temp_haste (other grants own it).
+inline void RefreshOppLifeHaste(GameState& state)
+{
+    if (!state.deck_has_cond_haste) { return; }   // presence gate (GameState.h), stamped per deck
+    for (Permanent& p : state.battlefield)
+    {
+        if (!p.entered_this_turn && !p.gained_control_this_turn) { p.cond_haste = false; continue; }
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const int n = d != nullptr ? d->params.haste_if_opp_life_at_most : 0;
+        p.cond_haste = n > 0 && state.players[1 - p.controller_index].life <= n;
+    }
+}
+
 inline void RefreshReconfigureCreatures(GameState& state)
 {
     if (!state.deck_has_reconfigure) { return; }
@@ -13433,6 +13536,106 @@ inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller,
     return pick;
 }
 
+// ================================================================================================
+// THE SHARED DISCARD HOOK (Vampires A2, 2026-10-18) -- the seam cluster A1 (madness) builds on.
+// ================================================================================================
+// Moves hand[hand_idx] out of `controller`'s hand as a DISCARD (CR 701.8) and puts it where it goes:
+//   * [MADNESS SEAM -- cluster A1, NOT YET IMPLEMENTED] a card with madness (CR 702.35) is exiled
+//     instead and queued for its madness trigger; the caller resolves the queue AFTER every other
+//     cost of the same activation is paid and BEFORE the ability's effect (see the outlet appliers'
+//     own [MADNESS SEAM] markers: pay mana -> discard -> sacrifice -> madness -> effect, so a
+//     madness-cast creature can never be the same activation's sacrifice, and Stromkirk Condemned's
+//     pump reaches it -- the 2016-07-13 ruling). A1 adds the `std::vector<MadnessPending>* mq`
+//     parameter here (design_A1_madness.md §2.3) and routes every OTHER discard site through this
+//     function (its §2.4 migration table);
+//   * Progenitus's replacement (MaybeReplaceGraveyardWithLibraryShuffle) -> the library + a shuffle;
+//   * else the owner's graveyard (a hand card's owner is its controller here).
+// Does NOT log and does NOT count Player::cards_cycled_or_discarded_this_turn: each site keeps its
+// own bookkeeping, so routing an existing site through here is byte-identical. TODAY ONLY THE NEW
+// VAMPIRES OUTLETS CALL IT (Falkenrath Pit Fighter, Stromkirk Condemned, the Blood token); the
+// pre-existing discard sites stay open-coded until A1's migration (their decks stay byte-identical).
+enum class DiscardDest : std::uint8_t { Graveyard, LibraryShuffle };
+inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
+                                       const std::string& cause)
+{
+    (void)cause;   // A1: the madness record's `cause` (the discard's source name)
+    Player& pl = state.players[controller];
+    Card c = pl.hand[static_cast<std::size_t>(hand_idx)];
+    pl.hand.erase(pl.hand.begin() + hand_idx);
+    // [MADNESS SEAM] A1: `if (!MadnessCostsFor(state, controller, c).empty()) { exile + queue; return MadnessExile; }`
+    if (MaybeReplaceGraveyardWithLibraryShuffle(state, controller, c)) { return DiscardDest::LibraryShuffle; }
+    pl.graveyard.push_back(c);
+    return DiscardDest::Graveyard;
+}
+
+// The hand index a PINNED activation discard takes: the first NON-STAGED copy of `pin` in hand order.
+// Every copy of one name is the same card by definition (the identity fold that makes one variant per
+// DISTINCT name sound -- design_A2 §0.1), so which copy is unobservable. -1 = no copy in hand: the
+// pinned activation's premise failed and the caller must NOT activate (decided before any cost is paid).
+// A staged card is in EXILE (castable from there), never in the hand proper, so it is never a candidate.
+inline int PinnedDiscardIndex(const GameState& state, int controller, const std::string& pin)
+{
+    const Player& pl = state.players[controller];
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        const Card& c = pl.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        if (c.m_name.str() == pin) { return i; }
+    }
+    return -1;
+}
+
+// "Can this activation's discard cost be paid?" -- the ONE predicate the enumeration, the site-9 key
+// and both apply sites read for the Vampires outlets. Pinned: a copy of the pin is in hand. Unpinned
+// (human play, where the card is asked at resolution): any non-staged card is in hand.
+inline bool ActivationDiscardPayable(const GameState& state, int controller, const std::string& pin)
+{
+    if (!pin.empty()) { return PinnedDiscardIndex(state, controller, pin) >= 0; }
+    for (const Card& c : state.players[controller].hand) { if (!c.m_is_staged) { return true; } }
+    return false;
+}
+
+// WHICH card an activation discards. Pinned -> that name's first non-staged copy, and the human
+// chooser is NOT consulted (the choice was already made where the person could see it -- the
+// replicate_count precedent). Unpinned -> ChooseNonCleanupDiscardIndex (the provider's ranking front,
+// overridden by the human `discard` decision at a REAL resolution). Autonomously every Vampires
+// activation carries a pin (CollectActions fans one variant per distinct name), so the unpinned branch
+// is the human-play path; an unpinned autonomous apply inside the search window is counted
+// (g_activation_discard_unpinned, checked by TurnSolver's trailing passes) and must read 0.
+inline std::atomic<long long> g_activation_discard_unpinned{0};
+inline int ChooseActivationDiscardIndex(const GameState& state, int controller,
+                                        const std::string& source_name, const std::string& pin)
+{
+    if (!pin.empty()) { return PinnedDiscardIndex(state, controller, pin); }
+    const int hi = ChooseNonCleanupDiscardIndex(state, controller, source_name);
+    // The provider's ranking may front a STAGED entry as a last resort; a staged card is in exile and
+    // is no legal discard -- take the first non-staged card instead (a cost must be legal).
+    const Player& pl = state.players[controller];
+    if (hi >= 0 && hi < static_cast<int>(pl.hand.size()) && !pl.hand[static_cast<std::size_t>(hi)].m_is_staged)
+    { return hi; }
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    { if (!pl.hand[static_cast<std::size_t>(i)].m_is_staged) { return i; } }
+    return -1;
+}
+
+// Stromkirk Condemned's mode-4 liveness (CR 602.5b "only once each turn" + the discard cost): the
+// source is ours, unused this turn, and the discard is payable. Checked BEFORE anything is paid in both
+// worlds, and by the enumeration -- a stale activation is a clean no-op, never a phantom pump.
+inline bool DiscardTeamPumpLive(const GameState& state, int controller, int source_id,
+                                const std::string& pin)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || (d->params.discard_team_pump_power <= 0
+                             && d->params.discard_team_pump_toughness <= 0)) { return false; }
+        if (d->params.activate_once_each_turn && p.once_per_turn_used) { return false; }
+        return ActivationDiscardPayable(state, controller, pin);
+    }
+    return false;
+}
+
 // ---- Main-phase ACTIVATED PUMP (Action::Kind::ActivatePump) -------------------------------------
 // One shared apply for both shapes, called IDENTICALLY from the rollout (TurnSolver's trailing
 // apply pass) and the executor (AIEngine::TakeTurn) so the two worlds stay lockstep.
@@ -13449,7 +13652,15 @@ inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller,
 // The MANA has already been paid by the caller (pre-scaled to K x unit cost), so this only applies
 // the effects; `k` is the activation count. Returns the number of activations actually realised
 // (mode 1 can stop short on an empty hand), which is what the caller logs.
-inline int ApplyActivatePump(GameState& state, int controller, int source_id, int mode, int k)
+//   mode 4 -- DISCARD-COST TEAM PUMP (Stromkirk Condemned, Vampires A2 2026-10-18): "Discard a card:
+//             Vampires you control get +1/+1 until end of turn. Activate only once each turn." No
+//             mana, no {T}. `discard_pin` names WHICH card (the searched pin, Action::discard_name;
+//             empty = asked at resolution -- human play). Order (design_A1 §2.5): mark the
+//             once-each-turn use -> DISCARD (the cost) -> [MADNESS SEAM] -> the +P/+T on every
+//             matching creature we control AS IT RESOLVES (a madness-cast Vampire is included, the
+//             2016 ruling; one cast later this turn is not, CR 611.2c). k is always 1.
+inline int ApplyActivatePump(GameState& state, int controller, int source_id, int mode, int k,
+                             const std::string& discard_pin = std::string())
 {
     int src = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -13460,6 +13671,49 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
     if (src < 0) { return 0; }   // source left the battlefield: stranded-outlet safe, a full no-op
     const CardDefinition* sd = CardDatabase::Instance().LookupCached(state.battlefield[src].card);
     if (!sd) { return 0; }
+    if (mode == 4)
+    {
+        // Liveness re-checked HERE as well as by both callers before they pay (no mana is involved,
+        // so a stale activation is simply nothing): unused this turn, discard payable.
+        if (!DiscardTeamPumpLive(state, controller, source_id, discard_pin)) { return 0; }
+        const std::string src_name = state.battlefield[src].card.m_name.str();
+        const int hi = ChooseActivationDiscardIndex(state, controller, src_name, discard_pin);
+        if (hi < 0) { return 0; }
+        if (sd->params.activate_once_each_turn) { state.battlefield[src].once_per_turn_used = true; }
+        Player& ap = state.players[controller];
+        const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
+        DiscardCardFromHand(state, controller, hi, src_name);   // COST (CR 602.2b)
+        ++ap.cards_cycled_or_discarded_this_turn;
+        // [MADNESS SEAM] cluster A1: ResolvePendingMadness(...) HERE -- the madness trigger sits above
+        // the ability on the stack, so a madness-cast Vampire is on the battlefield before the pump
+        // below reads it (Stromkirk Condemned ruling 2016-07-13).
+        const int pp = sd->params.discard_team_pump_power;
+        const int pt = sd->params.discard_team_pump_toughness;
+        int hit = 0;
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (!q.card.IsCreature() && !q.is_animated) { continue; }
+            bool m = sd->params.discard_team_pump_subtypes.empty();
+            for (const std::string& sub : sd->params.discard_team_pump_subtypes)
+            { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
+            if (!m) { continue; }
+            q.temp_power_bonus += pp;
+            q.temp_tough_bonus += pt;
+            ++hit;
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            const std::string who = sd->params.discard_team_pump_subtypes.empty()
+                                        ? std::string("creatures you control")
+                                        : sd->params.discard_team_pump_subtypes.front() + "s you control";
+            EmitPlayEvent(state.turn_number, "ability",
+                          src_name + ": discarded " + shed + " -- " + who + " get +"
+                          + std::to_string(pp) + "/+" + std::to_string(pt) + " until end of turn ("
+                          + std::to_string(hit) + ")");
+        }
+        return 1;
+    }
     int done = 0;
     for (int n = 0; n < std::max(1, k); ++n)
     {
@@ -14406,6 +14660,173 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             }
         }
     }
+}
+
+// ================================================================================================
+// DISCARD-COST SAC OUTLET (Vampires A2, 2026-10-18): Falkenrath Pit Fighter --
+//   "{1}{R}, Discard a card, Sacrifice a Vampire: Draw two cards. Activate only if an opponent lost
+//    life this turn."
+// ================================================================================================
+// A SEPARATE apply from ApplySacCreatureOutlet on purpose: every pre-existing outlet (Siege-Gang,
+// Pashalik, Psychotrope, Carrion Feeder, Dina...) keeps its exact code path -- byte-identical by
+// construction -- and this shape needs a different COST ORDER and no stale-victim substitution.
+//
+// BOTH DECISIONS ARE SEARCHED. The emitter (TurnSolver::CollectActions) fans one Action per
+// identity-folded victim class x per distinct hand-card name and bakes them on the Action
+// (sac_victim_id / victim_name, discard_name); this apply executes exactly what the search chose. Human
+// play is offered ONE activation and asked both at resolution (`discard`, then `sacrifice`).
+//
+// ORDER (design_A1 §2.5, the madness contract): the caller pays the MANA (under CreatureAbilityPayScope:
+// the source is a creature, so Secluded Courtyard's coloured mana is legal) -> DISCARD (cost) ->
+// SACRIFICE (cost) -> [MADNESS SEAM] -> draw. A madness card discarded here is in exile while the
+// sacrifice is chosen, so it can never be this activation's victim, and it is on the battlefield
+// before the draw resolves.
+//
+// LIVENESS IS DECIDED BEFORE ANY COST IS PAID (SacOutletLive, read by the enumeration, the site-9
+// activation key and both callers before they tap a land): the restriction, the discard, and the victim.
+// A plan whose premise failed (its baked victim is gone, its pinned card is not in hand) does NOTHING --
+// never a substitution (the "real-card victim premise failed" rule of ApplySacCreatureOutlet).
+
+inline bool IsDiscardSacOutlet(const CardParams& p)
+{
+    return p.sac_creature_outlet && p.sac_outlet_discard_cost > 0;
+}
+
+// Is permanent `q` a legal victim for outlet params `op`? "Sacrifice a <subtype>" -- a creature we
+// control (an animated land is a creature too) carrying the subtype (every type when animated with all
+// creature types); the source itself is legal (no "another").
+inline bool DiscardSacVictimLegal(const Permanent& q, int controller, const CardParams& op)
+{
+    if (q.controller_index != controller) { return false; }
+    if (!q.card.IsCreature() && !q.is_animated) { return false; }
+    if (op.sac_creature_requires_subtype.empty()) { return true; }
+    return q.AnimatedAllTypes() || CardHasSubtype(q.card, op.sac_creature_requires_subtype);
+}
+
+// The battlefield index of the victim the search baked: by per-copy number first; else, for a
+// SAME-PLAN victim (a creature the plan itself casts or Vial-puts before this trailing activation --
+// victim_name set), the NEWEST legal permanent of that name (battlefield order is entry order; every
+// copy of one name is the same card, so which copy is unobservable). -1 = the premise failed.
+inline int ResolveDiscardSacVictim(const GameState& state, int controller, const CardParams& op,
+                                   int victim_id, const std::string& victim_name)
+{
+    if (victim_id != 0)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number == victim_id && DiscardSacVictimLegal(q, controller, op)) { return i; }
+        }
+    }
+    if (!victim_name.empty())
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_name.str() == victim_name && DiscardSacVictimLegal(q, controller, op)) { return i; }
+        }
+    }
+    return -1;
+}
+
+// THE ONE LEGALITY PREDICATE for a discard-cost sac outlet activation (see the block note). `victim_id`
+// 0 with an empty `victim_name` = unbaked (human play): any legal victim will do. Same for an empty pin.
+inline bool SacOutletLive(const GameState& state, int controller, int source_id, int victim_id,
+                          const std::string& victim_name, const std::string& discard_pin)
+{
+    const CardParams* op = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
+        if (od && od->params.sac_creature_outlet) { op = &od->params; }
+        break;
+    }
+    if (op == nullptr) { return false; }
+    // "Activate only if an opponent lost life this turn" (CR 602.5b) -- any loss, even alongside a gain.
+    if (op->activate_only_if_opp_lost_life && !state.opponent_lost_life_this_turn) { return false; }
+    // The discard: the pinned name in hand, or (unpinned) at least `sac_outlet_discard_cost` cards.
+    if (op->sac_outlet_discard_cost > 0)
+    {
+        if (!discard_pin.empty())
+        {
+            if (PinnedDiscardIndex(state, controller, discard_pin) < 0) { return false; }
+        }
+        else
+        {
+            int n = 0;
+            for (const Card& c : state.players[controller].hand) { if (!c.m_is_staged) { ++n; } }
+            if (n < op->sac_outlet_discard_cost) { return false; }
+        }
+    }
+    // The victim.
+    if (victim_id == 0 && victim_name.empty())
+    {
+        for (const Permanent& q : state.battlefield)
+        { if (DiscardSacVictimLegal(q, controller, *op)) { return true; } }
+        return false;
+    }
+    return ResolveDiscardSacVictim(state, controller, *op, victim_id, victim_name) >= 0;
+}
+
+// The apply (see the block note). The caller has ALREADY checked SacOutletLive and paid the mana.
+// Returns true if the activation happened (false only when the premise failed -- unreachable after the
+// caller's own SacOutletLive check, kept so a future caller cannot turn a stale plan into a free draw).
+inline bool ApplyDiscardSacOutlet(GameState& state, int controller, int source_id, int victim_id,
+                                  const std::string& victim_name, const std::string& discard_pin)
+{
+    if (!SacOutletLive(state, controller, source_id, victim_id, victim_name, discard_pin)) { return false; }
+    const CardDefinition* od = nullptr;
+    std::string src_name;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        od = CardDatabase::Instance().LookupCached(p.card);
+        src_name = p.card.m_name.str();
+        break;
+    }
+    if (od == nullptr) { return false; }
+    const CardParams& op = od->params;   // the card DB entry: stable across the battlefield edits below
+    // 1. DISCARD (the cost; human play asks here -- the `discard` decision, source = this outlet).
+    std::string shed;
+    for (int n = 0; n < std::max(1, op.sac_outlet_discard_cost); ++n)
+    {
+        const int hi = ChooseActivationDiscardIndex(state, controller, src_name,
+                                                    n == 0 ? discard_pin : std::string());
+        if (hi < 0) { return false; }
+        Player& ap = state.players[controller];
+        if (!shed.empty()) { shed += ", "; }
+        shed += ap.hand[static_cast<std::size_t>(hi)].m_name.str();
+        DiscardCardFromHand(state, controller, hi, src_name);
+        ++ap.cards_cycled_or_discarded_this_turn;
+    }
+    // 2. SACRIFICE (the cost). Human play re-asks WHICH Vampire dies against the real board (the
+    // `sacrifice` decision); the baked victim is its preselect. Autonomously the baked victim.
+    int hidx = ChooseSacOutletVictimIndex(state, controller, source_id, op.sac_creature_requires_subtype,
+                                          victim_id, src_name);
+    if (hidx < 0) { hidx = ResolveDiscardSacVictim(state, controller, op, victim_id, victim_name); }
+    if (hidx < 0 && victim_id == 0 && victim_name.empty())
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (DiscardSacVictimLegal(state.battlefield[static_cast<std::size_t>(i)], controller, op)) { hidx = i; break; } }
+    }
+    if (hidx < 0) { return false; }   // unreachable (SacOutletLive above)
+    const std::string victim_nm = state.battlefield[static_cast<std::size_t>(hidx)].card.m_name.str();
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "sacrifice",
+                      "\xF0\x9F\x92\x80 " + src_name + ": discarded " + shed + ", sacrificed "
+                      + victim_nm + " -- draw " + std::to_string(op.sac_outlet_draw));
+    }
+    // SacrificePermanentAt: graveyard, attachments fall off, FireSacrificeWatchers, OnCreatureDies.
+    // A sacrificed Bloodghast is now a graveyard landfall watcher (FireLandfallTriggers).
+    SacrificePermanentAt(state, controller, hidx);
+    // 3. [MADNESS SEAM] cluster A1: ResolvePendingMadness(...) HERE -- after every cost is paid, before
+    //    the effect (the madness trigger is above the ability on the stack).
+    // 4. EFFECT: "Draw two cards" (a real draw -> the hand-entry breakpoint re-solves the phase, which is
+    //    how a further activation with fresh victim/discard choices is reached).
+    TrickDraw(state, controller, op.sac_outlet_draw);
+    return true;
 }
 
 // Multi-sac BURST: sacrifice up to `count` canonical victims to a damage sac-outlet in ONE activation
@@ -20283,7 +20704,8 @@ inline int SpendSurplusOnDrain(GameState& state, int controller, const ManaCost&
 }
 
 inline bool PermAbilitySourceLive(const GameState& state, int controller, int source_id,
-                                  PermAbilityMode mode);                                 // below
+                                  PermAbilityMode mode,
+                                  const std::string* discard_pin = nullptr);              // below
 
 // Spend surplus mana on a REPEATABLE LIBRARY-EXILE sink (Dimensional Infiltrator: "{1}{C}: Target
 // opponent exiles the top card of their library"). Returns the cards exiled.
@@ -21502,11 +21924,83 @@ inline void CreateClueTokens(GameState& state, int controller, int n)
     }
 }
 
+// Voldaren Estate (Vampires A2): "Create a Blood token. (It's an artifact with '{1}, {T}, Discard a
+// card, Sacrifice this token: Draw a card.')" The ability lives on the "Blood Token" NAMED TOKEN DEF in
+// cards.json (blood_draw_cost) -- the Clue Token precedent above -- so each Blood is a real, searched
+// ActivatePermAbility source (PermAbilityMode::BloodDraw). next_token_number keeps each one addressable.
+inline void CreateBloodTokens(GameState& state, int controller, int n)
+{
+    for (int k = 0; k < n; ++k)
+    {
+        Permanent token;
+        token.card.m_name = "Blood Token";
+        token.card.RehashName();
+        token.card.AddType(CardType::Artifact);
+        token.card.m_subtypes   = std::vector<std::string>{ "Blood" };
+        token.card.m_number     = state.next_token_number++;
+        token.controller_index  = controller;
+        token.owner_index       = controller;
+        token.entered_this_turn = true;   // no summoning sickness on an artifact; crackable now
+        token.is_token          = true;
+        state.battlefield.push_back(token);
+        FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    }
+}
+
+// "for each Vampire you control" -- creatures (an animated permanent too, CR 205.3b) carrying the
+// subtype, or every creature type (a Mutavault-style all-types animation / a changeling's own
+// subtype list through CardHasSubtype). Counted AT ACTIVATION by Voldaren Estate's Blood ability.
+inline int CountControlledSubtypeCreatures(const GameState& state, int controller, const std::string& sub)
+{
+    if (sub.empty()) { return 0; }
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+        if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { ++n; }
+    }
+    return n;
+}
+
+// Voldaren Estate's Blood ability cost RIGHT NOW: {5} minus one GENERIC per Vampire we control, floor
+// {0} (CR 601.2f -- a reduction never touches coloured pips, and the printed cost has none). The {T}
+// is not mana and stays. THE single cost reader: the enumerator prices its cost variants off it and
+// BOTH trailing passes pay what it says at the moment of activation, so a Vampire the plan cast first
+// makes it cheaper and one an earlier trailing activation sacrificed makes it dearer (the apply then
+// fails to pay and the activation is a clean no-op in both worlds).
+inline ManaCost TapBloodCostNow(const GameState& state, int controller, const CardDefinition& def)
+{
+    ManaCost c = def.params.tap_blood_cost.value_or(ManaCost{});
+    const int less = CountControlledSubtypeCreatures(state, controller,
+                                                     def.params.tap_blood_cost_less_per_subtype);
+    c.generic = std::max(0, c.generic - less);
+    return c;
+}
+
+// The DISCARD PIN of the activation being applied (Action::discard_name), for the PermAbility modes
+// that discard (the Blood token's BloodDraw). ApplyPermAbility's signature carries no Action, so both
+// trailing passes (TurnSolver's rollout apply and AIEngine's executor twin) install the pin around the
+// call with this scope; the BloodDraw case CONSUMES it (reads and clears), so a nested apply can never
+// inherit it. Null = unpinned (human play: the card is asked at resolution through `discard`).
+inline thread_local const std::string* g_activation_discard_pin = nullptr;
+struct ActivationDiscardPinScope
+{
+    const std::string* prev;
+    explicit ActivationDiscardPinScope(const std::string* pin) : prev(g_activation_discard_pin)
+    { g_activation_discard_pin = (pin != nullptr && !pin->empty()) ? pin : nullptr; }
+    ~ActivationDiscardPinScope() { g_activation_discard_pin = prev; }
+    ActivationDiscardPinScope(const ActivationDiscardPinScope&) = delete;
+    ActivationDiscardPinScope& operator=(const ActivationDiscardPinScope&) = delete;
+};
+
 // Is an ActivatePermAbility's source still there and still activatable? Checked BEFORE paying in
 // both worlds, so a stranded activation (its source left, or it got tapped earlier in the same
 // plan) is a clean no-op rather than a paid one -- the UntapCreature discipline.
+// `discard_pin` (the Blood token's BloodDraw only): the activation's searched discard name; null/empty
+// = unpinned (any non-staged hand card pays the discard).
 inline bool PermAbilitySourceLive(const GameState& state, int controller, int source_id,
-                                  PermAbilityMode mode)
+                                  PermAbilityMode mode, const std::string* discard_pin)
 {
     for (const Permanent& p : state.battlefield)
     {
@@ -21539,6 +22033,12 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             if (rd == nullptr || !rd->params.reconfigure_cost.has_value() || p.equipped_to == 0)
             { return false; }
         }
+        // The Blood token's "Discard a card" is part of the COST (CR 602.2b): no payable discard, no
+        // activation -- checked before the {1} and the {T} are paid, exactly like the gates above.
+        if (mode == PermAbilityMode::BloodDraw
+            && !ActivationDiscardPayable(state, controller,
+                                         discard_pin != nullptr ? *discard_pin : std::string()))
+        { return false; }
         // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
         // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
         // an untappable source would have stopped a just-wished Essence Depleter from draining on
@@ -21657,6 +22157,8 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
                                               return "remove quest counters, sacrifice it: search for two basic lands";
         case PermAbilityMode::ReconfigureUnattach:
                                               return "reconfigure: unattach it (it becomes a creature again)";
+        case PermAbilityMode::TapBlood:       return "create a Blood token";
+        case PermAbilityMode::BloodDraw:      return "discard a card, sacrifice it: draw a card";
         default:                              return "activate";
     }
 }
@@ -22266,6 +22768,47 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // -- quest counters, the sacrifice -- and the search: core/LandSearch.h.
             ApplyLandSearchActivation(state, controller, idx, *d);
             break;
+        case PermAbilityMode::TapBlood:
+        {
+            // Voldaren Estate: the {T} and the (Vampire-reduced) mana were paid by the caller.
+            CreateBloodTokens(state, controller, 1);
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "ability", src_name + ": created a Blood token"); }
+            break;
+        }
+        case PermAbilityMode::BloodDraw:
+        {
+            // The Blood token: "{1}, {T}, Discard a card, Sacrifice this token: Draw a card." The {1}
+            // and the {T} were paid by the caller; the discard and the self-sacrifice are COSTS too
+            // (CR 602.2b), paid here in the A1 contract's order -- DISCARD, then the sacrifice, then
+            // [MADNESS SEAM], then the draw. The pin is CONSUMED (see ActivationDiscardPinScope).
+            const std::string pin = g_activation_discard_pin != nullptr ? *g_activation_discard_pin
+                                                                        : std::string();
+            g_activation_discard_pin = nullptr;
+            const int hi = ChooseActivationDiscardIndex(state, controller, src_name, pin);
+            if (hi < 0) { break; }   // unreachable after PermAbilitySourceLive; never a free draw
+            Player& ap = state.players[controller];
+            const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
+            DiscardCardFromHand(state, controller, hi, src_name);
+            ++ap.cards_cycled_or_discarded_this_turn;
+            // Re-find the token by number (a discard never touches the battlefield, but be exact).
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == source_id
+                    && state.battlefield[static_cast<std::size_t>(i)].controller_index == controller)
+                { state.battlefield.erase(state.battlefield.begin() + i); break; }
+            }
+            FireSacrificeWatchers(state, controller);   // a sac cost IS a sacrifice
+            // [MADNESS SEAM] cluster A1: ResolvePendingMadness(...) HERE (above the ability on the
+            // stack), before the draw below.
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              src_name + ": discarded " + shed + ", sacrificed -- draw a card");
+            }
+            TrickDraw(state, controller, 1);
+            break;
+        }
         case PermAbilityMode::ReconfigureUnattach:
         {
             // Lizard Blades: "[Cost]: Unattach this permanent. Activate only if this permanent is
@@ -32448,7 +32991,8 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.loyalty_activated_this_turn ? 262144 : 0)
         | (p.colored_cast_lifegain_used_this_turn ? 524288 : 0)
         | (p.storied_draw_used_this_turn ? 1048576 : 0)
-        | (p.lifegain_counters_used_this_turn ? 2097152 : 0));
+        | (p.lifegain_counters_used_this_turn ? 2097152 : 0)
+        | (p.once_per_turn_used ? 4194304 : 0));   // Stromkirk Condemned's once-each-turn activation
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);

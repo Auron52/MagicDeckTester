@@ -183,6 +183,15 @@
 // Also folded into TurnSolver's BuildSimKey (nonzero-gated), because the attack half FLIPS
 // MID-TURN -- the Beastmaster Ascension property -- and the sim key's `/c` field records only
 // counters.SIZE, which is the storage-counter key-hole defect this repo has already paid for once.
+// 304 -> 304 (2026-10-18, Vampires A2): Permanent gained `once_per_turn_used` (Stromkirk Condemned's
+// "Activate only once each turn", PER OBJECT) and `cond_haste` (Bloodghast's opponent-life conditional
+// haste). Two plain bools crossed an alignment step (+8, measured), so they are 1-bit fields sharing the
+// byte storied_draw_used_this_turn occupied (now a bit-field too) -- THE TRIPWIRE DID NOT FIRE.
+// Classification: once_per_turn_used is an EXACT-MATCH field, folded in Build() below GATED ON SET -- the
+// lifegain_counters_used_this_turn argument verbatim (consumed by the untap step, flips mid-turn, so it is
+// also in BuildSimKey; no direction survives alone). cond_haste is DERIVED (a function of the definition
+// and the opponent's life, both already compared) and re-derived at entry / beginning of combat, so it
+// needs no fold.
 static_assert(sizeof(Permanent) == 304,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -467,6 +476,10 @@ static_assert(sizeof(Player) == 200,
 // class (set by the main-1 plan, read at THIS turn's declare-attackers), FOLDED in Build(), value-gated.
 // Galadriel's +24 and the Colossus padding-only fields above were made on parallel branches; together
 // 1136, measured (the static_assert compiles) on the rebased tree, 2026-10-17.
+// +0 bytes (2026-10-18, Vampires A2; measured 1136 -> 1136): `deck_has_cond_haste` (a bool in the padding
+// after inf_life_possible -- beside the other deck_has_* bools before m_provider it cost +8). Classification:
+// DECK CONSTANT, stamped once in StampDeckTraits; it only skips RefreshOppLifeHaste's provably-empty walk --
+// nothing to fold. The graveyard state Bloodghast reads is folded under GyR_GyLandfallNames above.
 static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1072,6 +1085,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                          || ((gy_bits & GyR_MulticolorNames) && zc.IsMulticolored())
                          // Haven / Haunted Fengraf: every creature card is a possible return.
                          || ((gy_bits & GyR_CreatureNames) && zc.IsCreature())
+                         // Bloodghast: a graveyard-landfall card returns on the next land.
+                         || ((gy_bits & GyR_GyLandfallNames) && gd->gy_landfall_watcher)
                          // Forge Anew: every Equipment card is a possible return.
                          || ((gy_bits & GyR_EquipmentNames) && [&zc]() {
                                 for (const std::string& st : zc.m_subtypes)
@@ -1216,6 +1231,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // a gain still to come this turn, so no direction survives on its own.
         if (p.lifegain_counters_used_this_turn) { mfold(0x9A8A6ull); }
         if (p.storied_draw_used_this_turn)      { mfold(0x57091ull); }
+        // Stromkirk Condemned's "activate only once each turn" (Vampires A2): exact-match, gated on SET.
+        if (p.once_per_turn_used)               { mfold(0x0CE7Aull); }
         if (wired)
         {
             mfold(0xA77Aull);

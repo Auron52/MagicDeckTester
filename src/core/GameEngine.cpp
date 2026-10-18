@@ -334,6 +334,7 @@ void GameEngine::UntapStep(GameState& state)
             p.storage_hold_this_turn = false;  // #6: the tap-vs-charge hold is a per-turn human choice
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
+            p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
             p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
@@ -672,6 +673,9 @@ void GameEngine::CombatPhase(GameState& state)
     // left during main 1 by a path that does not refresh is a creature again before attackers are
     // declared. Lockstep with TurnSolver::SimulateCombat. One bool test for every other deck.
     RefreshReconfigureCreatures(state);
+    // Bloodghast's "has haste as long as an opponent has 10 or less life": re-derived HERE, where attack
+    // legality is decided (lockstep with TurnSolver::SimulateCombat; one bool test for every other deck).
+    RefreshOppLifeHaste(state);
 
     // Ardenn, Intrepid Archaeologist (begin_combat_attach_all): "at the beginning of combat on your
     // turn, you may attach any number of Auras and Equipment you control to target permanent or

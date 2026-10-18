@@ -86,3 +86,75 @@ viewer wiring, unit-test plans. Summary of what they established:
     run Courtyard + a sac outlet. [default: fix, explain moves]
 11. **VampiresProvider orders** (discard / victim / activation drafts, design_A2 §8) and, later, the
     Vampires cast order and discard buckets — AGENT-DRAFTED, USER reviews.
+
+## Track A -- cluster A2 integrated (2026-10-18, integrator; branch `vampires-analysis`, NOT pushed)
+Cards (cards.json, verbatim Scryfall costs): Falkenrath Pit Fighter, Stromkirk Condemned, Voldaren Estate,
+Blood Token (named token def), Bloodghast. Everything in design_A2 is implemented except where noted below.
+
+**Engine (shared resolvers, both worlds):**
+- `DiscardCardFromHand` (SpellEffects.h) -- THE discard hook (A1's name), with `[MADNESS SEAM]` markers; today
+  only the new outlets call it (every pre-existing discard site stays open-coded until A1 migrates it).
+- Falkenrath Pit Fighter: its own apply `ApplyDiscardSacOutlet` + the one legality predicate `SacOutletLive`
+  (restriction + pinned discard + baked victim, checked BEFORE any cost in both trailing passes, by the
+  enumerator and by the site-9 key). Cost order = mana -> discard -> sacrifice -> [madness seam] -> draw.
+- Stromkirk Condemned: `ApplyActivatePump` mode 4 + `DiscardTeamPumpLive`; `Permanent::once_per_turn_used`
+  (reset at our untap in both worlds; BuildSimKey bit 1<<19, PermIsPlainForFoldImpl, FungibilityKey,
+  dominance::Build, LandfallTargetFoldKey, RemovalSelfTargetFoldKey, the payment parity check).
+- Voldaren Estate: Tier-1 mana (Unclaimed Territory + painland reading); `PermAbilityMode::TapBlood` with
+  `TapBloodCostNow` (paid at activation in both worlds); the Blood token `PermAbilityMode::BloodDraw`
+  (discard pin via `ActivationDiscardPinScope`, consumed once).
+- Bloodghast: graveyard landfall in `FireLandfallTriggers` (snapshot at entry; `revive` chooser in human
+  play; autonomous YES -- PROVISIONAL dominance); `Permanent::cond_haste` (derived; `RefreshOppLifeHaste` at
+  both begin-combat checkpoints + entry); `GyR_GyLandfallNames` folded into BuildSimKey / dominance;
+  `deck_has_landfall` + `deck_has_cond_haste` stamps.
+- Secluded Courtyard sac-outlet pay scope (design 0.4): both trailing passes pay every creature-source
+  sac outlet under `CreatureAbilityPayScope` (`MTG_SAC_OUTLET_PAY_SCOPE`, default ON, =0 = old payment).
+- `DeckUsesSecondMain`: `activate_only_if_opp_lost_life`.
+- Sizes: `sizeof(Permanent)` stays 304 (the two new flags + Kili's flag are 1-bit fields in one byte);
+  `sizeof(GameState)` stays 1136 (the stamp sits in padding); `sizeof(Action)` 472 -> 480 (one
+  `InternedName discard_name`; `int8_t vamp_casts_needed` in padding). No Action size pin exists.
+
+**Search (all branched; providers order only):**
+- `Action::discard_name` = the searched discard pin (one variant per distinct non-staged hand name), on Pit
+  Fighter / Condemned / Blood crack; folded into plan_signature, ActionFoldSig, BpCandFingerprint,
+  PlanDomKey, the action diff printer (all gated on non-empty -> other decks' keys unchanged).
+- Pit Fighter victims: one per identity class (LandfallTargetFoldKey) on the pre-plan board + one per
+  Vampire creature NAME in hand (a same-plan victim: `victim_name` + `needs_cast_mask` bit1). Source pooled
+  (first copy emits; `ActivationFamilyKey` group -> one activation per plan; more through the draw's
+  hand-entry breakpoint). Human play: ONE unpinned entry (+ a payability probe), asked at resolution.
+- Condemned: per-copy family (`ActivationFamilyKey`), one variant per discard name.
+- Voldaren: cost variants k = 0..kmax (Vampires the plan adds), exact-k + a top "k or more" variant.
+- `SubsetVampOutletInvalid` (both walkers): over-pinned discards, a same-plan victim without its cast, the
+  wrong Blood cost variant, a non-canonical identical-Condemned assignment (odometer positions only).
+- Site-9 keys: kActSacOutlet uses `SacOutletLive`; kActTeamPump keys mode 4; TapBlood / BloodDraw appended
+  LAST to all four ModeSpec tables (TapBlood priced at `TapBloodCostNow`).
+- Land: `TurnSolver::PutsGyLandfallFeeder` adds the -1 ("land after the activations") clone for a plan
+  whose activation discards / sacrifices a Bloodghast; the main-2 held-land exemption
+  (`GyLandfallHeldLandExempt`, `MTG_VAMP_GY_LANDFALL_HELD_LAND` default ON -- USER QUESTION 1).
+- `VampiresProvider : VialProvider` (Stage 4a), routed at the TOP of `DetectDecisionProvider` by
+  Vampires-only params from four cards; AGENT-DRAFTED orders (`MTG_VAMP_DRAFT_ORDERS`, default ON):
+  ActivationDiscardCandidates, SacOutletVictimCandidates, ActivationOrderRank (Blood -> Condemned -> crack
+  -> Pit Fighter). New base hooks `DecisionProvider::ActivationDiscardCandidates` /
+  `SacOutletVictimCandidates` (defaults: the cleanup ranking / SacExpendabilityRank, no narrowing).
+- Viewer: `discard` / `sacrifice` / `revive` reused (DECISIONS.md rows + a "Vampires A2 outlets" section);
+  plan JSON `makes_blood`; menu labels for mode 4 / Pit Fighter / Blood crack; auditor MANIFEST / INERT /
+  BOARD_ACTIVATIONS rows (`audit_viewer_decisions.py --no-sweep`: clean).
+
+**Deviations from design_A2 (and why):**
+1. Cost order is discard -> sacrifice (A1 §2.5 / the integration brief), not sacrifice -> discard: the madness
+   card is in exile while the victim is chosen, so it still can never be the victim.
+2. Same-plan Pit Fighter victims are emitted at ENUMERATION (named, guarded) instead of the post-dedup
+   `AppendSubdecisionAxes` re-point: no hand-index reconstruction, and the subset guard makes a missing cast
+   a rejected duplicate. Same reachable set.
+3. Condemned: per-copy emission + a canonical-assignment subset rule instead of a k-count multiset action
+   (same canonical set, no new Action fields).
+4. Blood cost variants keep EXACTLY one variant per subset (exact k, top variant "k or more") -- a ">= k"
+   guard alone would enumerate each subset once per k it satisfies.
+5. The "unpinned autonomous apply in the window" invariant is a counter (`g_activation_discard_unpinned`,
+   asserted 0 by the lockstep unit test), not an abort -- there is no debug build to abort in.
+6. Blood-crack pooling = the first untapped Blood (identical untapped Bloods have no distinguishing state).
+
+**PROVISIONAL (user sign-off owed):** Bloodghast "can't block" inert; instant-speed timing of Pit Fighter /
+Condemned / Blood (and Blood creation) collapsed to the main phases' trailing passes; Bloodghast's "may"
+= YES autonomously; Voldaren "Vampire spell" == "creature spell" (exact for this list); the
+main-2 held-land exemption (open question 1); the VampiresProvider draft orders (open question 11).
