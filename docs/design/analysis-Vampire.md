@@ -92,6 +92,23 @@ viewer wiring, unit-test plans. Summary of what they established:
   A payment-ORDER heuristic change across decks earns adoption by a held-out A/B on the decks it moves:
   `test/tools/payer_pain_ab.py` (8 decks, both levers on vs =0, two held-out blocks, one pooled batch).
 
+## Status update (orchestrator, 2026-10-18 night)
+- Payer A/B (test/tools/payer_pain_ab.py; 8 decks x 2 held-out blocks, one pooled batch): FIRST run failed the
+  bar (vampires +1 -- the levers skipped a T1 land on s13480130 gi9 -- and creature_giving +1). Root-caused and
+  fixed on `vampires-payer2` (merged: Pit Fighter's main-2 activation holds an ability-legal {R}; a sac-land
+  cast's victim pays first). RE-RUN: every deck net <= 0 (vampires -1, creature_giving -3, minotaur -2,
+  pirates -2, th -4, auras / selesnya / soldiers 0), ZERO slower searched games; three d0 slower games are the
+  d0 runner's later choice after a better payment (th gi1155 decks itself -- question 38, minotaur gi83,
+  soldiers gi1554).
+- GT re-accepted on the merged tree: smoke 6c5442e74 and regression 5b4b21c98 (filtered accepts over FULL
+  runs; every move attributed in the commit messages: searched slower = 2 vampires games, gi76 an old
+  phantom-mana line verified on the pre-fix binary, gi79 budget churn that recovers at d3/d5/d8 b0; d0 slower =
+  vampires phantom-mana / d0-greedy classes and pirates gi628 payer churn). Overnight vampires rows: running
+  (MTG_PGO=0, byte-identical to PGO).
+- Remaining: overnight accept; perf track (slow games, `vampires-perf`); leaf tie-break check (5c2); shed
+  bound (5i); verify_deck full (mismatch harnesses, viewer sweep, play_invariants); confirmation claude-play
+  sweep (incl. a game-index with opponent creatures for Captivating's steal); cast-order / bucket A/B.
+
 ## Open questions for the user (work continues on the stated default)
 1. **Main-2 held-land bar vs Bloodghast** (USER 2026-09-30 "Only newly arrived lands in second main").
    "Pit Fighter sacs Bloodghast post-combat, then play the held land" is unfindable at any budget under the
