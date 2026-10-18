@@ -70,29 +70,29 @@ both a value leaf and a mulligan profile. If it is over: report it to the user a
 range the first goal — **do not** generate anyway and do not exempt the deck.
 `MTG_ALLOW_UNTESTED_DECK=1` overrides and is a USER decision, never an agent's.
 
-## SERIAL, IN ORDER, AND ONLY AFTER THE VALUE LEAF (user directive, 2026-08-31)
+## SERIAL, IN ORDER -- AND NOW BEFORE THE VALUE LEAF (user directive 2026-08-31; order changed 2026-10-18)
 
-**profile -> value leaf -> mulligan.** A mulligan generation *or* its `recommend` scout runs ALONE
-on the box, only once the value leaf has FINISHED, and at the deck's real `mull_gen` settings.
-CLAUDE.md is authoritative; the three reasons, strongest first:
+**profile -> mulligan -> value leaf** (USER 2026-10-18, *"at least for the time being"*: *"We were able to
+make some optimizations to the no-leaf approach and these mean that the value-leaf is currently
+underperforming. Hence, the mulligan profile is the obvious thing to run first as it has significant
+performance implications."*). A mulligan generation *or* its `recommend` scout still runs ALONE on the box,
+after the profile stage has finished, at the deck's real `mull_gen` settings -- which `mullgen.sh run` now
+screens itself before the first table. CLAUDE.md is authoritative. What still holds:
 
-1. **The value leaf changes the performance you are measuring.** It replaces the horizon rollout
-   with an O(1) evaluator and the H-cell ladder is guarded on the sidecar EXISTING -- a missing
-   model silently costs **1.35-84.8x**. A probe run before it times the SLOW path, so its
-   projection can be wrong by more than an order of magnitude, always pessimistically. **Never
-   record a feasibility verdict measured without the value leaf attached** -- it is worthless.
-2. *(Superseded 2026-10-18.)* The generation settings used to come only from the value leaf's last
-   phase. `mullgen.sh run` now screens them itself before the first table (see "Generating a profile"),
-   writing into `<deck>.profile.json` when there is no sidecar. Still true: never CREATE a
-   `<deck>.value.json` by hand -- **sidecar presence activates the hybrid in play**.
-
-**ORDER UNDER REVIEW (USER 2026-10-18):** *"Realistically it seems that mulligan profile first and then
-value-leaf is pretty much always the right order now"* -- before a keep table, lookahead bottoming is the
-dominant cost of every game the value leaf plays (Galadriel: ~96% of CPU at d3 b10), and the leaf is fitted
-on the hand mix the keep policy produces. Galadriel ran mulligan -> value leaf on the USER's instruction;
-whether that becomes the general order (CLAUDE.md) is the USER's open decision.
+1. **Bottoming dominates a deck with no keep table.** Every mulligan's bottom is chosen by playing out each
+   candidate as a full game at play settings (Galadriel: ~96% of CPU at d3 b10). The keep table removes
+   that, and it fixes the hand mix the value leaf is later fitted on -- the reason this stage goes first.
+2. **Never hand-write a `<deck>.value.json`.** Sidecar presence activates the hybrid in play; the
+   generation setting goes into `<deck>.profile.json` until a sidecar exists, and `mullgen.sh run` carries
+   it over when one appears.
 3. **Contention corrupts a timing deliverable.** A `recommend` projection IS a wall-clock number;
    measured on a shared box it cannot answer the question it was run for.
+4. **A later value leaf does not by itself mean regenerating the table** (Rule 0 below: generation binds,
+   a profile's lifetime does not). A regen after adopting a leaf is the USER's call.
+
+The old reason for the reverse order -- the leaf changed generation cost by 1.35-84.8x, so a gen without it
+timed the slow path -- no longer holds with the no-leaf optimizations. If a leaf overtakes the no-leaf
+shapes again, raise the order with the USER; do not switch back unilaterally.
 
 2026-08-31 (Mirrorwing): a probe was run alongside a live value-leaf generation, before it
 finished, at inherited depth 5 instead of the deck's d3/b3 -- wrong on all three counts at once. It

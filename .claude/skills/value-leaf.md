@@ -66,8 +66,11 @@ range the first goal. `MTG_ALLOW_UNTESTED_DECK=1` overrides and is a USER decisi
 ## NOTHING ELSE RUNS WHILE THIS DOES (user directive, 2026-08-31)
 
 This generation owns the box. No mulligan gen, no `recommend` scout, no regression tier, no screen
-alongside it -- generation stages are strictly serial (CLAUDE.md). Two reasons beyond the obvious
-core-splitting:
+alongside it -- generation stages are strictly serial (CLAUDE.md). **It now runs AFTER the mulligan
+profile** (USER 2026-10-18, "at least for the time being": the no-leaf optimizations leave the leaf
+underperforming, and without a keep table lookahead bottoming dominates every game this run plays --
+Galadriel ~96% of CPU at d3 b10 -- while the keep table also fixes the hand mix the leaf is fitted on).
+Two reasons beyond the obvious core-splitting:
 
 * **Downstream stages depend on this one's OUTPUT.** An adopted leaf becomes `<deck>.value.json`, whose
   `value_play` the mulligan generator reads. (The mulligan-generation setting screen is no longer a
