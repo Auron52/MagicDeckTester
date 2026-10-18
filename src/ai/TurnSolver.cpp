@@ -1364,12 +1364,14 @@ enum Site
     kGreedyWalk,           // EnumeratePlans' subset walk, one unit per W visits (MTG_SOLVE_CHARGE)
     kEquipRoute,           // equip-route DFS: MTG_EQUIP_ROUTE_NODE_UNITS units per link applied
                            // (default 8, NOT 1 -- TurnSolver::ChargeDecisionUnits, equiproute::NodeUnits)
+    kPutBackPrice,         // Brainstorm put-back VARIANT price: MTG_PUTBACK_PRICE_UNITS per variant applied
+                           // (MTG_PUTBACK_PRICE; see ChargePutBackVariant)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
-    "fs_m2_wave", "greedy_walk", "equip_route"
+    "fs_m2_wave", "greedy_walk", "equip_route", "putback_price"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -21206,6 +21208,73 @@ static bool PutBackFoldOn()
     static const bool v = EnvOn("MTG_PUTBACK_FOLD", true);   // DEFAULT ON; =0 disables
     return v;
 }
+// MTG_PUTBACK_TRACE (diagnostic, default off): WHERE the put-back fan's applies land. Per apply site
+// (FSLineWin's pre-combat loop, its main-2 loop, SolveWithLookahead's candidate loop), how many plans
+// were applied, how many of them were put-back VARIANTS (putback_choice >= 1), and how many of each
+// ran with the decision's budget already EXHAUSTED or past its OVERRUN ceiling. Counters only.
+namespace pbsite
+{
+enum Site { kFsPre = 0, kFsM2, kLaPre, kLaPost, kCount };
+static std::atomic<long long> g_n[kCount][2][3];   // [site][variant?][0 = live, 1 = exhausted, 2 = overrun]
+static void Note(Site site, const TurnSolver::Plan& p, const SearchBudget* b)
+{
+    static const bool on = EnvOn("MTG_PUTBACK_TRACE");
+    if (!on) { return; }
+    const int v  = p.putback_choice >= 1 ? 1 : 0;
+    const int st = (b == nullptr || b->Unlimited()) ? 0 : b->Overrun() ? 2 : b->Exhausted() ? 1 : 0;
+    g_n[site][v][st].fetch_add(1, std::memory_order_relaxed);
+    struct Report
+    {
+        ~Report()
+        {
+            static const char* names[kCount] = { "fs_pre", "fs_m2", "la_pre", "la_post" };
+            for (int i = 0; i < kCount; ++i)
+            {
+                std::fprintf(stderr, "[putback-site] %-7s base: live=%lld exh=%lld over=%lld  variant: live=%lld exh=%lld over=%lld\n",
+                             names[i], g_n[i][0][0].load(), g_n[i][0][1].load(), g_n[i][0][2].load(),
+                             g_n[i][1][0].load(), g_n[i][1][1].load(), g_n[i][1][2].load());
+            }
+        }
+    };
+    static Report s_report;
+}
+}   // namespace pbsite
+
+// THE PUT-BACK VARIANT PRICE (MTG_PUTBACK_PRICE, per-job; MTG_PUTBACK_PRICE_UNITS = the price, default 2).
+// A Brainstorm fan is every distinct ordered pair of hand classes -- median ~76 per base plan, 280+ on a
+// Niv-Mizzet hand -- and every variant is a full plan applied and scored. The budget otherwise bills a
+// variant exactly like any plan (one unit per apply), so the iterative-deepening start gate and the
+// overrun ceiling see a fan as cheap as one plan per variant. The price bills each variant BEYOND THE
+// PROVIDER'S FIRST CANDIDATE (putback_choice >= 1; the base plan is candidate 0) extra units at the three
+// plan-apply loops, so a finite budget is spent on default put-backs first: passes whose fans would blow
+// the budget are gated or rolled back sooner, and a larger budget reaches the rest proportionally.
+// THE GOOD SHAPE (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK..."): nothing is refused or reordered -- every
+// variant is still enumerated and, where the loop runs, applied and scored -- and at an UNLIMITED
+// budget (nullptr, or Unlimited()) the price is never read, so --budget-ms 0 is byte-identical.
+static bool PutBackPriceOn()
+{
+    static const bool env = EnvOn("MTG_PUTBACK_PRICE", false);
+    return heurarm::Flag(heurarm::PUTBACK_PRICE, env);
+}
+static int PutBackPriceUnits()
+{
+    static const int v = []() -> int {
+        const char* e = std::getenv("MTG_PUTBACK_PRICE_UNITS");
+        const int n = (e && *e) ? std::atoi(e) : 2;
+        return n > 0 ? n : 0;
+    }();
+    return v;
+}
+static thread_local long long t_putback_price_charged = 0;   // this thread's running total (A/B read-out)
+long long TurnSolver::PutBackPriceCharged() { return t_putback_price_charged; }
+static void ChargePutBackVariant(SearchBudget* budget, const TurnSolver::Plan& p)
+{
+    if (budget == nullptr || budget->Unlimited() || p.putback_choice < 1 || !PutBackPriceOn()) { return; }
+    const int n = PutBackPriceUnits();
+    for (int i = n; i > 0; --i) { ConsumeAt(budget, unitsite::kPutBackPrice); }
+    t_putback_price_charged += n;
+}
+
 struct PutBackFoldMemo
 {
     struct Group { int width = -1; std::unordered_map<int, int> first; };   // resolved rank -> cand index
@@ -68722,6 +68791,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; w0_trunc = true; break; }
             ++m2_scanned;
             ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
+            pbsite::Note(pbsite::kFsM2, q, budget);
+            ChargePutBackVariant(budget, q);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             if (s_rollout_stats)
             {
                 m2stats::g_scanned.fetch_add(1, std::memory_order_relaxed);
@@ -70493,6 +70564,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
         ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
+        pbsite::Note(pbsite::kFsPre, p, budget);
+        ChargePutBackVariant(budget, p);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
         if (s_rollout_stats)
         {
             g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -75335,6 +75408,29 @@ static bool LaPassCeilingOn()
     static const bool env = EnvOn("MTG_LA_PASS_CEILING", true);
     return heurarm::Flag(heurarm::LA_PASS_CEILING, env);
 }
+// THE NESTED OVERRUN BAIL (MTG_LA_NESTED_BAIL; per-job). The pass ceiling above is armed only by the
+// BUDGETED root (gate). Every SolveWithLookahead nested under it -- a rollout's per-turn solve, a
+// searched second main (SolveSecondMainInSearch), all with enforce_budget=false -- runs its candidate
+// loop to completion and never looks at the ceiling. FSLineWin and FSLineTail bail at entry once it
+// trips ("abort the runaway pass"); this host did not, so the trip only stopped NEW rollout turn-steps:
+// the in-flight loops kept applying every remaining candidate, and each pre-combat candidate opened a
+// fresh second-main solve that applied every m2 candidate in turn. Measured on Niv-Mizzet d3 b10
+// (seed 82021 gi 21): 7.92M of the 8.13M main-2 applies ran AFTER the ceiling had tripped, and one
+// T6 decision spent 10.27M units against a 225k ceiling (1,141x its 9,000-unit budget).
+//
+// WHAT THE BAIL CAN CHANGE, exactly: after the trip every rollout returns a no-win at its first
+// turn-step (SimulateToEndImpl), so the only thing a post-trip candidate can still contribute is a win
+// realised without a rollout -- an apply (or its inline combat / second main) that kills this turn.
+// The bail stops the loop at the next candidate and treats the pass like the root's tripped pass: roll
+// back to the last completed pass, keeping a strictly better win this pass had already PROVEN (the
+// anytime rule). So it RE-PRICES work: a larger budget arms a proportionally larger ceiling and trips
+// later (or never), and at an UNLIMITED budget no ceiling is armed and Overrun() is never true -- inert
+// by construction. It refuses nothing the ceiling had not already condemned to a no-win score.
+static bool LaNestedBailOn()
+{
+    static const bool env = EnvOn("MTG_LA_NESTED_BAIL", false);
+    return heurarm::Flag(heurarm::LA_NESTED_BAIL, env);
+}
 
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
@@ -75548,6 +75644,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     bool gw_built = false, gw_build_truncated = false;
 
     const bool   gate         = enforce_budget && budget != nullptr;
+    // A nested solve under a finite budget honours a tripped overrun ceiling (see LaNestedBailOn).
+    const bool   nested_bail  = !gate && budget != nullptr && !budget->Unlimited() && LaNestedBailOn();
     long long    c_prev       = 0;       // cost of pass k-1 (work units)
     long long    c_prev2      = 0;       // cost of pass k-2
     bool         have_prev    = false;
@@ -76242,6 +76340,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
             // returns a no-win at its first turn-step, so the rest of the list would only re-pay applies.
             if (pass_ceiling.b != nullptr && budget->Overrun()) { pass_ceiling_tripped = true; break; }
+            // ...and the same for a NESTED solve under a tripped ceiling (see LaNestedBailOn).
+            if (nested_bail && budget->Overrun()) { pass_ceiling_tripped = true; break; }
             // --- Overrun guard: finish if almost done, else abort + roll back ---
             if (gate && budget->Exhausted() && candidates_done > 0)
             {
@@ -76435,6 +76535,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // One work unit for this candidate's inline first turn (combat + post
             // main); the remaining turns are counted inside SimulateToEnd.
             ConsumeAt(budget, unitsite::kLookaheadCand);
+            pbsite::Note(is_pre_combat ? pbsite::kLaPre : pbsite::kLaPost, plan, budget);
+            ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
@@ -77054,7 +77156,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // ever returns a no-win, so a win in pass_best is a line that was really played out). A trip
         // during the waves below is NOT this case: the candidate loop finished uncut, and the waves
         // only ever take a strictly better win, so a cut there leaves the pass exactly as complete.
-        if (pass_ceiling.b != nullptr && !pass_ceiling_tripped && budget->Overrun())
+        if ((pass_ceiling.b != nullptr || nested_bail) && !pass_ceiling_tripped && budget->Overrun())
         { pass_ceiling_tripped = true; }
         if (pass_ceiling_tripped)
         {
@@ -83392,7 +83494,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     return t;
 }
 #define MTG_TURN_CENSUS_FIELDS(X)                                                                 \
-    /* ---- WHERE THE UNITS WENT. These 15 sum exactly to `units`, and turn_census.py ABORTS if    \
+    /* ---- WHERE THE UNITS WENT. These 16 sum exactly to `units`, and turn_census.py ABORTS if    \
      * they ever don't -- add a bucket with every new Consume site. ---- */                       \
     X(u_rollout_step,     MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRolloutStep]))          \
     X(u_fs_main2,         MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsMain2]))              \
@@ -83409,6 +83511,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_fs_m2_wave,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kFsM2Wave]))             \
     X(u_greedy_walk,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kGreedyWalk]))           \
     X(u_equip_route,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kEquipRoute]))           \
+    X(u_putback_price,    MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kPutBackPrice]))         \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \

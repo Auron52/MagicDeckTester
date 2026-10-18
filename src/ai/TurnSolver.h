@@ -2086,6 +2086,9 @@ public:
     // Charge `n` units of such sub-search work to `budget` (no-op on nullptr), attributed to the
     // census's `equip_route` bucket.
     static void              ChargeDecisionUnits(SearchBudget* budget, int n);
+    // Work units the Brainstorm put-back price (MTG_PUTBACK_PRICE) has charged on THIS thread so far --
+    // a running total, so a caller diffs it around a game to report that game's units net of the price.
+    static long long         PutBackPriceCharged();
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the

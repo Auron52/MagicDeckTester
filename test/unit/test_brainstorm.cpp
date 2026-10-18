@@ -22,6 +22,8 @@
 #include "core/SpellEffects.h"
 #include "ai/AIEngine.h"
 #include "ai/TurnSolver.h"
+#include "ai/HeuristicArm.h"
+#include "ai/SearchBudget.h"
 #include "mtg_test_seam.h"
 
 #include <map>
@@ -406,4 +408,39 @@ TEST_CASE("Brainstorm: PutBackPickAt == PutBackCandidates rank for rank (random 
         }
     }
     CHECK(checked > 2000);
+}
+
+// THE TWO BUDGET LEVERS ARE INERT AT AN UNLIMITED BUDGET. MTG_PUTBACK_PRICE (extra units per put-back
+// variant applied) and MTG_LA_NESTED_BAIL (a nested solve stops at a tripped overrun ceiling) only
+// re-price a FINITE budget: with no budget, or an Unlimited() one, neither is read, so the chosen plan
+// and the units spent are identical with the levers on or off. At a finite budget the price IS charged.
+TEST_CASE("Brainstorm: the put-back price and the nested overrun bail are inert at an unlimited budget")
+{
+    const GameState s = BoardBs({ "Island", "Lightning Bolt", "Goblin Guide" },
+                                { "Birds of Paradise", "Sol Ring", "Llanowar Elves" });
+    auto solve = [&](int price, int bail, SearchBudget* b, long long* charged) -> TurnSolver::Plan
+    {
+        const heurarm::Arm saved = heurarm::t_arm;
+        heurarm::t_arm[heurarm::PUTBACK_PRICE]  = static_cast<std::int8_t>(price);
+        heurarm::t_arm[heurarm::LA_NESTED_BAIL] = static_cast<std::int8_t>(bail);
+        const long long c0 = TurnSolver::PutBackPriceCharged();
+        TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, true, 2, 8, b, b != nullptr, false, nullptr);
+        if (charged != nullptr) { *charged = TurnSolver::PutBackPriceCharged() - c0; }
+        heurarm::t_arm = saved;
+        return p;
+    };
+    long long ch = -1;
+    const TurnSolver::Plan off = solve(0, 0, nullptr, nullptr);
+    CHECK(solve(1, 1, nullptr, &ch) == off);
+    CHECK(ch == 0);
+    SearchBudget u_on(0), u_off(0);   // 0 = UNLIMITED
+    const TurnSolver::Plan p_on = solve(1, 1, &u_on, &ch);
+    CHECK(ch == 0);
+    const TurnSolver::Plan p_off = solve(0, 0, &u_off, nullptr);
+    CHECK(p_on == p_off);
+    CHECK(u_on.Used() == u_off.Used());
+    // A finite budget: the variants the root applies are billed the price.
+    SearchBudget fin(SearchBudget::FromVirtualMs(1000));
+    solve(1, 0, &fin, &ch);
+    CHECK(ch > 0);
 }

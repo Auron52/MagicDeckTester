@@ -10,6 +10,7 @@
 #include "../core/HardwareConcurrency.h"
 #include "../core/MemBudget.h"
 #include "../ai/AIEngine.h"
+#include "../ai/TurnSolver.h"   // PutBackPriceCharged: the MTG_PUTBACK_PRICE_LOG read-out
 #include "../ai/MulliganProfile.h"
 #include "../ai/Profiler.h"
 #include "../ai/MulliganProfileIO.h"
@@ -1918,9 +1919,19 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
                 const long long e0[9] = { escstats::t_take_n, escstats::t_take_u, escstats::t_disc_n, escstats::t_disc_u, escstats::t_disc_ver_n, escstats::t_disc_ver_earlier, escstats::t_disc_ver_equal, escstats::t_disc_rescued_n, escstats::t_disc_rescued_main_n };
                 escstats::t_job = job.name.c_str(); escstats::t_gi = wi.game;
+                const long long pbp0 = TurnSolver::PutBackPriceCharged();
                 int wt = engine->RunGame(state, job.max_turns);
                 escstats::t_job = nullptr; escstats::t_gi = -1;
                 const long long g_units = gamework::Used();
+                // MTG_PUTBACK_PRICE_LOG (diagnostic, default off): the units this game's put-back price
+                // charged, so a price A/B can report units NET of the price (the work actually done).
+                static const bool s_pbp_log = EnvOn("MTG_PUTBACK_PRICE_LOG");
+                if (s_pbp_log)
+                {
+                    std::fprintf(stderr, "[pbprice] job=%s gi=%d units=%lld price=%lld\n", job.name.c_str(),
+                                 global_gi, g_units,
+                                 TurnSolver::PutBackPriceCharged() - pbp0);
+                }
                 if (s_esc_job_stats)
                 {
                     const long long e1[9] = { escstats::t_take_n, escstats::t_take_u, escstats::t_disc_n, escstats::t_disc_u, escstats::t_disc_ver_n, escstats::t_disc_ver_earlier, escstats::t_disc_ver_equal, escstats::t_disc_rescued_n, escstats::t_disc_rescued_main_n };
