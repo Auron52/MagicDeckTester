@@ -252,3 +252,12 @@ against the rule as stated:
 Under honest play the broad form's extra is worth nothing (its shipped-search edge was the search knowing a
 Hammer would come); the narrowed rule keeps all of the real gain. Its two slower games (s13800066, s13820383)
 recover at depth W b100.
+
+### USER ruling (2026-10-18): the rule as stated stands
+
+*"Essentially the blades is good as a body or rarely could be worth it if we cannot afford equipping hammer. There
+is no reason to include it if we have both a body and a source to free-equip."* So Lizard Blades is a tutor target
+only with no creature (a body), or with no double striker and no free attach (the Hammer's {8} unaffordable);
+beside a body and a free attach the tutor fetches the Hammer alone. `MTG_COLOSSUS_TUTOR_LIZARD_DS` is now default
+OFF (the measured alternative, kept as a hatch); what it would buy, for the record: -0.0040 under the
+non-clairvoyant search (4 games in 1,000, each with a slow non-double-striker such as a 3-mana Ardenn the only body).

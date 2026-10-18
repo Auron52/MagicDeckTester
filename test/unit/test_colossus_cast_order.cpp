@@ -177,15 +177,15 @@ TEST_CASE("Colossus tutors: a cheap attach and a creature -> Colossus Hammer alo
     using V = std::vector<std::string>;
     CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" }, kTutorLib)) == V{ "Colossus Hammer" });
     CHECK(Picks(TutorBoard({ "Plains", "Kor Duelist" }, { "Magnetic Theft" }, kTutorLib)) == V{ "Colossus Hammer" });
-    // A non-double-striker with a cheap attach and no other route to a Hammer: the Hammer alone (Raubahn carries it).
+    // A body and a free attach: the Hammer alone, whatever else is in hand (USER: "There is no reason to include it if
+    // we have both a body and a source to free-equip").
     CHECK(Picks(TutorBoard({ "Plains", "Raubahn, Bull of Ala Mhigo" }, {}, kTutorLib)) == V{ "Colossus Hammer" });
-    // ...with a second tutor in hand, Lizard Blades joins: the double-strike body Raubahn's trigger moves the Hammer onto.
     CHECK(Picks(TutorBoard({ "Plains", "Raubahn, Bull of Ala Mhigo" }, { "Open the Armory" }, kTutorLib))
-          == V{ "Colossus Hammer", "Lizard Blades" });
+          == V{ "Colossus Hammer" });
     {
-        ArmCo stated(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 0);
+        ArmCo alt(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 1);   // the declined alternative: a second tutor -> the Lizard joins
         CHECK(Picks(TutorBoard({ "Plains", "Raubahn, Bull of Ala Mhigo" }, { "Open the Armory" }, kTutorLib))
-              == V{ "Colossus Hammer" });
+              == V{ "Colossus Hammer", "Lizard Blades" });
     }
     // ...and Open the Armory follows the same rule.
     const GameState s = TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" }, kTutorLib);
@@ -227,16 +227,19 @@ TEST_CASE("Colossus tutors: no Hammer left -> every legal target; the rule off -
           == V{ "Loxodon Warhammer", "Colossus Hammer", "Dragonfire Blade", "Lizard Blades" });
 }
 
-TEST_CASE("Colossus tutors: the Lizard amendment -- no double striker, a cheap attach -> Lizard Blades joins")
+TEST_CASE("Colossus tutors: the declined Lizard alternative (=1) -- no double striker, a cheap attach -> Lizard Blades joins")
 {
     using V = std::vector<std::string>;
+    CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft", "Steelshaper's Gift" },
+                           kTutorLib)) == V{ "Colossus Hammer" });   // the default: a body and a free attach -> the Hammer
+    ArmCo alt(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 1);
     // s1001 gi118: Ardenn the only creature, Magnetic Theft in hand -- the rule as stated offers the Hammer alone.
     const GameState s = TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft" }, kTutorLib);
     {
         ArmCo stated(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 0);
         CHECK(Picks(s) == V{ "Colossus Hammer" });
     }
-    CHECK(Picks(s) == V{ "Colossus Hammer" });   // the default (narrowed): no other route to a Hammer
+    CHECK(Picks(s) == V{ "Colossus Hammer" });   // the alternative, narrowed (its default): no other route to a Hammer
     {
         ArmCo broad(heurarm::COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER, 0);
         CHECK(Picks(s) == V{ "Colossus Hammer", "Lizard Blades" });   // the broad amendment
@@ -248,9 +251,10 @@ TEST_CASE("Colossus tutors: the Lizard amendment -- no double striker, a cheap a
     }
 }
 
-TEST_CASE("Colossus tutors: the narrowed amendment (default) -- Lizard Blades only when a Hammer is already reachable")
+TEST_CASE("Colossus tutors: the declined alternative, narrowed -- Lizard Blades only when a Hammer is already reachable")
 {
     using V = std::vector<std::string>;
+    ArmCo alt(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 1);
     // s1001 gi118: Ardenn + Theft and a SECOND Gift in hand -> the Lizard joins (the body for the Hammer to come).
     CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft", "Steelshaper's Gift" },
                            kTutorLib)) == V{ "Colossus Hammer", "Lizard Blades" });

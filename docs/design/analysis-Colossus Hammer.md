@@ -42,8 +42,8 @@ BYTE-IDENTICAL to the accepted GT (no accept needed), refs 600 / 0 drift. Commit
 ledger predate the rebase -- find each by its subject (`git log --oneline --grep`).
 10-18 (USER: "make sure they are pushed and that the engine matches them ... so we can launch the mulligan
 generation later"): the USER's 15 references pushed (`1ec3620be`, `313654130`); the 10-18 package (full order with
-the equips, Path never cast, tutor rule + Warhammer/Dragonfire fallback + the Lizard amendment NARROWED after the
-USER's "+10/+10 will beat double strike" (still PENDING the USER), Aid lethal-first) measured, every slower game
+the equips, Path never cast, the USER's tutor rule as stated + Warhammer/Dragonfire fallback (a Lizard amendment
+was measured and DECLINED by the USER), Aid lethal-first) measured, every slower game
 attributed, smoke + regression GT accepted (full tiers byte-identical on the narrowed engine except the one intended
 colossus2hg game), rebased onto origin `0744b1417` (Galadriel value leaf; Galadriel + Colossus rows re-verified
 there; refs 630 / 0 drift; ref_bench 0/15 short, 3.200 vs human 3.267). NOT pushed (awaiting the USER). Next stage for this deck under the 10-18 pipeline order
@@ -426,7 +426,10 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
    *"+10/+10 will beat double strike."* NARROWED (`MTG_COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER`, default ON): the Lizard
    only when a Hammer is already reachable (hand / battlefield / a second tutor), i.e. as the double-strike body
    for it; otherwise the Hammer alone. Non-clairvoyant search: identical to the broad form (-0.0040, same 4 games)
-   at 1.006x wall -- the broad form's extra was clairvoyance. Still awaiting the USER's ruling on the narrowed form.
+   at 1.006x wall -- the broad form's extra was clairvoyance.
+   -> RULED 2026-10-18: *"Essentially the blades is good as a body or rarely could be worth it if we cannot afford
+   equipping hammer. There is no reason to include it if we have both a body and a source to free-equip."* The rule
+   as stated stands; `MTG_COLOSSUS_TUTOR_LIZARD_DS` default OFF (forgoes -0.0040 honest, 4 games in 1,000).
 
 ## Provisional deferrals (await USER sign-off)
 

@@ -44852,9 +44852,10 @@ bool ColossusHammerProvider::NeverCast(const CardDefinition& def) const
 // A provider RESTRICTION (the search still branches over what is admitted), Hammer FIRST so it is also
 // the d0 / beyond-horizon pick and the human menu's default:
 //   * Colossus Hammer (equip_power_bonus >= 10) -- ALWAYS, while one is in the library.
-//   * Lizard Blades (the Equipment creature) -- when no creature we have (battlefield or hand) can double
-//     strike (the amendment, MTG_COLOSSUS_TUTOR_LIZARD_DS, default ON; =0 -> the rule as stated: no creature at
-//     all, or no double striker AND no cheap attach).
+//   * Lizard Blades (the Equipment creature) -- as a BODY when we have no creature (battlefield or hand), or when
+//     no creature we have can double strike AND no cheap attach is available (we cannot afford the Hammer's equip).
+//     USER 2026-10-18: "There is no reason to include it if we have both a body and a source to free-equip."
+//     (MTG_COLOSSUS_TUTOR_LIZARD_DS=1: the measured alternative, default OFF.)
 //   * the other Equipment (Loxodon Warhammer, Dragonfire Blade) -- ONLY when no cheap attach is available
 //     ("unnecessary if we free equip"; MTG_COLOSSUS_TUTOR_OTHERS, default ON). The USER's goldfish call
 //     was "never", conditioned on a test ("I don't know 100% if it will be lossless"): it is NOT lossless
@@ -44880,27 +44881,25 @@ bool ColossusTutorOthersEnabled()
     return heurarm::Flag(heurarm::COLOSSUS_TUTOR_OTHERS, on);
 }
 
-// The AMENDMENT (proposed to the USER 2026-10-18; default ON pending the ruling, =0 -> the rule as stated): Lizard
-// Blades whenever no creature can double strike, cheap attach or not -- the USER's "only consider the others if it
-// falls short", and with no double striker the Hammer is half the damage. Counterexamples to the rule as stated
-// (s1001 gi118, 2HG gi22, s2002 gi25 / gi112, 38 of run6's slower games): Ardenn / Speaker / Raubahn the only
-// creatures, a cheap attach in hand -- "Gift for Lizard Blades, Gift for the Hammer, Theft it onto the Lizard" kills
-// a turn earlier and was unfindable at any budget. Held-out (run7): -0.0057 play / -0.0043 d3 / -0.0040 2HG, 0 slower
-// at play settings, 1.02x work; the Hammer stays first, so d0 and the human default are unchanged.
+// A MEASURED ALTERNATIVE the USER declined (2026-10-18): Lizard Blades beside a non-double-striking creature and a
+// cheap attach, as a faster double-strike body (s1001 gi118: Ardenn + Theft + two Gifts -- Gift -> Lizard, cast it,
+// Gift -> Hammer, Theft it onto the Lizard, T3 instead of T4). The USER: "Essentially the blades is good as a body or
+// rarely could be worth it if we cannot afford equipping hammer. There is no reason to include it if we have both a
+// body and a source to free-equip." Non-clairvoyant search: -0.0040 (4 games in 1,000). Default OFF; =1 -> it.
 bool ColossusTutorLizardDsEnabled()
 {
-    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_DS", true);   // DEFAULT ON (pending the USER's ruling)
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_DS", false);   // DEFAULT OFF: the USER declined it (2026-10-18)
     return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_DS, on);
 }
 
-// The amendment only where a Hammer is already reachable -- in hand, on our battlefield, or through a second
-// Equipment tutor in hand (default ON; =0 -> the broad amendment). Non-clairvoyant search (run8nc, 1,000 paired):
+// With MTG_COLOSSUS_TUTOR_LIZARD_DS=1 only: the alternative only where a Hammer is already reachable -- in hand, on
+// our battlefield, or through a second Equipment tutor in hand (default ON, inert while LIZARD_DS is off). Non-clairvoyant search (run8nc, 1,000 paired):
 // identical to the broad form (-0.0040, the same 4 faster games) at 1.006x wall vs 1.024x. USER: "+10/+10 will beat double strike": fetching the
 // Lizard is right only when it becomes the double-strike body FOR a Hammer we will have anyway; with no other route
 // to a Hammer, the Hammer itself is the pick.
 bool ColossusTutorLizardNeedsHammerEnabled()
 {
-    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER", true);   // DEFAULT ON (run8nc)
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER", true);   // DEFAULT ON (inert unless LIZARD_DS=1)
     return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER, on);
 }
 
