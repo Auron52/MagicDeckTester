@@ -13,6 +13,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -336,7 +337,7 @@ TEST_CASE("Galadriel scry before Galadriel: missing G/U -> only colour fixers ar
     CHECK_FALSE(KeepsGal(s, kGaladriel));   // a second one
 }
 
-TEST_CASE("Galadriel scry before Galadriel: colours in, a scry land in hand -> Crackle and acceleration kept, the rest thrown")
+TEST_CASE("Galadriel scry before Galadriel: colours in, a scry land in hand -> Crackle kept, the rest thrown")
 {
     EnsureCardsLoadedGal();
     GameState s = FreshGal();
@@ -346,8 +347,10 @@ TEST_CASE("Galadriel scry before Galadriel: colours in, a scry land in hand -> C
     HandGal(s, kGaladriel, 4);
     HandGal(s, "Temple of Triumph", 5);     // the land that follows her
     CHECK(KeepsGal(s, kCrackle));
-    CHECK(KeepsGal(s, "Sol Ring"));
-    CHECK(KeepsGal(s, kSkerry));
+    // Three lands out: acceleration is no longer useful (USER 2026-10-18, the LAND TIMING rule; it is
+    // kept below two lands -- see the LAND TIMING test).
+    CHECK_FALSE(KeepsGal(s, "Sol Ring"));
+    CHECK_FALSE(KeepsGal(s, kSkerry));
     CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));
     CHECK_FALSE(KeepsGal(s, kHavens));
     CHECK_FALSE(KeepsGal(s, kGaladriel));
@@ -507,4 +510,84 @@ TEST_CASE("Galadriel scry rule is a FIRM verdict: a land-drop scry offers the se
     const auto toss = TopDispositionCandidates(s, one("Sol Ring"), LookKind::Scry);
     REQUIRE(toss.size() == 1);
     CHECK(toss[0].top_order.empty());                      // bottomed
+}
+
+TEST_CASE("Galadriel scry LAND TIMING: land keeps on mana in play, Sol Ring + filters fill one colour each (USER)")
+{
+    EnsureCardsLoadedGal();
+    struct Arm
+    {
+        Arm()  { heurarm::t_arm[heurarm::GALADRIEL_LAND_TIMING] = 1; }
+        ~Arm() { heurarm::t_arm[heurarm::GALADRIEL_LAND_TIMING] = -1; }
+    } arm;
+    SUBCASE("one land, short, acceleration still useful: a plain land is thrown, acceleration kept")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 1;
+        PutGal(s, kTemple, 1);              // G/U
+        HandGal(s, kGaladriel, 2);
+        CHECK_FALSE(KeepsGal(s, kHavens));
+        CHECK_FALSE(KeepsGal(s, "Temple of Triumph"));
+        CHECK(KeepsGal(s, "Sol Ring"));
+        CHECK(KeepsGal(s, kSkerry));
+    }
+    SUBCASE("two lands, short: any land kept, acceleration no longer useful")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 2;
+        PutGal(s, kTemple, 1);
+        PutGal(s, "Temple of Malice", 2);
+        HandGal(s, kGaladriel, 3);
+        CHECK(KeepsGal(s, kHavens));
+        CHECK_FALSE(KeepsGal(s, "Sol Ring"));
+    }
+    SUBCASE("no scry land in hand: kept only at 3+ mana (go off next turn)")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 2;
+        PutGal(s, kTemple, 1);
+        PutGal(s, "Temple of Malice", 2);
+        HandGal(s, kGaladriel, 3);
+        HandGal(s, kSkerry, 4);             // three lands, none a scry land in hand
+        CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));   // 2 mana: next turn's drop casts her
+        s.turn_number = 3;
+        PutGal(s, "Zhalfirin Void", 5);
+        CHECK(KeepsGal(s, "Temple of Plenty"));         // 3 mana: she lands next turn
+    }
+    SUBCASE("Sol Ring fills one missing colour per filter held")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 1;
+        PutGal(s, "Temple of Malice", 1);   // B/R: G and U missing
+        HandGal(s, kGaladriel, 2);
+        HandGal(s, "Sol Ring", 3);
+        HandGal(s, "Crystal Grotto", 4);
+        HandGal(s, "Temple of Triumph", 5);
+        CHECK_FALSE(KeepsGal(s, kCrackle)); // one filter: one colour still missing
+        CHECK(KeepsGal(s, "Temple of Deceit"));
+        HandGal(s, "Rumble Arena", 6);      // two filters: both filled
+        CHECK(KeepsGal(s, kCrackle));
+    }
+    SUBCASE("late, no Sol Ring: a filter fills ONE colour, not both")
+    {
+        GameState s = FreshGal();           // turn 4: the filter can be fed
+        PutGal(s, "Temple of Malice", 1);   // B/R
+        PutGal(s, "Crystal Grotto", 2);
+        HandGal(s, kGaladriel, 3);
+        HandGal(s, "Temple of Triumph", 4);
+        CHECK_FALSE(KeepsGal(s, kCrackle)); // one colour still missing
+        CHECK(KeepsGal(s, "Temple of Deceit"));
+    }
+    SUBCASE("the top card completing the pair is a fix")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 1;
+        PutGal(s, "Temple of Plenty", 1);   // G: U missing
+        HandGal(s, kGaladriel, 2);
+        HandGal(s, "Crystal Grotto", 3);
+        CHECK(KeepsGal(s, "Sol Ring"));
+        heurarm::t_arm[heurarm::GALADRIEL_LAND_TIMING] = 0;
+        CHECK_FALSE(KeepsGal(s, "Sol Ring"));   // shipped rule: colourless acceleration on bad colours
+        heurarm::t_arm[heurarm::GALADRIEL_LAND_TIMING] = 1;
+    }
 }

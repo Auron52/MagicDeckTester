@@ -5622,12 +5622,18 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         if (d != nullptr && (d->card.IsLand() || d->params.mana_rock)) { mana_bf += std::max(1, d->params.produces_amount); }
     }
     const bool filter_ok = s.turn_number >= 4 || mana_bf >= 3;
+    // LAND TIMING (MTG_GALADRIEL_LAND_TIMING, default ON -- the USER's rule; 24 held-out seeds x 1000:
+    // -0.0055 t (t -4.4) non-clairvoyant, -0.0033 t (t -3.7) clairvoyant, same cost): read here because it changes how a filter
+    // counts -- USER 2026-10-18 "it only fills one colour", so under the arm a filter covers nothing in
+    // covers() and instead fills ONE missing colour below, once it can be fed.
+    static const bool timing_env = EnvOn("MTG_GALADRIEL_LAND_TIMING", true);
+    const bool timing = heurarm::Flag(heurarm::GALADRIEL_LAND_TIMING, timing_env);
     auto covers = [&](const CardDefinition& d) -> unsigned {
         // "you want actually green and blue rather than filter lands, since the latter slows you down"
         // (USER): a filter's {1} feed costs Galadriel's turn a mana, so it covers neither -- "But, if
         // you are already far enough along in turns the filter land is sufficient": from turn 4 on
         // (agent's threshold: her turn is 3, and a fourth land pays the feed) it covers both.
-        if (d.params.any_color_filter) { return filter_ok ? 3u : 0u; }
+        if (d.params.any_color_filter) { return (filter_ok && !timing) ? 3u : 0u; }
         unsigned m = 0;
         for (Color c : d.params.produces) { m |= colour_bit(c); }
         return m;
@@ -5644,24 +5650,97 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d != nullptr && (d->card.IsLand() || d->params.mana_rock)) { have |= covers(*d); }
     }
-    const unsigned missing = 3u & ~have;
+    unsigned missing = 3u & ~have;
+    // SOL RING + A FILTER LAND (LAND TIMING arm, USER 2026-10-18): "Sol Ring + Filter land is a
+    // workaround for bad colours that should be considered" -- Sol Ring pays the filter's {1} feed --
+    // and "it only fills one colour": with both held (in play or in hand), ONE missing colour counts
+    // as covered per filter; "Using two filters to fill the needs for two colours is slowish, but fills
+    // the colour gap while still allowing the combo to go off T4" -- Sol Ring's two mana feed two
+    // filters, so two filters fill both.
+    bool sol_held = false;
+    int filters_held = 0;
+    {
+        auto note = [&](const CardDefinition& d)
+        {
+            if (d.params.mana_rock) { sol_held = true; }
+            if (d.card.IsLand() && d.params.any_color_filter) { ++filters_held; }
+        };
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr) { note(*d); }
+        }
+        for (const Card& c : pl.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr) { note(*d); }
+        }
+    }
+    // Colours still missing given real sources `h`, `nf` filters and whether they can be fed (Sol
+    // Ring, or late / 3+ mana -- USER); each fed filter fills one, so only the COUNT matters.
+    auto still_missing = [](unsigned h, int nf, bool fed) -> int
+    {
+        const unsigned m = 3u & ~h;
+        const int n = ((m & 1u) != 0) + ((m & 2u) != 0);
+        return std::max(0, n - (fed ? nf : 0));
+    };
+    const bool filters_fed = sol_held || filter_ok;
+    const int  miss_n = timing ? still_missing(have, filters_held, filters_fed) : 0;
+    if (timing) { missing = miss_n == 0 ? 0u : missing; }
     const bool bad_colours = missing != 0;                 // G or U missing: Galadriel uncastable
     const bool short_lands = lands_bf + lands_hand < 3;
-    const bool fixes = (td->card.IsLand() || tp.mana_rock) && (covers(*td) & missing) != 0;
+    // Under the arm the top card is a fix when it lowers that count: a real G/U source, a filter that
+    // can be fed, or Sol Ring feeding a held filter.
+    const bool timing_fix = timing && miss_n > 0 && (td->card.IsLand() || tp.mana_rock)
+        && still_missing(have | covers(*td), filters_held + ((td->card.IsLand() && tp.any_color_filter) ? 1 : 0),
+                         filters_fed || tp.mana_rock) < miss_n;
+    const bool fixes = timing ? timing_fix : ((td->card.IsLand() || tp.mana_rock) && (covers(*td) & missing) != 0);
     const bool accel = tp.mana_rock || (td->card.IsLand() && tp.produces_amount > 1);
     (void)rocks_bf;
 
     if (fixes) { return true; }
+    // LAND TIMING (MTG_GALADRIEL_LAND_TIMING, default ON): the land clauses keyed on MANA IN
+    // PLAY (the land that just entered included). USER 2026-10-18: "It's basically: I am missing a piece
+    // which is a scry land" -- in this deck every land but Saprazzan Skerry is one -- and "So you either
+    // have 3+ mana already and can go off next turn or you have 2 mana which is insufficient to cast
+    // galadriel without using your land drop": the follow-up scry land is needed only at 3+ mana.
+    // Acceleration: "none of the acceleration cards can allow us to play Galadriel and a scry land with
+    // only 2 scry lands out", so it is useful only below 2 lands in play. And the short-on-lands keep
+    // "is only for when you already have everything else including Galadriel and the needed colours
+    // etc., acceleration is either on board or no longer useful."
+    auto is_accel = [](const CardDefinition& d)
+    { return d.params.mana_rock || (d.card.IsLand() && d.params.produces_amount > 1); };
+    bool accel_bf = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && is_accel(*d)) { accel_bf = true; }
+    }
+    // MTG_GALADRIEL_ACCEL_HAND (A/B arm, default OFF): acceleration held in hand counts as settled too
+    // -- the Skerry goes down as next turn's land drop, Sol Ring off one land (seed 1026).
+    static const bool accel_hand_env = EnvOn("MTG_GALADRIEL_ACCEL_HAND", false);
+    if (heurarm::Flag(heurarm::GALADRIEL_ACCEL_HAND, accel_hand_env))
+    {
+        for (const Card& c : pl.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && is_accel(*d)) { accel_bf = true; }
+        }
+    }
+    const bool accel_useful = lands_bf < 2;
+    const bool go_off_next  = mana_bf >= 3;
     // "you still need to prioritize getting the colours even if short on lands. It is only beyond
     // that that you would accept anything" (USER): a non-fixing land is kept only once G and U are
-    // covered.
-    if (td->card.IsLand() && short_lands && missing == 0) { return true; }
+    // covered (with LAND TIMING, also only once acceleration is in play or no longer useful).
+    if (td->card.IsLand() && short_lands && missing == 0 && (!timing || accel_bf || !accel_useful)) { return true; }
     // A SCRY LAND TO FOLLOW HER (USER 2026-10-18, seed 14 reference): "if we need a scry land in hand
     // ... and have no other needs we should not bottom any scry land. Drawing something else like a
     // Galadriel, Crackle, Skerry or Sol Ring in that situation would be really bad." The chain starts
     // only from a land played AFTER she lands, so with the colours covered and no scry land in hand,
     // a scry land is kept and everything else is thrown.
-    if (missing == 0 && scry_lands_hand == 0) { return td->card.IsLand() && tp.etb_scry > 0; }
+    if (missing == 0 && scry_lands_hand == 0 && (!timing || go_off_next)) { return td->card.IsLand() && tp.etb_scry > 0; }
     // NOTHING BEING LOOKED FOR (A/B arm, MTG_GALADRIEL_SCRY_NONEED, default OFF): USER 2026-10-18 "It is
     // possible that when we aren't looking for something we should not bottom" -- "for example, if we
     // have the colours we need and either have acceleration or it is too late for acceleration we could
@@ -5672,28 +5751,19 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
     // behind the Crackle in the reveal chain -- what the clairvoyant search exploited on seeds 7/10/15.)
     {
         static const bool noneed_env = EnvOn("MTG_GALADRIEL_SCRY_NONEED", false);
-        if (heurarm::Flag(heurarm::GALADRIEL_SCRY_NONEED, noneed_env) && missing == 0 && !short_lands)
+        bool have_accel = accel_bf;
+        for (const Card& c : pl.hand)
         {
-            auto is_accel = [](const CardDefinition& d)
-            { return d.params.mana_rock || (d.card.IsLand() && d.params.produces_amount > 1); };
-            bool have_accel = false;
-            for (const Permanent& p : s.battlefield)
-            {
-                if (p.controller_index != me) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (d != nullptr && is_accel(*d)) { have_accel = true; }
-            }
-            for (const Card& c : pl.hand)
-            {
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (d != nullptr && is_accel(*d)) { have_accel = true; }
-            }
-            const bool too_late = mana_bf >= 2;
-            if (have_accel || too_late) { return true; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && is_accel(*d)) { have_accel = true; }
         }
+        if (heurarm::Flag(heurarm::GALADRIEL_SCRY_NONEED, noneed_env) && missing == 0 && !short_lands
+            && (have_accel || mana_bf >= 2))
+        { return true; }
     }
     if (tp.scry_reveal_land_to_battlefield) { return false; }   // a second copy (one is in hand)
-    if (IsCrackle(*td) || accel) { return !bad_colours; }
+    if (IsCrackle(*td)) { return !bad_colours; }
+    if (accel) { return !bad_colours && (!timing || accel_useful); }
     return false;
 }
 

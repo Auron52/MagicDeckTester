@@ -282,35 +282,44 @@ Same 40 seeds (700000+) x 1000, d5, with the scry prune (5c85e812) live; each ar
 - **ADOPTED (USER 2026-10-18: "Okay, let's switch to it.")** decks/Galadriel/Galadriel.value.json = nlfit. Smoke
   unchanged (byte-identical digests); regression 3 faster / 1 slower (d3 s2002 gi9 4->5), accepted.
 
-## RESUME POINT (2026-10-18 ~06:10 UTC, before a context compaction)
-UNCOMMITTED (working tree; build bav16nup0 may still be running):
-- `GaladrielProvider::ScryVerdict` -- the USER's scry rule as a FIRM verdict on every land-drop scry
-  (`MTG_GALADRIEL_SCRY_PRUNE`, heurarm slot, default ON). USER: "No greedy in the search doesn't meant the
-  heuristics in the provider cannot prune the tree. They can and should." + unit test (one candidate).
-- A/B ARM `MTG_GALADRIEL_SCRY_NONEED` (default OFF): before Galadriel, with G/U covered, not short on lands,
-  a scry land in hand, and acceleration held OR too late (agent threshold: mana_bf >= 2) -> KEEP the card.
-  USER: "It is possible that when we aren't looking for something we should not bottom" / "if we have the
-  colours we need and either have acceleration or it is too late for acceleration we could keep something on
-  top" / "That is a case I'm genuinely uncertain of."
-NEXT:
-1. Make sure the latest DecisionProviders.cpp is compiled (9p clock lag: `sleep 200`, delete
-   build/CMakeFiles/mtg-core.dir/Release/src/ai/DecisionProviders.cpp.o + HeuristicArm.h dependents, ninja),
-   all unit tests pass.
-2. CLAIRVOYANT A/B: `build/Release/mtg --batch build/scratch/gal/scryab_cv.json` (arms searched =
-   PRUNE off / pruned = shipped / noneed; 24 seeds x 1000 from 800000). Paired stats: score unwon (-1) as 9.
-3. NON-CLAIRVOYANT A/B: same arms under `MTG_NC_SEARCH=1` (K=8 d2; process-wide env -> its own batch);
-   time a probe first (build/scratch/gal/scryab_ncprobe.json, 10 games/arm) and size from it.
-4. USER bar: "the only losses we can accept are those that are clearly clairvoyant in nature." For every game
-   the searched arm wins under NC, find the diverging scry and read the state -> amend the rule if needed.
-6. (USER 2026-10-18, after 2-5) nlfit at a RAISED budget vs the model at the shipped one: the argument is
-   that nlfit's saved time is better spent as budget than on the leaf. Same 40 seeds (700000+) x 1000, d5;
-   arms model b20 / nlfit b20 / b27 (~equal core time to model b20) / b40; record how often the budget binds.
-5. Report; the USER decides NONEED. Then full smoke (only galadriel should move), accept galadriel smoke +
-   regression + overnight, ref_bench, commit + push, CI (curl + git credential fill).
-OPEN USER QUESTIONS: model-vs-nlfit leaf (40-seed A/B: model -0.0018 t at 0.70x units; nlfit -0.0004 at
-0.58x); seeds 4/5 T5 scry choices; showing a recommended main-phase plan in the viewer (offered).
-OWED: the old value-leaf matrix RSS growth (13 -> 19 GiB); test/suite_cost.json refresh on the next pooled tier.
-Gotchas: 9p clock lag; never pkill -f; gh CLI logged out (curl + `git credential fill` for CI).
+## Land timing (USER 2026-10-18; `MTG_GALADRIEL_LAND_TIMING`, default ON)
+The USER's refinement of the pre-Galadriel land clauses, keyed on MANA IN PLAY: "It's basically: I am missing
+a piece which is a scry land"; "So you either have 3+ mana already and can go off next turn or you have 2 mana
+which is insufficient to cast galadriel without using your land drop"; acceleration is useful only below two
+lands ("none of the acceleration cards can allow us to play Galadriel and a scry land with only 2 scry lands
+out"); the short-on-lands keep "is only for when you already have everything else including Galadriel and the
+needed colours etc., acceleration is either on board or no longer useful"; and "Sol Ring + Filter land is a
+workaround for bad colours" -- "it only fills one colour", two filters fill both ("slowish, but ... the combo
+[goes] off T4"). So under the rule each fed filter (Sol Ring held, or turn 4+ / 3+ mana) fills ONE missing
+colour; the shipped clause had let one filter cover both from turn 4.
+A/B, 24 HELD-OUT seeds (850000+) x 1000, d5 b20, nlfit leaf: non-clairvoyant **-0.0055 t (t -4.4; 381 faster /
+265 slower)**, clairvoyant -0.0033 t (t -3.7; 263 / 181), same cost. ADOPTED as the default (the USER's rule,
+better in both modes).
+- Suite: only galadriel moved. Smoke 7 slower / 1 faster (small rows), regression 9 faster / 1 slower; both
+  accepted. RECOVERY (USER: "We should ensure that slower games are recoverable"): the 5 d0 deals recover at
+  d8 b0. The 5 searched deals do not -- the rule prunes the scry, so depth cannot take the other branch -- so
+  each was checked against the UNPRUNED non-clairvoyant search: on 1045, 1059, 1141 and 3151 it is slow too
+  (the old rule's faster line was library-order luck). Seed 1026 is the exception: after five mulligans
+  (Galadriel, Skerry, Temple of Plenty kept) T1 Plenty scries Rumble Arena; short on lands, G/U in; the rule
+  read "acceleration on board" literally, so the Skerry in HAND did not count and the Arena was bottomed; the
+  unpruned honest search keeps it and wins T4 (rule: T5).
+- A/B ARM `MTG_GALADRIEL_ACCEL_HAND` (default OFF): acceleration held in hand (Skerry = next land drop, Sol
+  Ring off one land) counts as settled. Clairvoyant, 24 seeds x 1000 (850000+): -0.0002 t (t -0.6; 36 / 32).
+  Non-clairvoyant: 12 seeds x 1000, see below / the closing report.
+
+## PARKED (USER 2026-10-18: "once this is done I would like to park this deck")
+Shipped: exhaustive keep table (K=9, R=40); leaf = nlfit (USER); the USER's scry rule as a firm prune; the
+Crackle-pile rule; land timing; every suite row resized; smoke + regression GT accepted (overnight GT is left
+for the periodic overnight run).
+OPEN USER QUESTIONS (none blocks anything):
+- `MTG_GALADRIEL_SCRY_NONEED` (keep on top when nothing is needed): measured worse than the plain rule in both
+  modes (+0.011 t non-clairvoyant); OFF. Drop it or keep it as an option?
+- The seeds 4/5 turn-5 scry choices in the USER's references.
+- Showing a recommended main-phase plan in the viewer (offered).
+OWED: the old value-leaf matrix RSS growth (13 -> 19 GiB); test/suite_cost.json refresh on the next pooled
+tier run (still holds the pre-keep-table 2,969 ms/game).
+Gotchas: 9p clock lag (sleep 200 and delete the objects, including every HeuristicArm.h dependent, before
+trusting a build); never pkill -f; gh CLI logged out (curl + `git credential fill` for CI).
 
 ## Claude-play sweep
 - commit: `314fa393` (the sweep's play; fixes below land after it -- re-sweep owed if they move more than the flagged plans)
