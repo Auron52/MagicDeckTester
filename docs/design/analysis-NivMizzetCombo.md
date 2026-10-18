@@ -40,9 +40,8 @@ as next week's starting point.
 Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
 - `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP. The LIFO draw loop is COMMITTED (0d0892e19; 1491
   unit, 229 scenarios). Uncommitted (keep uncommitted): the suite rows in `test/regression_cases.sh` +
-  `test/suite_cost.json` (niv 124,304 ms/game). RUNNING: ab2 = niv-aura@0d0892e19 vs niv-bs (base arm
-  reused from ab1, same binary; `build/scratch/niv-aura/ab/ab2_aura_only.sh`, marker `ab2.done`; compare
-  `python3 <niv>/logs/arms/aura_ab_cmp.py ab2`).
+  `test/suite_cost.json` (niv 124,304 ms/game). ab2 DONE (LIFO: outcomes identical to ab1's niv-aura arm,
+  see the Brainstorm/Aura section).
 - `niv` = branch `niv-analysis` (behind niv-aura; ff to niv-aura once Stage 4 is done). Its build is the
   OLD T2 binary the Stage-4 analyzer runs on (discard evidence, 400 games d3, single thread, 4.5h+): do
   NOT rebuild until `logs/stage4.status` says done.
@@ -195,6 +194,10 @@ commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
   **4.680**, 1 slower / 7 faster, retargets 752,104 -> 0; d5 b20 x60 (s62000) 0 slower / 1 faster
   (one base game still running at the time of writing). Slower gi73 d3 at --budget-ms 0: pending.
 - Unit 1490/1490, scenarios 229/229.
+- **ab2 (the LIFO draw loop, `0d0892e19`, on top of the bundle)**, same cells, base arm reused from ab1
+  (same niv-bs binary): per-game outcomes IDENTICAL to ab1's niv-aura arm in both cells (d3 4.680,
+  d5 4.633; only the completion order of the `[win]` lines differs). The loop fix only changes
+  near-empty-library kills, which these 210 games never reach.
 
 ### Stage 5j — the 3x cost rule: FAIL (2026-10-18 ~09:45)
 `suite_gate.py --measure decks/NivMizzetCombo` on the niv-aura tree (`d09f881e7` src), the rows of
