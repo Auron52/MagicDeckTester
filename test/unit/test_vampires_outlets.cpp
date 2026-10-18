@@ -305,6 +305,191 @@ TEST_CASE("Voldaren Estate (search): 'cast the 5th Vampire, THEN make Blood for 
     }
 }
 
+// ---- 3b. Defect M (2026-10-18): the Blood is priced off the arrivals AHEAD of it in the executed order --
+// The claude-play confirmation sweep (seeds 92003 gi5 T5, 92004 gi6 T6): the cost variants counted only the
+// plan's Vampire CASTS, so a Bloodline Keeper token tap -- which the trailing pass runs ahead of the Blood
+// (rank 0 vs rank 1) -- never lowered the booked cost, and every line affordable only at the true cost was
+// missing from the search and the human menu alike.
+
+namespace
+{
+bool IsBlood(const Action& a)
+{ return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapBlood; }
+
+// The Blood cost a plan's own actions book in the SHIPPED trailing order: {5} - (Vampires now + its
+// Vampire casts / Vial puts + its Vampire token taps), floor {0}. The cast section runs before the trailing
+// pass and Keeper's token tap (rank 0) ahead of Blood (rank 1); a madness cast (the pump's rank 2, the
+// crack's 3), a steal (count band 1) and Pit Fighter (band 3) all run AFTER it.
+int ExpectedBloodCost(const GameState& s, const TurnSolver::Plan& p)
+{
+    int v = CountControlledSubtypeCreatures(s, 0, "Vampire");
+    for (const Action& a : p.actions)
+    {
+        const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial)
+            && d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, "Vampire")) { ++v; }
+        if (a.kind == Action::Kind::TapForTokenPay) { ++v; }
+    }
+    return std::max(0, 5 - v);
+}
+
+int VampireTokens(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& q : s.battlefield)
+    { if (q.is_token && q.card.IsCreature() && CardHasSubtype(q.card, "Vampire")) { ++n; } }
+    return n;
+}
+
+// The rollout's ApplyPlan and the executor (the committed-line pop) must realise `line` alike. The Blood
+// made mid-pass opens breakpoint site 9 (a crackable Blood); pin the EMPTY arm, which both worlds honour,
+// so the comparison is exactly the plan's own actions (the lockstep test's discipline, section 8).
+void CheckBothWorlds(const GameState& s, const TurnSolver::Plan& line0, bool pre,
+                     const std::function<void(const GameState&, const char*)>& check)
+{
+    TurnSolver::Plan line = line0;
+    if (line.bp_choice < 0) { line.bp_choice = TurnSolver::kBpEmptyChoice; line.bp_all = true; }
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, line, pre);
+    check(roll, "rollout");
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    if (!pre) { eng.SetSearchPostCombat(true); }
+    MtgTestSeam::CommitPhasePlan(eng, line, pre);
+    GameState exec = s;
+    eng.TakeTurn(exec, pre, ResolveAll);
+    check(exec, "executor");
+}
+}   // namespace
+
+TEST_CASE("Defect M: a Keeper token tap AHEAD of the Blood lowers its cost -- 'Captain, token, Blood for {0}' is offered and realised")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Bloodline Keeper", 11);       // unsick: its {T} token is live
+    Put(s, "Legion Lieutenant", 24);
+    Put(s, "Falkenrath Gorger", 16);      // three Vampires: the Blood costs {2}
+    Put(s, "Voldaren Estate", 58);
+    Put(s, "Blackcleave Cliffs", 7);
+    Put(s, "Swamp", 44);
+    Put(s, "Swamp", 45);
+    Hand(s, "Stromkirk Captain", 37);     // {1}{B}{R} takes all three lands; the Estate keeps its {T}
+    // Captain + the token = five Vampires: the Blood is {0} -- the ONLY price at which the line fits the
+    // board. Before the fix the variants stopped at k = 1 (one Vampire card in hand), booked it at {1},
+    // and the line was never enumerated.
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    int blood_plans = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool cap = false, tok = false, blood = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Stromkirk Captain") { cap = true; }
+            if (a.kind == Action::Kind::TapForTokenPay) { tok = true; }
+            if (IsBlood(a))
+            {
+                blood = true;
+                ++blood_plans;
+                // Exactly one priced variant per subset, and it is the one the executed order books.
+                CHECK(a.cost.ManaValue() == ExpectedBloodCost(s, p));
+            }
+        }
+        if (cap && tok && blood && line == nullptr) { line = &p; }
+    }
+    CHECK(blood_plans > 0);
+    REQUIRE_MESSAGE(line != nullptr, "'Captain, Keeper token, Blood for {0}' was not offered (defect M)");
+    CheckBothWorlds(s, *line, /*pre=*/true, [](const GameState& st, const char* world)
+    {
+        INFO(world);
+        CHECK(CountOnBf(st, "Blood Token") == 1);
+        CHECK(CountOnBf(st, "Stromkirk Captain") == 1);
+        CHECK(VampireTokens(st) == 1);
+        REQUIRE(FindNum(st, 58) != nullptr);
+        CHECK(FindNum(st, 58)->tapped);   // the Estate's {T}
+        CHECK(FindNum(st, 11)->tapped);   // Keeper's {T}
+    });
+}
+
+TEST_CASE("Defect M: 'Keeper token, Blood, Blood, transform' -- the token prices BOTH Estates at {0} (seed 92004 T6 shape)")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Bloodline Keeper", 11);
+    Put(s, "Vampire of the Dire Moon", 3);
+    Put(s, "Legion Lieutenant", 24);
+    Put(s, "Falkenrath Gorger", 16);      // four Vampires: each Blood costs {1}
+    Put(s, "Swamp", 44);
+    Put(s, "Secluded Courtyard", 33);
+    Put(s, "Voldaren Estate", 58);
+    Put(s, "Voldaren Estate", 59);
+    // Two lands besides the Estates. {1}{1}{B} never fit; with the token first the Bloods are {0}{0} and
+    // the transform's {B} (five Vampires, its count band after the Bloods) is the whole bill.
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        int bloods = 0;
+        bool tok = false, xf = false;
+        for (const Action& a : p.actions)
+        {
+            if (IsBlood(a)) { ++bloods; CHECK(a.cost.ManaValue() == ExpectedBloodCost(s, p)); }
+            if (a.kind == Action::Kind::TapForTokenPay) { tok = true; }
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TransformSelf)
+            { xf = true; }
+        }
+        if (bloods == 2 && tok && xf && line == nullptr) { line = &p; }
+    }
+    REQUIRE_MESSAGE(line != nullptr, "'token, Blood, Blood, transform' was not offered (defect M)");
+    for (const Action& a : line->actions) { if (IsBlood(a)) { CHECK(a.cost.ManaValue() == 0); } }
+    CheckBothWorlds(s, *line, /*pre=*/true, [](const GameState& st, const char* world)
+    {
+        INFO(world);
+        CHECK(CountOnBf(st, "Blood Token") == 2);
+        CHECK(CountOnBf(st, "Lord of Lineage") == 1);
+        CHECK(CountOnBf(st, "Bloodline Keeper") == 0);
+        CHECK(VampireTokens(st) == 1);
+        CHECK(FindNum(st, 58)->tapped);
+        CHECK(FindNum(st, 59)->tapped);
+    });
+}
+
+TEST_CASE("Defect M (item 2): the land drop's Bloodghast is already in the Blood's base count -- a land-first plan is enumerated post-drop")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.deck_has_landfall = true;
+    s.players[0].lands_played_this_turn = 0;
+    Put(s, "Vampire of the Dire Moon", 3);
+    Put(s, "Legion Lieutenant", 24);      // two Vampires on the battlefield
+    Put(s, "Voldaren Estate", 58);
+    Put(s, "Blackcleave Cliffs", 7);
+    { Card bg = Def("Bloodghast").card; bg.m_number = 5; s.players[0].graveyard.push_back(bg); }
+    Hand(s, "Swamp", 44);
+    Hand(s, "Vampire of the Dire Moon", 10);
+    // Swamp first -> Bloodghast returns (three) -> the Dire Moon (four) -> Blood {1}: {B} + {1} is exactly
+    // the Cliffs and the Swamp. Without the returned Bloodghast the Blood would be {2} and the line short.
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.land_to_play != "Swamp" || p.land_slot != TurnSolver::kLandSlotFirst) { continue; }
+        bool dm = false, blood = false;
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Vampire of the Dire Moon") { dm = true; } }
+        for (const Action& a : p.actions)
+        { if (IsBlood(a)) { blood = true; CHECK(a.cost.ManaValue() == (dm ? 1 : 2)); } }   // Bloodghast counted
+        if (dm && blood && line == nullptr) { line = &p; }
+    }
+    REQUIRE(line != nullptr);
+    CheckBothWorlds(s, *line, /*pre=*/true, [](const GameState& st, const char* world)
+    {
+        INFO(world);
+        CHECK(CountOnBf(st, "Bloodghast") == 1);
+        CHECK(CountOnBf(st, "Blood Token") == 1);
+        CHECK(CountOnBf(st, "Vampire of the Dire Moon") == 2);
+    });
+}
+
 // ---- 4. Falkenrath Pit Fighter ----------------------------------------------------------------------
 
 TEST_CASE("Pit Fighter: not live before an opponent lost life; live after; pinned discard + baked victim + draw two")
