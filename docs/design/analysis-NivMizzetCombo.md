@@ -31,37 +31,27 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
-## RESUME STATE (2026-10-18 ~12:35 UTC)
-**PUSH HOLD (USER, 2026-10-18 ~10:10 UTC): do NOT push until ~16:10 UTC ("hold off on pushing until maybe 6 hours from now"). Local commits only.**
-**USER NOTE (2026-10-18 ~10:50 UTC):** *"We may need to work more on heuristics for this deck next week.
-Ponder, Preordain and Brainstorm are especially troublesome in terms of potential branches."* -> the
-cantrip-branching census goes in `docs/design/niv-cantrip-branching.md` (from the perf agent's report),
-as next week's starting point.
-Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
-- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP. The LIFO draw loop is COMMITTED (0d0892e19); the
-  payment agent's P1/P2 fast-forwarded on top (de36ef8ae), rebuilt: 1495/1495 unit, 229/229 scenarios. Uncommitted (keep uncommitted): the suite rows in `test/regression_cases.sh` +
-  `test/suite_cost.json` (niv 124,304 ms/game). ab2 DONE (LIFO: outcomes identical to ab1's niv-aura arm,
-  see the Brainstorm/Aura section).
-- `niv` = branch `niv-analysis` (behind niv-aura; ff to niv-aura once Stage 4 is done). Its build is the
-  OLD T2 binary the Stage-4 analyzer runs on (discard evidence, 400 games d3, single thread, 4.5h+): do
-  NOT rebuild until `logs/stage4.status` says done.
-- `niv-perf`: PERF AGENT DONE, integrated (see "Search cost cut"; was: the 3x rule; leads = per-unit cost explosions: d3 b10 s3007 gi4
-  1,507 s / 1.64M units, s2018 gi16 347 s / 246k units, s2029 gi27; d5 b20 s3007 gi4 >20 min). Told NOT
-  to touch the draw loop or the payment code.
-- `niv-pay`: PAYMENT AGENT DONE (integrated, see "Payment holes P1/P2 fixed") (sweep defects P1 PP_FLOAT_NZ with a Servant float, P2 ramp-filter
-  scarcity; acceptance seeds s71004/s71011/s71014 where Claude beat the AI).
-- `niv-bs` (done, integrated; the A/B base), `niv-base` (origin src), `niv-core`/`-remand`/`-mana`/`-d0`.
-Running: gi73 d3 b0 on niv-bs vs niv-aura (`build/scratch/niv-aura/ab/gi73_b0_*.txt`, 1.5h+), Stage 4.
-DONE this session: 3x cost rule FAIL (Stage 5j section); claude-play sweep recorded (## Claude-play
-sweep: 5 unresolved -> 2 are the payment agent's, 3 deferred low/cosmetic need the user's sign-off);
-verify_deck --no-sweep static checks.
-NEXT after that: (1) integrate niv-pay + niv-perf reports (rebase onto niv-aura), re-measure the cost
-(`suite_gate.py --measure`; NOT `--cost`, which re-measures); (2) Stage 4 done -> stage4_analyze.json
-(mulligan_flags; discard buckets = AUTHOR + REPORT), commit profile, provider_audit --check, ff
-niv-analysis; (3) Stage 5 runtime: verify_deck full (nonconv/fd-diverge), multi-depth, 5c2 (card-cost
-audit DONE 10:55 UTC: 12/12 costed cards match Scryfall, rc=0); (4) when the deck fits 3x: tiers + full smoke/regression (nested bail,
-Action::def and AuraSpellCastLegal are GENERAL -> attribute every moved deck); (5) AFTER the hold:
-rebase onto origin phase-1-2-deck-analyzer, push, CI, ff primary, check_references_safe.
+## RESUME STATE (2026-10-18 ~15:10 UTC)
+**PUSH HOLD (USER, 2026-10-18 ~10:10 UTC): do NOT push until ~16:10 UTC.** Local commits only until then.
+**USER NOTE (~10:50 UTC):** *"We may need to work more on heuristics for this deck next week. Ponder,
+Preordain and Brainstorm are especially troublesome in terms of potential branches."* -> the starting
+point is `docs/design/niv-cantrip-branching.md` (census, folds done, options; Q14-Q16).
+
+- **`niv-aura`** (`.claude/worktrees/niv-aura`) = THE BRANCH TO PUSH: rebased onto origin `2176032dd`,
+  every analysis commit + the payment (P1/P2), search-cost and bottoming-cut fixes, the profile, and the
+  accepted smoke + regression GT (`4c13e2ac6`). T4 tiers green per the attribution below.
+- **Niv is NOT in the suite** (3x rule FAIL, 11,604 vs 8,086 ms/game). Its rows are set aside, not lost:
+  `logs/niv/niv_suite_rows.patch` + `niv_suite_cost.patch` in niv-aura (and `build/scratch/niv-aura/`).
+  Re-apply them when the deck fits (Q15 is the lever that does it today).
+- `niv` (branch `niv-analysis`, Stage 4 done) is SUPERSEDED by niv-aura (pre-rebase history); nothing
+  unique left in it. `niv-aura-prerebase-25fd4d0` = the pre-rebase tip, kept for reference.
+- Agent worktrees, all integrated: `niv-bs`, `niv-pay`, `niv-perf`, `niv-perf-base`, `niv-core`,
+  `niv-remand`, `niv-mana`, `niv-d0`, `niv-base`. Prune only on the user's say-so.
+- AFTER THE HOLD: re-fetch (rebase + re-tier if origin moved again), `git push origin
+  niv-aura:phase-1-2-deck-analyzer`, watch CI (report Windows), fast-forward the primary checkout (the
+  user's untracked `decks/NivMizzetCombo/NivMizzetCombo.cod` differs from the committed copy ONLY by CRLF:
+  set it aside as a backup, never delete), rebuild, `check_references_safe.py`.
+- STILL TO RUN: `verify_deck.py` full (running 15:05), multi-depth d0/3/5 and 5c2 on the final tip.
 
 ## Stage 1 — coverage (2026-10-17)
 Missing (8): Niv-Mizzet, the Firemind; Niv-Mizzet, Parun; Curiosity; Tandem Lookout; Generator
@@ -197,6 +187,8 @@ commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
   `--seed 61000 --game-index 73`, which is a DIFFERENT game -- the A/B's gi73 is `--seed 61073
   --game-index 73` (base + gi). Stopped unfinished; the corrected command reproduces the A/B at b10
   (base T4, tip T5) and was relaunched at b0 on niv-bs and the current tip.
+  **Result:** the tip (`25fd4d075` src) at d3 `--budget-ms 0` wins gi73 on **T4** (= base's b10 T4; 28.6 min,
+  117M units) -> the A/B's one slower game RECOVERS at unlimited budget. Base's b0 run stopped (not needed).
 - Unit 1490/1490, scenarios 229/229.
 - **ab2 (the LIFO draw loop, `0d0892e19`, on top of the bundle)**, same cells, base arm reused from ab1
   (same niv-bs binary): per-game outcomes IDENTICAL to ab1's niv-aura arm in both cells (d3 4.680,
@@ -279,6 +271,24 @@ case with T2 (`logs/niv/t2_t3_cmp.py`), then per game.
   package, GT re-accepts). One conflict (`tools/play/DECISIONS.md`, both rows kept); range-diff: every
   other commit patch-identical. T4 = the same tiers on the rebased binary, against origin's GT.
 
+### Tiers T4 (rebased, `b01c51cd3` src `c34f2d3d2`) and the GT accept (2026-10-18 14:35-15:00)
+- unit 1511/1511 (origin added cases), scenarios 229/229. smoke + regression: every case byte-identical
+  to T3 except galadriel / colossus (origin's own changes), which match origin's GT exactly -- this
+  branch moves neither. Refs (viewer protocol --strict): 630, 0 drift / gap / contract-fail.
+- vs GT: smoke searched 4 slower / 6 faster, regression 15 slower / 29 faster; the searched-SLOWER sets
+  are IDENTICAL to T2's (all Hinata, the Remand rider, recovered at unlimited budget at T2).
+- ACCEPTED smoke + regression (`4c13e2ac6`) with one-line provenance notes naming every owner; the
+  dropped colossus notes' USER rulings are carried in them (their cells did not move).
+  `check_gt_logs` 735 consistent. The OVERNIGHT GT is left for the periodic overnight run.
+
+### Stage 4 -- analyzer (finished 13:31 UTC on the `c52ed5c9d` binary; profile committed `bff87208d`)
+- mulligan_flags: none. Mulligan profile defaults (min_lands 1, max_lands 5, no hand-score gate).
+- Cost diagnostic: COST_NEUTRAL (avg 4.675 both arms, 200 games d5 b20).
+- **Discard analysis: STATUS_QUO_OK** -- 308 cleanup decisions over 400 games (264 at hand 9+, 44 at
+  hand 8), EVERY one multi-optimal, status-quo regret 0, derived order empty -> no discard buckets to
+  author. (Measured before the Aura / payment / perf fixes; with every decision tied, they cannot
+  plausibly change it.)
+
 ### Stage 5j — the 3x cost rule: FAIL (2026-10-18 ~09:45)
 `suite_gate.py --measure decks/NivMizzetCombo` on the niv-aura tree (`d09f881e7` src), the rows of
 `logs/add_niv_rows.py` in place (uncommitted): **124,303.95 ms/game** at the worst searched case
@@ -298,6 +308,10 @@ overwrote `test/logs/regression/batch.log`'s per-case breakdown. The cached figu
   s3003 332,412/40, d3 s2002 320,923/40, 2HG d3 354,607/40, d0 289/1000. The worst case's gi4 (67 s),
   gi8 (59 s) and gi3 (34 s) are 66% of it -- all bottoming-probe games. Logs kept in
   `build/scratch/niv-aura/measure2/`.
+- **With the bottoming turn cut** (`MTG_BOTTOM_TURN_CUT`, `25fd4d075`, SOUND: all six Niv digests and
+  .wins byte-identical): **11,604.25 ms/game** (worst d5 s3003), units there 9.29M -> 7.86M. Still
+  **1.44x over**. What remains is the bottoming probes' turns BEFORE the best win turn (most candidate
+  bottoms tie); the one lever left that clears the gate is the bottom-eval setting (Q15, the user's).
 
 ### Stage 4a — provider
 `NivMizzetComboProvider` (`067b3a1db`): an empty `DeckProvider` derivation (the deck rode Generic),
