@@ -54458,6 +54458,22 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
     return sig;
 }
 
+// MTG_ENUM_DEDUP_STREAM_VERIFY counters (see ds_mark in EnumeratePlans).
+namespace dsverify
+{
+inline std::atomic<long long> g_kept{0}, g_bad{0}, g_marked{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!EnvOn("MTG_ENUM_DEDUP_STREAM_VERIFY")) { return; }
+        std::fprintf(stderr, "[enum-dedup-stream] kept_checked=%lld would_drop=%lld KEPT_A_DROPPED=%lld\n",
+                     g_kept.load(), g_marked.load(), g_bad.load());
+    }
+};
+inline Dump g_dump;
+}
+
 // MTG_RH_MOVED_MEMO_VERIFY counters (see rh_moved in EnumeratePlans' dedup).
 namespace rhmemo
 {
@@ -55189,6 +55205,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     std::function<void(const std::vector<int>&)> eval_and_push_body;
+    // MTG_ENUM_DEDUP_STREAM: set only for the duration of the odometer walk (see its note there); called
+    // after every plan the walk emits. Empty everywhere else.
+    std::function<void()> ds_on_push;
     // MTG_BP_DERIVE_METER: armed for this enumeration only inside a breakpoint derivation, under an armed
     // decision meter, outside human play. Read once per call.
     const bool bp_meter_on = BpDeriveMeterOn() && g_bp_enum_depth > 0 && decisionwork::Armed()
@@ -56656,6 +56675,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (BfCensusOn()) { bfcensus::g_subsets_scored[1].fetch_add(1, std::memory_order_relaxed); }
         if (enumstats::Enabled()) { enumstats::g_e_surv.fetch_add(1, std::memory_order_relaxed); }
         plans.push_back(std::move(plan));
+        if (ds_on_push) { ds_on_push(); }
     };
 
     // Odometer over per-card choices (0 = skip the card, v >= 1 selects
@@ -57034,6 +57054,212 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     || ((accel_prefix_on && any_accel) && NonPrefixAccelViolated(accel_order, c));
             });
     }
+    const bool s_human_play_sig = HumanPlayActive();
+    // Off-switch for the #B0/#B1 bestow split below. Unlike the rest of this batch's fixes, that one
+    // moves the AUTONOMOUS search space (it is gated on the param, not on human play), so without a
+    // switch it is the one change `gt_line_playable.py --attribute` cannot bisect -- Minotaur's moved
+    // games came back "(none - not moved by this batch)" purely because there was nothing to turn off.
+    // MTG_LEGACY_BESTOW_SIG=1 restores the collapsed signature (the pre-fix search).
+    static const bool s_legacy_bestow_sig = EnvOn("MTG_LEGACY_BESTOW_SIG");
+    static const bool s_aura_host_sig_env = EnvOn("MTG_EDF_AURA_HOST_SIG", true);
+    const bool s_aura_host_sig = heurarm::Flag(heurarm::EDF_AURA_HOST_SIG, s_aura_host_sig_env);
+    // NARROWED TO THE KAROO-DROP BRANCH (MTG_EDF_AURA_HOST_SIG_KAROO, default ON; 2026-09-15, the
+    // perf half of the host signature). Keeping every host variant distinct doubled every land-Aura
+    // plan at every ply and cost +13.7% wall on the EDF deck average (Session 28 §5). The fold is
+    // only WRONG when this plan's land drop is a karoo -- the bounce is what takes the folded host
+    // (s12 T3) -- so the variants are kept distinct exactly on that enumeration branch and folded
+    // as before on every other. The branch announces itself (g_enum_karoo_drop, set by
+    // EnumeratePlansWithLand's add_for_land around the deferred-karoo call) because nothing in
+    // the STATE says so here: the land axis is applied after this dedup, p.land_to_play is still
+    // empty (a first cut keyed on it folded s12's host again), and the deferred-karoo branch
+    // removes the karoo from `copy`'s hand (a second cut scanning the hand folded it on exactly
+    // that branch). Human play and the UN-PRUNED enumeration (MTG_UNPRUNED: the viewer's / the
+    // claude-play oracle's plan list, and the validate_line fixtures' -- edf_land_aura_multicast_
+    // offered reads choose/3 there) keep every host distinct regardless: the host is the human's
+    // decision to make, un-pruning exists to show the searched axes, and neither is where the
+    // wall is. =0 restores the unconditional signature.
+    static const bool s_aura_host_karoo_env = EnvOn("MTG_EDF_AURA_HOST_SIG_KAROO", true);
+    const bool s_aura_host_karoo = heurarm::Flag(heurarm::EDF_AURA_HOST_SIG_KAROO, s_aura_host_karoo_env);
+    const bool host_sig = s_aura_host_sig
+                       && (!s_aura_host_karoo || g_enum_karoo_drop || s_human_play_sig
+                           || DecisionUnpruned());
+    // CREATURE-AURA HOST. The autonomous signature keys a creature Aura by NAME only, so the plans
+    // that differ only in WHICH creature an Aura enchants form one class. Which member survives is the
+    // AURA CAST HOST RANKING's decision (USER 2026-10-06 -- "not a difficult decision. It makes sense
+    // to have a heuristic for it"; see AuraPlanHostKey and core/SpellEffects.h), applied in the dedup
+    // below. Before it the class kept whichever host was enumerated FIRST (battlefield order), and
+    // Bruna opted out of the fold entirely (per-host branching, Bruna sweep B). The host stays a
+    // distinct plan for the un-pruned oracle (MTG_UNPRUNED: the viewer's / claude-play's plan list),
+    // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
+    const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
+    const bool rep_sig = ReplicateSigEnabled();   // the #R key below (MTG_REPLICATE_SIG)
+    bool range_hosts = false;
+    if (!host_sig && !s_human_play_sig && EdfAuraRangeHostsOn())
+    {
+        bool rh_aura = false, rh_untapper = false;
+        for (const Action& c : cands)
+        {
+            if (c.kind != Action::Kind::CastFromHand || c.def == nullptr) { continue; }
+            if (c.def->params.is_land_aura && c.enchant_target > 0) { rh_aura = true; }
+            if (c.def->card.IsCreature() && c.def->params.etb_untap_lands > 0) { rh_untapper = true; }
+        }
+        range_hosts = rh_aura && rh_untapper;
+    }
+    // ---- MTG_ENUM_DEDUP_STREAM (DEFAULT ON; =0 keeps every emitted plan until the dedup below) -------
+    // PEAK MEMORY. The walk below materialises EVERY emitted plan and only the signature dedup after the
+    // sort throws the duplicates away. On a hand that has drawn its library (EDF: 40+ cards, four copies
+    // of most of them) one enumeration emitted 741k plans to keep 32.5k -- ~0.7 GB live per game, the
+    // RSS-cap aborts of the EDF overnight tier and of two EDF mulligan generations
+    // (docs/design/edf-slow-rollout-tail-2026-10-17.md). This compacts the list WHILE the walk runs,
+    // dropping only plans the dedup provably can never keep.
+    //
+    // WHY IT IS EXACT. The dedup keeps, per signature class, the FIRST member in the order of the stable
+    // sort below -- (wins_this_turn desc, value desc), ties in emission order -- i.e. the member with the
+    // greatest (wins, value) and the earliest emission among equals; and it places the class at that
+    // member's sorted position. A member that is not the current best of its class at compaction time
+    // can never become it (later emissions only displace it by being strictly better, and an equal later
+    // one loses the tie), so dropping it changes neither which member the class keeps nor where. The
+    // survivors keep their relative emission order, so the stable sort over the compacted list orders
+    // them exactly as it orders them in the full one. The range-hosts tiers (MTG_EDF_AURA_RANGE_HOSTS)
+    // keep up to one EXTRA member per class -- the first of each (class, Aura host) and the first whose
+    // arrangement verdict differs from the class head's -- so with range_hosts armed the compaction key
+    // is the signature PLUS the rank-ordered copy-equivalence tokens of the plan's casts
+    // (paymemo::WalkEquivalent, the key MTG_RH_MOVED_MEMO already relies on): members sharing it share
+    // the Aura hosts and the arrangement verdict, so the best of each such sub-class is a superset of
+    // every member those tiers can keep. A plan whose casts are not all canonical hand casts is never
+    // dropped (empty key).
+    //
+    // STANDS DOWN wherever the dedup reads something this key does not fold: human play (the legacy
+    // signature + sub-decision suffix), the creature-Aura host ranking (`pick`, armed when a candidate
+    // casts a creature Aura and the signature folds the host), the legacy signature builder, and the
+    // print-only instruments that read the pre-dedup count (MTG_SIG_X_AUDIT, MTG_BRANCH_STATS, the branch
+    // shape stats, the McWalk bound verify). Only the odometer walk is compacted; the go-off cuts before it
+    // (which read plans.back() right after a push) and Plan B after it are untouched.
+    // MTG_ENUM_DEDUP_STREAM_AT=<n> (default 4096) is the list size that triggers the first compaction; the
+    // trigger then doubles over what survived, so the work is amortised linear in what is emitted.
+    static const bool s_ds_env = EnvOn("MTG_ENUM_DEDUP_STREAM", true);
+    static const std::size_t s_ds_at = static_cast<std::size_t>(std::max(64, EnvInt("MTG_ENUM_DEDUP_STREAM_AT", 4096)));
+    static const bool s_ds_xaudit = EnvOn("MTG_SIG_X_AUDIT");
+    bool ds_on = s_ds_env && !s_human_play_sig && PlanSigFastOn() && !s_ds_xaudit
+              && !branchstats::Enabled() && !shapestats::Enabled() && !McWalkBoundVerify();
+    if (ds_on && !cre_host_sig)
+    {
+        for (const Action& c : cands) { if (IsCreatureAuraCast(c)) { ds_on = false; break; } }
+    }
+    std::vector<std::string> ds_keys;   // compaction key of plans[i], for i < ds_keys.size()
+    std::vector<Action>      ds_reps;   // range_hosts: one representative per copy-equivalence token
+    Action                   ds_scratch;   // reused by ds_equiv: assignment keeps its capacity
+    std::size_t              ds_next = s_ds_at;
+    // paymemo::WalkEquivalent without its per-call Action copy (same predicate: equal in every member but
+    // hand_index / equiv_ord).
+    auto ds_equiv = [&](const Action& r, const Action& a) -> bool
+    {
+        if (r.kind != a.kind || r.def != a.def || r.enchant_target != a.enchant_target || !(r.cost == a.cost))
+        { return false; }
+        ds_scratch = a;
+        ds_scratch.hand_index = r.hand_index;
+        ds_scratch.equiv_ord  = r.equiv_ord;
+        return r == ds_scratch;
+    };
+    auto ds_key = [&](const TurnSolver::Plan& p) -> std::string
+    {
+        std::string k = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
+        if (!range_hosts) { return k; }
+        // The casts' tokens in RANK order, exactly the sequence rh_moved keys its memo on (a stable sort by
+        // CastOrderLess, ties in plan order). Plan order would be finer but far too fine: the same subset
+        // built from other copies interleaves its casts differently, and almost nothing merges.
+        thread_local std::vector<int> rk;
+        rk.clear();
+        for (int i = 0; i < static_cast<int>(p.actions.size()); ++i)
+        {
+            const Action& a = p.actions[static_cast<std::size_t>(i)];
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { rk.push_back(i); }
+        }
+        std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
+        { return CastOrderLess(state, p.actions[static_cast<std::size_t>(x)], p.actions[static_cast<std::size_t>(y)]); });
+        k.push_back('\x1f');
+        for (int i : rk)
+        {
+            const Action& a = p.actions[static_cast<std::size_t>(i)];
+            if (!paymemo::WalkCanonical(a)) { return std::string(); }   // never merged
+            std::size_t t = 0;
+            while (t < ds_reps.size() && !ds_equiv(ds_reps[t], a)) { ++t; }
+            if (t == ds_reps.size()) { ds_reps.push_back(a); }
+            k += std::to_string(t);
+            k.push_back(',');
+        }
+        return k;
+    };
+    auto ds_compact = [&]()
+    {
+        for (std::size_t i = ds_keys.size(); i < plans.size(); ++i) { ds_keys.push_back(ds_key(plans[i])); }
+        std::unordered_map<std::string, std::size_t> best;
+        best.reserve(plans.size());
+        std::vector<char> keep(plans.size(), 0);
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            if (ds_keys[i].empty()) { keep[i] = 1; continue; }
+            auto ins = best.try_emplace(ds_keys[i], i);
+            if (ins.second) { continue; }
+            const TurnSolver::Plan& b = plans[ins.first->second];
+            const TurnSolver::Plan& c = plans[i];
+            // The sort's comparator, strictly: an equal later member loses the stable tie.
+            if (c.wins_this_turn != b.wins_this_turn ? c.wins_this_turn : c.value > b.value)
+            { ins.first->second = i; }
+        }
+        for (const auto& kv : best) { keep[kv.second] = 1; }
+        std::size_t w = 0;
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            if (!keep[i]) { continue; }
+            if (w != i) { plans[w] = std::move(plans[i]); ds_keys[w] = std::move(ds_keys[i]); }
+            ++w;
+        }
+        plans.erase(plans.begin() + static_cast<std::ptrdiff_t>(w), plans.end());
+        ds_keys.resize(w);
+        ds_next = std::max(s_ds_at, 2 * w);
+    };
+    // MTG_ENUM_DEDUP_STREAM_VERIFY=1: compact NOTHING; instead tag every plan with its emission index
+    // (Plan::land_tie_key, scratch that EnumeratePlansWithLand overwrites before its only read), MARK what
+    // each compaction would have dropped, and after the real dedup count every kept plan that carries a
+    // marked tag (must be 0; printed at exit). The tags are reset to -1 before anything else reads them.
+    static const bool s_ds_verify = EnvOn("MTG_ENUM_DEDUP_STREAM_VERIFY");
+    std::vector<char> ds_marked;
+    auto ds_mark = [&]()
+    {
+        for (std::size_t i = ds_keys.size(); i < plans.size(); ++i) { ds_keys.push_back(ds_key(plans[i])); }
+        ds_marked.resize(plans.size(), 0);
+        std::unordered_map<std::string, std::size_t> best;
+        std::size_t live = 0;
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            if (ds_keys[i].empty()) { ++live; continue; }
+            auto ins = best.try_emplace(ds_keys[i], i);
+            if (ins.second) { continue; }
+            const TurnSolver::Plan& b = plans[ins.first->second];
+            const TurnSolver::Plan& c = plans[i];
+            if (c.wins_this_turn != b.wins_this_turn ? c.wins_this_turn : c.value > b.value)
+            { ds_marked[ins.first->second] = 1; ins.first->second = i; }
+            else { ds_marked[i] = 1; }
+        }
+        (void)live;
+        // Nothing is removed here, so the trigger doubles over the FULL list (marks are cumulative and
+        // order-free; the final mark at the end of the walk judges every plan anyway).
+        ds_next = std::max(s_ds_at, 2 * plans.size());
+    };
+    if (ds_on && !s_ds_verify)
+    {
+        ds_on_push = [&]() { if (plans.size() >= ds_next) { ds_compact(); } };
+    }
+    else if (ds_on)
+    {
+        for (std::size_t i = 0; i < plans.size(); ++i) { plans[i].land_tie_key = -2 - static_cast<int>(i); }
+        ds_on_push = [&]()
+        {
+            plans.back().land_tie_key = -2 - static_cast<int>(plans.size() - 1);
+            if (plans.size() >= ds_next) { ds_mark(); }
+        };
+    }
     if (!(any_ritual || any_rock))
     {
         // No mana side => no splice base, no accelerant, no Lotus sac => every group predicate is
@@ -57342,6 +57568,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                eval_and_push);
     }
 
+    ds_on_push = nullptr;   // MTG_ENUM_DEDUP_STREAM: the walk is over (Plan B is never compacted)
+    if (ds_on && s_ds_verify) { ds_mark(); }   // the verify judges every walk-emitted plan
     // --- Plan B: draw-early variants for Spectacle draw spells ---
     // Helper: field-by-field ManaCost addition.
     auto add_cost = [](ManaCost a, const ManaCost& b) -> ManaCost
@@ -57472,45 +57700,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // simply wrong -- the human IS the decision-maker -- so we keep every variant. Gated on
     // MTG_HUMAN_PLAY: the autonomous search and the MTG_UNPRUNED A/B stay byte-identical (the
     // shortcut, warts and all, is unchanged there -- widening the search is a separate question).
-    const bool s_human_play_sig = HumanPlayActive();
-    // Off-switch for the #B0/#B1 bestow split below. Unlike the rest of this batch's fixes, that one
-    // moves the AUTONOMOUS search space (it is gated on the param, not on human play), so without a
-    // switch it is the one change `gt_line_playable.py --attribute` cannot bisect -- Minotaur's moved
-    // games came back "(none - not moved by this batch)" purely because there was nothing to turn off.
-    // MTG_LEGACY_BESTOW_SIG=1 restores the collapsed signature (the pre-fix search).
-    static const bool s_legacy_bestow_sig = EnvOn("MTG_LEGACY_BESTOW_SIG");
-    static const bool s_aura_host_sig_env = EnvOn("MTG_EDF_AURA_HOST_SIG", true);
-    const bool s_aura_host_sig = heurarm::Flag(heurarm::EDF_AURA_HOST_SIG, s_aura_host_sig_env);
-    // NARROWED TO THE KAROO-DROP BRANCH (MTG_EDF_AURA_HOST_SIG_KAROO, default ON; 2026-09-15, the
-    // perf half of the host signature). Keeping every host variant distinct doubled every land-Aura
-    // plan at every ply and cost +13.7% wall on the EDF deck average (Session 28 §5). The fold is
-    // only WRONG when this plan's land drop is a karoo -- the bounce is what takes the folded host
-    // (s12 T3) -- so the variants are kept distinct exactly on that enumeration branch and folded
-    // as before on every other. The branch announces itself (g_enum_karoo_drop, set by
-    // EnumeratePlansWithLand's add_for_land around the deferred-karoo call) because nothing in
-    // the STATE says so here: the land axis is applied after this dedup, p.land_to_play is still
-    // empty (a first cut keyed on it folded s12's host again), and the deferred-karoo branch
-    // removes the karoo from `copy`'s hand (a second cut scanning the hand folded it on exactly
-    // that branch). Human play and the UN-PRUNED enumeration (MTG_UNPRUNED: the viewer's / the
-    // claude-play oracle's plan list, and the validate_line fixtures' -- edf_land_aura_multicast_
-    // offered reads choose/3 there) keep every host distinct regardless: the host is the human's
-    // decision to make, un-pruning exists to show the searched axes, and neither is where the
-    // wall is. =0 restores the unconditional signature.
-    static const bool s_aura_host_karoo_env = EnvOn("MTG_EDF_AURA_HOST_SIG_KAROO", true);
-    const bool s_aura_host_karoo = heurarm::Flag(heurarm::EDF_AURA_HOST_SIG_KAROO, s_aura_host_karoo_env);
-    const bool host_sig = s_aura_host_sig
-                       && (!s_aura_host_karoo || g_enum_karoo_drop || s_human_play_sig
-                           || DecisionUnpruned());
-    // CREATURE-AURA HOST. The autonomous signature keys a creature Aura by NAME only, so the plans
-    // that differ only in WHICH creature an Aura enchants form one class. Which member survives is the
-    // AURA CAST HOST RANKING's decision (USER 2026-10-06 -- "not a difficult decision. It makes sense
-    // to have a heuristic for it"; see AuraPlanHostKey and core/SpellEffects.h), applied in the dedup
-    // below. Before it the class kept whichever host was enumerated FIRST (battlefield order), and
-    // Bruna opted out of the fold entirely (per-host branching, Bruna sweep B). The host stays a
-    // distinct plan for the un-pruned oracle (MTG_UNPRUNED: the viewer's / claude-play's plan list),
-    // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
-    const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
-    const bool rep_sig = ReplicateSigEnabled();   // the #R key below (MTG_REPLICATE_SIG)
     // LOCKSTEP with PlanSignatureFast (MTG_PLAN_SIG_FAST, the default autonomous builder): every token
     // this legacy builder emits is mirrored there field for field. Edit both, then run
     // MTG_PLAN_SIG_FAST_VERIFY=1 (see PlanSigFastOn).
@@ -58019,18 +58208,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Armed only when this enumeration's candidates hold a host-declared land Aura AND an untapper (one scan
     // of `cands`): only EldraziDisplacerFlicker holds an untapper, so every other deck skips the whole
     // block and its menu is unchanged. Additive: it only ever keeps a plan the fold would have dropped.
-    bool range_hosts = false;
-    if (!host_sig && !s_human_play_sig && EdfAuraRangeHostsOn())
-    {
-        bool rh_aura = false, rh_untapper = false;
-        for (const Action& c : cands)
-        {
-            if (c.kind != Action::Kind::CastFromHand || c.def == nullptr) { continue; }
-            if (c.def->params.is_land_aura && c.enchant_target > 0) { rh_aura = true; }
-            if (c.def->card.IsCreature() && c.def->params.etb_untap_lands > 0) { rh_untapper = true; }
-        }
-        range_hosts = rh_aura && rh_untapper;
-    }
     struct RhShape { int n_aura = 0; bool untapper = false; std::string hosts; };
     auto rh_shape = [&](const TurnSolver::Plan& rp) -> RhShape
     {
@@ -58163,6 +58340,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
             }
         }
+    }
+
+    // MTG_ENUM_DEDUP_STREAM_VERIFY: did the dedup keep anything the compaction would have dropped?
+    if (ds_on && s_ds_verify)
+    {
+        for (TurnSolver::Plan& kp : deduped)
+        {
+            if (kp.land_tie_key > -2) { continue; }   // Plan B: never tagged
+            const std::size_t idx = static_cast<std::size_t>(-2 - kp.land_tie_key);
+            dsverify::g_kept.fetch_add(1, std::memory_order_relaxed);
+            if (idx < ds_marked.size() && ds_marked[idx]) { dsverify::g_bad.fetch_add(1, std::memory_order_relaxed); }
+            kp.land_tie_key = -1;
+        }
+        std::size_t nm = 0;
+        for (char m : ds_marked) { nm += m ? 1 : 0; }
+        dsverify::g_marked.fetch_add(static_cast<long long>(nm), std::memory_order_relaxed);
     }
 
     // ROLLING EARTHQUAKE TOP-X (MTG_PD_QUAKE_TOP_X, ADOPTED default ON 2026-09-29, PROVISIONAL; USER doctrine 2026-09-29: "it makes

@@ -271,3 +271,40 @@ MTG_DECISION_WORK_X=1000 MTG_KEEP_BENCH=1 MTG_KEEP_REPLAY_LIST=slow.log MTG_KEEP
 
 Each `[replay-list] ms=... win_turn=... <rollout>` line pairs across arms by its rollout text. Keep the
 thread count fixed across arms (the TT is sized per worker).
+
+## 6. Follow-on (2026-10-18): the peak-memory half -- `MTG_ENUM_DEDUP_STREAM` (byte-identical, default ON)
+
+The EDF overnight tier was aborted by its RSS cap (32 workers on `edf_overnight_d0_*`, 16.8-17.65 GB with
+the plan and FSL caches empty), and both EDF mulligan-generation aborts were the same thing: LIVE memory,
+the walk in `EnumeratePlans` materialising every emitted plan before the signature dedup keeps ~4% of them.
+
+`MTG_ENUM_DEDUP_STREAM` compacts the plan list WHILE the odometer walk runs (first at 4,096 plans,
+`MTG_ENUM_DEDUP_STREAM_AT`, then each time the list doubles over what survived), dropping only members
+the dedup can never keep: per signature class it keeps the member with the greatest (wins_this_turn,
+value), earliest emission among equals -- exactly the dedup's survivor, at exactly its sorted position,
+because the survivors keep their emission order and the sort is stable. With the range-hosts tiers armed
+the key adds the rank-ordered copy-equivalence tokens of the casts (the `MTG_RH_MOVED_MEMO` key), so every
+extra member those tiers keep survives too. It stands down for human play, the creature-Aura host ranking,
+the legacy signature builder and the print-only instruments that read the pre-dedup count. The go-off cuts
+before the walk and Plan B after it are untouched. `MTG_ENUM_DEDUP_STREAM_VERIFY=1` compacts nothing, tags
+every plan with its emission index, marks what each compaction would drop and counts every plan the real
+dedup keeps that carries a mark.
+
+Measured (Release, at 064dc806b + this change; lever `=0` vs default):
+
+| | off | on |
+|---|---|---|
+| single EDF d0 game (seed 6533, game-index 527, `--games 1`): peak RSS | 882-911 MB | **164-169 MB** |
+| ... wall | 7.6 s | 6.8 s |
+| 640-game EDF d0 slice (`build/scratch/poolmem/m.json`, 32 workers): peak RSS | 5.90-6.32 GB | **3.17-3.21 GB** |
+| ... wall / per-game ms sum | 9.1 s / 86-88k | 8.8 s / 83k |
+| identity batch (1,756 games, 16 threads): peak RSS | 7.72 GB | **4.33 GB** |
+| ... instructions | 5.542e12 | 5.738e12 (+3.5%) |
+
+Identity: the batch, the slice and the single game are byte-identical (digests, units, every per-game
+`.wins` / `.units`); verify over the batch: 5,183,531 kept plans checked, 16,120,047 would-drop marks,
+**0 kept plans marked**. Smoke 128/128, scenarios 217/217, unit 1,428/1,428. The +3.5% instructions is the
+signature computed once more for each survivor, plus the range-hosts tokens; wall did not move.
+
+What is left of the single game's peak (~165 MB against a ~20 MB floor) is elsewhere -- lowering the trigger
+to 1,024 plans did not move the slice -- so the next memory target is not this list.
