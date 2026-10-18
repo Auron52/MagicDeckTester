@@ -90,3 +90,44 @@ there, and every own spell it could target is cast in a main phase.
 * Hinata2's keep table and value leaf were fitted to play in which Remand was dead, and
   EquivalenceDiscovery no longer merges Remand with the inert cards -- both artifacts are stale
   against the new play.
+
+## 2026-10-18: the plan evaluators must not credit a countered X (fixed), and the d0 valuation (USER decision)
+
+CollectActions zeroes a remand variant's resolution projections, but both plan evaluators (Solve's
+`consider` -- the d0 decision and every rollout leaf -- and EnumeratePlans' `eval_and_push`) also read
+X's DEFINITION. Three readers priced a countered X's resolution; each now asks `RemandCountersCast`
+(TurnSolver.cpp), in both evaluators:
+
+1. **The leftover-mana FILL** (`FillScaledCastFace`, and `FillScaledXTrick` for the same reason) scaled a
+   REMANDED Magma Opus's face: the plan was credited the extra face damage and eval of a spell that goes
+   back to hand, and both apply worlds then paid the filled face's bill (they price the cast from
+   `crackle_targets`). Hinata2 d0: 557 such fill calls per 1000 games. It reached the search too: the
+   searched root returns the first candidate whose PROJECTED `wins_this_turn` is true without a rollout,
+   so a phantom fill could be committed as a kill. Test: "the leftover-mana FILL never scales a COUNTERED
+   Magma's face".
+2. **The cast restrictor** (Irencrag Feat, "one more spell") counted a remand variant as ONE cast; it is
+   two (`RestrictorCastsOf`). `{Irencrag, X + Remand}` with one cast left was admitted, priced "X
+   countered, draw a card", and played as plain X (both worlds void the rider at
+   `casts_remaining_this_turn == 1`). Rejecting it loses nothing: the plain `{Irencrag, X}` subset
+   realises that line on less mana. Test: "Remand after a cast restrictor counts TWO casts".
+3. **KillTriggerComboCredit** counted a remanded burn spell's creature damage (latent: no Searing Blood
+   deck runs Remand).
+
+Still open, latent (no Remand deck has the model): the provider's `ExtraLethalDamage` /
+`ProjectsAlternateWin` receive X's definition in `casting` for a countered X.
+
+**The Hinata2 d0 regression is NOT one of these** (d0 s2002 1000 games: base 6.791, rider 6.849, rider +
+fixes 6.848; d3 b10 60 games: 5.817 / 5.750 / 5.750). It is the generic greedy valuation. The lethal plan
+of the reported game (s2017 gi15 T5) is on neither binary's ROOT menu -- it appears only after Soulfire
+Eruption's dig resolves (the breakpoint re-solve). At the root the greedy compares {Soulfire} = 0 against
+{Soulfire + Remand on it} = 100: `EvalCard` prices Soulfire Eruption at `damage (0) x 100` (its real
+damage and its dig of N staged cards are unvalued), and a non-haste creature from turn 6 at 0
+(`ExpectedAttacks` assumes a 6-turn game), while the Remand's draw is the DrawSpell 100. The rider
+"monetises" those zeros: of the 71 slower games, the remand at the first divergence targets Soulfire
+Eruption (~51), Hinata (16), Irencrag (2). The 16 faster games are mostly a stuck hand cycling Remand
+through an otherwise dead Irencrag Feat (5 unwon -> won). Withholding riders from the d0 runner (as the
+rollout leaf already does) is byte-identical to base on those 1000 games. A naive Soulfire dig credit
+(+100 per target) measured much worse (6.871). OPTIONS for the USER: (a) d0 follows the leaf (no
+riders at depth 0); (b) a provider-owned rider policy at d0 (e.g. Hinata2: never answer Soulfire /
+Hinata); (c) a real fix of the greedy's value for Soulfire Eruption and late creatures (a heuristic
+adoption, needs the heuristic-optimization loop); (d) keep the current behaviour.

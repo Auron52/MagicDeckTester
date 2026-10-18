@@ -17003,6 +17003,31 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
 }
 
 
+// A REMAND variant whose X is COUNTERED (Action::remand_by on a spell that can be countered): X goes
+// back to its owner's hand and never resolves (docs/design/remand-self-target.md). CollectActions'
+// REMAND post-pass zeroes the variant's resolution projections (direct_damage, ritual_float, ...), but a
+// plan evaluator that reads X's DEFINITION instead of those fields still sees the spell X is -- so every
+// such reader that prices a RESOLUTION effect must ask this first. A can't-be-countered X resolves
+// after the Remand draws, so it is not countered here.
+static bool RemandCountersCast(const Action& a)
+{
+    return !a.remand_by.empty() && a.def != nullptr && !a.def->params.cant_be_countered;
+}
+
+// How many SPELLS a plan action casts, as a cast restrictor (Irencrag Feat: "you can cast only one more
+// spell this turn") counts them. A REMAND variant is two: X, then the Remand that answers it -- and
+// whether X can be countered does not matter, the Remand is a cast either way. Counting it as one
+// admitted {Irencrag, X + Remand} with one cast left, a line that is illegal as described (two spells
+// after the Feat): both apply worlds void the rider there (casts_remaining_this_turn == 1 -> X is cast
+// plainly and RESOLVES, nothing is remanded and nothing drawn), so the plan was priced as "X countered,
+// draw a card" and realised as plain X -- the greedy pick and the search's static value both read the
+// wrong line. Rejecting it loses nothing: what it realises is exactly the plain {Irencrag, X} subset,
+// which the enumerators admit on less mana. Every non-remand action counts one (byte-identical).
+static int RestrictorCastsOf(const Action& a)
+{
+    return a.remand_by.empty() ? 1 : 2;
+}
+
 // Fill a scaled divided-damage cast (Magma Opus) UP from a plan's LEFTOVER mana (user directive: "spend all
 // available mana in the plan"; "fit the scalars to the proposed plan" rather than enumerate every cost). The
 // cast is emitted as ONE cheap candidate (min face); after a plan's other costs are paid -- including the
@@ -17021,6 +17046,13 @@ static int FillScaledCastFace(const GameState& state, Action& a, int surplus_gen
     if (!fill_enabled) { return 0; }
     const CardDefinition* d = a.def;
     if (!d || a.kind != Action::Kind::CastFromHand) { return 0; }
+    // A REMANDED Magma never resolves, so its face is resolution-only: filling it would credit face
+    // damage (and plan eval) the countered spell never deals -- a phantom kill in the greedy pick --
+    // and the apply worlds, which price the cast from the filled crackle_targets, would then pay the
+    // bigger face's bill for a spell that goes back to hand. The emitted (cheapest) face is the only
+    // sensible one for a countered cast: same outcome, least mana. Hinata2 d0 s2002: 557 calls on a
+    // remanded Magma with leftover mana per 1000 games before this guard.
+    if (RemandCountersCast(a)) { return 0; }
     if (!d->params.damage_divided || a.crackle_targets < 0) { return 0; }
     if (surplus_generic <= 0) { return 0; }
     std::vector<ScaledCastVariant> ladder = ResolveProvider(state).ScaledCastVariants(state, *d);
@@ -17062,6 +17094,7 @@ static int FillScaledCastFace(const GameState& state, Action& a, int surplus_gen
 static int FillScaledXTrick(const GameState& state, Action& a, int surplus_generic)
 {
     if (a.kind != Action::Kind::CastFromHand || surplus_generic <= 0) { return 0; }
+    if (RemandCountersCast(a)) { return 0; }   // a countered pump trick pumps nothing (see FillScaledCastFace)
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
     if (!d || !d->params.solo_target_trick || d->params.pump_per_x_power <= 0) { return 0; }
     if (!d->card.m_mana_cost.has_x) { return 0; }
@@ -38931,6 +38964,9 @@ static int KillTriggerComboCredit(const GameState& state, const std::vector<Acti
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        // A REMANDED burn spell deals no creature damage and arms no kill trigger (it never resolves;
+        // RemandCountersCast). Its zeroed direct_damage would otherwise read as "a kill-trigger cast".
+        if (RemandCountersCast(a)) { continue; }
         const CardDefinition& d = *a.def;
         if (d.tmpl != CardTemplate::DirectDamage) { continue; }
         if (d.params.targeting != Targeting::Creature && d.params.targeting != Targeting::Multi) { continue; }
@@ -39364,10 +39400,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
                                  ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
                                  : nullptr;
-        if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0)
+        const bool fa_countered = RemandCountersCast(fa);   // both fills return 0 for it
+        if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0 && !fa_countered)
         { fill_face_ok[j] = 1; }   // FillScaledCastFace requires a.def itself
         if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
-            && fd->card.m_mana_cost.has_x)
+            && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
         const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
@@ -40263,7 +40300,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 PlanCastOrder(state, cands, sel, r_arranged);
                 const auto it = std::find(r_arranged.begin(), r_arranged.end(), j);
                 if (it != r_arranged.end())
-                { arranged = &r_arranged; after = static_cast<int>(r_arranged.end() - it) - 1; }
+                {
+                    arranged = &r_arranged; after = static_cast<int>(r_arranged.end() - it) - 1;
+                    // A REMAND variant is TWO casts (X, then the Remand) -- see RestrictorCastsOf.
+                    for (auto q = it + 1; q != r_arranged.end(); ++q) { after += RestrictorCastsOf(cands[*q]) - 1; }
+                }
             }
             if (arranged == nullptr)
             {
@@ -40274,7 +40315,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
                     if (k_rank > r_rank)
                     {
-                        ++after;
+                        after += RestrictorCastsOf(cands[k]);
                     }
                 }
             }
@@ -40552,7 +40593,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 for (int j : sel)
                 {
                     const Action& a = cands[static_cast<std::size_t>(j)];
-                    std::cerr << a.card_name << (a.free_cast ? "(free)" : "") << ";";
+                    std::cerr << a.card_name << (a.free_cast ? "(free)" : "") << (a.remand_by.empty() ? "" : "+RM") << "#e" << a.eval << ";";
                 }
                 std::cerr << "} mv=" << combined.ManaValue()
                           << " supply=" << (credited ? eff : pool).Total()
@@ -52948,10 +52989,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
                                  ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
                                  : nullptr;
-        if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0)
+        const bool fa_countered = RemandCountersCast(fa);   // both fills return 0 for it
+        if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0 && !fa_countered)
         { fill_face_ok[j] = 1; }   // FillScaledCastFace requires a.def itself
         if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
-            && fd->card.m_mana_cost.has_x)
+            && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
         const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
@@ -54132,7 +54174,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 PlanCastOrder(state, cands, sel, r_arranged);
                 const auto it = std::find(r_arranged.begin(), r_arranged.end(), j);
                 if (it != r_arranged.end())
-                { arranged = &r_arranged; after = static_cast<int>(r_arranged.end() - it) - 1; }
+                {
+                    arranged = &r_arranged; after = static_cast<int>(r_arranged.end() - it) - 1;
+                    // A REMAND variant is TWO casts (X, then the Remand) -- see RestrictorCastsOf.
+                    for (auto q = it + 1; q != r_arranged.end(); ++q) { after += RestrictorCastsOf(cands[*q]) - 1; }
+                }
             }
             if (arranged == nullptr)
             {
@@ -54143,7 +54189,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
                     if (k_rank > r_rank)
                     {
-                        ++after;
+                        after += RestrictorCastsOf(cands[k]);
                     }
                 }
             }

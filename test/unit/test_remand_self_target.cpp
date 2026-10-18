@@ -17,6 +17,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
+#include "ai/DecisionProviders.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -445,4 +446,78 @@ TEST_CASE("Remand cantripping off an uncounterable Niv-Mizzet, Parun: only the N
         CHECK(g->players[0].cards_drawn_this_turn == 1);
         CHECK(g->players[1].life == gamesetup::StartingLife() - 1);
     }
+}
+
+// ---- A COUNTERED X CREDITS NOTHING ITS RESOLUTION WOULD HAVE DONE (the plan evaluators) -------------
+// CollectActions zeroes a remand variant's resolution projections, but the plan evaluators (Solve's
+// consider -- the d0 decision -- and EnumeratePlans' eval_and_push) also read X's DEFINITION. These pin
+// the two readers that priced a countered X's resolution: the scaled-face FILL and the cast restrictor.
+
+TEST_CASE("Remand on Magma Opus: the leftover-mana FILL never scales a COUNTERED Magma's face (no phantom damage)")
+{
+    // Hinata (tapped: no attack) + 3 Islands + 3 Mountains. Magma's Hinata ladder on this board is
+    // face 2 {1}{U}{R} / face 3 {2}{U}{R} / face 4 {3}{U}{R}; "Magma + Remand on it" costs {1}{U}{R} + {U}
+    // (Hinata takes {1} off the Remand) and leaves 2 mana -- exactly what the fill would pour into the
+    // face (2 -> 4), reading 2 more damage (the opponent is at 2: a "win") off a spell that goes back to
+    // hand, and pricing its cast at the face-4 bill. The countered Magma must keep its emitted face and
+    // project 0. (Without the guard: wins_this_turn, crackle_targets 4, six lands tapped.)
+    EnsureCardsLoaded();
+    const HinataProvider hp;
+    GameState s = Fresh({ "Mountain" });
+    s.m_provider = &hp;
+    s.players[1].life = 2;
+    Put(s, "Hinata, Dawn-Crowned", 40);
+    s.battlefield.back().tapped = true;
+    for (int k = 0; k < 3; ++k) { Put(s, "Island", 50 + k); }
+    for (int k = 0; k < 3; ++k) { Put(s, "Mountain", 60 + k); }
+    Hand(s, kRemand, 10);
+    Hand(s, "Magma Opus", 11);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* p = RemandOnly(plans, "Magma Opus");
+    REQUIRE(p != nullptr);
+    CHECK_FALSE(p->wins_this_turn);
+    for (const Action& a : p->actions)
+    {
+        if (a.remand_by.empty()) { continue; }
+        CHECK(a.direct_damage == 0);
+        CHECK(a.crackle_targets == 2);    // the emitted (cheapest) face, not the filled 4
+    }
+    // Realised: four lands pay {1}{U}{R} + {U}; Magma is back in hand, the opponent untouched.
+    const auto [r, e] = BothWorlds(s, *p, "Magma Opus");
+    CHECK(r.tapped == 4);
+    CHECK(r.hand == std::vector<std::string>{ "Magma Opus", "Mountain" });
+    CheckSame(r, e);
+    // The control: the PLAIN Magma is still the kill.
+    bool plain_kill = false;
+    for (const TurnSolver::Plan& q : plans)
+    { if (HasCast(q, "Magma Opus", "") && q.wins_this_turn) { plain_kill = true; } }
+    CHECK(plain_kill);
+}
+
+TEST_CASE("Remand after a cast restrictor counts TWO casts: {Irencrag Feat, X + Remand on X} is never offered")
+{
+    // Irencrag Feat: "you can cast only one more spell this turn". X + Remand is two spells, so after the
+    // Feat the rider is void in both apply worlds (X is cast plainly and RESOLVES -- the test above);
+    // admitting the subset priced "X countered, draw a card" for a line that plays as plain X. The plain
+    // {Irencrag, Magma} line is still offered. 3 Mountains + 4 Islands: the Feat ({1}{R}{R}{R}) and its seven
+    // {R} are load-bearing (7 lands pay neither Magma {6}{U}{R} alone nor Magma + Remand), so no ritual guard
+    // is what rejects the remand line.
+    EnsureCardsLoaded();
+    const HinataProvider hp;
+    GameState s = Fresh({ "Mountain" });
+    s.m_provider = &hp;
+    for (int k = 0; k < 3; ++k) { Put(s, "Mountain", 50 + k); }
+    for (int k = 0; k < 4; ++k) { Put(s, "Island", 55 + k); }
+    Hand(s, kRemand, 10);
+    Hand(s, "Irencrag Feat", 11);
+    Hand(s, "Magma Opus", 12);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    bool plain_line = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        const bool feat = HasCast(p, "Irencrag Feat", "");
+        if (feat && HasCast(p, "Magma Opus", "")) { plain_line = true; }
+        CHECK_FALSE((feat && HasCast(p, "Magma Opus", kRemand)));
+    }
+    CHECK(plain_line);
 }
