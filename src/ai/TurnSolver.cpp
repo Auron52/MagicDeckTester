@@ -47246,8 +47246,25 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 }
                 cand.push_back(i);
             }
+            // MTG_PAY_NARROW_RESTRICTED_FIRST: among equally flexible candidates, try to give back a
+            // Secluded Courtyard (colored_creature_ability_ok) BEFORE an Unclaimed Territory -- the
+            // Courtyard is the one whose colour a trailing creature ability can still spend.
+            const bool narrow_first = PayNarrowRestrictedFirstOn();
+            auto broad = [&](int i) -> int
+            {
+                if (!narrow_first) { return 0; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(bf_snap[i].card);
+                return (d && d->params.colored_creature_only && d->params.colored_creature_ability_ok) ? 1 : 0;
+            };
             std::stable_sort(cand.begin(), cand.end(),
-                             [&](int a, int b) { return flex(a) > flex(b); });
+                             [&](int a, int b)
+                             { return flex(a) != flex(b) ? flex(a) > flex(b) : broad(a) > broad(b); });
+            // MTG_PAY_PAIN_LAST: a give-back must not BUY its released source with pain. The re-solve
+            // runs without the released source, so it can be forced onto a damaging coloured mode the
+            // accepted solve avoided (Voldaren Estate's colour once the Courtyard is held back); keeping
+            // the Courtyard tapped and the payment painless is the better trade. Unarmed boards only:
+            // on an armed board the tap damage is deferred to the flush and life does not move here.
+            const bool pain_guard = PayPainLastOn() && !state.dmg_events_armed;
             // Start from the hold the accepted solve ran under, and add to it. Everything the
             // winning solve wrote -- City of Brass tap damage, a depletion counter, the float --
             // rides on the saved STATE, so each candidate is judged against a full restore and the
@@ -47278,7 +47295,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                                     /*tapped_mask=*/0, /*untapped_max=*/-1,
                                                     /*reserved_mask=*/trial, /*out_full_pool=*/&p2)
                                  && p2.wild == 0;
-                if (o2)
+                if (o2 && !(pain_guard && state.players[active].life < best_la))
                 {
                     hold          = trial;
                     best_bf       = state.battlefield;

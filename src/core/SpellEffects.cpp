@@ -2827,6 +2827,63 @@ static bool AcfExactInfeasible(const std::vector<AcfSrc>& srcs, const ManaCost& 
     return true;
 }
 
+// ---- PAINLESS-FIRST PASS (MTG_PAY_PAIN_LAST; Vampires sweep F) ------------------------------------
+//
+// The backtracker returns the FIRST assignment its DFS reaches, and its source order is battlefield
+// order, so whether a coloured pip took Voldaren Estate's pay-1-life colour or a painless Swamp /
+// Courtyard depended on which land entered first (s91007: the same T3 Stromkirk Captain cost one life
+// or none by land order alone; s91016 T5: the whole-turn prepay's joint solve took the Estate's colour
+// for {Pit Fighter, Stromkirk Captain} with a painless assignment on the board). No candidate ORDER
+// fixes that in general: the DFS also over-taps (a rainbow land's generic-representative colour is
+// explored before its useful one), so a painful source placed last is still reached after a useless
+// tap. What does fix it is a second, restricted solve tried FIRST: while g_bt_painless_pass is set,
+// every damaging COLOURED mode is withheld -- a painland keeps only its painless {C}, a source whose
+// every coloured tap hurts (City of Brass, a horizon land) is skipped -- and only when that pass finds
+// nothing does TapForCostBacktrackTop re-solve unrestricted (the historical solve, byte for byte).
+// LOSSLESS by construction: the unrestricted pass is the old solver, so every cost it paid is still
+// paid; the restricted pass can only choose WHICH of the old payable assignments is returned.
+// Colourless pain (Ancient Tomb's {C}{C}) is not a coloured mode and is untouched, as is every armed
+// board (Prevent Damage's dmgev policy owns pain there, deliberate pain included).
+static thread_local bool g_bt_painless_pass = false;
+
+// What the painless pass allows of source `d`: 0 = unaffected, 1 = its painless {C} mode only,
+// 2 = nothing (skipped for the pass). Only a PLAIN source keeps a {C}-only shape; a painful source of
+// any other shape (none in cards.json today) is simply skipped by the pass -- conservative, because
+// the unrestricted pass behind it is complete.
+static int BtPainlessMode(const CardDefinition& d)
+{
+    if (!g_bt_painless_pass || d.params.tap_self_damage <= 0) { return 0; }
+    bool has_colour = false, has_c = false;
+    for (Color c : d.params.produces)
+    { if (c == Color::Colorless) { has_c = true; } else { has_colour = true; } }
+    if (!has_colour) { return 0; }   // colourless-only pain (Ancient Tomb): not a coloured mode
+    const bool plain = !d.params.is_filter && !d.params.ramp_filter && !d.params.any_color_filter
+                    && !d.params.domain_mana && !d.params.storage_land && !d.params.reflecting
+                    && !d.params.mana_colors_of_graveyard_legends && !d.params.untap_creature_cost.has_value()
+                    && !IsScaledManaDork(d) && !IsScaledManaLand(d);
+    // The {C} mode is painless only as the painland model has it (PainlandCModeEnabled: activate()'s
+    // `painless` branch) and only when the land does not hurt in every mode.
+    return (plain && has_c && PainlandCModeEnabled() && !d.params.tap_self_damage_any_mode) ? 1 : 2;
+}
+
+// Does the controller have an untapped, unreserved source the painless pass would restrict? Only then
+// is the extra pass worth running (it would otherwise re-run the identical solve).
+static bool BoardHasPainfulColourSource(const GameState& state, std::uint64_t reserved_mask)
+{
+    const int active = state.active_player_index;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        if (i < 64 && (reserved_mask & (1ull << i))) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.tap_self_damage <= 0) { continue; }
+        for (Color c : d->params.produces) { if (c != Color::Colorless) { return true; } }
+    }
+    return false;
+}
+
 static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool for_creature,
                               const ManaPool& floating, const std::vector<Color>* rp_colors,
                               std::uint64_t reserved_mask,
@@ -2905,6 +2962,11 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = dead
+        // PAINLESS-FIRST PASS (see BtPainlessMode): the oracle prices exactly the sources the restricted
+        // DFS may use, so a pass that cannot pay without pain is proven infeasible here in one flow
+        // instead of by exhausting the restricted tree. 0 outside the pass -> unchanged.
+        const int pmode = BtPainlessMode(*def);
+        if (pmode == 2) { continue; }
         // SCALED MANA DORK (Priest of Titania / Elvish Archdruid): one tap bursts the live Elf
         // count into its ONE produces colour ({G}) -- per-permanent yield like a storage land.
         if (IsScaledManaDork(*def))
@@ -3143,6 +3205,12 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                 bundle_per_col = per;
                 bundle_total   = std::max(amt, static_cast<int>(produces.size()));
             }
+        }
+        // Painless pass: a plain painful source contributes its {C} mode only (BtPainlessMode == 1).
+        if (pmode == 1)
+        {
+            bits &= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
+            bundle_per_col = 0;
         }
         if (bits == 0) { continue; }   // solo Reflecting Pool etc.: makes nothing usable -> no supply
         // LAND AURAS. This oracle can declare a cost INFEASIBLE and short-circuit the payment
@@ -4167,6 +4235,13 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = no mana
+        // PAINLESS-FIRST PASS (MTG_PAY_PAIN_LAST; see BtPainlessMode): while the restricted pass runs, a
+        // source whose every coloured tap hurts is skipped and a painland keeps only its {C} (stripped
+        // below with the other payment-legality strips). Definition-determined, like every filter
+        // above, so the identical-sibling chain's "passed the same filters" premise still holds.
+        // Constant 0 outside the pass.
+        const int pain_mode = BtPainlessMode(*def);
+        if (pain_mode == 2) { continue; }
 
         // Identical-sibling collapse (see the s_dup_of_buf block above): an untapped chain member was
         // explored earlier at this node -- with the exact same def, permanent state and filters -- and
@@ -4233,6 +4308,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             for (Color c : *produces_ptr) { if (c == Color::Colorless) { enrv.push_back(c); } }
             produces_ptr = &enrv;
         }
+        // PAINLESS PASS strip (pain_mode == 1, a plain painland): its painless {C} mode only. A constant,
+        // not a scratch buffer: BtPainlessMode returns 1 only for a source whose produces holds {C}, and
+        // neither strip above ever removes {C}, so the result is always exactly {C} -- and a constant
+        // cannot be refilled under this node's colour loop by a deeper node.
+        static const std::vector<Color> kPainlessC{ Color::Colorless };
+        if (pain_mode == 1) { produces_ptr = &kPainlessC; }
         const std::vector<Color>& produces = *produces_ptr;
         // Undo across this source's options. `activate` only ever modifies THIS source (its
         // tapped flag + a depletion counter); deeper recursion taps OTHER sources but each level
@@ -4811,6 +4892,39 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     return false;
 }
 
+// One top-level backtracking SOLVE: the painless-first pass (MTG_PAY_PAIN_LAST -- see BtPainlessMode),
+// then, only if it found nothing, the unrestricted historical solve. Both are top-level worker calls
+// (fail_memo == nullptr at the top), so each builds its own candidate list and starts from an empty
+// failure memo -- a pass-1 proven failure is never read by pass 2. A failed worker leaves the state
+// exactly as it found it, so pass 2 starts from the same board. The pass runs only when it can differ:
+// lever on, an UNARMED board (Prevent Damage's policy owns pain on armed ones -- and g_bt_pay_with_pain
+// is false there by construction), and an untapped, unreserved source with a damaging coloured mode.
+// Shared by the real solve and the cache-verify re-solve, so the two cannot disagree.
+static bool TapForCostBacktrackSolve(GameState& state, const ManaCost& cost, bool for_creature,
+                                     const ManaPool& floating, const std::vector<Color>* rp_colors,
+                                     TapBacktrackMemo* fail_memo, ManaPool* out_leftover,
+                                     std::uint64_t tapped_mask, int untapped_max,
+                                     std::uint64_t reserved_mask, ManaPool* out_full_pool,
+                                     const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
+{
+    if (fail_memo == nullptr && !g_bt_painless_pass && PayPainLastOn() && !state.dmg_events_armed
+        && !g_bt_pay_with_pain && BoardHasPainfulColourSource(state, reserved_mask))
+    {
+        struct PainlessPass
+        {
+            PainlessPass()  { g_bt_painless_pass = true; }
+            ~PainlessPass() { g_bt_painless_pass = false; }
+        } _pass;
+        if (TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, nullptr,
+                                      out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                      out_full_pool, src_cands))
+        { return true; }
+    }
+    return TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                     out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                     out_full_pool, src_cands);
+}
+
 // ============================ PAYABLE MANA CACHE (MTG_MANA_CACHE) ============================
 // Memoises the out_full_pool batch-prepay solve. Measured: within a rollout the search re-queries the
 // SAME (source-config, cost) ~80% of the time, and each deep solve is 20-40 backtracker nodes -- so
@@ -5074,6 +5188,10 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     // localised it: per-job inputs clean, results still moved). heurarm::Flag is per-thread and
     // per-job, so reading it here keys each job's entries to its own arm.
     mix(h1, FilterFeedStrictOn() ? 0x9e3779b97f4a7c15ull : 0ull);
+    // Same rule for MTG_PAY_PAIN_LAST's painless-first pass: it picks WHICH payable assignment the solve
+    // returns, so an arm's entries must not replay into the other arm's games. Folded only when ON, so
+    // the =0 arm's keys are the historical ones bit for bit.
+    if (PayPainLastOn()) { mix(h1, 0x5041494E4C415354ull); }
     // Same rule, second offender (2026-09-05, batch-pool-contamination.md sightings 3-5): a drip
     // land's stored solution records the OBSERVED opponent-life delta -- tap_opponent_lifegain x
     // gamesetup::OpponentHeads(), a PER-JOB global -- so an entry stored under one job's heads
@@ -5638,11 +5756,11 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
     const bool saved_crack = g_paysac_cracked;
     TapBacktrackMemo vmemo;
     ManaPool vleft, vfull;
-    const bool vok = TapForCostBacktrackWorker(vs, cost, for_creature, floating, rp_colors,
-                                               fail_memo ? &vmemo : nullptr,
-                                               out_leftover ? &vleft : nullptr, tapped_mask,
-                                               untapped_max, reserved_mask,
-                                               out_full_pool ? &vfull : nullptr, src_cands);
+    const bool vok = TapForCostBacktrackSolve(vs, cost, for_creature, floating, rp_colors,
+                                              fail_memo ? &vmemo : nullptr,
+                                              out_leftover ? &vleft : nullptr, tapped_mask,
+                                              untapped_max, reserved_mask,
+                                              out_full_pool ? &vfull : nullptr, src_cands);
     g_paysac_cracked = saved_crack;
     g_mcv_checked.fetch_add(1, std::memory_order_relaxed);
     bool same = (vok == e.payable);
@@ -5884,16 +6002,16 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     bool ok;
     if (!tapstats::Enabled())
     {
-        ok = TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
-                                       out_leftover, tapped_mask, untapped_max, reserved_mask,
-                                       out_full_pool, src_cands);
+        ok = TapForCostBacktrackSolve(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                      out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                      out_full_pool, src_cands);
     }
     else
     {
         const std::uint64_t nodes0 = tapstats::g_nodes.load(std::memory_order_relaxed);
-        ok = TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
-                                       out_leftover, tapped_mask, untapped_max, reserved_mask,
-                                       out_full_pool, src_cands);
+        ok = TapForCostBacktrackSolve(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                      out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                      out_full_pool, src_cands);
         const std::uint64_t dn = tapstats::g_nodes.load(std::memory_order_relaxed) - nodes0;
         // MTG_TAP_BIG_DUMP=<nodes> (diagnostic, needs MTG_TAP_STATS=1, run single-threaded): print the
         // board of any ONE top-level solve that walked more than <nodes> DFS nodes. Off (0) by default.
