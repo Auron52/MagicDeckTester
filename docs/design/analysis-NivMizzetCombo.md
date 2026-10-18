@@ -45,7 +45,7 @@ Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
 - `niv` = branch `niv-analysis` (behind niv-aura; ff to niv-aura once Stage 4 is done). Its build is the
   OLD T2 binary the Stage-4 analyzer runs on (discard evidence, 400 games d3, single thread, 4.5h+): do
   NOT rebuild until `logs/stage4.status` says done.
-- `niv-perf`: PERF AGENT running (goal: the 3x rule; leads = per-unit cost explosions: d3 b10 s3007 gi4
+- `niv-perf`: PERF AGENT DONE, integrated (see "Search cost cut"; was: the 3x rule; leads = per-unit cost explosions: d3 b10 s3007 gi4
   1,507 s / 1.64M units, s2018 gi16 347 s / 246k units, s2029 gi27; d5 b20 s3007 gi4 >20 min). Told NOT
   to touch the draw loop or the payment code.
 - `niv-pay`: PAYMENT AGENT DONE (integrated, see "Payment holes P1/P2 fixed") (sweep defects P1 PP_FLOAT_NZ with a Servant float, P2 ramp-filter
@@ -228,6 +228,33 @@ commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
   agent's quick probe (d0 x300, d3 x40 per deck, fresh seeds): breaching/dragonstorm identical, th/bruna
   digests moved with equal averages, hinata d0 1 faster, no slower games.
 
+### Search cost cut (2026-10-18 ~13:30, the niv-perf agent; `dccf2ec51`..`80aeeca6c`)
+- **Root cause of the per-unit explosions.** `BpUnbranchedCanon` reads ONE entry (`front()`) of a
+  breakpoint continuation list but derived and cached the whole list, Brainstorm put-back clones
+  included: on s2018 gi16 d3 one T6 decision took 151 s for 225k units (the 25x overrun ceiling), 88% of
+  it in those builds -- 46M clones from 101k derivations (one list: 18,015 clones of 555 plans), 32 cache
+  clears, 2.8 GB RSS. Interior work the budget never charged.
+- Fixes (all SOUND, default ON, hatches): `MTG_BP_CANON_FRONT` (front-only list without the put-back or
+  Ponder clones; `MTG_BP_CANON_FRONT_VERIFY=1` checked 167k builds against the full list, 0 mismatches),
+  `MTG_BP_NODE_PUTBACK_FOLD` (a breakpoint child whose put-back rank clamps onto one a sibling applied
+  is skipped; still charged its unit, so units do not move), and the front-only route only when the
+  hand holds a Brainstorm or a Ponder (every other deck keeps its caching and units exactly).
+  Diagnostic `MTG_CANTRIP_ATTRIB` (default off).
+- Identity (suite-shaped 160 games): 160/160 same win turn + play digest; 158/160 same units (2 differ
+  by -1 / -36, breakpoint-cache residency; identical with `MTG_NO_BP_ENUM_CACHE=1`). Hinata2 90/90 same
+  play, 89/90 same units.
+- Per game: s2018 gi16 d3 99.4 -> 8.6 s; s3007 gi4 d3 980.9 -> 38.4 s; s3007 gi4 d5 1201.2 -> 53.2 s;
+  s2029 gi27 d3 180.8 -> 149.4 s (mulligan-bound). Cases (ms/game): d3 s3003 29,856 -> 7,161; d5 s3003
+  69,218 -> **14,071** (the worst case; quieter runs 10.6-11.7 s); 2HG d3 25,571 -> 7,489. Still OVER
+  the 8,086 ms limit on the agent's shared-box reading -> the official `suite_gate.py --measure` re-run.
+- What dominates now: **mulligan bottoming** (no keep table: one full game per legal bottom subset):
+  51-56% of d3 wall, ~64% of d5 / 2HG; the three heaviest d5 s3003 games are 95-98% of it (Q15). 45-99%
+  of units sit in passes aborted at the 25x ceiling (Q16). Payment trials <0.6% self time.
+- Cantrip census + options for next week: `docs/design/niv-cantrip-branching.md`.
+- Disclosures (the agent's): one `cd` in a compound command; two `pkill -f` self-matches; one edit of
+  TurnSolver.cpp mid-compile (the stale probe binary was discarded and rebuilt). It left
+  `.claude/worktrees/niv-perf-base` (detached at `de36ef8ae`) in place.
+
 ### Stage 5j — the 3x cost rule: FAIL (2026-10-18 ~09:45)
 `suite_gate.py --measure decks/NivMizzetCombo` on the niv-aura tree (`d09f881e7` src), the rows of
 `logs/add_niv_rows.py` in place (uncommitted): **124,303.95 ms/game** at the worst searched case
@@ -348,5 +375,23 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
 - **Q13 (s71014: a T1 land-order miss).** Claude's T4 kill (Ferrous Lake, Parun, crack the Servant)
   needs Saprazzan Skerry on T1; the AI plays Spirebluff Canal and is T5 at b20/b200/b2000. A search
   question (land choice), not payment -- open, to look at with next week's cantrip/heuristic work.
+
+- **Q14 (Preordain's scry is a provider prune, not searched).** A cast scry resolves through the
+  provider's `ScryKeepOnTop`; the searched scry axis covers land-ETB scries only. The no-greedy audit
+  lists "cast-scry via ScryKeepOnTop" as a fine provider prune ("extend the scry axis to cast
+  sources"). Two separate questions: (a) search it (up to 5 options per Preordain; moves Hinata2 too);
+  (b) the rule it gets here is `GenericProvider`'s -- keep a land only while < 2 lands are in play --
+  so from turn 3 every Preordain bottoms every land in a deck whose Nivs cost 6. A Niv
+  `ScryKeepOnTop` is a provider heuristic (variants, held-out A/B, the user adopts). Neither taken;
+  `docs/design/niv-cantrip-branching.md`.
+- **Q15 (Niv's bottom-eval setting -- MULLIGAN policy, the user's).** With no keep table, every legal
+  bottom subset plays a full game at play settings, and that is now the deck's dominant cost. The
+  agent's held-out A/B vs current (d3 b10 x150 s61000 / d5 b20 x60 s62000): PD's `bottom_eval_budget_ms 1`
+  d3 +0.013 (2 slower), 0.57x units / d5 +0.033 (1 slower), 0.49x -- the one lever that clears the 3x
+  gate on its own (est. d5 s3003 ~7 s/game); Melira's (depth 0 + top-5 refine) +0.007 / +0.017, 0.77x /
+  0.82x; budget 1 + top-3 refine +0.020 / -0.017, 0.76x / 0.77x. The keep table removes this cost
+  entirely, but the suite gate comes before the keep table. NOT taken.
+- **Q16 (the 25x overrun ceiling is global).** 45-99% of Niv's units sit in passes that ran to it and
+  were thrown away. A settings question across every deck; no change proposed yet.
 
 ## Approved deferrals
