@@ -68,6 +68,7 @@ declare -A DECK_FILE=(
   [landfall]=decks/Landfall/Landfall.cod
   [galadriel]=decks/Galadriel/Galadriel.cod
   [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
+  [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
 )
 declare -A DECK_PROF=(
   [fungusv2]=decks/Fungus/Fungus.profile.json
@@ -103,6 +104,7 @@ declare -A DECK_PROF=(
   [landfall]=decks/Landfall/Landfall.profile.json
   [galadriel]=decks/Galadriel/Galadriel.profile.json
   [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
+  [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -470,6 +472,15 @@ SMOKE_CASES=(
   "bruna 0 1001 1000 0"
   "bruna 3 1001  150 10"
   "bruna 5 1001   75 20"
+  # edf (EldraziDisplacerFlicker): ADDED 2026-10-17. suite_gate --cost on ONE pooled regression-tier run
+  # (Release, quiet box) measured its worst searched case, d5 b20 s3003, at 6,174 ms/game against pd's
+  # 2,695 (the costliest deck with both artifacts) -> 2.29x, budget 8,086. Sized like pd (closest per-game
+  # cost): at Bruna's counts it was 26% of the regression tier. No value leaf / keep table yet, so GT WILL
+  # move when they land; overnight carries the ENTRY set.
+  #HOLD-EDF-MEM "edf2hg 3 1001   15 10"
+  #HOLD-EDF-MEM "edf 0 1001 1000 0"
+  #HOLD-EDF-MEM "edf 3 1001   25 10"
+  #HOLD-EDF-MEM "edf 5 1001   15 20"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -742,6 +753,12 @@ REGRESSION_CASES=(
   "bruna 3 3003  150 10"
   "bruna 5 2002   75 20"
   "bruna 5 3003   75 20"
+  # edf: see the SMOKE block.
+  #HOLD-EDF-MEM "edf 0 2002 1000 0"
+  #HOLD-EDF-MEM "edf 3 2002   40 10"
+  #HOLD-EDF-MEM "edf 3 3003   40 10"
+  #HOLD-EDF-MEM "edf 5 2002   25 20"
+  #HOLD-EDF-MEM "edf 5 3003   25 20"
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
@@ -802,21 +819,25 @@ OVERNIGHT_CASES=(
   # been parked pending the Fungus cost work, which left the deck in two of three tiers.
   # This is the ENTRY SET verbatim (regression-testing skill, "Sizing a deck's overnight rows"):
   # d0 4x2000, d3 4x400 b10, d5 4x300 b20. The retiring incumbent already sat on exactly this shape,
-  # so the new list inherits it unchanged. EXPAND to the full set just BEFORE the keep table is
+  # so the new list inherits it unchanged. EXPANDED to the standard FULL set 2026-10-17 (USER: "put
+  # everything into the latest version" once v1 / candidate-b left the suite). The keep table landed
+  # 2026-10-16 before this resize, so the resize re-defines these keys at the next overnight accept.
+  # Measured 2026-10-17 (regression tier, Release): ~90 ms/searched game -> the full set is < 1 core-h.
+  # (Superseded guidance kept below for the record:) EXPAND to the full set just BEFORE the keep table is
   # adopted, re-accepting these keys table-ABSENT first so the adoption diff is like-for-like -- a GT
   # key does not encode the game count, so a resize re-defines an existing key.
   "fungusv2  0  4004 2000 0"
   "fungusv2  0  6006 2000 0"
   "fungusv2  0  8008 2000 0"
   "fungusv2  0 10010 2000 0"
-  "fungusv2  3  4004  400 10"
-  "fungusv2  3  5005  400 10"
-  "fungusv2  3  6006  400 10"
-  "fungusv2  3  7007  400 10"
-  "fungusv2  5  4004  300 20"
-  "fungusv2  5  5005  300 20"
-  "fungusv2  5  6006  300 20"
-  "fungusv2  5  7007  300 20"
+  "fungusv2  3  4004 1000 20"
+  "fungusv2  3  5005 1000 20"
+  "fungusv2  3  6006 1000 20"
+  "fungusv2  3  7007 1000 20"
+  "fungusv2  5  4004  500 40"
+  "fungusv2  5  5005  500 40"
+  "fungusv2  5  6006  500 40"
+  "fungusv2  5  7007  500 40"
   "slivers 0 4004 2000 0"
   "slivers 0  6006 2000 0"
   "slivers 0  8008 2000 0"
@@ -1228,6 +1249,19 @@ OVERNIGHT_CASES=(
   "bruna 5 5005  300 20"
   "bruna 5 6006  300 20"
   "bruna 5 7007  300 20"
+  # edf: see the SMOKE block. ENTRY SET (Hinata's shape) until its keep table is adopted.
+  #HOLD-EDF-MEM "edf 0 4004 2000 0"
+  #HOLD-EDF-MEM "edf 0 6006 2000 0"
+  #HOLD-EDF-MEM "edf 0 8008 2000 0"
+  #HOLD-EDF-MEM "edf 0 10010 2000 0"
+  #HOLD-EDF-MEM "edf 3 4004  400 10"
+  #HOLD-EDF-MEM "edf 3 5005  400 10"
+  #HOLD-EDF-MEM "edf 3 6006  400 10"
+  #HOLD-EDF-MEM "edf 3 7007  400 10"
+  #HOLD-EDF-MEM "edf 5 4004  300 20"
+  #HOLD-EDF-MEM "edf 5 5005  300 20"
+  #HOLD-EDF-MEM "edf 5 6006  300 20"
+  #HOLD-EDF-MEM "edf 5 7007  300 20"
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
   # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.

@@ -90,6 +90,14 @@
    "total_core_ms": 99915,
    "worst_case": "dragonstorm_regression_d5_s2002"
   },
+  "edf": {
+   "cost_per_game_ms": 6173.56,
+   "jobs": 5,
+   "key": "edf",
+   "tier": "regression",
+   "total_core_ms": 2751188,
+   "worst_case": "edf_regression_d5_s3003"
+  },
   "fivecolour": {
    "cost_per_game_ms": 1479.76,
    "jobs": 6,
@@ -106,21 +114,13 @@
    "total_core_ms": 50178,
    "worst_case": "fluctuator_regression_d3_s2002"
   },
-  "fungus": {
-   "cost_per_game_ms": 405.19,
+  "fungusv2": {
+   "cost_per_game_ms": 89.76,
    "jobs": 5,
-   "key": "fungus",
+   "key": "fungusv2",
    "tier": "regression",
-   "total_core_ms": 170243,
-   "worst_case": "fungus_regression_d5_s2002"
-  },
-  "fungusb": {
-   "cost_per_game_ms": 743.86,
-   "jobs": 5,
-   "key": "fungusb",
-   "tier": "regression",
-   "total_core_ms": 162667,
-   "worst_case": "fungusb_regression_d5_s3003"
+   "total_core_ms": 59724,
+   "worst_case": "fungusv2_regression_d5_s2002"
   },
   "galadriel": {
    "cost_per_game_ms": 2969.1,
@@ -153,22 +153,6 @@
    "tier": "regression",
    "total_core_ms": 1166113,
    "worst_case": "hinata_regression_d5_s2002"
-  },
-  "kitty": {
-   "cost_per_game_ms": 339.1367,
-   "jobs": 5,
-   "key": "kitty",
-   "tier": "regression",
-   "total_core_ms": 323563,
-   "worst_case": "kitty_regression_d3_s3003"
-  },
-  "kittyv2": {
-   "cost_per_game_ms": 1020.76,
-   "jobs": 5,
-   "key": "kittyv2",
-   "tier": "regression",
-   "total_core_ms": 174616,
-   "worst_case": "kittyv2_regression_d5_s2002"
   },
   "kittyv3": {
    "cost_per_game_ms": 389.52,
