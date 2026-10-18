@@ -1724,6 +1724,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.exile_opponent_top_cost = ManaCostFromString(params["exile_opponent_top_cost"].get<std::string>());
     p.exile_opponent_top_may_bounce_on_land =
         params.value("exile_opponent_top_may_bounce_on_land", false);
+    p.draw_target_player            = params.value("draw_target_player", false);
     p.tap_draw_cost_less_per_rad    = params.value("tap_draw_cost_less_per_rad", false);
     p.tap_draw_then_discard         = params.value("tap_draw_then_discard", false);
     p.etb_optional_tapped_rad       = params.value("etb_optional_tapped_rad", 0);

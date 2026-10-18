@@ -4785,6 +4785,55 @@ std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefi
     return { max_affordable };
 }
 
+// See DecisionProvider::DrawXCandidates.
+std::vector<int> DecisionProvider::DrawXCandidates(const GameState& s, const CardDefinition& def,
+                                                   bool target_opponent, int max_affordable) const
+{
+    (void)def;
+    std::vector<int> out;
+    if (max_affordable < 0) { return out; }
+    // HUMAN PLAY sees every legal X for either target -- X = 0 and an over-draw included (both are
+    // legal casts; the executor resolves an over-draw as the loss it is). Widening only: false in
+    // every rollout (HumanPlaySuppress), so the search is unchanged.
+    if (HumanPlayActive())
+    {
+        for (int x = 0; x <= max_affordable; ++x) { out.push_back(x); }
+        return out;
+    }
+    if (target_opponent)
+    {
+        // THE PRUNE (a provider restriction, never the engine's): only the minimal lethal X. A
+        // non-lethal forced draw gives a PASSIVE opponent cards it never uses, so within this turn it
+        // is a pure mana sink, and a larger-than-lethal X spends more for the same kill.
+        // CAVEAT, recorded rather than hidden: it is not dominated ACROSS turns -- with two Strokes
+        // (or one plus recursion) and a large but finite pool, "make them draw 25 now, finish next
+        // turn" is a real line. MTG_UNPRUNED=xspell opens the whole 1..max range to measure it.
+        const int lethal = opponentdeck::ForcedDrawLethalX(s);
+        if (DecisionUnpruned(UnprunedGate::XSpell))
+        {
+            for (int x = 1; x <= max_affordable; ++x) { out.push_back(x); }
+            return out;
+        }
+        if (lethal > 0 && lethal <= max_affordable) { out.push_back(lethal); }
+        return out;
+    }
+    // SELF: capped at our library -- drawing past it loses the game (CR 104.3c), so no autonomous
+    // line may ask for it. Not a single pick: the cap, half of it and 1..3 are all searched.
+    const int lib = static_cast<int>(s.ActivePlayer().library.size());
+    const int cap = std::min(max_affordable, lib);
+    if (cap <= 0) { return out; }
+    if (DecisionUnpruned(UnprunedGate::XSpell))
+    {
+        for (int x = 1; x <= cap; ++x) { out.push_back(x); }
+        return out;
+    }
+    for (int x : { cap, (cap + 1) / 2, 1, 2, 3 })
+    {
+        if (x >= 1 && x <= cap && std::find(out.begin(), out.end(), x) == out.end()) { out.push_back(x); }
+    }
+    return out;
+}
+
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
 
 // MTG_RESTRICTED_MANA_RANK (RestrictedManaRankOn, EngineFlags.h). A colored_creature_only source

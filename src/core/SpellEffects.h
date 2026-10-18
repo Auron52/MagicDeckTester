@@ -36463,3 +36463,24 @@ inline int AuraCastHostByRank(const GameState& state, int controller, int aura_s
     }
     return 0;
 }
+
+// "TARGET PLAYER DRAWS X CARDS" (Stroke of Genius; the draw_x template) -- THE one resolver, called by
+// the executor's EffectHandler::ResolveDrawX and the rollout's ApplyPlanDirect DrawX branch, so the
+// two worlds cannot drift on what X cards at either player does. Returns the cards actually drawn.
+//
+//   * target_opponent: opponentdeck::ForcedDraw -- the deck-out kill (sets opponent_decked when the
+//     draw empties or over-asks their library; see ForcedDraw for why n == library counts too).
+//   * self: drawn into our hand, counted for Fists-of-Flame-style readers, and an OVER-draw (X larger
+//     than our library) sets player_lost_on_draw: drawing from an empty library loses the game
+//     (CR 104.3c / 704.5b), the same flag the draw step and ResolveDrawSpell's deck-out use.
+//
+// X = 0 is a clean no-op either way (CR 107.3: X may be 0; "draws 0 cards" draws nothing).
+inline int PerformDrawX(GameState& state, int controller, bool target_opponent, int n)
+{
+    if (n <= 0) { return 0; }
+    if (target_opponent) { return opponentdeck::ForcedDraw(state, n); }
+    const int drew = DrawIntoHand(state, controller, n, HandEntryReason::Draw);
+    state.players[controller].cards_drawn_this_turn += drew;
+    if (drew < n) { state.player_lost_on_draw = true; }
+    return drew;
+}

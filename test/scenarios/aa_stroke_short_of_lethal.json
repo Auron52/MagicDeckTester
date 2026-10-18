@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Negative twin of aa_stroke_decks_opponent.json: ONE mana short (4 Forest + the drawn-and-played Forest + Alchemist = 6, so X <= 3",
+    "against a 4-card library). The opponent variant is not lethal, the provider does not offer it, and",
+    "no damage clock exists -- so the engine must NOT win on turn 4. Guards against a spurious deck-out",
+    "(e.g. a ForcedDraw that flagged a partial draw, or an empty-is-not-absent regression)."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 4,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "controller": 0,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 4,
+  "expect_no_win": true
+}

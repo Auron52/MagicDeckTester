@@ -584,6 +584,15 @@ struct Action
                                        // rollout; AIEngine::m_cast_riders -> StackEntry::attach_equip_id
                                        // in the executor), both into ResolveAttachTargetEquipment.
                                        // 0 = not an attach spell.
+    int         draw_target      = 0;  // "TARGET PLAYER draws X" (CardParams::draw_target_player, Stroke
+                                       // of Genius): 0 = we draw, 1 = the OPPONENT draws (the
+                                       // opponentdeck::ForcedDraw deck-out). A SEARCHED axis --
+                                       // CollectActions' DrawX branch emits one variant per (target, X)
+                                       // sharing hand_index, so the search picks; every signature folds
+                                       // it (gated on nonzero, so no other deck's key moves). Threaded to
+                                       // resolution through the consume-once CastRiders (apply_one's
+                                       // cast_riders -> PerformDrawX in the rollout; AIEngine::
+                                       // m_cast_riders -> the Player entry.targets -> ResolveDrawX).
     InternedName attach_equip_hand;    // ...and the Equipment target's NAME when it is a same-plan HAND
                                        // cast (cast the Hammer, then Theft it onto the Duelist): the
                                        // subset must cast an Equipment of that name
@@ -848,6 +857,16 @@ inline const CardDefinition* ActionCastDef(const Action& a)
 // (the rollout consumed both), the rollout kept four of the five across a breakpoint truncation and a
 // karoo hold, and the executor never armed them for an alt-cost cast at all (the rollout did).
 // Each field's default is the Action's own "not this kind of cast" value.
+// Is this cast a "draw X" whose cards land in OUR hand (Stroke of Genius at ourselves, or any draw_x
+// spell without a target-player choice)? Such a cast is a PLAIN CANTRIP for the breakpoint machinery
+// (site 3: the drawn cards are re-solved with the turn's remaining mana) -- and an opponent-targeted
+// one is NOT (nothing new reaches our hand). The ONE predicate every twin reads: ApplyPlanDirect's
+// resolution branch, IsPlainCantrip, BpSiteMask and the executor's equip_bp_truncates.
+inline bool IsSelfDrawXCast(const CardDefinition& d, int draw_target)
+{
+    return d.tmpl == CardTemplate::DrawX && (!d.params.draw_target_player || draw_target == 0);
+}
+
 struct CastRiders
 {
     int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
@@ -857,6 +876,7 @@ struct CastRiders
     int      twobrid_colored = 0;    // Action::twobrid_colored (Beseech the Queen)
     int      attach_equip_id = 0;    // Action::attach_equip_id (Magnetic Theft's Equipment target)
     ManaPool land_put{};             // Action::rock_mana on a LandSearchPutsUntapped cast (Search for Tomorrow)
+    int      draw_target     = 0;    // Action::draw_target (Stroke of Genius: 0 self, 1 opponent)
     bool     free_cast       = false;   // Action::free_cast: spend one banked Maelstrom Archangel charge
                                         // AT PAYMENT if the bank holds one (the rollout's apply_one; the
                                         // executor passes Action::free_cast to cast_by_name positionally
@@ -878,6 +898,7 @@ struct CastRiders
         r.free_cast       = a.free_cast;
         r.remand_by       = a.remand_by;
         r.player_target   = a.player_target;
+        r.draw_target     = a.draw_target;
         return r;
     }
     // Copy out and reset: the ONLY way a cast reads them.

@@ -553,6 +553,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 {
                     const CardDefinition* xd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
                     if (xd && xd->card.m_mana_cost.has_x) { tag += " (X=" + std::to_string(a.chosen_x) + ")"; }
+                    // "Target player draws X" (Stroke of Genius): WHO draws is half of what tells two
+                    // variants apart -- "you draw 5" and "the opponent draws 40 (deck-out)" share a name.
+                    if (xd && xd->params.draw_target_player)
+                    { tag += (a.draw_target != 0) ? " \xE2\x86\x92 opponent draws" : " \xE2\x86\x92 you draw"; }
                 }
                 // Terastodon's destroy count K rides chosen_x with no {X} in the cost, and the K fan is
                 // the whole difference between its variants (claude-play sweep gi5: four plans read
@@ -1717,6 +1721,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + "|" + std::to_string(a.sac_count)
                      + "|" + std::to_string(a.phyrexian_life)
                      + "|" + std::to_string(a.twobrid_colored)
+                     + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                      + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "")
                      + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str()) + ";";
             }
@@ -1880,6 +1885,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                     ? "|cv" + std::to_string(a.convoke_green) + "/" + std::to_string(a.convoke_other)
                       + "+" + std::to_string(static_cast<int>(a.convoke_plan_pip))
                       + "/" + std::to_string(static_cast<int>(a.convoke_plan_other)) : std::string())
+                 + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                  + "|" + tgt;
         };
         // The PLAN-level identity: its land, its face, and its actions' payload keys IN VECTOR
@@ -2531,6 +2537,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.phyrexian_life > 0)            { os << ", \"phyrexian_life\": " << ac.phyrexian_life; }
             // Twobrid variant ({2/B}): how many pips this cast pays with their coloured side.
             if (ac.twobrid_colored > 0)           { os << ", \"twobrid_colored\": " << ac.twobrid_colored; }
+            // "Target player draws X" (Stroke of Genius): who draws -- the searched target player.
+            {
+                const CardDefinition* dd = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
+                if (dd && dd->params.draw_target_player)
+                { os << ", \"draw_target\": \"" << (ac.draw_target != 0 ? "opponent" : "self") << "\""; }
+            }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
             // REMAND rider (Action::remand_by): the same bestow lesson -- "cast X" and "cast X,

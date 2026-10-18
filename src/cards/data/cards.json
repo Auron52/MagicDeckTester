@@ -4297,7 +4297,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Target player draws X cards. [Garth One-Eye conjure target only. 'Target player' = self (giving the passive opponent cards is strictly pointless). Drawn inside ApplyGarthActivate with the variant's auto-maxed X.]",
+   "oracle_text": "Target player draws X cards. [Garth One-Eye conjure target only. 'Target player' = self: the opponent target is NOT modelled here because no deck that can conjure this card deals the passive opponent a library (FiveColour holds no DeckTouchesOpponentZones trait), so making them draw would draw from an EMPTY zone and do nothing. That is an engine limitation, not a property of the card: Stroke of Genius models the opponent target (draw_target_player + opponentdeck::ForcedDraw), and this card would need the same param -- and a deck that deals the opponent a library -- for its deck-out mode to exist. Drawn inside ApplyGarthActivate with the variant's auto-maxed X.]",
    "template": "draw_x",
    "parameters": {}
   },
@@ -4358,7 +4358,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Choose five. You may choose the same mode more than once.\n- Target permanent phases out.\n- Target player draws a card.\n- Exile target player's graveyard.\n- Unite the Coalition deals 2 damage to any target.\n- Destroy target artifact or enchantment. [USER-APPROVED COLLAPSE (2026-08-06): modeled as a SEARCHED split S in [0..5] -> S x (2 damage to the opponent face; 'any target' collapses to face, etb_damage_any precedent) + (5-S) x (draw a card; 'target player' = self). The three dead modes are dropped: phase-out has nothing to dodge, the opponent's graveyard is always empty (exiling our own strips Deathrite fuel), and no opponent artifact/enchantment ever exists (destroying our own is never right). One plan variant per S; distinct splits are signature-distinct.]",
+   "oracle_text": "Choose five. You may choose the same mode more than once.\n- Target permanent phases out.\n- Target player draws a card.\n- Exile target player's graveyard.\n- Unite the Coalition deals 2 damage to any target.\n- Destroy target artifact or enchantment. [USER-APPROVED COLLAPSE (2026-08-06): modeled as a SEARCHED split S in [0..5] -> S x (2 damage to the opponent face; 'any target' collapses to face, etb_damage_any precedent) + (5-S) x (draw a card; 'target player' = self -- the opponent target is dropped because FiveColour deals the passive opponent NO library (no DeckTouchesOpponentZones trait), so a forced draw there would draw from an empty zone; that is an engine limitation, not a card property -- see Stroke of Genius's draw_target_player / ForcedDraw for the modelled shape). The three dead modes are dropped: phase-out has nothing to dodge, the opponent's graveyard is always empty (exiling our own strips Deathrite fuel), and no opponent artifact/enchantment ever exists (destroying our own is never right). One plan variant per S; distinct splits are signature-distinct.]",
    "template": "custom",
    "parameters": {
     "modal_choose_n": 5,
@@ -6731,9 +6731,12 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Target player draws X cards. [The deck's draw payoff: with infinite mana this draws the library. 'Target player' = self (handing the passive opponent cards is strictly pointless -- the same collapse Braingeyser carries).]",
+   "oracle_text": "Target player draws X cards. [BOTH TARGETS ARE MODELLED, and the target player is a SEARCHED axis (draw_target_player): CollectActions' DrawX branch emits a self variant and an opponent variant per candidate X (Action::draw_target, sharing hand_index), and the search picks. AT THE OPPONENT it is a deck-out kill: the passive opponent has a library whenever the deck holds this card (draw_target_player is a DeckTouchesOpponentZones trait), and opponentdeck::ForcedDraw sets opponent_decked when X >= their library -- X > library is the CR 704.5b loss itself, and X == library is the same win on the same turn because their simulated end-of-turn draw then has nothing to take (the TakeFromTop precedent). By default the provider offers the opponent only the minimal lethal X (DrawXCandidates): a non-lethal forced draw hands a passive opponent cards it never uses, so this turn it is a pure mana sink -- but NOT across turns (two Strokes and a large finite pool could split a deck-out over two turns), which MTG_UNPRUNED=xspell opens. AT OURSELVES it is a plain cantrip for the breakpoint machinery (site 3: the drawn cards are re-solved with the turn's remaining mana); the provider offers a small searched set of X capped at our library (cap, half, 1..3), and an over-draw (possible only by hand) loses via player_lost_on_draw (CR 104.3c). One shared resolver for both worlds: PerformDrawX (SpellEffects.h). Human play sees every legal X for both targets as main_phase plan variants.]",
    "template": "draw_x",
-   "parameters": {}
+   "parameters": {
+    "targeting": "player",
+    "draw_target_player": true
+   }
   },
   {
    "name": "Vexing Shusher",

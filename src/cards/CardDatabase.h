@@ -3860,6 +3860,18 @@ struct CardParams
     // recorded as a bracket note on the card, not silently dropped.
     bool                    exile_opponent_top_may_bounce_on_land = false;
 
+    // "TARGET PLAYER draws X cards" (Stroke of Genius, a draw_x spell). true = the target player is a
+    // SEARCHED axis: CollectActions emits a self variant and an opponent variant (Action::draw_target,
+    // 0 = self, 1 = opponent), and the opponent variant resolves through opponentdeck::ForcedDraw --
+    // drawing them out of cards is a deck-out kill (CR 704.5b). false = the draw is always ours.
+    //
+    // ALSO a deck trait: it is one of the params GoldFishRunner::DeckTouchesOpponentZones keys on, so
+    // a deck holding such a card is dealt the opponent's library (GameState::opponent_library_dealt).
+    // Without that the opponent variant would draw from an EMPTY zone and silently do nothing.
+    // Deliberately NOT set on Braingeyser / Unite the Coalition: no deck holding them deals an
+    // opponent library, so the opponent half would be a no-op there (their notes say so).
+    bool                    draw_target_player = false;
+
     // AETHER HUB. "When this land enters, you get {E} (an energy counter). / {T}: Add {C}. /
     // {T}, Pay {E}: Add one mana of any color."
     //

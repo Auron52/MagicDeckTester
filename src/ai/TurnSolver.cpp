@@ -3310,6 +3310,8 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         // Magnetic Theft's (Equipment, creature) pair -- two pairs are a substitution, not a subset.
         if (a.attach_equip_id != 0)
         { k += "/MT" + std::to_string(a.attach_equip_id) + ">" + std::to_string(a.enchant_target); }
+        // Stroke of Genius's target player: "draw X" and "make them draw X" are a substitution.
+        if (a.draw_target != 0)       { k += "/DT" + std::to_string(a.draw_target); }
         if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
         if (a.alt_cost)               { k += "/alt"; }
         if (!a.tutor_target.empty())  { k += "/t" + a.tutor_target; }
@@ -16266,6 +16268,9 @@ static std::uint64_t ActionFoldSig(const Action& a)
                  + static_cast<std::uint64_t>(a.madness_arm)); }
     if (a.kind == Action::Kind::SacCreatureOutlet && !a.victim_name.empty())
     { FoldMix(h, 0x5A1Cull); FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.victim_name.str()))); }
+    // Stroke of Genius's target player is a searched axis too; folded only when set (opponent), so
+    // every other deck's signature is byte-identical.
+    if (a.draw_target != 0) { FoldMix(h, 0xD7A6ull + static_cast<std::uint64_t>(a.draw_target)); }
     // Magnetic Theft's Equipment target is a searched axis too (the creature rides enchant_target,
     // above). Folded only when set, so every other deck's signature is byte-identical.
     if (a.attach_equip_id != 0)
@@ -23395,6 +23400,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
             folds(a.attach_equip_hand.str());
             folds(a.trick_hand_target);
         }
+        // Stroke of Genius's target player: a must-fold like devour_count (self vs opponent draw are
+        // two plays). Folded only when set, so every other plan's fingerprint is unchanged.
+        if (a.draw_target != 0) { fold(0x4454ull + static_cast<uint64_t>(a.draw_target) * 977); }   // "DT"
         fold(static_cast<uint64_t>(a.convoke_green) * 37
              + static_cast<uint64_t>(a.convoke_other));
         if (a.convoke_plan_pip != 0 || a.convoke_plan_other != 0)   // Vampires item B; gated on set
@@ -23656,6 +23664,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     { add("steal_spec", StealSpecText(x.steal_spec), StealSpecText(y.steal_spec)); }
     if (x.victim_name != y.victim_name)
     { add("victim_name", x.victim_name.str(), y.victim_name.str()); }
+    if (x.draw_target != y.draw_target)
+    { add("draw_target", std::to_string(x.draw_target), std::to_string(y.draw_target)); }
     if (static_cast<long long>(x.replicate_count) != static_cast<long long>(y.replicate_count))
     { add("replicate_count", std::to_string(static_cast<long long>(x.replicate_count)),
            std::to_string(static_cast<long long>(y.replicate_count))); }
@@ -27272,6 +27282,9 @@ static bool IsPlainCantrip(const Action& a)
     if (!a.remand_by.empty()) { return true; }
     const CardDefinition* d = a.def;
     if (d == nullptr) { return false; }
+    // A self-targeted draw X (Stroke of Genius at ourselves) is a plain cantrip too -- same site,
+    // same resolution branch (ApplyPlanDirect), see IsSelfDrawXCast.
+    if (IsSelfDrawXCast(*d, a.draw_target)) { return true; }
     return d->tmpl == CardTemplate::DrawSpell
         && !d->params.stages_cards && !d->params.expressive_iteration;
 }
@@ -27700,6 +27713,7 @@ bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinitio
     const CardParams& p = def.params;
     return def.tmpl == CardTemplate::DrawUntilNonland
         || def.tmpl == CardTemplate::DrawSpell
+        || def.tmpl == CardTemplate::DrawX     // site 3 when self-targeted (IsSelfDrawXCast)
         || p.draw > 0
         || p.cascade_max_mv > 0
         || p.shuffle_reveal_freecast
@@ -31794,8 +31808,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
 
         // {X} spells: enumerate candidate X values (provider XCandidates narrows the range,
         // the search picks among the variants -- they share hand_index, so they are mutually
-        // exclusive in the plan). Only X-damage (DirectDamage) is modeled today; other X
-        // templates (DrawX) stay skipped until their effect is scaled in BOTH cast paths.
+        // exclusive in the plan). X-damage (DirectDamage), draw X (DrawX, both targets) and the
+        // named branches below are modeled; any other X template is still skipped here.
         // An {X} SOLO-TARGET TRICK (Luxurious Libation) needs the TRICK shape -- per-target
         // variants and copy fan-out -- not this block's X-damage shape. This block ends in an
         // unconditional `continue` for anything whose template is not DirectDamage, so WITHOUT this
@@ -32123,6 +32137,61 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.is_noncreature = !def.card.IsCreature();
                     a.card_mv        = def.card.m_mana_cost.ManaValue();   // 3; X is 0 off the stack
                     actions.push_back(std::move(a));
+                }
+                continue;
+            }
+            // "TARGET PLAYER DRAWS X CARDS" (Stroke of Genius; draw_x). WITHOUT THIS BRANCH THE CARD
+            // IS UNCASTABLE -- the terminal `continue` below drops every non-DirectDamage {X} spell
+            // (docs/design/x-spell-tricks-dropped-from-enumeration.md), and that is exactly how the
+            // card sat for its whole life before the AccomplishedAlchemist analysis.
+            //
+            // TWO SEARCHED AXES: the TARGET PLAYER (draw_target_player: self and opponent variants;
+            // a card without the param only draws for us) and X. Every (target, X) is its own cast
+            // variant sharing hand_index (mutually exclusive), and every signature keys both
+            // (#DX, draw_target folds), so the search -- not this loop -- picks. WHICH X values are
+            // offered is the provider's (DrawXCandidates): by default the minimal lethal X at the
+            // opponent and a small capped set at ourselves; human play gets every legal X.
+            //
+            // Resolution: the opponent variant is opponentdeck::ForcedDraw (the deck-out kill, via
+            // PerformDrawX); the self variant is a plain cantrip whose drawn cards are re-solved at
+            // breakpoint site 3 (IsSelfDrawXCast).
+            if (def.tmpl == CardTemplate::DrawX)
+            {
+                const ManaCost dbase = EffectiveCost(def, state);   // {2}{U}; ManaValue ignores X
+                ManaPool dpool = AvailableManaPool(state);
+                dpool.AddPool(state.floating_mana);                 // the Rolling Earthquake shape
+                int dpips = def.card.m_mana_cost.x_pips; if (dpips < 1) { dpips = 1; }
+                const int dmax = (dpool.Total() - dbase.ManaValue()) / dpips;
+                if (dmax < 0) { continue; }   // cannot pay even the base -> uncastable now
+                constexpr int DMG = 100;      // EvalCard's unit (one card drawn = one damage-equivalent)
+                const int ntargets = def.params.draw_target_player ? 2 : 1;
+                for (int tgt = 0; tgt < ntargets; ++tgt)
+                {
+                    const bool at_opp = (tgt == 1);
+                    const int  lethal = at_opp ? opponentdeck::ForcedDrawLethalX(state) : 0;
+                    for (int xv : ResolveProvider(state).DrawXCandidates(state, def, at_opp, dmax))
+                    {
+                        if (xv < 0 || xv > dmax) { continue; }
+                        Action a;
+                        a.kind           = Action::Kind::CastFromHand;
+                        a.card_name      = ap.hand[i].m_name;
+                        a.hand_index     = i;
+                        ManaCost c = dbase; c.generic += xv * dpips;
+                        a.cost           = c;
+                        a.chosen_x       = xv;
+                        a.draw_target    = tgt;
+                        // ORDERING ONLY (the win itself is detected by the apply: ForcedDraw sets
+                        // opponent_decked, which OpponentHasLost reads). A lethal deck-out is priced
+                        // as a decisive play so a saturated budget reaches it first; a non-lethal
+                        // forced draw (human / unpruned only) is worth nothing to a goldfish.
+                        a.eval           = at_opp ? ((lethal > 0 && xv >= lethal) ? 50 * DMG : 0)
+                                                  : xv * DMG;
+                        a.direct_damage  = 0;
+                        a.is_draw        = !at_opp;
+                        a.is_noncreature = !def.card.IsCreature();
+                        a.card_mv        = def.card.m_mana_cost.ManaValue();   // 3; X is 0 off the stack
+                        actions.push_back(std::move(a));
+                    }
                 }
                 continue;
             }
@@ -44206,7 +44275,7 @@ namespace solvememo
                 || x.replicate_count != y.replicate_count || x.devour_count != y.devour_count
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
                 || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored
-                || x.attach_equip_id != y.attach_equip_id)
+                || x.attach_equip_id != y.attach_equip_id || x.draw_target != y.draw_target)
             { return false; }
         }
         return true;
@@ -45233,7 +45302,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
         const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name);
-        if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
+        if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell
+                   || IsSelfDrawXCast(*dd, fa.draw_target)))
         { cand_draws[j] = 1; }
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
         { cand_held[j] = 1; any_held = true; }
@@ -52142,6 +52212,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // hand, the Irencrag budget) -- then X is cast plainly, as the executor's CastSpellFromHand does.
         const InternedName cast_remand = riders.remand_by;
         const int      cast_player_target = riders.player_target;   // "target player gains N life"
+        const int      cast_draw_tgt   = riders.draw_target;   // Stroke of Genius: 0 self, 1 opponent
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
@@ -52891,6 +52962,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Equipment and did nothing, while the rollout had attached it and counted the kill
             // (Colossus Hammer s1065 gi64: d0 won T3, every searched depth T5 at any budget).
             rec.attach_equip_id    = cast_attach;
+            // ...and Stroke of Genius's searched TARGET PLAYER, for the same reason: replayed without
+            // it, an opponent-targeted deck-out kill inside a continuation would draw OUR library.
+            rec.draw_target        = cast_draw_tgt;
             // ...and the Archangel free-cast intent: replay_recorded hands Action::free_cast to
             // cast_by_name, which spends the charge at payment as this cast just did. A cascade hit is
             // NOT a free_cast rider (the executor's own cascade trigger casts it) -- false, as before.
@@ -53577,8 +53651,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
-        else if (def.tmpl == CardTemplate::DrawSpell)
+        else if (def.tmpl == CardTemplate::DrawX && def.params.draw_target_player && cast_draw_tgt != 0)
         {
+            // "Target player draws X" AT THE OPPONENT (Stroke of Genius): the ForcedDraw deck-out,
+            // through the one resolver the executor's ResolveDrawX also calls (lockstep). No
+            // breakpoint: nothing entered OUR hand, so there is nothing new to re-solve with. A
+            // lethal X sets opponent_decked here, which every within-turn OpponentHasLost check sees.
+            PerformDrawX(state, state.active_player_index, /*target_opponent=*/true, chosen_x);
+        }
+        else if (def.tmpl == CardTemplate::DrawSpell || def.tmpl == CardTemplate::DrawX)
+        {
+            // DrawX AT OURSELVES joins the plain-cantrip shape on purpose: "draw X" is a cantrip whose
+            // count is the searched X, and the new cards must be re-solved with the turn's remaining
+            // mana exactly as a Ponder's are -- same site (3), same deferral, same partition, so the
+            // executor's cantrip twins (equip_bp_truncates, the end-of-main catch-all) need no new
+            // class. The only differences are the count (chosen_x, not params.draw) and the resolver
+            // (PerformDrawX: an over-draw is a loss, CR 104.3c) -- see `is_drawx` below.
+            const bool is_drawx = (def.tmpl == CardTemplate::DrawX);
             // Expressive Iteration: look 3 -> 1 hand / 1 exiled-staged-this-turn / 1 bottom (its own
             // model). Mirrors EffectHandler::ResolveDrawSpell (lockstep). The breakpoint re-solve
             // below then plays the staged (this-turn-only) card.
@@ -53638,8 +53727,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else
             {
                 std::size_t before = ap.hand.size();
+                if (is_drawx) { PerformDrawX(state, state.active_player_index, /*target_opponent=*/false, chosen_x); }
+                else
+                {
                 DrawIntoHand(state, state.active_player_index, n, HandEntryReason::Draw);
                 ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
+                }
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink)
                 {
@@ -59888,7 +59981,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
         const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name);
-        if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
+        if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell
+                   || IsSelfDrawXCast(*dd, fa.draw_target)))
         { cand_draws[j] = 1; }
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
         { cand_held[j] = 1; any_held = true; }
@@ -62705,6 +62799,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                            ? ("#MT" + std::to_string(act.attach_equip_id) + ">"
                               + std::to_string(act.enchant_target) + "/" + act.attach_equip_hand.str()
                               + "/" + act.trick_hand_target) : "")
+                        // DRAW X (Stroke of Genius): X AND the target player are both searched axes
+                        // (CollectActions' DrawX branch). "Draw 3 myself", "draw 7 myself" and "deck
+                        // the opponent" are DIFFERENT SPELLS sharing one name -- the devour / Theft
+                        // lesson: without the key the name-only dedup keeps the highest-sorted
+                        // variant and the rest are unfindable at any budget. Gated on the template
+                        // (no draw_x card was ever cast from hand before), so no other deck moves.
+                        + ((act.def && act.def->tmpl == CardTemplate::DrawX)
+                           ? ("#DX" + std::to_string(act.chosen_x) + "/" + std::to_string(act.draw_target))
+                           : "")
                         // REPLICATE COUNT (CR 702.56, Hatchery Sliver): the devour defect again, on
                         // the axis that was fanned for the USER's no-greedy rule (2026-09-30) and
                         // then never reached the search. CollectActions emits one variant per pinned
@@ -63017,6 +63120,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // `e` token above), so two pairs onto one creature stay distinct variants.
                 if (act.attach_equip_id != 0)
                 { sub.push_back("m" + act.card_name + ">" + std::to_string(act.attach_equip_id)); }
+                // Stroke of Genius: the TARGET PLAYER (the X already rides this key's chosen_x token).
+                if (act.draw_target != 0)
+                { sub.push_back("dt" + act.card_name + ">" + std::to_string(act.draw_target)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }
@@ -64514,6 +64620,9 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (!d->params.cant_be_countered) { continue; }
         }
         if (d->tmpl == CardTemplate::DrawUntilNonland) { mask |= 1 << 1; }
+        // A self-targeted draw X resolves through the plain-cantrip branch (site 3); one aimed at
+        // the opponent opens nothing (IsSelfDrawXCast).
+        else if (IsSelfDrawXCast(*d, a.draw_target)) { mask |= 1 << 3; }
         else if (d->tmpl == CardTemplate::DrawSpell)
         {
             // Staging / EI re-solve inline (site 0); a plain cantrip defers to site 3.
@@ -93059,7 +93168,7 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.soulfire_own_targets, a.crackle_targets, a.ponder_keep, a.evoke ? 1 : 0,
                               a.adventure ? 1 : 0, a.bestow ? 1 : 0, a.gy_exile_mode, a.loyalty_ability,
                               a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
-                              a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other };
+                              a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other, a.draw_target };
             for (int v : f) { k += "|" + std::to_string(v); }
             ks.push_back(std::move(k));
         }

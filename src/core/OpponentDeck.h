@@ -25,6 +25,7 @@
 // card is a bare placeholder; its types come from the definition at read time, per the empty-mask
 // rule in docs/design/ -- never call IsLand() on the zone card itself).
 #include "GameState.h"
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -175,6 +176,46 @@ inline int TakeFromTop(GameState& state, int n)
     }
     if (opp.library.empty()) { state.opponent_decked = true; }
     return taken;
+}
+
+// THE forced-draw primitive: the opponent draws `n` cards ("Target player draws X cards" aimed at
+// them -- Stroke of Genius). Returns the number actually drawn. Called from BOTH worlds through the
+// one shared resolver (PerformDrawX, SpellEffects.h), never open-coded.
+//
+// Two ways this decks them, and both set `opponent_decked` HERE, at resolution:
+//   * n > library: they are asked to draw from an empty library, which is the rules loss itself
+//     (CR 121.4 / 104.3c, checked as a state-based action, CR 704.5b, the next time a player would
+//     receive priority -- i.e. immediately after this spell resolves).
+//   * n == library: the library is EMPTY but nobody has drawn from it yet. That is not the CR loss,
+//     but under this model it is the SAME win on the SAME turn, for exactly TakeFromTop's reason:
+//     our turn always ends with EndOfTurnDraw, nothing can refill the zone, so the loss lands at the
+//     end of THIS turn -- and the reported win turn is this turn either way (EndOfTurnDraw fires
+//     while turn_number is still ours). Setting the flag now is what lets every within-turn win
+//     check (wins_this_turn, the go-off short-circuit, the rollout's OpponentHasLost) SEE the kill.
+//     So the minimal lethal X is max(1, library) -- one card less than "library + 1".
+// n <= 0 (an X = 0 cast) draws nothing and decks nobody, even against an empty library: no draw was
+// asked for. Inert when no library was dealt (the empty-is-not-absent trap, see Deal).
+inline int ForcedDraw(GameState& state, int n)
+{
+    if (!state.opponent_library_dealt || n <= 0) { return 0; }
+    Player& opp = state.players[1];
+    int drawn = 0;
+    for (; drawn < n && !opp.library.empty(); ++drawn)
+    {
+        opp.hand.push_back(opp.library.front());
+        opp.library.erase(opp.library.begin());
+    }
+    if (opp.library.empty()) { state.opponent_decked = true; }
+    return drawn;
+}
+
+// The smallest X that decks the opponent through ForcedDraw this turn, or 0 when no X can (no
+// library dealt, or they are already decked). Shared by the enumerator's lethal-X sizing and the
+// provider's prune, so the two cannot disagree about what "lethal" means.
+inline int ForcedDrawLethalX(const GameState& state)
+{
+    if (!state.opponent_library_dealt || state.opponent_decked) { return 0; }
+    return std::max(1, static_cast<int>(state.players[1].library.size()));
 }
 
 } // namespace opponentdeck

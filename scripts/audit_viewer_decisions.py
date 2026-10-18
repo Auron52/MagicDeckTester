@@ -137,6 +137,11 @@ MANIFEST = {
     # plan-variant sub-decisions -- surfaced inside the main_phase plan list, not their own
     # type. Verified by "does the deck offer >1 plan variant", not a distinct decision type;
     # listed here so the self-guard treats them as MAPPED (not unknown choice params).
+    # Stroke of Genius "TARGET PLAYER draws X" (2026-10-18): WHO draws is a searched plan-variant axis
+    # (Action::draw_target, self / opponent) alongside X, labelled "-> you draw" / "-> opponent draws"
+    # in the main_phase plan list -- the same ride as X itself. No resolution-time prompt: the target
+    # decides the cast's X and its lethality, so it is chosen with the plan, not on the board.
+    "draw_target_player":    ("main_phase",           truthy),
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
     # "You MAY search" (Giant Harbinger). This is a real decision, not inert: TurnSolver.cpp

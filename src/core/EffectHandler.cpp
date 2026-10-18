@@ -935,14 +935,20 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
 void EffectHandler::ResolveDrawX(GameState& state, const StackEntry& entry,
                                    const CardDefinition& def)
 {
-    (void)def;
-    Player& controller = state.players[entry.controller_index];
-    int n = entry.chosen_x.value_or(0);
-    if (n > 0)
+    // "Target player draws X cards". The target player is the SEARCHED Action::draw_target, stamped
+    // onto entry.targets at the cast site (AIEngine::CastSpellFromHand, Targeting::Player); a card
+    // without draw_target_player always draws for its controller. Resolved through the one shared
+    // PerformDrawX, the rollout's twin (lockstep): the opponent half is the ForcedDraw deck-out, and a
+    // self over-draw sets player_lost_on_draw (it used to draw what was left and carry on).
+    bool at_opponent = false;
+    if (def.params.draw_target_player)
     {
-        controller.cards_drawn_this_turn += DrawIntoHand(state, entry.controller_index, n,
-                                                         HandEntryReason::Draw);
+        for (const Target& t : entry.targets)
+        {
+            if (t.type == Target::Type::Player) { at_opponent = (t.player_index != entry.controller_index); break; }
+        }
     }
+    PerformDrawX(state, entry.controller_index, at_opponent, entry.chosen_x.value_or(0));
     MoveToGraveyard(state, entry);
 }
 

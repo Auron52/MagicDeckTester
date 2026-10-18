@@ -1390,6 +1390,23 @@ public:
     virtual std::vector<int> XCandidates(const GameState& s, const CardDefinition& def,
                                          int max_affordable) const = 0;
 
+    // DrawXCandidates -- candidate X values for a "target player draws X" spell (draw_x template,
+    // Stroke of Genius), asked once per TARGET: `target_opponent` false = we draw, true = the opponent
+    // draws (only asked when the card carries draw_target_player). `max_affordable` is the largest X
+    // the flat pool can pay. One cast variant is emitted per (target, returned X); the variants share
+    // hand_index and every signature keys both axes, so the SEARCH picks among them. Empty -> that
+    // target is not offered this turn. Default (DecisionProviders.cpp):
+    //   * opponent: exactly the minimal LETHAL X (opponentdeck::ForcedDrawLethalX) when affordable,
+    //     else nothing -- handing a passive opponent cards short of decking them does nothing this
+    //     turn (see the definition for the one multi-turn caveat);
+    //   * self: a small searched set capped at our library size (an over-draw loses, CR 104.3c) --
+    //     the cap, half of it, and 1..3, so "draw a lot" and "draw a few and keep mana for what I
+    //     find" are both on the menu and the breakpoint re-solve casts what was drawn;
+    //   * HUMAN PLAY / MTG_UNPRUNED(XSpell): every legal X, 0..max for a human (X = 0 and an over-draw
+    //     are legal casts) and 1..max unpruned.
+    virtual std::vector<int> DrawXCandidates(const GameState& s, const CardDefinition& def,
+                                             bool target_opponent, int max_affordable) const;
+
     // OfferFailToFindPut -- should the autonomous search also be offered a FAIL-TO-FIND cast of an
     // X-capped put-tutor (Chord of Calling / Green Sun's Zenith: "search ... may fail to find", CR
     // 701.19b), at X = 0? The enumerator's X axis is otherwise the (target, X = its MV) pairs, so a

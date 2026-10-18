@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Stroke of Genius AT THE OPPONENT decks them this turn (AccomplishedAlchemist chunk B, 2026-10-18).",
+    "",
+    "Opponent library: 4. Seven mana (5 Forest + the turn's drawn-and-played Forest + Accomplished Alchemist, whose one any-colour mana is the",
+    "only BLUE source) pays {X}{2}{U} at exactly X = 4 = their library, the minimal lethal X",
+    "(opponentdeck::ForcedDrawLethalX). ForcedDraw empties the library and sets opponent_decked at",
+    "resolution, so the win is THIS turn (4) -- their end-of-turn draw would find nothing either way.",
+    "",
+    "Guards three things at once: (1) the DrawX X-variant enumeration exists at all (before chunk B every",
+    "hand-cast {X} draw spell was dropped from enumeration); (2) the target player is searched and the",
+    "opponent variant reaches the executor as an OPPONENT target (AIEngine Targeting::Player from the",
+    "draw_target rider -> ResolveDrawX -> PerformDrawX); (3) the exact payer funds {U} + X off the",
+    "Alchemist's single-colour burst. No other clock exists: opponent life 20, nothing that deals damage."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 4,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "controller": 0,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 4,
+  "expect_win_turn": 4
+}

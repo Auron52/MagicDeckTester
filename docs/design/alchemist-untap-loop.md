@@ -56,6 +56,10 @@ SEARCHED (one Action variant per payoff K). Ceiling = safety cap only, never a l
   self/opponent target; rollout DrawX branch; `opponentdeck::ForcedDraw` (deck-out when n > library, and
   when the library empties — TakeFromTop reasoning); self over-draw sets `player_lost_on_draw`;
   `DeckTouchesOpponentZones`; self-draw breakpoint class.
+  **LANDED 2026-10-18** (see analysis-AccomplishedAlchemist.md "Chunk B"). For chunk C: the enumerator
+  sizes Stroke's X from the PRE-PLAN flat pool, so X funded by mana the same plan creates (the loop's
+  untaps, an Alchemist yield raised by a same-main lifegain) is not offered -- the loop's resolution must
+  either size the finisher itself (the SpendSurplusOnExile shape) or re-solve after the mana exists.
 * **Chunk C — untap primitives + loop + provider.** Crab Umbra (`untap_enchanted_cost`), Galvanic
   (`soulbond_grants_untap_self_cost`; partner = searched), Staff (`self_untap_cost`, `tap_lifegain_flat`,
   untap-any-creature, `tap_draw_cost`; tap-target ability = inert deferral), Seedcradle Witch

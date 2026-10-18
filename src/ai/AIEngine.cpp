@@ -6715,7 +6715,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Does casting `nm` end our section? Same predicate the rollout arms on, so the two worlds
     // truncate at exactly the same cast. Evaluated post-resolution, where the Equipment and the
     // watcher are both on the battlefield.
-    auto equip_bp_truncates = [&](const std::string& nm) -> bool
+    auto equip_bp_truncates = [&](const std::string& nm, int draw_target) -> bool
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
         if (d == nullptr) { return false; }
@@ -6736,8 +6736,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // search scored full-tail-greedy) must execute its tail, and a non-committed greedy plan
         // (bp_choice < 0 always) is untouched.
         if ((TurnSolver::PartitionCantrip() || (TurnSolver::BpNodeSearch() && plan.bp_choice >= 0))
-            && d->tmpl == CardTemplate::DrawSpell
-            && !d->params.expressive_iteration && !d->params.stages_cards)
+            && ((d->tmpl == CardTemplate::DrawSpell
+                 && !d->params.expressive_iteration && !d->params.stages_cards)
+                // A self-targeted draw X takes the rollout's plain-cantrip branch too (IsSelfDrawXCast;
+                // the Action's searched target rides in, since the card alone cannot say).
+                || IsSelfDrawXCast(*d, draw_target)))
         { return true; }
         // MTG_BP_NODE_D56: the node hosts the other two DEFERRED classes too, and each one's
         // partition needs its executor twin here for exactly the reason the cantrip clause above
@@ -7030,7 +7033,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (stage_draw_break(BpNameOf(a))) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a))) { bp_trunc_exec = true; break; }
+            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a), a.draw_target)) { bp_trunc_exec = true; break; }
         }
     }
     else
@@ -7235,7 +7238,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (stage_draw_break(BpNameOf(a))) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a))) { bp_trunc_exec = true; break; }
+            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a), a.draw_target)) { bp_trunc_exec = true; break; }
         }
     }
     }
@@ -7327,7 +7330,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const bool clean_bp_inline = !(fd_plan_committed && ExecCleanBpDeferredOn())
                                   || (clean_bpd != nullptr && TurnSolver::EquipmentDrawBreakpointInline()
                                       && TurnSolver::EquipmentDrawBreakpoint(state, *clean_bpd));
-        if (s_full_depth && clean_bp_inline && equip_bp_truncates(BpNameOf(a)))
+        if (s_full_depth && clean_bp_inline && equip_bp_truncates(BpNameOf(a), a.draw_target))
         {
             if (fd_plan_committed)
             { if (cast_paid) { replay_segment(); } }
@@ -7349,7 +7352,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 resolve_draw_breakpoint(0);
             }
         }
-        if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a))) { bp_trunc_exec = true; break; }
+        if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a), a.draw_target)) { bp_trunc_exec = true; break; }
     }
     }
     }
@@ -8418,6 +8421,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             Target t;
             t.type         = Target::Type::Player;
             t.player_index = opp_index;
+            // "Target player draws X" (Stroke of Genius): WHICH player is the searched
+            // Action::draw_target, carried here as a consume-once cast rider (0 = us, 1 = the
+            // opponent). Read at resolution by ResolveDrawX -> PerformDrawX, the rollout's twin.
+            // Param-gated: every other Player/Any spell keeps the opponent target.
+            if (def->params.draw_target_player)
+            { t.player_index = riders.draw_target != 0 ? opp_index : state.active_player_index; }
             entry.targets.push_back(t);
             break;
         }

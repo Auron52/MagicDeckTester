@@ -560,6 +560,9 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
             const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
             if (!def) { continue; }
             if (def->params.exile_opponent_top_cost.has_value()) { return true; }
+            // "Target player draws X" aimed at the opponent (Stroke of Genius): a forced-draw
+            // deck-out needs a library to empty (opponentdeck::ForcedDraw).
+            if (def->params.draw_target_player) { return true; }
         }
         return false;
     };

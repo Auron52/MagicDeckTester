@@ -13,12 +13,16 @@
 //  * Eternal Witness    etb_return_gy_to_hand (searched graveyard pick).
 //  * Ezuri              team pump +3/+3 to Elves only, at combat (ApplyFirebreathing).
 //  * deck_reads_lifegain_in_play also scans a WISH-REACHABLE sideboard.
+//  * Stroke of Genius   (chunk B) draw_target_player: ForcedDraw deck-out boundaries, the searched
+//                       (target, X) variants, executor == rollout, and the opponent-library trait.
 #include <doctest/doctest.h>
 
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
+#include "core/EffectHandler.h"
 #include "core/GameState.h"
+#include "core/OpponentDeck.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 #include "deck/DeckLoader.h"
@@ -373,4 +377,179 @@ TEST_CASE("Ezuri: {2}{G}{G}{G} gives attacking ELVES +3/+3, not other creatures"
     CHECK(ByNumAa(s, ez)->EffectiveToughness() == 5);
     CHECK(ByNumAa(s, ae)->EffectivePower() == 4);
     CHECK(ByNumAa(s, bb)->EffectivePower() == 2);
+}
+
+
+// ===================================================================================== chunk B
+namespace
+{
+// An opponent library of `n` placeholder cards, dealt (opponent_library_dealt) -- the fixture shape.
+void DealOppAa(GameState& s, int n)
+{
+    s.opponent_library_dealt = true;
+    for (int k = 0; k < n; ++k)
+    {
+        Card c = DefAa("Forest").card; c.m_number = opponentdeck::kNumberBase + k;
+        s.players[1].library.push_back(c);
+    }
+}
+
+const Action* StrokeCastAa(const TurnSolver::Plan& p)
+{
+    if (!CastsOnlyAa(p, "Stroke of Genius")) { return nullptr; }
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand) { return &a; } }
+    return nullptr;
+}
+}   // namespace
+
+TEST_CASE("ForcedDraw: deck-out boundaries (n = L-1, L, L+1; empty before; X = 0; no library)")
+{
+    EnsureCardsAa();
+    {   // n < L: draws, no deck-out
+        GameState s; DealOppAa(s, 5);
+        CHECK(opponentdeck::ForcedDraw(s, 4) == 4);
+        CHECK(s.players[1].library.size() == 1);
+        CHECK(s.players[1].hand.size() == 4);
+        CHECK_FALSE(s.opponent_decked);
+        CHECK_FALSE(OpponentHasLost(s));
+    }
+    {   // n == L: the library is emptied -> decked NOW (their end-of-turn draw is certain this turn)
+        GameState s; DealOppAa(s, 5);
+        CHECK(opponentdeck::ForcedDraw(s, 5) == 5);
+        CHECK(s.players[1].library.empty());
+        CHECK(s.opponent_decked);
+        CHECK(OpponentHasLost(s));
+    }
+    {   // n > L: asked to draw from an empty library -- the CR 704.5b loss itself
+        GameState s; DealOppAa(s, 5);
+        CHECK(opponentdeck::ForcedDraw(s, 6) == 5);
+        CHECK(s.opponent_decked);
+    }
+    {   // library ALREADY empty: any draw decks them; X = 0 asks for no draw and decks nobody
+        GameState s; DealOppAa(s, 0);
+        CHECK(opponentdeck::ForcedDraw(s, 0) == 0);
+        CHECK_FALSE(s.opponent_decked);
+        CHECK(opponentdeck::ForcedDraw(s, 1) == 0);
+        CHECK(s.opponent_decked);
+    }
+    {   // no library dealt: empty is not absent -- a forced draw is inert, never a spurious win
+        GameState s;
+        CHECK(opponentdeck::ForcedDraw(s, 3) == 0);
+        CHECK_FALSE(s.opponent_decked);
+        CHECK(opponentdeck::ForcedDrawLethalX(s) == 0);
+    }
+    {   // the lethal X the enumerator sizes from
+        GameState s; DealOppAa(s, 7);
+        CHECK(opponentdeck::ForcedDrawLethalX(s) == 7);
+        GameState e; DealOppAa(e, 0);
+        CHECK(opponentdeck::ForcedDrawLethalX(e) == 1);
+    }
+}
+
+TEST_CASE("PerformDrawX: a self over-draw is a loss; within the library it is a plain draw")
+{
+    GameState s = FreshAa();                       // 10 Forests in our library
+    CHECK(PerformDrawX(s, 0, /*target_opponent=*/false, 4) == 4);
+    CHECK(s.players[0].hand.size() == 4);
+    CHECK(s.players[0].cards_drawn_this_turn == 4);
+    CHECK_FALSE(s.player_lost_on_draw);
+    CHECK(PerformDrawX(s, 0, false, 7) == 6);      // only 6 left
+    CHECK(s.player_lost_on_draw);
+}
+
+TEST_CASE("Stroke of Genius: the search is offered BOTH targets; the opponent variant is the lethal X")
+{
+    GameState s = FreshAa();
+    for (int k = 0; k < 7; ++k) { PutAa(s, "Island"); }   // 7 mana: base {2}{U} + X up to 4
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 4);                                      // lethal X = 4, affordable exactly
+    std::set<int> self_x; std::set<int> opp_x;
+    bool opp_kills = false, self_draws = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        const Action* a = StrokeCastAa(p);
+        if (a == nullptr) { continue; }
+        (a->draw_target != 0 ? opp_x : self_x).insert(a->chosen_x);
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, /*is_pre_combat=*/true);
+        if (a->draw_target != 0 && a->chosen_x == 4)
+        {
+            opp_kills = OpponentHasLost(t) && t.players[1].hand.size() == 4;
+            CHECK(t.players[0].hand.empty());             // nothing reached OUR hand
+        }
+        if (a->draw_target == 0 && a->chosen_x == 4)
+        {
+            self_draws = (t.players[0].hand.size() == 4) && !OpponentHasLost(t)
+                      && t.players[1].library.size() == 4;
+        }
+    }
+    CHECK(opp_x == std::set<int>{ 4 });                   // the minimal lethal X only (provider prune)
+    CHECK(self_x == std::set<int>{ 1, 2, 3, 4 });         // cap (4), half (2), 1..3 -- searched, not picked
+    CHECK(opp_kills);
+    CHECK(self_draws);
+
+    // One mana short of lethal: the opponent variant is not offered at all; self still is.
+    GameState u = FreshAa();
+    for (int k = 0; k < 6; ++k) { PutAa(u, "Island"); }
+    HandAa(u, "Stroke of Genius");
+    DealOppAa(u, 4);
+    bool any_opp = false, any_self = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(u, true))
+    {
+        const Action* a = StrokeCastAa(p);
+        if (a == nullptr) { continue; }
+        if (a->draw_target != 0) { any_opp = true; } else { any_self = true; }
+    }
+    CHECK_FALSE(any_opp);
+    CHECK(any_self);
+}
+
+TEST_CASE("Stroke of Genius: the executor's ResolveDrawX and the rollout reach the same state")
+{
+    for (int target : { 0, 1 })
+    {
+        GameState s = FreshAa();
+        DealOppAa(s, 6);
+        const CardDefinition& def = DefAa("Stroke of Genius");
+        // Executor: the stack entry the cast site builds (Player target = the rider's draw_target).
+        GameState ex = s;
+        StackEntry e;
+        e.type = StackEntry::EntryType::Spell;
+        e.source = def.card; e.source.m_number = 4242;
+        e.controller_index = 0;
+        e.chosen_x = 6;
+        Target t; t.type = Target::Type::Player; t.player_index = target;
+        e.targets.push_back(t);
+        EffectHandler::Resolve(ex, e, def);   // public dispatch -> ResolveDrawX
+        // Rollout twin: the one shared resolver.
+        GameState ro = s;
+        PerformDrawX(ro, 0, target != 0, 6);
+        CHECK(ex.players[0].hand.size() == ro.players[0].hand.size());
+        CHECK(ex.players[1].hand.size() == ro.players[1].hand.size());
+        CHECK(ex.players[0].library.size() == ro.players[0].library.size());
+        CHECK(ex.players[1].library.size() == ro.players[1].library.size());
+        CHECK(ex.opponent_decked == ro.opponent_decked);
+        CHECK(ex.opponent_decked == (target == 1));
+        CHECK(ex.player_lost_on_draw == ro.player_lost_on_draw);
+    }
+}
+
+TEST_CASE("Stroke of Genius: draw_target_player deals the opponent a library; Braingeyser does not")
+{
+    EnsureCardsAa();
+    CHECK(DefAa("Stroke of Genius").params.draw_target_player);
+    CHECK_FALSE(DefAa("Braingeyser").params.draw_target_player);
+    Decklist with;
+    with.mainboard.push_back(DefAa("Forest").card);
+    with.sideboard.push_back(DefAa("Stroke of Genius").card);   // the sideboard counts too (Living Wish)
+    CHECK(GoldFishRunner::DeckTouchesOpponentZones(with));
+    Decklist without;
+    without.mainboard.push_back(DefAa("Forest").card);
+    without.mainboard.push_back(DefAa("Braingeyser").card);
+    CHECK_FALSE(GoldFishRunner::DeckTouchesOpponentZones(without));
+    // The real deck file: dealt.
+    Decklist aa = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath(
+        "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod"));
+    CHECK(GoldFishRunner::DeckTouchesOpponentZones(aa));
 }
