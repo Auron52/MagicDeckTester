@@ -346,6 +346,14 @@ MANIFEST = {
     # discard). Falkenrath Gorger's grant creates the same decision for every Vampire creature card.
     "madness_cost":                    ("madness",     truthy),
     "grants_madness_creature_subtype": ("madness",     truthy),
+    # ---- Vampires B (2026-10-18; tools/play/DECISIONS.md `target` / `dig` reuse rows) ----
+    # Captivating Vampire's "Tap five untapped Vampires you control: Gain control of TARGET creature":
+    # the creature, then the five bodies (the cost), are board-click `target` prompts asked at
+    # resolution (SpellEffects.h ApplyPermAbility TapSubtypeSteal -> PayTapSubtypeCost).
+    "steal_tap_count":                 ("target",      positive),
+    # Bloodline Keeper's {B} transform IN COMBAT (after Mavren Fein's attack token): the `dig` reuse
+    # "(combat transform)" (ApplyCombatTransforms). The main-phase transform is the transform= verb.
+    "transform_back_name":             ("dig",         truthy),
     # Slaughter-Priest's "Sacrifice another creature or an enchantment" widens the sac-outlet
     # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
     "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
@@ -602,6 +610,11 @@ BOARD_ACTIVATIONS = {
     # hand (the Deathrite `gyexile=` case), and the board_acts affordability probe cannot separate
     # them either because it only picks up costs with a positive mana value. cost_from None = free.
     "tap_lifegain_per_subtype":                  ("verb:taplife",   truthy,   None),
+    # Vampires B: Captivating Vampire's steal (no mana -- five untapped Vampires) and Bloodline
+    # Keeper's {B} transform get their OWN verbs for the taplife reason: the list runs two copies of
+    # each, so `cast=<name>` cannot be told apart from hard-casting the copy in hand.
+    "steal_tap_count":                           ("verb:steal",     positive, None),
+    "transform_cost":                            ("verb:transform", truthy,   "transform_cost"),
     # Evolving Wilds / Terramorphic Expanse ({T}, Sacrifice -- cost ""), Myriad Landscape ({2}, {T},
     # Sacrifice) and Khalni Heart Expedition (three quest counters + sacrifice): the landsearch= verb
     # (a land is never cast; a Khalni may also sit in hand).
@@ -1399,6 +1412,12 @@ INERT_PARAMS = {
     "keyword_grant_subtypes": "Rick's grant recipients ('Humans you control') -- exhaustive, no choice",
     "daybound_back_name": "Brutal Cathar's night face -- day/night is a turn-based action (CR 726.3a), not a player choice",
     "nightbound_front_name": "Moonrage Brute's day face -- day/night is a turn-based action (CR 726.3a), not a player choice",
+    # ---- Vampires B (2026-10-18) ----
+    "steal_tap_subtype": "Captivating Vampire's cost detail ('Vampires') -- rides steal_tap_count -> target / verb:steal",
+    "steal_adds_subtype": "Captivating Vampire's 'It becomes a Vampire' -- a fixed characteristic of the effect, no choice",
+    "transform_front_name": "Lord of Lineage's front face -- the card it becomes OFF the battlefield (CR 712.8a), no choice",
+    "transform_min_controlled_subtype": "Bloodline Keeper's activation restriction detail (rides transform_cost -> verb:transform)",
+    "transform_min_controlled_count": "Bloodline Keeper's activation restriction detail (rides transform_cost -> verb:transform)",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -1552,6 +1571,17 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 # targeted seed-search cannot reach either: a forward driver can only cast cards, it cannot stock a
 # graveyard. Keep this list SHORT and every entry backed by a test that exercises the human chooser.
 STATE_GATED_TYPES = {
+    ("transform_back_name", "dig"):
+        "Bloodline Keeper's in-combat transform window is asked only when the five-Vampire restriction holds "
+        "at declare-attackers -- in this list only via Mavren Fein's attack token -- with {B} still open; a "
+        "forward sweep rarely builds that board. Pinned by test/unit/test_vampires_lords.cpp 'Combat window: "
+        "Mavren Fein's token makes the fifth Vampire ...' and the hand-built --claude-play repro in "
+        "docs/design/analysis-Vampires.md (cluster B).",
+    ("steal_tap_count", "target"):
+        "Captivating Vampire's steal needs five untapped Vampires AND an opponent creature at once (a "
+        "late-game, spawn-pattern-dependent board); its target + five-body prompts are pinned by the "
+        "hand-built --claude-play repro in docs/design/analysis-Vampires.md (cluster B) and "
+        "test/unit/test_vampires_lords.cpp 'Steal effect ...'.",
     ("etb_return_equipment_from_gy", "dig"):
         "Forge Anew asks only with TWO OR MORE Equipment in the graveyard (one is a forced pick, none has no "
         "target), and Equipment almost never reaches this list's graveyard; the multi-card prompt is pinned by "

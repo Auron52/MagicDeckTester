@@ -283,6 +283,12 @@ struct Action
     // streaming / .empty()/.c_str() covered in NameRegistry.h). Byte-identical: values unchanged,
     // and no site orders by the POINTER (the one lexicographic sort compares .str()).
     Kind        kind           = Kind::CastFromHand;
+    // VAMPIRES B (2026-10-18): Captivating Vampire's SEARCHED TAP SET -- the interned id of the
+    // identity-folded five-body multiset an ActivatePermAbility TapSubtypeSteal taps (StealTapSpec,
+    // SpellEffects.h; the target rides enchant_target). 0 = none / unpinned (human play asks). Placed
+    // HERE, in the 4-byte hole after `kind`, so sizeof(Action) stays 480. The id's VALUE depends on
+    // interning order, so every key folds its CONTENT (StealSpecFold), never the id.
+    int         steal_spec     = 0;
     InternedName card_name;            // source card (creature name for ActivateVial)
     int         hand_index     = -1;   // hand index of the source/creature at enumeration time
     // INTERCHANGEABLE-SOURCE FOLD (MTG_FOLD_ACT_SOURCES). Nonzero = this activation's source was
@@ -781,6 +787,23 @@ inline ManaCost OutletOwnCost(const Action& a)
     return c;
 }
 inline MadnessPin MadnessPinOf(const Action& a) { return MadnessPin{ a.madness_choice, a.madness_arm }; }
+// Vampires B. // A hand-source activation (needs_cast_mask bit0) names the hand copy's number; the cast may have taken
+// a different copy of the same name, so the apply re-resolves BY NAME (the hand-Pod / hand go-off
+// precedent): the lowest-numbered permanent of that name we control that entered this turn.
+inline int ResolveHandSourceActivation(const GameState& state, const Action& a)
+{
+    if ((a.needs_cast_mask & 1) == 0 || a.kind != Action::Kind::ActivatePermAbility) { return a.sac_source_id; }
+    const int me = state.active_player_index;
+    int best = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.card.m_number == a.sac_source_id) { return a.sac_source_id; }
+        if (p.card.m_name == a.card_name && p.entered_this_turn && (best == 0 || p.card.m_number < best))
+        { best = p.card.m_number; }
+    }
+    return best != 0 ? best : a.sac_source_id;
+}
 // The definition an Action casts (its cached def, else the database entry by name) -- the convoke apply
 // sites read the card's convoke rules (pip colour; Chord's legacy rules) off it.
 inline const CardDefinition* ActionCastDef(const Action& a)
@@ -1285,6 +1308,11 @@ public:
         //     that point, battlefield order; -1 = no crack). Rides GameState::
         //     scripted_combat_land_search_crack; the cracks' land picks continue the attack stream.
         int combat_crack_choice = -1;
+        //   combat_transform_choice -- Bloodline Keeper's {B} transform IN COMBAT (Vampires B), after
+        //     Mavren Fein's attack token made the fifth Vampire and before damage: a bitmask over the
+        //     transform sources we control at that point, battlefield order; -1 = hold. Rides GameState::
+        //     scripted_combat_transform (ApplyCombatTransforms). Folded wherever combat_crack_choice is.
+        std::int8_t combat_transform_choice = -1;
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's
@@ -2520,6 +2548,11 @@ public:
     // and this returns immediately when every rank is 0 -- so no list is copied, no sort runs, and
     // every deck that declares no order is byte-identical.
     static void OrderTrailingActivations(const GameState& state, std::vector<Action>& acts);
+    // VAMPIRES B: does the pass hold a count-READING activation (Captivating Vampire's steal, Bloodline
+    // Keeper's transform)? Then OrderTrailingActivations applies the engine's COUNT BANDS (raisers ->
+    // the steal -> the transform -> creature sacrifices) ahead of the provider rank, and both trailing
+    // passes must call it even when no provider rank is set. False for every other deck's lists.
+    static bool TrailingHasCountBands(const std::vector<Action>& acts);
 
     // COLOUR-CRITICAL reserve (MTG_COLOR_RESERVE, default off). The batch pre-pay solves the turn's
     // mana JOINTLY, but it declines on most interesting turns -- producers, {X} spells, per-target
@@ -2745,6 +2778,15 @@ public:
         // human meant the crack or a hard cast. WHICH lands it finds is asked at resolution (the
         // `tutor_etb` prompts), never on the line. EMPTY keeps the legacy name-in-casts matching.
         std::vector<std::string> land_searches;
+        // "steal=<source name>" / "transform=<source name>" (Vampires B): Captivating Vampire's "Tap five
+        // untapped Vampires you control: Gain control of target creature" (PermAbilityMode::
+        // TapSubtypeSteal) and Bloodline Keeper's "{B}: Transform this creature" (TransformSelf), naming
+        // the SOURCE. Their own verbs for the taplife reason: the list runs two copies of each card, so
+        // `cast=Captivating Vampire` cannot say whether the human meant the board activation or a hard
+        // cast of the copy in hand. The steal's target and its five bodies are asked at resolution
+        // (board-click `target`), never on the line. EMPTY keeps the legacy name-in-casts matching.
+        std::vector<std::string> steals;
+        std::vector<std::string> transforms;
         // "auraswap=<Aura brought in>": Arcanum Wings' main-phase Aura swap (Action::Kind::AuraSwap),
         // naming the hand Aura it puts onto the Wings' host. ALWAYS its own verb (no legacy split --
         // the kind is new): `cast=Colossification` and swapping Colossification in are different

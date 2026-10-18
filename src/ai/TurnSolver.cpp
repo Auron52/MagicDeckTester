@@ -883,6 +883,7 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
     return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
         || p.attack_land_search_choice >= 0    // Primeval Titan's attack pick: read in THIS combat only
         || p.combat_crack_choice >= 0          // ...and the in-combat Khalni crack
+        || p.combat_transform_choice >= 0      // ...and Bloodline Keeper's in-combat transform (Vampires B)
         || p.attack_attach_choice >= 0         // Raubahn's attack attach: read in THIS combat only
         || p.fb_hold_choice >= 0;              // the searched banked hold: read at THIS combat's pump only
 }
@@ -1523,6 +1524,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("aattach", first.attack_attach_choice != dup.attack_attach_choice);
     pl("clandfall", first.combat_landfall_target_choice != dup.combat_landfall_target_choice);
     pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
+    pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
@@ -9333,6 +9335,37 @@ static int CountAttackGatherPump(const GameState& state, int active,
     return after - before;
 }
 
+// Projection twin of Bloodline Keeper's IN-COMBAT transform (ApplyCombatTransforms; Vampires B): the
+// extra damage THIS combat, by running the very same helpers on a COPY -- Mavren Fein's attack token
+// first (it is what can make the fifth Vampire), then the pinned transforms -- and summing the
+// attackers' combat power after minus before (the CountAttackGatherPump shape). Free unless the
+// combat-transform pin is set, which only the Vampires axis does.
+static int CountCombatTransformPump(const GameState& state, int active,
+                                    const std::vector<const Permanent*>& attackers)
+{
+    if (state.scripted_combat_transform <= 0 || attackers.empty()) { return 0; }
+    std::vector<int> atk_idx;
+    std::vector<int> nums;
+    int before = 0;
+    for (const Permanent* p : attackers)
+    {
+        atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
+        nums.push_back(p->card.m_number);
+        before += std::max(0, CombatPowerOf(*p, state)) * (CreatureHasDoubleStrike(*p, state) ? 2 : 1);
+    }
+    GameState t = state;
+    RevealLogPause quiet;   // a projection never asks a human or logs
+    FireAttackOneOrMoreTokens(t, active, atk_idx);
+    ApplyCombatTransforms(t, active, atk_idx);
+    int after = 0;
+    for (const int qi : RefindByNumberInOrder(t, nums))
+    {
+        const Permanent& q = t.battlefield[static_cast<std::size_t>(qi)];
+        after += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
+    }
+    return after - before;
+}
+
 bool TurnSolver::IsLandSearchActivation(const Action& a)
 {
     return a.kind == Action::Kind::ActivatePermAbility
@@ -9568,6 +9601,8 @@ static int PendingAttackDamageImpl(const GameState& state)
     dmg += CountAttackLandSearchPump(state, active, attackers);
     // Raubahn's attack attach: the moved Equipment lands on an attacker THIS combat.
     dmg += CountAttackAttachPump(state, active, attackers);
+    // Bloodline Keeper's in-combat transform (Vampires B): Lord of Lineage's +2/+2 lands THIS combat.
+    dmg += CountCombatTransformPump(state, active, attackers);
     // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
     // resolved through the same ResolveAttackModalMode the combat uses, so the projection cannot
     // credit damage a mode-B trigger will not deal (the overshoot/fd-diverge class).
@@ -9834,6 +9869,9 @@ struct AttackTapCtx
     // takes out of the attack, or -1.
     std::vector<signed char> cand_bit;
     std::vector<int>         bit_number;                      // bit -> that creature's card number
+    // Per candidate, SEVERAL attackers at once (Vampires B: Captivating Vampire's steal taps up to five
+    // bodies as its cost -- the ATTACK-class slots of its tap spec). Empty unless a steal is a candidate.
+    std::vector<std::uint64_t> cand_mask;
     struct Entry
     {
         std::uint64_t mask = 0;
@@ -10196,6 +10234,51 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             set_bit(j, a.sac_source_id);
         }
     }
+    // Vampires B: a steal's ATTACK-class bodies are tapped as its COST, so they do not attack -- the
+    // projection must count them out too, or plans holding a steal are over-scored (ordering and
+    // projection only: the rollout is exact, a tapped body fails CanAttackFull). The class's
+    // lowest-numbered members, as ResolveStealBodies takes them.
+    if (pending_atk > 0)
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::ActivatePermAbility || a.steal_spec == 0) { continue; }
+            const StealTapSpec* spec = stealspec::Get(a.steal_spec);
+            if (spec == nullptr) { continue; }
+            std::vector<int> taken;
+            for (int si = 0; si < spec->n && si < 8; ++si)
+            {
+                const int v = spec->slot[static_cast<std::size_t>(si)];
+                if (v <= 0) { continue; }
+                const Permanent* rep = own_perm(v);
+                if (rep == nullptr || StealBodyIsFree(state, *rep)) { continue; }
+                const std::uint64_t key = StealAttackBodyKey(state, *rep);
+                const Permanent* best = nullptr;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != active || q.tapped || StealBodyIsFree(state, q)) { continue; }
+                    if (std::find(taken.begin(), taken.end(), q.card.m_number) != taken.end()) { continue; }
+                    if (StealAttackBodyKey(state, q) != key) { continue; }
+                    if (best == nullptr || q.card.m_number < best->card.m_number) { best = &q; }
+                }
+                if (best == nullptr) { continue; }
+                taken.push_back(best->card.m_number);
+                if (!attacker(best)) { continue; }
+                int bit = -1;
+                for (int b = 0; b < static_cast<int>(ctx.bit_number.size()); ++b)
+                { if (ctx.bit_number[b] == best->card.m_number) { bit = b; break; } }
+                if (bit < 0)
+                {
+                    if (ctx.bit_number.size() >= 64) { continue; }   // dropping one only under-discounts
+                    bit = static_cast<int>(ctx.bit_number.size());
+                    ctx.bit_number.push_back(best->card.m_number);
+                }
+                if (ctx.cand_mask.empty()) { ctx.cand_mask.assign(cands.size(), 0); }
+                ctx.cand_mask[static_cast<std::size_t>(j)] |= std::uint64_t{1} << bit;
+            }
+        }
+    }
     // Point 9: which candidates feed a live subtype scaler (ComputePlanTraits' casts_scaler_food).
     if (pending_atk > 0 && AttackTapPayerOrderEnabled())
     {
@@ -10328,6 +10411,8 @@ static int AttackTapLoss(const GameState& state, AttackTapCtx& ctx, const std::v
             if (b >= 0) { mask |= std::uint64_t{1} << b; }
         }
     }
+    if (!ctx.cand_mask.empty())   // Vampires B: a steal's tapped bodies
+    { for (int j : sel) { mask |= ctx.cand_mask[static_cast<size_t>(j)]; } }
     // Stage 1: the board with the plan's ability / tap-on-entry taps applied (the pre-plan board when
     // there are none) -- its attack and its attacking mana sources.
     const std::vector<AttackingManaSource>* s1 = ctx.srcs;
@@ -11999,6 +12084,60 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
             if (!ok) { return true; }   // rule 3
         }
         if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { ++mode4; }
+        // Rule 6 (Vampires B): Captivating Vampire's steal / Bloodline Keeper's transform.
+        //   6a. A HAND-SOURCE activation (needs_cast_mask bit0) without a cast / put of its source's name
+        //       in the selection -- the source never reaches the battlefield, a no-op.
+        //   6b. A variant relying on more ARRIVALS (vamp_casts_needed: the steal's bodies the plan must
+        //       add; the transform's Vampire shortfall now) than the selection could possibly add -- a
+        //       NECESSARY condition only, counted GENEROUSLY so it can never refuse a real line: every
+        //       `sub` creature cast / put, every `sub` token tap, every madness CAST pin of a `sub`
+        //       creature, a steal that makes its target a `sub` (for the transform), every graveyard-
+        //       landfall `sub` creature in the graveyard and every pinned discard of one (it may return
+        //       on the land drop, which is not an action of the selection).
+        if (c.kind == Action::Kind::ActivatePermAbility
+            && (c.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                || c.ability_mode == Action::AbilityMode::TransformSelf))
+        {
+            if ((c.needs_cast_mask & 1) != 0 && puts_name(c.card_name.str()) == 0) { return true; }   // 6a
+            const CardDefinition* sd6 = def_of(c);
+            if (c.vamp_casts_needed > 0 && sd6 != nullptr)
+            {
+                const bool steal = c.ability_mode == Action::AbilityMode::TapSubtypeSteal;
+                const std::string& sub = steal ? sd6->params.steal_tap_subtype
+                                               : sd6->params.transform_min_controlled_subtype;
+                int adds = 0;
+                for (int jdx : sel)
+                {
+                    const Action& d = cands[static_cast<std::size_t>(jdx)];
+                    const CardDefinition* dd = def_of(d);
+                    if ((d.kind == Action::Kind::CastFromHand || d.kind == Action::Kind::ActivateVial)
+                        && !d.bestow && !d.adventure)
+                    { if (dd != nullptr && dd->card.IsCreature() && CardHasSubtype(dd->card, sub)) { ++adds; } }
+                    else if (d.kind == Action::Kind::TapForTokenPay && dd != nullptr)
+                    {
+                        const auto& ts = dd->params.tap_token_subtypes;
+                        if (std::find(ts.begin(), ts.end(), sub) != ts.end()) { ++adds; }
+                    }
+                    else if (!steal && jdx != idx && d.kind == Action::Kind::ActivatePermAbility
+                             && d.ability_mode == Action::AbilityMode::TapSubtypeSteal && dd != nullptr
+                             && dd->params.steal_adds_subtype == sub)
+                    { ++adds; }
+                    if (!d.discard_name.empty())
+                    {
+                        const CardDefinition* md = CardDatabase::Instance().Lookup(d.discard_name.str());
+                        if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)
+                            && (d.madness_choice > 0 || md->gy_landfall_watcher)) { ++adds; }
+                    }
+                }
+                for (const Card& gc : ap.graveyard)
+                {
+                    const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+                    if (gd != nullptr && gd->gy_landfall_watcher && gd->card.IsCreature()
+                        && CardHasSubtype(gd->card, sub)) { ++adds; }
+                }
+                if (adds < c.vamp_casts_needed) { return true; }   // 6b
+            }
+        }
         // Rule 5 (Vampires A1): a madness CAST pin whose card has madness only through a granter the
         // plan must put onto the battlefield first (Falkenrath Gorger in hand, none in play -- see
         // MadnessFanFor) needs that granter cast / Vial-put by the SAME subset; without it the pin
@@ -14003,6 +14142,8 @@ static std::uint64_t ActionFoldSig(const Action& a)
     if (!a.discard_name.empty())
     { FoldMix(h, 0xD15Cull); FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.discard_name.str()))); }
     if (a.vamp_casts_needed != 0) { FoldMix(h, 0xB100Dull + static_cast<std::uint64_t>(a.vamp_casts_needed)); }
+    // Vampires B: Captivating Vampire's tap spec -- its CONTENT, never the interned id (see StealTapSpec).
+    if (a.steal_spec != 0) { FoldMix(h, 0x57EA1ull ^ StealSpecFold(a.steal_spec)); }
     // Vampires A1: the madness pin rides beside the discard pin (same gating: set -> folded).
     if (a.madness_choice >= 0)
     { FoldMix(h, 0x3AD0ull + static_cast<std::uint64_t>(a.madness_choice) * 64
@@ -17346,7 +17487,11 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         if (!a.discard_name.empty() || a.vamp_casts_needed != 0
             || (a.kind == Action::Kind::SacCreatureOutlet && (a.needs_cast_mask & 2) != 0)
             || (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapBlood)
-            || (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4))
+            || (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4)
+            // Vampires B: the steal / the transform (rule 6 -- the hand-source cast, the arrivals).
+            || (a.kind == Action::Kind::ActivatePermAbility
+                && (a.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                    || a.ability_mode == Action::AbilityMode::TransformSelf)))
         { p.vamp_outlet = true; }   // Vampires A2 (SubsetVampOutletInvalid)
         if (a.free_cast)          { p.dup_source = true; }   // bank slots, and the paid/free pair
         if (a.equiv_tag != 0)     { p.dup_source = true; }   // canonical-prefix fold (see the note above)
@@ -20832,6 +20977,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         // like devour_count (two pins are two plays). Gated on set -> every other fingerprint unchanged.
         if (!a.discard_name.empty()) { fold(0x44495343ull); folds(a.discard_name.str()); }   // "DISC"
         if (a.vamp_casts_needed != 0) { fold(0x424C4F44ull + static_cast<uint64_t>(a.vamp_casts_needed)); }   // "BLOD"
+        // Vampires B: Captivating Vampire's tap spec (its CONTENT; the target rides enchant_target above).
+        if (a.steal_spec != 0) { fold(0x5354454Cull ^ StealSpecFold(a.steal_spec)); }   // "STEL"
         // Vampires A1: the madness answer of the discard (decline / which cast) -- a must-fold.
         if (a.madness_choice >= 0)
         { fold(0x4D41444Eull + static_cast<uint64_t>(a.madness_choice) * 64 + static_cast<uint64_t>(a.madness_arm)); }   // "MADN"
@@ -20918,6 +21065,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A5E0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.upkeep_land_search_choice + 2))); }
     if (p.combat_crack_choice != -1)
     { fold(0x1A5F0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_crack_choice + 2))); }
+    // Bloodline Keeper's in-combat transform (Vampires B): value-gated, its own tag.
+    if (p.combat_transform_choice != -1)
+    { fold(0x1A610000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_transform_choice + 2))); }
     // ...and the activations' POSITION (Plan::land_search_act_slot; -1, the trailing pass, is the
     // default and folds nothing): 0 keeps the value the old pre-cast twin folded, k >= 1 folds k.
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
@@ -21065,6 +21215,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (x.vamp_casts_needed != y.vamp_casts_needed)
     { add("vamp_casts_needed", std::to_string(static_cast<int>(x.vamp_casts_needed)),
            std::to_string(static_cast<int>(y.vamp_casts_needed))); }
+    if (x.steal_spec != y.steal_spec)
+    { add("steal_spec", StealSpecText(x.steal_spec), StealSpecText(y.steal_spec)); }
     if (x.victim_name != y.victim_name)
     { add("victim_name", x.victim_name.str(), y.victim_name.str()); }
     if (static_cast<long long>(x.replicate_count) != static_cast<long long>(y.replicate_count))
@@ -21201,6 +21353,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
+        && p.combat_transform_choice == -1
         && p.land_search_act_slot == -1
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.putback_choice == -1
@@ -21242,6 +21395,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // into BuildDedupKey's pending pins (a post-apply state still carrying one is distinct).
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
+        || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
         // The cycle / sac-draw dig variants (0 = the no-dig twin / never, 1 = dig-while-affordable) --
         // NOT the 2 mark, which is a base plan. Missing from the 9d widening: a dig variant whose world
         // its base already reached (the gate refused, the source was unaffordable) paid a full rollout
@@ -26851,6 +27005,300 @@ static std::vector<std::string> ActivationDiscardClasses(const GameState& state,
     }
     if (names.size() <= 1) { return names; }
     return ResolveProvider(state).ActivationDiscardCandidates(state, src_def, names);
+}
+
+// ---- VAMPIRES B: CAPTIVATING VAMPIRE'S STEAL + BLOODLINE KEEPER'S TRANSFORM -- the emission helpers ----
+// (design_B_lords.md §3-§4; the shared resolvers -- ResolveStealBodies, PayTapSubtypeCost,
+// TransformRestrictionMet, ApplyCombatTransforms -- live in SpellEffects.h.)
+//
+// THE BODIES THE PLAN CAN STILL ADD. Activations are enumerated on the PRE-plan board but run in the
+// trailing pass, after the plan's casts -- so a gate on the pre-plan count alone would make "cast the
+// fifth Vampire, then transform" / "cast two one-drops, then tap five to steal" unfindable at any
+// budget. Each body the plan can add is listed with the class it will have on arrival:
+//   * a `sub` creature card in HAND (a cast, a Vial put, a madness cast off an outlet's discard);
+//   * a graveyard-landfall `sub` creature (Bloodghast) while a land drop remains;
+//   * a `sub` token from a live tap-token source (Bloodline Keeper / Lord of Lineage);
+// Arrivals are summoning-sick -> FREE (colour of the card / token, no live {T} ability), unless the card
+// would arrive with haste in a pre-combat main (printed haste, or Bloodghast's opponent-life clause) ->
+// an ATTACK class of its own, keyed on its card number (the apply derives the class from the arrival).
+struct StealBodyArrival { bool free = true; int code = 0; int rep = 0; };
+static std::vector<StealBodyArrival> StealBodyArrivals(const GameState& state, const std::string& sub)
+{
+    std::vector<StealBodyArrival> out;
+    if (sub.empty()) { return out; }
+    const int me = state.active_player_index;
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    const bool pre_combat = !StealCombatOver(state);
+    const int opp_life = state.players[static_cast<std::size_t>(1 - me)].life;
+    auto arrival_of = [&](const Card& c, const CardDefinition& d)
+    {
+        StealBodyArrival a;
+        const bool haste = d.card.HasKeyword(Keyword::Haste)
+            || (d.params.haste_if_opp_life_at_most > 0 && opp_life <= d.params.haste_if_opp_life_at_most);
+        if (pre_combat && haste) { a.free = false; a.rep = c.m_number; }
+        else                     { a.code = StealFreeCode(StealColourMaskOf(d.card), false); }
+        return a;
+    };
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsCreature() || !CardHasSubtype(d->card, sub)) { continue; }
+        out.push_back(arrival_of(c, *d));
+    }
+    if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+    {
+        for (const Card& c : ap.graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->gy_landfall_watcher || !d->card.IsCreature() || !CardHasSubtype(d->card, sub)) { continue; }
+            out.push_back(arrival_of(c, *d));
+        }
+    }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.tap_token_cost.has_value() || !TapTokenSourceLive(state, p, *d)) { continue; }
+        if (std::find(d->params.tap_token_subtypes.begin(), d->params.tap_token_subtypes.end(), sub)
+            == d->params.tap_token_subtypes.end()) { continue; }
+        Card tok;
+        if (!d->params.tap_token_color.empty())
+        {
+            for (char ch : d->params.tap_token_color)
+            {
+                if (ch == 'W') { tok.AddColor(Color::White); } else if (ch == 'U') { tok.AddColor(Color::Blue); }
+                else if (ch == 'B') { tok.AddColor(Color::Black); } else if (ch == 'R') { tok.AddColor(Color::Red); }
+                else if (ch == 'G') { tok.AddColor(Color::Green); }
+            }
+        }
+        StealBodyArrival a;
+        a.code = StealFreeCode(StealColourMaskOf(tok), false);
+        out.push_back(a);
+    }
+    return out;
+}
+// An UPPER BOUND on the `sub` permanents we can control by the trailing pass (the transform's gate):
+// those we control now + every arrival above + one more if a steal could resolve this plan.
+static int SubtypeCountUpperBound(const GameState& state, const std::string& sub)
+{
+    const int me = state.active_player_index;
+    int n = CountControlledSubtypePermanents(state, me, sub)
+          + static_cast<int>(StealBodyArrivals(state, sub).size());
+    bool target = false;
+    for (const Permanent& q : state.battlefield) { if (StealTargetLegal(q, me)) { target = true; break; } }
+    if (!target) { return n; }
+    auto steals = [&](const CardDefinition* d) { return d != nullptr && d->params.steal_tap_count > 0; };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == me && steals(CardDatabase::Instance().LookupCached(p.card))) { return n + 1; }
+    }
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    { if (steals(CardDatabase::Instance().LookupCached(c))) { return n + 1; } }
+    return n;
+}
+
+// CAPTIVATING VAMPIRE'S STEAL -- every searched variant of one source (design_B §3 "Search design").
+//   * TARGET axis: one variant per IDENTITY CLASS of creature we do not control (LandfallTargetFoldKey;
+//     an unkeyable one is its own class), representative = the lowest card number. Identical spawns are
+//     interchangeable -- an identity fold, not a pick. No in-engine "best power" pick (the Bolas shape
+//     the no-greedy rule forbids); the provider may order, the axis is small enough to leave whole.
+//   * TAP-SET axis: one variant per distinct count vector over the body classes (StealTapSpec) summing to
+//     steal_tap_count, within each class's multiplicity (real bodies + the arrivals above).
+//   * Both mains (CollectActions runs in both; a main-2 steal is free of attack cost) -- no main-1 prune.
+//   * vamp_casts_needed = how many of the variant's bodies are ARRIVALS: SubsetVampOutletInvalid rule 6
+//     rejects a selection that adds fewer `sub` bodies than that (a necessary condition only).
+//   * ORDER ONLY (the eval): the target's power first, then the attack power the cost gives up, then
+//     the arrivals it relies on. A ROLLOUT LEAF (estimating, beyond the horizon) emits only the best of
+//     that order -- the permitted playout policy (the madness / convoke precedent).
+// `hand_src` != nullptr: a Captivating Vampire the SAME plan casts (needs_cast_mask bit0, re-resolved
+// by name at apply): it may tap itself while summoning-sick.
+static void EmitStealVariants(const GameState& state, const Card& src_card, const CardDefinition* sd,
+                              bool hand_src, std::vector<Action>& actions)
+{
+    const int me = state.active_player_index;
+    const int N  = sd->params.steal_tap_count;
+    const std::string& sub = sd->params.steal_tap_subtype;
+    if (N <= 0 || N > 8 || sub.empty()) { return; }
+    // TARGET classes.
+    struct Tgt { std::uint64_t key; int rep; int pw; };
+    std::vector<Tgt> tgts;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (!StealTargetLegal(q, me)) { continue; }
+        std::uint64_t key = 0;
+        if (!LandfallTargetFoldKey(state, q, key))
+        { key = 0xC0FFEE0000000000ull ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.card.m_number)); }
+        const int pw = q.EffectivePower();
+        bool found = false;
+        for (Tgt& t : tgts)
+        {
+            if (t.key != key) { continue; }
+            found = true;
+            if (q.card.m_number < t.rep) { t.rep = q.card.m_number; }
+            break;
+        }
+        if (!found) { tgts.push_back(Tgt{ key, q.card.m_number, pw }); }
+    }
+    if (tgts.empty()) { return; }
+    Action base;
+    base.kind            = Action::Kind::ActivatePermAbility;
+    base.card_name       = src_card.m_name;
+    base.def             = sd;
+    base.hand_index      = -1;
+    base.sac_source_id   = src_card.m_number;
+    base.ability_mode    = Action::AbilityMode::TapSubtypeSteal;
+    base.chosen_x        = 1;
+    base.cost            = ManaCost{};
+    base.needs_cast_mask = hand_src ? 1 : 0;
+    base.is_noncreature  = true;
+    // HUMAN PLAY: ONE representative per source, gated on legality only (a board source with enough
+    // untapped Vampires now, sick ones included); the target and the five bodies are asked at resolution
+    // over the full legal sets (the Oko / Bolas precedent). A same-turn cast is a board source by then
+    // (the human's main phase re-prompts after each cast).
+    if (HumanPlayActive())
+    {
+        if (hand_src) { return; }
+        int untapped = 0;
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index == me && !q.tapped && PermCountsAsSubtype(q, sub)) { ++untapped; } }
+        if (untapped < N) { return; }
+        Action a = base;
+        a.eval = 1;
+        actions.push_back(std::move(a));
+        return;
+    }
+    // BODY classes.
+    struct Cls { bool free; int code; int rep; std::uint64_t key; int real; int arr; int pw; };
+    std::vector<Cls> cls;
+    auto add_free = [&](int code, bool real)
+    {
+        for (Cls& c : cls) { if (c.free && c.code == code) { (real ? c.real : c.arr) += 1; return; } }
+        cls.push_back(Cls{ true, code, 0, 0, real ? 1 : 0, real ? 0 : 1, 0 });
+    };
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.tapped || !PermCountsAsSubtype(q, sub)) { continue; }
+        if (StealBodyIsFree(state, q)) { add_free(StealFreeCodeOf(state, q), true); continue; }
+        const std::uint64_t key = StealAttackBodyKey(state, q);
+        bool found = false;
+        for (Cls& c : cls)
+        {
+            if (c.free || c.rep <= 0 || c.key != key || c.arr != 0) { continue; }
+            ++c.real; found = true;
+            if (q.card.m_number < c.rep) { c.rep = q.card.m_number; }
+            break;
+        }
+        if (!found)
+        {
+            const int pw = std::max(0, q.EffectivePower()
+                + ComputeLordBonus(q.card, state, q.controller_index, q.AnimatedAllTypes(), &q).first);
+            cls.push_back(Cls{ false, 0, q.card.m_number, key, 1, 0, pw });
+        }
+    }
+    for (const StealBodyArrival& ar : StealBodyArrivals(state, sub))
+    {
+        if (ar.free) { add_free(ar.code, false); continue; }
+        cls.push_back(Cls{ false, 0, ar.rep, 0, 0, 1, 0 });
+    }
+    // A board source counts among the real bodies above; a hand source is among the arrivals.
+    int total = 0;
+    for (const Cls& c : cls) { total += c.real + c.arr; }
+    if (total < N) { return; }
+    // Deterministic class order: ATTACK classes by representative number, then FREE classes by code.
+    std::stable_sort(cls.begin(), cls.end(), [](const Cls& x, const Cls& y)
+    {
+        if (x.free != y.free) { return !x.free; }
+        return x.free ? x.code < y.code : x.rep < y.rep;
+    });
+    struct Var { StealTapSpec spec; int lost_pw; int arrivals; };
+    std::vector<Var> vars;
+    std::vector<int> cnt(cls.size(), 0);
+    std::function<void(std::size_t, int)> rec = [&](std::size_t i, int left)
+    {
+        if (i == cls.size())
+        {
+            if (left != 0) { return; }
+            Var v;
+            v.spec.n = static_cast<std::int8_t>(N);
+            int k = 0;
+            v.lost_pw = 0; v.arrivals = 0;
+            for (std::size_t j = 0; j < cls.size(); ++j)
+            {
+                for (int m = 0; m < cnt[j]; ++m)
+                { v.spec.slot[static_cast<std::size_t>(k++)] = cls[j].free ? -cls[j].code : cls[j].rep; }
+                if (!cls[j].free) { v.lost_pw += cnt[j] * cls[j].pw; }
+                v.arrivals += std::max(0, cnt[j] - cls[j].real);
+            }
+            std::sort(v.spec.slot.begin(), v.spec.slot.begin() + N);
+            vars.push_back(v);
+            return;
+        }
+        const int cap = std::min(left, cls[i].real + cls[i].arr);
+        for (int c = cap; c >= 0; --c) { cnt[i] = c; rec(i + 1, left - c); }
+        cnt[i] = 0;
+    };
+    rec(0, N);
+    if (vars.empty()) { return; }
+    // Order only: fewest given-up attack power, then fewest arrivals relied on.
+    std::stable_sort(vars.begin(), vars.end(), [](const Var& x, const Var& y)
+    {
+        if (x.lost_pw != y.lost_pw) { return x.lost_pw < y.lost_pw; }
+        return x.arrivals < y.arrivals;
+    });
+    std::stable_sort(tgts.begin(), tgts.end(), [](const Tgt& x, const Tgt& y) { return x.pw > y.pw; });
+    const bool leaf = !(g_search_candidate_enum || g_condemn_root_turn < 0);
+    constexpr int DMG = 100;
+    for (const Tgt& t : tgts)
+    {
+        for (const Var& v : vars)
+        {
+            Action a = base;
+            a.enchant_target    = t.rep;
+            a.steal_spec        = stealspec::Intern(v.spec);
+            a.vamp_casts_needed = static_cast<std::int8_t>(std::min(v.arrivals, 127));
+            a.eval              = (t.pw * 2 - v.lost_pw) * DMG - v.arrivals;
+            actions.push_back(std::move(a));
+            if (leaf) { return; }   // the playout policy: the front of the order only
+        }
+    }
+}
+
+// BLOODLINE KEEPER'S TRANSFORM -- one action per untransformed source (design_B §4). The gate is the
+// UPPER BOUND on the Vampires the plan can still add (SubtypeCountUpperBound); the exact count is
+// re-checked at activation (PermAbilitySourceLive), so admitting a transform that turns out illegal
+// costs a duplicate of its base plan and never loses a line. vamp_casts_needed = the shortfall NOW
+// (SubsetVampOutletInvalid rule 6). `hand_src`: a Keeper the SAME plan casts (needs_cast_mask bit0).
+static void EmitTransformAction(const GameState& state, const Card& src_card, const CardDefinition* sd,
+                                bool hand_src, std::vector<Action>& actions)
+{
+    const CardParams& pp = sd->params;
+    if (pp.transform_back_name.empty() || CardDatabase::Instance().Lookup(pp.transform_back_name) == nullptr) { return; }
+    const int me = state.active_player_index;
+    const int now = pp.transform_min_controlled_count > 0
+        ? CountControlledSubtypePermanents(state, me, pp.transform_min_controlled_subtype) : 0;
+    if (HumanPlayActive())
+    {
+        // Legality only: the restriction NOW (the human's main phase re-prompts after each cast).
+        if (hand_src || !TransformRestrictionMet(state, me, pp)) { return; }
+    }
+    else if (pp.transform_min_controlled_count > 0
+             && SubtypeCountUpperBound(state, pp.transform_min_controlled_subtype) < pp.transform_min_controlled_count)
+    { return; }
+    Action a;
+    a.kind            = Action::Kind::ActivatePermAbility;
+    a.card_name       = src_card.m_name;
+    a.def             = sd;
+    a.hand_index      = -1;
+    a.sac_source_id   = src_card.m_number;
+    a.ability_mode    = Action::AbilityMode::TransformSelf;
+    a.chosen_x        = 1;
+    a.cost            = pp.transform_cost.value_or(ManaCost{});
+    a.needs_cast_mask = hand_src ? 1 : 0;
+    a.vamp_casts_needed = static_cast<std::int8_t>(std::clamp(pp.transform_min_controlled_count - now, 0, 127));
+    // Ordering only: +2/+2 for each other Vampire (the back face's lord bonus) -- the search scores it.
+    a.eval            = 2 * std::max(1, now);
+    a.is_noncreature  = true;
+    actions.push_back(std::move(a));
 }
 
 // ---- VAMPIRES A1: THE MADNESS FAN of one pinned discard (design_A1 §3.2) ---------------------------
@@ -32505,6 +32953,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // so which one cracks is unobservable; further cracks come through the draw's hand-entry
         // breakpoint with fresh discard choices (the no-K-block rule: each pick is its own decision).
         bool blood_crack_emitted = false;
+        // Vampires B: a Captivating Vampire / Bloodline Keeper the SAME plan casts (or Vial-puts) is a
+        // legal source for its no-{T} ability this very turn -- tapping itself while summoning-sick for
+        // the steal, transforming while sick -- so each distinct name in HAND emits its variants with
+        // needs_cast_mask bit0 (SubsetVampOutletInvalid rule 6 requires the cast; the apply re-resolves
+        // the source by name, ResolveHandSourceActivation). Deck-stamp gated: no other deck scans.
+        if ((state.deck_has_tap_steal || state.deck_has_transform) && !HumanPlayActive())
+        {
+            std::vector<InternedName> seen_src;
+            for (const Card& hc : ap.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd == nullptr
+                    || (hd->params.steal_tap_count <= 0 && hd->params.transform_back_name.empty())) { continue; }
+                if (std::find(seen_src.begin(), seen_src.end(), hc.m_name) != seen_src.end()) { continue; }
+                seen_src.push_back(hc.m_name);
+                if (hd->params.steal_tap_count > 0)         { EmitStealVariants(state, hc, hd, /*hand_src=*/true, actions); }
+                if (!hd->params.transform_back_name.empty()) { EmitTransformAction(state, hc, hd, /*hand_src=*/true, actions); }
+            }
+        }
         // Call of the Wild "{2}{G}{G}: reveal top; creature -> battlefield, else graveyard"
         // (repeatable) + Wirewood Lodge "{G}, {T}: Untap target Elf". StompySurprise battlefield
         // abilities; param-gated -> no other deck emits them.
@@ -33193,6 +33660,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     actions.push_back(std::move(a));
                 }
             }
+
+            // ---- Captivating Vampire's steal and Bloodline Keeper's transform (Vampires B; see
+            // EmitStealVariants / EmitTransformAction). NOT in the ModeSpec table: both are {T}-less,
+            // and that table gives every {T}-less row a K-count block -- these are one activation per
+            // source per plan (kDupPermAbil), the ReconfigureUnattach shape. A back face (Lord of
+            // Lineage) carries no transform_back_name, so it emits nothing here.
+            if (sd->params.steal_tap_count > 0)
+            { EmitStealVariants(state, src.card, sd, /*hand_src=*/false, actions); }
+            if (!sd->params.transform_back_name.empty())
+            { EmitTransformAction(state, src.card, sd, /*hand_src=*/false, actions); }
 
             // ---- Voldaren Estate: "{5}, {T}: Create a Blood token. This ability costs {1} less to
             // activate for each Vampire you control." (PermAbilityMode::TapBlood; Vampires A2.) NOT in
@@ -39813,6 +40290,7 @@ namespace solvememo
             || a.attack_land_search_choice != b.attack_land_search_choice
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
             || a.combat_crack_choice != b.combat_crack_choice
+            || a.combat_transform_choice != b.combat_transform_choice
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
@@ -45943,6 +46421,17 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
 
 // See the header. Stable so that equal ranks keep the emitted order exactly as today, and an
 // early-out so a deck declaring no order copies nothing and sorts nothing.
+bool TurnSolver::TrailingHasCountBands(const std::vector<Action>& acts)
+{
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && (a.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                || a.ability_mode == Action::AbilityMode::TransformSelf)) { return true; }
+    }
+    return false;
+}
+
 void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Action>& acts)
 {
     if (acts.size() < 2) { return; }
@@ -45953,11 +46442,41 @@ void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Ac
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
     };
-    bool any = false;
-    for (const Action& a : acts) { if (rank_of(a) != 0) { any = true; break; } }
+    // VAMPIRES B -- THE COUNT BANDS (design_B §4 "Trailing order"). Bloodline Keeper's transform reads
+    // the Vampire count ("activate only if you control five or more") and Captivating Vampire's steal
+    // needs five untapped Vampires, so the pass runs: everything else (token taps -- Keeper's own
+    // included -- Blood creation, Stromkirk Condemned's and the Blood crack's madness casts, in the
+    // provider's order) -> the steal (it adds a Vampire) -> the transform -> creature SACRIFICES
+    // (Falkenrath Pit Fighter; a sacrifice never raises the count, madness cast included: +1 -1).
+    // A SOUND IDENTITY ORDER, not a heuristic: the transform changes no other activation's legality,
+    // the earlier bands only raise the count and the last only lowers it, so every transform legal in
+    // ANY order is legal in this one -- and "tap Keeper for a token, then transform" is findable. Only
+    // when a steal / transform is in the pass, so every other deck's order is byte-identical.
+    const bool bands = TrailingHasCountBands(acts);
+    bool any = bands;
+    if (!any) { for (const Action& a : acts) { if (rank_of(a) != 0) { any = true; break; } } }
     if (!any) { return; }   // no deck opinion -> byte-identical to the historical emission order
-    std::stable_sort(acts.begin(), acts.end(),
-                     [&](const Action& x, const Action& y) { return rank_of(x) < rank_of(y); });
+    if (!bands)
+    {
+        std::stable_sort(acts.begin(), acts.end(),
+                         [&](const Action& x, const Action& y) { return rank_of(x) < rank_of(y); });
+        return;
+    }
+    auto band_of = [](const Action& a) -> int
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && a.ability_mode == Action::AbilityMode::TapSubtypeSteal) { return 1; }
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && a.ability_mode == Action::AbilityMode::TransformSelf)   { return 2; }
+        if (a.kind == Action::Kind::SacCreatureOutlet)                 { return 3; }
+        return 0;
+    };
+    std::stable_sort(acts.begin(), acts.end(), [&](const Action& x, const Action& y)
+    {
+        const int bx = band_of(x), by = band_of(y);
+        if (bx != by) { return bx < by; }
+        return rank_of(x) < rank_of(y);
+    });
 }
 
 
@@ -50489,6 +51008,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
         }
+        if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
         if (_any)
         {
             _ord_buf = trailing_acts_in;
@@ -50714,17 +51234,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             // Shivan Gorge / Investigate / Mariposa draw / Clue crack. Precondition FIRST so a
             // stranded activation never pays (the UntapCreature discipline).
+            // Vampires B: a hand-source activation (needs_cast_mask bit0 -- a Captivating Vampire or a
+            // Bloodline Keeper this plan cast) re-resolves its source by name; every other action keeps
+            // its own number. The steal's searched target + tap spec ride a scope (the apply's
+            // signature carries no Action), installed for the liveness check and the apply alike.
+            // Executor twin: AIEngine.
+            const int src_id = ResolveHandSourceActivation(state, a);
+            const StealPinScope _steal_pin(a.enchant_target, a.steal_spec);
             // The {T} half of the cost is paid BEFORE the mana half, so the source cannot tap
             // itself toward its own activation (see SetPermTapped). Restored if the mana fails.
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
-                                                          a.sac_source_id, a.ability_mode,
+                                                          src_id, a.ability_mode,
                                                           &a.discard_name.str()))
             {
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 // A CREATURE source's ability may be paid with Secluded Courtyard's coloured mana
                 // (D12). Covers the K-1 repeat payments below too. Executor twin: AIEngine.
                 std::optional<CreatureAbilityPayScope> creature_ability_scope;
-                if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+                if (PermAbilitySourceIsCreature(state, state.active_player_index, src_id))
                 { creature_ability_scope.emplace(); }
                 // Voldaren Estate's Blood ability costs {1} less per Vampire we control AT ACTIVATION:
                 // pay the TRUE cost now (TapBloodCostNow), not the enumeration variant's estimate.
@@ -50738,7 +51265,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.ability_mode == Action::AbilityMode::BloodDraw && a.discard_name.empty()
                     && !HumanPlayActive() && greedywindow::InWindow(0))
                 { g_activation_discard_unpinned.fetch_add(1, std::memory_order_relaxed); }
-                if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
+                if (taps) { SetPermTapped(state, state.active_player_index, src_id, true); }
                 ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
                 if (TapForCostDirect(state, act_cost, /*for_creature=*/false))
                 {
@@ -50758,7 +51285,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     std::vector<int> snow_hand_before;
                     if (snow_look && TurnSolver::BreakpointHandSnapshotWanted(state))
                     { snow_hand_before = TurnSolver::HandCardNumbers(state); }
-                    ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode);
+                    ApplyPermAbility(state, state.active_player_index, src_id, a.ability_mode);
                     // Repeatable {T}-less sinks: the plan asked for K activations and only the FIRST
                     // is on the subset's books, so pay the rest here out of what the turn actually
                     // produced. Shared with the executor (SpendRepeatActivations), which also
@@ -50771,17 +51298,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         // firing zero extras with no error.
                         if (a.ability_mode == Action::AbilityMode::SporeSaproling)
                         {
-                            SpendSporeActivations(state, state.active_player_index, a.sac_source_id,
+                            SpendSporeActivations(state, state.active_player_index, src_id,
                                                   *a.def, a.chosen_x - 1);
                         }
                         else if (a.ability_mode == Action::AbilityMode::FadeSaproling)
                         {
-                            SpendFadeActivations(state, state.active_player_index, a.sac_source_id,
+                            SpendFadeActivations(state, state.active_player_index, src_id,
                                                  *a.def, a.chosen_x - 1);
                         }
                         else
                         {
-                            SpendRepeatActivations(state, state.active_player_index, a.sac_source_id,
+                            SpendRepeatActivations(state, state.active_player_index, src_id,
                                                    a.ability_mode, *a.def, a.chosen_x - 1);
                         }
                     }
@@ -50966,7 +51493,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.ability_mode == Action::AbilityMode::TapDraw)
                     { ++g_stranded_tapdraw_count; }
                     if (taps)
-                    { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
+                    { SetPermTapped(state, state.active_player_index, src_id, false); }
                     // MTG_ACT_DROP_AUDIT "unpaid" -- the cross-world, cross-deck twin of the
                     // thread_local counter above (which only ever surfaces under DedupCensusOn and
                     // only in this world). See GameLogger.h.
@@ -50979,7 +51506,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else if (ActDropAuditOn() && a.def != nullptr)
             {
                 const int _why = PermAbilityDeadReason(state, state.active_player_index,
-                                                       a.sac_source_id, a.ability_mode);
+                                                       src_id, a.ability_mode);
                 // THE EXACT JOIN (see t_cont_act_srcs): of the `tapped` class, how much is this
                 // plan's OWN breakpoint continuation having re-solved and activated the very
                 // permanent the plan still owed a {T} to -- a DOUBLE-BOOKING, whose fix is
@@ -50987,7 +51514,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (_why == 1)
                 {
                     const bool by_cont =
-                        std::find(t_cont_act_srcs.begin(), t_cont_act_srcs.end(), a.sac_source_id)
+                        std::find(t_cont_act_srcs.begin(), t_cont_act_srcs.end(), src_id)
                         != t_cont_act_srcs.end();
                     if (by_cont) { g_tapped_by_cont_act.fetch_add(1, std::memory_order_relaxed); }
                     else         { g_tapped_other.fetch_add(1, std::memory_order_relaxed); }
@@ -52389,6 +52916,9 @@ static void SimulateCombat(GameState& state)
     // (lockstep, same position relative to every power read; see the note there).
     FireAttackGatherAuras(state, active, atk_idx);
     ApplyCombatAuraSwap(state, active, atk_idx);
+    // Bloodline Keeper's IN-COMBAT transform (Vampires B). Mirrors GameEngine::CombatPhase (lockstep,
+    // ONE shared helper, same position: after every attack trigger, before any power read).
+    ApplyCombatTransforms(state, active, atk_idx);
 
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
@@ -52691,6 +53221,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
+    state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
@@ -57488,7 +58019,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                   + (act.discard_name.empty() ? std::string() : "#D" + act.discard_name.str())
                                   + MadnessSigTag(act)
                                   + (act.vamp_casts_needed == 0 ? std::string()
-                                                                : "#V" + std::to_string(static_cast<int>(act.vamp_casts_needed))));
+                                                                : "#V" + std::to_string(static_cast<int>(act.vamp_casts_needed)))
+                                  // Captivating Vampire's steal (Vampires B): WHICH creature and WHICH
+                                  // five bodies are distinct plans (the Gamble lesson) -- the target's
+                                  // number and the tap spec's CONTENT. 0 for every other ability.
+                                  + (act.steal_spec == 0 && act.ability_mode != Action::AbilityMode::TapSubtypeSteal
+                                     ? std::string()
+                                     : "#T" + std::to_string(act.enchant_target) + "#S" + StealSpecText(act.steal_spec)));
                     break;
             }
         }
@@ -63259,6 +63796,128 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // ---- BLOODLINE KEEPER'S IN-COMBAT TRANSFORM (Vampires B; Plan::combat_transform_choice) ----------
+    // {B}: Transform is instant speed, and the one way the Vampire count crosses five DURING combat is
+    // an attack-token trigger (Mavren Fein: an untapped 1/1 Vampire at declare-attackers) -- so "Mavren's
+    // token is the fifth Vampire; transform before damage; the attackers swing with Lord of Lineage's
+    // +2/+2" is a line no main-phase activation can express. The window is a STATE PIN consumed in
+    // combat (ApplyCombatTransforms, both worlds), fanned here like the in-combat Khalni crack: one
+    // variant per non-empty subset (bitmask) of the transform sources that can be on the battlefield at
+    // the window (those on it now, then this plan's own casts / Vial puts of one -- they enter at the
+    // end of battlefield order), at most 3. Pre-combat lists of the OUTER plan only (never inside a
+    // continuation derivation: the pin is consumed after the apply).
+    // IDENTITY FOLD, not a prune: only for a plan whose PRE-combat Vampire count cannot already reach
+    // the restriction (an upper bound: the count now + the plan's own Vampire casts / puts / token
+    // taps / steals / madness casts; sacrifices sort after the transform). When it can, the main-1
+    // transform of the same plan reaches the identical board from the same mana -- that plan is
+    // enumerated (EmitTransformAction) -- so the combat window adds nothing. Also only while an
+    // attack-token source of the counted subtype is (or is cast) on our side: nothing else adds a
+    // Vampire in combat. Human play never fans: the human answers the `dig` "(combat transform)" prompt.
+    if (!HumanPlayActive() && !cont_axes_only && is_pre_combat && state.deck_has_transform)
+    {
+        const int me = state.active_player_index;
+        auto def_of = [](const Action& c) -> const CardDefinition*
+        { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+        int e_bf = 0;
+        std::string sub;
+        int need = 0;
+        bool tok_src_bf = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd == nullptr) { continue; }
+            if (!qd->params.transform_back_name.empty())
+            { ++e_bf; sub = qd->params.transform_min_controlled_subtype; need = qd->params.transform_min_controlled_count; }
+            if (qd->params.attack_one_or_more_tokens > 0) { tok_src_bf = true; }
+        }
+        if (sub.empty())
+        {
+            for (const Card& hc : ap.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd != nullptr && !hd->params.transform_back_name.empty())
+                { sub = hd->params.transform_min_controlled_subtype; need = hd->params.transform_min_controlled_count; break; }
+            }
+        }
+        const int inh = state.scripted_combat_transform;
+        std::vector<TurnSolver::Plan> extra;
+        if (!sub.empty())
+        {
+            const int now = CountControlledSubtypePermanents(state, me, sub);
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (PlanIsAxisVariantExceptOrder(p) || PlanHasCombatPin(p) || p.combat_transform_choice != -1) { continue; }
+                int e = e_bf;
+                bool tok_src = tok_src_bf;
+                int pre = now;
+                for (const Action& a : p.actions)
+                {
+                    const CardDefinition* d = def_of(a);
+                    if (d == nullptr) { continue; }
+                    if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial)
+                        && !a.bestow && !a.adventure)
+                    {
+                        if (!d->params.transform_back_name.empty()) { ++e; }
+                        if (d->params.attack_one_or_more_tokens > 0) { tok_src = true; }
+                        if (d->card.IsCreature() && CardHasSubtype(d->card, sub)) { ++pre; }
+                    }
+                    else if (a.kind == Action::Kind::TapForTokenPay)
+                    {
+                        const auto& ts = d->params.tap_token_subtypes;
+                        if (std::find(ts.begin(), ts.end(), sub) != ts.end()) { ++pre; }
+                    }
+                    else if (a.kind == Action::Kind::ActivatePermAbility
+                             && a.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                             && d->params.steal_adds_subtype == sub) { ++pre; }
+                    if (a.madness_choice > 0 && !a.discard_name.empty())
+                    {
+                        const CardDefinition* md = CardDatabase::Instance().Lookup(a.discard_name.str());
+                        if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)) { ++pre; }
+                    }
+                }
+                e = std::min(e, 3);
+                if (e <= 0 || !tok_src || pre >= need) { continue; }
+                if (StatePinFrontIsVariant(inh, 0))
+                {
+                    TurnSolver::Plan v = p;
+                    v.combat_transform_choice = 0;
+                    extra.push_back(std::move(v));
+                }
+                for (int m = 1; m < (1 << e); ++m)
+                {
+                    if (m == inh) { continue; }   // == inherited: the base plan
+                    TurnSolver::Plan v = p;
+                    v.combat_transform_choice = static_cast<std::int8_t>(m);
+                    extra.push_back(std::move(v));
+                }
+            }
+            // THE PASS. With the land drop spent the enumeration offers no empty plan while anything
+            // else is playable (the host's pass is constructed later -- Solve's attack-only seed --
+            // and never reaches this fan), so "do nothing in main 1, attack with the Keeper, transform
+            // it when Mavren's token makes five" had no plan to ride. Seed it here exactly as
+            // AppendIdlePassAxes seeds the idle pass (one empty plan, land decided): variants only,
+            // never the bare pass itself. (`idle_pass` lists already ARE the pass.)
+            bool have_pass = idle_pass;
+            for (const TurnSolver::Plan& p : all)
+            { if (p.actions.empty() && p.land_to_play.empty()) { have_pass = true; break; } }
+            const int e0 = std::min(e_bf, 3);
+            if (!have_pass && e0 > 0 && tok_src_bf && now < need)
+            {
+                TurnSolver::Plan idle;
+                idle.land_decided = true;
+                for (int m = 1; m < (1 << e0); ++m)
+                {
+                    if (m == inh) { continue; }
+                    TurnSolver::Plan v = idle;
+                    v.combat_transform_choice = static_cast<std::int8_t>(m);
+                    extra.push_back(std::move(v));
+                }
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+    }
+
     // ---- SEARCHED LAND-SEARCH PICKS (core/LandSearch.h; 2026-10-15) -----------------------------
     // Rampant Growth / Search for Tomorrow / Cultivate resolving, Primeval Titan's ETB and attack
     // trigger, Evolving Wilds / Terramorphic / Myriad Landscape / Khalni Heart Expedition cracks, and
@@ -63302,7 +63961,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.freshmode_choice == 0 && p.tapmode_choice == 0 && p.dig_choice == -1
                 && !p.soulbond_decline && p.land_search_pins.empty()
                 && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
-                && p.combat_crack_choice == -1;
+                && p.combat_crack_choice == -1 && p.combat_transform_choice == -1;
         };
         std::map<const CardDefinition*, std::size_t> width_cache;
         auto width_of = [&](const CardDefinition* d) -> std::size_t
@@ -64313,6 +64972,8 @@ static std::string PlanDomKey(const Action& a)
     if (a.madness_choice >= 0) { k += MadnessSigTag(a); }                     // Vampires A1 pin
     if (!a.victim_name.empty())  { k += "|V"; k += a.victim_name.str(); }
     if (a.vamp_casts_needed != 0) { k += "|B"; k += std::to_string(static_cast<int>(a.vamp_casts_needed)); }
+    if (a.steal_spec != 0)   // Vampires B: the steal's target + tap spec content
+    { k += "|S"; k += std::to_string(a.enchant_target); k += "/"; k += StealSpecText(a.steal_spec); }
     return k;
 }
 
@@ -64413,6 +65074,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (int s : pl.land_search_pins)     { add(s); }
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
+            add(pl.combat_transform_choice);
             x += "|bpacts";
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
@@ -68073,10 +68735,11 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
     {
         // + Raubahn's attack attach (2026-10-17), a new LAST slot so every earlier slot's tag is unmoved.
         // + the searched banked-hold rank (MTG_FB_HOLD_SEARCHED, 2026-10-20), the next LAST slot.
+        // + Bloodline Keeper's in-combat transform mask (Vampires B, 2026-10-18), the next LAST slot.
         const int cpins[] = { state.scripted_bruna_gather, state.scripted_combat_aura_swap,
                               state.scripted_combat_aura_swap_in, state.scripted_attack_attach,
-                              state.scripted_fb_hold };
-        for (int i = 0; i < 5; ++i)
+                              state.scripted_fb_hold, state.scripted_combat_transform };
+        for (int i = 0; i < static_cast<int>(sizeof(cpins) / sizeof(cpins[0])); ++i)
         {
             if (cpins[i] != -1)
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
@@ -82385,6 +83048,26 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         { return "'" + name + "' has no activated land search"; }
     }
 
+    // --- steal= / transform= (Vampires B): source presence and the ability existing on that card. The
+    // counts (five untapped Vampires; five Vampires for the transform) are NOT asserted: the line's own
+    // casts and token taps can supply them (the LegalNotEnumerated grade, as taplife= explains).
+    for (const std::string& name : spec.steals)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to activate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && d->params.steal_tap_count <= 0)
+        { return "'" + name + "' has no tap-Vampires-to-gain-control ability"; }
+    }
+    for (const std::string& name : spec.transforms)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to transform"; }
+        const CardDefinition* d = def_of(name);
+        if (d && d->params.transform_back_name.empty())
+        { return "'" + name + "' has no transform ability"; }
+    }
+
     // --- blink= : Emiel's "{3}:" / Eldrazi Displacer's "{2}{C}:" exile-and-return. Source presence,
     // the ability existing on that card, and -- when the line PINNED a target -- that the target is a
     // creature we could legally blink. A "another target creature" ability cannot take the outlet
@@ -82943,7 +83626,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       // -- an ACCEPT for a line the engine then does not play, which is strictly
                       // worse than a reject because the human sees no error at all.
                       spec.tap_lifes.empty() && spec.aura_swaps.empty()
-                      && spec.land_searches.empty()))
+                      && spec.land_searches.empty()
+                      && spec.steals.empty() && spec.transforms.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -83074,6 +83758,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     std::vector<std::string> sortedLandSearches = spec.land_searches;
     std::sort(sortedLandSearches.begin(), sortedLandSearches.end());
     const bool landsearch_declared = !spec.land_searches.empty();
+    // steal= / transform= (Vampires B), the same declared-vs-legacy split.
+    std::vector<std::string> sortedSteals = spec.steals;
+    std::sort(sortedSteals.begin(), sortedSteals.end());
+    const bool steal_declared = !spec.steals.empty();
+    std::vector<std::string> sortedTransforms = spec.transforms;
+    std::sort(sortedTransforms.begin(), sortedTransforms.end());
+    const bool transform_declared = !spec.transforms.empty();
     // pod= / ooze= (Birthing Pod / Scavenging Ooze activations), the same declared-vs-legacy
     // split every verb above uses -- an undeclared line keeps matching the action's card name in
     // the ordinary cast multiset, so saved references are unaffected.
@@ -83150,6 +83841,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         std::vector<std::string> animateNames, tapTokenNames, gyReturnNames, gyPlayNames;
         std::vector<std::string> tapLifeNames;
         std::vector<std::string> landSearchNames;
+        std::vector<std::string> stealNames;
+        std::vector<std::string> transformNames;
         std::vector<int> jitteModes, gyExileModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
@@ -83235,6 +83928,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 && (a.ability_mode == Action::AbilityMode::SacLandSearch
                     || a.ability_mode == Action::AbilityMode::QuestSacLandSearch))
             { landSearchNames.push_back(a.card_name); continue; }
+            if (steal_declared && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::TapSubtypeSteal)
+            { stealNames.push_back(a.card_name); continue; }
+            if (transform_declared && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::TransformSelf)
+            { transformNames.push_back(a.card_name); continue; }
             if (pod_declared && a.kind == Action::Kind::ActivatePod)
             { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
             if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
@@ -83405,6 +84104,18 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = landSearchNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedLandSearches) { continue; }
+        }
+        if (steal_declared)
+        {
+            std::vector<std::string> v2 = stealNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedSteals) { continue; }
+        }
+        if (transform_declared)
+        {
+            std::vector<std::string> v2 = transformNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedTransforms) { continue; }
         }
         if (pod_declared && !PodsMatch(spec.pods, podActs)) { continue; }
         if (ooze_declared)
@@ -85910,7 +86621,8 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "None", "TapDamage", "TapInvestigate", "TapDraw", "SacDraw", "Drain", "ExileTop",
         "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
-        "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw"
+        "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
+        "TapSubtypeSteal", "TransformSelf"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
@@ -86169,6 +86881,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.attack_land_search_choice >= 0) { s.scripted_attack_land_search = p.attack_land_search_choice; }
     if (p.upkeep_land_search_choice >= 0) { s.scripted_upkeep_land_search = p.upkeep_land_search_choice; }
     if (p.combat_crack_choice >= 0)       { s.scripted_combat_land_search_crack = p.combat_crack_choice; }
+    // Bloodline Keeper's in-combat transform mask (Vampires B), read at THIS turn's declare-attackers.
+    if (p.combat_transform_choice >= 0)   { s.scripted_combat_transform = p.combat_transform_choice; }
     // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
     if (p.combat_landfall_target_choice >= 0)
