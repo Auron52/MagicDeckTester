@@ -171,6 +171,13 @@ enum class Keyword
     // the inert tags above, this one IS read: it is the cheap no-lookup test for "an Equipment that
     // stops being a creature while attached" in the creature-ness refresh's hot loop.
     Reconfigure,
+    // Madness (Markov Baron, Asylum Visitor): an INERT keyword-ability tag. The mechanic is modelled
+    // structurally -- CardParams::madness_cost (a card's OWN madness) and
+    // grants_madness_creature_subtype (Falkenrath Gorger's static grant), read at every discard by
+    // MadnessCostsFor (SpellEffects.h, the madness core). No engine code reads this enumerator; it
+    // exists so Scryfall's keywords array can be pasted VERBATIM (KeywordFromString throws on an
+    // unmapped keyword -- see Jump's note).
+    Madness,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

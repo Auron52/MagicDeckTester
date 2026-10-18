@@ -60,6 +60,7 @@ thread_local BounceChooser* g_play_treasurify_chooser = nullptr;
 thread_local RummageChooser* g_play_rummage_chooser = nullptr;
 thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
 thread_local FreeCastChooser* g_play_free_cast_chooser = nullptr;
+thread_local MadnessChooser* g_play_madness_chooser = nullptr;   // Vampires A1 madness
 thread_local DemonstrateChooser* g_play_demonstrate_chooser = nullptr;
 thread_local TutorChooser*   g_play_tutor_chooser  = nullptr;
 thread_local std::vector<PlayReveal>* g_play_reveal_sink = nullptr;

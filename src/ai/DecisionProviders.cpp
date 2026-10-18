@@ -733,6 +733,13 @@ std::vector<std::string> DecisionProvider::ActivationDiscardCandidates(
     return out;
 }
 
+int DecisionProvider::MadnessCastDefault(const GameState& s, int controller, const CardDefinition& def,
+                                         const std::vector<MadnessOption>& opts, MadnessWindow w) const
+{
+    (void)s; (void)controller; (void)def; (void)w;
+    return opts.empty() ? -1 : 0;   // the dominance rule (see the declaration)
+}
+
 std::vector<int> DecisionProvider::SacOutletVictimCandidates(
     const GameState& s, const Permanent& src, const std::vector<int>& reps) const
 {
@@ -14547,7 +14554,7 @@ bool DragonstormProvider::CastOrderingCandidates(const GameState& s0, const std:
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(st, st.active_player_index, a.card_name); }
         else
-        { ApplyConvokeTaps(st, st.active_player_index, a.convoke_green, a.convoke_other); }
+        { ApplyConvokeTapsForCard(st, st.active_player_index, ActionCastDef(a), a.convoke_green, a.convoke_other); }
     }
     const GameState& s = pre ? *pre : s0;
     const int n = static_cast<int>(reorder.size());
@@ -19527,6 +19534,19 @@ int VampiresProvider::ActivationOrderRank(const GameState& s, const CardDefiniti
     return VialProvider::ActivationOrderRank(s, d);
 }
 
+int VampiresProvider::MadnessCastDefault(const GameState& s, int controller, const CardDefinition& def,
+                                         const std::vector<MadnessOption>& opts, MadnessWindow w) const
+{
+    const int base = VialProvider::MadnessCastDefault(s, controller, def, opts, w);
+    if (!VampDraftOrdersOn()) { return base; }
+    if (def.gy_landfall_watcher && w != MadnessWindow::Cleanup)
+    {
+        const Player& ap = s.players[static_cast<std::size_t>(controller)];
+        if (ap.lands_played_this_turn < ap.LandDropsAvailable() && VampHandHasLand(s)) { return -1; }
+    }
+    return base;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -21573,9 +21593,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        // + A1: Falkenrath Gorger's madness grant KEYED ON THE VAMPIRE SUBTYPE (a madness-granter for
+        // another type would be another archetype). madness_cost alone is deliberately NOT a term: it is
+        // archetype-NEUTRAL (any madness card -- a Fiery Temper burn list -- carries it), so it would
+        // pull a non-Vampires deck here. hellbent_upkeep_draw is left out for the same reason (Asylum
+        // Visitor is a fine card for a non-tribal hellbent list).
         if (p.sac_outlet_discard_cost > 0 || p.activate_only_if_opp_lost_life
             || p.discard_team_pump_power > 0 || p.tap_blood_cost.has_value()
-            || p.landfall_return_self_from_gy)
+            || p.landfall_return_self_from_gy
+            || p.grants_madness_creature_subtype == "Vampire")
         { vampires = true; }
         if (p.attack_gather_auras) { bruna = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }

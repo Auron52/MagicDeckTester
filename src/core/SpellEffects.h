@@ -18,6 +18,8 @@
 #include "../ai/EngineFlags.h"         // FrontlineTriggerFirst: shared executor/rollout flag reader
 #include "../ai/HeuristicArm.h"        // per-job lever overrides, so ONE pooled batch runs both arms
 #include "Trace.h"                     // MTG_TRACE=discard: cleanup-discard tie distribution
+#include "MadnessTypes.h"              // the madness core's data types (Vampires A1)
+#include "GreedyWindow.h"              // greedywindow::InWindow: the madness in-window counter
 #include <algorithm>
 #include <climits>   // INT_MIN -- the refloat need model's argmax seed (demand can go negative)
 #include <array>
@@ -627,9 +629,66 @@ std::vector<std::string> CleanupDiscardShedLoopReference(
 inline bool MaybeReplaceGraveyardWithLibraryShuffle(GameState& state, int controller_index,
                                                     const Card& c);
 
+// THE SHARED DISCARD HOOK (defined with the madness core further down; declared here because the cleanup
+// shed below routes its discards through it). Every REAL discard in the engine goes through this one
+// function (Vampires A1 migration, design_A1 §2.4). A card with madness is exiled and queued on `mq`;
+// the caller resolves the queue (ResolvePendingMadness) at the point the rules put the trigger.
+enum class DiscardDest : std::uint8_t { Graveyard, LibraryShuffle, MadnessExile };
+inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
+                                       std::vector<MadnessPending>* mq, const std::string& cause);
+
+// The CALLER-OWNED madness payer (the g_etb_optional_payer idiom: no core resolution effect taps on its
+// own, because the executor keeps its own payment accounting). `pay(state, cost)` pays `cost` on `state`
+// as a CREATURE SPELL (for_creature = true -- Unclaimed Territory's / Secluded Courtyard's / Voldaren
+// Estate's restricted colours are legal): the rollout binds TapForCostDirect, the executor
+// AIEngine::TapForCost with a fresh AvailableManaPool. The option probes call it on a COPY.
+using MadnessPayFn = std::function<bool(GameState&, const ManaCost&)>;
+inline thread_local const MadnessPayFn* g_madness_payer = nullptr;
+// The searched pin of the activation being applied (Action::madness_choice / madness_arm), installed by
+// both trailing passes around an outlet apply together with the payer (ApplyPermAbility's signature
+// carries no Action -- the ActivationDiscardPinScope precedent). CONSUMED by the first madness trigger
+// the activation produces (TakeMadnessPin), so a nested apply can never inherit it.
+inline thread_local MadnessPin g_madness_pin{};
+struct MadnessHostScope
+{
+    const MadnessPayFn* prev_payer;
+    MadnessPin          prev_pin;
+    MadnessHostScope(const MadnessPayFn* payer, MadnessPin pin)
+        : prev_payer(g_madness_payer), prev_pin(g_madness_pin)
+    { g_madness_payer = payer; g_madness_pin = pin; }
+    ~MadnessHostScope() { g_madness_payer = prev_payer; g_madness_pin = prev_pin; }
+    MadnessHostScope(const MadnessHostScope&) = delete;
+    MadnessHostScope& operator=(const MadnessHostScope&) = delete;
+};
+inline MadnessPin TakeMadnessPin()
+{
+    const MadnessPin p = g_madness_pin;
+    g_madness_pin = MadnessPin{};
+    return p;
+}
+// The window a main-phase madness trigger resolves in (the convoke arms and the provider rule read it).
+inline MadnessWindow MadnessWindowNow(const GameState& s)
+{
+    return s.phase == Phase::PostCombatMain ? MadnessWindow::PostCombatMain : MadnessWindow::PreCombatMain;
+}
+// Resolve every queued madness trigger, FIFO (one controller; ordering our own simultaneous triggers is
+// ours, FIFO is the deterministic choice). Defined with the convoke helpers further down.
+inline int ResolvePendingMadness(GameState& state, std::vector<MadnessPending>& mq, MadnessWindow w,
+                                 MadnessPin pin, const std::string& source);
+// The shape every RESOLVING-effect discard site uses: resolve its queue (if any) with the hosted payer,
+// unpinned (no current deck pairs these effects with a madness card; an in-window event is counted).
+inline void ResolveEffectMadness(GameState& state, std::vector<MadnessPending>& mq, const std::string& source)
+{
+    if (mq.empty()) { return; }
+    ResolvePendingMadness(state, mq, MadnessWindow::Resolution, MadnessPin{}, source);
+}
+
+// `madness_q` (Vampires A1): where a shed madness card is queued -- the caller resolves it after the
+// CR 514.2 reset (GameEngine::CleanupStep / SimulateEndAndStartNextTurn). Null = no madness host (a
+// scratch / unit-test caller); a madness card shed with no host is counted and declined.
 inline int CleanupDiscardShed(GameState& state, const std::vector<std::string>* required_pieces,
                               int count, int pinned_first, bool invert, bool staged_exempt,
-                              bool* consulted)
+                              bool* consulted, std::vector<MadnessPending>* madness_q = nullptr)
 {
     ShedStats::CostScope _scs;          // MTG_SHED_STATS cost attribution; see ShedStats::CostScope
     if (consulted != nullptr) { *consulted = false; }
@@ -693,14 +752,10 @@ inline int CleanupDiscardShed(GameState& state, const std::vector<std::string>* 
         }
         ShedStats::Count(state, /*is_rollout=*/true);   // MTG_SHED_STATS; off by default
         if (s_verify) { got.push_back(ap.hand[static_cast<std::size_t>(v)].m_name.str()); }
-        // Progenitus: shuffled into its owner's library instead of the graveyard (replacement) --
-        // lockstep with GameEngine::CleanupStep's identical check.
-        if (!MaybeReplaceGraveyardWithLibraryShuffle(state, state.active_player_index,
-                                                     ap.hand[static_cast<std::size_t>(v)]))
-        {
-            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(v)]);
-        }
-        ap.hand.erase(ap.hand.begin() + v);
+        // THE SHARED DISCARD HOOK: madness exile + queue, else Progenitus (shuffled into its owner's
+        // library instead of the graveyard -- a replacement), else the graveyard. Lockstep with
+        // GameEngine::CleanupStep, which calls the identical hook.
+        DiscardCardFromHand(state, state.active_player_index, v, madness_q, "cleanup");
         ++done;
         // Re-map the cached order onto the shrunken hand in place -- drop the shed entry, decrement
         // everything that sat behind it. This is what lets ONE consultation answer a multi-card
@@ -2427,7 +2482,42 @@ struct ConvokeClasses
     std::vector<int> free_green, free_other;   // m_numbers, cheapest-first
     std::vector<int> atk_green,  atk_other;    // would-attack bodies (real opportunity cost)
 };
-inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
+// THE CONVOKE RULES a classification runs under (Vampires A1, design_A1 §2.7). The legacy default --
+// Chord of Calling's -- is pip GREEN, no post-combat collapse, no {T}-ability term: ClassifyConvokeBodies
+// (s, c) below is that default and is byte-identical to the pre-A1 classifier. A CREATURE spell with
+// convoke (Markov Baron) runs ConvokeRulesFor its definition: its own pip colour (a body of that colour
+// pays the pip or {1}; ConvokeClasses' *_green lists then hold the PIP-coloured bodies), every untapped
+// body FREE once combat is over (it can no longer attack; the passive opponent never attacks), and a
+// body with a live non-mana {T} ability COSTLY in every window (tapping it forfeits that ability).
+// Whether Chord should adopt the two new terms is a play change left to the USER (Melira Pod has no
+// creature that the {T} term would reclassify today; the post-combat term would widen its main-2 arm 0).
+struct ConvokeRules
+{
+    Color pip                = Color::Green;
+    bool  all_free           = false;   // after combat / at cleanup: no body can attack any more
+    bool  tap_ability_costly = false;   // a body with a live non-mana {T} ability is COSTLY
+};
+// Does a convoke body have a LIVE non-mana {T} ability (one the convoke tap would forfeit)? The {T}
+// rows of the activation tables (PermAbilityTaps), read off the definition, and the body able to tap
+// now. Cluster B (Bloodline Keeper's token ability) adds its param HERE. Consulted only under the
+// creature-spell rules, so Chord's classification never reads it.
+inline bool ConvokeBodyTapAbilityLive(const GameState& s, const Permanent& p, const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    const CardParams& pp = d->params;
+    const bool has_tap_ability =
+           (pp.tap_damage_cost.has_value()      && PermAbilityTaps(PermAbilityMode::TapDamage))
+        || (pp.tap_investigate_cost.has_value() && PermAbilityTaps(PermAbilityMode::TapInvestigate))
+        || (pp.tap_draw_cost.has_value()        && PermAbilityTaps(PermAbilityMode::TapDraw))
+        || (pp.ice_counter_cost.has_value()     && PermAbilityTaps(PermAbilityMode::IceCounter))
+        || (pp.lifelink_grant_cost.has_value()  && PermAbilityTaps(PermAbilityMode::GrantLifelink))
+        || (pp.pay_token_cost.has_value()       && PermAbilityTaps(PermAbilityMode::PayToken))
+        || (pp.ping_all_cost.has_value()        && PermAbilityTaps(PermAbilityMode::PingAll))
+        || (pp.tap_lifegain_cost.has_value()    && PermAbilityTaps(PermAbilityMode::TapLifegain))
+        || (pp.activated_dig_cost.has_value()   && PermAbilityTaps(PermAbilityMode::ActivatedDig));
+    return has_tap_ability && CanTapNow(p, s.battlefield, nullptr);
+}
+inline ConvokeClasses ClassifyConvokeBodiesEx(const GameState& s, int controller, const ConvokeRules& r)
 {
     ConvokeClasses out;
     struct Ent { int pw, num; bool green, free; };
@@ -2439,8 +2529,9 @@ inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
         const bool live_dork = d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield, nullptr);
         if (live_dork) { continue; }
         const int  pw   = p.EffectivePower();
-        const bool atk  = CanAttackFull(p, s.battlefield, controller) && pw > 0;
-        ents.push_back(Ent{pw, p.card.m_number, p.card.HasColor(Color::Green), !atk});
+        const bool atk  = !r.all_free && CanAttackFull(p, s.battlefield, controller) && pw > 0;
+        const bool tapc = r.tap_ability_costly && ConvokeBodyTapAbilityLive(s, p, d);
+        ents.push_back(Ent{pw, p.card.m_number, p.card.HasColor(r.pip), !atk && !tapc});
     }
     std::sort(ents.begin(), ents.end(), [](const Ent& a, const Ent& b)
               { if (a.pw != b.pw) { return a.pw < b.pw; } return a.num < b.num; });
@@ -2450,6 +2541,46 @@ inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
                 : (e.green ? out.atk_green  : out.atk_other)).push_back(e.num);
     }
     return out;
+}
+inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
+{
+    return ClassifyConvokeBodiesEx(s, controller, ConvokeRules{});
+}
+// The convoke PIP colour of a card: the colour of its printed mana cost's coloured pips (Chord of
+// Calling G, Markov Baron B). A cost with pips of several colours would need per-colour counts (no
+// convoke card in the pool has one); it reads the first colour in WUBRG order. No coloured pip: Green
+// (the legacy default -- there is no pip to cover, so the colour never matters).
+inline Color ConvokePipColor(const CardDefinition& d)
+{
+    const ManaCost& m = d.card.m_mana_cost;
+    if (m.white > 0) { return Color::White; }
+    if (m.blue  > 0) { return Color::Blue;  }
+    if (m.black > 0) { return Color::Black; }
+    if (m.red   > 0) { return Color::Red;   }
+    return Color::Green;
+}
+inline int* ConvokePipField(ManaCost& c, Color pip)
+{
+    switch (pip)
+    {
+        case Color::White: return &c.white;
+        case Color::Blue:  return &c.blue;
+        case Color::Black: return &c.black;
+        case Color::Red:   return &c.red;
+        case Color::Green: return &c.green;
+        default:           return &c.green;
+    }
+}
+// The rules a convoke card's cast runs under at `post_combat_or_cleanup`. Chord (not a creature): the
+// legacy default, byte-identical. A creature spell: its pip, the post-combat collapse, the {T} term.
+inline ConvokeRules ConvokeRulesFor(const CardDefinition& d, bool post_combat_or_cleanup)
+{
+    ConvokeRules r;
+    if (!d.card.IsCreature()) { return r; }
+    r.pip                = ConvokePipColor(d);
+    r.all_free           = post_combat_or_cleanup;
+    r.tap_ability_costly = true;
+    return r;
 }
 
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
@@ -9495,6 +9626,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             if ((hd ? hd->card : cp_.hand[hi]).IsLand()) { land_idx.push_back(hi); }
         }
         int n_disc = std::max(0, static_cast<int>(land_idx.size()) - 2);
+        std::vector<MadnessPending> rum_mq;   // the shared discard hook (Vampires A1)
         // Human-play rummage override (--claude-play / viewer; bucket-B wiring 2026-09-05): the
         // person picks WHICH cards to discard -- any number, zero included (the +1 bonus draw
         // happens regardless). Candidates = the whole hand; the excess-lands heuristic set is
@@ -9515,11 +9647,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             std::sort(chosen.begin(), chosen.end(), std::greater<int>());
             chosen.erase(std::unique(chosen.begin(), chosen.end()), chosen.end());
             for (int hi : chosen)
-            {
-                Card gone = cp_.hand[hi];
-                cp_.hand.erase(cp_.hand.begin() + hi);
-                cp_.graveyard.push_back(std::move(gone));
-            }
+            { DiscardCardFromHand(state, controller, hi, &rum_mq, def->card.m_name.str()); }
             n_disc = static_cast<int>(chosen.size());
         }
         else
@@ -9527,9 +9655,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         for (int k = 0; k < n_disc; ++k)
         {
             const int hi = land_idx[land_idx.size() - 1 - k];   // erase from the back: stable idx
-            Card gone = cp_.hand[hi];
-            cp_.hand.erase(cp_.hand.begin() + hi);
-            cp_.graveyard.push_back(std::move(gone));
+            DiscardCardFromHand(state, controller, hi, &rum_mq, def->card.m_name.str());
         }
         }
         const int n_draw = n_disc + p.etb_discard_any_draw_bonus;
@@ -9550,6 +9676,8 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
                           "\xF0\x9F\x83\x8F " + def->card.m_name.str() + " -- discarded "
                           + std::to_string(n_disc) + ", drew " + std::to_string(n_draw));
         }
+        // A madness card discarded by the RESOLVING trigger: its trigger after the rummage completes.
+        ResolveEffectMadness(state, rum_mq, def->card.m_name.str());
     }
 
     // Kitesail Larcenist: "When this creature enters, for each player, choose up to one other target
@@ -13759,36 +13887,107 @@ inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller,
 }
 
 // ================================================================================================
-// THE SHARED DISCARD HOOK (Vampires A2, 2026-10-18) -- the seam cluster A1 (madness) builds on.
+// THE SHARED DISCARD HOOK + THE MADNESS CORE (hook: Vampires A2 2026-10-18; madness: A1 2026-10-18)
 // ================================================================================================
-// Moves hand[hand_idx] out of `controller`'s hand as a DISCARD (CR 701.8) and puts it where it goes:
-//   * [MADNESS SEAM -- cluster A1, NOT YET IMPLEMENTED] a card with madness (CR 702.35) is exiled
-//     instead and queued for its madness trigger; the caller resolves the queue AFTER every other
-//     cost of the same activation is paid and BEFORE the ability's effect (see the outlet appliers'
-//     own [MADNESS SEAM] markers: pay mana -> discard -> sacrifice -> madness -> effect, so a
-//     madness-cast creature can never be the same activation's sacrifice, and Stromkirk Condemned's
-//     pump reaches it -- the 2016-07-13 ruling). A1 adds the `std::vector<MadnessPending>* mq`
-//     parameter here (design_A1_madness.md §2.3) and routes every OTHER discard site through this
-//     function (its §2.4 migration table);
+// design_A1_madness.md §2.3-§2.6. EVERY real discard in the engine routes through DiscardCardFromHand
+// (the cleanup in both worlds, Burning-Fist, Neheb, the loots, channel / transmute, Celes, Gamble,
+// retrace, cycling, Land's Edge, and the Vampires outlets). It moves hand[hand_idx] out of
+// `controller`'s hand as a DISCARD (CR 701.8) and puts it where it goes:
+//   * a card with MADNESS (CR 702.35: its own madness_cost, or Falkenrath Gorger's grant -- see
+//     MadnessCostsFor) is exiled instead and queued on `mq` for its madness trigger. The OPTIONAL
+//     replacement ("you may discard it into exile") is folded into the cast-or-decline: exiling and
+//     then declining ends in the graveyard exactly as not exiling does, and no window in this engine
+//     can observe the exile in between -- an identity fold, so the hook always exiles a madness card
+//     and the decline is the real choice (disclosure D-A1-5);
 //   * Progenitus's replacement (MaybeReplaceGraveyardWithLibraryShuffle) -> the library + a shuffle;
 //   * else the owner's graveyard (a hand card's owner is its controller here).
-// Does NOT log and does NOT count Player::cards_cycled_or_discarded_this_turn: each site keeps its
-// own bookkeeping, so routing an existing site through here is byte-identical. TODAY ONLY THE NEW
-// VAMPIRES OUTLETS CALL IT (Falkenrath Pit Fighter, Stromkirk Condemned, the Blood token); the
-// pre-existing discard sites stay open-coded until A1's migration (their decks stay byte-identical).
-enum class DiscardDest : std::uint8_t { Graveyard, LibraryShuffle };
-inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
-                                       const std::string& cause)
+// The CALLER resolves the queue (ResolvePendingMadness) at the point the rules put the trigger:
+//   * a discard paid as a COST (an outlet's "Discard a card") -> after every cost is paid and BEFORE the
+//     ability's effect (the madness trigger goes on the stack above the ability, so the madness-cast
+//     creature resolves first -- Stromkirk Condemned's 2016-07-13 ruling);
+//   * a discard while a spell / ability RESOLVES (a loot, Neheb) -> after that effect completes;
+//   * the CLEANUP discard -> after the CR 514.2 reset (CR 514.3a: the trigger gets priority, then a new
+//     cleanup step -- madness cannot raise the hand size, so the re-check is a no-op).
+// Does NOT log and does NOT count Player::cards_cycled_or_discarded_this_turn: each site keeps its own
+// bookkeeping, so routing a site through here is byte-identical for every deck without madness (whose
+// discards also skip the madness lookup entirely: GameState::deck_has_madness).
+
+// Diagnostic counters (never read by play). UNHOSTED: a madness card discarded at a site that passed no
+// queue (a scratch / sim caller) -- the trigger cannot resolve, so the card is treated as a decline.
+// UNPINNED_IN_WINDOW: a main-phase madness trigger resolved by the provider's default while the search
+// still had depth (greedywindow::InWindow) -- a site whose enumeration missed the madness axis. MUST
+// read 0 (the A2 unpinned-discard counter's twin, asserted by test_vampires_madness.cpp's lockstep sweep).
+// The cleanup is excluded: its one-option rule is the stated dominance fold (USER question 4).
+inline std::atomic<long long> g_madness_unhosted{0};
+inline std::atomic<long long> g_madness_unpinned_in_window{0};
+inline std::atomic<long long> g_madness_unpaid{0};   // a chosen cast whose payment failed (-> declined)
+
+// The DISTINCT madness costs `c` has if `owner` discards it NOW, cheapest first. Its own madness_cost,
+// plus -- for a CREATURE card -- its printed mana cost (front face) while `owner` controls a permanent
+// granting madness to that card's subtype (Falkenrath Gorger: "Each Vampire creature card you own that
+// isn't on the battlefield has madness. The madness cost is equal to its mana cost."). The discarded
+// card is in hand, so a lone Gorger discarded gets nothing; a second Gorger on the battlefield grants
+// it. Two Gorgers grant ONE instance, and an own cost equal to the granted one folds with it (Markov
+// Baron / Asylum Visitor + a Gorger: one option) -- the costs are a SET. The choice between two
+// different instances (a card with its own madness AND a different granted cost -- none in the pool)
+// survives as two options.
+inline std::vector<ManaCost> MadnessCostsFor(const GameState& state, int owner, const Card& c)
 {
-    (void)cause;   // A1: the madness record's `cause` (the discard's source name)
+    std::vector<ManaCost> out;
+    if (!state.deck_has_madness) { return out; }   // presence gate (GameState.h): proves no madness
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr) { return out; }
+    auto add = [&out](const ManaCost& m)
+    { if (std::find(out.begin(), out.end(), m) == out.end()) { out.push_back(m); } };
+    if (d->params.madness_cost.has_value()) { add(*d->params.madness_cost); }
+    if (d->card.IsCreature())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != owner) { continue; }
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
+            if (gd == nullptr || gd->params.grants_madness_creature_subtype.empty()) { continue; }
+            if (!CardHasSubtype(d->card, gd->params.grants_madness_creature_subtype)) { continue; }
+            add(d->card.m_mana_cost);
+        }
+    }
+    std::stable_sort(out.begin(), out.end(),
+                     [](const ManaCost& a, const ManaCost& b) { return a.ManaValue() < b.ManaValue(); });
+    return out;
+}
+
+inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
+                                       std::vector<MadnessPending>* mq, const std::string& cause)
+{
     Player& pl = state.players[controller];
     Card c = pl.hand[static_cast<std::size_t>(hand_idx)];
     pl.hand.erase(pl.hand.begin() + hand_idx);
-    // [MADNESS SEAM] A1: `if (!MadnessCostsFor(state, controller, c).empty()) { exile + queue; return MadnessExile; }`
+    if (state.deck_has_madness)
+    {
+        std::vector<ManaCost> costs = MadnessCostsFor(state, controller, c);
+        if (!costs.empty())
+        {
+            if (mq != nullptr)
+            {
+                state.exile.push_back(c);   // in exile until its trigger resolves (CR 702.35a)
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "discard",
+                                  c.m_name.str() + " -- discarded into exile (madness, " + cause + ")");
+                }
+                mq->push_back(MadnessPending{ c, controller, std::move(costs), cause });
+                return DiscardDest::MadnessExile;
+            }
+            g_madness_unhosted.fetch_add(1, std::memory_order_relaxed);
+            TRACE("madness", "UNHOSTED discard of %s (%s) -- treated as declined", c.m_name.str().c_str(),
+                  cause.c_str());
+        }
+    }
     if (MaybeReplaceGraveyardWithLibraryShuffle(state, controller, c)) { return DiscardDest::LibraryShuffle; }
     pl.graveyard.push_back(c);
     return DiscardDest::Graveyard;
 }
+
 
 // The hand index a PINNED activation discard takes: the first NON-STAGED copy of `pin` in hand order.
 // Every copy of one name is the same card by definition (the identity fold that makes one variant per
@@ -13878,7 +14077,7 @@ inline bool DiscardTeamPumpLive(const GameState& state, int controller, int sour
 //             Vampires you control get +1/+1 until end of turn. Activate only once each turn." No
 //             mana, no {T}. `discard_pin` names WHICH card (the searched pin, Action::discard_name;
 //             empty = asked at resolution -- human play). Order (design_A1 §2.5): mark the
-//             once-each-turn use -> DISCARD (the cost) -> [MADNESS SEAM] -> the +P/+T on every
+//             once-each-turn use -> DISCARD (the cost) -> [MADNESS: ResolvePendingMadness] -> the +P/+T on every
 //             matching creature we control AS IT RESOLVES (a madness-cast Vampire is included, the
 //             2016 ruling; one cast later this turn is not, CR 611.2c). k is always 1.
 inline int ApplyActivatePump(GameState& state, int controller, int source_id, int mode, int k,
@@ -13904,11 +14103,13 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
         if (sd->params.activate_once_each_turn) { state.battlefield[src].once_per_turn_used = true; }
         Player& ap = state.players[controller];
         const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
-        DiscardCardFromHand(state, controller, hi, src_name);   // COST (CR 602.2b)
+        std::vector<MadnessPending> mq;
+        DiscardCardFromHand(state, controller, hi, &mq, src_name);   // COST (CR 602.2b)
         ++ap.cards_cycled_or_discarded_this_turn;
-        // [MADNESS SEAM] cluster A1: ResolvePendingMadness(...) HERE -- the madness trigger sits above
-        // the ability on the stack, so a madness-cast Vampire is on the battlefield before the pump
-        // below reads it (Stromkirk Condemned ruling 2016-07-13).
+        // MADNESS (A1): the trigger sits above the ability on the stack, so a madness-cast Vampire is on
+        // the battlefield before the pump below reads it (Stromkirk Condemned ruling 2016-07-13). The
+        // searched pin rides the activation (MadnessHostScope, both trailing passes).
+        ResolvePendingMadness(state, mq, MadnessWindowNow(state), TakeMadnessPin(), src_name);
         const int pp = sd->params.discard_team_pump_power;
         const int pt = sd->params.discard_team_pump_toughness;
         int hit = 0;
@@ -13947,8 +14148,14 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                                                         state.battlefield[src].card.m_name.str());
             if (hi < 0) { break; }
             const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
-            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
-            ap.hand.erase(ap.hand.begin() + hi);
+            // The discard is a COST: through the shared hook, and a madness trigger resolves before
+            // the +N/+0 (it sits above the ability on the stack). Byte-identical without madness.
+            {
+                const std::string src_nm = state.battlefield[src].card.m_name.str();
+                std::vector<MadnessPending> mq;
+                DiscardCardFromHand(state, controller, hi, &mq, src_nm);
+                ResolvePendingMadness(state, mq, MadnessWindowNow(state), TakeMadnessPin(), src_nm);
+            }
             state.battlefield[src].temp_power_bonus += sd->params.firebreathing_power;
             if (g_play_event_sink && !g_tap_speculating)
             {
@@ -14901,7 +15108,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
 //
 // ORDER (design_A1 §2.5, the madness contract): the caller pays the MANA (under CreatureAbilityPayScope:
 // the source is a creature, so Secluded Courtyard's coloured mana is legal) -> DISCARD (cost) ->
-// SACRIFICE (cost) -> [MADNESS SEAM] -> draw. A madness card discarded here is in exile while the
+// SACRIFICE (cost) -> [MADNESS: ResolvePendingMadness] -> draw. A madness card discarded here is in exile while the
 // sacrifice is chosen, so it can never be this activation's victim, and it is on the battlefield
 // before the draw resolves.
 //
@@ -15010,7 +15217,10 @@ inline bool ApplyDiscardSacOutlet(GameState& state, int controller, int source_i
     }
     if (od == nullptr) { return false; }
     const CardParams& op = od->params;   // the card DB entry: stable across the battlefield edits below
-    // 1. DISCARD (the cost; human play asks here -- the `discard` decision, source = this outlet).
+    // 1. DISCARD (the cost; human play asks here -- the `discard` decision, source = this outlet). A
+    // madness card is exiled and queued here, BEFORE the sacrifice: a Falkenrath Gorger sacrificed
+    // below has already granted its madness (the grant is snapshotted at the discard -- 2016 ruling).
+    std::vector<MadnessPending> mq;
     std::string shed;
     for (int n = 0; n < std::max(1, op.sac_outlet_discard_cost); ++n)
     {
@@ -15020,7 +15230,7 @@ inline bool ApplyDiscardSacOutlet(GameState& state, int controller, int source_i
         Player& ap = state.players[controller];
         if (!shed.empty()) { shed += ", "; }
         shed += ap.hand[static_cast<std::size_t>(hi)].m_name.str();
-        DiscardCardFromHand(state, controller, hi, src_name);
+        DiscardCardFromHand(state, controller, hi, &mq, src_name);
         ++ap.cards_cycled_or_discarded_this_turn;
     }
     // 2. SACRIFICE (the cost). Human play re-asks WHICH Vampire dies against the real board (the
@@ -15044,8 +15254,9 @@ inline bool ApplyDiscardSacOutlet(GameState& state, int controller, int source_i
     // SacrificePermanentAt: graveyard, attachments fall off, FireSacrificeWatchers, OnCreatureDies.
     // A sacrificed Bloodghast is now a graveyard landfall watcher (FireLandfallTriggers).
     SacrificePermanentAt(state, controller, hidx);
-    // 3. [MADNESS SEAM] cluster A1: ResolvePendingMadness(...) HERE -- after every cost is paid, before
-    //    the effect (the madness trigger is above the ability on the stack).
+    // 3. MADNESS (A1): after every cost is paid, before the effect (the madness trigger is above the
+    //    ability on the stack). The madness-cast creature can never be this activation's victim.
+    ResolvePendingMadness(state, mq, MadnessWindowNow(state), TakeMadnessPin(), src_name);
     // 4. EFFECT: "Draw two cards" (a real draw -> the hand-entry breakpoint re-solves the phase, which is
     //    how a further activation with fresh victim/discard choices is reached).
     TrickDraw(state, controller, op.sac_outlet_draw);
@@ -15189,23 +15400,30 @@ inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int
 // caught the recompute sites pricing the FULL cost while the plan was committed at the reduced
 // one: a mana-legal convoke Chord tapped its bodies, failed the recomputed payment, and was
 // silently dropped ("dropped_casts") -- three independent agents reproduced it.
-inline void ApplyConvokeReduction(ManaCost& c, int green_taps, int other_taps)
+// `pip` (Vampires A1): the colour whose pip the `green_taps` bodies cover first -- Chord's GREEN by
+// default (byte-identical), the spell's own pip colour for a creature spell (ConvokePipColor: Markov
+// Baron's {B}). The count names "bodies of the pip colour" whatever that colour is.
+inline void ApplyConvokeReduction(ManaCost& c, int green_taps, int other_taps, Color pip = Color::Green)
 {
     if (green_taps <= 0 && other_taps <= 0) { return; }
-    const int g1 = std::min(green_taps, c.green);
-    c.green -= g1;
+    int* pf = ConvokePipField(c, pip);
+    const int g1 = std::min(green_taps, *pf);
+    *pf -= g1;
     const int gen_cover = std::min(c.generic, (green_taps - g1) + other_taps);
     c.generic -= gen_cover;
 }
 
-// Tap `green` green and `other` non-green convoke bodies -- free bodies first, then attackers,
-// in the classification's deterministic order. Taps fewer if the board changed (stale-plan
-// guard); the cost was reduced at enumeration, so a shortfall costs payment quality (the reduced
-// cost may then fail to pay), never phantom mana.
-inline void ApplyConvokeTaps(GameState& state, int controller, int green, int other)
+// Tap `green` pip-coloured and `other` other convoke bodies -- free bodies first, then attackers,
+// in the classification's deterministic order (`r`: the legacy Chord rules by default). Taps fewer if
+// the board changed (stale-plan guard); the cost was reduced at enumeration, so a shortfall costs
+// payment quality (the reduced cost may then fail to pay), never phantom mana. `tapped_out` (may be
+// null) receives the m_numbers tapped, so a caller whose payment then fails can untap them (the
+// madness resolver).
+inline void ApplyConvokeTapsEx(GameState& state, int controller, int green, int other, const ConvokeRules& r,
+                               std::vector<int>* tapped_out = nullptr)
 {
     if (green <= 0 && other <= 0) { return; }
-    const ConvokeClasses cc = ClassifyConvokeBodies(state, controller);
+    const ConvokeClasses cc = ClassifyConvokeBodiesEx(state, controller, r);
     auto tap_ids = [&](const std::vector<int>& ids, int& want)
     {
         for (int id : ids)
@@ -15214,7 +15432,11 @@ inline void ApplyConvokeTaps(GameState& state, int controller, int green, int ot
             for (Permanent& p : state.battlefield)
             {
                 if (p.controller_index == controller && p.card.m_number == id && !p.tapped)
-                { p.tapped = true; --want; break; }
+                {
+                    p.tapped = true; --want;
+                    if (tapped_out != nullptr) { tapped_out->push_back(id); }
+                    break;
+                }
             }
         }
     };
@@ -15227,6 +15449,300 @@ inline void ApplyConvokeTaps(GameState& state, int controller, int green, int ot
                       "\xF0\x9F\x99\x8C Convoke -- tapped "
                       + std::to_string(green - g + other - o) + " creature(s)");
     }
+}
+inline void ApplyConvokeTaps(GameState& state, int controller, int green, int other)
+{
+    ApplyConvokeTapsEx(state, controller, green, other, ConvokeRules{});
+}
+// The apply-side twin every CastFromHand convoke site calls (both worlds, the payability walks): the
+// card's own rules (ConvokeRulesFor -- Chord's legacy rules, a creature spell's pip / post-combat /
+// {T} terms) at the CURRENT phase, so the bodies tapped are exactly the ones the enumeration counted.
+inline void ApplyConvokeTapsForCard(GameState& state, int controller, const CardDefinition* d,
+                                    int green, int other)
+{
+    if (green <= 0 && other <= 0) { return; }
+    const ConvokeRules r = d != nullptr ? ConvokeRulesFor(*d, state.phase == Phase::PostCombatMain)
+                                        : ConvokeRules{};
+    ApplyConvokeTapsEx(state, controller, green, other, r);
+}
+inline Color ConvokePipColorOf(const CardDefinition* d) { return d != nullptr ? ConvokePipColor(*d) : Color::Green; }
+
+inline bool& PayingCreatureAbility();   // defined far below (the D12 ability pay scope)
+
+// ---- CREATURE-SPELL CONVOKE ARMS (Vampires A1, design_A1 §2.7) ----------------------------------
+// The convoke arms of a creature spell's `base` cost under rules `r` (ConvokeRulesFor), in order:
+//   arm 0 -- every FREE body that helps (pip-coloured bodies cover the pip first, then generic; other
+//            bodies cover generic; leftover pip bodies cover generic -- the Chord assignment);
+//   arm k -- arm 0 plus the k lowest-power COSTLY bodies that still help (a body that would attack, or
+//            one with a live non-mana {T} ability), each a distinct reduction. Lowest power first is the
+//            classifier's order (ledger open question 5 -- the USER may prefer a provider order that
+//            keeps attack-trigger bodies such as Drana / Mavren Fein untapped).
+// Arms are PREFIXES within each colour class, which is exactly what ApplyConvokeTapsEx taps by count
+// (free first, then costly, ascending power), so a count pair names one body set in both worlds.
+// After combat / at cleanup (r.all_free) every untapped body without a live {T} ability is free, so
+// arm 0 already taps everything that helps and the costly arms are only {T}-ability bodies.
+struct ConvokeArmSpec { int pip = 0, other = 0; ManaCost reduced; };
+inline std::vector<ConvokeArmSpec> CreatureConvokeArms(const GameState& s, int controller, const ManaCost& base,
+                                                       const ConvokeRules& r)
+{
+    std::vector<ConvokeArmSpec> arms;
+    const ConvokeClasses cc = ClassifyConvokeBodiesEx(s, controller, r);
+    ManaCost probe = base;
+    const int pip_need = *ConvokePipField(probe, r.pip);
+    auto assign = [&](int ap, int ao) -> ConvokeArmSpec
+    {
+        ConvokeArmSpec a;
+        const int p1 = std::min(ap, pip_need);
+        const int o1 = std::min(ao, base.generic);
+        const int p2 = std::max(0, std::min(ap - p1, base.generic - o1));
+        a.pip = p1 + p2; a.other = o1; a.reduced = base;
+        ApplyConvokeReduction(a.reduced, a.pip, a.other, r.pip);
+        return a;
+    };
+    const int fp = static_cast<int>(cc.free_green.size());
+    const int fo = static_cast<int>(cc.free_other.size());
+    arms.push_back(assign(fp, fo));
+    // The costly bodies, merged lowest power first (ties: m_number) across the two colour classes.
+    auto power_of = [&](int num) -> int
+    {
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == num && p.controller_index == controller) { return p.EffectivePower(); } }
+        return 0;
+    };
+    std::size_t ip = 0, io = 0;
+    int tp = 0, to = 0;
+    while (arms.back().reduced.ManaValue() > 0)
+    {
+        ManaCost last = arms.back().reduced;
+        const bool pip_useful   = *ConvokePipField(last, r.pip) > 0 || last.generic > 0;
+        const bool other_useful = last.generic > 0;
+        const bool has_p = pip_useful && ip < cc.atk_green.size();
+        const bool has_o = other_useful && io < cc.atk_other.size();
+        if (!has_p && !has_o) { break; }
+        bool take_p = has_p;
+        if (has_p && has_o)
+        {
+            const int pp = power_of(cc.atk_green[ip]), po = power_of(cc.atk_other[io]);
+            take_p = pp < po || (pp == po && cc.atk_green[ip] < cc.atk_other[io]);
+        }
+        if (take_p) { ++ip; ++tp; } else { ++io; ++to; }
+        const ConvokeArmSpec a = assign(fp + tp, fo + to);
+        if (a.reduced.ManaValue() < arms.back().reduced.ManaValue()) { arms.push_back(a); }
+    }
+    return arms;
+}
+
+// ---- THE MADNESS CORE, part 2: options, the cast, the resolver ----------------------------------
+// Every payable way to cast the pending card NOW: one per (distinct madness cost) x (convoke arm, for a
+// card with convoke -- convoke applies after the alternative cost, CR 601.2f / the Markov Baron ruling),
+// each kept only if a probe ON A COPY can tap the arm's bodies and pay the reduced cost with `payer`
+// (exact under the restricted lands). Empty when nothing is payable or no more spells may be cast this
+// turn (Irencrag's budget, casts_remaining_this_turn == 0). Never asks a human (probes run paused).
+inline std::vector<MadnessOption> MadnessOptionsNow(const GameState& state, const MadnessPending& pend,
+                                                    MadnessWindow w, const MadnessPayFn* payer)
+{
+    std::vector<MadnessOption> out;
+    if (state.casts_remaining_this_turn == 0) { return out; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(pend.card);
+    if (d == nullptr) { return out; }
+    const bool late = w == MadnessWindow::PostCombatMain || w == MadnessWindow::Cleanup
+                   || state.phase == Phase::PostCombatMain;
+    const ConvokeRules r = ConvokeRulesFor(*d, late);
+    RevealLogPause _pause;               // a probe never asks a human or logs
+    TapSpeculationScope _spec;
+    for (std::size_t ci = 0; ci < pend.costs.size(); ++ci)
+    {
+        std::vector<ConvokeArmSpec> arms;
+        if (d->params.convoke && d->card.IsCreature()) { arms = CreatureConvokeArms(state, pend.owner, pend.costs[ci], r); }
+        else { arms.push_back(ConvokeArmSpec{ 0, 0, pend.costs[ci] }); }
+        for (std::size_t a = 0; a < arms.size(); ++a)
+        {
+            MadnessOption o;
+            o.cost_idx   = static_cast<std::int8_t>(ci);
+            o.arm        = static_cast<std::int8_t>(a);
+            o.conv_pip   = static_cast<std::int8_t>(arms[a].pip);
+            o.conv_other = static_cast<std::int8_t>(arms[a].other);
+            o.reduced    = arms[a].reduced;
+            if (payer != nullptr)
+            {
+                GameState probe = state;
+                ApplyConvokeTapsEx(probe, pend.owner, o.conv_pip, o.conv_other, r);
+                bool& pca = PayingCreatureAbility();
+                const bool prev = pca;
+                pca = false;   // a SPELL payment, never an enclosing ability's pay scope
+                const bool ok = (*payer)(probe, o.reduced);
+                pca = prev;
+                if (!ok) { continue; }
+            }
+            out.push_back(o);
+        }
+    }
+    return out;
+}
+
+// The madness CAST (CR 702.35b: cast it for its madness cost): the cast bookkeeping every cast site
+// performs (EffectHandler::PushFreeCast / CastSpellFromHand / apply_one -- the storm and mana-value
+// counters, Irencrag's budget, on-cast triggers, prowess), then the permanent spell resolves and enters
+// through the SHARED enter path (both ETB cascades -- FireEtbWatchers carries the enters-with
+// replacements, Vampire Socialite's counter included; lords and Stromkirk Condemned's later pump see
+// it). DISCLOSED SIMPLIFICATION (D-A1-1; the World War Hulk chapter-I precedent, PerformSagaFreeCast):
+// the spell does not physically traverse the stack, so stack-only cast machinery (PushCastTriggers:
+// cascade / demonstrate) is not run -- provably inert for every card that can be madness-cast in the
+// pool (no Vampire creature carries a cast trigger, cascade or storm). It is the ONE path both worlds
+// can call at every madness site, including the rollout's cleanup.
+inline void FireProwess(GameState& state, const CardDefinition& def);   // defined far below
+inline void CastFromMadness(GameState& state, int controller, const Card& card, const std::string& source)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+    if (d == nullptr) { state.players[controller].graveyard.push_back(card); return; }
+    ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += d->card.m_mana_cost.ManaValue();   // printed MV (CR 202.3), not the paid cost
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    if (d->params.max_casts_after >= 0)
+    {
+        state.casts_remaining_this_turn =
+            (state.casts_remaining_this_turn < 0)
+                ? d->params.max_casts_after
+                : std::min(state.casts_remaining_this_turn, d->params.max_casts_after);
+    }
+    FireOnCastTriggers(state, *d);
+    FireProwess(state, *d);
+    Permanent perm;
+    perm.card              = d->card;
+    perm.card.m_number     = card.m_number;   // per-copy id (logging / state key / aura links)
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    state.battlefield.push_back(perm);
+    const int idx = static_cast<int>(state.battlefield.size()) - 1;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "cast",
+                      card.m_name.str() + " -- cast for its madness cost (" + source + ")");
+    }
+    FireEtbWatchers(state, controller, idx);
+    FireOwnEtbTriggers(state, controller, idx, std::string(), kEtbKxHeuristic);
+}
+
+inline int ResolvePendingMadness(GameState& state, std::vector<MadnessPending>& mq, MadnessWindow w,
+                                 MadnessPin pin, const std::string& source)
+{
+    (void)source;
+    if (mq.empty()) { return 0; }
+    const MadnessPayFn* payer = g_madness_payer;
+    int casts = 0;
+    std::vector<MadnessPending> q;
+    q.swap(mq);   // the queue is consumed whatever happens below (a cast's ETB can never re-enter it)
+    for (std::size_t qi = 0; qi < q.size(); ++qi)
+    {
+        MadnessPending& pend = q[qi];
+        // Out of exile (it was put there by the discard).
+        for (int i = static_cast<int>(state.exile.size()) - 1; i >= 0; --i)
+        {
+            const Card& e = state.exile[static_cast<std::size_t>(i)];
+            if (e.m_number == pend.card.m_number && e.m_name == pend.card.m_name)
+            { state.exile.erase(state.exile.begin() + i); break; }
+        }
+        const MadnessPin use = (qi == 0) ? pin : MadnessPin{};   // a pin names ONE discard
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pend.card);
+        std::vector<MadnessOption> opts;
+        if (payer != nullptr && d != nullptr) { opts = MadnessOptionsNow(state, pend, w, payer); }
+        int choice = -1;   // index into opts, -1 = decline
+        const bool unpinned = use.choice < 0;
+        if (use.choice > 0)
+        {
+            for (std::size_t k = 0; k < opts.size(); ++k)
+            {
+                if (opts[k].cost_idx == use.choice - 1 && opts[k].arm == use.arm)
+                { choice = static_cast<int>(k); break; }
+            }
+            // absent = the pinned option no longer exists / is no longer payable: decline (the
+            // stranded-premise rule -- legal, and the variant then scores as the decline it is).
+        }
+        else if (unpinned && !opts.empty() && d != nullptr)
+        {
+            choice = ResolveProvider(state).MadnessCastDefault(state, pend.owner, *d, opts, w);
+            if (choice >= static_cast<int>(opts.size())) { choice = static_cast<int>(opts.size()) - 1; }
+            if (choice < -1) { choice = -1; }
+            // The no-greedy invariant's instrument: a main-phase / resolution trigger the search had
+            // depth for, decided by a default. Cleanup is the stated dominance fold (excluded).
+            if (w != MadnessWindow::Cleanup && !HumanPlayActive() && greedywindow::InWindow(0))
+            { g_madness_unpinned_in_window.fetch_add(1, std::memory_order_relaxed); }
+        }
+        // Human play: the person answers every UNPINNED madness trigger (the outlet's single unpinned
+        // entry, the cleanup, a resolving discard) -- the provider's pick is the preselect. With no
+        // payable cast there is nothing to choose (the card can only go to the graveyard; the play
+        // event says so), so nothing is asked. Nulled by RevealLogPause in every search / rollout
+        // scope, so autonomous play is untouched.
+        if (g_play_madness_chooser != nullptr && unpinned && !g_tap_speculating && d != nullptr
+            && !opts.empty())
+        {
+            std::vector<MadnessChoice> menu;
+            menu.reserve(opts.size());
+            for (const MadnessOption& o : opts)
+            {
+                MadnessChoice mc;
+                mc.cost_text    = o.reduced.ToString();
+                mc.convoke_taps = o.conv_pip + o.conv_other;
+                mc.label        = "Cast for " + (o.reduced.ManaValue() == 0 ? std::string("{0}") : o.reduced.ToString())
+                                + (mc.convoke_taps > 0 ? ", tapping " + std::to_string(mc.convoke_taps)
+                                                         + (mc.convoke_taps == 1 ? " creature" : " creatures")
+                                                         + " (convoke)"
+                                                       : std::string());
+                menu.push_back(mc);
+            }
+            const int got = (*g_play_madness_chooser)(state, pend.owner, pend.cause, pend.card, menu, choice);
+            choice = (got >= 0 && got < static_cast<int>(opts.size())) ? got : -1;
+        }
+        bool cast = false;
+        if (choice >= 0 && payer != nullptr && d != nullptr)
+        {
+            const MadnessOption& o = opts[static_cast<std::size_t>(choice)];
+            const bool late = w == MadnessWindow::PostCombatMain || w == MadnessWindow::Cleanup
+                           || state.phase == Phase::PostCombatMain;
+            const ConvokeRules r = ConvokeRulesFor(*d, late);
+            std::vector<int> tapped;
+            ApplyConvokeTapsEx(state, pend.owner, o.conv_pip, o.conv_other, r, &tapped);
+            bool& pca = PayingCreatureAbility();
+            const bool prev = pca;
+            pca = false;
+            const bool paid = (*payer)(state, o.reduced);
+            pca = prev;
+            if (paid)
+            {
+                CastFromMadness(state, pend.owner, pend.card, pend.cause);
+                ++casts;
+                cast = true;
+            }
+            else
+            {
+                // Unreachable after the probe on an identical copy with the identical payer; kept so a
+                // future payer drift costs a decline (legal) rather than phantom mana.
+                for (const int id : tapped)
+                {
+                    for (Permanent& p : state.battlefield)
+                    { if (p.card.m_number == id && p.controller_index == pend.owner) { p.tapped = false; break; } }
+                }
+                g_madness_unpaid.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        if (!cast)
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "discard",
+                              pend.card.m_name.str() + " -- not cast (madness declined): put into the graveyard");
+            }
+            if (!MaybeReplaceGraveyardWithLibraryShuffle(state, pend.owner, pend.card))
+            { state.players[static_cast<std::size_t>(pend.owner)].graveyard.push_back(pend.card); }
+        }
+        TRACE("madness", "g%llu T%d %s via %s w=%d pin=%d/%d opts=%zu -> %s",
+              static_cast<unsigned long long>(state.game_seed), state.turn_number,
+              pend.card.m_name.str().c_str(), pend.cause.c_str(), static_cast<int>(w),
+              static_cast<int>(use.choice), static_cast<int>(use.arm), opts.size(),
+              cast ? "CAST" : "declined");
+    }
+    return casts;
 }
 
 // Birthing Pod activation sentinel: an ActivatePod whose tutor_target is this string sacrifices
@@ -15415,8 +15931,10 @@ inline void ApplyChannel(GameState& state, int controller, int hand_index,
     else { for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
            { if (ap.hand[i].m_name == card_name) { idx = i; break; } } }
     if (idx < 0) { return; }
-    ap.graveyard.push_back(ap.hand[idx]);
-    ap.hand.erase(ap.hand.begin() + idx);
+    // "Discard this card" is a COST: the shared hook, and a madness trigger resolves before the effect.
+    std::vector<MadnessPending> mq;
+    DiscardCardFromHand(state, controller, idx, &mq, card_name);
+    ResolvePendingMadness(state, mq, MadnessWindowNow(state), TakeMadnessPin(), card_name);
     state.players[1 - controller].life -= damage;
     state.opponent_lost_life_this_turn = true;
 }
@@ -15449,8 +15967,10 @@ inline void ApplyTransmute(GameState& state, int controller, int hand_index,
     if (idx < 0) { return; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[idx]);
     const Card src = d ? d->card : ap.hand[idx];
-    ap.graveyard.push_back(ap.hand[idx]);
-    ap.hand.erase(ap.hand.begin() + idx);
+    // "Discard this card" is a COST: the shared hook, and a madness trigger resolves before the search.
+    std::vector<MadnessPending> mq;
+    DiscardCardFromHand(state, controller, idx, &mq, card_name);
+    ResolvePendingMadness(state, mq, MadnessWindowNow(state), TakeMadnessPin(), card_name);
     if (g_play_event_sink && !g_tap_speculating)
     { EmitPlayEvent(state.turn_number, "ability", card_name + ": transmute (discarded)"); }
     PdStats::Count(PdStats::Transmute);
@@ -17763,6 +18283,102 @@ inline void PerformUpkeepSporeCounters(GameState& state)
         if (sweepers > 0 && CardHasSubtype(p.card, "Fungus"))
         { for (int s = 0; s < sweepers; ++s) { PutSporeCounters(state, p, 1); } }
     }
+}
+
+// ---- ASYLUM VISITOR (Vampires A1, 2026-10-18; design_A1 §2.9) ------------------------------------
+// "At the beginning of each player's upkeep, if that player has no cards in hand, you draw a card and
+// you lose 1 life." (CardParams::hellbent_upkeep_draw / _life_loss / _each_player.)
+//
+// OUR UPKEEP -- PerformUpkeepHellbentDraw, lockstep: the TOP of GameEngine::UpkeepStep and the same
+// relative spot of the rollout's SimulateEndAndStartNextTurn (before the suspend arrivals and the Aether
+// Vial charge -- our simultaneous upkeep triggers are ours to order, and Visitor-first gives the Vial
+// decision the drawn card). An INTERVENING-IF (CR 603.4): checked as the upkeep begins AND on
+// resolution, so with N Visitors the first draw fills the hand and the rest do nothing -- ONE draw and
+// ONE life lost in total (2016-04-08 ruling). The hand is read on NON-STAGED cards: a staged card is in
+// exile (the rollout keeps it in `hand` flagged; the executor does not -- the cleanup's s_staged_exempt
+// rule). The draw is a real CR 121 draw (cards_drawn_this_turn); drawing from an empty library loses the
+// game exactly as the draw step does (returns false: the executor sets player_lost_on_draw, the rollout
+// returns false). The loss is LIFE LOSS, not damage.
+inline bool HandHasNonStaged(const Player& p)
+{
+    for (const Card& c : p.hand) { if (!c.m_is_staged) { return true; } }
+    return false;
+}
+inline void HellbentUpkeepResolve(GameState& state, int me, const CardParams& vp, const std::string& src)
+{
+    Player& ap = state.players[static_cast<std::size_t>(me)];
+    std::string drawn_names;
+    for (int k = 0; k < vp.hellbent_upkeep_draw && !ap.library.empty(); ++k)
+    {
+        Card c = ap.library.DrawTop();
+        ap.cards_drawn_this_turn += 1;
+        if (g_play_draw_sink && !g_tap_speculating) { g_play_draw_sink->push_back({ state.turn_number, c.m_name.str() }); }
+        if (g_reveal_logger) { g_reveal_logger->LogDraw(c.m_number, c.m_name.str()); }
+        if (!drawn_names.empty()) { drawn_names += ", "; }
+        drawn_names += c.m_name.str();
+        EnterHand(state, me, std::move(c), HandEntryReason::DrawStep);
+    }
+    ap.life -= vp.hellbent_upkeep_life_loss;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "draw",
+                      src + ": no cards in hand -- drew " + (drawn_names.empty() ? std::string("nothing") : drawn_names)
+                      + ", lost " + std::to_string(vp.hellbent_upkeep_life_loss) + " life");
+    }
+}
+inline bool PerformUpkeepHellbentDraw(GameState& state)
+{
+    const int me = state.active_player_index;
+    const CardParams* vp = nullptr;
+    std::string src;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.hellbent_upkeep_draw > 0) { vp = &d->params; src = p.card.m_name.str(); break; }
+    }
+    if (vp == nullptr) { return true; }
+    Player& ap = state.players[static_cast<std::size_t>(me)];
+    if (HandHasNonStaged(ap)) { return true; }   // the trigger condition (no Visitor triggers)
+    if (ap.library.empty() && vp->hellbent_upkeep_draw > 0)
+    {
+        ap.life -= vp->hellbent_upkeep_life_loss;   // the loss still happens; the empty draw loses (CR 704.5b)
+        return false;
+    }
+    // The FIRST Visitor resolves (its intervening-if still holds); its draw fills the hand, so every
+    // other Visitor's re-check fails -- one resolution in total.
+    HellbentUpkeepResolve(state, me, *vp, src);
+    return true;
+}
+
+// THE OPPONENT'S UPKEEP -- PerformOpponentUpkeepHellbentDraw, at the turn boundary immediately BEFORE
+// opponentdeck::EndOfTurnDraw in both worlds (their upkeep precedes their draw). "That player" is the
+// opponent: the condition reads THEIR hand, and only when one was dealt (opponent_library_dealt);
+// otherwise the passive opponent holds its untouched opening seven forever and the condition is false
+// (disclosure D-A1-2 -- faithful, not a deferral). When it holds, EACH of our Visitors resolves (our
+// draw does not fill THEIR hand). Our cards_drawn_this_turn is not touched (it is their turn; ours
+// resets at our untap). Returns false when a draw met an empty library (we lose).
+inline bool PerformOpponentUpkeepHellbentDraw(GameState& state)
+{
+    const int me = state.active_player_index;
+    const int opp = 1 - me;
+    if (!state.opponent_library_dealt) { return true; }
+    if (!state.players[static_cast<std::size_t>(opp)].hand.empty()) { return true; }
+    bool ok = true;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.hellbent_upkeep_draw <= 0 || !d->params.hellbent_upkeep_each_player) { continue; }
+        Player& ap = state.players[static_cast<std::size_t>(me)];
+        if (ap.library.empty()) { ap.life -= d->params.hellbent_upkeep_life_loss; ok = false; continue; }
+        const int drawn_before = ap.cards_drawn_this_turn;
+        HellbentUpkeepResolve(state, me, d->params, p.card.m_name.str() + " (opponent's upkeep)");
+        state.players[static_cast<std::size_t>(me)].cards_drawn_this_turn = drawn_before;
+    }
+    return ok;
 }
 
 // FADING at upkeep (CR 702.32): "At the beginning of your upkeep, remove a fade counter from it.
@@ -22968,8 +23584,8 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 if (hi >= 0 && hi < static_cast<int>(ap.hand.size()))
                 {
                     const Card gone = ap.hand[static_cast<std::size_t>(hi)];
-                    ap.hand.erase(ap.hand.begin() + hi);
-                    ap.graveyard.push_back(gone);
+                    std::vector<MadnessPending> mq;   // the shared discard hook (Vampires A1)
+                    DiscardCardFromHand(state, controller, hi, &mq, src_name);
                     ++ap.cards_cycled_or_discarded_this_turn;
                     if (g_reveal_logger) { g_reveal_logger->LogDiscard(gone.m_number, gone.m_name.str()); }
                     if (g_play_event_sink && !g_tap_speculating)
@@ -22977,6 +23593,8 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                         EmitPlayEvent(state.turn_number, "ability",
                                       src_name + ": draws, then discards " + gone.m_name.str());
                     }
+                    // A discard while the ability RESOLVES: the madness trigger after it completes.
+                    ResolveEffectMadness(state, mq, src_name);
                 }
             }
             break;
@@ -23447,7 +24065,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // The Blood token: "{1}, {T}, Discard a card, Sacrifice this token: Draw a card." The {1}
             // and the {T} were paid by the caller; the discard and the self-sacrifice are COSTS too
             // (CR 602.2b), paid here in the A1 contract's order -- DISCARD, then the sacrifice, then
-            // [MADNESS SEAM], then the draw. The pin is CONSUMED (see ActivationDiscardPinScope).
+            // [MADNESS: ResolvePendingMadness], then the draw. The pin is CONSUMED (see ActivationDiscardPinScope).
             const std::string pin = g_activation_discard_pin != nullptr ? *g_activation_discard_pin
                                                                         : std::string();
             g_activation_discard_pin = nullptr;
@@ -23455,7 +24073,8 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             if (hi < 0) { break; }   // unreachable after PermAbilitySourceLive; never a free draw
             Player& ap = state.players[controller];
             const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
-            DiscardCardFromHand(state, controller, hi, src_name);
+            std::vector<MadnessPending> mq;
+            DiscardCardFromHand(state, controller, hi, &mq, src_name);
             ++ap.cards_cycled_or_discarded_this_turn;
             // Re-find the token by number (a discard never touches the battlefield, but be exact).
             for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -23465,8 +24084,8 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 { state.battlefield.erase(state.battlefield.begin() + i); break; }
             }
             FireSacrificeWatchers(state, controller);   // a sac cost IS a sacrifice
-            // [MADNESS SEAM] cluster A1: ResolvePendingMadness(...) HERE (above the ability on the
-            // stack), before the draw below.
+            // MADNESS (A1): above the ability on the stack -- resolves before the draw below.
+            ResolvePendingMadness(state, mq, MadnessWindowNow(state), TakeMadnessPin(), src_name);
             if (g_play_event_sink && !g_tap_speculating)
             {
                 EmitPlayEvent(state.turn_number, "ability",

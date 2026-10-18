@@ -339,6 +339,13 @@ MANIFEST = {
     # existing `revive` decision from the landfall chokepoint, one 0/1 flag per graveyard copy, all
     # preselected (autonomous play resolves YES by a PROVISIONAL dominance).
     "landfall_return_self_from_gy":  ("revive",      truthy),
+    # ---- Vampires A1 (2026-10-18; tools/play/DECISIONS.md `madness`) ----
+    # Madness "cast it for its madness cost or put it into your graveyard": the NEW bucket-B `madness`
+    # decision, asked from the shared ResolvePendingMadness at every unpinned madness trigger of a real
+    # resolution (an outlet discard -- human play emits one unpinned entry -- the cleanup, any resolving
+    # discard). Falkenrath Gorger's grant creates the same decision for every Vampire creature card.
+    "madness_cost":                    ("madness",     truthy),
+    "grants_madness_creature_subtype": ("madness",     truthy),
     # Slaughter-Priest's "Sacrifice another creature or an enchantment" widens the sac-outlet
     # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
     "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
@@ -659,6 +666,11 @@ INERT_PARAMS = {
     "activate_once_each_turn": "'Activate only once each turn' RESTRICTION (per object) -- a legality gate, not a choice",
     "tap_blood_cost_less_per_subtype": "Voldaren Estate's Blood cost reduction (per Vampire we control, counted at activation) -- a cost detail, not a choice",
     "haste_if_opp_life_at_most": "Bloodghast's conditional haste (opponent at 10 or less life) -- a static, no choice",
+    # ---- Vampires A1 (2026-10-18). Classified inert by the integrator; PENDING USER OK per the self-guard
+    #      (recorded in docs/design/analysis-Vampires.md -- surfaced, not blocking).
+    "hellbent_upkeep_draw": "Asylum Visitor's upkeep trigger -- MANDATORY (draw a card and lose 1 life), an intervening-if on the hand being empty; no choice",
+    "hellbent_upkeep_life_loss": "Asylum Visitor's life-loss magnitude -- a printed constant",
+    "hellbent_upkeep_each_player": "Asylum Visitor also watches the opponent's upkeep -- a printed scope, no choice",
     # ---- Galadriel (2026-10-17) ----
     "mana_colors_of_graveyard_legends": "The Grey Havens' colour mode -- WHICH colour a tapped mana source makes is a payment question (the standing mana-payment exemption), not a player-facing decision",
     # ---- Landfall triggers (2026-10-15; OnLandEntered, core/SpellEffects.h) ----

@@ -12820,6 +12820,82 @@
     "opp_lost_life_other_enters_counters": 1,
     "opp_lost_life_other_enters_subtype": "Vampire"
    }
+  },
+  {
+   "name": "Falkenrath Gorger",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Vampire",
+    "Berserker"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Each Vampire creature card you own that isn't on the battlefield has madness. The madness cost is equal to its mana cost. (If you discard a card with madness, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.) [grants_madness_creature_subtype: a STATIC grant read at the moment of each discard by MadnessCostsFor -- while a Gorger we control is on the battlefield, every discarded creature card with subtype Vampire has madness for its own printed mana cost (front face). The option is SNAPSHOTTED into the pending madness record, so a Gorger that leaves between the discard and the trigger's resolution (e.g. sacrificed to Falkenrath Pit Fighter AFTER the discard -- costs are paid discard-first) still lets the card be cast (2016-04-08 ruling). A discarded Gorger gets madness only from ANOTHER Gorger on the battlefield. Two Gorgers grant one instance; a card with its own equal-cost madness (Markov Baron, Asylum Visitor) has one option. 'Cards you own that aren't on the battlefield' is read at the only place a card can be discarded -- our hand -- so the grant is evaluated exactly where it can matter. Every discard site routes through the shared DiscardCardFromHand hook; the cast-or-decline is a SEARCHED decision on an outlet discard (Action madness pin) and the provider's PROVISIONAL 'cast if payable' dominance rule at cleanup (USER question) -- see the madness core in SpellEffects.h. The madness cast is a real cast (spells-cast count, on-cast triggers) that enters through the shared enter cascade; it does not traverse the stack (no cast-trigger card can be madness-cast in this pool).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "grants_madness_creature_subtype": "Vampire"
+   }
+  },
+  {
+   "name": "Markov Baron",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Vampire",
+    "Noble"
+   ],
+   "keywords": [
+    "Lifelink",
+    "Madness",
+    "Convoke"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)\nLifelink\nOther Vampires you control get +1/+1.\nMadness {2}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.) [All four clauses modelled. LORD: lord_effect, subtypes_affected Vampire, +1/+1, lord_excludes_self (Knight Exemplar shape; Vampire tokens included). LIFELINK: the keyword, read by CreatureHasLifelink at the combat-damage site (our life total is real: Voldaren Estate's pay-1-life and Asylum Visitor's loss draw on it, and own-death checks are live for this deck). CONVOKE: the Chord of Calling cost-reduction model GENERALIZED to a creature spell and to the spell's coloured pip (a BLACK body pays {B} or {1}, any other body {1}); summoning sickness irrelevant; SEARCHED arms = max FREE bodies (cannot attack / 0 power, after combat every untapped body), then free + k COSTLY bodies (a would-attack body pre-combat, lowest power first -- USER question; or one with a live non-mana {T} ability); the no-convoke cast is dropped only while a free body exists (weakly dominated: a free body's tap has no other use against the passive opponent). Applies to the hard cast AND to the madness cast (convoke applies after the alternative cost). MADNESS {2}{B}: own madness_cost; with a Falkenrath Gorger out the granted instance has the same cost, so one option. The cast-or-decline is searched (outlet Action pin) or the provider's cleanup dominance rule.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Vampire"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "convoke": true,
+    "madness_cost": "{2}{B}"
+   }
+  },
+  {
+   "name": "Asylum Visitor",
+   "mana_cost": "{1}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Vampire",
+    "Wizard"
+   ],
+   "keywords": [
+    "Madness"
+   ],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "At the beginning of each player's upkeep, if that player has no cards in hand, you draw a card and you lose 1 life.\nMadness {1}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.) [Both clauses modelled. UPKEEP TRIGGER (hellbent_upkeep_draw / _life_loss / _each_player): OUR upkeep -- PerformUpkeepHellbentDraw, lockstep in GameEngine::UpkeepStep and SimulateEndAndStartNextTurn, ordered FIRST among our upkeep triggers; the intervening-if is evaluated on NON-STAGED hand cards and re-checked on resolution, so two Visitors give ONE draw (2016-04-08 ruling). Draw = a real CR 121 draw (cards_drawn_this_turn; an empty library loses as at the draw step), loss = life loss (not damage). OPPONENT's upkeep -- PerformOpponentUpkeepHellbentDraw at the turn boundary just before the opponent's notional draw; it reads the opponent's real hand only when one was dealt (opponent_library_dealt); otherwise the passive opponent holds its untouched opening seven forever and the condition is false. When it fires, every Visitor resolves (our draw does not fill THEIR hand). MADNESS {1}{B}: own madness_cost; with a Falkenrath Gorger out the granted instance has the same cost, so one option.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "madness_cost": "{1}{B}",
+    "hellbent_upkeep_draw": 1,
+    "hellbent_upkeep_life_loss": 1,
+    "hellbent_upkeep_each_player": true
+   }
   }
  ]
 }
