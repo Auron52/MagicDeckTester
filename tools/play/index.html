@@ -1704,6 +1704,8 @@ function queueActivation(src, opt){
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
     : opt.verb==='taplife' ? `${src}: tapping it to gain 1 life for each Elf on the battlefield. Commit the phase to resolve it.`
     : opt.verb==='landsearch' ? `${src}: sacrificing it to search for land(s). Commit the phase to resolve it — you pick WHICH lands as it resolves.`
+    : opt.verb==='steal' ? `${src}: tapping five untapped Vampires to gain control of a creature. Commit the phase to resolve it — you pick the creature, then the five Vampires to tap, as it resolves.`
+    : opt.verb==='transform' ? `${src}: paying {B} to transform it into Lord of Lineage (other Vampires get +2/+2). Commit the phase to resolve it.`
     : opt.verb==='pod' ? `${src}: tapping it and sacrificing a creature to fetch ${opt.name}. You pick the victim when committing.`
     : opt.verb==='ooze' ? `${src}: paying {G} to exile ${opt.name} from a graveyard. Commit the phase to resolve it.`
     // Repeatable (no {T}, no sacrifice): say it STACKS, since that is the whole point of the flag
@@ -2621,6 +2623,8 @@ function renderPlanbar() {
               : p.verb==='taptoken'  ? ' ⟳ make a token'
               : p.verb==='taplife'   ? ' ⟳ gain life per Elf'
               : p.verb==='landsearch' ? ' ⟳ sac → search for lands'
+              : p.verb==='steal'     ? ' ⟳ tap 5 Vampires → steal'
+              : p.verb==='transform' ? ' ⟳ transform'
               : p.verb==='equip'     ? ' ⟳ equip'
               : p.verb==='attachall' ? ' ⟳ attach all'
               // The HOST is the chip's `name` for this one (the engine's action names the host too),
@@ -4085,6 +4089,8 @@ function activationPickerHtml(pick){
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
                    : o.verb==='taplife'   ? `Tap ${o.name} — gain 1 life for each Elf on the battlefield`
                    : o.verb==='landsearch' ? `${o.name} — sacrifice it: search for land(s) (you pick them as it resolves)`
+                   : o.verb==='steal'     ? `${o.name} — tap five untapped Vampires: gain control of target creature (you pick it and the five as it resolves)`
+                   : o.verb==='transform' ? `${o.name} — {B}: transform it into Lord of Lineage`
                    // Always the single activation now: the go-off count is filtered out of the click
                    // path (clickActivationOptions) and lives on the COMBO OFF panel button instead,
                    // so this picker only ever offers real, one-at-a-time plays. Click it again to
@@ -4164,6 +4170,20 @@ function digPanelHtml(d){
   // Khalni Heart Expedition's IN-COMBAT crack window reuses this modal ("(combat crack)" in the
   // source): the tiles are Expeditions on the battlefield to CRACK, not cards to dig, and the
   // default is to keep it (the engine cracks in combat only when its search committed to it).
+  // Bloodline Keeper's IN-COMBAT transform window reuses it too ("(combat transform)"; Vampires B):
+  // the tiles are Keepers on the battlefield to TRANSFORM for {B}; the default is to keep them.
+  if (/\(combat transform\)/.test(d.source||'')) {
+    let h=`<h3>Bloodline Keeper — transform it now, before combat damage?</h3>`;
+    h+=`<div class="sub">Pay {B}: it becomes Lord of Lineage, and every other Vampire you control gets +2/+2 for THIS combat (you control five or more Vampires — Mavren Fein's token counts). You are asked again after each transform.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — transform it">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em></span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Keep it (the AI's default)</button></div>`;
+    return h;
+  }
   if (/\(combat crack\)/.test(d.source||'')) {
     let h=`<h3>Khalni Heart Expedition — crack it now, before combat damage?</h3>`;
     h+=`<div class="sub">Remove three quest counters and sacrifice it: search for up to two basic lands and put them onto the battlefield tapped. Their landfall triggers resolve before combat damage, so attacking Plants get Avenger / Phylath counters. You are asked again after each crack.</div>`;

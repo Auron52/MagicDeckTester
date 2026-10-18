@@ -428,6 +428,8 @@ std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
         // A transforming DFC's back face (Moonrage Brute, the night face of Brutal Cathar) is the
         // same image problem: Scryfall's default image for the name is the FRONT.
         if (!def.params.daybound_back_name.empty()) { out.push_back(def.params.daybound_back_name); }
+        // ...and an ACTIVATED transform's back face (Lord of Lineage, Bloodline Keeper's; Vampires B).
+        if (!def.params.transform_back_name.empty()) { out.push_back(def.params.transform_back_name); }
     }
     std::sort(out.begin(), out.end());
     out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -1805,6 +1807,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.hellbent_upkeep_draw        = params.value("hellbent_upkeep_draw", 0);
     p.hellbent_upkeep_life_loss   = params.value("hellbent_upkeep_life_loss", 0);
     p.hellbent_upkeep_each_player = params.value("hellbent_upkeep_each_player", false);
+
+    // ---- Vampires B (2026-10-18): Captivating Vampire's steal + Bloodline Keeper's transform -- see
+    // CardParams for each field's oracle clause.
+    p.steal_tap_count    = params.value("steal_tap_count", 0);
+    p.steal_tap_subtype  = params.value("steal_tap_subtype", std::string{});
+    p.steal_adds_subtype = params.value("steal_adds_subtype", std::string{});
+    p.transform_back_name  = params.value("transform_back_name", std::string{});
+    p.transform_front_name = params.value("transform_front_name", std::string{});
+    if (params.contains("transform_cost"))
+        p.transform_cost = ManaCostFromString(params["transform_cost"].get<std::string>());
+    p.transform_min_controlled_subtype = params.value("transform_min_controlled_subtype", std::string{});
+    p.transform_min_controlled_count   = params.value("transform_min_controlled_count", 0);
 
     return p;
 }

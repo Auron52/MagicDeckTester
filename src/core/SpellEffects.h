@@ -32,6 +32,8 @@
 #include <string_view>   // CardMatchesTypeName: size-first literal compares (no strlen per probe)
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
+#include <mutex>
 
 // ---- Characteristics of a card OUTSIDE the battlefield -----------------------------------------
 // DeckLoader::MakePlaceholder builds every library/hand/graveyard Card from its NAME alone, so the
@@ -2501,6 +2503,7 @@ struct ConvokeRules
 // rows of the activation tables (PermAbilityTaps), read off the definition, and the body able to tap
 // now. Cluster B (Bloodline Keeper's token ability) adds its param HERE. Consulted only under the
 // creature-spell rules, so Chord's classification never reads it.
+inline bool TapTokenSourceLive(const GameState& state, const Permanent& src, const CardDefinition& d);   // below
 inline bool ConvokeBodyTapAbilityLive(const GameState& s, const Permanent& p, const CardDefinition* d)
 {
     if (d == nullptr) { return false; }
@@ -2515,6 +2518,12 @@ inline bool ConvokeBodyTapAbilityLive(const GameState& s, const Permanent& p, co
         || (pp.ping_all_cost.has_value()        && PermAbilityTaps(PermAbilityMode::PingAll))
         || (pp.tap_lifegain_cost.has_value()    && PermAbilityTaps(PermAbilityMode::TapLifegain))
         || (pp.activated_dig_cost.has_value()   && PermAbilityTaps(PermAbilityMode::ActivatedDig));
+    // Bloodline Keeper / Lord of Lineage (Vampires B): "{T}: Create a 2/2 black Vampire token with
+    // flying" -- tapping the body for convoke forfeits its token, so a live one is COSTLY (the A1 hand-off
+    // note). TapTokenSourceLive is the family's one predicate (untapped, summoning sickness, Speaker's
+    // life gate). Only creature-spell convoke reads this term (Chord keeps the legacy rules), and the
+    // only creature with convoke is Markov Baron, so no other deck can move.
+    if (pp.tap_token_cost.has_value() && TapTokenSourceLive(s, p, *d)) { return true; }
     return has_tap_ability && CanTapNow(p, s.battlefield, nullptr);
 }
 inline ConvokeClasses ClassifyConvokeBodiesEx(const GameState& s, int controller, const ConvokeRules& r)
@@ -10059,6 +10068,10 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
         NormalizeLeftDayboundFace(state, controller, left, *d);
         ReturnOrphanedLinkedExiles(state);
     }
+    // Lord of Lineage (Bloodline Keeper's back face; Vampires B): a Bloodline Keeper card in its new
+    // zone (CR 712.8a) -- reachable through Falkenrath Pit Fighter's sacrifice. No linked exile here.
+    else if (d && !d->params.transform_front_name.empty())
+    { NormalizeLeftDayboundFace(state, controller, left, *d); }
     if (!d || d->params.ltb_return_creatures <= 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -12750,7 +12763,11 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
         if (q.equipped_to      == dead_num) { q.equipped_to      = 0; }
         if (q.aura_attached_to == dead_num) { q.aura_attached_to = 0; }
     }
-    state.players[controller].graveyard.push_back(dead);
+    // The OWNER's graveyard (CR 404.2 / 400.3): a creature taken with Captivating Vampire (Vampires B)
+    // and sacrificed to Falkenrath Pit Fighter goes to the opponent's graveyard, not ours. Identical for
+    // every permanent we own -- i.e. every deck until a control change exists (Bolas's -2 victims are
+    // never sacrificed by any suite deck: no outlet shares a list with Bolas).
+    state.players[state.battlefield[idx].owner_index].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, dead, was_tok, dead_m1);
@@ -18996,8 +19013,12 @@ inline void ReturnOrphanedLinkedExiles(GameState& state)
 inline void NormalizeLeftDayboundFace(GameState& state, int controller, const Card& left,
                                       const CardDefinition& d)
 {
-    if (d.params.nightbound_front_name.empty()) { return; }   // already the front face
-    const CardDefinition* fd = CardDatabase::Instance().Lookup(d.params.nightbound_front_name);
+    // A daybound back face (nightbound_front_name) or an ACTIVATED transform's back face (Lord of
+    // Lineage's transform_front_name; Vampires B) -- the same CR 712.8 rule, the same re-facing.
+    const std::string& front = !d.params.nightbound_front_name.empty() ? d.params.nightbound_front_name
+                                                                       : d.params.transform_front_name;
+    if (front.empty()) { return; }   // already the front face
+    const CardDefinition* fd = CardDatabase::Instance().Lookup(front);
     if (!fd) { return; }
     auto reface = [&](std::vector<Card>& zone)
     {
@@ -23292,6 +23313,271 @@ struct ActivationDiscardPinScope
     ActivationDiscardPinScope& operator=(const ActivationDiscardPinScope&) = delete;
 };
 
+// ===== VAMPIRES B (2026-10-18): CAPTIVATING VAMPIRE'S STEAL + BLOODLINE KEEPER'S TRANSFORM ==========
+// Design: docs/design/vampires/design_B_lords.md §3-§4. Everything here is param-gated
+// (CardParams::steal_tap_count / transform_back_name), so every other deck is byte-identical.
+//
+// "Vampires you control" -- PERMANENTS (any type) carrying the subtype, or every creature type (an
+// all-types animation, CR 205.3b). Bloodline Keeper's activation restriction counts these (this one,
+// tokens and a stolen creature included), and Captivating Vampire's cost taps them.
+inline bool PermCountsAsSubtype(const Permanent& q, const std::string& sub)
+{
+    return !sub.empty() && (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub));
+}
+inline int CountControlledSubtypePermanents(const GameState& state, int controller, const std::string& sub)
+{
+    if (sub.empty()) { return 0; }
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    { if (q.controller_index == controller && PermCountsAsSubtype(q, sub)) { ++n; } }
+    return n;
+}
+
+// ---- THE TAP SPEC: which five bodies a searched steal taps (an identity-folded multiset) ------------
+// The five bodies are a SEARCHED choice (the no-greedy rule), folded by IDENTITY CLASS only: two bodies
+// in one class are interchangeable for the rest of the turn (tapped status is the only state the cost
+// changes, and everything untaps at our next untap step), so "which of the class" is not a decision --
+// the apply takes the class's lowest-numbered untapped members. Two class kinds:
+//   * FREE   -- a body that cannot attack this turn (summoning-sick without haste, or combat is over):
+//               keyed by its COLOUR (convoke -- Markov Baron -- pays a coloured pip with a body of that
+//               colour) and whether it has a LIVE {T} ability (Bloodline Keeper's token, a mana ability:
+//               tapping it forfeits that). Nothing else in the pool reads an untapped non-attacker.
+//               Slot value -(1 + colour mask + 32 * taplive).
+//   * ATTACK -- a body that can still attack this turn (main 1): keyed by its full identity
+//               (StealAttackBodyKey: name, P/T, keywords, counters, until-EOT bonuses ...), and the slot
+//               names the class REPRESENTATIVE's card number (> 0); the apply re-derives the class from
+//               the live representative, so a convoke cast that tapped one copy earlier in the plan is
+//               absorbed by its twin.
+// Bodies the SAME plan adds before its trailing pass (a Vampire cast / Vial-put / madness-cast, a
+// Keeper token, a Bloodghast back from the graveyard) are counted by the enumerator as hypothetical
+// members of the class they will have; a variant whose bodies the plan does not add resolves as a clean
+// no-op (nothing paid) -- the subset rule (SubsetVampOutletInvalid rule 6) rejects most of those first.
+//
+// Specs are INTERNED (one id per distinct content, Action::steal_spec -- an int in the padding after
+// Action::kind, so sizeof(Action) does not move). The id VALUE depends on interning order across
+// threads, so it is NEVER folded into a key or compared by order: keys fold the CONTENT (StealSpecFold)
+// and equality of ids is equality of content.
+struct StealTapSpec
+{
+    std::int8_t        n = 0;          // bodies (== the source's steal_tap_count)
+    std::array<int, 8> slot{};         // sorted ascending; see the block note for the encoding
+};
+namespace stealspec {
+constexpr int kChunkBits = 10;
+constexpr int kChunk     = 1 << kChunkBits;
+constexpr int kMaxChunks = 1 << 14;
+struct Table
+{
+    std::mutex                                 mu;
+    std::map<std::array<int, 9>, int>          index;
+    std::array<std::atomic<StealTapSpec*>, kMaxChunks> chunks{};
+    int                                        next = 1;
+};
+inline Table& T() { static Table t; return t; }
+inline int Intern(const StealTapSpec& s)
+{
+    std::array<int, 9> k{};
+    k[0] = s.n;
+    for (int i = 0; i < 8; ++i) { k[static_cast<std::size_t>(i + 1)] = s.slot[static_cast<std::size_t>(i)]; }
+    Table& t = T();
+    std::lock_guard<std::mutex> g(t.mu);
+    auto it = t.index.find(k);
+    if (it != t.index.end()) { return it->second; }
+    const int id = t.next;
+    const int c  = id >> kChunkBits;
+    if (c >= kMaxChunks) { return 0; }   // 16M distinct specs: unreachable; 0 = unpinned (a no-op)
+    StealTapSpec* chunk = t.chunks[static_cast<std::size_t>(c)].load(std::memory_order_acquire);
+    if (chunk == nullptr)
+    {
+        chunk = new StealTapSpec[kChunk];   // immortal (never freed: ids live as long as the process)
+        t.chunks[static_cast<std::size_t>(c)].store(chunk, std::memory_order_release);
+    }
+    chunk[id & (kChunk - 1)] = s;
+    ++t.next;
+    t.index.emplace(k, id);
+    return id;
+}
+inline const StealTapSpec* Get(int id)
+{
+    if (id <= 0) { return nullptr; }
+    const int c = id >> kChunkBits;
+    if (c >= kMaxChunks) { return nullptr; }
+    StealTapSpec* chunk = T().chunks[static_cast<std::size_t>(c)].load(std::memory_order_acquire);
+    return chunk != nullptr ? &chunk[id & (kChunk - 1)] : nullptr;
+}
+}   // namespace stealspec
+// The CONTENT digest of a spec id (0 for none) -- what every key folds (see the block note).
+inline std::uint64_t StealSpecFold(int id)
+{
+    const StealTapSpec* s = stealspec::Get(id);
+    if (s == nullptr) { return 0; }
+    std::uint64_t h = 0x5354454C53504543ull;   // "STELSPEC"
+    auto mix = [&h](std::uint64_t v) { h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); h *= 0xBF58476D1CE4E5B9ull; };
+    mix(static_cast<std::uint64_t>(s->n));
+    for (int i = 0; i < s->n && i < 8; ++i)
+    { mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(s->slot[static_cast<std::size_t>(i)]))); }
+    return h;
+}
+inline std::string StealSpecText(int id)
+{
+    const StealTapSpec* s = stealspec::Get(id);
+    if (s == nullptr) { return std::string(); }
+    std::string t;
+    for (int i = 0; i < s->n && i < 8; ++i)
+    {
+        if (!t.empty()) { t += ","; }
+        const int v = s->slot[static_cast<std::size_t>(i)];
+        t += v > 0 ? "#" + std::to_string(v) : "F" + std::to_string(-v);
+    }
+    return t;
+}
+
+// Is combat over for this turn (main 2 / the ending phase)? Then no body can attack any more.
+inline bool StealCombatOver(const GameState& s)
+{
+    return s.phase == Phase::PostCombatMain || s.phase == Phase::Ending;
+}
+// FREE = cannot attack this turn. Read as if UNTAPPED: a class representative that an earlier convoke
+// cast tapped still names the class its untapped twins are in (ResolveStealBodies).
+inline bool StealBodyIsFree(const GameState& s, const Permanent& q)
+{
+    if (StealCombatOver(s)) { return true; }
+    if (!q.tapped) { return !CanAttackFull(q, s.battlefield, q.controller_index); }
+    Permanent c = q;
+    c.tapped = false;
+    return !CanAttackFull(c, s.battlefield, c.controller_index);
+}
+// A live {T} ability on the body: a non-mana {T} ability (ConvokeBodyTapAbilityLive -- which covers
+// Bloodline Keeper's token tap) or a mana creature that can tap now.
+inline bool StealBodyTapAbilityLive(const GameState& s, const Permanent& q)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+    if (d == nullptr) { return false; }
+    if (ConvokeBodyTapAbilityLive(s, q, d)) { return true; }
+    return d->tmpl == CardTemplate::ManaDork && CanTapNow(q, s.battlefield);
+}
+inline int StealColourMaskOf(const Card& c)
+{
+    int m = 0;
+    if (c.HasColor(Color::White)) { m |= 1; }
+    if (c.HasColor(Color::Blue))  { m |= 2; }
+    if (c.HasColor(Color::Black)) { m |= 4; }
+    if (c.HasColor(Color::Red))   { m |= 8; }
+    if (c.HasColor(Color::Green)) { m |= 16; }
+    return m;
+}
+inline int StealFreeCode(int colour_mask, bool tap_live) { return 1 + colour_mask + (tap_live ? 32 : 0); }
+inline int StealFreeCodeOf(const GameState& s, const Permanent& q)
+{ return StealFreeCode(StealColourMaskOf(q.card), StealBodyTapAbilityLive(s, q)); }
+// The ATTACK-body identity key (see the block note). Built on LandfallTargetFoldKey's exhaustive state
+// fold, over a copy with the fields that fold refuses to key -- until-end-of-turn bonuses and keywords,
+// the once-each-turn flag, `tapped` -- cleared and then mixed back in BY VALUE: a team pump that hits
+// every Vampire alike (Stromkirk Condemned) must not split identical bodies into singletons. A body the
+// fold cannot key (attachments, damage, ...) is its own class (keyed on its number).
+inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
+{
+    Permanent c = q;
+    c.tapped = false;
+    c.temp_power_bonus = 0;
+    c.temp_tough_bonus = 0;
+    c.temp_haste = false;
+    c.temp_lifelink = false;
+    c.temp_double_strike = false;
+    c.once_per_turn_used = false;
+    std::uint64_t k = 0;
+    if (!LandfallTargetFoldKey(s, c, k))
+    { return 0xA5A5000000000000ull ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.card.m_number)); }
+    auto mix = [&k](std::uint64_t v) { k ^= v + 0x9E3779B97F4A7C15ull + (k << 6) + (k >> 2); k *= 0xBF58476D1CE4E5B9ull; };
+    mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_power_bonus + 4096)));
+    mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_tough_bonus + 4096)));
+    mix((q.temp_haste ? 1u : 0u) | (q.temp_lifelink ? 2u : 0u) | (q.temp_double_strike ? 4u : 0u)
+        | (q.once_per_turn_used ? 8u : 0u) | (q.cond_haste ? 16u : 0u));
+    return k;
+}
+
+// THE BODY RESOLVER, shared by the liveness check and the cost payment in both worlds: the battlefield
+// indices of the bodies `spec` names on the live board, or empty when it cannot be realised (a class
+// short of members -- a stale variant, a clean no-op). Deterministic: every slot takes the
+// lowest-numbered untapped matching body not already taken.
+inline std::vector<int> ResolveStealBodies(const GameState& s, int controller, const std::string& sub,
+                                           const StealTapSpec& spec)
+{
+    std::vector<int> out;
+    std::vector<char> used(s.battlefield.size(), 0);
+    auto take_best = [&](auto&& match) -> bool
+    {
+        int best = -1;
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+            if (used[static_cast<std::size_t>(i)] || q.controller_index != controller || q.tapped) { continue; }
+            if (!PermCountsAsSubtype(q, sub) || !match(q)) { continue; }
+            if (best < 0 || q.card.m_number < s.battlefield[static_cast<std::size_t>(best)].card.m_number) { best = i; }
+        }
+        if (best < 0) { return false; }
+        used[static_cast<std::size_t>(best)] = 1;
+        out.push_back(best);
+        return true;
+    };
+    for (int i = 0; i < spec.n && i < 8; ++i)
+    {
+        const int v = spec.slot[static_cast<std::size_t>(i)];
+        bool ok = false;
+        if (v > 0)
+        {
+            const Permanent* rep = nullptr;
+            for (const Permanent& q : s.battlefield)
+            { if (q.card.m_number == v && q.controller_index == controller) { rep = &q; break; } }
+            if (rep == nullptr || StealBodyIsFree(s, *rep)) { return {}; }
+            const std::uint64_t key = StealAttackBodyKey(s, *rep);
+            ok = take_best([&](const Permanent& q)
+                           { return !StealBodyIsFree(s, q) && StealAttackBodyKey(s, q) == key; });
+        }
+        else
+        {
+            const int code = -v;
+            ok = take_best([&](const Permanent& q)
+                           { return StealBodyIsFree(s, q) && StealFreeCodeOf(s, q) == code; });
+        }
+        if (!ok) { return {}; }
+    }
+    return out;
+}
+
+// THE STEAL PIN of the activation being applied (Action::enchant_target + Action::steal_spec).
+// ApplyPermAbility's signature carries no Action, so both trailing passes install it around the
+// liveness check and the apply (the ActivationDiscardPinScope shape); the TapSubtypeSteal case CONSUMES
+// it. {0, 0} = unpinned: human play asks the target and the five bodies at resolution.
+struct StealPin { int target = 0; int spec = 0; };
+inline thread_local StealPin g_steal_pin{};
+struct StealPinScope
+{
+    StealPin prev;
+    StealPinScope(int target, int spec) : prev(g_steal_pin) { g_steal_pin = StealPin{ target, spec }; }
+    ~StealPinScope() { g_steal_pin = prev; }
+    StealPinScope(const StealPinScope&) = delete;
+    StealPinScope& operator=(const StealPinScope&) = delete;
+};
+// MEASUREMENT: an AUTONOMOUS steal applied with no pin inside the search window (the no-greedy rule:
+// must read 0 -- the unit lockstep sweep asserts it; the fallback is the playout policy's front).
+inline std::atomic<long long> g_steal_unpinned{0};
+
+// A legal steal TARGET: a creature we do not control (the Bolas -2 precedent: aiming "gain control"
+// at our own creature is a legal no-op that taps five Vampires for nothing -- excluded, disclosed).
+inline bool StealTargetLegal(const Permanent& q, int controller)
+{
+    return q.controller_index != controller && (q.card.IsCreature() || q.is_animated);
+}
+inline int StealSourceTapCount(const CardDefinition& d) { return d.params.steal_tap_count; }
+
+// Bloodline Keeper's activation restriction, counted NOW (CR 602.5b).
+inline bool TransformRestrictionMet(const GameState& state, int controller, const CardParams& pp)
+{
+    if (pp.transform_min_controlled_count <= 0) { return true; }
+    return CountControlledSubtypePermanents(state, controller, pp.transform_min_controlled_subtype)
+           >= pp.transform_min_controlled_count;
+}
+
 // Is an ActivatePermAbility's source still there and still activatable? Checked BEFORE paying in
 // both worlds, so a stranded activation (its source left, or it got tapped earlier in the same
 // plan) is a clean no-op rather than a paid one -- the UntapCreature discipline.
@@ -23337,6 +23623,51 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             && !ActivationDiscardPayable(state, controller,
                                          discard_pin != nullptr ? *discard_pin : std::string()))
         { return false; }
+        // Bloodline Keeper's transform: "Activate only if you control five or more Vampires" -- an
+        // activation RESTRICTION (CR 602.5b), counted now, before the {B} is paid. A back face (no
+        // transform_back_name) has no such ability: a stale plan is a clean no-op.
+        if (mode == PermAbilityMode::TransformSelf)
+        {
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
+            if (td == nullptr || td->params.transform_back_name.empty()
+                || CardDatabase::Instance().Lookup(td->params.transform_back_name) == nullptr
+                || !TransformRestrictionMet(state, controller, td->params))
+            { return false; }
+        }
+        // Captivating Vampire's steal: the TARGET (chosen first, CR 601.2c) and the FIVE BODIES (the
+        // cost, CR 601.2h) must both exist before anything happens. Pinned (StealPin, the searched
+        // variant): the pinned creature is still a legal target and the pinned classes still have their
+        // untapped members (ResolveStealBodies) -- NO SUBSTITUTION, which would be an in-window pick.
+        // Unpinned (human play): at least one legal target and enough untapped Vampires.
+        if (mode == PermAbilityMode::TapSubtypeSteal)
+        {
+            const CardDefinition* sd2 = CardDatabase::Instance().LookupCached(p.card);
+            if (sd2 == nullptr || sd2->params.steal_tap_count <= 0) { return false; }
+            const StealPin pin = g_steal_pin;
+            bool target_ok = false;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (!StealTargetLegal(q, controller)) { continue; }
+                if (pin.target == 0 || q.card.m_number == pin.target) { target_ok = true; break; }
+            }
+            if (!target_ok) { return false; }
+            const StealTapSpec* spec = stealspec::Get(pin.spec);
+            if (spec != nullptr)
+            {
+                if (ResolveStealBodies(state, controller, sd2->params.steal_tap_subtype, *spec).empty())
+                { return false; }
+            }
+            else
+            {
+                int untapped = 0;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index == controller && !q.tapped
+                        && PermCountsAsSubtype(q, sd2->params.steal_tap_subtype)) { ++untapped; }
+                }
+                if (untapped < sd2->params.steal_tap_count) { return false; }
+            }
+        }
         // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
         // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
         // an untappable source would have stopped a just-wished Essence Depleter from draining on
@@ -23457,8 +23788,110 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
                                               return "reconfigure: unattach it (it becomes a creature again)";
         case PermAbilityMode::TapBlood:       return "create a Blood token";
         case PermAbilityMode::BloodDraw:      return "discard a card, sacrifice it: draw a card";
+        case PermAbilityMode::TapSubtypeSteal:
+                                              return "tap five untapped Vampires: gain control of target creature";
+        case PermAbilityMode::TransformSelf:  return "transform it (you control five or more Vampires)";
         default:                              return "activate";
     }
+}
+
+// ---- CAPTIVATING VAMPIRE'S COST: "Tap five untapped Vampires you control" (Vampires B) -------------
+// THE ONE PAYER, called from ApplyPermAbility's TapSubtypeSteal case -- i.e. from BOTH trailing passes
+// (the rollout's apply_one and the executor's twin), after the target is chosen (CR 601.2c before
+// 601.2h). It never consults CanTapNow: there is no {T} symbol in the cost, so summoning-sick Vampires
+// and the source itself are legal (the 2010-08-15 ruling; CR 302.6 restricts only {T}/{Q} abilities).
+//   * PINNED (the searched variant): exactly the bodies ResolveStealBodies names on the live board.
+//   * HUMAN PLAY: N board-click `target` prompts in sequence (the Magnetic Theft "asked twice" shape)
+//     over every untapped Vampire not yet picked, the pinned body (else the first FREE one)
+//     preselected; when the remaining legal bodies are exactly the ones still owed, they are forced
+//     and not prompted.
+//   * UNPINNED AUTONOMOUS (the playout policy's fallback only; counted -- g_steal_unpinned must read 0
+//     inside the window): FREE bodies first, then the lowest-power attackers, by card number.
+// Returns false, tapping nothing, when the bodies cannot be found (unreachable after the liveness
+// check -- kept so no future caller can turn a stale plan into a free steal).
+inline bool PayTapSubtypeCost(GameState& state, int controller, const CardDefinition& sd,
+                              const std::string& src_name, int spec_id)
+{
+    const int n = sd.params.steal_tap_count;
+    const std::string& sub = sd.params.steal_tap_subtype;
+    if (n <= 0) { return false; }
+    const StealTapSpec* spec = stealspec::Get(spec_id);
+    std::vector<int> chosen;
+    if (spec != nullptr) { chosen = ResolveStealBodies(state, controller, sub, *spec); }
+    if (g_play_loyalty_chooser != nullptr && !g_tap_speculating)
+    {
+        std::vector<int> picked;
+        for (int k = 0; k < n; ++k)
+        {
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.controller_index != controller || q.tapped || !PermCountsAsSubtype(q, sub)) { continue; }
+                if (std::find(picked.begin(), picked.end(), i) != picked.end()) { continue; }
+                legal.push_back(i);
+            }
+            if (static_cast<int>(legal.size()) < n - k) { return false; }
+            if (static_cast<int>(legal.size()) == n - k)
+            { picked.insert(picked.end(), legal.begin(), legal.end()); break; }   // forced: not prompted
+            int heur = -1;
+            for (int ci : chosen)
+            {
+                if (std::find(picked.begin(), picked.end(), ci) != picked.end()) { continue; }
+                for (int j = 0; j < static_cast<int>(legal.size()); ++j) { if (legal[static_cast<std::size_t>(j)] == ci) { heur = j; break; } }
+                if (heur >= 0) { break; }
+            }
+            if (heur < 0)
+            {
+                for (int j = 0; j < static_cast<int>(legal.size()); ++j)
+                {
+                    if (StealBodyIsFree(state, state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(j)])]))
+                    { heur = j; break; }
+                }
+            }
+            if (heur < 0) { heur = 0; }
+            const int c = (*g_play_loyalty_chooser)(
+                state, controller, src_name,
+                "tapped to pay its cost (" + std::to_string(k + 1) + " of " + std::to_string(n) + ")",
+                legal, heur);
+            const int pick = (c >= 0 && c < static_cast<int>(legal.size())) ? c : heur;
+            picked.push_back(legal[static_cast<std::size_t>(pick)]);
+        }
+        chosen = picked;
+    }
+    else if (spec == nullptr)
+    {
+        if (!HumanPlayActive() && greedywindow::InWindow(0))
+        { g_steal_unpinned.fetch_add(1, std::memory_order_relaxed); }
+        std::vector<int> cand;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index == controller && !q.tapped && PermCountsAsSubtype(q, sub)) { cand.push_back(i); }
+        }
+        std::stable_sort(cand.begin(), cand.end(), [&](int a, int b)
+        {
+            const Permanent& x = state.battlefield[static_cast<std::size_t>(a)];
+            const Permanent& y = state.battlefield[static_cast<std::size_t>(b)];
+            const bool fx = StealBodyIsFree(state, x), fy = StealBodyIsFree(state, y);
+            if (fx != fy) { return fx; }
+            if (!fx && x.EffectivePower() != y.EffectivePower()) { return x.EffectivePower() < y.EffectivePower(); }
+            return x.card.m_number < y.card.m_number;
+        });
+        if (static_cast<int>(cand.size()) >= n) { chosen.assign(cand.begin(), cand.begin() + n); }
+    }
+    if (static_cast<int>(chosen.size()) != n) { return false; }
+    std::string names;
+    for (int i : chosen)
+    {
+        Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        q.tapped = true;
+        if (!names.empty()) { names += ", "; }
+        names += q.card.m_name.str();
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "ability", src_name + ": tapped " + names + " to pay its cost"); }
+    return true;
 }
 
 // Resolve one ActivatePermAbility. The cost is already paid by the caller; this is the effect half
@@ -24109,6 +24542,88 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                               src_name + ": discarded " + shed + ", sacrificed -- draw a card");
             }
             TrickDraw(state, controller, 1);
+            break;
+        }
+        case PermAbilityMode::TapSubtypeSteal:
+        {
+            // Captivating Vampire: "Tap five untapped Vampires you control: Gain control of target
+            // creature. It becomes a Vampire in addition to its other types." There is no mana; the
+            // caller checked PermAbilitySourceLive under the same pin. The pin is CONSUMED here.
+            const StealPin pin = g_steal_pin;
+            g_steal_pin = StealPin{};
+            // 1. THE TARGET (CR 601.2c -- chosen before the cost is paid). Pinned: that creature (no
+            //    substitution). Human play: a board click over every creature we do not control, the
+            //    pinned one (else the largest) preselected. Unpinned autonomous: the largest (counted
+            //    by PayTapSubtypeCost's instrument -- the playout policy only).
+            int ti = -1, big = -1, big_pw = INT_MIN;
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (!StealTargetLegal(q, controller)) { continue; }
+                legal.push_back(i);
+                if (pin.target != 0 && q.card.m_number == pin.target) { ti = i; }
+                if (q.EffectivePower() > big_pw) { big_pw = q.EffectivePower(); big = i; }
+            }
+            if (legal.empty()) { break; }
+            if (pin.target == 0) { ti = big; }
+            if (g_play_loyalty_chooser != nullptr && !g_tap_speculating && legal.size() > 1)
+            {
+                int heur = 0;
+                for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+                { if (legal[static_cast<std::size_t>(k)] == (ti >= 0 ? ti : big)) { heur = k; break; } }
+                const int c = (*g_play_loyalty_chooser)(state, controller, src_name,
+                                                         "taken under your control (it becomes a Vampire)",
+                                                         legal, heur);
+                ti = legal[static_cast<std::size_t>((c >= 0 && c < static_cast<int>(legal.size())) ? c : heur)];
+            }
+            else if (g_play_loyalty_chooser != nullptr && !g_tap_speculating)
+            { ti = legal.front(); }   // a single legal target is forced, not prompted
+            if (ti < 0) { break; }   // the pinned target is gone (unreachable after the liveness check)
+            const int target_number = state.battlefield[static_cast<std::size_t>(ti)].card.m_number;
+            // 2. THE COST: tap the five (sick bodies and this creature itself included).
+            if (!PayTapSubtypeCost(state, controller, *d, src_name, pin.spec)) { break; }
+            // 3. THE EFFECT (layer 2 control, layer 4 type -- both permanent: the ability has no
+            //    duration, 2010-08-15 ruling). Owner unchanged: sacrificed later it goes to its OWNER's
+            //    graveyard (SacrificePermanentAt). gained_control_this_turn = CR 302.6 sickness by
+            //    control (the Bolas -2 precedent), cleared at our next untap in both worlds. Tapped
+            //    status is NOT touched (a control change does not untap). Not an entering: no ETB, no
+            //    enter watcher (Vampire Socialite's counter does not apply).
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != target_number || !StealTargetLegal(q, controller)) { continue; }
+                q.controller_index         = controller;
+                q.gained_control_this_turn = true;
+                const std::string& add = d->params.steal_adds_subtype;
+                if (!add.empty() && !CardHasSubtype(q.card, add)) { q.card.m_subtypes.push_back(add); }
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "ability",
+                                  src_name + ": gains control of " + q.card.m_name.str()
+                                  + (add.empty() ? std::string() : " (it becomes a " + add + ")"));
+                }
+                break;
+            }
+            break;
+        }
+        case PermAbilityMode::TransformSelf:
+        {
+            // Bloodline Keeper: "{B}: Transform this creature." The {B} was paid by the caller under
+            // the creature-ability pay scope, after PermAbilitySourceLive checked the five-Vampire
+            // restriction. The face swap keeps the PERMANENT (CR 701.28 / 712.8): card number,
+            // counters, damage, tapped and summoning-sick status persist, and it is NOT an entering --
+            // no enter watcher, no ETB (Vampire Socialite's as-enters counter does not apply). One-shot:
+            // the back face carries no transform. Lord of Lineage's +2/+2 is read off the swapped face
+            // by ComputeLordBonus (LookupCached on the new name), with no further wiring.
+            const CardDefinition* bd = d->params.transform_back_name.empty()
+                ? nullptr : CardDatabase::Instance().Lookup(d->params.transform_back_name);
+            if (bd == nullptr) { break; }
+            SwapDayboundFace(state.battlefield[static_cast<std::size_t>(idx)], *bd);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              src_name + " transforms into " + bd->card.m_name.str());
+            }
             break;
         }
         case PermAbilityMode::ReconfigureUnattach:
@@ -28983,6 +29498,102 @@ inline bool PermAbilitySourceIsCreature(const GameState& state, int controller, 
         return p.card.IsCreature() || p.is_animated;
     }
     return false;
+}
+
+// ---- BLOODLINE KEEPER'S IN-COMBAT TRANSFORM WINDOW (Vampires B; design_B_lords.md §4) --------------
+// "{B}: Transform this creature" is instant speed. The one way the Vampire count crosses five DURING
+// combat is Mavren Fein's attack trigger (an untapped 1/1 Vampire token at declare-attackers), so once
+// the attack triggers have resolved the active player may transform a Keeper BEFORE damage: Lord of
+// Lineage then gives THIS combat's attackers +2/+2 (an attacking Keeper swings as a 5/5). A main-phase
+// activation cannot express that line. SEARCHED, never greedy: GameState::scripted_combat_transform
+// (Plan::combat_transform_choice) is a BITMASK over the transform sources we control in battlefield
+// order here; bit i transforms the i-th if it is still legal (PermAbilitySourceLive: the five-Vampire
+// restriction re-checked) and its {B} can be paid NOW from what is untapped (TapForCostDirect under the
+// creature-ability scope -- the combat-time payer, ApplyCombatAuraSwap's). No pin = HOLD: the window is
+// never taken by a default. Human play asks through the shared `dig` chooser ("(combat transform)"):
+// the transformable sources whose {B} is affordable right now (probed on a copy), -1 = do not
+// transform, re-asked after each. Called right after ApplyCombatAuraSwap in BOTH combat worlds and in
+// the attack projection's twin (CountCombatTransformPump). Nothing moves on the battlefield (the swap
+// is in place), so `atk_idx` stays valid.
+inline void ApplyCombatTransforms(GameState& state, int controller, const std::vector<int>& atk_idx)
+{
+    (void)atk_idx;
+    const int mask = state.scripted_combat_transform;
+    const bool human = g_play_dig_chooser != nullptr && !g_tap_speculating;
+    if (mask < 0 && !human) { return; }            // every deck's hot path: one compare
+    ++combatpin::t_reads;                          // reads a combat pin (GameState.h, COMBAT-PIN READ WITNESS)
+    state.scripted_combat_transform = -1;          // consumed whether or not it fires
+    if (!state.deck_has_transform) { return; }
+    if (mask <= 0 && !human) { return; }
+    std::vector<int> order;                        // the mask's index space
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && !d->params.transform_back_name.empty()) { order.push_back(p.card.m_number); }
+    }
+    if (order.empty()) { return; }
+    auto transform = [&](int num, bool commit) -> bool
+    {
+        const Permanent* src = nullptr;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == num && p.controller_index == controller) { src = &p; break; } }
+        if (src == nullptr) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src->card);
+        if (d == nullptr || !PermAbilitySourceLive(state, controller, num, PermAbilityMode::TransformSelf))
+        { return false; }
+        const ManaCost cost = d->params.transform_cost.value_or(ManaCost{});
+        if (!commit)
+        {
+            GameState probe = state;
+            CreatureAbilityPayScope probe_scope;
+            return TapForCostDirect(probe, cost, /*for_creature=*/false);
+        }
+        {
+            CreatureAbilityPayScope pay_scope;
+            if (!TapForCostDirect(state, cost, /*for_creature=*/false)) { return false; }
+        }
+        ApplyPermAbility(state, controller, num, PermAbilityMode::TransformSelf);
+        return true;
+    };
+    if (!human)
+    {
+        for (int i = 0; i < static_cast<int>(order.size()) && i < 7; ++i)
+        { if ((mask >> i) & 1) { transform(order[static_cast<std::size_t>(i)], /*commit=*/true); } }
+        return;
+    }
+    for (;;)
+    {
+        std::vector<Card> examined;
+        std::vector<int>  nums;
+        for (const int num : order)
+        {
+            if (!transform(num, /*commit=*/false)) { continue; }
+            for (const Permanent& p : state.battlefield)
+            { if (p.card.m_number == num) { examined.push_back(p.card); nums.push_back(num); break; } }
+        }
+        if (examined.empty()) { break; }
+        std::vector<int> legal(examined.size());
+        for (std::size_t k = 0; k < legal.size(); ++k) { legal[k] = static_cast<int>(k); }
+        // DEFAULT = HOLD (-1), which is what the engine does with no pin. The "(combat transform)" tag
+        // selects the emitter's and the viewer's wording (main.cpp WriteDigDecisionJson, digPanelHtml).
+        int dflt = -1;
+        for (std::size_t k = 0; k < nums.size() && mask > 0; ++k)
+        {
+            for (int i = 0; i < static_cast<int>(order.size()) && i < 7; ++i)
+            {
+                if (order[static_cast<std::size_t>(i)] == nums[k] && ((mask >> i) & 1))
+                { dflt = static_cast<int>(k); break; }
+            }
+            if (dflt >= 0) { break; }
+        }
+        const int picked = (*g_play_dig_chooser)(
+            state, controller,
+            "Bloodline Keeper (combat transform) -- pay {B} and transform it NOW, before combat damage",
+            examined, legal, dflt);
+        if (picked < 0 || picked >= static_cast<int>(nums.size())) { break; }
+        if (!transform(nums[static_cast<std::size_t>(picked)], /*commit=*/true)) { break; }
+    }
 }
 
 // ---- SUBTYPE-RESTRICTED MANA (Giada, Font of Hope) ------------------------------------------

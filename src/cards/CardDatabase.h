@@ -4059,6 +4059,39 @@ struct CardParams
     int                      hellbent_upkeep_draw        = 0;
     int                      hellbent_upkeep_life_loss   = 0;
     bool                     hellbent_upkeep_each_player = false;
+
+    // ---- Vampires B (2026-10-18): Captivating Vampire + Bloodline Keeper // Lord of Lineage --------
+    // Every field below is new and gated (0 / empty / nullopt inert), so every deck that does not carry
+    // one is byte-identical. Design: docs/design/vampires/design_B_lords.md §3-§4.
+    //
+    // Captivating Vampire: "Tap five untapped Vampires you control: Gain control of target creature. It
+    // becomes a Vampire in addition to its other types." PermAbilityMode::TapSubtypeSteal -- NO {T} on
+    // the source (it may be one of the five, sick or not: the 2010-08-15 ruling, CR 302.6 restricts only
+    // {T}/{Q}). steal_tap_count = how many untapped `steal_tap_subtype` permanents the cost taps (0 = no
+    // such ability); steal_adds_subtype = the subtype the stolen creature gains (layer 4, permanent;
+    // empty = none). Named generically so a future "tap N untapped X: gain control" card reuses them.
+    int                      steal_tap_count = 0;
+    std::string              steal_tap_subtype;
+    std::string              steal_adds_subtype;
+    // Bloodline Keeper // Lord of Lineage: "{B}: Transform this creature. Activate only if you control
+    // five or more Vampires." PermAbilityMode::TransformSelf -- NO {T} (legal while sick or tapped).
+    //   transform_back_name  -- on the FRONT entry: the back face's DB entry (the permanent swaps to it
+    //                           IN PLACE: same object, counters / tapped / summoning-sick status kept,
+    //                           not an entering -- CR 701.28, 712.8). Its presence arms the ability.
+    //   transform_front_name -- on the BACK entry: the front face's DB entry (the card that goes to any
+    //                           other zone, CR 712.8a) -- NormalizeLeftDayboundFace's second key.
+    //   transform_cost       -- the activation's mana ({B}); a creature-source ability (Secluded
+    //                           Courtyard's coloured mana may pay it, CreatureAbilityPayScope).
+    //   transform_min_controlled_subtype / _count -- the activation restriction (CR 602.5b), counted
+    //                           over PERMANENTS you control (this one, tokens and a stolen creature
+    //                           included) when the ability is activated.
+    // Deliberately NOT daybound_back_name / nightbound_front_name: ApplyDayboundOnEnter would set
+    // day/night and could make a Keeper enter as its back face.
+    std::string              transform_back_name;
+    std::string              transform_front_name;
+    std::optional<ManaCost>  transform_cost;
+    std::string              transform_min_controlled_subtype;
+    int                      transform_min_controlled_count = 0;
 };
 
 // Rick's chosen-keyword bits (Permanent::chosen_keyword_mask).
