@@ -1121,6 +1121,35 @@ public:
     // as the human preselect, and as the FRONT of the searched fan (the fan still holds every option).
     int MadnessCastDefault(const GameState& s, int controller, const CardDefinition& def,
                            const std::vector<MadnessOption>& opts, MadnessWindow w) const override;
+
+    // ---- AI-DRAFTED 2026-10-18, PENDING THE USER: the cast order and the discard buckets ------------
+    // docs/design/vampires-cast-order-2026-10-18.md. Both are USER-OWNED decisions; both ship DEFAULT
+    // OFF and =0 / unset is byte-identical to the inherited VialProvider behaviour.
+    //
+    // MTG_VAMPIRES_ORDER (heurarm VAMPIRES_ORDER): the TOTAL cast order, by params --
+    //   Vampire Socialite > Falkenrath Gorger > the three static lords (Stromkirk Captain > Legion
+    //   Lieutenant > Captivating Vampire) > every other creature, cheapest first, then by NAME >
+    //   Markov Baron (convoke: after every body this main can tap for it) > Aether Vial (its {1} is the
+    //   one cost every land in the list can pay, so the creatures' restricted pips choose first).
+    //   MainPhaseOverride carries the drafted main-1 / main-2 VIEW. It is DISPLAY-ONLY for this deck
+    //   (the --cast-order-report): VampiresProvider opts into neither ClassifiesMainPhases nor
+    //   CondemnsPassedMainPhase, so play still searches both mains for every card.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotalByName() const override;
+    std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
+    //
+    // MTG_VAMPIRES_BUCKET_DISCARD (heurarm VAMPIRES_BUCKET_DISCARD): the analyze-deck 5i buckets --
+    // FREE sheds first (at CLEANUP, a creature card madness can cast right now from the untapped mana; a
+    // Bloodghast with a land in hand to bring it back), then DEAD cards, then lands past FOUR counting the board,
+    // a late Vial, threats past a floor of two by castability x value (discard_dist), an early Vial,
+    // the floor, the kept lands. ONE index per consultation (5i rule 5); a multi-card cleanup re-asks.
+    // The same buckets ORDER the searched discard pins of Stromkirk Condemned / Falkenrath Pit Fighter /
+    // the Blood token (ActivationDiscardCandidates) -- ordering only, every name is still a variant; there
+    // the madness promotion is off (the plan's own casts spend the pre-plan mana it would read).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough

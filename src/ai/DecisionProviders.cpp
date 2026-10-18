@@ -19471,9 +19471,32 @@ static bool VampHandHasLand(const GameState& s)
     return false;
 }
 
+static bool VampiresBucketDiscardEnabled();                                           // defined below
+static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_mode);  // defined below
+
 std::vector<std::string> VampiresProvider::ActivationDiscardCandidates(
     const GameState& s, const CardDefinition& src_def, const std::vector<std::string>& names) const
 {
+    // MTG_VAMPIRES_BUCKET_DISCARD (AI-DRAFTED 2026-10-18, DEFAULT OFF): the discard buckets ORDER the
+    // searched pins too -- the bucket shed order in ACTIVATION mode (a Bloodghast a held land returns
+    // leads; no madness promotion, see VampBucketShedOrder) mapped onto the names by first appearance. It
+    // replaces the draft tiers below for the discard axis only; every name is still returned, so every
+    // variant is still branched.
+    if (VampiresBucketDiscardEnabled())
+    {
+        const Player& hp = s.players[s.active_player_index];
+        std::vector<std::string> ordered;
+        ordered.reserve(names.size());
+        for (const int i : VampBucketShedOrder(s, /*activation_mode=*/true))
+        {
+            const std::string& nm = hp.hand[static_cast<std::size_t>(i)].m_name.str();
+            if (std::find(names.begin(), names.end(), nm) == names.end())     { continue; }
+            if (std::find(ordered.begin(), ordered.end(), nm) == ordered.end()) { ordered.push_back(nm); }
+        }
+        for (const std::string& nm : names)
+        { if (std::find(ordered.begin(), ordered.end(), nm) == ordered.end()) { ordered.push_back(nm); } }
+        return ordered;
+    }
     // The inherited ranking first (VialProvider's cleanup rule mapped onto the names): the draft below
     // re-orders it STABLY, so every tie keeps the inherited order.
     std::vector<std::string> out = VialProvider::ActivationDiscardCandidates(s, src_def, names);
@@ -19561,6 +19584,446 @@ int VampiresProvider::MadnessCastDefault(const GameState& s, int controller, con
         if (ap.lands_played_this_turn < ap.LandDropsAvailable() && VampHandHasLand(s)) { return -1; }
     }
     return base;
+}
+
+// ---- VampiresProvider: the AI-DRAFTED cast order (MTG_VAMPIRES_ORDER, DEFAULT OFF) ---------------
+//
+// docs/design/vampires-cast-order-2026-10-18.md, drafted 2026-10-18 for the USER's review (USER
+// 2026-10-14: "The generic order is never a good option ... It should be edited by you and then
+// presented to me for additional feedback"). Cast order is USER-OWNED: this ships OFF, and =0 / unset
+// is VialProvider::CastOrderRank byte-for-byte (every creature tied at the generic 10 in plan order,
+// Aether Vial at 20).
+//
+// WHAT IN THIS LIST IS ORDER-SENSITIVE AT ALL (the rank sequences the hand casts and Vial puts of ONE
+// main phase; every activation -- Condemned's pump, Pit Fighter, Blood, the steal, Keeper's token and
+// transform, the Vial put's own tap -- runs in the trailing pass AFTER every cast, and every discard is
+// there or at cleanup):
+//   * Markov Baron's CONVOKE: a body cast earlier in the same main is untapped and summoning sick, so
+//     it taps for {1} (or {B}) at no cost. Baron goes after every other creature. This is the one slot
+//     that changes what a main can pay.
+//   * Aether Vial's {1} is the one cost every land in the list pays (each makes {C} or {B}), while the
+//     creatures' {W} (only the 12 creature-only rainbow lands), {R} (those plus Blackcleave Cliffs) and
+//     {B}{B} draw on subsets -- so the Vial pays last, from whatever the creatures left. Under the
+//     whole-turn batch prepay it is inert; it matters on the per-cast fallback and the sequential walk.
+//   * Everything else is ORDER-FREE by the card text: the lords are static (CR 611.3); Vampire
+//     Socialite's two clauses reach every Vampire whichever side of it they enter (its ETB counts the
+//     earlier ones, its as-enters replacement the later ones); Gorger's grant, Drana's / Mavren's
+//     triggers and every outlet only matter after the casts. The USER's cross-deck ruling still wants
+//     them TOTAL ("I don't like the randomness of choosing the order"), so they get fixed slots:
+//     Socialite and Gorger first (a watcher / granter ahead of what it watches is the robust reading),
+//     then the three static lords, then the rest cheapest first, then by NAME (CastOrderTotalByName).
+// Every slot is read off PARAMS; a card the deck does not hold lands at its mana value among the bodies
+// (a creature) or after the Vial (a noncreature), and the name breaks any tie.
+static bool VampiresOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_VAMPIRES_ORDER");   // DEFAULT OFF (AI draft awaiting the USER); =1 enables
+    return heurarm::Flag(heurarm::VAMPIRES_ORDER, on);
+}
+
+namespace
+{
+constexpr int kVampWatcher   = 1;     // Vampire Socialite
+constexpr int kVampGranter   = 2;     // Falkenrath Gorger
+constexpr int kVampLordFs    = 3;     // Stromkirk Captain
+constexpr int kVampLord      = 4;     // Legion Lieutenant
+constexpr int kVampLordSteal = 5;     // Captivating Vampire
+constexpr int kVampFreeBase  = 20;    // every other creature: 20 + mana value, then NAME
+constexpr int kVampConvoke   = 40;    // Markov Baron
+constexpr int kVampVial      = 50;    // Aether Vial
+constexpr int kVampUnlisted  = 100;   // a noncreature the list does not hold: + its generic rank
+
+bool VampIsStaticLord(const CardParams& p)
+{
+    return !p.subtypes_affected.empty() && (p.power_bonus > 0 || p.tough_bonus > 0);
+}
+
+bool VampIsEnterWatcher(const CardParams& p)
+{
+    return p.opp_lost_life_other_enters_counters > 0 || p.etb_each_other_own_creature_counters_if_opp_lost_life > 0;
+}
+}   // namespace
+
+int VampiresProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!VampiresOrderEnabled()) { return VialProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (p.upkeep_adds_charge)                         { return kVampVial; }
+    if (!def.card.IsCreature())                       { return kVampUnlisted + VialProvider::CastOrderRank(s, def); }
+    if (p.convoke)                                    { return kVampConvoke; }     // tested before the lord test
+    if (VampIsEnterWatcher(p))                        { return kVampWatcher; }
+    if (!p.grants_madness_creature_subtype.empty())   { return kVampGranter; }
+    if (VampIsStaticLord(p))
+    {
+        if (p.grants_first_strike)   { return kVampLordFs; }
+        if (p.steal_tap_count > 0)   { return kVampLordSteal; }
+        return kVampLord;
+    }
+    return kVampFreeBase + std::min(def.card.m_mana_cost.ManaValue(), 9);
+}
+
+bool VampiresProvider::CastOrderTotalByName() const
+{
+    if (!VampiresOrderEnabled()) { return VialProvider::CastOrderTotalByName(); }
+    return true;
+}
+
+const char* VampiresProvider::CastOrderTierName(int rank) const
+{
+    if (!VampiresOrderEnabled()) { return VialProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case kVampWatcher:   return "ENTER-WATCHER (Vampire Socialite): first -- order-free (its ETB reaches the earlier Vampires, its as-enters clause the later ones); a watcher leads";
+        case kVampGranter:   return "MADNESS GRANTER (Falkenrath Gorger): order-free (every discard is in the trailing pass or at cleanup, after the casts); ahead of the outlets";
+        case kVampLordFs:    return "STATIC LORD + FIRST STRIKE (Stromkirk Captain): static, order-free; leads the lords";
+        case kVampLord:      return "STATIC LORD (Legion Lieutenant): static, order-free";
+        case kVampLordSteal: return "STATIC LORD + STEAL (Captivating Vampire): static; the steal is a trailing activation";
+        case kVampConvoke:   return "CONVOKE LORD (Markov Baron): after every other creature -- each body cast this main taps for it free";
+        case kVampVial:      return "AETHER VIAL: last -- every land pays its {1}; the creatures' W / R / BB pips choose their lands first";
+        default: break;
+    }
+    if (rank >= kVampFreeBase && rank < kVampConvoke)
+    { return "ORDER-FREE BODY: cheapest first (20 + mana value), then by NAME"; }
+    if (rank >= kVampUnlisted) { return "UNLISTED NONCREATURE: generic rank + 100, then by NAME"; }
+    return nullptr;
+}
+
+// The drafted MAIN-PHASE VIEW (display only -- see the class note). Main 2: the cards whose text needs
+// "an opponent lost life this turn", which in this list only combat damage sets (Socialite's counters,
+// Pit Fighter's draw). Main 1: the cards that change THIS combat (the two plain static lords; Mavren's
+// attack trigger) and the Vial (nothing to wait for). Both: everything with a role on each side --
+// Markov Baron (a lord now vs every untapped body free for convoke after combat), Captivating Vampire
+// (a lord now vs the steal after combat), Stromkirk Condemned (a pre-combat pump vs a post-combat
+// madness outlet), Bloodghast (haste at <= 10), Gorger, and the sick bodies (Socialite's counter if she
+// is out and combat connects).
+std::optional<DecisionProvider::MainPhase>
+VampiresProvider::MainPhaseOverride(const GameState& s, const CardDefinition& def) const
+{
+    if (!VampiresOrderEnabled()) { return VialProvider::MainPhaseOverride(s, def); }
+    const CardParams& p = def.params;
+    if (VampIsEnterWatcher(p) || p.activate_only_if_opp_lost_life)          { return MainPhase::Main2; }
+    if (p.attack_one_or_more_tokens > 0)                                     { return MainPhase::Main1; }
+    if (VampIsStaticLord(p) && !p.convoke && p.steal_tap_count == 0)        { return MainPhase::Main1; }
+    if (p.upkeep_adds_charge)                                                { return MainPhase::Main1; }
+    return MainPhase::Both;
+}
+
+// ---- VampiresProvider: the AI-DRAFTED discard buckets (MTG_VAMPIRES_BUCKET_DISCARD, DEFAULT OFF) --
+//
+// analyze-deck 5i, drafted 2026-10-18 for the USER's review (docs/design/vampires-cast-order-2026-10-18.md
+// section 3). Discard buckets are USER-OWNED: OFF and =0 are VialProvider's rule (the slivers_vial
+// buckets this deck has ridden since it routed to Vial) byte-for-byte.
+//
+// THE DECK: a 1-3-drop Vampire curve (Bloodline Keeper at 4) on 20 lands, where a discard is often
+// not a loss at all -- Falkenrath Gorger gives every Vampire creature card madness (Markov Baron and
+// Asylum Visitor have their own), so a discarded creature the untapped mana can pay is CAST, and
+// Bloodghast comes back from the graveyard on the next land. So the buckets are the 5i shape with a
+// FREE tier in front:
+//   FREE     at CLEANUP, a creature card madness can cast right now (its madness cost payable from the
+//            untapped mana, convoke counted for Baron -- every body is free at cleanup), best value
+//            first: the shed deploys it a turn early. Then a Bloodghast with a land in hand: it returns
+//            on that land for nothing. At an OUTLET (ActivationDiscardCandidates) only the Bloodghast
+//            tier applies -- it returns this turn while the drop is open, hasty at <= 10, for no mana --
+//            because that order is built on the pre-plan board, whose mana the plan's casts spend first.
+//   DEAD     an Aether Vial beyond the first (board copy included); a legendary we already control.
+//   MANA     lands to FOUR counting the board (the curve tops at 4 and Pit Fighter / Blood / the
+//            transform are mana sinks). Colour coverage first: a land making {W} (only the creature-only
+//            rainbow lands do) while a held card needs {W} and no board land makes it; the same for
+//            {R}. Then the most flexible: Secluded Courtyard (also pays Pit Fighter's {R} and the
+//            transform's {B}) > Voldaren Estate (the Blood sink, a pay-1-life colour) > Unclaimed
+//            Territory > Blackcleave Cliffs (worse once it would enter tapped) > Swamp.
+//   VIAL     one, only while it is early (turn <= 2, none on board): kept after a two-threat floor.
+//   THREATS  the catch-all, ordered by EV = discard_dist::CastFactorFor (the shared distance-to-castable
+//            model: board mana + the KEPT lands + the library's land density; Baron's cost net of the
+//            bodies that convoke it next turn; a Vial-puttable mana value counts as castable) x a
+//            param-derived value (printed P+T, a lord's bonus x3, first strike / steal / convoke +1,
+//            Keeper's token + transform, Drana's / Mavren's / Socialite's +3, Condemned's pump and Pit
+//            Fighter's draw +2, Visitor's draw +1, Gorger +3 while a held Vampire would use the grant
+//            and none is out, Bloodghast -3: it is the deck's best fodder).
+// SHED ORDER: FREE -> DEAD -> lands past the quota (worst first) -> a late Vial -> threats past the
+// floor (lowest EV first) -> an early Vial -> the floor -> the kept lands (last picked first).
+// ONE index per consultation (5i rule 5), through CleanupDiscardRankingWithOrder; the madness-castable
+// test reads the untapped mana, which a shed's madness cast spends, so a multi-card cleanup re-asks.
+static bool VampiresBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_VAMPIRES_BUCKET_DISCARD");   // DEFAULT OFF (AI draft awaiting the USER); =1 enables
+    return heurarm::Flag(heurarm::VAMPIRES_BUCKET_DISCARD, on);
+}
+
+namespace
+{
+// Param-derived value of a held card in this deck's plan (higher = keep).
+int VampThreatValue(const CardDefinition& d, bool granter_live, bool hand_has_madness_target)
+{
+    const CardParams& p = d.params;
+    if (!d.card.IsCreature()) { return d.card.m_mana_cost.ManaValue(); }
+    int v = d.card.m_power.value_or(0) + d.card.m_toughness.value_or(0);
+    if (VampIsStaticLord(p))                     { v += 3 * (p.power_bonus + p.tough_bonus); }
+    if (p.grants_first_strike)                   { v += 1; }
+    if (p.steal_tap_count > 0)                   { v += 1; }
+    if (p.convoke)                               { v += 1; }
+    if (p.tap_token_power > 0)                   { v += p.tap_token_power + p.tap_token_toughness; }
+    if (!p.transform_back_name.empty())          { v += 2; }
+    if (p.combat_damage_counters_each_attacker > 0) { v += 3 * p.combat_damage_counters_each_attacker; }
+    if (p.attack_one_or_more_tokens > 0)         { v += 3; }
+    if (VampIsEnterWatcher(p))                   { v += 3; }
+    if (p.discard_team_pump_power > 0)           { v += 2; }
+    if (p.sac_outlet_draw > 0)                   { v += 2; }
+    if (p.hellbent_upkeep_draw > 0)              { v += 1; }
+    if (!p.grants_madness_creature_subtype.empty())
+    { v += granter_live ? 0 : (hand_has_madness_target ? 3 : 1); }
+    if (p.landfall_return_self_from_gy)          { v -= 3; }
+    return v;
+}
+
+// Higher = keep first. Rainbow (creature-only any-colour) lands 50, a two-colour land 20, a basic 10;
+// +5 for a land that also pays the creature ABILITIES' colours (Courtyard; an unrestricted dual); +3
+// for Voldaren Estate's Blood sink, -1 for its life payment; -5 for a fastland that would enter tapped.
+int VampLandKeepScore(const CardDefinition* d, int board_lands)
+{
+    if (d == nullptr) { return 0; }
+    const CardParams& p = d->params;
+    int colours = 0;
+    for (Color c : p.produces) { if (c != Color::Colorless) { ++colours; } }
+    int v = 10 * colours;
+    if (p.colored_creature_ability_ok || (!p.colored_creature_only && colours >= 2)) { v += 5; }
+    if (p.tap_blood_cost.has_value())                                               { v += 3; }
+    if (p.tap_self_damage > 0)                                                      { v -= 1; }
+    if (p.fastland_max_other_lands >= 0 && board_lands > p.fastland_max_other_lands) { v -= 5; }
+    return v;
+}
+
+bool VampLandMakes(const CardDefinition* d, Color c)
+{
+    if (d == nullptr) { return false; }
+    return std::find(d->params.produces.begin(), d->params.produces.end(), c) != d->params.produces.end();
+}
+}   // namespace
+
+// The whole bucket shed order: every non-staged hand index once, most expendable first.
+// activation_mode: an outlet's discard in a main phase (this turn's land drop may still be open).
+static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_mode)
+{
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    const int n = static_cast<int>(ap.hand.size());
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // ---- board census (net of board) -----------------------------------------------------------
+    int board_lands = 0, board_creatures = 0, untapped_creatures = 0, board_vials = 0, vial_charge = -1;
+    bool granter_live = false, board_w = false, board_r = false;
+    std::vector<std::string> board_legends;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(perm.card);
+        if (perm.card.IsLand())
+        {
+            ++board_lands;
+            if (VampLandMakes(d, Color::White)) { board_w = true; }
+            if (VampLandMakes(d, Color::Red))   { board_r = true; }
+        }
+        if (perm.card.IsCreature()) { ++board_creatures; if (!perm.tapped) { ++untapped_creatures; } }
+        if (perm.card.HasSupertype(Supertype::Legendary)) { board_legends.push_back(perm.card.m_name.str()); }
+        if (d == nullptr) { continue; }
+        if (d->params.upkeep_adds_charge) { ++board_vials; vial_charge = std::max(vial_charge, perm.charge_counters); }
+        if (!d->params.grants_madness_creature_subtype.empty()) { granter_live = true; }
+    }
+    const bool drop_open = activation_mode && ap.lands_played_this_turn < ap.LandDropsAvailable();
+
+    // ---- partition the hand ----------------------------------------------------------------------
+    enum : char { C_SKIP, C_LAND, C_VIAL, C_DEAD, C_MADNESS, C_GHAST, C_THREAT };
+    std::vector<char> cls(static_cast<std::size_t>(n), C_SKIP);
+    std::vector<const CardDefinition*> defs(static_cast<std::size_t>(n), nullptr);
+    bool hand_land = false, need_w = false, need_r = false, hand_madness_target = false;
+    std::vector<std::string> granted_subtypes;   // what a held granter (Gorger) would give madness to
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        defs[static_cast<std::size_t>(i)] = d;
+        if (CleanupDiscardIsLand(c)) { hand_land = true; continue; }
+        if (d == nullptr) { continue; }
+        if (d->card.m_mana_cost.white > 0) { need_w = true; }
+        if (d->card.m_mana_cost.red > 0 || d->params.sac_outlet_discard_cost > 0) { need_r = true; }
+        if (!d->params.grants_madness_creature_subtype.empty())
+        { granted_subtypes.push_back(d->params.grants_madness_creature_subtype); }
+    }
+    for (int i = 0; i < n && !granted_subtypes.empty(); ++i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr || !d->card.IsCreature() || !d->params.grants_madness_creature_subtype.empty()) { continue; }
+        for (const std::string& sub : granted_subtypes)
+        { if (CardHasSubtype(d->card, sub)) { hand_madness_target = true; break; } }
+    }
+    ManaPool pool = AvailableManaPool(s);
+    auto madness_now = [&](const Card& c, const CardDefinition* d)
+    {
+        if (d == nullptr || !d->card.IsCreature() || s.casts_remaining_this_turn == 0) { return false; }
+        for (const ManaCost& m : MadnessCostsFor(s, me, c))
+        {
+            ManaCost r = m;
+            if (d->params.convoke) { r.generic = std::max(0, r.generic - untapped_creatures); }
+            if (pool.CanPay(r)) { return true; }
+        }
+        return false;
+    };
+    int vials_seen = board_vials;
+    std::vector<std::string> legends_seen = board_legends;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        if (CleanupDiscardIsLand(c)) { cls[static_cast<std::size_t>(i)] = C_LAND; continue; }
+        if (d != nullptr && d->params.upkeep_adds_charge)
+        {
+            cls[static_cast<std::size_t>(i)] = vials_seen > 0 ? C_DEAD : C_VIAL;
+            ++vials_seen;
+            continue;
+        }
+        if (d != nullptr && d->card.HasSupertype(Supertype::Legendary))   // a hand card is a name-only placeholder
+        {
+            const std::string nm = c.m_name.str();
+            if (std::find(legends_seen.begin(), legends_seen.end(), nm) != legends_seen.end())
+            { cls[static_cast<std::size_t>(i)] = C_DEAD; continue; }
+            legends_seen.push_back(nm);
+        }
+        // The madness promotion is CLEANUP-ONLY: there the untapped mana is the mana the madness trigger
+        // will really see. An outlet's discard order is built on the PRE-plan board and the plan's own
+        // casts spend that mana first, so promoting a lord on it throws the lord away whenever the cast
+        // then cannot be paid (d0 probe 2026-10-18, seed 1214: Condemned discarded Stromkirk Captain).
+        // The searched fan still holds every "discard it, cast it" variant.
+        if (d != nullptr && d->params.landfall_return_self_from_gy && hand_land)
+        { cls[static_cast<std::size_t>(i)] = (!activation_mode && madness_now(c, d)) ? C_MADNESS : C_GHAST; continue; }
+        if (!activation_mode && madness_now(c, d)) { cls[static_cast<std::size_t>(i)] = C_MADNESS; continue; }
+        cls[static_cast<std::size_t>(i)] = C_THREAT;
+    }
+    auto value_of = [&](int i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        return d == nullptr ? 0 : VampThreatValue(*d, granter_live, hand_madness_target);
+    };
+    auto name_of = [&](int i) -> const std::string& { return ap.hand[static_cast<std::size_t>(i)].m_name.str(); };
+
+    // ---- MANA: colour coverage, then the most flexible, to four counting the board ----------------
+    std::vector<int> lands;
+    for (int i = 0; i < n; ++i) { if (cls[static_cast<std::size_t>(i)] == C_LAND) { lands.push_back(i); } }
+    const int land_quota = std::max(0, 4 - board_lands);
+    std::vector<int> kept_lands;   // in pick order
+    std::vector<char> land_kept(static_cast<std::size_t>(n), 0);
+    {
+        bool have_w = board_w, have_r = board_r;
+        while (static_cast<int>(kept_lands.size()) < land_quota)
+        {
+            int best = -1, best_key = -1;
+            for (int i : lands)
+            {
+                if (land_kept[static_cast<std::size_t>(i)]) { continue; }
+                const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+                int key = VampLandKeepScore(d, board_lands);
+                if ((need_w && !have_w && VampLandMakes(d, Color::White))
+                    || (need_r && !have_r && VampLandMakes(d, Color::Red))) { key += 1000; }
+                if (best < 0 || key > best_key || (key == best_key && name_of(i) < name_of(best)))
+                { best = i; best_key = key; }
+            }
+            if (best < 0) { break; }
+            land_kept[static_cast<std::size_t>(best)] = 1;
+            kept_lands.push_back(best);
+            if (VampLandMakes(defs[static_cast<std::size_t>(best)], Color::White)) { have_w = true; }
+            if (VampLandMakes(defs[static_cast<std::size_t>(best)], Color::Red))   { have_r = true; }
+        }
+    }
+    std::vector<int> surplus_lands;
+    for (int i : lands) { if (!land_kept[static_cast<std::size_t>(i)]) { surplus_lands.push_back(i); } }
+    std::stable_sort(surplus_lands.begin(), surplus_lands.end(), [&](int a, int b)
+    {
+        const int ka = VampLandKeepScore(defs[static_cast<std::size_t>(a)], board_lands);
+        const int kb = VampLandKeepScore(defs[static_cast<std::size_t>(b)], board_lands);
+        if (ka != kb) { return ka < kb; }
+        return name_of(a) < name_of(b);
+    });
+
+    // ---- THREATS: EV = castability x value --------------------------------------------------------
+    const discard_dist::Census census = discard_dist::BuildCensus(s, me);
+    std::vector<discard_dist::LandDrop> kept_drops;
+    for (int i : kept_lands) { kept_drops.push_back(discard_dist::LandDropOf(defs[static_cast<std::size_t>(i)])); }
+    std::vector<double> ev(static_cast<std::size_t>(n), 0.0);
+    std::vector<int> threats, free_madness, free_ghast, dead, vials;
+    for (int i = 0; i < n; ++i)
+    {
+        const char k = cls[static_cast<std::size_t>(i)];
+        if (k == C_MADNESS) { free_madness.push_back(i); }
+        else if (k == C_GHAST) { free_ghast.push_back(i); }
+        else if (k == C_DEAD) { dead.push_back(i); }
+        else if (k == C_VIAL) { vials.push_back(i); }
+        if (k != C_THREAT) { continue; }
+        threats.push_back(i);
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr) { continue; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        double factor;
+        if (d->card.IsCreature() && vial_charge >= 0 && (mv == vial_charge || mv == vial_charge + 1))
+        { factor = 1.0; }                                                       // a Vial put next turn
+        else if (d->params.convoke && d->card.IsCreature())
+        { factor = discard_dist::CastFactorFor(census, *d, kept_drops, std::max(1, mv - board_creatures)); }
+        else
+        { factor = discard_dist::CastFactorFor(census, *d, kept_drops); }
+        ev[static_cast<std::size_t>(i)] = factor * static_cast<double>(value_of(i));
+    }
+    // Most expendable first: lower EV, then the dearer card, then by NAME (never hand order).
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    {
+        const double ea = ev[static_cast<std::size_t>(a)], eb = ev[static_cast<std::size_t>(b)];
+        if (ea != eb) { return ea < eb; }
+        const int ma = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(a)]);
+        const int mb = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(b)]);
+        if (ma != mb) { return ma > mb; }
+        return name_of(a) < name_of(b);
+    });
+    // FREE madness: the best creature first (the shed deploys it).
+    std::stable_sort(free_madness.begin(), free_madness.end(), [&](int a, int b)
+    {
+        const int va = value_of(a), vb = value_of(b);
+        if (va != vb) { return va > vb; }
+        return name_of(a) < name_of(b);
+    });
+    constexpr int kThreatFloor = 2;
+    const int threat_over = std::max(0, static_cast<int>(threats.size()) - kThreatFloor);
+    const bool vial_early = s.turn_number <= 2 && board_vials == 0;
+
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    if (drop_open) { for (int i : free_ghast) { shed.push_back(i); } }
+    for (int i : free_madness) { shed.push_back(i); }
+    if (!drop_open) { for (int i : free_ghast) { shed.push_back(i); } }
+    for (int i : dead) { shed.push_back(i); }
+    for (int i : surplus_lands) { shed.push_back(i); }
+    if (!vial_early) { for (int i : vials) { shed.push_back(i); } }
+    for (int k = 0; k < threat_over; ++k) { shed.push_back(threats[static_cast<std::size_t>(k)]); }
+    if (vial_early)  { for (int i : vials) { shed.push_back(i); } }
+    for (std::size_t k = static_cast<std::size_t>(threat_over); k < threats.size(); ++k) { shed.push_back(threats[k]); }
+    for (auto it = kept_lands.rbegin(); it != kept_lands.rend(); ++it) { shed.push_back(*it); }
+    return shed;
+}
+
+std::vector<int> VampiresProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!VampiresBucketDiscardEnabled() || s.players[s.active_player_index].hand.empty())
+    { return VialProvider::CleanupDiscardCandidates(s, required_pieces); }
+    std::vector<int> ranked =
+        CleanupDiscardRankingWithOrder(s, required_pieces, VampBucketShedOrder(s, /*activation_mode=*/false));
+    if (ranked.size() > 1) { ranked.resize(1); }   // ONE index: the rule IS the decision (5i rule 5)
+    return ranked;
+}
+
+// One index per consultation, and the next pick moves with the hand and the mana (a shed's madness cast
+// spends the untapped mana the FREE tier reads): a multi-card cleanup re-asks after every shed.
+bool VampiresProvider::CleanupDiscardShedStable() const
+{
+    if (!VampiresBucketDiscardEnabled()) { return VialProvider::CleanupDiscardShedStable(); }
+    return false;
 }
 
 // ---- instances + selection --------------------------------------------------
