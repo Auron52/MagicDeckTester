@@ -58,6 +58,28 @@ viewer wiring, unit-test plans. Summary of what they established:
   Unclaimed Territory / Secluded Courtyard note lines.
 - Then C is rebased in, smoke/regression byte-identity checked, Stage 3 coverage re-run.
 
+## Status (orchestrator, 2026-10-18)
+- Stage 2 integrated in order A2 -> C (cherry-picked from `vampires-combat`; cards.json merged per card, no
+  card edited on both sides) -> A1 -> B. Unit 1514/1514. Backup: origin `backup/2026-10-18/vampires-analysis`.
+- Stage 3: coverage clean (20/20 full, 0 missing); every remaining bracket note is an implementation note or
+  a PROVISIONAL goldfish-inert collapse listed below. Cost audit rc 0 (450/450, B integrator). Field audit:
+  all hard fields match; its rc 1 is the pre-existing unfetched Temple of Abandon (not this deck).
+- Stage 4: baseline profile `decks/Vampires/Vampire.profile.json` (static keep; no keep table / value leaf).
+  Cost diagnostic NO_COST_INTERACTIONS. Discard analysis DISCARD_UNLABELLED: 0 real cleanup sheds in 400 d3
+  games, 64,621 rollout sheds (all with < 4 lands out, each taking ranking index 0) -> BOUND it with the
+  MTG_SHED_WORST pair (Stage 5i).
+- Stage 4a: VampiresProvider (derives VialProvider; empty of judgement hooks except the AGENT-DRAFTED orders,
+  `MTG_VAMP_DRAFT_ORDERS`) routed at the top of the chain; `provider_audit.py --check` rc 0.
+- Stage 4-bis: rows in all three tiers (colossus shape, overnight ENTRY set, vampires2hg in each tier).
+  Smoke accepted (46b709eeb) and regression accepted (ff401f887), both FILTERED accepts over FULL-tier runs in
+  which every other deck was byte-identical; critter/angels moved with the two-step combat (smoke: 0 slower,
+  19 searched + 65 d0 faster; regression: 0 slower, 45 searched + 79 d0 faster). Their OVERNIGHT GT is left
+  to the periodic overnight run (CLAUDE.md).
+- Reference gate (regression mode): ONE play-drift, CritterLifegain/claude_s6_gi5 (recorded T5, replays T4).
+  BISECTED: origin 2176032dd ok (T5); combat track alone T4; combined T4. Mechanism: two Ocelot Prides'
+  first-strike lifelink reach 30+ life before regular damage, so Serra Ascendant connects as a 6/6. Reference
+  untouched -- open question 27.
+
 ## Open questions for the user (work continues on the stated default)
 1. **Main-2 held-land bar vs Bloodghast** (USER 2026-09-30 "Only newly arrived lands in second main").
    "Pit Fighter sacs Bloodghast post-combat, then play the held land" is unfindable at any budget under the
@@ -491,3 +513,17 @@ Flying (Keeper, Lord, tokens) inert; one steal per Captivating per main phase.
     [default: disclose, PROVISIONAL]
 26. **A sacrificed permanent goes to its OWNER's graveyard** (SacrificePermanentAt) -- a rules fix for every
     deck, byte-identical in the suite (no suite deck sacrifices a creature it does not own). [default: keep]
+
+## Open questions -- orchestrator / cluster C (work continues on the stated default)
+27. **CritterLifegain/claude_s6_gi5 now replays T4 (recorded T5)** under the faithful first-strike step (see
+    Status). The checker has no override mechanism by design, so the regression tier's reference gate stays red
+    on this one reference until the USER rules. [default: reference untouched; drift disclosed]
+28. **Baseline profile `min_playable: 0`** (the analyzer's output; Soldiers / Pirates / Colossus ship the same;
+    the skill's old note asks >= 1 for multi-colour decks). Keep policy is USER-owned and the keep table
+    replaces it. [default: as generated]
+29. **Attack projection does not count first-step lifelink feeding Thune / Pridemate / life thresholds**
+    (integration_C_notes): the search's damage estimate undercounts there (the safe direction); rollouts are
+    exact. [default: leave]
+30. **Rick, Steadfast Leader keeps choosing vigilance + lifelink over first strike** -- correct for Soldiers,
+    which has nothing between the damage steps. [default: unchanged]
+31. **New combat params classified as no-viewer-decision** (INERT_PARAMS). [default: as classified]
