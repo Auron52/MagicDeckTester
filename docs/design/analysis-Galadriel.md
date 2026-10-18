@@ -216,22 +216,32 @@ USER: "I'm not so fond of using play settings ... We should have run the setting
   library's bottom, so the table's bottom order surfaces (smoke 11, regression 6 games).
 - Overnight rows NOT resized (the skill's FULL-set step) -- surfaced to the USER as a proposal.
 
-## RESUME POINT (2026-10-18 ~04:50 UTC)
-DONE + PUSHED: scry rules round 2; settings screen moved to mullgen.sh (1a0c495b); pipeline order
-profile -> mulligan -> value leaf (f1195e14); keep table + GT (this commit).
-NEXT: the VALUE LEAF on the new play with the keep table live (`bash scripts/valueleaf.sh run
-decks/Galadriel`, alone, MTG_RSS_CAP_GB override; the old queue logs/vlq_galadriel is pre-rule,
-pre-table play -- moved aside to logs/vlq_galadriel.prekeep-20261018, never resumed). Then the cross-game
-RSS growth question (13 -> 19 GiB in the old matrix).
-THEN (USER 2026-10-18: "we should resize all of the regression test rows for the deck"): resize every
-galadriel / galadriel2hg row in test/regression_cases.sh -- smoke and regression to the Selesnya/Bruna shape
-(smoke d3 150 b10, d5 75 b20, 2hg d3 75; regression d3 2x150, d5 2x75, 2hg d3 100 + d5 50), overnight sized
-by MEASURED per-game cost with the keep table (+ leaf if adopted) via test/tier_cost.py (between Hinata's
-d3 4x400 b10 / d5 4x300 b20 and the full d3 4x1000 b20 / d5 4x500 b40). Run all three tiers for the deck
-once, AFTER the value leaf (it owns the box, and an adopted leaf moves play again), and accept per tier.
-OPEN USER QUESTIONS: overnight FULL-set resize at adoption; keep-policy sign-off (curve_check none /
-max_lands 6); Saproling Migration (Kicker) / Kili (Storied) keyword mismatches + the rate-limited cost
-audit; the seeds 4/5 T5 scry choices.
+## Value leaf (2026-10-18, after the keep table; `valueleaf.sh run`, frozen e3ba99ef, ~13 min end to end)
+- C0: greedy leaf from H3 (H3-H5: 0 of 50 paired games moved; 0.24x / 0.69x / 0.94x units).
+- E.5 ADOPTED the staged model: -0.0026 t (t -3.7) at 0.70x units vs live (no leaf), 8 seeds x 1000.
+  Leafless shapes, same A/B: nlesc (escalation, leafless probe) +0.0004 t at 0.67x; nlfit (final-depth
+  single pass) +0.0005 t at 0.58x. Model vs nlfit: -0.0031 t (t -4.7) at 1.20x -- flagged a TRADE for the
+  USER; the run picked the model as notably better. Switch = copy logs/vlq_galadriel/Galadriel.value.NLFIT.json.
+- E.6: no escalation-skip allowance (headroom 0.3% < 4%).
+- Compare: the pre-keep-table run (logs/vlq_galadriel.prekeep-20261018) spent 9+ h in phase C alone.
+
+## Suite rows resized (USER 2026-10-18: "we should resize all of the regression test rows for the deck")
+Smoke d3 150 b10 / d5 75 b20 / 2hg d3 75; regression d3 2x150 / d5 2x75 / 2hg d3 100 + d5 50; overnight the
+FULL standard set (d0 4x2000, d3 4x1000 b20, d5 4x500 b40, 2hg d5 4x170 b40). Worst searched case now
+~169 ms/game (regression d5 s3003) vs 2,969 before the keep table -- 21st of 36 decks (test/suite_cost.json
+still holds the stale 2,969 until the next pooled --measure-all). Galadriel's whole overnight: 42 s makespan.
+All three tiers accepted with the leaf live.
+
+## RESUME POINT (2026-10-18 ~05:30 UTC)
+Pipeline COMPLETE for Galadriel: cards, profile, suite (resized), scry/turn-order USER rules, 15 USER
+references (0/15 short), keep table (K=9), value leaf (model). All committed + pushed.
+OPEN USER QUESTIONS: the value leaf's model-vs-nlfit trade; the seeds 4/5 T5 scry choices. (Keep-policy
+sign-off is MOOT: the keep table covers every composition, so the static rules are only the fallback. The
+Saproling Migration / Kili keyword items were already fixed in d5fe4897.)
+OWED: the cross-game RSS growth seen in the old value-leaf matrix (13 -> 19 GiB); the rate-limited Scryfall
+cost audit re-run (in progress 2026-10-18); a refresh of test/suite_cost.json on the next pooled tier run;
+the settings screen will run before Galadriel's NEXT keep-table generation (its table was made at play
+settings d5 b20).
 Gotchas: 9p clock lag (delete .o files after edits; header edits via ninja -t deps); never pkill -f; gh CLI
 logged out on this container (query CI via curl + `git credential fill`).
 

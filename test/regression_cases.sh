@@ -505,14 +505,16 @@ SMOKE_CASES=(
   "landfall 0 1001 1000 0"
   "landfall 3 1001   30 10"
   "landfall 5 1001   15 20"
-  # galadriel: ADDED 2026-10-17 (docs/design/analysis-Galadriel.md), all three tiers at once, at Landfall's
-  # pre-keep-table admission shape (d3 30/40, d5 15/20; overnight d3 4x250, d5 4x150) -- grow at the
-  # keep-table adoption. No value leaf and no keep table yet, so GT WILL move when they land. 2HG rows:
+  # galadriel: ADDED 2026-10-17 (docs/design/analysis-Galadriel.md) at Landfall's pre-keep-table admission
+  # shape; RESIZED 2026-10-18 after the keep table + value leaf landed (USER: "we should resize all of the
+  # regression test rows for the deck") -- smoke/regression to the Selesnya/Bruna shape, overnight to the
+  # FULL standard set (d3 4x1000 b20, d5 4x500 b40; 2hg ~1/3 at d5 b40): with the keep table + leaf its
+  # worst searched case measured ~170 ms/game (was 2,969 before the keep table). 2HG rows:
   # Crackle with Power hits "up to X targets", so a second head is a second Crackle target.
   "galadriel 0 1001 1000 0"
-  "galadriel 3 1001   30 10"
-  "galadriel 5 1001   15 20"
-  "galadriel2hg 3 1001 30 10"
+  "galadriel 3 1001  150 10"
+  "galadriel 5 1001   75 20"
+  "galadriel2hg 3 1001 75 10"
   # colossus: ADDED 2026-10-17 by the analysis (docs/design/analysis-Colossus Hammer.md), all three tiers
   # at once (the all-or-none rule), at the pirates / soldiers gate shape and the overnight ENTRY set.
   # Colossus Hammer (+10/+10) on a double striker through five equip cheats; most games end T3-T5. No
@@ -758,11 +760,12 @@ REGRESSION_CASES=(
   "landfall 5 3003   20 20"
   # galadriel: see the SMOKE block.
   "galadriel 0 2002 1000 0"
-  "galadriel 3 2002   40 10"
-  "galadriel 3 3003   40 10"
-  "galadriel 5 2002   20 20"
-  "galadriel 5 3003   20 20"
-  "galadriel2hg 3 2002 40 10"
+  "galadriel 3 2002  150 10"
+  "galadriel 3 3003  150 10"
+  "galadriel 5 2002   75 20"
+  "galadriel 5 3003   75 20"
+  "galadriel2hg 3 2002 100 10"
+  "galadriel2hg 5 2002  50 20"
   # colossus: see the SMOKE block.
   "colossus 0 2002 1000 0"
   "colossus 3 2002  150 10"
@@ -1351,18 +1354,18 @@ OVERNIGHT_CASES=(
   "galadriel 0 6006 2000 0"
   "galadriel 0 8008 2000 0"
   "galadriel 0 10010 2000 0"
-  "galadriel 3 4004  250 10"
-  "galadriel 3 5005  250 10"
-  "galadriel 3 6006  250 10"
-  "galadriel 3 7007  250 10"
-  "galadriel 5 4004  150 20"
-  "galadriel 5 5005  150 20"
-  "galadriel 5 6006  150 20"
-  "galadriel 5 7007  150 20"
-  "galadriel2hg 5 4004  50 20"
-  "galadriel2hg 5 5005  50 20"
-  "galadriel2hg 5 6006  50 20"
-  "galadriel2hg 5 7007  50 20"
+  "galadriel 3 4004 1000 20"
+  "galadriel 3 5005 1000 20"
+  "galadriel 3 6006 1000 20"
+  "galadriel 3 7007 1000 20"
+  "galadriel 5 4004  500 40"
+  "galadriel 5 5005  500 40"
+  "galadriel 5 6006  500 40"
+  "galadriel 5 7007  500 40"
+  "galadriel2hg 5 4004 170 40"
+  "galadriel2hg 5 5005 170 40"
+  "galadriel2hg 5 6006 170 40"
+  "galadriel2hg 5 7007 170 40"
   # colossus: see the SMOKE block. The ENTRY set (regression-testing.md "Sizing a deck's overnight
   # rows"); it expands to the FULL set just before a keep table is adopted.
   "colossus 0 4004 2000 0"
