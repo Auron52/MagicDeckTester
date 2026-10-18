@@ -2030,7 +2030,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{1}, {T}: Add {U}{R}. [Modelled exactly like Ferrous Lake's ramp_filter: needs a {1} feeder, nets +1 mana, contributes 1 wild. The {U}{R} is treated as wild (any colour) like every multi-colour source here; the deck's dedicated W sources cover Hinata's {W}, and SubsetPayable does not tighten wild, so this is the same minor over-approximation duals already carry.]",
+   "oracle_text": "{1}, {T}: Add {U}{R}. [ramp_filter, the same model as Ferrous Lake. PAYMENT is exact in both worlds (the shared TapForCostShared): the {1} is fed from another source and the Signet adds exactly one {U} and one {R}; when the first pass fails after a fixed feed pick, the backtracker re-runs with every feed unit branched (MTG_RAMP_FEED_BRANCH), so e.g. Island -> Signet -> its {R} -> Ferrous Lake for {U}{U}{R} is payable. AFFORDABILITY: the flat pool still credits +1 wild beside the feeder's own unit, but the colour-feasibility test charges each filter's feed (MTG_RAMP_FEED_CHARGE), so a single-colour feeder no longer passes {U}{U}{U} off Island + Island + Signet; a sac-for-mana float (Generator Servant) counts as a feeder in the filter rescue (MTG_RESCUE_SAC_FLOAT). Fully modelled.]",
    "template": "custom",
    "parameters": {
     "mana_rock": true,
