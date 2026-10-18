@@ -2533,10 +2533,6 @@ struct CardParams
     // a card.'" Granted to BOTH halves of the live pair; MANDATORY draw (a draw from an empty library
     // loses), stopped the instant the opponent has lost.
     bool soulbond_damage_trigger_draw = false;
-    // Niv-Mizzet, Parun: "This spell can't be countered." Only the JSON key lives on this branch; the
-    // reader (a self-targeted Remand fails against it) is the niv-remand branch's. Parsed here as a
-    // plain bool so the field exists whichever branch lands first.
-    bool cant_be_countered = false;
 
     // ================= Goblins tribal (mono-red aggro/sacrifice) =================
     // Every field below is gated (0/false/empty = inert) so decks that don't run Goblins

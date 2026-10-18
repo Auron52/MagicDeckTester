@@ -4990,6 +4990,11 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
     p.cards_drawn_this_turn += drew;
     if (drew < want) { state.player_lost_on_draw = true; }
     p.graveyard.push_back(remand_card);
+    // Remand has finished resolving: its draw's triggers (Niv-Mizzet's ping) go on the stack NOW,
+    // above X (CR 603.3), so they resolve before an uncounterable X does. Without this flush the
+    // caller's end-of-cast flush would run after X resolved, and a Niv-Mizzet, Parun that Remand
+    // merely cantripped off would ping for a draw made before it entered. Idempotent (watermark).
+    if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
     return before;
 }
 

@@ -411,3 +411,38 @@ TEST_CASE("Remand: the shared predicates -- never castable on its own, never a f
     CHECK(Def(kRemand).params.draw == 1);
 }
 
+
+TEST_CASE("Remand cantripping off an uncounterable Niv-Mizzet, Parun: only the Nivs ALREADY out ping for its draw")
+{
+    // Integration of the self-Remand rider with the Niv draw-trigger loop. Remand resolves first and
+    // draws; its draw's triggers go on the stack ABOVE the still-unresolved Parun (CR 603.3), so a
+    // tapped Firemind pings once and Parun -- not yet on the battlefield -- does not. A flush placed
+    // only at the end of the whole cast would let Parun ping too (opponent at 18, not 19).
+    EnsureCardsLoaded();
+    const char* kParun    = "Niv-Mizzet, Parun";
+    const char* kFiremind = "Niv-Mizzet, the Firemind";
+    REQUIRE(CardDatabase::Instance().Lookup(kParun) != nullptr);
+    GameState s = Fresh({ "Island" });
+    for (int k = 0; k < 4; ++k) { Put(s, "Island", 50 + k); }
+    for (int k = 0; k < 4; ++k) { Put(s, "Mountain", 60 + k); }
+    Put(s, kFiremind, 70);
+    s.battlefield.back().tapped = true;   // no attack, no {T} draw: only its trigger is live
+    s.deck_has_draw_ping = true;
+    Hand(s, kRemand, 10);
+    Hand(s, kParun, 11);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = RemandOnly(plans, kParun);
+    REQUIRE(p != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *p, /*is_pre_combat=*/true);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *p, true);
+    GameState exec = s;
+    eng.TakeTurn(exec, true, ResolveAll);
+    for (const GameState* g : { &roll, &exec })
+    {
+        CHECK(OnBattlefield(*g, kParun));
+        CHECK(g->players[0].cards_drawn_this_turn == 1);
+        CHECK(g->players[1].life == gamesetup::StartingLife() - 1);
+    }
+}
