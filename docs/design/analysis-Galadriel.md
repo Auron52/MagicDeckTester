@@ -270,6 +270,16 @@ land-drop scry offers one candidate. A/B, 24 seeds x 1000 paired (800000+), d5 b
 - ref_bench: 0/15 short; search 5.600 vs USER 5.667. Seeds 7, 10, 15 now MATCH the USER (the clairvoyant
   scry wins are gone); seed 5 is still a turn faster.
 
+## nlfit at a raised budget (USER 2026-10-18: "nlfit's time could probably be used better with a higher budget")
+Same 40 seeds (700000+) x 1000, d5, with the scry prune (5c85e812) live; each arm vs the model leaf at b20:
+- nlfit b20: **-0.0006 t (t -4.1; 24 faster / 2 slower)** at 0.72x core (0.76x units).
+- nlfit b27: -0.0006 (t -4.2) at 0.78x core; nlfit b40: -0.0006 (t -4.5) at 0.81x core / 0.95x units.
+- nlfit b27 / b40 vs nlfit b20: 1 / 1 and 2 / 1 games faster / slower. Extra budget is spent (units +12% /
+  +26%) but buys nothing: at d5 the budget almost never binds for this deck.
+- The pre-prune verdict reversed: before the prune the model was -0.0014 t vs nlfit; with the prune, nlfit is
+  better AND cheaper. The model was fitted to pre-prune play. Switching = copy
+  logs/vlq_galadriel/Galadriel.value.NLFIT.json over decks/Galadriel/Galadriel.value.json -- the USER's call.
+
 ## RESUME POINT (2026-10-18 ~06:10 UTC, before a context compaction)
 UNCOMMITTED (working tree; build bav16nup0 may still be running):
 - `GaladrielProvider::ScryVerdict` -- the USER's scry rule as a FIRM verdict on every land-drop scry
