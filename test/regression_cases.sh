@@ -518,8 +518,9 @@ SMOKE_CASES=(
   # colossus: ADDED 2026-10-17 by the analysis (docs/design/analysis-Colossus Hammer.md), all three tiers
   # at once (the all-or-none rule), at the pirates / soldiers gate shape and the overnight ENTRY set.
   # Colossus Hammer (+10/+10) on a double striker through five equip cheats; most games end T3-T5. No
-  # value leaf and no keep table yet, so GT WILL move when they land; the AI-drafted cast order and
-  # discard buckets ship OFF (MTG_COLOSSUS_ORDER / MTG_COLOSSUS_BUCKET_DISCARD) pending the USER.
+  # value leaf and no keep table yet, so GT WILL move when they land. The USER's full cast order and the
+  # Path exclusion are ON (2026-10-18, MTG_COLOSSUS_ORDER / MTG_COLOSSUS_NO_PATH); the AI-drafted discard
+  # buckets ship OFF (MTG_COLOSSUS_BUCKET_DISCARD) pending the USER.
   "colossus 0 1001 1000 0"
   "colossus 3 1001  150 10"
   "colossus 5 1001   75 20"

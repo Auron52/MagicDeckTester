@@ -701,14 +701,22 @@ public:
     // from it. DecisionProviders.cpp, "Sigarda's Aid host".
     int EquipmentEtbAttachHost(const GameState& s, int controller, const Card& equip_card,
                                const std::vector<int>& candidate_bf_indices) const override;
-    // CAST ORDER: the AI-DRAFTED order (docs/design/colossus-hammer-cast-order-draft.md), behind
-    // MTG_COLOSSUS_ORDER (heurarm COLOSSUS_ORDER), DEFAULT OFF until the USER reviews it -- off, every
-    // hook below returns the generic answer. DecisionProviders.cpp, "Cast order".
+    // CAST ORDER: the USER-ADOPTED full order (docs/design/colossus-hammer-cast-order.md; AI-drafted
+    // 2026-10-17, adopted 2026-10-18 with the equip abilities in it), behind MTG_COLOSSUS_ORDER (heurarm
+    // COLOSSUS_ORDER), DEFAULT ON -- =0 returns every hook below to the generic answer. The casts carry
+    // one position per card; the activations run after every cast, in the order ActivationOrderRankFor
+    // gives them. DecisionProviders.cpp, "Cast order".
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
     bool        CastOrderTotalByName() const override;
     bool        OrderOpaqueCastsByRank() const override;
     int         LandDropCastOrderRank() const override;
+    int         ActivationOrderRankFor(const GameState& s, const CardDefinition& d, int act_class) const override;
+    // PATH TO EXILE IS NEVER CAST (USER 2026-10-18: "Path to Exile can be excluded entirely via a
+    // heuristic for goldfishing"; MTG_COLOSSUS_NO_PATH, default ON) -- the KittyEquipment Swords shape.
+    // Human play and MTG_UNPRUNE=uacast still offer it. With it on, OffersRemovalCast above is never
+    // reached for this deck.
+    bool NeverCast(const CardDefinition& def) const override;
     // CLEANUP DISCARD: the AI-DRAFTED 5i buckets (docs/design/colossus-hammer-discard-policy-proposal.md),
     // behind MTG_COLOSSUS_BUCKET_DISCARD (heurarm COLOSSUS_BUCKET_DISCARD), DEFAULT OFF until the USER
     // reviews them. ONE index; re-asked after every shed while on.

@@ -28,6 +28,7 @@
 #include "core/SpellEffects.h"
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "mtg_test_seam.h"
 
@@ -63,6 +64,16 @@ const ColossusHammerProvider& HammerPe()
     static const ColossusHammerProvider p;
     return p;
 }
+
+// Path to Exile is never cast on this deck by default (USER 2026-10-18, MTG_COLOSSUS_NO_PATH --
+// ColossusHammerProvider::NeverCast). These tests exercise the Path machinery itself (the cast, its
+// lockstep, the self-target classes), so they run with the exclusion OFF; the last test pins the default.
+struct PathOfferedPe
+{
+    std::int8_t saved;
+    PathOfferedPe() : saved(heurarm::t_arm[heurarm::COLOSSUS_NO_PATH]) { heurarm::t_arm[heurarm::COLOSSUS_NO_PATH] = 0; }
+    ~PathOfferedPe() { heurarm::t_arm[heurarm::COLOSSUS_NO_PATH] = saved; }
+};
 
 int PutPe(GameState& s, const std::string& name, int number, int controller = 0, bool tapped = false,
           bool sick = false)
@@ -235,7 +246,7 @@ void CheckSameWorld(const GameState& roll, const GameState& exec)
 
 }   // namespace
 
-TEST_CASE("Path: a self-target cast exiles our creature and fetches a TAPPED basic -- searched, in lockstep")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: a self-target cast exiles our creature and fetches a TAPPED basic -- searched, in lockstep")
 {
     GameState s = BoardPe(1, { kPath });
     PutPe(s, "Kor Duelist", 50);
@@ -273,7 +284,7 @@ TEST_CASE("Path: a self-target cast exiles our creature and fetches a TAPPED bas
     CHECK(SolePathPlans(one_plans, 50).size() == 1);
 }
 
-TEST_CASE("Path: an opponent target exiles it and nothing else; the ColossusHammer provider refuses that cast")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: an opponent target exiles it and nothing else; the ColossusHammer provider refuses that cast")
 {
     // ColossusHammer: only the self-target variant; no opponent-target Path at all.
     {
@@ -316,7 +327,7 @@ TEST_CASE("Path: an opponent target exiles it and nothing else; the ColossusHamm
     CheckSameWorld(roll, exec);
 }
 
-TEST_CASE("Path: exiling an equipped host DETACHES the Equipment, in both worlds (the exile-branch fix)")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: exiling an equipped host DETACHES the Equipment, in both worlds (the exile-branch fix)")
 {
     GameState s = BoardPe(1, { kPath });
     PutPe(s, "Kor Duelist", 50);
@@ -359,7 +370,7 @@ TEST_CASE("Path: exiling an equipped host DETACHES the Equipment, in both worlds
     CHECK(w.players[0].life == 21);   // our Duelist's power, to us
 }
 
-TEST_CASE("Path: exiling the host of an attached Lizard Blades makes the Lizard a creature again, in both worlds")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: exiling the host of an attached Lizard Blades makes the Lizard a creature again, in both worlds")
 {
     // Reconfigure (CR 702.151b): attached, Lizard Blades is not a creature; once its host leaves it is
     // unattached and a creature again -- not summoning sick, because it has been under our control
@@ -392,7 +403,7 @@ TEST_CASE("Path: exiling the host of an attached Lizard Blades makes the Lizard 
     CheckSameWorld(roll, exec);
 }
 
-TEST_CASE("Path: one cast variant per own-creature identity class; the second Path names the second member")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: one cast variant per own-creature identity class; the second Path names the second member")
 {
     // Two bare Duelists fold, Swiftblade is its own class.
     {
@@ -458,7 +469,7 @@ TEST_CASE("Path: one cast variant per own-creature identity class; the second Pa
     }
 }
 
-TEST_CASE("Path: a stale self-target (the creature left before the cast) is not cast in either world")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: a stale self-target (the creature left before the cast) is not cast in either world")
 {
     GameState s = BoardPe(1, { kPath });
     PutPe(s, "Kor Duelist", 50);
@@ -481,7 +492,7 @@ TEST_CASE("Path: a stale self-target (the creature left before the cast) is not 
     CheckSameWorld(roll, exec);
 }
 
-TEST_CASE("Path: human play -- the board click defaults to our lowest-power creature; -1 declines the search")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: human play -- the board click defaults to our lowest-power creature; -1 declines the search")
 {
     // The plan carries no own target (the human's one cast); an opponent creature is on board too.
     GameState s = BoardPe(1, { kPath }, /*hammer_provider=*/false);
@@ -548,7 +559,7 @@ TEST_CASE("Path: human play -- the board click defaults to our lowest-power crea
     g_play_tutor_chooser  = saved_u;
 }
 
-TEST_CASE("Path: human play -- the default ranks by REAL power, so a Colossus Hammer carrier is never the 'cheapest body'")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: human play -- the default ranks by REAL power, so a Colossus Hammer carrier is never the 'cheapest body'")
 {
     // Claude-play sweep, Colossus Hammer seeds 2100005 / 2100017: the target decision listed
     // "Lizard Blades (13/13)" with heuristic_default 0 -- the default ranked by EffectivePower(), which
@@ -592,7 +603,7 @@ TEST_CASE("Path: human play -- the default ranks by REAL power, so a Colossus Ha
     CHECK(FindPe(a, spawn) != nullptr);
 }
 
-TEST_CASE("Path: the attack projection drops the creature a self-target Path exiles (and its Equipment)")
+TEST_CASE_FIXTURE(PathOfferedPe, "Path: the attack projection drops the creature a self-target Path exiles (and its Equipment)")
 {
     // Kor Duelist + Colossus Hammer = 11 power, double strike while equipped -> 22; Swiftblade 1/1
     // double strike -> 2. Exiling the Duelist leaves 2 of attack, exiling Swiftblade leaves 22.
@@ -622,4 +633,23 @@ TEST_CASE("Path: the attack projection drops the creature a self-target Path exi
     };
     CHECK(max_win_life(50) == 2);
     CHECK(max_win_life(52) == 22);
+}
+
+TEST_CASE("Path: Colossus Hammer never casts it by default (USER 2026-10-18: excluded for goldfishing)")
+{
+    // The default arm: no Path plan at all, own creature or opponent's on the board.
+    GameState s = BoardPe(2, { kPath });
+    PutPe(s, "Kor Duelist", 50);
+    SpawnPe(s);
+    CHECK(PathTargets(TurnSolver::EnumerateMainPlans(s, true)).empty());
+    CHECK(HammerPe().NeverCast(DefPe(kPath)));
+    CHECK_FALSE(HammerPe().NeverCast(DefPe("Colossus Hammer")));
+    // =0 brings the self-target back (and only it). A different board (one more Plains), so no
+    // enumeration memo entry made under the default can answer for it.
+    PathOfferedPe off;
+    CHECK_FALSE(HammerPe().NeverCast(DefPe(kPath)));
+    GameState t = BoardPe(3, { kPath });
+    PutPe(t, "Kor Duelist", 50);
+    SpawnPe(t);
+    { const std::set<int> pt_ = PathTargets(TurnSolver::EnumerateMainPlans(t, true)); CHECK_MESSAGE(pt_ == std::set<int>{ 50 }, SetStr(pt_)); }
 }

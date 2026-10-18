@@ -44633,41 +44633,67 @@ int ColossusHammerProvider::EquipmentEtbAttachHost(
     return have ? best.num : 0;
 }
 
-// ---- Cast order: the AI-DRAFTED order (MTG_COLOSSUS_ORDER, DEFAULT OFF) ------------------------
+// ---- Cast order: the USER-ADOPTED full order (MTG_COLOSSUS_ORDER, DEFAULT ON) ---------------------
 //
-// docs/design/colossus-hammer-cast-order-draft.md, drafted 2026-10-17 under the USER's standing ask
-// ("The generic order is never a good option ... It should be edited by you and then presented to me
-// for additional feedback"). Cast order is USER-owned, so this ships OFF until the USER answers; off,
-// every hook returns the generic answer (creatures 10, everything else 20, ties by plan order).
+// docs/design/colossus-hammer-cast-order.md. AI-drafted 2026-10-17 under the USER's standing ask ("The
+// generic order is never a good option ... It should be edited by you and then presented to me for
+// additional feedback"); ADOPTED 2026-10-18 with two amendments: "That seems reasonable, but we should
+// make a full order, also, we should have equip abilities listed in the order." =0 restores the generic
+// order (creatures 10, everything else 20, ties by plan order) and every hook below.
 //
-// Every line that matters is "Colossus Hammer onto a double striker without paying equip {8}", and
-// two of the cheats are order-sensitive inside one main: Sigarda's Aid attaches an Equipment only AS
-// IT ENTERS (so the Aid and a host must already be out), and Forge Anew's graveyard return enters
-// through the same trigger. Classes, all read off params (never names):
-//   1 an Equipment TUTOR to hand (Steelshaper's Gift, Open the Armory) -- the found card re-solves the
-//     rest of the phase at site 10, so first leaves the most phase to spend on it.
-//   2 attach_equipment_on_etb (Sigarda's Aid) -- out before any Equipment enters.
-//   3 a non-Equipment creature with double strike, printed or while equipped (Swiftblade, Kor Duelist).
-//   4 every other non-Equipment creature (Raubahn, Ardenn, Speaker).
-//   5 an Equipment that is a creature (Lizard Blades): after the hosts, so the Aid can put it ON one;
-//     before the Hammer, so a Lizard left a creature can carry it.
-//   6 the graveyard-Equipment return / first-equip waiver (Forge Anew): after the Aid and the hosts.
-//   7 every other Equipment (Colossus Hammer, Dragonfire Blade, Loxodon Warhammer).
-//   8 attach_target_equipment (Magnetic Theft): after every Equipment and creature (structural anyway,
-//     ApplyAttachSpellDependencyOrder).
-//   9 the rest (Path to Exile).
-// Inside a class: cheapest first, then the card NAME (CastOrderTotalByName) -- plan order never
-// decides. Activations (equip, reconfigure, Speaker's token) stay in the trailing pass.
+// Every line that matters is "Colossus Hammer onto a double striker without paying equip {8}", and two
+// of the cheats are order-sensitive inside one main: Sigarda's Aid attaches an Equipment only AS IT
+// ENTERS (so the Aid and a host must already be out), and Forge Anew's graveyard return enters through
+// the same trigger. Under the generic order the Aid and every Equipment tie at 20 and plan order casts
+// the Equipment first, which made "Aid, then the Hammer onto Kor Duelist" (the T2 kill) unfindable.
+//
+// THE CASTS, one position per card, keyed by params (never names; the card each position holds on this
+// list is named):
+//    1 Steelshaper's Gift      an Equipment tutor (to hand: the rest of the phase re-solves at site 10)
+//    2 Open the Armory         the same, Aura-or-Equipment
+//    3 Sigarda's Aid           attach_equipment_on_etb -- out before any Equipment enters
+//    4 Kor Duelist             double strike while equipped -- a host for the Aid to pick
+//    5 Swiftblade Vindicator   printed double strike -- the same
+//    6 Speaker of the Heavens  the life-gated Angel maker (a lifelink body)
+//    7 Raubahn                 attaches at its attack, so its own timing is free
+//    8 Ardenn                  attaches at begin combat (and any other body, by mana value)
+//    9 Lizard Blades           after the hosts (the Aid can put it ON one), before the Hammer (a Lizard
+//                              left a creature can carry it)
+//   10 Forge Anew              after the Aid and the hosts: the returned piece attaches as it enters
+//   11 Colossus Hammer         the kill piece (equip_power_bonus >= 10)
+//   12 Loxodon Warhammer       lifelink Equipment
+//   13 Dragonfire Blade        every other Equipment
+//   14 Magnetic Theft          after every Equipment and creature (structural anyway,
+//                              ApplyAttachSpellDependencyOrder)
+//   -- Path to Exile           never cast (NeverCast, MTG_COLOSSUS_NO_PATH)
+// THE ACTIVATIONS, after every cast (the trailing pass -- the KittyEquipment rule, USER 2026-10-04:
+// "the equip usages should all go at the end of main 1"), in this order (ActivationOrderRankFor):
+//   15 Lizard Blades' unattach         (a creature again before anything is equipped)
+//   16 Colossus Hammer's equip         the FIRST equip, so the one Forge Anew's {0} pays: the waiver goes
+//                                      to the plan's most expensive equip (StoriedWaivedEquipId), and the
+//                                      Hammer's {8} is the most expensive whenever it is in the plan
+//   17 Loxodon Warhammer's equip
+//   18 Dragonfire Blade's equip
+//   19 Lizard Blades' reconfigure-attach (never waived: not an equip ability, IsReconfigureAttach)
+//   20 Speaker of the Heavens' Angel   (summoning-sick, so nothing above wants it first)
+// The land drop precedes every cast (LandDropCastOrderRank). An unlisted card falls back on its class's
+// mana value and then its NAME (CastOrderTotalByName) -- plan order never decides.
 namespace
 {
 bool ColossusOrderEnabled()
 {
-    static const bool on = EnvOn("MTG_COLOSSUS_ORDER");   // DEFAULT OFF (an AI draft awaiting the USER)
+    static const bool on = EnvOn("MTG_COLOSSUS_ORDER", true);   // DEFAULT ON (USER 2026-10-18); =0 disables
     return heurarm::Flag(heurarm::COLOSSUS_ORDER, on);
 }
 
-constexpr int kColossusClassScale = 4096;
-constexpr int kColossusMvScale    = 256;
+bool ColossusNoPathEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_NO_PATH", true);   // DEFAULT ON (USER 2026-10-18); =0 disables
+    return heurarm::Flag(heurarm::COLOSSUS_NO_PATH, on);
+}
+
+constexpr int kColossusPosScale = 4096;
+constexpr int kColossusMvScale  = 256;
 
 bool IsEquipmentTutor(const CardParams& p)
 {
@@ -44675,44 +44701,63 @@ bool IsEquipmentTutor(const CardParams& p)
         && std::find(p.tutor_types.begin(), p.tutor_types.end(), std::string("Equipment")) != p.tutor_types.end();
 }
 
-int ColossusOrderClass(const CardDefinition& def)
+int ColossusOrderPosition(const CardDefinition& def)
 {
     const CardParams& p = def.params;
-    if (IsEquipmentTutor(p))                    { return 1; }
-    if (p.attach_equipment_on_etb)              { return 2; }
+    if (IsEquipmentTutor(p))
+    {
+        const bool aura = std::find(p.tutor_types.begin(), p.tutor_types.end(), std::string("Aura")) != p.tutor_types.end();
+        return aura ? 2 : 1;
+    }
+    if (p.attach_equipment_on_etb) { return 3; }
     if (def.card.IsCreature() && !p.is_equipment)
     {
-        return (def.card.HasKeyword(Keyword::DoubleStrike) || p.double_strike_while_equipped) ? 3 : 4;
+        if (p.double_strike_while_equipped)             { return 4; }
+        if (def.card.HasKeyword(Keyword::DoubleStrike)) { return 5; }
+        if (p.tap_token_min_life_above_start > 0)       { return 6; }
+        if (p.attack_attach_equipment)                  { return 7; }
+        return 8;
     }
-    if (p.is_equipment && def.card.IsCreature()) { return 5; }
-    if (p.etb_return_equipment_from_gy || p.first_equip_free) { return 6; }
-    if (p.is_equipment)                         { return 7; }
-    if (p.attach_target_equipment)              { return 8; }
-    return 9;
+    if (p.is_equipment && def.card.IsCreature())              { return 9; }
+    if (p.etb_return_equipment_from_gy || p.first_equip_free) { return 10; }
+    if (p.is_equipment)
+    {
+        if (p.equip_power_bonus >= 10) { return 11; }
+        if (p.equip_grants_lifelink)   { return 12; }
+        return 13;
+    }
+    if (p.attach_target_equipment) { return 14; }
+    return 15;
 }
 }   // namespace
 
 int ColossusHammerProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!ColossusOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
-    return ColossusOrderClass(def) * kColossusClassScale
+    return ColossusOrderPosition(def) * kColossusPosScale
          + (def.card.m_mana_cost.ManaValue() & 0xF) * kColossusMvScale;
 }
 
 const char* ColossusHammerProvider::CastOrderTierName(int rank) const
 {
     if (!ColossusOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
-    switch (rank / kColossusClassScale)
+    switch (rank / kColossusPosScale)
     {
-        case 1:  return "EQUIPMENT TUTOR (Steelshaper's Gift, Open the Armory): first -- the found card re-solves the rest of the phase (AI DRAFT)";
-        case 2:  return "SIGARDA'S AID: before every Equipment it attaches as it enters (AI DRAFT)";
-        case 3:  return "DOUBLE-STRIKE HOST (Swiftblade Vindicator, Kor Duelist): on the battlefield when the Aid picks a host (AI DRAFT)";
-        case 4:  return "OTHER CREATURE (Raubahn, Ardenn, Speaker of the Heavens) (AI DRAFT)";
-        case 5:  return "CREATURE EQUIPMENT (Lizard Blades): after the hosts, before the Hammer (AI DRAFT)";
-        case 6:  return "FORGE ANEW: after the Aid and the hosts, so the returned piece is attached as it enters (AI DRAFT)";
-        case 7:  return "EQUIPMENT (Colossus Hammer, Dragonfire Blade, Loxodon Warhammer): after every host and the Aid (AI DRAFT)";
-        case 8:  return "MAGNETIC THEFT: after every Equipment and creature (AI DRAFT)";
-        case 9:  return "THE REST (Path to Exile) (AI DRAFT)";
+        case 1:  return "1 STEELSHAPER'S GIFT: an Equipment tutor first -- the found card re-solves the rest of the phase";
+        case 2:  return "2 OPEN THE ARMORY: the second tutor";
+        case 3:  return "3 SIGARDA'S AID: before every Equipment it attaches as it enters";
+        case 4:  return "4 KOR DUELIST: a double-strike host, out when the Aid picks one";
+        case 5:  return "5 SWIFTBLADE VINDICATOR: a double-strike host, out when the Aid picks one";
+        case 6:  return "6 SPEAKER OF THE HEAVENS";
+        case 7:  return "7 RAUBAHN: attaches at its attack, its own timing is free";
+        case 8:  return "8 ARDENN (and any other creature): attaches at begin combat";
+        case 9:  return "9 LIZARD BLADES: after the hosts, before the Hammer";
+        case 10: return "10 FORGE ANEW: after the Aid and the hosts, so the returned piece attaches as it enters";
+        case 11: return "11 COLOSSUS HAMMER: after every host and the Aid";
+        case 12: return "12 LOXODON WARHAMMER";
+        case 13: return "13 DRAGONFIRE BLADE (and any other Equipment)";
+        case 14: return "14 MAGNETIC THEFT: after every Equipment and creature";
+        case 15: return "15 THE REST (Path to Exile is never cast)";
         default: return nullptr;
     }
 }
@@ -44726,6 +44771,39 @@ bool ColossusHammerProvider::OrderOpaqueCastsByRank() const { return ColossusOrd
 // storage land; a check land or Snarl played later only enters tapped more often), and nothing in the
 // list forces the defer branch (no flood gate removes the land-first plans).
 int ColossusHammerProvider::LandDropCastOrderRank() const { return ColossusOrderEnabled() ? 0 : -1; }
+
+// Positions 15-20 of the order: the board activations, all after every cast (see the block above).
+// act_class is TurnSolver::ActivationClass -- 1 for an Equip (a reconfigure-attach is an Equip action
+// too), 0 for the rest (Lizard Blades' unattach is an ActivatePermAbility, Speaker's Angel a
+// TapForTokenPay). Every rank is nonzero, so OrderTrailingActivations sorts both worlds' passes.
+int ColossusHammerProvider::ActivationOrderRankFor(const GameState&, const CardDefinition& d,
+                                                   int act_class) const
+{
+    if (!ColossusOrderEnabled()) { return 0; }
+    const CardParams& p = d.params;
+    if (act_class == 1)
+    {
+        if (p.reconfigure_cost.has_value()) { return 50; }   // 19 Lizard Blades' reconfigure-attach
+        if (p.equip_power_bonus >= 10)      { return 20; }   // 16 Colossus Hammer
+        if (p.equip_grants_lifelink)        { return 30; }   // 17 Loxodon Warhammer
+        return 40;                                           // 18 Dragonfire Blade (any other equip)
+    }
+    if (p.reconfigure_cost.has_value())     { return 10; }   // 15 Lizard Blades' unattach
+    return 60;                                               // 20 Speaker's Angel (anything else)
+}
+
+// Path to Exile, never cast (USER 2026-10-18: "Path to Exile can be excluded entirely via a heuristic
+// for goldfishing"). Its only goldfish use was the self-target ramp line -- exile our own creature for a
+// TAPPED basic -- which trades a body (usually a host) for a land that taps next turn; the opponent
+// target never had an effect (OffersRemovalCast above refused it). Dropped at the CollectActions choke
+// point, so the search, the breakpoint continuations, the rollouts and the d0 runner never enumerate it,
+// and the 5i discard reads it as dead (sheds it first). The KittyEquipment Swords / Unexpectedly Absent
+// shape. Human play and MTG_UNPRUNE=uacast still offer it.
+bool ColossusHammerProvider::NeverCast(const CardDefinition& def) const
+{
+    if (def.tmpl != CardTemplate::Removal || !ColossusNoPathEnabled()) { return false; }
+    return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::UACast);
+}
 
 // ---- Cleanup discard: the AI-DRAFTED 5i buckets (MTG_COLOSSUS_BUCKET_DISCARD, DEFAULT OFF) ------
 //
