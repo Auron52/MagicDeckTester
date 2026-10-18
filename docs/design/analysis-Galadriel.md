@@ -161,42 +161,42 @@ into range is now the FIRST goal (ahead of value leaf / mulligan). Post-payment-
 (BuildSimKey ~7%, CollectActions ~4%, the chain's ScryTop/FireScryWatchers/ScryKeepOnTop ~6%).
 Next: measure the chain axis' share (MTG_SCRY_SEARCH=0 diagnostic) and the k-variant census.
 
-## RESUME POINT (2026-10-17, before a context compaction)
-Committed: 48bf0607 (cards, Galadriel engine, Grey Havens, MTG_ACF_EXACT / MTG_ACF_INTERIOR payment
-fixes, viewer wiring, tests, ledger). NOT pushed -- asked the user whether to push + watch CI (Windows);
-no answer yet, so hold.
-UNCOMMITTED, in flight:
-- `decks/Galadriel/Galadriel.profile.json` (untracked): baseline profile + USER's required piece
-  (Galadriel) + min_playable 1.
-- heurarm slots GALADRIEL_SCRY and GALADRIEL_CHAIN_PRUNE (src/ai/HeuristicArm.h).
-- **USER's chain rule (2026-10-17)**: "We definitely want a scry heuristic. With Galadriel out it is
-  simple. You keep any scry land on top and pitch other things except for Crackle when you have enough
-  mana out to finish the opponent next turn." Implemented in GaladrielProvider::ScryKeepOnTop (gal_bf>0
-  branch; GaladrielCrackleLethalNextTurn: all sources untap + a hand land, X = ceil((life-power)/5), cost
-  3X+2 + one per {R} short of native red sources, needs filters to cover the shortfall). Pre-Galadriel:
-  the agent's draft rule (unmeasured).
-- Chain mechanics changed: ScryChainCandidates = {-1 = LIVE provider default (ScryKeepOnTop per look on
-  the current board), then k = 0..S}; GaladrielProvider::ScryChainSingleCandidate prunes to the default
-  alone (MTG_GALADRIEL_CHAIN_PRUNE, default ON pending A/B; never in human play). Test updated
-  (pinned skip now index 2).
-- A rebuild + full unit-test run was in flight (background) when compaction was requested.
-Measured so far (seed 63000 unless noted): d3 b20 ~9.9 s/game; d5 b40 ~12.4 s/game (seeds 61000/62000,
-draft rule, unpruned) -> Stage 5j cost gate OVER (budget 8,086 ms/game = 3x pd). Deck NOT in the suite.
+## RESUME POINT (2026-10-18 ~00:45 UTC, before a context compaction)
+DONE + PUSHED (HEAD b43384fb, rebased onto the Colossus agent's 20 commits; GT logs consistent):
+cards/engine/viewer (48bf0607); USER scry + turn-order rules (a4d183e9, 9c9be490, 314fa393);
+ManaPool::wild_conv fed-filter fix (5ab13d2b); suite rows all 3 tiers + GT, keep policy curve_check none /
+max_lands 6, K=13 buckets (4b57bf72); 5c2 tie-break keep (f371aa8d); per-thread byte caps for the rollout
+m1 memo + mana cache (1943bccc); the USER's first 3 Galadriel references (8a1070bb). CI green through 1943bccc.
+
+IN FLIGHT:
+- VALUE LEAF `bash scripts/valueleaf.sh run decks/Galadriel` (nohup, log logs/valueleaf_galadriel/run.log,
+  queue logs/vlq_galadriel) -- phase C matrix ~69% (14,454/20,800), deepest cells (H5, V6-V8) left, ~55
+  core-h + a long-game tail. Batch RSS ~19 GiB vs the 22.65 GiB cap (3/4 of 30 GB). If it aborts on
+  rss-cap, resume with this machine's override (agent memory machine-memory-cap: MTG_RSS_CAP_GB =
+  MemTotal - 4 GB). It was resumed once after a Windows-update host restart (21:21) -- resume is safe.
+- PLAY VIEWER running from the primary checkout (MDT_REFERENCE_BACKUP_DIR=~/.claude/mdt-reference-backups),
+  port 8080. Commit+push any new references/Galadriel/* at once. Restart it after the Release rebuild if
+  server.js changed in the rebase.
+UNCOMMITTED (built into Release only, NOT into the value-leaf run):
+- USER rule: no Galadriel in hand or on the battlefield -> scry keeps ONLY Galadriel ("you must scry away
+  everything that is not Galadriel until you find her"; "without Galadriel the deck does essentially
+  nothing"). GaladrielProvider::ScryKeepOnTop + unit test. PLAY CHANGE -> needs smoke/regression GT accept
+  for galadriel + a held-out A/B (seeds disjoint) once the box is free.
+- Viewer: Galadriel reveal prompt OFF by default (USER: "too click intensive") -- `galadriel_reveal` in
+  AUTO_RESOLVABLE / SURFACE_OFF_BY_DEFAULT, autoResolveDecision special-case on the dig source; DECISIONS.md.
 NEXT, in order:
-1. Confirm build + unit tests green; smoke must stay byte-identical (only Galadriel code changed).
-2. One pooled batch, fresh seeds (61000/62000), d0/d3/d5: arms = {generic scry (GALADRIEL_SCRY off),
-   USER rule unpruned (CHAIN_PRUNE off), USER rule pruned (default)} -- report avg AND ms/game to the
-   user; the prune is a perf lever whose quality must hold.
-3. Cost gate again (suite_gate --cost semantics: worst searched case, regression-row settings
-   d3 b20 / d5 b20). If still over: next suspects are per-node costs on 30-40-permanent boards
-   (BuildSimKey ~7%, CollectActions ~4%) and remaining branching (land-choice x cast subsets).
-4. Then Stage 5 battery (5a nonconv/fd-diverge, 5b depth sweep, 5c2 tie-break, 5d claude-play
-   sweep, 5h viewer audit, discard MTG_SHED_WORST bound), Stage 4-bis/5j suite add once under 3x.
-Open user questions: push 48bf0607 + watch CI? Field audit found 2 OTHER-deck keyword mismatches
-(Saproling Migration: Kicker; Kili, the Resourceful: Storied) -- untouched, reported. 3 Temples still
-need `audit_card_fields.py --update` (429s); cost audit should be re-run clean later.
-Gotchas: the 9p clock lags ~195 s and most files are root-owned (touch fails) -> wait ~200 s after an
-edit before ./build.sh. Never `pkill -f <pattern>` -- it matches its own shell; kill by pid.
+1. Rebuild Release on the rebased tree (delete touched objects -- 9p clock lag), unit tests, commit the
+   viewer change + scry rule; smoke (expect only galadriel keys to move), accept galadriel GT per tier.
+2. When the value leaf finishes: read logs/vlq_galadriel/DECISIONS.txt, report. PROPOSED to the USER (no
+   answer yet): finish this run, A/B the no-Galadriel rule, then REGENERATE the value leaf on the new play
+   (resume re-queues incomplete cells; rows/model are old play) before the mulligan profile.
+3. Mulligan profile: `bash scripts/mullgen.sh run decks/Galadriel` ALONE, with the MTG_RSS_CAP_GB
+   override; read .claude/skills/mulligan-profile.md recipe/journal rules first (K=13 buckets file exists).
+4. After the value leaf: investigate the slow cross-game RSS growth (13 -> 19 GiB over the matrix).
+OPEN USER QUESTIONS: keep-policy sign-off (curve_check none / max_lands 6: -0.45..-0.50 turns, <1/2 cost);
+the two other-deck keyword mismatches (Saproling Migration: Kicker; Kili: Storied) and the rate-limited
+cost audit (verify_deck's only failing gates); the value-leaf regenerate-vs-restart choice above.
+Gotchas: 9p clock lag (delete .o files after edits; header edits via ninja -t deps); never pkill -f.
 
 ## Claude-play sweep
 - commit: `314fa393` (the sweep's play; fixes below land after it -- re-sweep owed if they move more than the flagged plans)
