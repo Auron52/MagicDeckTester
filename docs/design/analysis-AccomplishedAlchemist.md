@@ -367,6 +367,91 @@ smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLif
 
 ## Verification (Stage 5)
 
+Run 2026-10-18 on c96b7f46 (play-identical to 251c426e), profile = the freshly generated
+`AccomplishedAlchemist.profile.json` (no value_play, so play settings = the built-in d5 b20). Seed base
+70001 (disjoint from the suite's 1001..4004 and the chunk measurements' 9100). Scratch:
+`/workspaces/MagicDeckTester/build/scratch/aa/s5/`. Single-game repro for batch gi=N:
+`--seed $((70001+N)) --game-index N --games 1`.
+
+**5a -- mismatch harnesses: FINDINGS (2 fd-diverge, 0 nonconv).**
+* `MTG_FLAG_NONCONV` over 800 games (d0, d3 b20, d5 b20, d5 b40 x 200): **0 [nonconv]**.
+* `MTG_FD_ORACLE` d5 b40 x 200: **2 [fd-diverge]**, both `leaf_est=none` (simulated, not a leaf guess), both
+  the same class -- **a LOCKSTEP defect between breakpoint site 9 (post-entry activation) and a self-targeted
+  Stroke of Genius (site 3, the partitioned plain-cantrip shape)**. Not a card bug: the cards resolve
+  identically in both worlds; the executor applies the scored continuation in a different ORDER.
+  * gi120 (seed 70121, predicted T5 at T4, realised T6). Rollout T5: Staff + Nourish, site 9 picks candidate 3
+    = `Stroke(X=1) + Staff#2 + Staff loop`; the self-Stroke truncates that continuation (partition) and its
+    site-3 continuation runs the loop -> Staff draws -> Stroke X=51 at the opponent. Executor (site-9 twin,
+    `AIEngine.cpp` ~7316): `pe_cast` casts Stroke X=1 AND the second Staff (no partition truncation inside the
+    site-9 twin), which spends the Alchemist's float, so the loop never fires and the recorded Stroke X=51
+    has no card. Trace: `MTG_SITE9_TRACE=5 MTG_FD_TRACE=1 MTG_BP_TRACE=1`.
+  * gi54 (seed 70055, predicted T6 at T6, realised T7). Committed T6 plan `Witch, Stroke X=2 (self), ...`
+    with bp_choice 1. Rollout: after the Stroke, site 9 fires FIRST (idx 0: Feed the Clan + the Witch's
+    untap of the Alchemist), then the Stroke's site-3 continuation (idx 1: Feed, Umbra, Umbra -> loop, X=14
+    float). Executor: the Stroke's recorded continuation is replayed at the cast (`[replay-bp]` right after
+    it), which sets `bp_replayed`, so the site-9 twin stands down (`!bp_replayed`) and the Witch untap never
+    happens -- the Alchemist stays tapped, the loop is unfunded.
+  * Folds ruled out: both reproduce with `MTG_HAND_COPY_CLASS_FOLD=0` and/or `MTG_LAND_AURA_HOST_CLASS_FOLD=0`.
+  * STATUS: OPEN -- not a local fix (the site-9 twin needs the rollout's partition truncation and the
+    site-9-before-deferred-cantrip ordering). Back to the convergence loop (engine).
+* Note: `MTG_FULL_DEPTH` is no longer read by this binary (startup warning); `MTG_FD_ORACLE` alone arms the
+  oracle. The skill's 5a recipe is stale on that point.
+
+**5b -- multi-depth sanity: monotone in depth, plausible; one budget non-monotonicity.** 200 games each:
+
+| cell | avg | T4 | T5 | T6 | T7 | T8 | unwon |
+|---|---|---|---|---|---|---|---|
+| d0 | 8.395 | 1 | 5 | 16 | 17 | 14 | 147 |
+| d3 b20 | 5.820 | 20 | 81 | 50 | 26 | 10 | 13 |
+| d5 b20 (play) | 5.810 | 20 | 81 | 50 | 27 | 10 | 12 |
+| d5 b40 (suite) | 5.805 | 20 | 83 | 50 | 23 | 11 | 13 |
+
+* d3 -> d5 b20: 2 faster, 0 slower. d5 b20 -> b40: 11 faster, **8 slower** (gi45 6->7, 47 6->8, 54 6->7,
+  83 4->5, 146 5->6, 149 7->unwon, 152 5->6, 198 4->5). Median kill T5, 10% T4: plausible for the combo.
+* **d0 is 147/200 unwon** -- the greedy leaf policy almost never assembles the loop. Every searched leaf
+  finishes with that policy, so 5i (d0-vs-search divergence digest) is the obvious next lever; not run here.
+* The 13 d5-b40 unwon games, read: 9 never had a castable Alchemist (gi7, 39 stuck on two lands; gi51, 78,
+  139, 172, 184 never drew one; gi127 three lands; gi160 Harbinger only on T7 -- an Alchemist from it could
+  not tap before T9); gi89, 15, 187, 149 recover with budget (below). No unexplained unwon game.
+
+**5c -- budget starvation: thresholds noted; ONE game is a narrowing loss, not starvation.**
+* Recovered by budget (d5): gi89 unwon -> T5 at b400; gi15 unwon -> T8 (b400); gi187 unwon -> T8 (b400);
+  gi54 7 -> 6, gi146 6 -> 5, gi198 5 -> 4 at b400; gi45 7 -> 6 and gi83 5 -> 5 only at b2000; gi47 8 -> 6 at
+  b2000 (19.7 M units, 772 s); gi149 unwon -> T8 (b400) -> T7 (b2000). So b40 is starving a few-percent tail;
+  the deck wants ~b400 at d5 to settle, and the d5 b20->b40 slower games are budget noise (each restored or
+  bettered at b400/b2000). gi83 is the oddest: b20 T4, b40 T5, b400 T6, b2000 T5.
+* **gi152 is NOT starvation**: d5 b400 and b2000 spend the SAME units (681,327) and both realise T6, while
+  d3 b20 / d5 b20 realise T5. `MTG_UNPRUNED=1` at d5 b400 -> T5; gate bisection (`--gate-probe`, then each
+  live gate alone): **`MTG_UNPRUNE=searchorder` -> T5 and `MTG_UNPRUNE=xspell` -> T5**, every other live gate
+  T6. With search ordering the T2 play is `Staff of Domination + Utopia Sprawl` (Sprawl on the Forest Arbor
+  Elf then untaps, funding the Staff) instead of `Utopia Sprawl + Nourish` -- a line the canonical cast order
+  does not reach. A 5e finding: a narrowing (cast order, and/or Stroke's X menu) costs a turn at full budget.
+  Cast order is the USER's decision; reported, not changed.
+
+**5c2 -- horizon-honest tie-break:** PENDING (see below).
+
+**5h -- viewer decision surface: PASS.** `audit_viewer_decisions.py ... --sideboard`: expected
+{attach_host, attack_mode, choose_color, dig}; the 40-game sweep surfaced attach_host, choose_color,
+tutor_etb; the two UNVERIFIED (Eternal Witness `dig`, Trufflesnout `attack_mode`) were VERIFIED by the
+targeted seed search. No HARD MISS, no SELF-GUARD, no DRIVER failure. Oracle advisories (Staff/Witch
+'target', Trufflesnout 'modal') are already modelled or carry inert notes.
+
+**verify_deck.py:** coverage PASS (21/21 full); card_costs FAIL = did-not-run (7 cards 429'd -- none of
+them in this deck; every AA card compared clean); card_fields SKIP (snapshot incomplete); regression_tiers
+FAIL + suite FAIL (not yet in test/regression_cases.sh -- expected, Stage 5j); viewer PASS; viewer_wiring
+was FAIL ("choose_color not in registry") -> a verify_deck.py parser defect, FIXED in c96b7f46, now PASS;
+mismatch PASS (its own 2 x 60 games at d5 b20, seeds 7001/8001 -- the sample did not hit the site-9 class);
+play_invariants PASS (8 games / 236 decisions); claude_sweep SKIP (un-run).
+
+**`--game-log-dir` on a non-batch run (C1's "12 games all unwon, avg 9.0"):** not that flag. The single-run
+parser silently IGNORES unknown arguments, so `--game-log-dir D` was a no-op (results byte-identical with and
+without it; no logs written). The "all unwon, avg 9.0" signature reproduces exactly by launching `mtg` from a
+directory without `src/cards/data/cards.json`: the CWD-relative default was skipped silently and the deck
+played as empty definitions. FIXED in c96b7f46 (missing database = exit 1 in single and batch; ignored
+arguments warned), with `test/mtg_cli_selftest.py`. Related, NOT changed: `ApplyHeuristicDefaults` resolves
+`heuristic_defaults.env` by walking up from the EXECUTABLE first, and a worktree's `build/` is a symlink into
+the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults file.
+
 ## Open questions surfaced to USER (defaults taken)
 
 * Stroke at opponent offered only at minimal lethal X (chunk B). Lossy vs completeness (a 2-turn split deck-out). Default taken: chunk C2 adds a max-affordable opponent variant too; MTG_UNPRUNED=xspell is the full arm.
