@@ -193,6 +193,10 @@ commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
 - **A/B** niv-bs vs niv-aura, profile loaded, held-out seeds: d3 b10 x150 (s61000) avg 4.733 ->
   **4.680**, 1 slower / 7 faster, retargets 752,104 -> 0; d5 b20 x60 (s62000) 0 slower / 1 faster
   (one base game still running at the time of writing). Slower gi73 d3 at --budget-ms 0: pending.
+  **Disclosure:** the first gi73 b0 pair (08:56-14:15 UTC, ~5.3 h each, both arms) ran
+  `--seed 61000 --game-index 73`, which is a DIFFERENT game -- the A/B's gi73 is `--seed 61073
+  --game-index 73` (base + gi). Stopped unfinished; the corrected command reproduces the A/B at b10
+  (base T4, tip T5) and was relaunched at b0 on niv-bs and the current tip.
 - Unit 1490/1490, scenarios 229/229.
 - **ab2 (the LIFO draw loop, `0d0892e19`, on top of the bundle)**, same cells, base arm reused from ab1
   (same niv-bs binary): per-game outcomes IDENTICAL to ab1's niv-aura arm in both cells (d3 4.680,
@@ -254,6 +258,26 @@ commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
 - Disclosures (the agent's): one `cd` in a compound command; two `pkill -f` self-matches; one edit of
   TurnSolver.cpp mid-compile (the stale probe binary was discarded and rebuilt). It left
   `.claude/worktrees/niv-perf-base` (detached at `de36ef8ae`) in place.
+
+### Tiers T3 (pre-rebase `25fd4d075`) -- what moved since T2, and who owns it (2026-10-18 14:09-14:35)
+Niv's suite rows set aside (`logs/niv/niv_suite_rows.patch`, deck not admitted: 3x rule). Compared case by
+case with T2 (`logs/niv/t2_t3_cmp.py`), then per game.
+- **smoke:** 121 identical, 7 moved, ALL d0: bruna / dragons / fivecolour / mirrorwing / selesnya ->
+  `MTG_PREPAY_FLOAT_POOL` (=0 restores T2's digest), th -> `MTG_RAMP_FEED_ROUTE`, hinata d0 -> neither
+  (both =0 still differ; the only other post-T2 commit reaching Hinata d0 is the Remand-X credit fix
+  `a21854b5f`, whose own report was "Hinata d0 2 faster / 1 slower"). Every SEARCHED smoke case is
+  byte-identical to T2; vs GT searched slower 4 / faster 6 = T2's (all Hinata, the Remand rider).
+- **regression:** 164 identical, 13 moved. d0: bruna, dragons, fivecolour, fungusv2, hinata, mirrorwing,
+  selesnya, th (same owners). Searched: hinata d3 s2002 / d3 s3003 / d5 s2002 / d5 s3003, fivecolour2hg d3
+  -- per game, every move is the SAME win turn except hinata d3 s3003 gi128 **5 -> 4**, owned by
+  `MTG_LA_NESTED_BAIL` (=0 alone restores T5; a re-price, inert at unlimited budget). No searched game
+  got slower T2 -> T3. vs GT: searched slower 15 / faster 29 (T2: 15 / 28).
+- **The d0 slower games** are the permitted greedy, e.g. mirrorwing d0 gi236 5 -> 6 (`MTG_PREPAY_FLOAT_POOL`):
+  the float now lets T4 pay Ancestral Anger alongside Zada (the old payer could not), and the greedy
+  runner's different T5 wins a turn later -- churn, not a payment defect.
+- Then REBASED onto origin `2176032dd` (45 commits: Galadriel scry rules + value leaf + keep table, Colossus
+  package, GT re-accepts). One conflict (`tools/play/DECISIONS.md`, both rows kept); range-diff: every
+  other commit patch-identical. T4 = the same tiers on the rebased binary, against origin's GT.
 
 ### Stage 5j — the 3x cost rule: FAIL (2026-10-18 ~09:45)
 `suite_gate.py --measure decks/NivMizzetCombo` on the niv-aura tree (`d09f881e7` src), the rows of
