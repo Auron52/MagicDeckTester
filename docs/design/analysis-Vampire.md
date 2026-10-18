@@ -109,6 +109,31 @@ viewer wiring, unit-test plans. Summary of what they established:
   bound (5i); verify_deck full (mismatch harnesses, viewer sweep, play_invariants); confirmation claude-play
   sweep (incl. a game-index with opponent creatures for Captivating's steal); cast-order / bucket A/B.
 
+## Status update (orchestrator, 2026-10-18 late night)
+- Overnight vampires + vampires2hg ENTRY rows accepted (bcbd21481, filtered, 16 new keys; d0 4.70-4.73, d3
+  4.41-4.43, d5 4.40-4.43, 2HG d5 4.93-5.05). Left as accepted through the later play changes below: the periodic
+  overnight re-accepts (CLAUDE.md).
+- Stage 5f search cost (`docs/design/vampires-search-cost.md`; perf commits cherry-picked as f95a154d6 / 40e4951f2 /
+  1feccc32b / 2ed53cf74 = the doc's 6161e387c / 46f82d9e5 / ee3dbd8f6 / 1b34af3eb): three folds, default ON --
+  `MTG_VAMP_M2_PUMP_DISCARD_FOLD` (dominance, subset rule 9), `MTG_VAMP_MADNESS_COLOR_FOLD` (identity),
+  `MTG_VAMP_OUTLET_NOT_GROWTH` (sound). The slowest single-player games cost 2.9-3.7x fewer units (gi131 d5
+  4.86M -> 1.44M); held-out 400 games and a d5 b100 sample byte-identical in win turn. 99.7% of a slow game's units
+  are mulligan-bottoming trial games, which the keep table removes. Questions 39-42.
+- GT re-accepted on the perf-merged tree (89eddb1f6, filtered over FULL runs; every other deck byte-identical):
+  smoke searched 0 slower / 1 faster, d0 0 slower; regression searched 0 slower / 3 faster, d0 1 slower (gi265
+  4->5, the d0 greedy's extra T3 pump; the perf doc).
+- Claude-play confirmation sweep 2 (`docs/design/vampires/claude_sweep_2.md`): 8 Opus players, seeds 92000-92007 at
+  game-index 2..9 (opponent creatures, so Captivating Vampire's steal ran its full cycle in three games): 8/8 tie
+  the search; every sweep-1 defect class re-checked clean; ONE new defect, M.
+- Defect M (fixed, 4493e2158 = vampires-fixm 4a36fa9cd): Voldaren Estate's Blood cost variants counted only the
+  plan's Vampire CASTS, so a Bloodline Keeper token tapped earlier in the same plan never discounted the Blood --
+  a completeness hole within one main phase at any budget (a pre-combat Blood affordable only at the true cost was
+  unfindable; mostly masked by the main-2 Blood reaching the same end-of-turn board). Rule 3 now counts the
+  arrivals that run BEFORE the Blood in the shared trailing order (TurnSolver::TrailingRunsBefore, the same keys as
+  OrderTrailingActivations); madness casts / steals that run after it are correctly not counted. 0 of 110 paired
+  Vampires games moved; KittyEquipment / Colossus byte-identical. Question 43.
+- Static checks: verify_deck --no-sweep GATE PASS; whole-repo audit_card_costs 450/450.
+
 ## Open questions for the user (work continues on the stated default)
 1. **Main-2 held-land bar vs Bloodghast** (USER 2026-09-30 "Only newly arrived lands in second main").
    "Pit Fighter sacs Bloodghast post-combat, then play the held land" is unfindable at any budget under the
@@ -758,3 +783,22 @@ rules; gi1565's least-flexible pick).
 38. **A flood engine that empties the library** (th gi1155): the d0 runner casts a DrawUntilNonland Treasure
     Hunt when the library holds no nonland card and no same-turn kill, and decks itself. A provider prune
     (TreasureHuntProvider::ShouldCastDrawEngine) would be the place. [default: unchanged -- d0 policy, yours]
+
+## Open questions -- Stage 5f search cost + sweep 2 (work continues on the stated default)
+39. **Subset rule 9 (`MTG_VAMP_M2_PUMP_DISCARD_FOLD`) is a DOMINANCE fold shipped ON.** Its deck half rests on a
+    reading of this list: after combat nothing reads power, and nothing reads the graveyard or a discard except
+    Bloodghast and madness (both exempted, as are an emptied hand with Asylum Visitor out, > 7 cards at cleanup,
+    and a plan that draws). Sign-off? [default: ON]
+40. **Breakpoint CHAIN arm off for Vampires** (the per-deck setting five other decks use): -1.1% to -2.2% units,
+    -8.1% on 2HG gi34, win turns identical. [default: unchanged (on)]
+41. **A general EMPTY-arm fold** (skip a breakpoint's "cast nothing more" arm when it repeats its base plan; 100% of
+    gi34's empty arms did): ~8% on gi34, ~2% on the 2HG cell; touches breakpoint code every deck uses and moves
+    every deck's GT. [default: not built]
+42. **The search-walk canonical-prefix fold** is still question 33: -0.1% to -0.4% here, byte-identical; needs its
+    verification run. [default: not taken]
+43. **The Vampires trailing order hides two cheaper-Blood lines** (extends question 34). The AGENT-DRAFTED order runs
+    Blood before Condemned's pump and the Blood crack, and the count band runs the steal after them, so "pump
+    discarding a madness Vampire, then a cheaper Blood" and "steal, then a cheaper Blood" cannot be expressed
+    within one main phase (only the main-2 Blood substitutes). Candidate amendment: token taps -> pump -> crack ->
+    steal -> Blood -> transform -> sacrifices (risk: a madness cast paying first could tap the Estate for mana;
+    the activation hold reserves it first). [default: unchanged -- the order is yours; not measured]
