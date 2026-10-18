@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
@@ -2742,98 +2743,6 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     };
 
-    auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
-    {
-        const int H = work[w].H, idx = work[w].idx;
-        const std::vector<int>& comp = tables[HAND - H].comps[idx];
-        double sum = 0.0, sumsq = 0.0;
-        long long kept = 0;                          // rollouts that produced a label (abandoned ones do not)
-        long long batch_us = 0;                      // measured cost of this batch, for wave ORDERING only
-        std::vector<char> hit;                       // execution-trace scratch (per rollout), if tracing
-        std::set<int>     cell_touched;              // union over this task's rollouts
-        if (trace_on) { hit.assign(touch_names.size(), 0); }
-        for (long long r = r0; r < r1; ++r)
-        {
-            if (abandon_failed.load()) { break; }   // see run_one: stop the queued backlog dead
-            // Fresh shuffle per rollout: pulling the top comp[b] cards of each bucket samples WHICH
-            // specific members fill the slots (proportional to their deck counts). The library
-            // continuation is then RE-SHUFFLED below (see the fix note) so its order is unbiased.
-            const uint64_t rs = cfg.seed + 21'000'000ULL
-                              + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
-                              + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
-            GameState s = GoldFishRunner::SetupGame(deck, rs);
-            s.m_required_pieces = &rollout_profile.required_pieces;
-            s.m_card_scores     = rollout_profile.card_scores.empty()
-                                ? nullptr : &rollout_profile.card_scores;
-            s.on_the_play       = (pd == 1);
-            Player& ap = s.ActivePlayer();
-            ap.hand.clear();
-            for (int b = 0; b < K; ++b)
-            {
-                int need = comp[b];
-                for (std::size_t k = 0; k < ap.library.size() && need > 0; )
-                {
-                    auto bit = bof.find(ap.library[k].m_name.str());
-                    if (bit != bof.end() && bit->second == b)
-                    { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin() + k); --need; }
-                    else { ++k; }
-                }
-            }
-            // FIX (library-continuation bias): the top-pull above removes the EARLIEST copies of the
-            // hand's card types, leaving the remaining library's top depleted of those types and
-            // enriched in everything else -- notably LANDS. That made a spell-heavy / land-light hand
-            // draw into its lands far too fast (measured: P(2 lands in first 2 draws) 0.29 vs the true
-            // 0.20), inflating win-turn and spuriously KEEPING land-light hands. Re-shuffle the leftover
-            // so the continuation is a fresh uniform permutation of the remaining cards; the hand's
-            // member sampling from the top is already correct, only the ORDER was biased. Deterministic
-            // + portable (SaltSeed), so pooling parity holds; a fixed salt keeps it independent of the
-            // opening shuffle.
-            ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
-            double wt;
-            const auto t_roll = std::chrono::steady_clock::now();
-            arm_rollout();
-            if (trace_on)
-            {
-                std::fill(hit.begin(), hit.end(), 0);
-                wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, &hit);
-                for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } }
-            }
-            else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
-            const double roll_ms = std::chrono::duration<double, std::milli>(
-                                       std::chrono::steady_clock::now() - t_roll).count();
-            batch_us += static_cast<long long>(roll_ms * 1000.0);   // wave ORDERING only; never a result
-            capture_slow(H, comp, pd, r, rs, roll_ms);   // always-on (cheap-gated)
-            // LEFT OUT, per the user's ruling: a truncated game's win-turn is not a label. Skipping the
-            // accumulate AND the count (below, via `kept`) is what makes this one fewer sample rather
-            // than a contaminated one -- see the ruling block above capture_slow.
-            if (note_if_abandoned(H, comp, pd, r, rs)) { continue; }
-            sum += wt; sumsq += wt * wt; ++kept;
-        }
-        SizeTable& t = tables[HAND - H];
-        double js; double jq; long long jn;
-        {
-            // Consistent with a concurrent mid-flight checkpoint read (write_raw_atomic under acc_mtx):
-            // a cell is committed atomically (all four fields together) or not at all -> the checkpoint
-            // never sees a torn cell. One thread owns each (cell,pd) per pass, so this doesn't serialize
-            // distinct cells' accumulation -- only the brief commit vs a checkpoint snapshot.
-            std::lock_guard<std::mutex> lk(acc_mtx);
-            t.sum[idx][pd]   += sum;
-            t.sumsq[idx][pd] += sumsq;
-            if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
-            // `kept`, NOT (r1 - r0): an abandoned rollout contributed nothing to sum/sumsq, so counting
-            // it here would divide a short sum by a full n and pull every such cell's mean win-turn
-            // DOWN -- i.e. make the deck look faster exactly on the hands that are hardest to play.
-            t.cnt[idx][pd]   += kept;
-            // MEASURED per-cell cost, for SLOWEST-FIRST wave dispatch (see cell_us). Folded inside the
-            // lock that is already held, so it adds no contention and cannot race.
-            cell_us[HAND - H][static_cast<std::size_t>(idx) * 2 + pd] += batch_us;
-            js = t.sum[idx][pd]; jq = t.sumsq[idx][pd]; jn = t.cnt[idx][pd];
-        }
-        // Journal this commit (continuous path only -> journal_on; sub-tables here, size-7 lands via the
-        // pool's worker). f is unused for sub-tables on resume (Pass A skips a cell once cnt>=cell_init).
-        journal_append(H, idx, pd, js, jq, jn, 0);
-    };
-
     // Single rollout r of cell w, mode pd -> win-turn (does NOT commit; the continuous path stores the
     // result in a per-(cell,r) slot and folds it deterministically). Same seed stream as run_batch
     // (pure function of seed_base,r,w,pd), so a cell's value is byte-identical to the wave path for the
@@ -2887,6 +2796,85 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // truncated win-turn; NaN is that value and every consumer below tests for it explicitly.
         if (note_if_abandoned(H, comp, pd, r, rs)) { return std::numeric_limits<double>::quiet_NaN(); }
         return wt;
+    };
+
+    // One sub-table rollout plus its measured cost (`us` feeds cell_us, which orders later waves
+    // slowest-first; never a result).
+    auto sub_rollout = [&](AIEngine& ai, int w, int pd, long long r, std::vector<char>* hit,
+                           long long* us) -> double
+    {
+        const auto t0 = std::chrono::steady_clock::now();
+        const double wt = run_one(ai, w, pd, r, hit);
+        *us = static_cast<long long>(std::chrono::duration<double, std::micro>(
+                                         std::chrono::steady_clock::now() - t0).count());
+        return wt;
+    };
+    // Commit one sub-table batch: fold its per-rollout values IN r ORDER into a batch-local sum (the
+    // exact arithmetic the serial loop always used: sum += wt; sumsq += wt*wt over r0..r1-1, NaN =
+    // abandoned = left out), then add that sum to the cell under acc_mtx and journal the cell. ONE
+    // definition, used by the serial batch AND by the split batch's last finisher, so the two paths
+    // cannot drift apart.
+    auto commit_sub = [&](int w, int pd, const std::vector<double>& vals, long long batch_us,
+                          const std::set<int>& cell_touched)
+    {
+        const int H = work[w].H, idx = work[w].idx;
+        double sum = 0.0, sumsq = 0.0;
+        long long kept = 0;
+        for (const double wt : vals)
+        {
+            // LEFT OUT, per the user's ruling: a truncated game's win-turn is not a label. Skipping the
+            // accumulate AND the count (below, via `kept`) is what makes this one fewer sample rather
+            // than a contaminated one -- see the ruling block above capture_slow.
+            if (std::isnan(wt)) { continue; }
+            sum += wt; sumsq += wt * wt; ++kept;
+        }
+        SizeTable& t = tables[HAND - H];
+        double js; double jq; long long jn;
+        {
+            // Consistent with a concurrent mid-flight checkpoint read (write_raw_atomic under acc_mtx):
+            // a cell is committed atomically (all four fields together) or not at all -> the checkpoint
+            // never sees a torn cell. One thread owns each (cell,pd) per pass, so this doesn't serialize
+            // distinct cells' accumulation -- only the brief commit vs a checkpoint snapshot.
+            std::lock_guard<std::mutex> lk(acc_mtx);
+            t.sum[idx][pd]   += sum;
+            t.sumsq[idx][pd] += sumsq;
+            if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
+            // `kept`, NOT (r1 - r0): an abandoned rollout contributed nothing to sum/sumsq, so counting
+            // it here would divide a short sum by a full n and pull every such cell's mean win-turn
+            // DOWN -- i.e. make the deck look faster exactly on the hands that are hardest to play.
+            t.cnt[idx][pd]   += kept;
+            // MEASURED per-cell cost, for SLOWEST-FIRST wave dispatch (see cell_us). Folded inside the
+            // lock that is already held, so it adds no contention and cannot race.
+            cell_us[HAND - H][static_cast<std::size_t>(idx) * 2 + pd] += batch_us;
+            js = t.sum[idx][pd]; jq = t.sumsq[idx][pd]; jn = t.cnt[idx][pd];
+        }
+        // Journal this commit (continuous path only -> journal_on; sub-tables here, size-7 lands via the
+        // pool's worker). f is unused for sub-tables on resume (Pass A skips a cell once cnt>=cell_init).
+        journal_append(H, idx, pd, js, jq, jn, 0);
+    };
+    // Append rollouts [r0,r1) to sub-table cell `w`, mode `pd`, serially on this thread.
+    auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
+    {
+        std::vector<double> vals;
+        vals.reserve(static_cast<std::size_t>(std::max<long long>(0, r1 - r0)));
+        long long batch_us = 0;                      // measured cost of this batch, for wave ORDERING only
+        std::vector<char> hit;                       // execution-trace scratch (per rollout), if tracing
+        std::set<int>     cell_touched;              // union over this task's rollouts
+        if (trace_on) { hit.assign(touch_names.size(), 0); }
+        for (long long r = r0; r < r1; ++r)
+        {
+            // Fresh shuffle per rollout (run_one): pulling the top comp[b] cards of each bucket samples
+            // WHICH specific members fill the slots, then the library continuation is RE-SHUFFLED so its
+            // order is unbiased. run_one returns NaN for an abandoned rollout and, once the fail-out has
+            // tripped, for every later one without rolling it (the old loop's `break`).
+            long long us = 0;
+            const double wt = sub_rollout(ai, w, pd, r, trace_on ? &hit : nullptr, &us);
+            if (trace_on)
+            { for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } } }
+            batch_us += us;                          // wave ORDERING only; never a result
+            vals.push_back(wt);
+        }
+        commit_sub(w, pd, vals, batch_us, cell_touched);
     };
 
     // ---- REPLAY one captured rollout (root-cause a degenerate game in isolation) -----------------
@@ -4689,6 +4677,27 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::array<double, 2> vg_roll{ 0.0, 0.0 };
         long long vg_base = r0;
 
+        // ---- SPLIT SUB BATCHES (MTG_KEEP_BATCH_SPLIT, default ON) ---------------------------------------
+        // A kind-1 (sub floor / cap) or kind-2 (adaptive wave) batch [r0,r1) used to run serially on ONE
+        // thread, so a cell with a few slow rollouts held a core -- and, because every sub-wave ends in a
+        // barrier, held the WHOLE next wave -- for the sum of their times. Split, each rollout is its own
+        // queue task (kind 3) writing into the batch's slot array; whichever task finishes LAST folds the
+        // slots in r order through commit_sub, the same function the serial batch uses, so the cell's
+        // sum/sumsq/cnt, its journal record and everything downstream are bit-identical (a rollout is a
+        // pure function of (seed_base, r, w, pd); only WHICH thread rolls it changes). =0 restores the
+        // one-thread batch.
+        const bool split_on = EnvOn("MTG_KEEP_BATCH_SPLIT", true);
+        struct SplitBatch
+        {
+            int w = 0, pd = 0, kind = 0;
+            long long r0 = 0;
+            std::vector<double>    vals;
+            std::vector<long long> us;
+            std::atomic<long long> left{ 0 };
+            std::mutex             mx;        // guards `touched` (execution-trace only)
+            std::set<int>          touched;
+        };
+
         // The freeze test for level c given that cell's prefix (sum_c/sumsq_c at exactly c samples). Shared
         // by the inline fold (refine) and the reconcile replay (post-speculation) so the two can never drift.
         auto freeze_hit = [&](int i, int pd, long long c, double sum_c, double sumsq_c) -> bool
@@ -4739,6 +4748,34 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     task = q.front(); q.pop_front();
                 }
                 q_nf.notify_one();
+                if (task[0] == 3)   // SPLIT sub-batch rollout: one slot of a SplitBatch; last one commits
+                {
+                    SplitBatch* sb = reinterpret_cast<SplitBatch*>(static_cast<std::intptr_t>(task[1]));
+                    const long long r = task[2];
+                    long long us = 0;
+                    const double wt = sub_rollout(ai, sb->w, sb->pd, r, trace_on ? &w_hit : nullptr, &us);
+                    const std::size_t z = static_cast<std::size_t>(r - sb->r0);
+                    sb->vals[z] = wt; sb->us[z] = us;
+                    if (trace_on)
+                    {
+                        std::lock_guard<std::mutex> tk(sb->mx);
+                        for (std::size_t k = 0; k < w_hit.size(); ++k)
+                        { if (w_hit[k]) { sb->touched.insert(static_cast<int>(k)); } }
+                    }
+                    // acq_rel: the last finisher must see every other task's slot write.
+                    if (sb->left.fetch_sub(1, std::memory_order_acq_rel) != 1) { continue; }
+                    long long bus = 0;
+                    for (const long long u : sb->us) { bus += u; }
+                    commit_sub(sb->w, sb->pd, sb->vals, bus, sb->touched);
+                    const int kind = sb->kind;
+                    delete sb;
+                    if (kind == 1) { sub_remaining.fetch_sub(1);
+                                     gen_prog.sub_done.fetch_add(1, std::memory_order_relaxed); }
+                    else           { sub_wave_pending.fetch_sub(1); }
+                    in_flight.fetch_sub(1);
+                    prod_cv.notify_one();
+                    continue;
+                }
                 if (task[0] < 0)    // PRECOMPUTE (kind -1): fill the memo, fold NOTHING. See pre_val.
                 {
                     if (!pre_on) { continue; }   // cache declined (too large) -> nothing enqueues these
@@ -5111,20 +5148,50 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // one high. It was invisible because the generator check only exercised the (now deleted) uniform
         // path, where these tasks never went through the pool.
         std::size_t sub_cursor = 0;
+        // Enqueue ONE sub-table batch [r0,r1) of cell w: as a single serial task (kind 1/2), or -- split --
+        // as one kind-3 task per rollout sharing a SplitBatch whose last finisher commits it. Either way it
+        // is ONE batch to the counters (in_flight, sub_remaining / sub_wave_pending, fed_total).
+        auto push_sub_batch = [&](int kind, int w, int pd, long long br0, long long br1)
+        {
+            if (split_on && br1 - br0 >= 2)
+            {
+                SplitBatch* sb = new SplitBatch();
+                sb->w = w; sb->pd = pd; sb->kind = kind; sb->r0 = br0;
+                sb->vals.assign(static_cast<std::size_t>(br1 - br0), 0.0);
+                sb->us.assign(static_cast<std::size_t>(br1 - br0), 0);
+                sb->left.store(br1 - br0, std::memory_order_relaxed);
+                in_flight.fetch_add(1);      // before the first rollout can possibly complete the batch
+                for (long long r = br0; r < br1; ++r)
+                {
+                    { std::unique_lock<std::mutex> lk(qmtx);
+                      q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                      q.push_back({ 3, static_cast<long long>(reinterpret_cast<std::intptr_t>(sb)), r, 0, 0 }); }
+                    q_ne.notify_one();
+                }
+                gen_prog.split_batches.fetch_add(1, std::memory_order_relaxed);
+                gen_prog.split_rolls.fetch_add(br1 - br0, std::memory_order_relaxed);
+            }
+            else
+            {
+                { std::unique_lock<std::mutex> lk(qmtx);
+                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                  q.push_back({ kind, static_cast<long long>(w), static_cast<long long>(pd), br0, br1 }); }
+                q_ne.notify_one();
+                in_flight.fetch_add(1);
+            }
+            ++fed_total; any_fed = true;
+            gen_prog.rollsub.fetch_add(br1 - br0, std::memory_order_relaxed);
+        };
         auto feed_sub = [&]()
         {
             while (sub_cursor < fused_sub_tasks.size())
             {
                 const Task& st = fused_sub_tasks[sub_cursor];
-                { std::unique_lock<std::mutex> lk(qmtx);
-                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd),
-                                st.r0, st.r1 }); }
-                q_ne.notify_one();
-                ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true;
-                gen_prog.rollsub.fetch_add(st.r1 - st.r0, std::memory_order_relaxed);
+                ++sub_cursor;
+                push_sub_batch(1, st.w, st.pd, st.r0, st.r1);
             }
         };
+
         // fuse_subfloor: advance the adaptive sub-refine ONE wave at a time, driven from the producer so it
         // shares the pool with the size-7 floor (kind-2 tasks) -- byte-identical to the run_refine_waves
         // barrier, but the size-7 floor fills cores during each wave's serial recompute/mark instead of the
@@ -5171,15 +5238,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             { sub_converged = true; gen_prog.subconv.store(1, std::memory_order_relaxed); return; }
             sub_wave_pending.store(static_cast<long long>(wave.size()));
             gen_prog.subwsz.store(static_cast<long long>(wave.size()), std::memory_order_relaxed);
-            for (const Task& st : wave)
-            {
-                { std::unique_lock<std::mutex> lk(qmtx);
-                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ 2, static_cast<long long>(st.w), static_cast<long long>(st.pd), st.r0, st.r1 }); }
-                q_ne.notify_one();
-                in_flight.fetch_add(1); ++fed_total; any_fed = true;
-                gen_prog.rollsub.fetch_add(st.r1 - st.r0, std::memory_order_relaxed);
-            }
+            for (const Task& st : wave) { push_sub_batch(2, st.w, st.pd, st.r0, st.r1); }
             gen_prog.subwave.fetch_add(1, std::memory_order_relaxed);
             ++refine_waves;
         };
