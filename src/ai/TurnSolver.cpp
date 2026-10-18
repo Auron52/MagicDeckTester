@@ -11792,6 +11792,57 @@ static bool SubsetHasShroudBlockedEquip(const GameState& state,
 }
 
 // ---- An Aura SPELL onto a creature an Equipment shrouds (Bruna sweep B, 2026-10-05) ------------
+// A host the SAME subset sacrifices for mana. Both apply worlds crack every SacForMana in the plan's
+// pre-pass, before any cast (Generator Servant: "{T}, Sacrifice this creature: Add {C}{C}"), so an
+// Aura SPELL aimed at that creature -- or a soulbond creature told to pair with it -- names a host that
+// is gone when it resolves, and ResolveEnchantTarget / the soulbond chooser fall back to the ranked
+// host. The plan the search priced is then not the plan that runs (the [enchant-retarget] meter read
+// 3.7M on one NivMizzetCombo analyzer pass). Under the real rules the Aura would FIZZLE (targets are
+// chosen before the Servant is cracked to pay, CR 601.2c/2g, and are illegal on resolution, CR 608.2b),
+// which is never better than the same plan with a legal host. Rejecting the subset is therefore an
+// IDENTITY / DOMINANCE fold: the member of the same plan class that names the fallback host directly
+// is enumerated anyway (one variant per legal host), so no line is lost at any budget.
+// `on` is the SubsetFilterPre flag: false (every deck that never pairs the two) -> nothing to check.
+static bool AuraOrPairTargetsCand(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return false; }
+    // enchant_target is reused by other axes (copy source, trick target): only an Aura spell's host
+    // and a soulbond creature's partner are the "host" this rule is about.
+    return (d->params.is_aura && !d->params.is_land_aura && !a.bestow) || d->params.soulbond;
+}
+static bool SubsetHasHostSacrificedForMana(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                           bool on)
+{
+    if (!on) { return false; }
+    for (int i : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(i)];
+        if (!AuraOrPairTargetsCand(a)) { continue; }
+        for (int j : sel)
+        {
+            const Action& b = cands[static_cast<std::size_t>(j)];
+            if (b.kind == Action::Kind::SacForMana && b.sac_source_id == a.enchant_target) { return true; }
+        }
+    }
+    return false;
+}
+// The SubsetFilterPre flag: some candidate names a host that some SacForMana candidate sacrifices.
+static bool AnyHostSacrificedForMana(const std::vector<Action>& cands)
+{
+    bool any_sac = false;
+    for (const Action& b : cands) { if (b.kind == Action::Kind::SacForMana && b.sac_source_id != 0) { any_sac = true; break; } }
+    if (!any_sac) { return false; }
+    for (const Action& a : cands)
+    {
+        if (!AuraOrPairTargetsCand(a)) { continue; }
+        for (const Action& b : cands)
+        { if (b.kind == Action::Kind::SacForMana && b.sac_source_id == a.enchant_target) { return true; } }
+    }
+    return false;
+}
+
 // An Aura spell TARGETS its host (CR 303.4a), so it cannot be cast onto a creature Lightning Greaves
 // shrouds (CR 702.18a) -- unless the SAME plan first moves that Greaves to another creature. Both
 // apply worlds realise the move first (TurnSolver::ApplyManaUnlockEquips' shroud-RELEASE half fires
@@ -12294,6 +12345,13 @@ static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
         for (std::size_t q = 0; q < pos.size(); ++q)
         { trial[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(pick[q])]; }
         if (ActsHaveShroudBlockedAura(state, trial)) { continue; }
+        // ...nor onto a creature this plan sacrifices for mana (SubsetHasHostSacrificedForMana's twin
+        // over an ACTION list: the re-point must not reintroduce a host the subset filter rejected).
+        {
+            std::vector<int> all(trial.size());
+            for (std::size_t q = 0; q < trial.size(); ++q) { all[q] = static_cast<int>(q); }
+            if (SubsetHasHostSacrificedForMana(trial, all, true)) { continue; }
+        }
         const AuraHostKey k = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, trial);
         if (AuraHostKeyBetter(k, best_key)) { best_key = k; best_pick = pick; }
     }
@@ -16032,6 +16090,9 @@ struct SubsetFilterPre
     // (0 = none). Empty = no controlled shroud-granting Equipment is attached to anything, which
     // proves SubsetHasShroudBlockedAura can find nothing (every deck without Lightning Greaves).
     std::vector<int>  aura_shroud_src;
+    // Some candidate's Aura host / soulbond partner is a creature some SacForMana candidate sacrifices
+    // (SubsetHasHostSacrificedForMana). False for every deck that never pairs the two.
+    bool              host_sac_for_mana = false;
     // MTG_EQUIP_INERT_FOLD's subset half (see DropInertHasteShroudEquips): per candidate (Equip only),
     // the creature an inert haste/shroud move would RELEASE when the move is admissible only beside
     // an action that targets that creature; 0 = unrestricted. EMPTY = not built (greedy scope, or no
@@ -16749,6 +16810,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     if (GateProbeArmed() || strandedstats::Enabled() || BfCensusOn() || FoldVerifyOn())
     {
         BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
+        p.host_sac_for_mana = AnyHostSacrificedForMana(cands);
         BuildEquipReleaseOnly(state, cands, p.equip_release_only);
         BuildReplicatePending(state, cands, p.rep_pending);
         BuildEquipHostFold(state, cands, p);
@@ -16959,6 +17021,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     }
 
     BuildAuraShroudSrc(state, cands, p.aura_shroud_src);
+    p.host_sac_for_mana = AnyHostSacrificedForMana(cands);
     if (p.equip) { BuildEquipReleaseOnly(state, cands, p.equip_release_only); }
     BuildReplicatePending(state, cands, p.rep_pending);
     if (p.equip) { BuildEquipHostFold(state, cands, p); }
@@ -39674,6 +39737,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // ...and an Aura SPELL onto a Greaves-shrouded creature without that move (CR 303.4a).
         if (!pre.aura_shroud_src.empty() && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src))
         { return; }
+        // ...and an Aura / soulbond host this same subset sacrifices for mana (identity fold; twin below).
+        if (SubsetHasHostSacrificedForMana(cands, sel, pre.host_sac_for_mana)) { return; }
         // ...and an idle haste/shroud move (MTG_EQUIP_INERT_FOLD_GREEDY; eval_and_push's twin).
         if (!pre.equip_release_only.empty() && EquipInertFoldGreedyOn()
             && SubsetHasIdleReleaseMove(cands, sel, pre.equip_release_only))
@@ -53220,6 +53285,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (!pre.aura_shroud_src.empty()
             && SubsetHasShroudBlockedAura(cands, sel, pre.aura_shroud_src, /*dest_aura_ordered=*/true))
         { return; }
+        // ...and an Aura / soulbond host this same subset sacrifices for mana (identity fold; Solve's twin).
+        if (SubsetHasHostSacrificedForMana(cands, sel, pre.host_sac_for_mana)) { return; }
         // ...and an INERT haste/shroud move that releases nothing this subset targets (dominated by
         // the same subset without it; MTG_EQUIP_INERT_FOLD, see DropInertHasteShroudEquips).
         if (!pre.equip_release_only.empty() && EquipInertFoldOn()

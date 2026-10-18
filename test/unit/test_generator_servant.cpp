@@ -358,3 +358,42 @@ TEST_CASE("Generator Servant: a bill with no generic or {C} pip takes no {C} and
     CHECK(t.floating_mana.colorless == 2);
     CHECK(t.floating_haste_c == 2);
 }
+
+TEST_CASE("An Aura / soulbond host the SAME plan sacrifices for mana is never a plan's host (identity fold)")
+{
+    // Generator Servant's SacForMana is cracked in the apply pre-pass, before any cast, so a Curiosity
+    // aimed at it (or a Tandem Lookout told to pair with it) names a host that is gone on resolution;
+    // ResolveEnchantTarget then silently falls back ([enchant-retarget]). The fold rejects that subset;
+    // the same plan with a LEGAL host must still be enumerated.
+    GameState s = FreshGs();
+    s.players[0].lands_played_this_turn = 1;
+    PutGs(s, "Island", 18);
+    PutGs(s, "Island", 19);
+    PutGs(s, "Generator Servant", 12);
+    PutGs(s, "Tandem Lookout", 57);
+    HandGs(s, "Curiosity", 7);
+    HandGs(s, "Tandem Lookout", 58);
+    const long long before = g_enchant_retargets.load();
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool legal_member = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool sacks_servant = false;
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::SacForMana && a.sac_source_id == 12) { sacks_servant = true; } }
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (sacks_servant) { CHECK_MESSAGE(a.enchant_target != 12, "host sacrificed by its own plan: ", a.card_name.str()); }
+            if (sacks_servant && a.card_name.str() == "Curiosity" && a.enchant_target == 57) { legal_member = true; }
+        }
+    }
+    CHECK(legal_member);   // the class keeps its legal-host member
+    // Realising every plan never trips the silent retarget.
+    for (const TurnSolver::Plan& p : plans)
+    {
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, p, /*is_pre_combat=*/true);
+    }
+    CHECK(g_enchant_retargets.load() == before);
+}
