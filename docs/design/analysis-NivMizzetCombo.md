@@ -190,6 +190,19 @@ commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
   (one base game still running at the time of writing). Slower gi73 d3 at --budget-ms 0: pending.
 - Unit 1490/1490, scenarios 229/229.
 
+### Stage 5j — the 3x cost rule: FAIL (2026-10-18 ~09:45)
+`suite_gate.py --measure decks/NivMizzetCombo` on the niv-aura tree (`d09f881e7` src), the rows of
+`logs/add_niv_rows.py` in place (uncommitted): **124,303.95 ms/game** at the worst searched case
+(`niv_regression_d5_s3003`), 8,459.4 core-s over the six regression jobs. Budget = 3 x pd 2,695.2 =
+8,085.6 ms/game -> **15.4x over the limit (46x pd)**. Measured on a box ~2x oversubscribed (load 35-52
+on 24 cores: another session + the perf agent's builds), which inflates core-ms; halving it is still
+~8x over. The cost is dominated by outlier games whose per-UNIT cost explodes (d3 b10 s3007 gi4: 1,507 s
+for 1.64M units; s2018 gi16: 347 s for 246k units -- 15-25x the normal per-unit cost: work the budget
+never sees). PER THE RULE: the deck is in NO tier (rows not committed), and getting it under 3x is
+the first goal, ahead of the value leaf and the mulligan profile -- perf agent on `niv-perf`.
+(A re-run via `--cost` was started by mistake and stopped within a minute -- it re-measures; it
+overwrote `test/logs/regression/batch.log`'s per-case breakdown. The cached figure above stands.)
+
 ### Stage 4a — provider
 `NivMizzetComboProvider` (`067b3a1db`): an empty `DeckProvider` derivation (the deck rode Generic),
 routed at the top of `SelectDecisionProvider` by four params OR'd across four cards no other deck
