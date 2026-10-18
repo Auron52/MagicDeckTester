@@ -108,6 +108,14 @@ smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLif
 
 ## Verification (Stage 5)
 
+## Open questions surfaced to USER (defaults taken)
+
+* Stroke at opponent offered only at minimal lethal X (chunk B). Lossy vs completeness (a 2-turn split deck-out). Default taken: chunk C2 adds a max-affordable opponent variant too; MTG_UNPRUNED=xspell is the full arm.
+* Second main for this deck: global default OFF kept; m2 arm to be measured.
+* Weather the Storm cast order: generic kept; storm-last proposed.
+* Utopia Sprawl colour / Galvanic partner: made SEARCHED (not provider picks).
+* critter_smoke_d0_s1001 moves 4 digests (avg unchanged) from the chunk-A self-only sac-outlet victim fix -> accept at landing.
+
 ## Approved deferrals
 
 (none yet)
