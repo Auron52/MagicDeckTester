@@ -2001,6 +2001,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::atomic<long long> sspec_hit{ 0 };   // sub rollouts served from the speculative memo
         std::atomic<long long> sspec_bad{ 0 };   // memo values that FAILED the verify re-roll (must be 0)
         std::atomic<long long> sspec_plans{ 0 }; // speculative sub-wave plans computed
+        std::atomic<long long> sspec_levels{ 0 };// speculated waves folded from the memo to plan one further
         std::atomic<long long> split_batches{ 0 };  // sub batches split into per-rollout tasks
         std::atomic<long long> split_rolls{ 0 };    // ...rollouts they carried
         // WORKER IDLE: microseconds workers spent waiting on an EMPTY queue while the producer was
@@ -2130,7 +2131,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     if (const long long sq = gp.sspec_req.load(std::memory_order_relaxed); sq > 0)
                     { std::cerr << "  subspec=" << sq << " rolled=" << gp.sspec_rolled.load(std::memory_order_relaxed)
                                 << " hit=" << gp.sspec_hit.load(std::memory_order_relaxed)
-                                << " plans=" << gp.sspec_plans.load(std::memory_order_relaxed);
+                                << " plans=" << gp.sspec_plans.load(std::memory_order_relaxed)
+                                << " chained=" << gp.sspec_levels.load(std::memory_order_relaxed);
                       if (const long long sb = gp.sspec_bad.load(std::memory_order_relaxed); sb > 0)
                       { std::cerr << " MISMATCH=" << sb; } }
                     if (const long long sb = gp.split_batches.load(std::memory_order_relaxed); sb > 0)
@@ -4863,6 +4865,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         };
         // Every sub-table batch commit bumps this; the speculative planner replans only when it moved.
         std::atomic<long long> sub_commit_seq{ 0 };
+        // Speculative sub rollouts queued or rolling (kind -2): a plan whose rollouts are all done can be
+        // chained one wave further (see sub_plan), so its completion is a replan trigger too.
+        std::atomic<long long> sub_spec_outstanding{ 0 };
         // SPECULATIVE NEXT SUB-WAVE (MTG_KEEP_SUB_SPEC, default ON; =0 restores the barrier-only path).
         // See the planner below. Off where the memo could not be byte-exact: under a per-rollout WALL
         // (abandonment is wall-clock, so a speculative roll could be abandoned where the real one would
@@ -4932,7 +4937,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         std::lock_guard<std::mutex> lk(sh.mx);
                         auto it = sh.m.find(key);
-                        if (it == sh.m.end() || it->second.state != 1) { continue; }   // claimed back / held already
+                        if (it == sh.m.end() || it->second.state != 1)               // claimed back / held already
+                        { sub_spec_outstanding.fetch_sub(1); continue; }
                         it->second.state = 3;                                         // rolling: a consumer waits
                     }
                     gen_prog.sspec_rolled.fetch_add(1, std::memory_order_relaxed);
@@ -4946,6 +4952,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         if (it != sh.m.end() && it->second.state == 3) { it->second = SubMemoEnt{ v, us, 2 }; }
                     }   // (gone => the sub-refine converged and the memo was retired: drop ours)
                     sh.cv.notify_all();
+                    sub_spec_outstanding.fetch_sub(1);
                     continue;
                 }
                 if (task[0] == 3)   // SPLIT sub-batch rollout: one slot of a SplitBatch; last one commits
@@ -5550,13 +5557,65 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (ex[m][static_cast<std::size_t>(idx) * 2 + pd]) { return false; }
                 *v = sV[m][idx][pd]; return true;
             };
-            const std::array<std::vector<double>, 2> Dopt = {
-                ComputeDoptWith(tables, K, P, cfg.max_mull, 0, vf, &planner.cancel),
-                ComputeDoptWith(tables, K, P, cfg.max_mull, 1, vf, &planner.cancel) };
-            if (planner.cancel.load()) { return false; }
-            const long long n = sub_mark_core(SpecAcc{ sV, sQ, sN, pj, ex }, Dopt, cfg.flip_eps, &out,
-                                              /*count_refined=*/false, scost, &planner.cancel);
-            return n >= 0 && !planner.cancel.load();
+            // CHAIN through memo-held waves (MTG_KEEP_SUB_SPEC_DEPTH, default 16 levels). A wave depends on
+            // the previous wave's RESULTS, but a speculated wave whose rollouts are ALL already parked in
+            // the memo has known results: they are the very values the real batches will fold. So fold
+            // them into the snapshot exactly as commit_sub would (batch-local sum in r order, NaN left
+            // out, then added to the cell) and plan the wave after it -- and again, until a level still
+            // needs rollouts. That level is what gets fed. Without this, a straggler longer than one wave
+            // of work left the box speculating only ONE wave ahead and then idling against the barrier;
+            // with it, the whole chain that does not depend on the straggler's own cell can run during
+            // it. Read-only on the memo (values stay for the real batches to consume).
+            std::vector<std::vector<long long>> pjl = pj;   // the projection advances with each folded level
+            auto memo_peek = [&](int w, int pd, long long r, double* v) -> bool
+            {
+                const std::uint64_t key = sub_key(w, pd, r);
+                SubMemoShard& sh = memo_shard(key);
+                std::lock_guard<std::mutex> lk(sh.mx);
+                auto it = sh.m.find(key);
+                if (it == sh.m.end() || it->second.state != 2) { return false; }
+                *v = it->second.v; return true;
+            };
+            const int max_depth = std::max(1, EnvInt("MTG_KEEP_SUB_SPEC_DEPTH", 16));
+            std::vector<double> vals;
+            for (int depth = 0; depth < max_depth; ++depth)
+            {
+                const std::array<std::vector<double>, 2> Dopt = {
+                    ComputeDoptWith(tables, K, P, cfg.max_mull, 0, vf, &planner.cancel),
+                    ComputeDoptWith(tables, K, P, cfg.max_mull, 1, vf, &planner.cancel) };
+                if (planner.cancel.load()) { return false; }
+                const long long n = sub_mark_core(SpecAcc{ sV, sQ, sN, pjl, ex }, Dopt, cfg.flip_eps, &out,
+                                                  /*count_refined=*/false, scost, &planner.cancel);
+                if (n < 0 || planner.cancel.load()) { return false; }
+                if (out.empty() || depth + 1 >= max_depth) { return true; }   // speculation converged / depth cap
+                // Is this whole level already rolled? Then fold it and look one wave further.
+                bool all_held = true;
+                for (const Task& t : out)
+                {
+                    for (long long r = t.r0; r < t.r1 && all_held; ++r)
+                    { double v; if (!memo_peek(t.w, t.pd, r, &v)) { all_held = false; } }
+                    if (!all_held) { break; }
+                }
+                if (!all_held) { return true; }
+                for (const Task& t : out)
+                {
+                    const int ti = HAND - work[t.w].H, si = work[t.w].idx;
+                    double sum = 0.0, sumsq = 0.0; long long kept = 0;
+                    for (long long r = t.r0; r < t.r1; ++r)
+                    {
+                        double v = 0.0; memo_peek(t.w, t.pd, r, &v);
+                        if (std::isnan(v)) { continue; }
+                        sum += v; sumsq += v * v; ++kept;
+                    }
+                    sS[ti][si][t.pd] += sum; sQ[ti][si][t.pd] += sumsq; sN[ti][si][t.pd] += kept;
+                    if (sN[ti][si][t.pd] > 0) { sV[ti][si][t.pd] = sS[ti][si][t.pd] / sN[ti][si][t.pd]; }
+                    if (pc.change_detect && pc.resolved[ti][si][t.pd]) { sV[ti][si][t.pd] = pc.pri_V[ti][si][t.pd]; }
+                    long long& p = pjl[ti][static_cast<std::size_t>(si) * 2 + t.pd];
+                    p = std::max(p, t.r1);
+                }
+                gen_prog.sspec_levels.fetch_add(1, std::memory_order_relaxed);
+            }
+            return true;
         };
         auto planner_loop = [&]()
         {
@@ -5614,6 +5673,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::size_t       spec_pos = 0;         // next task of spec_list
         long long         spec_r = -1;          // next r inside spec_list[spec_pos] (-1 = not started)
         long long         spec_seq_planned = -1;
+        long long         spec_fed_since_plan = 0;   // rollouts fed from the current plan
         // Retire the sub speculation once the sub-tables have converged: nothing can consume it any more.
         auto sub_spec_retire = [&]()
         {
@@ -5704,9 +5764,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 { spec_list = std::move(planner.spec_out); spec_pos = 0; spec_r = -1; planner.spec_ready = false; }
                 const long long seq = sub_commit_seq.load();
                 if (!planner.spec_busy && !planner.spec_req && !planner.true_pending
-                    && spec_pos >= spec_list.size() && seq != spec_seq_planned)
+                    && spec_pos >= spec_list.size()
+                    && (seq != spec_seq_planned || (spec_fed_since_plan > 0 && sub_spec_outstanding.load() == 0)))
                 {
                     planner.spec_proj = sub_proj; planner.spec_req = true; spec_seq_planned = seq;
+                    spec_fed_since_plan = 0;
                     planner.cv.notify_all();
                 }
             }
@@ -5726,11 +5788,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     std::lock_guard<std::mutex> lk(sh.mx);
                     if (!sh.m.emplace(key, SubMemoEnt{ 0.0, 0, 1 }).second) { continue; }   // already asked
                 }
+                sub_spec_outstanding.fetch_add(1);
                 { std::unique_lock<std::mutex> lk(qmtx);
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
                   q.push_back({ -2, static_cast<long long>(st.w), static_cast<long long>(st.pd), r, 0 }); }
                 q_ne.notify_one();
-                ++fed; any_fed = true;
+                ++fed; ++spec_fed_since_plan; any_fed = true;
                 gen_prog.sspec_req.fetch_add(1, std::memory_order_relaxed);
             }
             return fed;
@@ -6105,7 +6168,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                       << pct(s7_used, s7f) << "%); precompute hit " << prh << "/" << prr << " rolled ("
                       << pct(prh, prr) << "%); sub-spec hit " << ssh << "/" << ssr << " rolled ("
                       << pct(ssh, ssr) << "%, " << gen_prog.sspec_req.load() << " requested, "
-                      << gen_prog.sspec_plans.load() << " plans";
+                      << gen_prog.sspec_plans.load() << " plans, " << gen_prog.sspec_levels.load()
+                      << " waves chained through the memo";
             if (gen_prog.sspec_bad.load() > 0) { std::cerr << ", " << gen_prog.sspec_bad.load() << " MISMATCH"; }
             if (gen_prog.prebad.load() > 0)    { std::cerr << ", precompute " << gen_prog.prebad.load() << " MISMATCH"; }
             std::cerr << "); split " << gen_prog.split_batches.load() << " batches / "
