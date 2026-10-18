@@ -8633,8 +8633,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         }
         // Sac-fodder-first (MTG_SAC_FODDER_PAYS): lockstep twin of the rollout's apply-cast
         // publish -- the additional-cost victim (own_targets) pays before any other source.
+        // A sacrifice-a-LAND cast's predicted victim pays first too (SacLandPayVictim; the rollout
+        // twin is apply_one's identical publish).
         PaySacVictimScope _psv(!def->params.sac_additional_creature_color.empty()
-            ? ResolveSacVictimId(state, def->params.sac_additional_creature_color, own_targets) : 0);
+            ? ResolveSacVictimId(state, def->params.sac_additional_creature_color, own_targets)
+            : (def->params.sacrifice_land ? SacLandPayVictim(state, effective) : 0));
         // Phyrexian life gate (before the tap, which mutates): the payment must leave us alive.
         // Mirrors the rollout apply's gate exactly -- an unpayable life half drops the cast.
         if (phyrexian_life > 0

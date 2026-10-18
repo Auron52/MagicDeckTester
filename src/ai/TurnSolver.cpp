@@ -46022,6 +46022,75 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     if (t.plan_has_own_pump && best >= 0)
     { t.pump_target_card = state.battlefield[static_cast<std::size_t>(best)].card.m_number; }
     t.attack_matters = !t.main2 && best >= 0;
+
+    // MAIN-2 CREATURE-ABILITY DEMAND (MTG_PAY_NARROW_RESTRICTED_FIRST; payer A/B 2026-10-18, vampires
+    // std d3/d5 block B gi129). Falkenrath Pit Fighter's "{1}{R}, discard, sacrifice a Vampire: draw two"
+    // may be activated only once an opponent has lost life this turn, which in this list only combat
+    // does -- so it is a MAIN-2 activation, and a main-1 plan NEVER carries it (the enumeration offers it
+    // after combat, as its own plan). act_pips_cab above therefore saw it only in human menus, whose
+    // plans list post-combat activations. Without it the pre-combat casts' payment could not know the
+    // {R} was owed: under MTG_PAY_PAIN_LAST a creature spell's {R} took Secluded Courtyard (painless)
+    // over Voldaren Estate's pay-1-life colour, and the Courtyard is the only colored_creature_only
+    // land whose colour may pay a creature ABILITY -- gi129's T4 horizon leaf cast Pit Fighter off the
+    // Courtyard, its main-2 draw-two had no legal {R}, the leaf's kill slipped T5 -> T7, and the
+    // budget-bound root then preferred NOT playing its turn-1 land (the "Estate" root scored 7, a
+    // land-less T1 6; T6 vs the off arm's T5). The sweep's defect L, one phase later.
+    //
+    // So a main-1 plan that ATTACKS (the only way to arm the restriction here) with such an outlet on
+    // our board or among its own casts owes the outlet's coloured pips as creature-ability demand,
+    // ONE activation's worth (the max over outlets -- each activation also eats a Vampire and a card),
+    // served by ActLineHoldMask from ability-legal providers only: Blackcleave Cliffs or a Mountain if
+    // up (narrowest first), else the Courtyard -- never a Territory / Estate, whose colour cannot pay
+    // it. A HOLD (held attempt first, unrestricted retry), so every cast the payer paid is still paid;
+    // it only moves which source pays, here onto the Estate's forced pain. Skipped when the plan
+    // already carries an outlet activation (its own demand is counted above). NARROW-gated: keeping
+    // the ability-legal colour for a creature ability IS that lever's intent; =0 (with
+    // MTG_PAY_PAIN_LAST=0) is the historical traits exactly. Only a sac outlet with BOTH a discard
+    // cost and the lost-life restriction qualifies -- Pit Fighter alone in cards.json -- so every other
+    // deck's traits are unchanged.
+    if (PayNarrowRestrictedFirstOn() && ActLineHoldEnabled() && t.attack_matters)
+    {
+        bool plan_has_outlet = false;
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::SacCreatureOutlet && a.def != nullptr && IsDiscardSacOutlet(a.def->params))
+            { plan_has_outlet = true; break; }
+        }
+        if (!plan_has_outlet)
+        {
+            auto m2_outlet = [](const CardDefinition* d) -> bool
+            {
+                return d != nullptr && IsDiscardSacOutlet(d->params)
+                    && d->params.activate_only_if_opp_lost_life && d->params.sac_creature_cost.has_value();
+            };
+            const CardDefinition* best_def = nullptr;
+            int best_pips = 0;
+            auto consider = [&](const CardDefinition* d)
+            {
+                if (!m2_outlet(d)) { return; }
+                const ManaCost& oc = d->params.sac_creature_cost.value();
+                const int pips = oc.white + oc.blue + oc.black + oc.red + oc.green;
+                if (best_def == nullptr || pips > best_pips) { best_def = d; best_pips = pips; }
+            };
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active) { continue; }
+                consider(CardDatabase::Instance().LookupCached(p.card));
+            }
+            for (const Action& a : acts)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                consider(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+            }
+            if (best_def != nullptr && best_pips > 0)
+            {
+                const ManaCost& oc = best_def->params.sac_creature_cost.value();
+                t.act_pips_cab[0] += oc.white; t.act_pips_cab[1] += oc.blue;
+                t.act_pips_cab[2] += oc.black; t.act_pips_cab[3] += oc.red;
+                t.act_pips_cab[4] += oc.green;
+            }
+        }
+    }
     return t;
 }
 
@@ -49709,8 +49778,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (def.params.etb_untap_lands > 0)
             { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
                                         ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost); }
+            // ...and a sacrifice-a-LAND cast's predicted victim (SacLandPayVictim; executor twin in
+            // CastSpellFromHand) -- the land is leaving, so its mana is free.
             PaySacVictimScope _psv(!def.params.sac_additional_creature_color.empty()
-                ? ResolveSacVictimId(state, def.params.sac_additional_creature_color, own_targets) : 0);
+                ? ResolveSacVictimId(state, def.params.sac_additional_creature_color, own_targets)
+                : (is_sacrifice ? SacLandPayVictim(state, ec) : 0));   // the flag this apply sacrifices on
             // Phyrexian life gate (before the tap, which mutates): the payment must leave us
             // ALIVE (paying to 0 loses to the SBA). Emission gated on the same test, but life
             // can have moved since (a shockland, an earlier phyrexian payment) -- treat a
@@ -81425,6 +81497,22 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                       << " depth=" << depth << " sub_depth=" << sub_depth
                       << (is_pre_combat ? " main1" : " main2")
                       << "  candidates=" << candidates.size() << "\n";
+            // MTG_TRACE_SOLVE_BOARD=1 (diagnostic, default off; needs the trace above armed): the active
+            // player's board (tapped marks), hand, lives and float under each traced decision, and every
+            // candidate's FULL action list below -- PlanDesc names casts only, so two plans that differ
+            // in an activation (Pit Fighter's draw-two vs a Blood token) printed identically (payer
+            // A/B gi129, 2026-10-18). Print-only.
+            static const bool s_trace_board = EnvOn("MTG_TRACE_SOLVE_BOARD");
+            if (s_trace_board)
+            {
+                std::cerr << "   board:";
+                for (const Permanent& bp : state.battlefield)
+                { if (bp.controller_index == state.active_player_index) { std::cerr << " " << bp.card.m_name.str() << (bp.tapped ? "(T)" : ""); } }
+                std::cerr << " | hand:";
+                for (const Card& hc : state.ActivePlayer().hand) { std::cerr << " " << hc.m_name.str(); }
+                std::cerr << " | life " << state.ActivePlayer().life << " opp " << state.Opponent().life
+                          << " float " << state.floating_mana.Total() << "\n";
+            }
         }
 
         // Branching-factor census (MTG_BF_CENSUS): record this decision's width and attribute its
@@ -82720,6 +82808,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // The graded no-win leaf (GradesNoWinLeaf) decides every equal-win-turn tie, so a
                 // trace that omits it cannot say why a no-win plan won (Prevent Damage 5b, g196).
                 if (leaf_tb != leafeval::kInvalid) { std::cerr << "  tb=" << leaf_tb; }
+                static const bool s_trace_board = EnvOn("MTG_TRACE_SOLVE_BOARD");   // see the header print
+                if (s_trace_board)
+                {
+                    std::cerr << "  all=[";
+                    if (plan.land_decided) { std::cerr << "land:" << plan.land_to_play << ";"; }
+                    for (const Action& a : plan.actions)
+                    { std::cerr << "k" << static_cast<int>(a.kind) << ":" << a.card_name << ","; }
+                    std::cerr << "]";
+                }
                 std::cerr << "\n";
             }
             // Tie-break. The primary key is unchanged -- a win inside the horizon always beats a
