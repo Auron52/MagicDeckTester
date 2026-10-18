@@ -160,3 +160,21 @@ three mana, so the fetched land is not what won). Only 84 plausibly used the lan
 removes ROOT clairvoyance -- both still SCORE each line against the true library -- so the Path question is
 settled by the non-clairvoyant search (`MTG_NC_SEARCH`: each real decision ranked by the 8-reshuffle
 average), run5.
+
+**run5, the non-clairvoyant search (`MTG_NC_SEARCH=1`, play settings, 1,000 paired games, seeds 13500001+,
+tutor rule on in both arms):** Path excluded vs kept **-0.0010 +- 0.0134** (22 faster / 23 slower), at **0.59x
+wall**. With the search unable to read the library, the Path's value is gone: the +0.03 of run2-run4 was the
+shuffle re-roll, i.e. clairvoyance (not a regression, USER 2026-10-13). The exclusion stays ON as the USER
+ruled, and it is now measured lossless under honest play as well as cheaper.
+
+## The USER's references (2026-10-18)
+
+The USER hand-played 15 Colossus games in the viewer (`references/Colossus_Hammer/`, seeds 1-15, average
+T3.27, all won). Every Steelshaper's Gift / Open the Armory pick is the Hammer except two T1 fetches of Lizard
+Blades with no creature anywhere (seeds 5 and 15) -- the tutor rule exactly -- and in four games (seeds 1, 4, 7,
+12) the pre-rule default named Loxodon Warhammer / Dragonfire Blade and the USER overrode it. Path to Exile
+was never cast. On the rebased tree with the whole package: `viewer_protocol_check` 15/15 replay to the same win
+turn (9 ok, 6 index-repaired by the reordered menus, 0 drift / enum-gap / board-diverged); `ref_bench` (the
+search from the USER's exact kept hand) 0/15 short, search 3.200 vs human 3.267 -- seed 7 one turn faster
+(T2 Aid + Kor Duelist instead of Open the Armory, so the Duelist is ready when the Hammer lands on T3; every card
+it used was in hand at the time).

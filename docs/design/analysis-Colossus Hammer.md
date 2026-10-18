@@ -234,6 +234,17 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
   for a decisive sample; the default (ON) stands unless that shows harm. **40 blocks (40,000 pairs): 21 changed
   (0.052%), net -8 turns, 13 better / 8 worse, halves +0 / -8 -> VERDICT: KEEP THE DEFAULT (ON).**
 
+## The USER's references (2026-10-18)
+
+15 hand-played games, `references/Colossus_Hammer/claude_s{1..15}_gi*.json` (seed 1 `1ec3620be`, seeds 2-15
+`313654130`, both pushed; `check_references_safe.py` OK). Human average T3.27, all won; tutor picks follow the
+USER's rule; Path never cast; Speaker's Angel made in main 2 on seeds 10 and 14. On the rebased tree with the
+whole 10-18 package: `viewer_protocol_check --only Colossus_Hammer --strict` 15/15 (9 ok, 6 index-repaired, 0
+drift / enum-gap / board-diverged / mull-drift); `ref_bench --deck colossus_hammer` **0/15 short, search 3.200
+vs human 3.267**, seed 7 faster (T3 vs T4: Aid + Kor Duelist on T2, every card in hand at the time).
+Bottoming: the USER's bottoms differ from the static default in most mulligans (seeds 4, 5, 6, 8, 9, 10, 11, 13,
+14, 15) -- input for the mulligan stage (the keep table bottoms exhaustively), not a play defect.
+
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`); flagged seeds RE-CHECKED on the final engine (`51573d7e5`), see below
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
@@ -341,6 +352,9 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
    -> ANSWERED 2026-10-18 (*"Path to Exile can be excluded entirely via a heuristic for goldfishing"*):
    NeverCast (`MTG_COLOSSUS_NO_PATH`, default ON); human play still offers it. This also retires the d0
    self-Path valuation question (gi539).
+   MEASURED: the search's +0.03 without Path (run2-run4) is the Path shuffle re-rolling a library the search
+   can read (six traced games); under the non-clairvoyant search (`MTG_NC_SEARCH`, run5, 1,000 paired games)
+   the exclusion is -0.001 +- 0.013 at 0.59x wall -- lossless under honest play (colossus-hammer-cast-order.md).
 3. **Forge Anew** clause 2 (instant-speed equip during your turn) — PROVISIONAL deferral (no window in the
    engine adds damage; full argument in the card note).
 4. **Raubahn** — Ward PROVISIONAL deferral (only an opponent's spell triggers it). The attack attach is a
