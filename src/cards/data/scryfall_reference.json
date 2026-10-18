@@ -5735,5 +5735,95 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Bloodghast": {
+    "cmc": 2.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{B}{B}",
+    "oracle_text": "This creature can't block.\nThis creature has haste as long as an opponent has 10 or less life.\nLandfall — Whenever a land you control enters, you may return this card from your graveyard to the battlefield.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Spirit"
+  },
+  "Falkenrath Pit Fighter": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "{1}{R}, Discard a card, Sacrifice a Vampire: Draw two cards. Activate only if an opponent lost life this turn.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Warrior"
+  },
+  "Legion Lieutenant": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{B}",
+    "oracle_text": "Other Vampires you control get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Knight"
+  },
+  "Stromkirk Condemned": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{B}{B}",
+    "oracle_text": "Discard a card: Vampires you control get +1/+1 until end of turn. Activate only once each turn.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Horror"
+  },
+  "Swamp": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {B}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Land — Swamp"
+  },
+  "Temple of Deceit": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {U} or {B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Temple of Enlightenment": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {W} or {U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Vampire of the Dire Moon": {
+    "cmc": 1.0,
+    "keywords": [
+      "Deathtouch",
+      "Lifelink"
+    ],
+    "mana_cost": "{B}",
+    "oracle_text": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Vampire"
+  },
+  "Voldaren Estate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}, Pay 1 life: Add one mana of any color. Spend this mana only to cast a Vampire spell.\n{5}, {T}: Create a Blood token. This ability costs {1} less to activate for each Vampire you control. (It's an artifact with \"{1}, {T}, Discard a card, Sacrifice this token: Draw a card.\")",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   }
 }
