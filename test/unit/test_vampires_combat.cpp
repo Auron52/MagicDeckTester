@@ -374,6 +374,21 @@ TEST_CASE("Critter: Ocelot Pride's first-step lifelink pumps Ajani's Pridemate b
     CHECK(Plus(ByNumber(s, 2)) == 1);
 }
 
+TEST_CASE("Attackers tap at declaration: vigilance gained BETWEEN the steps does not untap one")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Ocelot Pride", 1);
+    const int v = Put(s, "Voice of the Blessed", 2);   // vigilance at four +1/+1 counters
+    AddPlusCounters(s.battlefield[v], 3);
+    REQUIRE_FALSE(CreatureHasVigilance(s.battlefield[v], s));
+    // First step: the Pride's lifelink -> Voice's 4th counter (flying + vigilance). Regular step: 2+4.
+    CHECK(Swing(s, {1, 2}) == 1 + 6);
+    CHECK(Plus(ByNumber(s, 2)) == 4);
+    CHECK(CreatureHasVigilance(ByNumber(s, 2), s));
+    CHECK(ByNumber(s, 2).tapped);                       // it was declared without vigilance
+}
+
 TEST_CASE("No first or double striker: the single-step path is unchanged")
 {
     EnsureCardsLoaded();
