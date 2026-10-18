@@ -549,6 +549,8 @@ enum Slot : int
     HUMAN_PREPAY_DEMAND,      // MTG_HUMAN_PREPAY_DEMAND  HUMAN PLAY ONLY: the whole-turn prepay of a committed multi-cast line (TurnSolver::BatchPrepayMainCasts from ApplyPlanDirect) first tries to HOLD one untapped source per coloured pip the REST of the hand still owes (scarcest colour first, narrowest source), releasing it pip by pip before any existing hold class -- so a generic pip no longer spends the only source of a colour the human's next line needs (Colossus Hammer seed 2100016 T3: {Hammer, Magnetic Theft} tapped Furycalm Snarl, the only {W}, and left a Mountain up; Sigarda's Aid/Speaker uncastable). Lossless (held-first, then the existing ladder unchanged). Autonomous play and rollouts never pass the demand: byte-identical. Default ON; =0 -> the demand-blind joint solve
     EQUIP_HOST_FOLD,          // MTG_EQUIP_HOST_FOLD  SOUND identity fold: interchangeable Equip / reconfigure HOSTS (two Speakers of the Heavens in the same state, nothing on them, named by no other candidate) are RELABELLED to a canonical order -- among a subset's equips onto one class, taken in source order, each must use an already-used member or the NEXT unused one (a restricted-growth string), so "both on one Speaker" and "one on each" survive and their mirror images do not. Autonomous only (human play / MTG_UNPRUNED keep every host, the MTG_AURA_HOST_FOLD precedent). Default ON; =0 restores every host
     EQUIP_UNLANDED_COPY_FOLD, // MTG_EQUIP_UNLANDED_COPY_FOLD  SOUND dominance fold: an Equip of the k-th hand copy of a name (hand order) in a subset that casts <= k copies of it never lands -- the k-th cast takes the first copy still in hand, both worlds -- so it pays its equip cost and does nothing; the same subset without it is enumerated, cheaper, same board. Only where nothing else in the subset can move a hand copy or re-solve the turn (Equip / unattach / Equipment-or-Theft casts only); autonomous only. Default ON; =0 keeps every such plan
+    VAMPIRES_ORDER,           // MTG_VAMPIRES_ORDER  Vampires' AI-DRAFTED TOTAL cast order (2026-10-18, docs/design/vampires-cast-order-2026-10-18.md; awaiting the USER): Socialite > Gorger > the static lords > every other creature cheapest first then by name > Markov Baron (convoke after the bodies) > Aether Vial. DEFAULT OFF; =1 enables (VampiresProvider::CastOrderRank)
+    VAMPIRES_BUCKET_DISCARD,  // MTG_VAMPIRES_BUCKET_DISCARD  Vampires' AI-DRAFTED 5i cleanup buckets + the order of the searched outlet discard pins (2026-10-18, same doc; awaiting the USER): free sheds (madness-castable now, Bloodghast with a land) > dead > lands past 4 > late Vial > threats past a floor of 2 by castability x value > early Vial > floor > lands. DEFAULT OFF; =1 enables
     COUNT
 };
 
@@ -1048,6 +1050,8 @@ inline const char* Name(int slot)
         "MTG_HUMAN_PREPAY_DEMAND",
         "MTG_EQUIP_HOST_FOLD",
         "MTG_EQUIP_UNLANDED_COPY_FOLD",
+        "MTG_VAMPIRES_ORDER",
+        "MTG_VAMPIRES_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
