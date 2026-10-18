@@ -13972,12 +13972,19 @@ std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
                                                   const std::vector<Action>& acts)
 {
     std::vector<int> out;
-    if (!ActTapReserveEnabled()) { return out; }
+    // VOLDAREN ESTATE (Vampires A2): its Blood ability's {T} is held back from the plan's casts even with
+    // the lever off. The Estate is a MANA LAND, so without the hold the casts' greedy payment may tap it
+    // for mana and strand the Blood activation the plan was scored on -- a line made unreachable by
+    // payment order (design_A2 §3.2). The hold is the reserve-then-fallback attempt every entry here
+    // gets, so it can only change WHICH source pays, never whether a cost is payable. Mode-gated: every
+    // other deck keeps the lever's exact behaviour (no TapBlood action exists there).
+    const bool lever = ActTapReserveEnabled();
     const int active = state.active_player_index;
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id <= 0) { continue; }
         if (!PermAbilityTaps(a.ability_mode)) { continue; }
+        if (!lever && a.ability_mode != Action::AbilityMode::TapBlood) { continue; }
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
