@@ -527,3 +527,156 @@ Flying (Keeper, Lord, tokens) inert; one steal per Captivating per main phase.
 30. **Rick, Steadfast Leader keeps choosing vigilance + lifelink over first strike** -- correct for Soldiers,
     which has nothing between the damage steps. [default: unchanged]
 31. **New combat params classified as no-viewer-decision** (INERT_PARAMS). [default: as classified]
+
+## Sweep fixes (Stage 5d claude-play convergence, 2026-10-18; branch `vampires-fix`, NOT pushed)
+Fix integrator over the sweep's defect list (items A-L; repro CSVs in the sweep scratch DEFECTS.md). Commits
+`c2d643522` (A-E, G-K), `6939bd4d3` (F + L, the payer sub-integrator's `6e6497968` cherry-picked) and the F x L
+follow-up (the activation-line hold). The old CSVs do not replay index-for-index on the new binary (the convoke
+arms and the human filters change the menus), so every repro below was re-driven with a summary-matching
+translator (scratch `fix/repro/translate.py`) and the human menus checked by an all-or-nothing probe
+(`fix/repro/allornothing.py`: execute every plan holding a Vampires activation, verify each listed activation's
+event).
+
+**A -- phantom convoke mana (SERIOUS).** Root cause: the creature-spell convoke bodies were tapped in a PRE-PASS
+over the whole plan (executor TakeTurn / ApplyPlanDirect / the continuation replays), each Baron's committed
+(pip, other) counts against the pre-plan board, while every payment site reduced the cost by the COMMITTED
+counts -- two Markov Barons on the same three bodies tapped three creatures and were both reduced by three (seed
+91011 T3: "Territory; Baron, Baron" resolved with all three lands untapped). Fix: creature-spell convoke taps AT
+THE CAST (`ConvokeCastTaps`, SpellEffects.h), cheapest first on the board as it stands, and the cost comes down by
+the bodies ACTUALLY tapped -- one helper in CastSpellFromHand, apply_one and the sequential-payability walk; a
+failed payment untaps them; the pre-pass is a no-op for creature spells (Chord keeps it: Melira Pod
+byte-identical). Subset rule 7 (`SubsetConvokeBodiesInvalid`, both walkers) refuses a selection whose arms claim
+more bodies than the board plus the plan's own arrivals hold (the last convoke cast serves nobody). Under
+contention (a second convoke creature, a steal source) fewer-free arms down to the plain cast are offered, so
+"Baron A takes the bodies, Baron B pays lands" stays findable. Tests: `test_vampires_convoke.cpp` "Convoke A" x2
+(mana conservation in both worlds over every two-Baron plan; a stale arm reduces only by its real taps and
+untaps on failure). Repro: 91011 T3 menu holds no phantom plan (the 9-mana "Baron, Baron, Captain" and the
+land-less "Baron, Baron" are gone) and every two-Baron plan executes conserving mana (e.g. plan 8: Bloodghast +
+Dire Moon + the first Baron + 3 lands = 6).
+
+**B -- same-plan convoke bodies (reachability).** Root cause: arms came from the pre-plan board and the pre-pass
+ran before any cast, so a creature the plan casts first (sick = a free body) could never convoke -- unfindable at
+any budget. Fix: arms may count arrivals (`Action::convoke_plan_pip / _other`; every split between arrivals and
+would-attack board bodies is its own arm), `ApplyConvokeArrivalDependencyOrder` (end of both
+ApplyPayableCastOrder forms -- every apply site in both worlds) casts such an arm after its arrivals, rule 7
+requires them, and the human ordering search drops an order that does not (`OrderingPlacesConvokeBeforeArrivals`).
+Tests: "Convoke B" x2 (Dire Moon then Baron convoked by it on three Swamps, both worlds; the dependency order).
+Repro: 91016 T5 menu offers "Falkenrath Pit Fighter, Markov Baron (convoke: Legion Lieutenant #24, Asylum
+Visitor #5, Falkenrath Pit Fighter #21)"; 91005 handed to the search at d5 b200 now plays T3 "Condemned,
+Lieutenant, Baron convoked by Condemned + Lieutenant + Gorger" (4 to the face vs 3; both arms win T4, opp -12
+vs -6). The sweep's "6 on T3" line needs mana the board does not have; not reproduced.
+
+**C -- arm order ignored lords and the pip colour.** Root cause: `ClassifyConvokeBodiesEx` sorted would-attack
+bodies by `EffectivePower()` (no lord term) and only PREFIX arms of that list existed. Fix: creature rules rank by
+`CombatPowerOf` (`ConvokeRules::true_power`) and the arms are the full (pip, other) grid, one per (reduced cost,
+plan need) keeping the least attack power given up (ties: fewer costly, fewer pip bodies); the USER's question-5
+default (lowest power first) now applies to TRUE power. Test: "Convoke C" (both "tap the black Baron, pays {B},
+loses 2" and "tap the lord-pumped Gorger, pays {1}, loses 3" are offered; costly order by true power). Repro: 91000
+T5 offers "Drana, Markov Baron (convoke: Drana #15, Markov Baron #28)" -- the Gorger stays attacking.
+
+**D -- convoke arms printed identically.** Fix: every creature-convoke cast's summary and JSON (`"convoke": {pip,
+other, plan_bodies, taps}`) name the bodies it REALLY taps, off a probe apply with a depth-gated recorder
+(`g_convoke_tap_record`; main.cpp `ConvokeLabelsFor`) -- a Bloodghast the plan's land returns and a creature the
+plan casts first are named; the convoke event and the madness chooser labels name bodies too; human-menu twins
+that realise the same bodies (board arm vs plan-body arm once the arrival is cast first) are hidden in the capped
+menu. Test: "Sweep D" (the recorder names "Vampire of the Dire Moon #10"). Repro: the 91011 / 91016 menus above.
+
+**E -- outlets whose discard the plan's own land / casts empty.** Root cause: human play emits the discard outlets
+UNPINNED, and rule 1 counted pinned discards only; the executor then skipped the pump silently. Fix: subset rule
+8 (`SubsetDiscardOutletsUnpayable`, both walkers): every discard outlet, pinned or not, needs a card at its turn in
+the EXECUTED trailing order (OrderTrailingActivations), net of the selection's casts / puts and the earlier
+outlets' draws (the land drop is already off the walker's board -- EnumeratePlansWithLand plays it first -- so the
+coordinator's land-drop note needs no extra term). The search never credits a dead pump (the trailing pass
+checks liveness first). Test: "Sweep E" (pump + crack on one card rejected; a cast that empties the hand
+rejected; both accepted with a second card; the executed order). Repro: 91009 / 91011 / 91013 / 91007 -- the
+phantom plan has NO match in the new menu at that decision; all-or-nothing on those menus: 6 + 24 + 46 + 2 plans,
+0 partial.
+
+**F / L -- the payer (sub-integrator, `6939bd4d3`).** Root cause: Voldaren Estate, Unclaimed Territory and
+Secluded Courtyard tie at rank 59, so battlefield order picked; the backtracker returned its first DFS hit, and the
+painland {C}-first hoist only covered generic pips. Fix: `MTG_PAY_PAIN_LAST` (a life-costing coloured mode is the
+last resort for coloured pips too, in the greedy, the backtracker -- a painless solve first, the old solve as the
+fallback -- and the prepay shrink) and `MTG_PAY_NARROW_RESTRICTED_FIRST` (a creature-spell-only colour before a
+Courtyard), both default ON, heurarm, lossless; armed Prevent Damage boards keep their pain. Tests:
+`test_vampires_payer.cpp` (15 cases, 8 fail with the levers =0). Repros (life before -> after): 91017 19->20,
+91012 20->21, 91018 17->18, 91013 18->19, 91007 17/20 -> 18/20, 91004 17/19 -> 18/19, 91016 plans 48/52 19 -> 20;
+91001 now taps the Territory for the cast and keeps the Courtyard for Pit Fighter's {1}{R}. **F x L follow-up**
+(the sub-integrator's open question 1): pain-last sent a creature SPELL's pip to the Courtyard and Pit Fighter's
+own {R} (a creature ABILITY: Territory / Estate colour cannot pay it) no-op'd. `PlanTraits::act_pips_cab` now
+carries Pit Fighter's and the transform's pips and `ActLineHoldMask` reserves an ABILITY-LEGAL provider for them;
+both trailing passes bracket Pit Fighter's payment in `ActLinePayScope`. Test: "payer F x L (search)".
+
+**G -- duplicate Blood plans for identical Estates.** Fix: TapBlood actions carry the interchangeable-source
+`equiv_tag` (the k variant rides the tag), so the canonical-prefix fold drops the twin wherever it applies (the
+greedy walk always; the search walk under the deck opt-in, `FoldSearchOdometerOptIn`, which Vampires does not
+take -- open question 33); the human menu (never folded at enumeration) hides the twin. Test: "Sweep G" (with the
+fold arm pinned on, single-Blood plans use one Estate; before: both).
+
+**H -- transform missing from human plans that reach five.** Root cause: human play emitted the transform only
+when the restriction already held on the pre-plan board. Fix: human play takes the search's gate (the plan can
+reach five; rule 6b checks arrivals), board Keeper and a same-plan Keeper alike. Repro: 91012 T5 now offers
+"Territory; Aether Vial, Legion Lieutenant, Bloodline Keeper: transform it" and it executes (Lord of Lineage).
+
+**I / all-or-nothing -- a transform only Territory could pay; a pump that ran while its transform died.** Fix (human
+menu): a plan holding a Vampires activation (steal / transform / Blood / the discard outlets) is probed on a copy
+(land fixed as the frame decided it) and dropped when its apply SKIPS any activation (`g_trailing_act_skips`,
+counted at the trailing pass's not-live / unpaid branches); the same plan without the dead activation is its own
+entry. Repro: 91012 T5 with only Territory untapped offers no transform; 91004 T8 offers the transform only with
+the Swamp land drop (all-or-nothing on that menu: 52 plans, 0 partial). The AUTONOMOUS creature-ability pool
+still counts a colored_creature_only land as any colour (the USER withdrew MTG_CCO_NONCREATURE_POOL as
+enumeration hygiene that must earn its place; the narrow creature-ability analogue is the same class) -- open
+question 32.
+
+**J -- listed order vs executed order.** Root cause: the menu listed the plan vector; the trailing pass runs in
+OrderTrailingActivations order (VampiresProvider's draft: Blood creation -> Condemned -> crack -> Pit Fighter).
+Pricing parity holds: the Blood variant counts only casts / puts (rule 3) and runs first in both worlds, so it is
+priced and realised at the same {1}. Fix: a Vampires plan lists its trailing activations in the executed order
+(main.cpp `DisplayActionOrder`, summary + JSON). Repro: 91015 T5 now reads "Voldaren Estate: create a Blood
+token, Stromkirk Condemned: Vampires +1/+1". The ORDER itself is open question 34.
+
+**K -- the batch prepay ignored convoke.** Root cause: BatchPrepayMainCasts' combined bill recomputed each cast
+from EffectiveCost and never applied the convoke reduction (Chord never reached it: X spells decline). Fix: the
+bill applies the arm's reduction (the bodies tap at the cast; rule 7 makes the bill match). Test: "Convoke K"
+(Pit Fighter + a 3-body Baron: one land, nothing floating, the Estate untapped, in both worlds). Repro: 91016 T5
+"Pit Fighter, Baron (3 bodies), Estate: Blood" taps one land for {R} and makes the Blood (life 20).
+
+**Verification.** `mtg-test` 1540/1540 (1514 + convoke 7 + sweep 4 + payer 15). The enumeration-level convoke
+cases (A conservation, B found, K one land, C the black-Baron arm) were also built against the PRE-fix tree
+(1c4484e7e, a scratch worktree, removed): all four FAIL there (A: 6 mana cast off 3 bodies and 0 lands; B: no such
+plan; K: 4 lands tapped, {3} floating, life 19, the Estate tapped; C: no such arm). The rules-7/8 / recorder /
+fold cases drive predicates that did not exist before. **Smoke** (`regression.sh
+--smoke`, NOT accepted), my commit alone: 128 pass / 4 fail -- exactly the four Vampires rows, every other deck
+byte-identical (Melira Pod included). With F/L + the F x L hold: 106 / 26; Vampires
+`vampires_smoke_d0` 4.8300 -> 4.7000, `_d3` 4.4667 -> 4.3800, `_d5` 4.4267 -> 4.3467, `vampires2hg_d3` 5.0400 ->
+4.8800 (searched: 0 slower, 27 faster; d0: 17 slower, 147 faster -- the slower d0 games checked are the removed
+phantom: e.g. gi12 T3 old "Baron, Baron" on two lands + three bodies). Non-Vampires: 153 moved games, every one
+reproduced as a payer-lever move from a single-game repro (a pooled batch of the 153 with both levers =0
+reproduces the committed GT digest 153/153; mechanism per game from a levers-off vs -on log diff): 117 a coloured
+pip paid without pain (life +1), 12 a different (painless / narrower) land tapped, 6 a same-name copy swap, 15 an
+extra cast the saved colour funds, 3 a different searched line at the same score; score moves only at d0 --
+faster: treasure_hunt gi146 8->7, gi450 6->5, minotaur gi444 6->5 (Territories pay the cast, the Courtyard funds
+Burning-Fist's {1}{R}), pirates gi530 5->4 (Fiery Islet's {R} left for Lightning Bolt); slower: soldiers gi49 5->6,
+gi817 4->5 (the payment is painless and keeps Silent Clearing; the d0 runner then sacrifice-cycles the Clearing).
+Searched non-Vampires moves: 37 games, all at the same score. **Sanity** (`--batch`, MTG_SLOW_GAME_MS=10000):
+d3 b20 40 games seed 777 avg **4.3750** (was 4.4250), 5.56 s wall, 1,011 core-ms/game; d5 b40 20 games avg
+**4.3500** (was 4.4000), 6.05 s wall, 1,317 core-ms/game; no game over 10 s.
+
+## Open questions -- sweep fixes (work continues on the stated default)
+32. **Autonomous creature-ability pool**: a colored_creature_only land still counts as any colour for a creature
+    ABILITY's pip in the search (the transform / Pit Fighter variants the payer then cannot fund are rollout
+    duplicates, never wrong lines). Same class as the USER-withdrawn MTG_CCO_NONCREATURE_POOL. [default: unchanged;
+    the human menu's all-or-nothing probe removes the phantom there]
+33. **Vampires FoldSearchOdometerOptIn** (the canonical-prefix fold on the search's own walk -- identical Estates,
+    identical hand casts): per-deck, verified-before-adoption. [default: not taken]
+34. **The Vampires trailing order** (AGENT-DRAFTED, question 11) runs Blood creation BEFORE the discard outlets, so a
+    madness-cast Vampire from Condemned / the crack never discounts the Blood (91015), and "crack first, then pump the
+    drawn card" is reachable only through the crack's hand-entry breakpoint. Options: Blood after Condemned / the
+    crack, or search the order. [default: unchanged -- the order is yours]
+35. **Plan-body convoke arms in rollout leaves**: beyond the horizon only arm 0 (free board bodies) is offered, as
+    for every other convoke variant (question 15's playout policy). [default: on]
+36. **Payer over-tap with a held activation pip** (observed, not caused here): 91012 T5 "Vial, Lieutenant, transform"
+    taps five lands for four mana ({C} floats) -- the prepay ladder under MTG_ACT_LINE_HOLD. Payment quality only.
+    [default: disclose; follow-up]
+37. **The payer sub-integrator's open questions** (in `6939bd4d3`): MTG_HUMAN_PREPAY_DEMAND still outranks pain-last
+    (91016 plan 50 costs a life in human play only); the backtracker's needless first-candidate taps; recorded
+    `--tap-pref` taps still win over the new order in reference replays. [defaults: as shipped]
