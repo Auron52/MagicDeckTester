@@ -432,10 +432,12 @@ struct Action
                                        // grouping them reordered goblins' enumeration (14 d0 games, 11
                                        // worse). False for every action while the lever is off.
     // VAMPIRES A2: Voldaren Estate's Blood ability (ActivatePermAbility TapBlood) COST VARIANT -- the
-    // number of Vampire creatures the SAME plan adds (casts / Vial puts) before its trailing pass,
-    // which this variant's a.cost assumes ({5} - (Vampires now + k), floor 0). The subset must add at
-    // least that many (SubsetVampOutletInvalid); the apply pays the TRUE cost at activation
-    // (TapBloodCostNow). 0 for every other action. In padding (sizeof(Action) unchanged by it).
+    // number of Vampire creatures the SAME plan adds before THIS activation runs in the executed order
+    // (its casts / Vial puts, and the trailing activations that run ahead of it -- a Bloodline Keeper
+    // token tap; defect M, 2026-10-18), which this variant's a.cost assumes ({5} - (Vampires now + k),
+    // floor 0). The subset must add exactly that many, or at least that many on the top variant (k+16)
+    // (SubsetVampOutletInvalid rule 3); the apply pays the TRUE cost at activation (TapBloodCostNow).
+    // 0 for every other action. In padding (sizeof(Action) unchanged by it).
     std::int8_t vamp_casts_needed = 0;
     // VAMPIRES A1 (2026-10-18): the SEARCHED MADNESS answer of a discard-cost activation (rides beside
     // discard_name -- one discard per activation). madness_choice: -1 unpinned (no madness possible at
@@ -2481,10 +2483,22 @@ public:
     // and this returns immediately when every rank is 0 -- so no list is copied, no sort runs, and
     // every deck that declares no order is byte-identical.
     static void OrderTrailingActivations(const GameState& state, std::vector<Action>& acts);
+    // ...the SAME order read pairwise, for a rule that must know what has already run when an activation
+    // fires without building and sorting the pass: does trailing activation `x`, at position `px` of the
+    // plan's action vector, run BEFORE trailing activation `y` at `py`? `bands` = the plan's trailing
+    // list holds a count-band activation (TrailingHasCountBands). Exactly the composition both passes
+    // apply -- OrderTrailingActivations' stable (band, rank) sort, then DeferSameLineSacs' stable move of
+    // a same-line sacrifice to the end -- so the answer is the executed order by construction (the two
+    // share TrailingRankOf / TrailingBandOf). Read by SubsetVampOutletInvalid rule 3 (Voldaren Estate's
+    // Blood cost).
+    static bool TrailingRunsBefore(const GameState& state, const Action& x, std::size_t px,
+                                   const Action& y, std::size_t py, bool bands);
     // The Vampires sweep subset rules, exposed for the unit tests (a human-play selection cannot be
-    // built there -- HumanPlayActive() is a process static): rule 7 = SubsetConvokeBodiesInvalid (the
-    // convoke body books, items A / B), rule 8 = SubsetDiscardOutletsUnpayable (every discard outlet
-    // can discard in the executed order, items E / J). True = the selection is rejected.
+    // built there -- HumanPlayActive() is a process static): rule 3 = SubsetVampOutletInvalid's Blood
+    // cost-variant books (defect M: the arrivals counted in the executed order), rule 7 =
+    // SubsetConvokeBodiesInvalid (the convoke body books, items A / B), rule 8 =
+    // SubsetDiscardOutletsUnpayable (every discard outlet can discard in the executed order, items E /
+    // J). True = the selection is rejected.
     static bool VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
                                            const std::vector<int>& sel, int rule);
     // VAMPIRES B: does the pass hold a count-READING activation (Captivating Vampire's steal, Bloodline
