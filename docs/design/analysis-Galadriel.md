@@ -242,6 +242,34 @@ mana). With MTG_SCRY_WIDTH=1 the search reproduces the USER on 7 / 10 / 15 exact
 Seed 5 is the one non-clairvoyant gain: an untapped land on T3 (Grotto/Arena) puts Galadriel down a turn early;
 her T4 attack is the margin for a T5 X=3 lethal.
 
+## Scry rule as a firm prune (2026-10-18; `MTG_GALADRIEL_SCRY_PRUNE`, default ON)
+USER: "No greedy in the search doesn't meant the heuristics in the provider cannot prune the tree. They can and
+should." -- `GaladrielProvider::ScryVerdict` returns the USER's keep/bottom rule as a firm verdict, so a
+land-drop scry offers one candidate. A/B, 24 seeds x 1000 paired (800000+), d5 b20, three arms:
+- CLAIRVOYANT (shipped search): pruned +0.0476 t (t +33; 1,124 slower / 16 faster) at 0.49x core vs the
+  unpruned search; NONEED +0.0662 (t +40). Expected: the unpruned search reads the library order.
+- NON-CLAIRVOYANT (`MTG_NC_SEARCH=1`, the honest bar): pruned **-0.0108 t (t -6.9; 590 faster / 378 slower)**
+  at 0.39x core; NONEED +0.0000 vs searched, **+0.0108 (t +5.6) vs pruned**.
+- USER bar ("the only losses we can accept are those that are clearly clairvoyant"): all 378 NC games the
+  unpruned search wins and all 590 the prune wins were replayed (both reproduce exactly) and netted by the
+  FIRST divergence. Strong confirmations of the rule: Galadriel in hand, a 2nd Galadriel bottomed 5/38 (games
+  searched wins / prune wins); Crackle kept 10/35; no Galadriel, Galadriel kept 0/12; temples kept 45/66 and
+  bottomed 82/150. The only class leaning to the search: keeping an off-colour scry land (Crystal Grotto, The
+  Grey Havens, Zhalfirin Void) under the short-on-lands clause, 23/9, net -16 turns in 24,000 games (-0.0007
+  t; p~0.02 single-class, one of ~30 classes, so not significant after correction). Rumble Arena in the same
+  role is 6/7, and bottoming the same lands is neutral (44/37). Divergences that are not scries (the search
+  spending its budget differently) net +25 for the prune.
+- NONEED (USER: "a case I'm genuinely uncertain of"): worse than the plain prune in both modes; stays OFF
+  pending the USER.
+- Suite (clairvoyant): smoke 6 slower / 0 faster, regression 31 slower / 0 faster, only galadriel moved;
+  accepted. Replayed under NC: 28 of 32 (+ the 2hg smoke loss) are clearly clairvoyant (the unpruned honest
+  search misses the line too). Honest losses come from 3 deals, all the rule's early keep: seed 1041 (T2,
+  colours covered, Skerry out, Epiphany bottomed -- the NONEED case), seed 2091 (T1, short on lands, Temple of
+  Mystery kept) and seed 3020 (T2, Temple of Plenty kept for a missing colour). In the 24k NC data the T1
+  "short on lands" keep is the only near-even spot: temples kept 38/35, colourless scry lands kept 23/9.
+- ref_bench: 0/15 short; search 5.600 vs USER 5.667. Seeds 7, 10, 15 now MATCH the USER (the clairvoyant
+  scry wins are gone); seed 5 is still a turn faster.
+
 ## RESUME POINT (2026-10-18 ~06:10 UTC, before a context compaction)
 UNCOMMITTED (working tree; build bav16nup0 may still be running):
 - `GaladrielProvider::ScryVerdict` -- the USER's scry rule as a FIRM verdict on every land-drop scry
@@ -262,6 +290,9 @@ NEXT:
    time a probe first (build/scratch/gal/scryab_ncprobe.json, 10 games/arm) and size from it.
 4. USER bar: "the only losses we can accept are those that are clearly clairvoyant in nature." For every game
    the searched arm wins under NC, find the diverging scry and read the state -> amend the rule if needed.
+6. (USER 2026-10-18, after 2-5) nlfit at a RAISED budget vs the model at the shipped one: the argument is
+   that nlfit's saved time is better spent as budget than on the leaf. Same 40 seeds (700000+) x 1000, d5;
+   arms model b20 / nlfit b20 / b27 (~equal core time to model b20) / b40; record how often the budget binds.
 5. Report; the USER decides NONEED. Then full smoke (only galadriel should move), accept galadriel smoke +
    regression + overnight, ref_bench, commit + push, CI (curl + git credential fill).
 OPEN USER QUESTIONS: model-vs-nlfit leaf (40-seed A/B: model -0.0018 t at 0.70x units; nlfit -0.0004 at

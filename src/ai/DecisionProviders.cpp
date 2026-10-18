@@ -5662,9 +5662,54 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
     // only from a land played AFTER she lands, so with the colours covered and no scry land in hand,
     // a scry land is kept and everything else is thrown.
     if (missing == 0 && scry_lands_hand == 0) { return td->card.IsLand() && tp.etb_scry > 0; }
+    // NOTHING BEING LOOKED FOR (A/B arm, MTG_GALADRIEL_SCRY_NONEED, default OFF): USER 2026-10-18 "It is
+    // possible that when we aren't looking for something we should not bottom" -- "for example, if we
+    // have the colours we need and either have acceleration or it is too late for acceleration we could
+    // keep something on top." So: G/U covered, enough lands, a scry land in hand to follow her, and
+    // acceleration either held (a rock or a 2+-mana land, in play or in hand) or too late to matter --
+    // the agent's threshold: the battlefield already makes 2+ mana, so next turn's land drop reaches
+    // Galadriel's 3 without it. Then keep whatever this is. (A bottomed land is not lost; it only moves
+    // behind the Crackle in the reveal chain -- what the clairvoyant search exploited on seeds 7/10/15.)
+    {
+        static const bool noneed_env = EnvOn("MTG_GALADRIEL_SCRY_NONEED", false);
+        if (heurarm::Flag(heurarm::GALADRIEL_SCRY_NONEED, noneed_env) && missing == 0 && !short_lands)
+        {
+            auto is_accel = [](const CardDefinition& d)
+            { return d.params.mana_rock || (d.card.IsLand() && d.params.produces_amount > 1); };
+            bool have_accel = false;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != me) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d != nullptr && is_accel(*d)) { have_accel = true; }
+            }
+            for (const Card& c : pl.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && is_accel(*d)) { have_accel = true; }
+            }
+            const bool too_late = mana_bf >= 2;
+            if (have_accel || too_late) { return true; }
+        }
+    }
     if (tp.scry_reveal_land_to_battlefield) { return false; }   // a second copy (one is in hand)
     if (IsCrackle(*td) || accel) { return !bad_colours; }
     return false;
+}
+
+// THE SCRY RULE AS A PRUNE (USER 2026-10-18): "No greedy in the search doesn't meant the heuristics in
+// the provider cannot prune the tree. They can and should." Before this, every land-drop scry offered
+// the rule's answer FIRST and the opposite as a second, searched candidate (MTG_SCRY_WIDTH 2). On the
+// USER's references the search's only gains from that branch were CLAIRVOYANT -- it kept lands the rule
+// bottoms because it could see where the Crackle sat in the library (seeds 7, 10, 15: with the width
+// pinned to 1 the search plays the USER's game turn for turn). A firm verdict removes the branch, the
+// same one-option prune the reveal chain already carries (ScryChainSingleCandidate). Human play is
+// unaffected: the verdict only filters the SEARCH's candidate list (TopDispositionCandidates).
+int GaladrielProvider::ScryVerdict(const GameState& s, const Card& card) const
+{
+    static const bool on = EnvOn("MTG_GALADRIEL_SCRY_PRUNE", true);
+    if (!GaladrielScryOn() || !heurarm::Flag(heurarm::GALADRIEL_SCRY_PRUNE, on)) { return -1; }
+    return ScryKeepOnTop(s, card) ? 1 : 0;
 }
 
 bool GaladrielProvider::ScryChainSingleCandidate(const GameState& s) const

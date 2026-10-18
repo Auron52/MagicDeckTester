@@ -3000,6 +3000,9 @@ public:
     // with every other k still enumerated (ScryChainCandidates). Behind MTG_GALADRIEL_SCRY (default
     // ON; =0 -> the Generic rule). See the .cpp for the rule.
     bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
+    // ...and a FIRM verdict on every land-drop scry, so the search does not branch on it
+    // (MTG_GALADRIEL_SCRY_PRUNE, default ON; USER 2026-10-18). See the .cpp.
+    int ScryVerdict(const GameState& s, const Card& card) const override;
     // The USER's chain rule is a one-option prune of the reveal chain (MTG_GALADRIEL_CHAIN_PRUNE).
     bool ScryChainSingleCandidate(const GameState& s) const override;
     // The USER's turn order (2026-10-17): "the typical order should have Galadriel before lands and

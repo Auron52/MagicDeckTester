@@ -485,3 +485,26 @@ TEST_CASE("Galadriel scry with no Galadriel anywhere: keep only Galadriel (USER)
     CHECK_FALSE(KeepsGal(s, "Sol Ring"));
     CHECK_FALSE(KeepsGal(s, kSkerry));
 }
+
+TEST_CASE("Galadriel scry rule is a FIRM verdict: a land-drop scry offers the search ONE candidate (USER)")
+{
+    // USER 2026-10-18: "No greedy in the search doesn't meant the heuristics in the provider cannot prune
+    // the tree. They can and should." The seed 14 reference state: Galadriel + Crackle in hand, G/U out.
+    EnsureCardsLoadedGal();
+    static const GaladrielProvider gp;
+    GameState s = FreshGal();
+    s.m_provider = &gp;
+    s.turn_number = 3;
+    PutGal(s, "Temple of Epiphany", 1);
+    PutGal(s, kTemple, 2);
+    PutGal(s, "Zhalfirin Void", 3);
+    HandGal(s, kGaladriel, 4);
+    HandGal(s, kCrackle, 5);
+    auto one = [](const std::string& n) { Card c = DefGal(n).card; c.m_number = 99; return std::vector<Card>{ c }; };
+    const auto keep = TopDispositionCandidates(s, one("Temple of Plenty"), LookKind::Scry);
+    REQUIRE(keep.size() == 1);
+    CHECK(keep[0].top_order.size() == 1);                  // kept on top
+    const auto toss = TopDispositionCandidates(s, one("Sol Ring"), LookKind::Scry);
+    REQUIRE(toss.size() == 1);
+    CHECK(toss[0].top_order.empty());                      // bottomed
+}
