@@ -31,15 +31,15 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
-## RESUME STATE (2026-10-18 ~11:00 UTC)
+## RESUME STATE (2026-10-18 ~12:35 UTC)
 **PUSH HOLD (USER, 2026-10-18 ~10:10 UTC): do NOT push until ~16:10 UTC ("hold off on pushing until maybe 6 hours from now"). Local commits only.**
 **USER NOTE (2026-10-18 ~10:50 UTC):** *"We may need to work more on heuristics for this deck next week.
 Ponder, Preordain and Brainstorm are especially troublesome in terms of potential branches."* -> the
 cantrip-branching census goes in `docs/design/niv-cantrip-branching.md` (from the perf agent's report),
 as next week's starting point.
 Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
-- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP. The LIFO draw loop is COMMITTED (0d0892e19; 1491
-  unit, 229 scenarios). Uncommitted (keep uncommitted): the suite rows in `test/regression_cases.sh` +
+- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP. The LIFO draw loop is COMMITTED (0d0892e19); the
+  payment agent's P1/P2 fast-forwarded on top (de36ef8ae), rebuilt: 1495/1495 unit, 229/229 scenarios. Uncommitted (keep uncommitted): the suite rows in `test/regression_cases.sh` +
   `test/suite_cost.json` (niv 124,304 ms/game). ab2 DONE (LIFO: outcomes identical to ab1's niv-aura arm,
   see the Brainstorm/Aura section).
 - `niv` = branch `niv-analysis` (behind niv-aura; ff to niv-aura once Stage 4 is done). Its build is the
@@ -48,7 +48,7 @@ Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
 - `niv-perf`: PERF AGENT running (goal: the 3x rule; leads = per-unit cost explosions: d3 b10 s3007 gi4
   1,507 s / 1.64M units, s2018 gi16 347 s / 246k units, s2029 gi27; d5 b20 s3007 gi4 >20 min). Told NOT
   to touch the draw loop or the payment code.
-- `niv-pay`: PAYMENT AGENT running (sweep defects P1 PP_FLOAT_NZ with a Servant float, P2 ramp-filter
+- `niv-pay`: PAYMENT AGENT DONE (integrated, see "Payment holes P1/P2 fixed") (sweep defects P1 PP_FLOAT_NZ with a Servant float, P2 ramp-filter
   scarcity; acceptance seeds s71004/s71011/s71014 where Claude beat the AI).
 - `niv-bs` (done, integrated; the A/B base), `niv-base` (origin src), `niv-core`/`-remand`/`-mana`/`-d0`.
 Running: gi73 d3 b0 on niv-bs vs niv-aura (`build/scratch/niv-aura/ab/gi73_b0_*.txt`, 1.5h+), Stage 4.
@@ -199,6 +199,35 @@ commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
   d5 4.633; only the completion order of the `[win]` lines differs). The loop fix only changes
   near-empty-library kills, which these 210 games never reach.
 
+### Payment holes P1/P2 fixed (2026-10-18 ~11:10, the niv-pay agent; `d9e002b8e`, `de36ef8ae`)
+- **P1 `MTG_PREPAY_FLOAT_POOL`** (default ON). `PP_FLOAT_NZ` existed only because the pre-load
+  overwrote `floating_mana` (`f154d64b1`); both apply worlds crack SacForMana before the prepay, so every
+  Servant line fell to the per-cast greedy. The joint solve now STARTS from a plain float (WUBRG/{C}; a
+  wild or snow float still declines) and the pre-load is built from its output; the Servant's
+  haste-tagged {C} stays {C}. The two split-bill fallbacks are skipped with a counted float.
+- **P2 `MTG_RAMP_FEED_ROUTE`** (default ON). In the shared per-cast payer (`TapForCostShared`): when a
+  cheap precheck passes (casts still owed, an untapped ramp filter, the payment could tap every
+  feeder), the greedy is trialled on a scratch board; if it strands the filter and the rest of the line
+  becomes unpayable, a second trial routes the last feeder through the filter and is taken only if the
+  rest of the line then pays (one backtracker solve). Mana payment is the standing exemption; executor
+  and rollout share the payer (lockstep). Also live in human play (the viewer's plan menus lose these
+  drops).
+- Tests: 4 new unit cases (`test_niv_payment_holes.cpp`; each lever =0 reproduces the drop), 1495/1495,
+  scenarios 229/229, the 600-reference `viewer_protocol_check --strict` identical old vs new.
+- **Held-out A/B** (profile loaded; control = niv-aura `f05550dc7` src): d3 b10 x100 (s75000) 4.740 ->
+  **4.660** (9 faster / 1 slower); d5 b20 x40 (s76000) 4.625 -> **4.600** (2 / 1). Both slower games
+  recover at `--budget-ms 0` (d5 gi21 s76021: T4 = control; d3 gi77 s75077: T5 = control). CPU +4.7%
+  (ramp-route trials ran 4.2M times over 140 games, fired 0.5M).
+- Acceptance seeds (d5 b20): **s71004 T5 -> T4** (Claude's exact line); s71011 T4 only at b2000 in both
+  binaries (budget, not a hole); s71014 stays T5 at b20/b200/b2000 -- its T4 plan is offered undropped in
+  both binaries once Claude's T1-T3 are replayed; the AI loses it at T1 (Spirebluff Canal instead of
+  Saprazzan Skerry), a SEARCH question (Q13).
+- Other decks that can move (attribute in the tiers): float lever -- Dragonstorm (Lotus Bloom),
+  BreachingDragonstorm (Dwarven Ruins, Svyelunite Temple), Mirrorwing's mint-prefix prepay, any re-solve
+  starting with leftover float; ramp route -- treasure_hunt, Hinata2, BreachingDragonstorm, Bruna. The
+  agent's quick probe (d0 x300, d3 x40 per deck, fresh seeds): breaching/dragonstorm identical, th/bruna
+  digests moved with equal averages, hinata d0 1 faster, no slower games.
+
 ### Stage 5j — the 3x cost rule: FAIL (2026-10-18 ~09:45)
 `suite_gate.py --measure decks/NivMizzetCombo` on the niv-aura tree (`d09f881e7` src), the rows of
 `logs/add_niv_rows.py` in place (uncommitted): **124,303.95 ms/game** at the worst searched case
@@ -223,7 +252,7 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
 ## Claude-play sweep
 - commit: `d09f881e7` (niv-aura; workflow `wf_64ca898c-6fa`, Opus players + an Opus skeptic per flag)
 - seeds: 71000-71015 games: 16 (claude-play varies by SEED; AI benchmark = one pooled batch, d5 b20)
-- flags: 5 unresolved
+- flags: 5 unresolved at the sweep; 2 since fixed (P1/P2), 3 deferred (low/cosmetic, the user's sign-off)
 - Win turns: AI 7xT4 / 9xT5. Claude = AI on 12, FASTER on 3 (s71004, s71011, s71014: T4 vs T5),
   slower on 1 (s71006). s71004 / s71014 used exactly the payment shapes of P1/P2 below (a Servant-
   hasted Niv + Curiosity; a filter-fed Parun) -> acceptance checks for the payment fix; s71011's player
@@ -234,10 +263,10 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
     with 18. Now an explicit LIFO trigger stack (RunDrawPingStack).
   - FIXED -- the Brainstorm put-back chooser was still ASKED after lethal in human play (s71003).
   - FIXED -- the dig decision's note said "hand index"; the reply indexes `examined` (s71010).
-  - UNRESOLVED (agent on `niv-pay`) P1 -- a floated sac-for-mana (Generator Servant) makes
+  - FIXED (`d9e002b8e`, MTG_PREPAY_FLOAT_POOL) P1 -- a floated sac-for-mana (Generator Servant) makes
     BatchPrepayMainCasts decline (PP_FLOAT_NZ), and the per-cast payer then strands a later cast:
     "hasty Niv + Curiosity on Niv" unreachable at any budget (s71009, s71013).
-  - UNRESOLVED (agent on `niv-pay`) P2 -- the payer's scarcity pass never routes a generic through a
+  - FIXED (`de36ef8ae`, MTG_RAMP_FEED_ROUTE) P2 -- the payer's scarcity pass never routes a generic through a
     ramp filter: Ferrous Lake land + Izzet Signet + a second spell unreachable (s71005).
   - UNRESOLVED, deferred (low) -- an emptied depletion land (Skerry / Needle) is sacrificed at the end
     of the plan / at SBA, not inside its mana ability; visible mid-plan (s71001, s71002). It could
@@ -308,5 +337,16 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
   activation / trigger, esp. into an empty hand or in a fallback main, could not be cast that
   phase) are fixed for EVERY deck (`c52ed5c9d`), not just Niv. Expected to move Bruna, Snow and
   EldraziDisplacerFlicker play; measured as a play change.
+
+- **Q12 (the two payment levers -- adoption is the user's).** `MTG_PREPAY_FLOAT_POOL` and
+  `MTG_RAMP_FEED_ROUTE` ship DEFAULT ON (=0 restores each). Points to decide: (a) the ramp route also
+  changes HUMAN play / the viewer's plan menus (the reference sweep did not move; autonomous-only is the
+  alternative); (b) +4.7% CPU on a deck already over the 3x rule; (c) a scoring-vs-play gap it WIDENS:
+  breakpoint continuations are paid one cast at a time in both worlds, while the search's scoring
+  prepays continuation candidates -- it did for empty-float starts, now also for float starts. TAKEN:
+  ON pending the user.
+- **Q13 (s71014: a T1 land-order miss).** Claude's T4 kill (Ferrous Lake, Parun, crack the Servant)
+  needs Saprazzan Skerry on T1; the AI plays Spirebluff Canal and is T5 at b20/b200/b2000. A search
+  question (land choice), not payment -- open, to look at with next week's cantrip/heuristic work.
 
 ## Approved deferrals
