@@ -48,6 +48,18 @@
    "shortfalls": [],
    "src": "3225d4c5718515353f1386d98dcc12f1d9a8fb53"
   },
+  "colossus_hammer": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 3.2667,
+   "max_turns": 8,
+   "n": 15,
+   "policy": "committed value_play",
+   "search": 3.2,
+   "short": 0,
+   "shortfalls": [],
+   "src": "25e162c27c51e9cd6ad748cda76e1005964b8b9b"
+  },
   "creature_giving": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
