@@ -1,0 +1,318 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1, "karoo_float": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 36, "name": "Plains" }, { "num": 53, "name": "Steelshaper's Gift" }, { "num": 31, "name": "Open the Armory" }, { "num": 46, "name": "Sigarda's Aid" }, { "num": 37, "name": "Plains" }, { "num": 34, "name": "Path to Exile" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Colossus Hammer" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sigarda's Aid", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Steelshaper's Gift → Loxodon Warhammer", "land": "Plains", "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Loxodon Warhammer" }] },
+    { "index": 4, "summary": "land=Plains; cast: Sigarda's Aid", "land": "Plains", "casts": ["Sigarda's Aid"], "actions": [{ "card": "Sigarda's Aid" }] },
+    { "index": 5, "summary": "land=Plains; cast: Colossus Hammer", "land": "Plains", "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 6, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Plains; cast: Path to Exile", "land": "Plains", "casts": ["Path to Exile"], "actions": [{ "card": "Path to Exile" }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 3,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Loxodon Warhammer" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 36, "is_land": true, "taps": "W" }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 31, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Colossus Hammer, Steelshaper's Gift → Dragonfire Blade", "land": "Plains", "casts": ["Colossus Hammer", "Steelshaper's Gift"], "cast_order_canonical": ["Colossus Hammer", "Steelshaper's Gift"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Steelshaper's Gift", "tutor_target": "Dragonfire Blade" }] },
+    { "index": 4, "summary": "land=Plains; cast: Steelshaper's Gift → Dragonfire Blade", "land": "Plains", "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Dragonfire Blade" }] },
+    { "index": 8, "summary": "land=Plains; cast: Open the Armory → Dragonfire Blade", "land": "Plains", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Dragonfire Blade" }] },
+    { "index": 12, "summary": "land=Plains; cast: Path to Exile, Steelshaper's Gift → Dragonfire Blade", "land": "Plains", "casts": ["Path to Exile", "Steelshaper's Gift"], "cast_order_canonical": ["Path to Exile", "Steelshaper's Gift"], "actions": [{ "card": "Path to Exile" }, { "card": "Steelshaper's Gift", "tutor_target": "Dragonfire Blade" }] },
+    { "index": 16, "summary": "land=Plains; cast: Colossus Hammer", "land": "Plains", "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 17, "summary": "land=Plains; cast: Colossus Hammer, Path to Exile", "land": "Plains", "casts": ["Colossus Hammer", "Path to Exile"], "cast_order_canonical": ["Colossus Hammer", "Path to Exile"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Path to Exile" }] },
+    { "index": 18, "summary": "land=none; cast: Steelshaper's Gift → Dragonfire Blade", "land": null, "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Dragonfire Blade" }] },
+    { "index": 22, "summary": "land=none; cast: Colossus Hammer", "land": null, "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 23, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 24, "summary": "land=Plains; cast: Path to Exile", "land": "Plains", "casts": ["Path to Exile"], "actions": [{ "card": "Path to Exile" }] },
+    { "index": 25, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=none; cast: Path to Exile", "land": null, "casts": ["Path to Exile"], "actions": [{ "card": "Path to Exile" }] }
+  ],
+  "plans_hidden": 15,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 5,
+  "type": "tutor_etb",
+  "source": "Open the Armory",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Dragonfire Blade" }, { "index": 1, "name": "Lizard Blades" }, { "index": 2, "name": "Loxodon Warhammer" }, { "index": 3, "name": "Colossus Hammer" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 2, "source": "Open the Armory (searched)", "cards": [{ "name": "Colossus Hammer", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 5, "cast_order": ["*", "Kor Duelist", "Colossus Hammer"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Kor Duelist" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 37, "is_land": true, "taps": "W" }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 17, "name": "Kor Duelist", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Kor Duelist, Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Kor Duelist", "Steelshaper's Gift"], "cast_order_canonical": ["Kor Duelist", "Steelshaper's Gift"], "actions": [{ "card": "Kor Duelist" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 4, "summary": "land=none; cast: Colossus Hammer, Kor Duelist", "land": null, "casts": ["Colossus Hammer", "Kor Duelist"], "cast_order_canonical": ["Colossus Hammer", "Kor Duelist"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Kor Duelist" }] },
+    { "index": 5, "summary": "land=none; cast: Kor Duelist, Colossus Hammer", "land": null, "casts": ["Kor Duelist", "Colossus Hammer"], "cast_order_canonical": ["Kor Duelist", "Colossus Hammer"], "actions": [{ "card": "Kor Duelist" }, { "card": "Colossus Hammer" }] },
+    { "index": 6, "summary": "land=none; cast: Kor Duelist", "land": null, "casts": ["Kor Duelist"], "actions": [{ "card": "Kor Duelist" }] },
+    { "index": 7, "summary": "land=none; cast: Kor Duelist, Path to Exile", "land": null, "casts": ["Kor Duelist", "Path to Exile"], "cast_order_canonical": ["Kor Duelist", "Path to Exile"], "actions": [{ "card": "Kor Duelist" }, { "card": "Path to Exile" }] },
+    { "index": 8, "summary": "land=none; cast: Path to Exile, Kor Duelist", "land": null, "casts": ["Path to Exile", "Kor Duelist"], "cast_order_canonical": ["Path to Exile", "Kor Duelist"], "actions": [{ "card": "Path to Exile" }, { "card": "Kor Duelist" }] },
+    { "index": 9, "summary": "land=none; cast: Colossus Hammer, Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Colossus Hammer", "Steelshaper's Gift"], "cast_order_canonical": ["Colossus Hammer", "Steelshaper's Gift"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 13, "summary": "land=none; cast: Colossus Hammer, Colossus Hammer", "land": null, "casts": ["Colossus Hammer", "Colossus Hammer"], "cast_order_canonical": ["Colossus Hammer", "Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Colossus Hammer" }] },
+    { "index": 14, "summary": "land=none; cast: Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 18, "summary": "land=none; cast: Path to Exile, Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Path to Exile", "Steelshaper's Gift"], "cast_order_canonical": ["Path to Exile", "Steelshaper's Gift"], "actions": [{ "card": "Path to Exile" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 22, "summary": "land=none; cast: Colossus Hammer", "land": null, "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 23, "summary": "land=none; cast: Colossus Hammer, Path to Exile", "land": null, "casts": ["Colossus Hammer", "Path to Exile"], "cast_order_canonical": ["Colossus Hammer", "Path to Exile"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Path to Exile" }] },
+    { "index": 24, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=none; cast: Path to Exile", "land": null, "casts": ["Path to Exile"], "actions": [{ "card": "Path to Exile" }] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "attach_host",
+  "source": "Colossus Hammer",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Colossus Hammer", "idx": 5, "num": 5, "is_equip": true, "is_land": false }, { "name": "Kor Duelist", "idx": 4, "num": 17, "is_land": false }, { "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "perm_index": 4, "name": "Kor Duelist", "label": "Kor Duelist" }],
+  "soulbond": false,
+  "note": "reply an option index -- the creature to attach the put Equipment to, or -1 to leave it unattached. Default = the AI's pick (best attacker)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "Sigarda's Aid: attach Colossus Hammer -> Kor Duelist" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Colossus Hammer", "idx": 5, "num": 5, "is_equip": true, "attached_to": 17, "is_land": false }, { "name": "Kor Duelist", "idx": 4, "num": 17, "is_land": false }, { "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Colossus Hammer", "idx": 5, "num": 5, "is_equip": true, "attached_to": 17, "is_land": false }, { "name": "Kor Duelist", "idx": 4, "num": 17, "is_land": false }, { "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "tapped": true, "is_land": true }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 46, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Clifftop Retreat" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Colossus Hammer", "idx": 5, "num": 5, "is_equip": true, "attached_to": 17, "is_land": false }, { "name": "Kor Duelist", "idx": 4, "num": 17, "is_land": false }, { "name": "Plains", "idx": 1, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 37, "is_land": true, "taps": "W" }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 4, "name": "Clifftop Retreat", "cost": "", "mv": 0, "kind": "land" }, { "num": 6, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Clifftop Retreat; cast: Raubahn, Bull of Ala Mhigo, Steelshaper's Gift → Lizard Blades", "land": "Clifftop Retreat", "casts": ["Raubahn, Bull of Ala Mhigo", "Steelshaper's Gift"], "cast_order_canonical": ["Raubahn, Bull of Ala Mhigo", "Steelshaper's Gift"], "actions": [{ "card": "Raubahn, Bull of Ala Mhigo" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 4, "summary": "land=Clifftop Retreat; cast: Colossus Hammer, Raubahn, Bull of Ala Mhigo", "land": "Clifftop Retreat", "casts": ["Colossus Hammer", "Raubahn, Bull of Ala Mhigo"], "cast_order_canonical": ["Colossus Hammer", "Raubahn, Bull of Ala Mhigo"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Raubahn, Bull of Ala Mhigo" }] },
+    { "index": 5, "summary": "land=Clifftop Retreat; cast: Raubahn, Bull of Ala Mhigo, Colossus Hammer", "land": "Clifftop Retreat", "casts": ["Raubahn, Bull of Ala Mhigo", "Colossus Hammer"], "cast_order_canonical": ["Raubahn, Bull of Ala Mhigo", "Colossus Hammer"], "actions": [{ "card": "Raubahn, Bull of Ala Mhigo" }, { "card": "Colossus Hammer" }] },
+    { "index": 6, "summary": "land=Clifftop Retreat; cast: Raubahn, Bull of Ala Mhigo", "land": "Clifftop Retreat", "casts": ["Raubahn, Bull of Ala Mhigo"], "actions": [{ "card": "Raubahn, Bull of Ala Mhigo" }] },
+    { "index": 7, "summary": "land=Clifftop Retreat; cast: Path to Exile, Raubahn, Bull of Ala Mhigo", "land": "Clifftop Retreat", "casts": ["Path to Exile", "Raubahn, Bull of Ala Mhigo"], "cast_order_canonical": ["Path to Exile", "Raubahn, Bull of Ala Mhigo"], "actions": [{ "card": "Path to Exile" }, { "card": "Raubahn, Bull of Ala Mhigo" }] },
+    { "index": 8, "summary": "land=Clifftop Retreat; cast: Raubahn, Bull of Ala Mhigo, Path to Exile", "land": "Clifftop Retreat", "casts": ["Raubahn, Bull of Ala Mhigo", "Path to Exile"], "cast_order_canonical": ["Raubahn, Bull of Ala Mhigo", "Path to Exile"], "actions": [{ "card": "Raubahn, Bull of Ala Mhigo" }, { "card": "Path to Exile" }] },
+    { "index": 9, "summary": "land=Clifftop Retreat; cast: Colossus Hammer, Steelshaper's Gift → Lizard Blades", "land": "Clifftop Retreat", "casts": ["Colossus Hammer", "Steelshaper's Gift"], "cast_order_canonical": ["Colossus Hammer", "Steelshaper's Gift"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 13, "summary": "land=Clifftop Retreat; cast: Colossus Hammer, Path to Exile, Steelshaper's Gift → Lizard Blades", "land": "Clifftop Retreat", "casts": ["Colossus Hammer", "Path to Exile", "Steelshaper's Gift"], "cast_order_canonical": ["Colossus Hammer", "Path to Exile", "Steelshaper's Gift"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Path to Exile" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 14, "summary": "land=Clifftop Retreat; cast: Colossus Hammer, Steelshaper's Gift → Lizard Blades, Path to Exile", "land": "Clifftop Retreat", "casts": ["Colossus Hammer", "Steelshaper's Gift", "Path to Exile"], "cast_order_canonical": ["Colossus Hammer", "Steelshaper's Gift", "Path to Exile"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }, { "card": "Path to Exile" }] },
+    { "index": 15, "summary": "land=Clifftop Retreat; cast: Path to Exile, Colossus Hammer, Steelshaper's Gift → Lizard Blades", "land": "Clifftop Retreat", "casts": ["Path to Exile", "Colossus Hammer", "Steelshaper's Gift"], "cast_order_canonical": ["Path to Exile", "Colossus Hammer", "Steelshaper's Gift"], "actions": [{ "card": "Path to Exile" }, { "card": "Colossus Hammer" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 16, "summary": "land=Clifftop Retreat; cast: Steelshaper's Gift → Lizard Blades, Path to Exile, Colossus Hammer", "land": "Clifftop Retreat", "casts": ["Steelshaper's Gift", "Path to Exile", "Colossus Hammer"], "cast_order_canonical": ["Steelshaper's Gift", "Path to Exile", "Colossus Hammer"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }, { "card": "Path to Exile" }, { "card": "Colossus Hammer" }] },
+    { "index": 29, "summary": "land=none; cast: Colossus Hammer, Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Colossus Hammer", "Steelshaper's Gift"], "cast_order_canonical": ["Colossus Hammer", "Steelshaper's Gift"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 33, "summary": "land=Clifftop Retreat; cast: Steelshaper's Gift → Lizard Blades", "land": "Clifftop Retreat", "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 37, "summary": "land=Clifftop Retreat; cast: Path to Exile, Steelshaper's Gift → Lizard Blades", "land": "Clifftop Retreat", "casts": ["Path to Exile", "Steelshaper's Gift"], "cast_order_canonical": ["Path to Exile", "Steelshaper's Gift"], "actions": [{ "card": "Path to Exile" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 38, "summary": "land=Clifftop Retreat; cast: Steelshaper's Gift → Lizard Blades, Path to Exile", "land": "Clifftop Retreat", "casts": ["Steelshaper's Gift", "Path to Exile"], "cast_order_canonical": ["Steelshaper's Gift", "Path to Exile"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }, { "card": "Path to Exile" }] },
+    { "index": 45, "summary": "land=Clifftop Retreat; cast: Loxodon Warhammer", "land": "Clifftop Retreat", "casts": ["Loxodon Warhammer"], "actions": [{ "card": "Loxodon Warhammer" }] },
+    { "index": 46, "summary": "land=Clifftop Retreat; cast: Colossus Hammer", "land": "Clifftop Retreat", "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 47, "summary": "land=Clifftop Retreat; cast: Colossus Hammer, Path to Exile", "land": "Clifftop Retreat", "casts": ["Colossus Hammer", "Path to Exile"], "cast_order_canonical": ["Colossus Hammer", "Path to Exile"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Path to Exile" }] },
+    { "index": 48, "summary": "land=Clifftop Retreat; cast: Path to Exile, Colossus Hammer", "land": "Clifftop Retreat", "casts": ["Path to Exile", "Colossus Hammer"], "cast_order_canonical": ["Path to Exile", "Colossus Hammer"], "actions": [{ "card": "Path to Exile" }, { "card": "Colossus Hammer" }] },
+    { "index": 49, "summary": "land=none; cast: Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 53, "summary": "land=none; cast: Path to Exile, Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Path to Exile", "Steelshaper's Gift"], "cast_order_canonical": ["Path to Exile", "Steelshaper's Gift"], "actions": [{ "card": "Path to Exile" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 54, "summary": "land=none; cast: Steelshaper's Gift → Lizard Blades, Path to Exile", "land": null, "casts": ["Steelshaper's Gift", "Path to Exile"], "cast_order_canonical": ["Steelshaper's Gift", "Path to Exile"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }, { "card": "Path to Exile" }] },
+    { "index": 61, "summary": "land=none; cast: Colossus Hammer", "land": null, "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 62, "summary": "land=none; cast: Colossus Hammer, Path to Exile", "land": null, "casts": ["Colossus Hammer", "Path to Exile"], "cast_order_canonical": ["Colossus Hammer", "Path to Exile"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Path to Exile" }] },
+    { "index": 63, "summary": "land=none; cast: Path to Exile, Colossus Hammer", "land": null, "casts": ["Path to Exile", "Colossus Hammer"], "cast_order_canonical": ["Path to Exile", "Colossus Hammer"], "actions": [{ "card": "Path to Exile" }, { "card": "Colossus Hammer" }] },
+    { "index": 64, "summary": "land=Clifftop Retreat; cast: Path to Exile", "land": "Clifftop Retreat", "casts": ["Path to Exile"], "actions": [{ "card": "Path to Exile" }] },
+    { "index": 65, "summary": "land=none; cast: Path to Exile", "land": null, "casts": ["Path to Exile"], "actions": [{ "card": "Path to Exile" }] },
+    { "index": 66, "summary": "land=Clifftop Retreat; cast: (nothing)", "land": "Clifftop Retreat", "casts": [], "actions": [] },
+    { "index": 67, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 39,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "type": "attach_host",
+  "source": "Colossus Hammer",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 6, "num": 4, "is_land": true, "taps": "RW" }, { "name": "Colossus Hammer", "idx": 5, "num": 5, "is_equip": true, "attached_to": 17, "is_land": false }, { "name": "Colossus Hammer", "idx": 7, "num": 6, "is_equip": true, "is_land": false }, { "name": "Kor Duelist", "idx": 4, "num": 17, "is_land": false }, { "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "is_land": true, "taps": "W" }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "perm_index": 4, "name": "Kor Duelist", "label": "Kor Duelist" }],
+  "soulbond": false,
+  "note": "reply an option index -- the creature to attach the put Equipment to, or -1 to leave it unattached. Default = the AI's pick (best attacker)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "Sigarda's Aid: attach Colossus Hammer -> Kor Duelist" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 6, "num": 4, "is_land": true, "taps": "RW" }, { "name": "Colossus Hammer", "idx": 5, "num": 5, "is_equip": true, "attached_to": 17, "is_land": false }, { "name": "Colossus Hammer", "idx": 7, "num": 6, "is_equip": true, "attached_to": 17, "is_land": false }, { "name": "Kor Duelist", "idx": 4, "num": 17, "is_land": false }, { "name": "Plains", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 37, "is_land": true, "taps": "W" }, { "name": "Sigarda's Aid", "idx": 2, "num": 46, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Loxodon Warhammer", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Path to Exile", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 45, "name": "Raubahn, Bull of Ala Mhigo", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Open the Armory"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Raubahn, Bull of Ala Mhigo", "land": null, "casts": ["Raubahn, Bull of Ala Mhigo"], "actions": [{ "card": "Raubahn, Bull of Ala Mhigo" }] },
+    { "index": 1, "summary": "land=none; cast: Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 5, "summary": "land=none; cast: Path to Exile, Steelshaper's Gift → Lizard Blades", "land": null, "casts": ["Path to Exile", "Steelshaper's Gift"], "cast_order_canonical": ["Path to Exile", "Steelshaper's Gift"], "actions": [{ "card": "Path to Exile" }, { "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 6, "summary": "land=none; cast: Steelshaper's Gift → Lizard Blades, Path to Exile", "land": null, "casts": ["Steelshaper's Gift", "Path to Exile"], "cast_order_canonical": ["Steelshaper's Gift", "Path to Exile"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }, { "card": "Path to Exile" }] },
+    { "index": 13, "summary": "land=none; cast: Path to Exile", "land": null, "casts": ["Path to Exile"], "actions": [{ "card": "Path to Exile" }] }
+  ],
+  "plans_hidden": 9,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Kor Duelist (42) — 42 to opponent (20→-22)" }
+  ]
+}
