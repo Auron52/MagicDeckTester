@@ -26762,13 +26762,25 @@ static int OptimisticTurnMana(const GameState& state)
     //     any colour: net MINUS TWO. Crediting it as growth is backwards -- a line containing it needs
     //     two MORE mana, not fewer.
     // `from_hand` is what separates the two; every other term is zone-independent.
-    auto budget_can_grow = [](const CardDefinition& d, bool from_hand)
+    // A DISCARD-cost sac outlet (Falkenrath Pit Fighter, "{1}{R}, Discard a card, Sacrifice a Vampire:
+    // Draw two cards") is NOT growth (MTG_VAMP_OUTLET_NOT_GROWTH, DEFAULT ON; =0 -> the old blanket
+    // test). The blanket `sac_creature_outlet` term exists for Skirk Prospector, which makes MANA off
+    // the battlefield; a draw outlet adds none to THIS enumeration -- its activation runs in the
+    // trailing pass AFTER the plan's casts, and a card it draws is cast only through the draw's
+    // hand-entry breakpoint, i.e. a NEW enumeration with its own ceiling. Before this, one Pit Fighter
+    // on the battlefield or in hand disarmed the whole ceiling for Vampires (the emission prune, Markov
+    // Baron's convoke arms and the madness gate all read it). docs/design/vampires-search-cost.md.
+    const bool outlet_not_growth = heurarm::Flag(heurarm::VAMP_OUTLET_NOT_GROWTH,
+                                                 []{ static const bool v = EnvOn("MTG_VAMP_OUTLET_NOT_GROWTH", true); return v; }());
+    auto budget_can_grow = [outlet_not_growth](const CardDefinition& d, bool from_hand)
     {
         if (from_hand && d.params.mana_rock
             && ManaProducedPerTap(d) > d.card.m_mana_cost.ManaValue())
         { return true; }
+        const bool growth_outlet = d.params.sac_creature_outlet
+            && !(outlet_not_growth && IsDiscardSacOutlet(d.params) && !IsSacManaOutlet(d.params));
         return d.params.ritual_floating_mana > 0
-            || d.params.sac_creature_outlet   || d.params.hinata_cost_reducer
+            || growth_outlet                  || d.params.hinata_cost_reducer
             || d.params.affinity_for_subtype  || !d.params.reduces_spell_color.empty()
             || !d.params.reduces_spell_subtype.empty()
             || d.params.alt_lifegain_cost > 0 || !d.params.alt_cost_requires_subtype.empty()
@@ -28740,19 +28752,48 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
     }
     int dflt = -1;
     if (!opts.empty()) { dflt = ResolveProvider(state).MadnessCastDefault(state, me, *d, opts, w); }
+    // THE MADNESS COLOUR FOLD (MTG_VAMP_MADNESS_COLOR_FOLD, DEFAULT ON; =0 -> the total-mana gate above
+    // only). IDENTITY FOLD: a cast option is pinned by (cost index, arm) and ResolvePendingMadness resolves
+    // a pin whose option the trigger cannot pay as the DECLINE -- so a cast variant no line this turn can
+    // fund in COLOUR is the decline variant twice. The gate above is mana VALUE only (madness_mv rides
+    // a.cost as generic, so the subset walk's colour check never sees the madness pips either): with a
+    // lone Swamp it emitted "discard Falkenrath Gorger, cast it for {R}" beside the decline at every node
+    // (seed 13180132 T8: 16 of 83 plans). The test is on the turn's OPTIMISTIC pool -- AvailableManaPool
+    // (every untapped source, Unclaimed Territory / Voldaren Estate as any colour for a creature spell)
+    // plus whatever the ceiling credits beyond it (the land drop, Treasures, Lotus) as WILD -- against the
+    // outlet's own cost plus the option's reduced cost, so it can only drop an option that is unpayable on
+    // every plan. Skipped with no ceiling (a growth source: the bound is unknown). The provider's default
+    // is still computed over the UNFILTERED list, and an unpayable default is replaced by the decline in
+    // the front slot: the rollout leaf's front variant then resolves exactly as before (that pick was a
+    // decline either way). docs/design/vampires-search-cost.md.
+    std::vector<char> colour_dead(opts.size(), 0);
+    {
+        static const bool s_env = EnvOn("MTG_VAMP_MADNESS_COLOR_FOLD", true);
+        if (budget != kNoManaCeiling && heurarm::Flag(heurarm::VAMP_MADNESS_COLOR_FOLD, s_env))
+        {
+            ManaPool opt = AvailableManaPool(state);
+            opt.AddPool(state.floating_mana);   // may double-count (AvailableManaPool can hold it): optimistic
+            if (budget > opt.Total()) { opt.wild += budget - opt.Total(); }
+            for (std::size_t k = 0; k < opts.size(); ++k)
+            {
+                if (!opt.CanPay(AddManaCosts(opts[k].reduced, outlet_cost))) { colour_dead[k] = 1; }
+            }
+        }
+    }
     auto var_of = [](const MadnessOption& o)
     {
         return MadnessVariant{ static_cast<std::int8_t>(o.cost_idx + 1), o.arm,
                                static_cast<std::int8_t>(std::min(127, o.reduced.ManaValue())) };
     };
-    if (dflt >= 0 && dflt < static_cast<int>(opts.size())) { fan.push_back(var_of(opts[static_cast<std::size_t>(dflt)])); }
+    if (dflt >= 0 && dflt < static_cast<int>(opts.size()) && !colour_dead[static_cast<std::size_t>(dflt)])
+    { fan.push_back(var_of(opts[static_cast<std::size_t>(dflt)])); }
     fan.push_back(MadnessVariant{});   // decline
     // A ROLLOUT LEAF is estimating, not deciding (the phyrexian / creature-convoke precedent): beyond the
     // horizon the permitted playout policy is the provider's default, so only the FRONT variant (its
     // pick) is emitted there. The searched collect and the executor keep the whole fan.
     if (!(g_search_candidate_enum || g_condemn_root_turn < 0)) { fan.resize(1); return fan; }
     for (int k = 0; k < static_cast<int>(opts.size()); ++k)
-    { if (k != dflt) { fan.push_back(var_of(opts[static_cast<std::size_t>(k)])); } }
+    { if (k != dflt && !colour_dead[static_cast<std::size_t>(k)]) { fan.push_back(var_of(opts[static_cast<std::size_t>(k)])); } }
     g_axis_madness_vars.fetch_add(static_cast<long long>(fan.size()), std::memory_order_relaxed);
     return fan;
 }
