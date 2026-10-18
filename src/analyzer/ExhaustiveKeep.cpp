@@ -26,6 +26,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "EquivalenceDiscovery.h"
@@ -420,7 +421,12 @@ struct SizeTable
 
 // Best (HAND-m)-subcomposition value of hand `h` for pd (1=play, 0=draw): enumerate the
 // subcompositions bounded by the hand and take the min over those present in the size-(HAND-m) table.
-double KeepVal(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd)
+// `vf(m, idx, pd, &v)` supplies a cell's value (false => treat the cell as absent). The plain
+// overloads below pass the tables' own V, so they are the SAME arithmetic as before; the generator's
+// speculative sub-wave planner passes a snapshot instead (see sub_plan in RunExhaustiveKeep).
+template <class VF>
+double KeepValWith(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd,
+                   const VF& vf)
 {
     std::vector<std::vector<int>> subs;
     std::vector<int> cur(K, 0);
@@ -428,8 +434,24 @@ double KeepVal(const std::vector<SizeTable>& tables, int K, const std::vector<in
     double best = 1e9;
     const SizeTable& t = tables[m];                  // tables[HAND - (HAND-m)] -- the size-(HAND-m) table
     for (const std::vector<int>& s : subs)
-    { auto it = t.index.find(s); if (it != t.index.end()) { best = std::min(best, t.V[it->second][pd]); } }
+    {
+        auto it = t.index.find(s);
+        if (it == t.index.end()) { continue; }
+        double v;
+        if (vf(m, it->second, pd, &v)) { best = std::min(best, v); }
+    }
     return best;
+}
+
+struct TableV
+{
+    const std::vector<SizeTable>& tables;
+    bool operator()(int m, int idx, int pd, double* v) const { *v = tables[m].V[idx][pd]; return true; }
+};
+
+double KeepVal(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd)
+{
+    return KeepValWith(tables, K, h, m, pd, TableV{ tables });
 }
 
 // The cell index in tables[m] that ATTAINS KeepVal -- the argmin subcomposition. Its noise is what
@@ -469,18 +491,30 @@ std::vector<double> HandWeights(const std::vector<SizeTable>& tables, const std:
 // Backward induction: Dopt[m] = expected win-turn of the OPTIMAL keep policy at mull level m.
 // Dopt[max_mull] is the forced keep (no mulligan left); below it each hand takes the better of keeping
 // (KeepVal) and mulliganing (Dopt[m+1]), weighted by its draw probability.
-std::vector<double> ComputeDopt(const std::vector<SizeTable>& tables, int K,
-                                const std::vector<double>& P, int max_mull, int pd)
+// `cancel` (optional): polled every 4096 hands; when it reads true the result is partial and the
+// caller must discard it (only the speculative planner passes one).
+template <class VF>
+std::vector<double> ComputeDoptWith(const std::vector<SizeTable>& tables, int K,
+                                    const std::vector<double>& P, int max_mull, int pd, const VF& vf,
+                                    const std::atomic<bool>* cancel = nullptr)
 {
     const SizeTable& H7 = tables[0];
     const int M = max_mull;
     std::vector<double> Dopt(M + 1, 0.0);
+    auto stop = [&](std::size_t i) { return cancel != nullptr && (i & 4095) == 0 && cancel->load(); };
     for (std::size_t i = 0; i < H7.comps.size(); ++i)
-    { Dopt[M] += P[i] * KeepVal(tables, K, H7.comps[i], M, pd); }
+    { if (stop(i)) { return Dopt; } Dopt[M] += P[i] * KeepValWith(tables, K, H7.comps[i], M, pd, vf); }
     for (int m = M - 1; m >= 0; --m)
         for (std::size_t i = 0; i < H7.comps.size(); ++i)
-        { Dopt[m] += P[i] * std::min(KeepVal(tables, K, H7.comps[i], m, pd), Dopt[m + 1]); }
+        { if (stop(i)) { return Dopt; }
+          Dopt[m] += P[i] * std::min(KeepValWith(tables, K, H7.comps[i], m, pd, vf), Dopt[m + 1]); }
     return Dopt;
+}
+
+std::vector<double> ComputeDopt(const std::vector<SizeTable>& tables, int K,
+                                const std::vector<double>& P, int max_mull, int pd)
+{
+    return ComputeDoptWith(tables, K, P, max_mull, pd, TableV{ tables });
 }
 
 // ---- Offline bottoming bias correction: SHRINKAGE ONLY. The GATE is permanently closed. ---------
@@ -2798,11 +2832,70 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return wt;
     };
 
-    // One sub-table rollout plus its measured cost (`us` feeds cell_us, which orders later waves
-    // slowest-first; never a result).
+    // ---- SPECULATIVE SUB-ROLLOUT MEMO (MTG_KEEP_SUB_SPEC, see sub_spec_step in the pool) ----------
+    // A sub-table rollout is a pure function of (seed_base, r, w, pd) -- the same property the size-7
+    // PRECOMPUTE memo rests on, and the one RolloutKeepWinTurn's per-game cache clear guarantees -- so
+    // a value rolled early by a speculative task is bit-identical to the value the real batch would
+    // roll. Keyed by (w, pd, r); sharded so the per-rollout lookup never serialises the workers.
+    // state 1 = requested (a kind -2 task is queued), 3 = being rolled by a kind -2 task, 2 = value held.
+    // A consumer that finds state 1 ERASES the entry and rolls the value itself (the queued speculative
+    // task then sees it gone and skips the roll); one that finds state 3 WAITS for it -- it would take at
+    // least as long to roll it again -- and then takes it; one that finds state 2 takes it and erases it.
+    struct SubMemoEnt   { double v; long long us; char state; };
+    struct SubMemoShard { std::mutex mx; std::condition_variable cv; std::unordered_map<std::uint64_t, SubMemoEnt> m; };
+    static constexpr std::size_t kSubMemoShards = 64;
+    std::array<SubMemoShard, kSubMemoShards> sub_memo;
+    bool sub_spec_on = false;                         // decided at pool start (see the pool)
+    const bool sub_spec_verify = EnvOn("MTG_KEEP_SUB_SPEC_VERIFY");
+    auto sub_key = [](int w, int pd, long long r) -> std::uint64_t
+    { return (static_cast<std::uint64_t>(w) << 24) | (static_cast<std::uint64_t>(pd) << 23)
+           | static_cast<std::uint64_t>(r); };
+    auto memo_shard = [&](std::uint64_t key) -> SubMemoShard&
+    { return sub_memo[static_cast<std::size_t>((key * 0x9E3779B97F4A7C15ULL) >> 58)]; };
+    // One sub-table rollout, served from the speculative memo when a value is parked there. `us` gets
+    // the rollout's measured cost (the ROLL's, even when the value came from the memo) because it feeds
+    // cell_us, which orders later waves slowest-first: a memo hit must not make a heavy cell look cheap.
     auto sub_rollout = [&](AIEngine& ai, int w, int pd, long long r, std::vector<char>* hit,
                            long long* us) -> double
     {
+        if (sub_spec_on && hit == nullptr)
+        {
+            const std::uint64_t key = sub_key(w, pd, r);
+            SubMemoShard& sh = memo_shard(key);
+            bool got = false; double v = 0.0; long long vus = 0;
+            {
+                std::unique_lock<std::mutex> lk(sh.mx);
+                auto it = sh.m.find(key);
+                if (it != sh.m.end() && it->second.state == 3)
+                {
+                    sh.cv.wait(lk, [&]{ auto j = sh.m.find(key); return j == sh.m.end() || j->second.state != 3; });
+                    it = sh.m.find(key);
+                }
+                if (it != sh.m.end())
+                {
+                    if (it->second.state == 2) { got = true; v = it->second.v; vus = it->second.us; }
+                    sh.m.erase(it);   // consumed (or claimed back from a not-yet-run speculation)
+                }
+            }
+            if (got)
+            {
+                gen_prog.sspec_hit.fetch_add(1, std::memory_order_relaxed);
+                if (sub_spec_verify)   // MTG_KEEP_SUB_SPEC_VERIFY: prove the purity claim on THIS run
+                {
+                    const double live = run_one(ai, w, pd, r, nullptr);
+                    if (!(live == v || (std::isnan(live) && std::isnan(v))))
+                    {
+                        gen_prog.sspec_bad.fetch_add(1, std::memory_order_relaxed);
+                        std::cerr << "[keepgen] SUB-SPEC MISMATCH w=" << w << " pd=" << pd << " r=" << r
+                                  << ": memo=" << v << " live=" << live << " -- run_one is NOT pure in"
+                                     " (seed_base, r, w, pd); the speculative memo is unsound\n" << std::flush;
+                        v = live;
+                    }
+                }
+                *us = vus;
+                return v;
+            }
+        }
         const auto t0 = std::chrono::steady_clock::now();
         const double wt = run_one(ai, w, pd, r, hit);
         *us = static_cast<long long>(std::chrono::duration<double, std::micro>(
@@ -3323,18 +3416,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // cannot drift apart.
     const SizeTable& H7 = tables[0];
     const std::vector<double> P = HandWeights(tables, count, static_cast<int>(deck.mainboard.size()));
-    // Shrunk stderr of the mean for the STOP gate: pull the cell's sample variance toward the table's
-    // pooled variance `vg` with se_prior pseudo-observations, so a low-R cell's spuriously-small sample
-    // variance can't fake confidence (see MTG_KEEP_SE_PRIOR).
-    auto gate_se = [&](const SizeTable& t, int i, int pd, double vg) -> double
-    {
-        const long long c = t.cnt[i][pd];
-        if (c < 1) { return 0.0; }
-        const double mean = t.V[i][pd];
-        const double vc   = c > 1 ? std::max(0.0, t.sumsq[i][pd] / c - mean * mean) : vg;
-        const double vs   = (c * vc + cfg.se_prior * vg) / (c + cfg.se_prior);
-        return std::sqrt(vs / c);
-    };
+    // (Shrunk stderr of the mean for the STOP gate -- the cell's sample variance pulled toward the
+    // table's pooled variance `vg` with se_prior pseudo-observations, so a low-R cell's spuriously-small
+    // sample variance can't fake confidence (see MTG_KEEP_SE_PRIOR) -- lives in sub_mark_core as `gse`,
+    // over an accessor, so the real wave and the speculative planner share one formula.)
 
     // Adaptive schedule (influence-driven) -- the ONLY schedule. Sample EVERY cell to the floor r0, then
     // add rollouts only to cells that could still change a keep decision or bias the threshold, until
@@ -4358,27 +4443,52 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // wave size is the only number that says what a looser gate would buy, and it was previously
     // observable only by running the gen to this point. A dry run is pure computation over the tables
     // (no rollouts), so the diagnostic is nearly free.
-    auto compute_sub_wave_tasks_at = [&](std::vector<Task>* out, double eps) -> long long
+    // ---- The MARKING CORE, generic over WHERE the cell values come from -------------------------------
+    // `A` answers V / cnt / sumsq / start / present for (table m, cell i, pd). The REAL wave passes the
+    // tables themselves (start == cnt, every cell present) -- character for character the arithmetic
+    // this lambda always ran, so the real wave is unchanged. The SPECULATIVE planner (sub_plan, in the
+    // pool) passes a private SNAPSHOT, which is what makes speculation structurally unable to write
+    // committed state: it never holds a reference to anything it could mutate. `start` is the count a
+    // new batch would start from (the snapshot's projected count, past any batch still in flight);
+    // `present` lets a snapshot leave out a cell whose first batch has not committed yet (its V is not
+    // a measurement, so it must not win an argmin). `cancel` (optional) aborts a speculative plan when
+    // the real wave needs the planner; the caller then discards the partial result.
+    auto sub_mark_core = [&](const auto& A, const std::array<std::vector<double>, 2>& Dopt, double eps,
+                             std::vector<Task>* out, bool count_refined,
+                             const std::vector<std::vector<long long>>& cost,
+                             const std::atomic<bool>* cancel) -> long long
     {
         if (out != nullptr) { out->clear(); }
         const double SQRT2 = 1.4142135623730951;
-        const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
         std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });
         for (int H = HAND - 1; H >= min_size; --H)   // skip size-7: vg[0] is unused in sub_only and reading it races the pool
         {
-            const SizeTable& t = tables[HAND - H]; std::array<long long, 2> ng = { 0, 0 };
-            for (std::size_t i = 0; i < t.comps.size(); ++i)
+            const int ti = HAND - H;
+            const std::size_t nt = tables[ti].comps.size(); std::array<long long, 2> ng = { 0, 0 };
+            for (std::size_t i = 0; i < nt; ++i)
                 for (int pd = 0; pd < 2; ++pd)
-                { const long long c = t.cnt[i][pd];
-                  if (c > 1) { const double mn = t.V[i][pd];
-                               vg[HAND - H][pd] += std::max(0.0, t.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
-            for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[HAND - H][pd] /= ng[pd]; } }
+                { const long long c = A.cnt(ti, i, pd);
+                  if (c > 1) { const double mn = A.V(ti, i, pd);
+                               vg[ti][pd] += std::max(0.0, A.sumsq(ti, i, pd) / c - mn * mn); ++ng[pd]; } }
+            for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[ti][pd] /= ng[pd]; } }
         }
+        // gate_se, over the accessor (the same shrunk-stderr formula, term for term).
+        auto gse = [&](int ti, int i, int pd, double vgv) -> double
+        {
+            const long long c = A.cnt(ti, static_cast<std::size_t>(i), pd);
+            if (c < 1) { return 0.0; }
+            const double mean = A.V(ti, static_cast<std::size_t>(i), pd);
+            const double vc   = c > 1 ? std::max(0.0, A.sumsq(ti, static_cast<std::size_t>(i), pd) / c - mean * mean) : vgv;
+            const double vs   = (c * vc + cfg.se_prior * vgv) / (c + cfg.se_prior);
+            return std::sqrt(vs / c);
+        };
         std::set<std::array<int, 3>> mark;
         std::vector<std::vector<int>> subs;
         std::vector<int> cur(K, 0);
         for (int pd = 0; pd < 2; ++pd)
             for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            {
+                if (cancel != nullptr && (i & 1023) == 0 && cancel->load()) { return -1; }
                 for (int m = 1; m <= cfg.max_mull; ++m)
                 {
                     // One enumeration of the hand's (HAND-m)-subcompositions serves both the argmin and
@@ -4392,8 +4502,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         auto it = t.index.find(s);
                         if (it == t.index.end()) { continue; }
+                        if (!A.present(m, static_cast<std::size_t>(it->second), pd)) { continue; }
                         cand.push_back(it->second);
-                        if (t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; }
+                        const double v = A.V(m, static_cast<std::size_t>(it->second), pd);
+                        if (v < best) { best = v; arg = it->second; }
                     }
                     if (arg < 0) { continue; }
                     // A hand settled as a confident MULLIGAN at this level never reads its sub-cells
@@ -4401,16 +4513,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // The terminal level is a forced keep and is always needed.
                     if (m != cfg.max_mull)
                     {
-                        const double kv  = t.V[arg][pd];
+                        const double kv  = A.V(m, static_cast<std::size_t>(arg), pd);
                         const double thr = Dopt[pd][m + 1];
-                        const double se  = gate_se(t, arg, pd, vg[m][pd]);
+                        const double se  = gse(m, arg, pd, vg[m][pd]);
                         const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
                                                      : (kv == thr ? 0.5 : 0.0);
                         const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
                                                   && (kv - thr > 0.0) && (flip <= eps);
                         if (confident_mull) { continue; }
                     }
-                    if (!pc.resolved[m][arg][pd] && t.cnt[arg][pd] < r_max) { mark.insert({ m, arg, pd }); }
+                    if (!pc.resolved[m][arg][pd] && A.start(m, static_cast<std::size_t>(arg), pd) < r_max)
+                    { mark.insert({ m, arg, pd }); }
                     // RACE THE CONTENDERS (2026-09-16). Marking only the current argmin is the
                     // "winner's-curse-of-omission" the adaptive_bottom note above warns about, and it is
                     // exactly what broke FiveColour's bottoming: a candidate whose two floor rollouts came
@@ -4435,29 +4548,32 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // is what turns that filter from an exclusion of the unlucky into a guard against
                     // the merely unsampled. Cost: more sub-cell rollouts on decks with near-tie removals
                     // (the decks where they matter); decisive candidates still stop at the floor.
-                    const double se_a = gate_se(t, arg, pd, vg[m][pd]);
+                    const double se_a = gse(m, arg, pd, vg[m][pd]);
                     for (const int c : cand)
                     {
-                        if (c == arg || pc.resolved[m][c][pd] || t.cnt[c][pd] >= r_max) { continue; }
-                        const double d    = t.V[c][pd] - t.V[arg][pd];          // >= 0: arg is the argmin
-                        const double se_c = gate_se(t, c, pd, vg[m][pd]);
+                        if (c == arg || pc.resolved[m][c][pd]
+                            || A.start(m, static_cast<std::size_t>(c), pd) >= r_max) { continue; }
+                        const double d    = A.V(m, static_cast<std::size_t>(c), pd)
+                                          - A.V(m, static_cast<std::size_t>(arg), pd);   // >= 0: arg is the argmin
+                        const double se_c = gse(m, c, pd, vg[m][pd]);
                         const double sd   = std::sqrt(se_a * se_a + se_c * se_c);
                         const double p_better = (sd > 0) ? 0.5 * std::erfc(d / (sd * SQRT2))
                                                          : (d == 0.0 ? 0.5 : 0.0);
                         if (p_better > eps) { mark.insert({ m, c, pd }); }
                     }
                 }
+            }
         long long marked = 0;
         for (const std::array<int, 3>& mk : mark)
         {
             const int H_idx = mk[0], arg = mk[1], pd = mk[2];
-            const long long c   = tables[H_idx].cnt[arg][pd];
+            const long long c   = A.start(H_idx, static_cast<std::size_t>(arg), pd);
             const long long add = std::min<long long>(cfg.r_batch, r_max - c);
             if (add <= 0) { continue; }
             ++marked;
             if (out == nullptr) { continue; }          // dry run: count only, mutate nothing
             out->push_back({ work_idx[H_idx][arg], pd, c, c + add });
-            refined_rollouts += add;
+            if (count_refined) { refined_rollouts += add; }
         }
         // SLOWEST FIRST. Every wave ends in a hard barrier (sub_wave_pending == 0 gates the next one),
         // so the wave's makespan is set by when its most expensive task STARTS. Dispatching in
@@ -4468,16 +4584,31 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         if (out != nullptr && EnvOn("MTG_KEEP_SLOWEST_FIRST", true))
         {
             std::stable_sort(out->begin(), out->end(), [&](const Task& a, const Task& b) {
-                const auto cost = [&](const Task& t) -> long long {
+                const auto costof = [&](const Task& t) -> long long {
                     const int H = work[t.w].H, ix = work[t.w].idx;
                     const std::size_t k = static_cast<std::size_t>(ix) * 2 + static_cast<std::size_t>(t.pd);
-                    const std::vector<long long>& v = cell_us[HAND - H];
+                    const std::vector<long long>& v = cost[HAND - H];
                     return k < v.size() ? v[k] : 0;
                 };
-                return cost(a) > cost(b);
+                return costof(a) > costof(b);
             });
         }
         return marked;
+    };
+    // The tables themselves, as a marking accessor (the real wave and the flip_eps dry runs).
+    struct RealAcc
+    {
+        const std::vector<SizeTable>& tb;
+        double    V(int ti, std::size_t i, int pd) const     { return tb[ti].V[i][pd]; }
+        long long cnt(int ti, std::size_t i, int pd) const   { return tb[ti].cnt[i][pd]; }
+        double    sumsq(int ti, std::size_t i, int pd) const { return tb[ti].sumsq[i][pd]; }
+        long long start(int ti, std::size_t i, int pd) const { return tb[ti].cnt[i][pd]; }
+        bool      present(int, std::size_t, int) const       { return true; }
+    };
+    auto compute_sub_wave_tasks_at = [&](std::vector<Task>* out, double eps) -> long long
+    {
+        const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
+        return sub_mark_core(RealAcc{ tables }, Dopt, eps, out, /*count_refined=*/true, cell_us, nullptr);
     };
     // The real caller keeps its original name and signature, so every call site below is unchanged.
     auto compute_sub_wave_tasks = [&](std::vector<Task>& out)
@@ -4697,6 +4828,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             std::mutex             mx;        // guards `touched` (execution-trace only)
             std::set<int>          touched;
         };
+        // Every sub-table batch commit bumps this; the speculative planner replans only when it moved.
+        std::atomic<long long> sub_commit_seq{ 0 };
+        // SPECULATIVE NEXT SUB-WAVE (MTG_KEEP_SUB_SPEC, default ON; =0 restores the barrier-only path).
+        // See the planner below. Off where the memo could not be byte-exact: under a per-rollout WALL
+        // (abandonment is wall-clock, so a speculative roll could be abandoned where the real one would
+        // not -- and that knob must stay 0 for anything that ships anyway) and under the execution trace
+        // (the memo carries the value, not the touched-card set). Only meaningful with an adaptive
+        // sub-refine (no waves => nothing to speculate).
+        sub_spec_on = EnvOn("MTG_KEEP_SUB_SPEC", true) && sub_refine_on && rollout_wall_sec <= 0.0 && !trace_on;
 
         // The freeze test for level c given that cell's prefix (sum_c/sumsq_c at exactly c samples). Shared
         // by the inline fold (refine) and the reconcile replay (post-speculation) so the two can never drift.
@@ -4748,6 +4888,33 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     task = q.front(); q.pop_front();
                 }
                 q_nf.notify_one();
+                // A speculative task (kind < 0) left in the queue when the pool shuts down has no reader.
+                if (task[0] < 0 && !producing.load()) { continue; }
+                if (task[0] == -2)  // SPECULATIVE SUB ROLLOUT: fill the sub memo, commit NOTHING. See sub_memo.
+                {
+                    const int sw = static_cast<int>(task[1]), spd = static_cast<int>(task[2]);
+                    const long long sr = task[3];
+                    const std::uint64_t key = sub_key(sw, spd, sr);
+                    SubMemoShard& sh = memo_shard(key);
+                    {
+                        std::lock_guard<std::mutex> lk(sh.mx);
+                        auto it = sh.m.find(key);
+                        if (it == sh.m.end() || it->second.state != 1) { continue; }   // claimed back / held already
+                        it->second.state = 3;                                         // rolling: a consumer waits
+                    }
+                    gen_prog.sspec_rolled.fetch_add(1, std::memory_order_relaxed);
+                    const auto t0 = std::chrono::steady_clock::now();
+                    const double v = run_one(ai, sw, spd, sr, nullptr);
+                    const long long us = static_cast<long long>(std::chrono::duration<double, std::micro>(
+                                             std::chrono::steady_clock::now() - t0).count());
+                    {
+                        std::lock_guard<std::mutex> lk(sh.mx);
+                        auto it = sh.m.find(key);
+                        if (it != sh.m.end() && it->second.state == 3) { it->second = SubMemoEnt{ v, us, 2 }; }
+                    }   // (gone => the sub-refine converged and the memo was retired: drop ours)
+                    sh.cv.notify_all();
+                    continue;
+                }
                 if (task[0] == 3)   // SPLIT sub-batch rollout: one slot of a SplitBatch; last one commits
                 {
                     SplitBatch* sb = reinterpret_cast<SplitBatch*>(static_cast<std::intptr_t>(task[1]));
@@ -4769,6 +4936,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     commit_sub(sb->w, sb->pd, sb->vals, bus, sb->touched);
                     const int kind = sb->kind;
                     delete sb;
+                    sub_commit_seq.fetch_add(1, std::memory_order_relaxed);
                     if (kind == 1) { sub_remaining.fetch_sub(1);
                                      gen_prog.sub_done.fetch_add(1, std::memory_order_relaxed); }
                     else           { sub_wave_pending.fetch_sub(1); }
@@ -4797,6 +4965,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (task[0] >= 1)   // sub-table batch (fusion filler): whole batch on one thread, self-committing
                 {
                     run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), task[3], task[4]);
+                    sub_commit_seq.fetch_add(1, std::memory_order_relaxed);
                     // sub_done counts KIND-1 only, because sub_total is fused_sub_tasks.size() and those are
                     // the only kind-1 tasks. Counting kind-2 (adaptive sub-refine wave) batches here as well
                     // drives sub= past 100% on any recipe with adaptive bottoming -- i.e. exactly `fast`.
@@ -5148,11 +5317,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // one high. It was invisible because the generator check only exercised the (now deleted) uniform
         // path, where these tasks never went through the pool.
         std::size_t sub_cursor = 0;
+        // PROJECTED sub-cell counts, producer-owned: the count each sub cell-side will hold once every batch
+        // fed for it so far commits. The speculative planner starts its tasks HERE, past whatever is still in
+        // flight, so it never re-requests a rollout a real batch already owns.
+        std::vector<std::vector<long long>> sub_proj(tables.size());
+        for (std::size_t ti = 1; ti < tables.size(); ++ti)
+        {
+            sub_proj[ti].assign(tables[ti].comps.size() * 2, 0);
+            for (std::size_t si = 0; si < tables[ti].comps.size(); ++si)
+                for (int sp = 0; sp < 2; ++sp) { sub_proj[ti][si * 2 + sp] = tables[ti].cnt[si][sp]; }
+        }
         // Enqueue ONE sub-table batch [r0,r1) of cell w: as a single serial task (kind 1/2), or -- split --
         // as one kind-3 task per rollout sharing a SplitBatch whose last finisher commits it. Either way it
         // is ONE batch to the counters (in_flight, sub_remaining / sub_wave_pending, fed_total).
         auto push_sub_batch = [&](int kind, int w, int pd, long long br0, long long br1)
         {
+            {
+                const int Hw = work[w].H, iw = work[w].idx;
+                long long& pj = sub_proj[HAND - Hw][static_cast<std::size_t>(iw) * 2 + pd];
+                pj = std::max(pj, br1);
+            }
             if (split_on && br1 - br0 >= 2)
             {
                 SplitBatch* sb = new SplitBatch();
@@ -5192,21 +5376,31 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             }
         };
 
-        // fuse_subfloor: advance the adaptive sub-refine ONE wave at a time, driven from the producer so it
-        // shares the pool with the size-7 floor (kind-2 tasks) -- byte-identical to the run_refine_waves
-        // barrier, but the size-7 floor fills cores during each wave's serial recompute/mark instead of the
-        // barrier stranding them. Only steps when the current wave has fully committed (sub_wave_pending==0),
-        // so recompute_sub/compute_sub_wave_tasks never race a kind-2 worker; size-7 workers never touch the
-        // sub-tables it reads. No-op unless fuse_subfloor.
-        auto sub_refine_step = [&]()
+        // ---- THE SUB PLANNER THREAD ---------------------------------------------------------------------
+        // SPECULATIVE wave (MTG_KEEP_SUB_SPEC, default ON): while a wave -- or the sub floor -- still has
+        // batches in flight, compute a PROVISIONAL next wave from a private snapshot of everything committed
+        // so far (in-flight cells start at their projected count; a cell whose first batch has not committed
+        // is left out of every argmin). Its rollouts are rolled into the sub memo (kind -2), so when the true
+        // wave arrives most of its rollouts are already done. The snapshot is a copy taken under acc_mtx and
+        // the planner never holds a reference to committed state it could write, so a wrong guess costs only
+        // the wasted rollouts -- never a value. The TRUE wave is still computed by the producer, from the
+        // quiescent tables, after waiting out any snapshot in progress (see sub_refine_step).
+        struct SubPlanner
         {
-            // sub_remaining==0 additionally required: the sub-table FLOOR is now fused into this same pool,
-            // so the first wave must not be computed off half-sampled sub-cells (Pass A's join used to
-            // guarantee that). Both counters at zero == "every sub-cell committed its current target".
-            if (sub_converged || sub_wave_pending.load() != 0 || sub_remaining.load() != 0) { return; }
+            std::mutex              mx;
+            std::condition_variable cv;
+            bool stop = false;
+            bool spec_req = false, spec_busy = false, spec_ready = false;
+            std::vector<std::vector<long long>> spec_proj;
+            std::vector<Task> spec_out;
+            std::atomic<bool> cancel{ false };
+            std::thread th;
+        } planner;
+        // The TRUE wave's computation -- the body sub_refine_step always ran before feeding, unchanged.
+        auto true_wave_compute = [&](std::vector<Task>& wave)
+        {
             recompute_sub();               // fold the just-finished wave's sub-cell samples into V/se
             apply_prior_override_sub();     // change-detection: restore prior V on resolved sub-cells
-            std::vector<Task> wave;
             compute_sub_wave_tasks(wave);   // next wave's argmin sub-cells (empty => converged)
             // PRICE THE GATE, every wave, read-only. The adaptive bottoming refine is the dominant
             // phase of a large generation (v3: one wave of 50,063 tasks ~= 801,000 rollouts, 17-28 h),
@@ -5215,10 +5409,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // few looser gates turns "raise flip_eps?" from a guess into a priced, user-ownable choice.
             // Pure computation over the already-folded tables: no rollouts, nothing mutated.
             // ONCE, on the first wave only. The marking pass enumerates subcompositions for every
-            // size-7 hand at every mull level and runs on the PRODUCER thread -- the same thread that
-            // feeds the size-7 pool -- so repeating it per wave would stall feeding for its duration
-            // on every wave. The first wave is also where the number is worth most: it is the largest,
-            // and it arrives early enough to act on.
+            // size-7 hand at every mull level; repeating it per wave would cost that much again every
+            // wave. The first wave is also where the number is worth most: it is the largest, and it
+            // arrives early enough to act on.
             static bool flip_swept = false;
             if (!wave.empty() && !flip_swept && EnvOn("MTG_KEEP_FLIP_SWEEP", true))
             {
@@ -5234,13 +5427,204 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                              " bottoming line -- it changes the TABLE, so it is a user ruling;"
                              " MTG_KEEP_FLIP_SWEEP=0 silences this)\n" << std::flush;
             }
+        };
+        // A SPECULATIVE plan: snapshot -> provisional wave. Returns false when cancelled.
+        struct SpecAcc
+        {
+            const std::vector<std::vector<std::array<double, 2>>>&    sV;
+            const std::vector<std::vector<std::array<double, 2>>>&    sQ;
+            const std::vector<std::vector<std::array<long long, 2>>>& sN;
+            const std::vector<std::vector<long long>>&                pj;
+            const std::vector<std::vector<char>>&                     ex;
+            double    V(int ti, std::size_t i, int pd) const     { return sV[ti][i][pd]; }
+            long long cnt(int ti, std::size_t i, int pd) const   { return sN[ti][i][pd]; }
+            double    sumsq(int ti, std::size_t i, int pd) const { return sQ[ti][i][pd]; }
+            long long start(int ti, std::size_t i, int pd) const
+            { return std::max(sN[ti][i][pd], pj[ti][i * 2 + static_cast<std::size_t>(pd)]); }
+            bool      present(int ti, std::size_t i, int pd) const { return !ex[ti][i * 2 + static_cast<std::size_t>(pd)]; }
+        };
+        auto sub_plan = [&](const std::vector<std::vector<long long>>& pj, std::vector<Task>& out) -> bool
+        {
+            const std::size_t NT = tables.size();
+            std::vector<std::vector<std::array<double, 2>>>    sV(NT), sQ(NT), sS(NT);
+            std::vector<std::vector<std::array<long long, 2>>> sN(NT);
+            std::vector<std::vector<char>>                     ex(NT);
+            std::vector<std::vector<long long>>                scost(NT);
+            {
+                std::lock_guard<std::mutex> ak(acc_mtx);   // a consistent cut of every committed batch
+                for (std::size_t ti = 1; ti < NT; ++ti)
+                {
+                    const SizeTable& t = tables[ti];
+                    sS[ti] = t.sum; sQ[ti] = t.sumsq; sN[ti] = t.cnt; sV[ti] = t.V; scost[ti] = cell_us[ti];
+                }
+            }
+            for (std::size_t ti = 1; ti < NT; ++ti)
+            {
+                ex[ti].assign(tables[ti].comps.size() * 2, 0);
+                for (std::size_t si = 0; si < tables[ti].comps.size(); ++si)
+                    for (int sp = 0; sp < 2; ++sp)
+                    {
+                        const long long c = sN[ti][si][sp];
+                        if (c > 0) { sV[ti][si][sp] = sS[ti][si][sp] / c; }   // recompute_sub's mean
+                        else if (pj[ti][si * 2 + sp] > 0) { ex[ti][si * 2 + sp] = 1; }   // first batch in flight
+                        if (pc.change_detect && pc.resolved[ti][si][sp]) { sV[ti][si][sp] = pc.pri_V[ti][si][sp]; }
+                    }
+            }
+            // m == 0 is the size-7 table itself (ComputeDopt's Dopt[0] keeps the whole hand). The snapshot
+            // holds sub-tables only; size-7 V is not written during the pool (the fold writes sum/cnt,
+            // recompute() runs after the join), so read it in place exactly as the real wave does. Dopt[0]
+            // is never consulted by the marking (it gates on Dopt[m+1], m >= 1) nor by the refs.
+            auto vf = [&](int m, int idx, int pd, double* v) -> bool
+            {
+                if (m == 0) { *v = tables[0].V[idx][pd]; return true; }
+                if (ex[m][static_cast<std::size_t>(idx) * 2 + pd]) { return false; }
+                *v = sV[m][idx][pd]; return true;
+            };
+            const std::array<std::vector<double>, 2> Dopt = {
+                ComputeDoptWith(tables, K, P, cfg.max_mull, 0, vf, &planner.cancel),
+                ComputeDoptWith(tables, K, P, cfg.max_mull, 1, vf, &planner.cancel) };
+            if (planner.cancel.load()) { return false; }
+            const long long n = sub_mark_core(SpecAcc{ sV, sQ, sN, pj, ex }, Dopt, cfg.flip_eps, &out,
+                                              /*count_refined=*/false, scost, &planner.cancel);
+            return n >= 0 && !planner.cancel.load();
+        };
+        auto planner_loop = [&]()
+        {
+            std::unique_lock<std::mutex> lk(planner.mx);
+            for (;;)
+            {
+                planner.cv.wait(lk, [&]{ return planner.stop || planner.spec_req; });
+                if (planner.stop) { break; }
+                planner.spec_req = false; planner.spec_busy = true;
+                planner.cancel.store(false);
+                std::vector<std::vector<long long>> pj = std::move(planner.spec_proj);
+                lk.unlock();
+                std::vector<Task> o;
+                const bool ok = sub_plan(pj, o);
+                lk.lock();
+                planner.spec_busy = false;
+                planner.cv.notify_all();   // a producer computing the true wave itself waits on this
+                if (ok)
+                {
+                    planner.spec_out = std::move(o); planner.spec_ready = true;
+                    gen_prog.sspec_plans.fetch_add(1, std::memory_order_relaxed);
+                    prod_cv.notify_one();
+                }
+            }
+        };
+        // Started now and stopped by this guard on EVERY exit from the pool block (normal end, the
+        // recommend stop, a throw): the thread captures this scope's locals by reference.
+        struct PlannerGuard
+        {
+            SubPlanner& p;
+            ~PlannerGuard()
+            {
+                { std::lock_guard<std::mutex> lk(p.mx); p.stop = true; p.cancel.store(true); }
+                p.cv.notify_all();
+                if (p.th.joinable()) { p.th.join(); }
+            }
+        };
+        if (sub_spec_on) { planner.th = std::thread(planner_loop); }
+        PlannerGuard planner_guard{ planner };
+
+        // Feed one computed wave (or mark the sub-refine converged when it is empty).
+        std::vector<Task> spec_list;            // the current speculative plan, fed as backfill
+        std::size_t       spec_pos = 0;         // next task of spec_list
+        long long         spec_r = -1;          // next r inside spec_list[spec_pos] (-1 = not started)
+        long long         spec_seq_planned = -1;
+        // Retire the sub speculation once the sub-tables have converged: nothing can consume it any more.
+        auto sub_spec_retire = [&]()
+        {
+            if (!sub_spec_on) { return; }
+            spec_list.clear(); spec_pos = 0; spec_r = -1;
+            for (SubMemoShard& sh : sub_memo) { std::lock_guard<std::mutex> lk(sh.mx); sh.m.clear(); }
+            std::lock_guard<std::mutex> lk(planner.mx);
+            planner.spec_ready = false; planner.spec_out.clear(); planner.cancel.store(true);
+        };
+        auto feed_wave = [&](std::vector<Task>& wave)
+        {
             if (wave.empty())
-            { sub_converged = true; gen_prog.subconv.store(1, std::memory_order_relaxed); return; }
+            { sub_converged = true; gen_prog.subconv.store(1, std::memory_order_relaxed); sub_spec_retire(); return; }
+            // A speculative plan made for THIS wave is superseded by the real one (its memo entries stay:
+            // a later wave can still consume them).
+            if (sub_spec_on)
+            {
+                spec_list.clear(); spec_pos = 0; spec_r = -1;
+                std::lock_guard<std::mutex> lk(planner.mx);
+                planner.spec_ready = false; planner.spec_out.clear();
+            }
             sub_wave_pending.store(static_cast<long long>(wave.size()));
             gen_prog.subwsz.store(static_cast<long long>(wave.size()), std::memory_order_relaxed);
             for (const Task& st : wave) { push_sub_batch(2, st.w, st.pd, st.r0, st.r1); }
             gen_prog.subwave.fetch_add(1, std::memory_order_relaxed);
             ++refine_waves;
+        };
+        // fuse_subfloor: advance the adaptive sub-refine ONE wave at a time, driven from the producer so it
+        // shares the pool with the size-7 floor (kind-2 tasks). A wave is computed only once the previous
+        // one has fully committed (sub_wave_pending==0), so recompute_sub/compute_sub_wave_tasks never race a
+        // kind-2 worker; size-7 workers never touch the sub-tables it reads. No-op unless fuse_subfloor.
+        auto sub_refine_step = [&]()
+        {
+            // sub_remaining==0 additionally required: the sub-table FLOOR is now fused into this same pool,
+            // so the first wave must not be computed off half-sampled sub-cells (Pass A's join used to
+            // guarantee that). Both counters at zero == "every sub-cell committed its current target".
+            if (sub_converged || sub_wave_pending.load() != 0 || sub_remaining.load() != 0) { return; }
+            // Computed HERE, on the producer: first make sure the planner is not mid-snapshot of the tables
+            // this is about to write (recompute_sub / apply_prior_override_sub).
+            if (sub_spec_on)
+            {
+                std::unique_lock<std::mutex> lk(planner.mx);
+                planner.spec_req = false;     // a request not yet picked up must not start mid-write
+                planner.cancel.store(true);
+                planner.cv.wait(lk, [&]{ return !planner.spec_busy; });
+            }
+            std::vector<Task> wave; true_wave_compute(wave); feed_wave(wave);
+        };
+        // SPECULATIVE sub-wave feed (see the planner). Runs only in the TAIL of a sub stage -- every real
+        // batch of the floor / current wave already enqueued, some still in flight -- which is exactly when
+        // the next wave is held back by stragglers and nothing on the critical path is left to feed.
+        // Returns the rollouts it enqueued.
+        auto sub_spec_step = [&]() -> long long
+        {
+            if (!sub_spec_on || sub_converged || !cd_classified) { return 0; }
+            if (sub_cursor < fused_sub_tasks.size()) { return 0; }                       // real floor work first
+            if (sub_wave_pending.load() == 0 && sub_remaining.load() == 0) { return 0; } // the true wave is due
+            {
+                std::lock_guard<std::mutex> lk(planner.mx);
+                if (planner.spec_ready)
+                { spec_list = std::move(planner.spec_out); spec_pos = 0; spec_r = -1; planner.spec_ready = false; }
+                const long long seq = sub_commit_seq.load();
+                if (!planner.spec_busy && !planner.spec_req
+                    && spec_pos >= spec_list.size() && seq != spec_seq_planned)
+                {
+                    planner.spec_proj = sub_proj; planner.spec_req = true; spec_seq_planned = seq;
+                    planner.cv.notify_all();
+                }
+            }
+            long long fed = 0;
+            while (spec_pos < spec_list.size() && fed < spec_chunk)
+            {
+                const Task& st = spec_list[spec_pos];
+                const int Hs = work[st.w].H, is = work[st.w].idx;
+                const long long pj = sub_proj[HAND - Hs][static_cast<std::size_t>(is) * 2 + st.pd];
+                if (spec_r < 0) { spec_r = std::max(st.r0, pj); }
+                if (spec_r < pj) { spec_r = pj; }      // a real batch has claimed these since the plan
+                if (spec_r >= st.r1) { ++spec_pos; spec_r = -1; continue; }
+                const long long r = spec_r++;
+                const std::uint64_t key = sub_key(st.w, st.pd, r);
+                {
+                    SubMemoShard& sh = memo_shard(key);
+                    std::lock_guard<std::mutex> lk(sh.mx);
+                    if (!sh.m.emplace(key, SubMemoEnt{ 0.0, 0, 1 }).second) { continue; }   // already asked
+                }
+                { std::unique_lock<std::mutex> lk(qmtx);
+                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                  q.push_back({ -2, static_cast<long long>(st.w), static_cast<long long>(st.pd), r, 0 }); }
+                q_ne.notify_one();
+                ++fed; any_fed = true;
+                gen_prog.sspec_req.fetch_add(1, std::memory_order_relaxed);
+            }
+            return fed;
         };
         for (;;)
         {
@@ -5291,6 +5675,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 // Advance the adaptive sub-refine one wave when its prior wave has committed.
                 if (cd_classified) { sub_refine_step(); }
+                // SPECULATIVE NEXT SUB-WAVE, ahead of every size-7 filler: the sub-wave chain is the
+                // critical path to refs (size-7 refine cannot start before it converges), while size-7
+                // speculation and precompute are work the refine phase would do anyway. A full chunk of
+                // sub speculation therefore takes this iteration's filler slot.
+                const long long sspec_fed = sub_spec_step();
                 // Floor pass 2 (speculation filler): while the floor phase is INCOMPLETE for ANY reason
                 // (a size-7 cell still finishing r0, sub-tables still capping, or the fused sub-refine not
                 // yet converged) -> feed already-floored size-7 cells up to r0+spec_budget so idle cores
@@ -5319,7 +5708,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // would let compute_refs fire on a half-speculated state, and its reconcile (which
                 // truncates at the first freeze hit over (r0, cnt]) would then depend on where the sweep
                 // happened to be -- a different answer per run. spec_active is the gate's interlock below.
-                if (floor_spec && !spec_saturated && (spec_active || floor_incomplete))
+                if (sspec_fed < spec_chunk && floor_spec && !spec_saturated && (spec_active || floor_incomplete))
                 {
                     spec_active = true;
                     const std::size_t NS = static_cast<std::size_t>(NC) * 2;
@@ -5363,7 +5752,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // a quarter full, so kind 0/1/2 always have room and feed_upto never queues behind a
                 // precompute. A filler that can outrun the progress step it fills for is the FiveColour
                 // failure recorded above; this one cannot, because it yields the moment real work appears.
-                if (pre_on && floor_spec && spec_saturated && floor_incomplete)
+                if (sspec_fed < spec_chunk && pre_on && floor_spec && spec_saturated && floor_incomplete)
                 {
                     const std::size_t NS2 = static_cast<std::size_t>(NC) * 2;
                     long long budget = spec_chunk;
@@ -5439,6 +5828,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     cd_classified = true;
                 }
                 if (cd_classified) { sub_refine_step(); }
+                sub_spec_step();   // a resumed sub-refine speculates exactly as a fresh one does
             }
             // Floor complete = every size-7 cell folded to >= r0 AND every sub-cap batch done AND the fused
             // sub-refine converged (Dopt reads sub-table V, so refs cannot be fixed until the sub-tables are
