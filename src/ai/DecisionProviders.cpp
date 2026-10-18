@@ -12398,7 +12398,11 @@ static int HinataFullOrderRank(const CardDefinition& def)
     if (p.cast_draw > 0)          { return pay_tie ? 20 : 21; }     // Magma Opus -- payoff + draw 2
     if (p.x_damage_multiplier > 1){ return pay_tie ? 20 : 23; }     // Crackle -- X eats all mana
     // 30+: never cast against a passive opponent. Positions exist only so the order is TOTAL.
-    if (p.goldfish_inert)                   { return 30; }
+    // REMAND (counters_target_spell_to_hand) shares the slot for the same reason, but it is NOT dead
+    // any more: it is never cast as ITS OWN action -- a remand rides the cast of the spell it targets
+    // (Action::remand_by), and that action takes the TARGET's rank (it is the target's cast). So this
+    // slot is never consulted for a real remand line and deletes nothing; it only keeps the order total.
+    if (p.goldfish_inert || p.counters_target_spell_to_hand) { return 30; }
     return 40;
 }
 
@@ -12849,6 +12853,10 @@ std::vector<int> HinataProvider::CleanupDiscardCandidates(
         kManaNeeded = 50, kSoulfireWithHinata = 60, kCantripNeeded = 70,
         kSoulfireNoHinata = 80, kSoulfireScrewed = 85, kMagmaOpus = 90,
         kExtraManaOrCantrip = 100, kExtraCrackle = 110, kAnythingElse = 120, kInert = 130 };
+    // REMAND is no longer inert -- it is castable as a rider on another spell (Action::remand_by, a
+    // two-mana "draw a card" that also re-buys the spell) -- but the USER's keep list ranks it with the
+    // dead counterspells and that ranking is a USER-owned shed preference, so it stays here unchanged
+    // (a RANKING of which card to shed, not a deleted option). Flagged for the user to revisit.
     static const char* const kInertNames[] = {
         "Distorting Wake", "Icy Blast", "Memory Lapse", "Remand" };
     auto is_cantrip = [](const std::string_view nm)

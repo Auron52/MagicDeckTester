@@ -681,7 +681,10 @@ def action_sig(a):
         ("pod_victim", 0), ("activate", False), ("verb", ""), ("sacout", False),
         ("enchant_target", ""), ("bestow", False), ("evoke", False),
         ("landsedge", 0), ("dig", False), ("blink_target_name", ""),
-        ("twobrid_colored", 0)))
+        ("twobrid_colored", 0),
+        # Remand riding this cast (Action::remand_by, 2026-10-17): "cast X" and "cast X, Remand it"
+        # are different actions. Absent = "" in every older recording, i.e. the plain cast.
+        ("remand_by", "")))
 
 
 def actions_key(p):

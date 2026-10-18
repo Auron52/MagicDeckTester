@@ -837,6 +837,15 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                  + (a.twobrid_colored > 1 ? "s" : "") + " with colour)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
+        // REMAND rider (Action::remand_by): "cast X, then Remand it" shares X's name with the plain
+        // cast of X -- the same lesson once more. Say which card answers it and what it does.
+        if (!a.remand_by.empty())
+        {
+            const CardDefinition* xd = CardDatabase::Instance().Lookup(a.card_name);
+            tag += (xd != nullptr && xd->params.cant_be_countered)
+                 ? " + " + a.remand_by.str() + " on it (can't be countered: it resolves; draw a card)"
+                 : " + " + a.remand_by.str() + " on it (back to hand; draw a card)";
+        }
         // DEVOUR count (Mycoloth, CR 702.81). Same lesson again, and it had actually GONE WRONG:
         // the solver enumerates one cast variant per k = 0..(own creatures), keyed into
         // plan_signature so they are genuinely distinct plans -- but NOTHING rendered k, so the
@@ -1545,7 +1554,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + "|" + std::to_string(a.sac_count)
                      + "|" + std::to_string(a.phyrexian_life)
                      + "|" + std::to_string(a.twobrid_colored)
-                     + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "") + ";";
+                     + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "")
+                     + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str()) + ";";
             }
             if (has_collapse && !pod_reps.insert(key).second) { hide_bundle[i] = 1; }
         }
@@ -1668,6 +1678,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                  + "|" + std::to_string(static_cast<int>(a.ability_mode))
                  + "|" + std::to_string(a.enchant_target)
                  + (a.attach_equip_id != 0 ? "|mt" + std::to_string(a.attach_equip_id) : std::string())
+                 // REMAND rider: "cast X" and "cast X, Remand it" are different payloads.
+                 + (a.remand_by.empty() ? std::string() : "|rm" + a.remand_by.str())
                  + "|" + tgt;
         };
         // The PLAN-level identity: its land, its face, and its actions' payload keys IN VECTOR
@@ -1921,6 +1933,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (!first) { os << ", "; }
                 first = false;
                 JsonStr(os, p.actions[a].card_name);
+                // REMAND rider: the plan casts the Remand too (right after X) -- the same multiset
+                // CheckLine matches a declared "cast=X;cast=Remand" line against, and what keeps a
+                // remand variant from sharing the (land, casts) key of X's plain cast.
+                if (!p.actions[a].remand_by.empty()) { os << ", "; JsonStr(os, p.actions[a].remand_by); }
             }
         }
         os << "]";
@@ -2280,6 +2296,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.twobrid_colored > 0)           { os << ", \"twobrid_colored\": " << ac.twobrid_colored; }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
+            // REMAND rider (Action::remand_by): the same bestow lesson -- "cast X" and "cast X,
+            // Remand it" share X's name and hand slot. The key names the answering card (and its
+            // slot, so the GUI can light the Remand too) for the choose dialog.
+            if (!ac.remand_by.empty())
+            {
+                os << ", \"remand_by\": "; JsonStr(os, ac.remand_by.str());
+                if (ac.remand_slot >= 0) { os << ", \"remand_slot\": " << ac.remand_slot; }
+            }
             //  * ADVENTURE (Brightcap Badger // Fungus Frolic) is the bestow lesson again, and the
             //    sharpest instance of it: the two modes share a hand slot AND a name, but unlike
             //    bestow they do not split by an `enchant` sub, so without this key the choose

@@ -2111,10 +2111,12 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Counter target spell. If that spell is countered this way, put it into its owner's hand instead of into that player's graveyard.\nDraw a card. [Goldfish-inert: the passive opponent casts no spells, so Remand has no legal target and is never cast; its 'draw a card' rider only happens on resolution. A faithful dead draw against a do-nothing opponent.]",
-   "template": "custom",
+   "oracle_text": "Counter target spell. If that spell is countered this way, put it into its owner's hand instead of into that player's graveyard.\nDraw a card. [MODELLED as a SELF-TARGETED Remand: the passive opponent never casts, so the only legal target (CR 115.1, 'target spell' is any spell) is one of YOUR OWN spells on the stack. counters_target_spell_to_hand: Remand is never offered as a cast of its own (no target, CR 601.2c); it rides the hand cast of another spell X as one combined plan action (Action::remand_by), costing X's cost plus {1}{U} (Hinata, Dawn-Crowned's per-target discount applies to Remand's one target -- discount_max_targets 1). X's cast-time effects all happen (storm, cast triggers -- e.g. Niv-Mizzet, Parun draws on BOTH casts -- prowess, Phyrexian life), then Remand is cast (its own cast triggers fire) and resolves first: X returns to its owner's hand instead of resolving, and Remand draws a card (the draw-spell path; template draw_spell, draw 1) -- whose cantrip breakpoint lets the same turn recast X. A spell that can't be countered (cant_be_countered) resolves normally after Remand draws. The search branches over every legal target. NOT modelled (disclosed gaps, docs/design/remand-self-target.md): Remand on another Remand (a chain); Remand on a free / alternative-cost / sacrifice-land cast, on a cascade or demonstrate spell, on an untap ritual, a replicate creature or a Natural Order sacrifice; a cascade/free-cast walk casting Remand on the spell that cast it. Instant timing collapses to the main phase (PROVISIONAL: with no opponent spells there is nothing to answer in combat or at end of turn).]",
+   "template": "draw_spell",
    "parameters": {
-    "goldfish_inert": true
+    "draw": 1,
+    "counters_target_spell_to_hand": true,
+    "discount_max_targets": 1
    }
   },
   {

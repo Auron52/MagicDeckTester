@@ -32613,9 +32613,39 @@ inline bool SpellCanTargetPermanent(const GameState& s, int controller, const Pe
 //   * any target / target player, and a spell with no target: always castable here (a player is always
 //     a legal target in this engine).
 // Mana value, the Irencrag budget and the MV gates are the walks' own checks, not target legality.
+// ---- REMAND (CardParams::counters_target_spell_to_hand): the halves BOTH worlds share -------------
+//
+// A Remand has exactly one legal target here -- a spell of OUR OWN on the stack (the passive opponent
+// never casts; CR 115.1 "target spell" is any spell) -- so it is never a cast of its own (CR 601.2c:
+// no target, no cast). It rides a hand cast of that spell as the Action::remand_by rider; the
+// executor (AIEngine::CastSpellFromHand) and the rollout (TurnSolver's apply_one) both resolve it
+// through CastAndResolveRemand (ManaPayment.h), which uses the helpers below.
+//
+// "Can this card be offered as its own cast at all?" -- the ONE predicate every never-castable gate
+// reads (CollectActions' hand loop, HandCardLegalToCast, DigManaWantedInHand, DropOpenLandEnablesCast),
+// so a card that can only be cast as a rider can never read as castable through a side door.
+inline bool CastableOnItsOwn(const CardDefinition& d)
+{
+    return !d.params.goldfish_inert && !d.params.counters_target_spell_to_hand;
+}
+
+// "...put it into its owner's hand instead of into that player's graveyard." The card is a NEW
+// object (CR 400.7): a staged (exiled, expiring) copy that was cast comes back a plain hand card.
+inline void ReturnCounteredSpellToHand(GameState& state, int owner, Card card)
+{
+    card.m_is_staged     = false;
+    card.m_staged_expiry = 0;
+    EnterHand(state, owner, std::move(card), HandEntryReason::Countered);
+}
+
 inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const CardDefinition& d)
 {
     const CardParams& pp = d.params;
+    // A Remand hit by a free-cast walk (cascade, Creative Technique, Breaching Dragonstorm): its only
+    // legal target would be the spell that is casting it, which no walk models as a target -- so it is
+    // not cast, exactly as an Aura with no host. [Disclosed gap: "cascade into Remand on the cascading
+    // spell" is a legal line this engine cannot express; no Remand deck runs a free-cast walk.]
+    if (pp.counters_target_spell_to_hand) { return false; }
     if (pp.is_aura) { return !LegalEnchantTargets(s, controller, pp).empty(); }
     if (pp.attach_target_equipment) { return AttachSpellCastLegal(s, controller); }
     if (RemovalSearchesForController(d))

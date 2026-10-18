@@ -1254,6 +1254,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.x_damage_multiplier       = params.value("x_damage_multiplier", 1);
     p.damage_divided            = params.value("damage_divided", false);
     p.goldfish_inert            = params.value("goldfish_inert", false);
+    p.counters_target_spell_to_hand = params.value("counters_target_spell_to_hand", false);   // Remand
+    p.cant_be_countered         = params.value("cant_be_countered", false);
     p.hinata_cost_reducer        = params.value("hinata_cost_reducer", false);
     p.discount_max_targets       = params.value("discount_max_targets", 0);
     p.discount_targets_scale_x   = params.value("discount_targets_scale_x", false);

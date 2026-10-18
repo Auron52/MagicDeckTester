@@ -8531,6 +8531,9 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 for (const ScaledCastVariant& v : prov.ScaledCastVariants(cp, def))
                 { if (v.face == a.crackle_targets) { ec = v.cost; break; } }
             }
+            // REMAND rider: the Remand is paid in X's one bill (AddRemandRiderCost; lockstep with the
+            // enumeration's combined a.cost, apply_one and CastSpellFromHand). Empty name = no-op.
+            AddRemandRiderCost(ec, cp, a.remand_by.str());
             // MTG_SPASM_UNTAP_LITERAL phase 3: same tap-ahead as the apply/executor twins, so
             // this sequential-payability answer prices the chain the way it will really be paid.
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
@@ -10548,7 +10551,7 @@ static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state,
 static bool HandCardLegalToCast(const GameState& state, const CardDefinition* d)
 {
     if (!d || d->card.IsLand())   { return false; }   // a land drop is not what the re-solve is for
-    if (d->params.goldfish_inert) { return false; }   // can never be cast at all
+    if (!CastableOnItsOwn(*d)) { return false; }   // can never be cast at all (inert / Remand: a rider only)
     // A saturated cost-reducer is castable but changes NOTHING, and this probe feeds
     // DigResolveOnlyWhenCastable -- so counting it as "castable" is what drags the dig loop
     // into a re-solve whose only move is to spend a card and its mana for no effect. Skipping
@@ -10622,7 +10625,7 @@ static bool DigManaWantedInHand(const GameState& state, const ManaCost& act_cost
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d)                       { continue; }
         if (d->card.IsLand())         { continue; }   // the drop is free; it never rivals the mana
-        if (d->params.goldfish_inert) { continue; }   // can never be cast at all
+        if (!CastableOnItsOwn(*d)) { continue; }   // can never be cast at all (inert / Remand: a rider only)
         const bool draws = d->params.etb_self_draw > 0 || d->params.cast_draw > 0;
         const bool perm  = !(d->card.IsInstant() || d->card.IsSorcery());
         if (!perm && !draws)          { continue; }   // Skred: spends mana, leaves nothing behind
@@ -11824,6 +11827,10 @@ static bool IsCreatureAuraCast(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { return false; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    // A REMANDED Aura (Action::remand_by) is countered back to hand and never attaches, so its host
+    // is a cast-legality detail, not a host choice -- none of the host machinery (the host fold, the
+    // host ranking) may drop or reorder it. A can't-be-countered one would attach; none exists.
+    if (d != nullptr && !a.remand_by.empty() && !d->params.cant_be_countered) { return false; }
     return d != nullptr && d->params.is_aura && !d->params.is_land_aura;
 }
 
@@ -13449,6 +13456,14 @@ static std::uint64_t ActionFoldSig(const Action& a)
         FoldMix(h, 0xA77Aull + static_cast<std::uint64_t>(a.attach_equip_id));
         FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.attach_equip_hand.str())));
     }
+    // REMAND rider (Action::remand_by / remand_slot): folded only when set, so every other deck's
+    // signature is byte-identical.
+    if (!a.remand_by.empty())
+    {
+        FoldMix(h, 0x52454D41ull);   // "REMA"
+        FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.remand_by.str())));
+        FoldMix(h, static_cast<std::uint64_t>(a.remand_slot));
+    }
     FoldMix(h, static_cast<std::uint64_t>(a.eval));
     FoldMix(h, static_cast<std::uint64_t>(a.direct_damage));
     FoldMix(h, a.is_noncreature ? 1u : 0u);
@@ -13507,6 +13522,10 @@ static void FinalizeFoldTags(const GameState& state, std::vector<Action>& action
         {
             if (a.kind != Action::Kind::CastFromHand) { continue; }
             if (a.hand_index < 0 || a.hand_index >= hand_n) { continue; }
+            // A REMAND variant is never a class member: it is a different action from X's plain cast
+            // (it also spends a Remand), and CollectActions pins it to the LAST copy of X so the
+            // plain casts' canonical prefix never needs its slot (see the REMAND post-pass).
+            if (!a.remand_by.empty()) { continue; }
             int& st = slot_tag[static_cast<size_t>(a.hand_index)];
             if (st < 0) { st = HandCastEquivTag(state, ap.hand[a.hand_index]); }
             a.equiv_tag = st;
@@ -13597,6 +13616,11 @@ static void FinalizeFoldTags(const GameState& state, std::vector<Action>& action
     for (const Action& a : actions)
     {
         if (s_legacy_src_cond && a.equiv_tag == 0) { continue; }   // legacy: tagged actions only
+        // A REMAND variant names X's slot but cannot collide with a canonical prefix there: it sits on
+        // the LAST copy of its name (CollectActions' REMAND post-pass), so k < n plain casts take ords
+        // 0..k-1 and leave it free, and k = n is the same card twice -- illegal with or without the
+        // fold (kDupRemand). Counting it would only switch the fold off for every remandable card.
+        if (!a.remand_by.empty()) { continue; }
         // Mirrors PlanGroupKey: anything carrying a hand_index occupies that HAND SLOT (a Vial
         // deploy as much as a cast); otherwise the source is the permanent.
         if (a.hand_index < 0 && a.sac_source_id == 0) { continue; }   // no source to collide on
@@ -13779,6 +13803,7 @@ enum : unsigned
     kDupGarth    = 1u << 4,   // two Garth activations on one Garth
     kDupBlink    = 1u << 5,   // two blink activations on one outlet
     kDupPermAbil = 1u << 6,   // two {T} ability activations on one source
+    kDupRemand   = 1u << 7,   // a remand variant paired with its own X slot / another remand
     kDupAll      = ~0u
 };
 
@@ -13794,10 +13819,10 @@ enum : unsigned
 namespace dupclause
 {
     enum : int { kSacForMana = 0, kFreeSlot, kPaidFreePair, kLoyalty, kGarth, kBlink,
-                 kPermAbility, kFoldPrefix, kPod, kCount };
+                 kPermAbility, kFoldPrefix, kPod, kRemand, kCount };
     inline constexpr const char* kNames[kCount] = {
         "sac_for_mana", "free_slot", "paid_free_pair", "loyalty", "garth", "blink",
-        "perm_ability_tap", "fold_prefix", "pod" };
+        "perm_ability_tap", "fold_prefix", "pod", "remand" };
     inline std::atomic<std::uint64_t> g_hits[kCount];
     // Gated on the same flag as the rest of the walk funnel (set by MTG_BRANCH_SHAPE or the census),
     // declared here because this predicate sits far above namespace shapestats.
@@ -14072,6 +14097,30 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
                 }
                 dupclause::Hit(dupclause::kFoldPrefix);
                 return true;   // non-canonical arrangement
+            }
+        }
+        // REMAND (Action::remand_by). Its variants live in the REMAND copy's group (PlanGroupKey), so
+        // the odometer can pair one with a cast that uses the SAME hand slot X -- X cast plainly AND
+        // remanded, or remanded by two Remand copies at once: the same physical card cast twice.
+        // Reject both. (The recast of a REMANDED X is still reachable: X is back in hand when the
+        // Remand's draw opens the breakpoint, and the continuation casts it.) And two remands of
+        // DIFFERENT targets by two copies of one Remand name are kept in ONE arrangement only --
+        // target slot order follows Remand slot order -- because the apply worlds take the Remand BY
+        // NAME, so "copy a answers X, copy b answers Y" and the swap are the same line (an identity
+        // fold of interchangeable copies, never a pick). Inert unless a remand variant exists.
+        if ((dup_clause & kDupRemand) != 0 && !cands[sel[a]].remand_by.empty())
+        {
+            const Action& ra = cands[sel[a]];
+            for (size_t b = 0; b < sel.size(); ++b)
+            {
+                if (b == a) { continue; }
+                const Action& rb = cands[sel[b]];
+                if (rb.kind == Action::Kind::CastFromHand && rb.hand_index >= 0
+                    && rb.hand_index == ra.hand_index)
+                { dupclause::Hit(dupclause::kRemand); return true; }
+                if (b > a && !rb.remand_by.empty() && rb.remand_by == ra.remand_by
+                    && ((ra.remand_slot < rb.remand_slot) != (ra.hand_index < rb.hand_index)))
+                { dupclause::Hit(dupclause::kRemand); return true; }
             }
         }
         // Birthing Pod: one activation per Pod per plan (the {T} cost).
@@ -16727,6 +16776,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         }
         if (a.free_cast)          { p.dup_source = true; }   // bank slots, and the paid/free pair
         if (a.equiv_tag != 0)     { p.dup_source = true; }   // canonical-prefix fold (see the note above)
+        if (!a.remand_by.empty()) { p.dup_source = true; }   // the remand pair (kDupRemand)
         if (a.alt_cost)           { p.alt_payload = true; }
         if (a.phyrexian_life > 0) { p.phyrexian = true; }
         if (d == nullptr) { continue; }
@@ -16770,10 +16820,11 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     if (p.dup_source)
     {
         int n_sacmana = 0, n_free = 0, n_handcast = 0, n_loyalty = 0, n_garth = 0, n_blink = 0,
-            n_permabil = 0;
+            n_permabil = 0, n_remand = 0;
         for (const Action& a : cands)
         {
             if (a.free_cast) { ++n_free; }
+            if (!a.remand_by.empty()) { ++n_remand; }
             switch (a.kind)
             {
                 case Action::Kind::SacForMana:         ++n_sacmana;  break;
@@ -16797,6 +16848,9 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         if (n_garth    >= 2) { m |= kDupGarth;    }
         if (n_blink    >= 2) { m |= kDupBlink;    }
         if (n_permabil >= 2) { m |= kDupPermAbil; }
+        // A remand variant collides with X's own cast or another remand: one variant + any second
+        // hand cast. One remand is the cheap necessary half (X's plain cast is in `cands` with it).
+        if (n_remand >= 1 && n_handcast >= 2) { m |= kDupRemand; }
         p.dup_clause = m;
         // The equiv_tag canonical-prefix clause is NOT one of these seven and has no bit: it rejects
         // on a single selected action's ord, so no population count bounds it. `dup_source` still
@@ -22892,6 +22946,10 @@ static bool CantripFirstEnabled()
 static bool IsPlainCantrip(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand) { return false; }
+    // A REMAND variant (Action::remand_by) resolves as a plain cantrip -- apply_one arms exactly
+    // the cantrip breakpoint for it (and partitions there), so every predictor of that point
+    // (PlanOpensBreakpoint's site 3, the prefix prepay, cantrip-first) must see one here too.
+    if (!a.remand_by.empty()) { return true; }
     const CardDefinition* d = a.def;
     if (d == nullptr) { return false; }
     return d->tmpl == CardTemplate::DrawSpell
@@ -23728,6 +23786,8 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         { ec.StripPhyrexianForLife(pa.phyrexian_life / 2); }
                         // Twobrid: the coloured pips replace {2} each (the variant's own bill).
                         if (pa.twobrid_colored > 0) { ec.PayTwobridWithColor(pa.twobrid_colored); }
+                        // Remand rider: the Remand is part of the same bill.
+                        AddRemandRiderCost(ec, state, pa.remand_by.str());
                     }
                     planned.generic += ec.generic; planned.white += ec.white;
                     planned.blue += ec.blue; planned.black += ec.black;
@@ -25721,7 +25781,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // have no useful target, so the deck genuinely cannot productively cast them. Never
         // offered as an action -> they sit in hand as faithful dead draws. Gated off for
         // every existing deck.
-        if (def.params.goldfish_inert) { continue; }
+        // A REMAND (counters_target_spell_to_hand) is skipped here too, but NOT because it is dead:
+        // its only legal target is one of our own spells on the stack, so it has no cast of its own
+        // (CR 601.2c) and instead rides another spell's cast -- the REMAND post-pass near the end of
+        // this function emits those combined variants (Action::remand_by).
+        if (!CastableOnItsOwn(def)) { continue; }
         // Same shape one step further: a cost-reducer whose reduction a copy already in play has
         // SATURATED is castable and legal, but resolves to no change at all -- it spends the card
         // and its mana for nothing. Never offered as an action, so it stays in hand as fodder (and
@@ -34232,6 +34296,164 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // REMAND post-pass (CardParams::counters_target_spell_to_hand; Remand -- Hinata2, Unpredictable
+    // Cyclone, NivMizzetCombo). Remand's only legal target is one of OUR OWN spells on the stack (the
+    // passive opponent never casts; CR 115.1), so it has no cast of its own (the hand loop skips it,
+    // CastableOnItsOwn) and is instead offered as a RIDER on another hand cast: "cast X, then Remand
+    // it" -- one combined Action (X's variant + Action::remand_by), costing X's bill plus the Remand's.
+    // What it buys is real: X's cast-time effects (storm, cast triggers -- Niv-Mizzet, Parun draws on
+    // both casts -- prowess, Phyrexian life, Hinata's per-target discount on the Remand itself), X back
+    // in hand, and a card. The search BRANCHES over every target (Action::remand_by never collapses a
+    // decision): the variants of one Remand copy share that copy's odometer group (PlanGroupKey keys
+    // remand_slot), so a plan spends at most one Remand per copy, and SubsetHasDuplicateSacSource's
+    // kDupRemand clause keeps the targeted X and its own plain cast from being selected together.
+    //
+    // FOLDS -- every one an IDENTITY (the outcomes are equal), none a heuristic:
+    //   * Resolution-only riders are irrelevant to a COUNTERED X (it never resolves): tutor target,
+    //     Ponder keep, devour count, a walker's loyalty pin, Theft's Equipment, the land-put credit,
+    //     the float colour. Variants of X that differ only there are one remand target.
+    //   * COPIES of X are interchangeable: the apply worlds take X and the Remand BY NAME (apply_one's
+    //     earliest-expiring rule, the executor's cast_by_name), so which hand slot the variant names is
+    //     never read at apply. One variant per (name, cost, cast mode), pinned to the LAST slot holding
+    //     it -- the slot that keeps the hand-cast fold sound: FinalizeFoldTags admits plain casts of a
+    //     copy class only as a canonical PREFIX (ords 0..k-1 = the first slots), so a remand on the
+    //     last copy never collides with a prefix it needs (k < n plain casts + the remand fit; k = n
+    //     is the same card twice and is illegal either way). Pinned to the FIRST slot it would delete
+    //     "remand one Probe, cast the other".
+    //   * What is NOT folded: different names, or one name at different cost / X / cast mode. Even
+    //     two spells with an IDENTICAL cast profile (Ponder / Preordain: {U} blue sorceries) are not
+    //     an emission-level identity: "Remand Ponder" alone equals "Remand Preordain" alone, but in
+    //     a plan that ALSO casts the other one, which spell RESOLVES differs ({R(Ponder), Preordain}
+    //     vs {R(Preordain), Ponder}) -- so dropping either variant would delete a line. Collapsing it
+    //     soundly needs a SUBSET-level canonical rule (reject R(Y) only when its profile twin X is
+    //     not cast in the same plan) -- left as an open collapse, never a width cap.
+    // A COUNTERED X keeps the variant's legality fields (enchant_target, trick_hand_target -- CR
+    // 601.2c still needs a target for an Aura or a creature spell at cast) and loses every resolution
+    // projection (direct damage, haste power, ritual float, rock mana, mint): it never resolves. A
+    // can't-be-countered X (Niv-Mizzet, Parun) DOES resolve, so its variant is a full copy plus the draw.
+    //
+    // NOT TARGETED (each a modelling gap, disclosed in docs/design/remand-self-target.md, not a prune):
+    // another Remand (a Remand chain -- legal, niche, the second would need the first on the stack as
+    // ITS target); a free / alternative-cost / sacrifice-land cast (their bills are not the plain cast
+    // payment this rider extends); a card with its own REAL-STACK cast trigger (cascade, demonstrate:
+    // the executor pushes those above X and would resolve them after the Remand, the rollout before);
+    // an untap-ritual / ETB-untap cast (the tap-ahead payment assumes the resolution happens); a
+    // Natural Order sacrifice or a replicate creature (cast-time extras paid outside the bill).
+    //
+    // DECISION-SPACE ONLY (the phyrexian precedent above): the searched collect, the executor and human
+    // play. A rollout LEAF is estimating, not deciding -- it plays Remand as it always has (never), a
+    // symmetric mild pessimism; a committed plan's remand is realised by apply_one regardless of what
+    // later leaves enumerate.
+    {
+        const bool rm_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+        std::vector<int> rm_slots;
+        if (rm_decision_space)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                const CardDefinition* rd = CardDatabase::Instance().LookupCached(ap.hand[i]);
+                if (rd != nullptr && rd->params.counters_target_spell_to_hand) { rm_slots.push_back(i); }
+            }
+        }
+        if (!rm_slots.empty())
+        {
+            auto eligible = [&](const Action& b) -> bool
+            {
+                if (b.kind != Action::Kind::CastFromHand || !b.remand_by.empty()) { return false; }
+                if (b.hand_index < 0 || b.hand_index >= n || b.def == nullptr) { return false; }
+                if (b.free_cast || b.alt_cost || b.sacrifice_land) { return false; }
+                const CardParams& bp = b.def->params;
+                if (bp.counters_target_spell_to_hand) { return false; }
+                if (bp.cascade_max_mv > 0 || bp.demonstrate) { return false; }
+                if (bp.untap_x_mana_sources || bp.etb_untap_lands > 0) { return false; }
+                if (!bp.sac_additional_creature_color.empty()) { return false; }
+                if (b.replicate_count >= 0
+                    || (b.def->card.IsCreature()
+                        && CanReplicate(*b.def, state.battlefield, state.active_player_index)))
+                { return false; }
+                return true;
+            };
+            // The fold key: everything that decides what the cast-and-counter COSTS or what it is ON
+            // THE STACK (cast mode, X), and nothing that only its resolution reads -- or, for a spell
+            // that resolves anyway, the whole action.
+            auto fold_key = [&](const Action& b) -> std::string
+            {
+                if (b.def->params.cant_be_countered)
+                { return "U" + std::to_string(ActionFoldSig(b)); }
+                return "C" + b.card_name.str() + "|" + b.cost.ToString()
+                     + "|" + std::to_string(b.chosen_x) + "|" + std::to_string(b.phyrexian_life)
+                     + "|" + std::to_string(b.twobrid_colored) + "|" + std::to_string(b.convoke_green)
+                     + "|" + std::to_string(b.convoke_other) + "|" + std::to_string(b.splice_count)
+                     + "|" + std::to_string(b.soulfire_own_targets)
+                     + "|" + std::to_string(b.crackle_targets)
+                     + (b.evoke ? "|e" : "") + (b.kicked ? "|k" : "") + (b.bestow ? "|b" : "")
+                     + (b.adventure ? "|a" : "");
+            };
+            const std::size_t base_n = actions.size();
+            std::vector<std::string> keys;
+            std::vector<std::size_t> picks;
+            for (std::size_t i = 0; i < base_n; ++i)
+            {
+                if (!eligible(actions[i])) { continue; }
+                const std::string k = fold_key(actions[i]);
+                const auto it = std::find(keys.begin(), keys.end(), k);
+                if (it == keys.end()) { keys.push_back(k); picks.push_back(i); continue; }
+                std::size_t& p = picks[static_cast<std::size_t>(it - keys.begin())];
+                if (actions[i].hand_index > actions[p].hand_index) { p = i; }   // the LAST copy
+            }
+            for (int r : rm_slots)
+            {
+                const CardDefinition* rd = CardDatabase::Instance().LookupCached(ap.hand[r]);
+                const ManaCost rc = EffectiveCost(*rd, state);
+                const int      re = EvalCard(*rd, state);
+                for (std::size_t p : picks)
+                {
+                    Action v = actions[p];               // copy BEFORE push_back (reallocation)
+                    v.remand_by   = ap.hand[r].m_name;
+                    v.remand_slot = r;
+                    AddManaCost(v.cost, rc);             // ONE bill (the splice idiom); recompute twin:
+                                                         // AddRemandRiderCost at every recompute site
+                    // The hand loop's emission prune, on the COMBINED bill: a variant whose total
+                    // exceeds the turn's optimistic mana (an upper bound, or "no ceiling" whenever
+                    // the budget could grow) can never be paid, so it never reaches a rollout --
+                    // emitting it only widens the odometer it is rejected from.
+                    if (g_emit_prune && v.cost.ManaValue() > mana_ceiling) { continue; }
+                    v.is_draw     = true;
+                    v.equiv_tag   = 0;
+                    v.equiv_ord   = 0;
+                    v.breakpoint_casts.clear();
+                    v.cont_pins.reset();
+                    if (v.def->params.cant_be_countered) { v.eval += re; actions.push_back(std::move(v)); continue; }
+                    v.eval                 = re;
+                    v.tutor_target         = InternedName();
+                    v.ponder_keep          = -1;
+                    v.devour_count         = -1;
+                    v.loyalty_ability      = -1;
+                    v.attach_equip_id      = 0;
+                    v.attach_equip_hand    = InternedName();
+                    v.attach_equip_hand_ord = 0;
+                    v.rock_mana            = ManaPool{};
+                    v.chosen_float_color   = InternedName();
+                    v.ritual_float         = 0;
+                    v.mint_gain            = 0;
+                    v.mint_hand_magnet     = false;
+                    v.mint_magnet          = false;
+                    v.direct_damage        = 0;
+                    v.haste_attack_power   = 0;
+                    v.haste_prowess        = false;
+                    v.vial_attack_power    = 0;
+                    v.cond_artifact_haste_power = 0;
+                    v.adds_durable_artifact = false;
+                    v.is_draw_until_nonland = false;
+                    v.discard_land_damage  = 0;
+                    v.max_casts_after      = -1;
+                    v.has_spectacle        = false;
+                    actions.push_back(std::move(v));
+                }
+            }
+        }
+    }
+
     // Identical creature-Aura HOSTS -> the first k of each class (MTG_AURA_HOST_FOLD; see the function).
     // Dominated haste/shroud equip moves (see DropInertHasteShroudEquips): the search's lever or the
     // greedy's by scope, never in human play or an unpruned (viewer / claude-play) enumeration, and only
@@ -34349,6 +34571,15 @@ static int PlanGroupKey(const Action& a, const std::vector<int>& multi_sac)
     static const bool s_off = EnvOn("MTG_NO_ACTIVATION_FAMILY_GROUPS");
     if (!s_off && a.free_cast)
     { return -1000000 + a.sac_source_id; }   // sac_source_id = -1000 - slot -> unique, <= -1001000
+    // REMAND variants group by the REMAND copy they spend (Action::remand_slot), not by X's slot --
+    // the free-cast bank-slot shape: one Remand copy answers at most one spell per plan, so its
+    // targets are (1 + targets) odometer states instead of one extra member in EVERY castable card's
+    // group (which multiplies the whole product). The variant and X's own plain cast now sit in
+    // different groups; SubsetHasDuplicateSacSource's kDupRemand clause rejects the pair. Not behind
+    // s_off: there is no ungrouped form of this family to measure against. Base -5000000 is clear of
+    // every other key space here (hand slots >= 0, activation families -1000 - id, the free bank
+    // -1001000 - slot, -999, sac bursts -3000000 - id).
+    if (!a.remand_by.empty() && a.remand_slot >= 0) { return -5000000 - a.remand_slot; }
     if (a.hand_index >= 0) { return a.hand_index; }
     if (!s_off && a.kind == Action::Kind::SacForMana
         && std::binary_search(multi_sac.begin(), multi_sac.end(), a.sac_source_id))
@@ -40644,6 +40875,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             {
                 bool conf =
                     (cands[j].hand_index >= 0 && cands[j].hand_index == cands[k].hand_index)
+                    // ...and two remand variants spending the same Remand copy (PlanGroupKey's group)
+                    || (cands[j].remand_slot >= 0 && cands[j].remand_slot == cands[k].remand_slot)
                     || (cands[j].kind == Action::Kind::ActivateVial
                         && cands[k].kind == Action::Kind::ActivateVial
                         && cands[j].vial_bf_index == cands[k].vial_bf_index);
@@ -41345,7 +41578,7 @@ bool TurnSolver::DropOpenLandEnablesCast(const GameState& state, const std::stri
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d && !d->card.IsLand() && !d->params.goldfish_inert) { any_nonland = true; break; }
+        if (d && !d->card.IsLand() && CastableOnItsOwn(*d)) { any_nonland = true; break; }
     }
     if (!any_nonland) { return false; }
     std::vector<std::string> tried;
@@ -42554,6 +42787,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
         // Twobrid variant (Beseech): the coloured pips replace {2} each, as enumerated.
         if (a.twobrid_colored > 0) { ec.PayTwobridWithColor(a.twobrid_colored); }
+        // Remand rider: the Remand joins X's bill, as enumerated (AddRemandRiderCost).
+        AddRemandRiderCost(ec, state, a.remand_by.str());
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
         combined.colorless += ec.colorless;
@@ -45319,6 +45554,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const int      cast_devour     = riders.devour_count;
         const int      cast_twobrid    = riders.twobrid_colored;
         const int      cast_attach     = riders.attach_equip_id;
+        // REMAND rider (Action::remand_by): the Remand that answers THIS cast. Resolved to its definition
+        // below, after the cast-legality returns, and voided there when it cannot be cast (no copy in
+        // hand, the Irencrag budget) -- then X is cast plainly, as the executor's CastSpellFromHand does.
+        const InternedName cast_remand = riders.remand_by;
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
@@ -45462,6 +45701,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             return;
         }
 
+        // REMAND: the rider is LIVE only for a plain paid hand cast with a copy of the Remand in hand
+        // and a cast left in the Irencrag budget for it (X takes one, the Remand another). Checked
+        // before any mutation; a void rider casts X plainly. Lockstep: AIEngine::CastSpellFromHand.
+        const CardDefinition* remand_def = nullptr;
+        if (!cast_remand.empty() && !from_graveyard && !alt_cost && !cascade_hit_free && !riders.free_cast
+            && state.casts_remaining_this_turn != 1)
+        {
+            const CardDefinition* rd = CardDatabase::Instance().Lookup(cast_remand.str());
+            if (rd != nullptr && rd->params.counters_target_spell_to_hand)
+            {
+                for (const Card& hc : ap.hand)
+                { if (hc.m_name == cast_remand && hc.m_number != it->m_number) { remand_def = rd; break; } }
+            }
+        }
         // Cast-time guard for a risky alt payload (Reverent Silence): the search may commit it
         // from a node whose enabler diverges away in the realized line (commit-the-line
         // non-convergence, gi=212). Re-check the gate on the CURRENT board: if no enabler
@@ -45542,6 +45795,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (const ScaledCastVariant& v : ResolveProvider(state).ScaledCastVariants(state, def))
             { if (v.face == crackle_targets) { ec = v.cost; break; } }
         }
+        // REMAND rider: the Remand is paid in X's ONE bill (the enumeration's combined a.cost; lockstep
+        // with CastSpellFromHand, SubsetPayableSequential and BatchPrepayMainCasts). Paying the two
+        // spells' costs in one tap pass is exact: nothing between X's cast and the Remand's adds mana.
+        if (remand_def != nullptr) { AddRemandRiderCost(ec, state, cast_remand.str()); }
         if (!free_cast && !alt_cost)
         {
             if (AffordAuditOn()) { g_afford_rollout_attempts.fetch_add(1, std::memory_order_relaxed); }
@@ -45678,6 +45935,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // of 0, so ResolveEnchantTarget returned 0 and AuraBonusFor matched every aura (att 0)
         // against every creature (m_number 0) -- a systematic aura over-count vs the executor.
         const int cast_number = it->m_number;
+        // REMAND: X goes back to its owner's hand if countered -- keep the physical card (its number:
+        // the breakpoint diff reads it as the SAME card, not a new one).
+        Card remand_x_card;
+        if (remand_def != nullptr) { remand_x_card = *it; }
+        // Does the Remand counter X? Not when X can't be countered: then X resolves after it.
+        const bool remand_countered = remand_def != nullptr && !def.params.cant_be_countered;
         zone.erase(it);
 
         // STORM counter (Dragonstorm): the spell is now cast (committed to the "stack"). Count it
@@ -45698,7 +45961,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // above), THEN take the min with its max_casts_after so two Irencrags compose correctly. Inert
         // (budget stays -1) for every deck without a max_casts_after card.
         if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
-        if (def.params.max_casts_after >= 0)
+        // (A REMANDED restrictor never resolves, so it installs nothing -- "you can cast only one more
+        // spell this turn" is part of Irencrag Feat's resolution. Lockstep: CastSpellFromHand.)
+        if (def.params.max_casts_after >= 0 && !remand_countered)
         {
             state.casts_remaining_this_turn =
                 (state.casts_remaining_this_turn < 0)
@@ -46014,6 +46279,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // cast_by_name, which spends the charge at payment as this cast just did. A cascade hit is
             // NOT a free_cast rider (the executor's own cascade trigger casts it) -- false, as before.
             rec.free_cast          = riders.free_cast;
+            // ...and the REMAND rider: replay_recorded hands it back through m_cast_riders, so a
+            // continuation's "cast X, Remand it" replays as that and not as a plain X.
+            rec.remand_by          = cast_remand;
             // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
             // the executor's replay traits (ComputePlanTraits over the records) count the same mana
             // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0
@@ -46083,7 +46351,98 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         FireOnCastTriggers(state, def);
         FireProwess(state, def);
 
-        if (def.tmpl == CardTemplate::DirectDamage)
+        // THE CANTRIP BREAKPOINT -- what a draw spell's resolution does once it has drawn: stop for the
+        // human, defer the re-solve until after the plan's casts (a plain cantrip at the main-plan
+        // level), or re-solve inline (a cantrip inside a continuation, EI/staging). One body, two
+        // callers: the DrawSpell branch below (byte-identical -- it is that branch's code, moved) and a
+        // REMAND's resolution (cast_remand), which IS a plain cantrip draw. `site` is the draw spell
+        // that drew (the deferred re-solve's MTG_CANTRIP_ORDER site).
+        auto cantrip_breakpoint = [&](const CardDefinition& site, bool plain_cantrip)
+        {
+            // THE PARTITION (MTG_BP_PARTITION_CANTRIP): this cast ended our section, so the
+            // continuation resolves HERE -- with the drawn card in hand and the turn's remaining
+            // mana unspent -- and everything still unapplied in this plan belongs to it.
+            // MTG_BP_NODE partitions too, in exactly two shapes of apply: (1) where the CALLER
+            // can host the node (bp_capture provided), and (2) a plan CARRYING a continuation
+            // choice (bp_choice >= 0) -- a node child being re-applied WITHOUT resume (committed-
+            // line replay, rollout re-application), which must realise the same truncated prefix
+            // + chosen continuation the search scored, or the line diverges (the fd-diverge
+            // class). Every other apply -- greedy Solve, enumeration probes, rollout leaves --
+            // keeps the full-tail greedy shape, exactly as before.
+            const bool partition_here =
+                (BpPartitionCantripEnabled() || node_owns_site(3))
+                && plain_cantrip && sink_stack.empty();
+            if (s_human_play)
+            {
+                // Human play: the cantrip drew; STOP here. The chooser re-fires so the human
+                // re-decides with the drawn card (no auto re-solve, no auto land play).
+            }
+            else if (s_defer_cantrip && plain_cantrip && sink_stack.empty())
+            {
+                deferred_cantrip_resolve = true;
+                deferred_cantrip_site    = &site;
+                deferred_hand_before     = deferred_snapshot(hand_at_cast);
+                // THE PARTITION IS *DEFER* + TRUNCATE, NOT INLINE + TRUNCATE. Measured on Hinata,
+                // 60 games: deferred 5.7000; inline without truncation 6.0333; inline WITH
+                // truncation 7.0333. So moving the resolve inline is itself worth +0.33 before
+                // truncation is even considered -- the deferred re-solve runs after the trailing
+                // passes (Hinata's reserved Karoo drop among them), so an inline continuation sees
+                // less mana and lands the two worlds at different points in the turn. That is
+                // exactly the hazard the site-6 comment warns about, and it is why the default is
+                // deferred. Truncating here keeps the continuation's TIMING and removes only the
+                // thing the USER objected to: a tail derived against a hand that has not seen the
+                // draw. Everything after this cast is the continuation's to decide.
+                if (partition_here) { bp_truncate = true; }
+                note_trunc_asym(3, partition_here);
+            }
+            else
+            {
+                if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
+                TurnSolver::Plan extra;
+                bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
+                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
+                bp_play_searched_land(extra, my_bp_sink);
+                apply_continuation_precasts(extra);
+                apply_section = "cont0";   // route-apply trace only
+                apply_continuation_plan(extra);
+                apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
+                if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
+            }
+        };
+
+        // ---- REMAND (Action::remand_by) -----------------------------------------------------------
+        // X is on the "stack" with its cast-time block done. The Remand is cast now, targeting X (its
+        // only legal target), and resolves first (LIFO; the passive opponent never responds) -- the
+        // shared CastAndResolveRemand, which the executor's CastSpellFromHand calls at the same point.
+        // A COUNTERED X never resolves: the resolution chain below is skipped (remand_countered) and X
+        // is back in hand, so the Remand's draw opens the ordinary CANTRIP breakpoint here -- the
+        // continuation (deferred at the main-plan level, inline inside one) sees the drawn card AND X
+        // and can recast X ("Gitaxian Probe, Remand it, Probe again") with no machinery of its own. A
+        // can't-be-countered X (Niv-Mizzet, Parun) resolves normally after the draw, and the cantrip
+        // breakpoint opens after it, at the end of this cast (so a continuation never runs between the
+        // Remand and the spell it targeted).
+        if (remand_def != nullptr)
+        {
+            const std::size_t before_draw =
+                CastAndResolveRemand(state, state.active_player_index, *remand_def, !is_pre_combat,
+                                     remand_countered, remand_x_card, nullptr);
+            if (g_play_draw_sink)   // human-play draw reporting (nulled by RevealLogPause in search)
+            {
+                for (std::size_t hi = before_draw; hi < ap.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
+            }
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              remand_def->card.m_name.str() + " targets " + def.card.m_name.str()
+                              + (remand_countered ? " -- countered, back to hand; draw a card"
+                                                  : " -- it can't be countered; draw a card"));
+            }
+            if (remand_countered) { cantrip_breakpoint(*remand_def, /*plain_cantrip=*/true); }
+        }
+
+        if (remand_countered) { /* X is back in hand: nothing resolves (see the REMAND block) */ }
+        else if (def.tmpl == CardTemplate::DirectDamage)
         {
             // Play-viewer event: opponent life BEFORE this burn spell's damage, so the history can
             // report "N to opponent (before->after)". Measured up to (not including) the
@@ -46658,56 +47017,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // (sink_stack empty) defers its re-solve until after every main cast, matching
             // the executor's post-loop replay (see deferred_cantrip_resolve). Everything
             // else (EI/staging, or a cantrip already inside a re-solve) re-solves inline.
-            const bool plain_cantrip = !is_ei && !def.params.stages_cards;
-            // THE PARTITION (MTG_BP_PARTITION_CANTRIP): this cast ended our section, so the
-            // continuation resolves HERE -- with the drawn card in hand and the turn's remaining
-            // mana unspent -- and everything still unapplied in this plan belongs to it.
-            // MTG_BP_NODE partitions too, in exactly two shapes of apply: (1) where the CALLER
-            // can host the node (bp_capture provided), and (2) a plan CARRYING a continuation
-            // choice (bp_choice >= 0) -- a node child being re-applied WITHOUT resume (committed-
-            // line replay, rollout re-application), which must realise the same truncated prefix
-            // + chosen continuation the search scored, or the line diverges (the fd-diverge
-            // class). Every other apply -- greedy Solve, enumeration probes, rollout leaves --
-            // keeps the full-tail greedy shape, exactly as before.
-            const bool partition_here =
-                (BpPartitionCantripEnabled() || node_owns_site(3))
-                && plain_cantrip && sink_stack.empty();
-            if (s_human_play)
-            {
-                // Human play: the cantrip drew; STOP here. The chooser re-fires so the human
-                // re-decides with the drawn card (no auto re-solve, no auto land play).
-            }
-            else if (s_defer_cantrip && plain_cantrip && sink_stack.empty())
-            {
-                deferred_cantrip_resolve = true;
-                deferred_cantrip_site    = &def;
-                deferred_hand_before     = deferred_snapshot(hand_at_cast);
-                // THE PARTITION IS *DEFER* + TRUNCATE, NOT INLINE + TRUNCATE. Measured on Hinata,
-                // 60 games: deferred 5.7000; inline without truncation 6.0333; inline WITH
-                // truncation 7.0333. So moving the resolve inline is itself worth +0.33 before
-                // truncation is even considered -- the deferred re-solve runs after the trailing
-                // passes (Hinata's reserved Karoo drop among them), so an inline continuation sees
-                // less mana and lands the two worlds at different points in the turn. That is
-                // exactly the hazard the site-6 comment warns about, and it is why the default is
-                // deferred. Truncating here keeps the continuation's TIMING and removes only the
-                // thing the USER objected to: a tail derived against a hand that has not seen the
-                // draw. Everything after this cast is the continuation's to decide.
-                if (partition_here) { bp_truncate = true; }
-                note_trunc_asym(3, partition_here);
-            }
-            else
-            {
-                if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
-                TurnSolver::Plan extra;
-                bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
-                ContPinFrame _cpf(extra, my_bp_sink);   // the continuation's own during-cast pins (ContPins)
-                bp_play_searched_land(extra, my_bp_sink);
-                apply_continuation_precasts(extra);
-                apply_section = "cont0";   // route-apply trace only
-                apply_continuation_plan(extra);
-                apply_continuation_activations(extra, out_breakpoint && my_bp_sink);
-                if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
-            }
+            cantrip_breakpoint(def, /*plain_cantrip=*/!is_ei && !def.params.stages_cards);
         }
         else if (def.tmpl == CardTemplate::DrawUntilNonland)
         {
@@ -47488,20 +47798,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
         // "Create N tokens" as a spell's resolution (Fungus Frolic). Before the zone move below,
         // which is the order the real game resolves in. Executor twin: EffectHandler::ResolveImpl.
-        ApplyCastCreatesTokens(state, state.active_player_index, def);
+        // (Every resolution step from here to the zone move is skipped for a REMANDED X.)
+        if (!remand_countered) { ApplyCastCreatesTokens(state, state.active_player_index, def); }
 
         // "You gain N life" as an untargeted spell's resolution (Feed the Clan), with the ferocious
         // upgrade. Here for the same reason the token call above is: BEFORE the zone move below,
         // which is the order the real game resolves in -- and the gain must land before anything
         // reads life_gained_this_turn. Executor twin: EffectHandler::ResolveImpl.
-        ApplyCastLifegain(state, state.active_player_index, def);
+        if (!remand_countered) { ApplyCastLifegain(state, state.active_player_index, def); }
 
         // LAND SEARCH as an instant/sorcery's resolution (Rampant Growth, Search for Tomorrow,
         // Cultivate; core/LandSearch.h). Before the zone move below, and before the put-in-hand
         // arming at the end of this lambda, so Cultivate's hand basic opens site 10. The pick is
         // this resolution's in-plan land-search pin (Plan::land_search_pins). Executor twin:
         // EffectHandler::ResolveImpl -- the same helper, the same pin consumer.
-        if (def.params.land_search_on_resolve && def.params.land_search_count > 0
+        if (!remand_countered && def.params.land_search_on_resolve && def.params.land_search_count > 0
             && (def.card.IsInstant() || def.card.IsSorcery()))
         {
             // ...restricted to the picks earning the credit this cast variant was enumerated with
@@ -47515,7 +47826,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
         // graveyard faithful; nothing reads the graveyard for decks without retrace.
-        if (def.card.IsInstant() || def.card.IsSorcery())
+        // (A REMANDED X is in its owner's hand, not here.)
+        if (!remand_countered && (def.card.IsInstant() || def.card.IsSorcery()))
         {
             // "Exile Living Wish" -- a self-exiling spell goes to EXILE, not the graveyard.
             // LOCKSTEP with EffectHandler::MoveToGraveyard. Not cosmetic even though nothing in
@@ -47558,6 +47870,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // provider-ranked tapped-first default + human chooser override.
             PerformSacrificeLandCost(state, name);
         }
+
+        // REMAND on a can't-be-countered X: the Remand's draw happened before X resolved (above); its
+        // cantrip breakpoint opens now that X has resolved, so the continuation sees the spell on the
+        // battlefield -- the order the real game gives priority back in.
+        if (remand_def != nullptr && !remand_countered)
+        { cantrip_breakpoint(*remand_def, /*plain_cantrip=*/true); }
 
         // THE GENERAL RULE (MTG_BP_PUT_IN_HAND; see EngineFlags.h). ONE arming site, HERE at the end
         // of apply_one -- after every resolution branch above has run -- because that is the only
@@ -54968,7 +55286,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                               + std::to_string(act.rock_mana.blue) + "." + std::to_string(act.rock_mana.black)
                               + "." + std::to_string(act.rock_mana.red) + "." + std::to_string(act.rock_mana.green)
                               + "." + std::to_string(act.rock_mana.colorless) + "."
-                              + std::to_string(act.rock_mana.snow_units)) : "")); break;
+                              + std::to_string(act.rock_mana.snow_units)) : "")
+                        // REMAND rider: "cast X" and "cast X, Remand it" share X's name and are
+                        // DIFFERENT plans (X resolves vs X back in hand + a card) -- the bestow/devour
+                        // lesson. X is keyed too: a remanded X spell's X is its MV on the stack and
+                        // its cost, not a resolution detail. Gated on the field: no other deck moves.
+                        + (!act.remand_by.empty()
+                           ? ("#RM" + act.remand_by.str() + ":" + std::to_string(act.chosen_x)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -56513,6 +56837,16 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (d == nullptr) { continue; }
+        // REMAND rider (Action::remand_by): the Remand's resolution IS a plain cantrip draw, armed
+        // exactly as Ponder's (apply_one's cantrip_breakpoint: deferred at the main-plan level ->
+        // site 3). Without this clause the plan would earn no bp_choice variants and its continuation
+        // -- the recast of the X it just returned -- would be permanently unchallengeable. A COUNTERED
+        // X resolves nothing, so none of X's own classes below are this plan's.
+        if (!a.remand_by.empty())
+        {
+            mask |= 1 << 3;
+            if (!d->params.cant_be_countered) { continue; }
+        }
         if (d->tmpl == CardTemplate::DrawUntilNonland) { mask |= 1 << 1; }
         else if (d->tmpl == CardTemplate::DrawSpell)
         {
@@ -80286,6 +80620,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { blinkActs.push_back({ a.card_name.str(), a.sac_victim_id,
                                     std::max(1, a.chosen_x) }); continue; }
             orderNames.push_back(a.card_name);
+            // REMAND rider (Action::remand_by): the plan casts the Remand TOO, right after X -- so the
+            // human declares the line the way it is played, "cast X, cast Remand" (the Remand has no
+            // cast of its own, so no plan without the rider can ever match a line naming it).
+            if (!a.remand_by.empty()) { orderNames.push_back(a.remand_by); }
             if (a.kind != Action::Kind::CastFromHand) { boardActNames.push_back(a.card_name.str()); }
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -80637,6 +80975,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                         addSub(a.card_name + " " + mode, a.card_name + " {G/P}", mode,
                                a.card_name.str(), "phyrexian");
                     }
+                }
+                // REMAND: WHICH spell the Remand answers, when the declared line casts more than one
+                // ("Probe, Ponder, Remand" -> Remand on Probe or on Ponder). Only remand variants carry
+                // it, and only they can match a line that names the Remand, so the set is never mixed.
+                if (!a.remand_by.empty())
+                {
+                    addSub(a.remand_by.str() + " on " + a.card_name.str(), a.remand_by.str() + " target",
+                           a.card_name.str(), a.card_name.str(), "remand");
                 }
             }
             // Aura enchant TARGET: which permanent this Aura attaches to. Emit a sub per legal target so
@@ -82450,7 +82796,8 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
         {
             std::string k = std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str()
                 + "|" + a.tutor_target.str() + "|" + a.chosen_float_color.str() + "|" + a.victim_name.str()
-                + "|" + a.land_face.str() + "|" + a.land_fetch_target.str() + "|" + a.trick_hand_target;
+                + "|" + a.land_face.str() + "|" + a.land_fetch_target.str() + "|" + a.trick_hand_target
+                + "|" + a.remand_by.str();
             const int f[] = { a.chosen_x, a.splice_count, a.replicate_count, a.devour_count,
                               a.enchant_target, a.sac_source_id, a.sac_victim_id, a.sac_count,
                               static_cast<int>(a.ability_mode), a.alt_cost ? 1 : 0, a.alt_lifegain,

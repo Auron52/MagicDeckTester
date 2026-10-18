@@ -1847,6 +1847,22 @@ struct CardParams
     // opponent collapses to a do-nothing card). Default false; gated so other decks unaffected.
     bool goldfish_inert = false;
 
+    // REMAND (CR 701.5 + its own replacement): "Counter target spell. If that spell is countered this
+    // way, put it into its owner's hand instead of into that player's graveyard. Draw a card." The
+    // passive opponent never casts, so the ONLY legal target is a spell of OUR OWN on the stack
+    // (CR 115.1: "target spell" is any spell) -- which is a real line, not a dead card: pay X's cost
+    // plus {1}{U}, X's cast-time effects happen (storm, cast triggers, prowess, Phyrexian life), X
+    // goes back to hand, and Remand draws. So the card is NEVER offered as its own cast (it has no
+    // target alone, CR 601.2c); it rides a hand cast of X as the Action::remand_by rider (TurnSolver.h),
+    // which the search branches over. The card's template is draw_spell (draw: 1), so its resolution
+    // IS a plain cantrip in both worlds. See docs/design/remand-self-target.md.
+    bool counters_target_spell_to_hand = false;
+    // "This spell can't be countered." (Niv-Mizzet, Parun; Emrakul, the Aeons Torn). A Remand
+    // aimed at such a spell still resolves: the counter does nothing (CR 701.5a needs the spell to
+    // be countered), the spell stays on the stack and resolves normally, and Remand still draws --
+    // a pure cantrip that needs the spell on the stack. Read by the remand rider only.
+    bool cant_be_countered = false;
+
     // Hinata, Dawn-Crowned's static: "Spells you cast cost {1} less to cast for each target."
     // hinata_cost_reducer marks the permanent that grants the reduction (on Hinata herself).
     // discount_targets is the per-spell target count used for the reduction (Hinata's spells

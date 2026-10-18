@@ -398,6 +398,10 @@ private:
     // CastSpellFromHand -- so a skipped cast never leaves a value for the next one. Rollout twin:
     // ApplyPlanDirect's cast_riders, taken at apply_one's head.
     CastRiders m_cast_riders{};
+    // Did the last CastSpellFromHand REMAND the spell it cast (the remand rider ran)? A countered
+    // spell is back in hand under its own card number, so cast_by_name's "paid <=> the card left the
+    // hand" test would read a paid remand cast as unpaid; this is that test's other half.
+    bool m_last_cast_remanded = false;
     // The main phase TakeTurn is playing (scoped there, restored on exit): true in the POST-combat main.
     // Read by CastSpellFromHand's main-2 stager stamp (NoteMain2StagerCast), the executor twin of
     // TurnSolver's apply_one, which knows its phase from ApplyPlanDirect's is_pre_combat.

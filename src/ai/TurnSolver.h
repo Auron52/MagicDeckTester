@@ -636,6 +636,28 @@ struct Action
                                        // 2026-09-30), also for a cast after a SAME-PLAN Hatchery
                                        // (MTG_REPLICATE_PENDING) and keyed by the autonomous dedup
                                        // (MTG_REPLICATE_SIG); never offered to the greedy picker.
+    InternedName remand_by;            // REMAND RIDER (CardParams::counters_target_spell_to_hand). Non-empty
+                                       // = this CastFromHand of card_name (X) is immediately answered by a
+                                       // Remand-type card of this NAME from hand, targeting X on the stack
+                                       // -- the only legal target against a passive opponent (CR 115.1).
+                                       // One combined action: cost = X's cost + the Remand's (both paid in
+                                       // ONE bill at X's payment, the splice idiom), X's cast-time block
+                                       // runs (storm, Phyrexian life, FireOnCastTriggers / FireProwess),
+                                       // then the Remand's (its own storm + cast triggers), then the
+                                       // Remand resolves: X returns to its owner's hand UNLESS it can't be
+                                       // countered (CardParams::cant_be_countered -- then X resolves
+                                       // normally after it), and the Remand draws a card. Executor
+                                       // (AIEngine::CastSpellFromHand) and rollout (apply_one) take it as
+                                       // a CastRiders field and resolve it through ONE shared body,
+                                       // CastAndResolveRemand (ManaPayment.h) -- lockstep.
+                                       // Emitted by CollectActions' REMAND post-pass; hand_index stays X's
+                                       // slot (so every hand_index reader sees the card that is CAST), and
+                                       // the odometer groups the variants by the REMAND's slot instead
+                                       // (remand_slot, PlanGroupKey). Empty for every other action.
+    int         remand_slot      = -1; // ...the hand index of the Remand copy the variant spends (the
+                                       // odometer group key and the canonical-order key of the subset
+                                       // guard; never read at apply, which takes the Remand BY NAME --
+                                       // copies are interchangeable). -1 = not a remand variant.
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;
@@ -741,6 +763,8 @@ struct CastRiders
                                         // AT PAYMENT if the bank holds one (the rollout's apply_one; the
                                         // executor passes Action::free_cast to cast_by_name positionally
                                         // and spends at the same point in CastSpellFromHand)
+    InternedName remand_by;             // Action::remand_by: answer this cast with a Remand of that name
+                                        // (the rollout's apply_one and the executor's CastSpellFromHand)
 
     static CastRiders Of(const Action& a)
     {
@@ -751,6 +775,7 @@ struct CastRiders
         r.attach_equip_id = a.attach_equip_id;
         r.land_put        = a.rock_mana;
         r.free_cast       = a.free_cast;
+        r.remand_by       = a.remand_by;
         return r;
     }
     // Copy out and reset: the ONLY way a cast reads them.

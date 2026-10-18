@@ -948,6 +948,9 @@ INERT_PARAMS = {
     "etb_untap_lands": "DISCLOSED VIEWER GAP (not inert): which lands to untap is auto-resolved by yield order; needs a new multi-pick type. PROVISIONAL",
     # self-declared
     "goldfish_inert": "self-declared inert marker",
+    # "This spell can't be countered" (Niv-Mizzet, Parun; Emrakul): a static property read only by the
+    # remand rider (the Remand still resolves and draws; the spell then resolves). No player choice.
+    "cant_be_countered": "static property (a Remand on it draws and does not counter) -- no choice",
     # --- Creature Giving (gift-the-opponent drain) -----------------------------------------
     # Every trigger here is automatic (no player choice): the enter-watchers are mandatory-taken
     # "you may" beneficials, the gifts are fixed-count opponent tokens, the sweep hits every
@@ -1347,6 +1350,12 @@ MAINPHASE_PARAMS = {
     # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
     "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
+    # Remand (2026-10-17): "Counter target spell ... put it into its owner's hand ... Draw a card." Its
+    # only legal target is one of OUR OWN spells on the stack, so WHICH spell it answers is a main_phase
+    # PLAN VARIANT -- Action::remand_by on the target's cast ("X + Remand on it"), one per legal target,
+    # offered unpruned; the line is declared "cast=X;cast=Remand" and CheckLine's `remand` sub picks the
+    # target when the line casts more than one spell. The draw itself is no choice.
+    "counters_target_spell_to_hand": "Remand's target spell is a main_phase plan variant (Action::remand_by; line cast=X;cast=Remand + the `remand` sub)",
     "suspend_cost": "Search for Tomorrow's Suspend 2--{G}: the suspend is a main_phase plan action (the suspend= verb, the hand's suspend badge); the cost only prices it",
     # Unearth ("Return target creature card with mana value 3 or less from your graveyard to the
     # battlefield"). The CAST is an ordinary main_phase plan. WHICH graveyard creature comes back is

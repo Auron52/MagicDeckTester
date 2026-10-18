@@ -106,6 +106,9 @@ enum class HandEntryReason : uint8_t
     Bounce,        // a permanent returned to its owner's hand
     Recur,         // graveyard to hand
     StagedMerge,   // bookkeeping: staged_cards -> hand at a phase boundary; NOT new material
+    Countered,     // a spell countered to its owner's hand (Remand) -- the card left the hand when
+                   // it was cast, so it is back, not new; the arming diff (HandGainedACard) sees its
+                   // number in the pre-cast snapshot and does not call it new
     Count
 };
 
@@ -123,6 +126,7 @@ inline const char* HandEntryReasonName(HandEntryReason r)
         case HandEntryReason::Bounce:      return "bounce      (permanent -> owner's hand)";
         case HandEntryReason::Recur:       return "recur       (graveyard -> hand)";
         case HandEntryReason::StagedMerge: return "staged_merge(bookkeeping -- excluded)";
+        case HandEntryReason::Countered:   return "countered   (spell countered to hand -- Remand)";
         case HandEntryReason::Count:       break;
     }
     return "?";

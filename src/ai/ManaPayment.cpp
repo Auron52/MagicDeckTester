@@ -4951,6 +4951,48 @@ void AddManaCost(ManaCost& dst, const ManaCost& add)
     dst.colorless += add.colorless;
 }
 
+void AddRemandRiderCost(ManaCost& bill, const GameState& state, const std::string& remand_name)
+{
+    if (remand_name.empty()) { return; }
+    const CardDefinition* rd = CardDatabase::Instance().Lookup(remand_name);
+    if (rd == nullptr) { return; }
+    AddManaCost(bill, EffectiveSpellCost(*rd, state));
+}
+
+std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDefinition& remand_def,
+                                 bool post_combat, bool countered, const Card& x_card,
+                                 Card* remand_out)
+{
+    Player& p = state.players[controller];
+    auto rit = p.hand.end();
+    for (auto c = p.hand.begin(); c != p.hand.end(); ++c)
+    {
+        if (c->m_name != remand_def.card.m_name) { continue; }
+        if (rit == p.hand.end()) { rit = c; continue; }
+        if (c->m_is_staged && (!rit->m_is_staged || c->m_staged_expiry < rit->m_staged_expiry)) { rit = c; }
+    }
+    if (rit == p.hand.end()) { return p.hand.size(); }   // both callers verified a copy before paying
+    const Card remand_card = *rit;
+    p.hand.erase(rit);
+    if (remand_out != nullptr) { *remand_out = remand_card; }
+    // The per-cast block every cast runs (apply_one / CastSpellFromHand, same order).
+    ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += remand_def.card.m_mana_cost.ManaValue();
+    if (post_combat) { NoteMain2StagerCast(state, remand_def); }
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    FireOnCastTriggers(state, remand_def);
+    FireProwess(state, remand_def);
+    // Resolution: counter X to its owner's hand, then draw.
+    if (countered) { ReturnCounteredSpellToHand(state, controller, x_card); }
+    const std::size_t before = p.hand.size();
+    const int want = remand_def.params.draw;
+    const int drew = DrawIntoHand(state, controller, want, HandEntryReason::Draw);
+    p.cards_drawn_this_turn += drew;
+    if (drew < want) { state.player_lost_on_draw = true; }
+    p.graveyard.push_back(remand_card);
+    return before;
+}
+
 void SubManaCost(ManaCost& dst, const ManaCost& paid)
 {
     auto s = [](int& d, int p) { d = std::max(0, d - p); };

@@ -2415,6 +2415,19 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
     return false;
 }
 
+// BREAKPOINT CLASSIFICATION NAME of a cast action: the card whose RESOLUTION decides which draw /
+// acquisition breakpoint class the cast opens -- every per-cast classifier below (is_draw_engine,
+// put_in_hand_armed, acq_deferred, stage_draw_break, equip_bp_truncates, note_draw_engine, the
+// breakpoint site) reads it. For a REMANDED cast (Action::remand_by) that card is the REMAND, not X:
+// X never resolves, and the Remand's resolution is a plain cantrip draw -- exactly what the rollout's
+// apply_one arms for it (its CANTRIP breakpoint, site def = the Remand). Classifying by X instead would
+// open X's class in this world only (an Expressive Iteration's inline replay, a tutor's deferred
+// acquisition) and shift every later breakpoint ordinal. card_name for every other action.
+static const std::string& BpNameOf(const Action& a)
+{
+    return a.remand_by.empty() ? a.card_name.str() : a.remand_by.str();
+}
+
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
@@ -4416,8 +4429,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                           bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke,
                           adventure, kicked, riders);
         // Paid <=> the card left the hand (an unpayable cast leaves it there). An unnumbered card
-        // cannot be told apart from a copy, so it keeps the old always-armed reading.
-        last_cast_paid = cast_num <= 0
+        // cannot be told apart from a copy, so it keeps the old always-armed reading. A REMANDED cast
+        // is paid although the card is back in hand (m_last_cast_remanded, set by CastSpellFromHand).
+        last_cast_paid = cast_num <= 0 || m_last_cast_remanded
             || std::none_of(ap.hand.begin(), ap.hand.end(),
                             [&](const Card& c) { return c.m_number == cast_num; });
         // MTG_USER_ORDER_TRACE (diagnostic, default off): every REAL cast, in the order it happened.
@@ -5475,13 +5489,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); resolve_now(); walker_cast_activation(a);
                 const bool cont_cast_paid = last_cast_paid;   // before the nested re-solve overwrites it
-                const bool put_armed_c = put_in_hand_armed(a.card_name);
+                const bool put_armed_c = put_in_hand_armed(BpNameOf(a));
                 // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID continuation cast opens no nested
                 // breakpoint either (the rollout's continuation apply_one returns before arming).
-                if ((is_draw_engine(a.card_name) || put_armed_c)
+                if ((is_draw_engine(BpNameOf(a)) || put_armed_c)
                     && (cont_cast_paid || !ExecFailedCastNoResolve()))
                 {
-                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    rdb_site = CardDatabase::Instance().Lookup(BpNameOf(a));
                     pin_rdb_hand();
                     rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
@@ -5498,7 +5512,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         && gather_leftovers(extra.actions,
                                             std::vector<int>(cont_order.begin() + static_cast<long>(cpos) + 1,
                                                              cont_order.end()),
-                                            a.card_name);
+                                            BpNameOf(a));
                     rdb_lo_taken = false;
                     resolve_draw_breakpoint(bp_depth + 1);
                     rdb_leftovers.clear();
@@ -6823,30 +6837,30 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
-            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
-            const bool put_armed = put_in_hand_armed(a.card_name);
+            const bool put_armed = put_in_hand_armed(BpNameOf(a));
             // MTG_EXEC_PUT_DEFERRED: a put-in-hand site defers as the rollout arms it (see the reader).
             const bool put_deferred = put_armed && ExecPutDeferredEnabled() && m_lookahead_depth > 0
-                                   && !is_draw_engine(a.card_name);
-            if (s_full_depth && (acq_deferred(a.card_name) || put_deferred))
-            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
-            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
+                                   && !is_draw_engine(BpNameOf(a));
+            if (s_full_depth && (acq_deferred(BpNameOf(a)) || put_deferred))
+            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(BpNameOf(a)); } }
+            else if (s_full_depth && (is_draw_engine(BpNameOf(a)) || put_armed))
             {
                 // BREAKPOINT LEFTOVERS: this plan's remaining casts go to the continuation (taken by
                 // resolve_draw_breakpoint; on a committed line the rollout already merged them into
                 // the recorded segment), and the plan stops here. Lockstep twin: ApplyPlanDirect.
-                const bool lo_gathered = cast_paid && gather_leftovers(plan.actions, [&]{ std::vector<int> r; const int me = static_cast<int>(&a - plan.actions.data()); for (int q = me + 1; q < static_cast<int>(plan.actions.size()); ++q) { r.push_back(q); } return r; }(), a.card_name);
+                const bool lo_gathered = cast_paid && gather_leftovers(plan.actions, [&]{ std::vector<int> r; const int me = static_cast<int>(&a - plan.actions.data()); for (int q = me + 1; q < static_cast<int>(plan.actions.size()); ++q) { r.push_back(q); } return r; }(), BpNameOf(a));
                 rdb_lo_taken = false;
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
                 // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
                 else if (cast_paid || !ExecFailedCastNoResolve())
                 {
-                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    rdb_site = CardDatabase::Instance().Lookup(BpNameOf(a));
                     pin_rdb_hand();
                     rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
@@ -6863,10 +6877,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 rdb_leftovers.clear();
                 if (lo_gathered && (fd_plan_committed || rdb_lo_taken)) { bp_trunc_exec = true; break; }
             }
-            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+            else if (stage_draw_break(BpNameOf(a))) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a))) { bp_trunc_exec = true; break; }
         }
     }
     else
@@ -6927,7 +6941,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int i : ena)
         {
             const Action& a = plan.actions[i];
-            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
         }
     }
@@ -6953,7 +6967,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -7025,30 +7039,30 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // At its rank (SacLandCastsInOrder): the trailing sac loop below skips it.
             if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }
-            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
-            const bool put_armed = put_in_hand_armed(a.card_name);
+            const bool put_armed = put_in_hand_armed(BpNameOf(a));
             // MTG_EXEC_PUT_DEFERRED: a put-in-hand site defers as the rollout arms it (see the reader).
             const bool put_deferred = put_armed && ExecPutDeferredEnabled() && m_lookahead_depth > 0
-                                   && !is_draw_engine(a.card_name);
-            if (s_full_depth && (acq_deferred(a.card_name) || put_deferred))
-            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(a.card_name); } }
-            else if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
+                                   && !is_draw_engine(BpNameOf(a));
+            if (s_full_depth && (acq_deferred(BpNameOf(a)) || put_deferred))
+            { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(BpNameOf(a)); } }
+            else if (s_full_depth && (is_draw_engine(BpNameOf(a)) || put_armed))
             {
                 // BREAKPOINT LEFTOVERS: this plan's remaining casts go to the continuation (taken by
                 // resolve_draw_breakpoint; on a committed line the rollout already merged them into
                 // the recorded segment), and the plan stops here. Lockstep twin: ApplyPlanDirect.
-                const bool lo_gathered = cast_paid && gather_leftovers(plan.actions, [&]{ std::vector<int> r; auto it = std::find(ord.begin(), ord.end(), oi); if (it != ord.end()) { r.assign(it + 1, ord.end()); } return r; }(), a.card_name);
+                const bool lo_gathered = cast_paid && gather_leftovers(plan.actions, [&]{ std::vector<int> r; auto it = std::find(ord.begin(), ord.end(), oi); if (it != ord.end()) { r.assign(it + 1, ord.end()); } return r; }(), BpNameOf(a));
                 rdb_lo_taken = false;
                 if (fd_plan_committed)
                 { if (cast_paid) { replay_segment(); } }
                 // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
                 else if (cast_paid || !ExecFailedCastNoResolve())
                 {
-                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    rdb_site = CardDatabase::Instance().Lookup(BpNameOf(a));
                     pin_rdb_hand();
                     rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
@@ -7065,10 +7079,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 rdb_leftovers.clear();
                 if (lo_gathered && (fd_plan_committed || rdb_lo_taken)) { bp_trunc_exec = true; break; }
             }
-            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+            else if (stage_draw_break(BpNameOf(a))) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+            if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a))) { bp_trunc_exec = true; break; }
         }
     }
     }
@@ -7127,7 +7141,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         if (a.alt_cost) { m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
         if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }   // at its rank (SacLandCastsInOrder)
-        m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+        m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
         exec_slot_hook(a);
         const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
@@ -7142,14 +7156,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // hooking the broad predicate here armed breakpoints those decks never had (smoke went
         // 26/36 with 2 searched slower and 26 play-changed). Site 6 is the only class that both
         // lands in a clean set and has a rollout twin arming at the cast.
-        if (s_full_depth && equip_bp_truncates(a.card_name))
+        if (s_full_depth && equip_bp_truncates(BpNameOf(a)))
         {
             if (fd_plan_committed)
             { if (cast_paid) { replay_segment(); } }
             // MTG_EXEC_FAILED_CAST_NO_RESOLVE: an UNPAID cast opened no breakpoint (see the reader).
             else if (cast_paid || !ExecFailedCastNoResolve())
             {
-                rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                rdb_site = CardDatabase::Instance().Lookup(BpNameOf(a));
                 pin_rdb_hand();
                 rdb_site_activated = false;   // a CAST-armed site
                 if (TurnSolver::BreakpointHandSnapshotWanted(state))
@@ -7164,7 +7178,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 resolve_draw_breakpoint(0);
             }
         }
-        if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+        if ((cast_paid || (!fd_plan_committed && !ExecFailedCastNoResolve())) && equip_bp_truncates(BpNameOf(a))) { bp_trunc_exec = true; break; }
     }
     }
     }
@@ -7174,13 +7188,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
+        { m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
     }
     for (const Action& a : plan.actions)
     {
         if (staged_break || bp_trunc_exec) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
-        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); exec_slot_hook(a); }
+        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(BpNameOf(a)); resolve_now(); exec_slot_hook(a); }
     }
 
     // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
@@ -8064,6 +8078,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     const int      twobrid_colored = riders.twobrid_colored;
     const ManaPool land_put_credit = riders.land_put;
     const int      attach_equip_id = riders.attach_equip_id;
+    const InternedName remand_name = riders.remand_by;   // the REMAND rider (Action::remand_by)
+    m_last_cast_remanded = false;
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
     if (!def) { return; }
@@ -8113,6 +8129,21 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // creature left to a Path to Exile that resolved first. Not cast, nothing paid: the card stays in
     // hand with its {R}. The SHARED AttachSpellCastLegal; lockstep twin of apply_one's guard.
     if (def->params.attach_target_equipment && !AttachSpellCastLegal(state, state.active_player_index)) { return; }
+
+    // REMAND rider: live only for a plain paid hand cast with a copy of the Remand in hand and a cast
+    // left in the Irencrag budget for it -- the EXACT conditions of the rollout's apply_one (lockstep);
+    // a void rider casts X plainly.
+    const CardDefinition* remand_def = nullptr;
+    if (!remand_name.empty() && alt_lifegain <= 0 && !free_cast && state.casts_remaining_this_turn != 1)
+    {
+        const CardDefinition* rd = CardDatabase::Instance().Lookup(remand_name.str());
+        if (rd != nullptr && rd->params.counters_target_spell_to_hand)
+        {
+            for (const Card& hc : ap.hand)
+            { if (hc.m_name == remand_name && hc.m_number != hand_card.m_number) { remand_def = rd; break; } }
+        }
+    }
+    const bool remand_countered = remand_def != nullptr && !def->params.cant_be_countered;
 
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
@@ -8382,6 +8413,15 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         for (const ScaledCastVariant& v : ResolveProvider(state).ScaledCastVariants(state, *def))
         { if (v.face == crackle_targets) { effective = v.cost; break; } }
     }
+    // REMAND rider: the Remand is paid in X's ONE bill (lockstep with apply_one and the enumeration's
+    // combined Action::cost). X's own cost is kept for the log line.
+    const ManaCost x_effective = effective;
+    ManaCost remand_cost;
+    if (remand_def != nullptr)
+    {
+        remand_cost = EffectiveCost(*remand_def, state);
+        AddRemandRiderCost(effective, state, remand_name.str());
+    }
     // Maelstrom Archangel: spend a banked free cast (mirror of the rollout's prep_free +
     // cascade_free arm). Consumed here so exactly this cast skips payment; a stranded marker
     // (bank empty) falls through to the normal paid attempt below, matching apply_one.
@@ -8599,7 +8639,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         }
         m_logger->LogCastSpell(hand_card.m_number, hand_card.m_name,
                                alt_lifegain > 0 ? ("(alt: opp +" + std::to_string(alt_lifegain) + ")")
-                                                : effective.ToString(),
+                                                : x_effective.ToString(),
                                logged_x, tgts);
     }
 
@@ -8638,6 +8678,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                                      def->params.sac_additional_creature_color, own_targets);
     }
 
+    // REMAND: keep the physical card -- a countered X goes back to its owner's hand under its own number.
+    Card remand_x_card;
+    if (remand_def != nullptr) { remand_x_card = hand_card; }
     ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
         [&hand_card](const Card& c) { return &c == &hand_card; }));
 
@@ -8726,7 +8769,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // (decrement FIRST -- its cast is governed by any prior budget checked above -- then min). Inert
     // (budget stays -1) for every deck without a max_casts_after card.
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
-    if (def->params.max_casts_after >= 0)
+    // (A REMANDED restrictor never resolves, so it installs nothing -- lockstep with apply_one.)
+    if (def->params.max_casts_after >= 0 && !remand_countered)
     {
         state.casts_remaining_this_turn =
             (state.casts_remaining_this_turn < 0)
@@ -8754,6 +8798,44 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         tok_entry.source           = tok;
         tok_entry.controller_index = state.active_player_index;
         state.stack.push_back(std::move(tok_entry));
+    }
+
+    // ---- REMAND (Action::remand_by) -- executor twin of apply_one's REMAND block ----------------------
+    // X is on the stack with its cast triggers fired. With priority, we cast the Remand targeting it;
+    // the passive opponent passes, so the Remand -- top of the stack -- resolves NOW: X leaves the stack
+    // for its owner's hand (unless it can't be countered: then it stays and resolve_now() resolves it
+    // after), and the Remand draws. The shared CastAndResolveRemand is the rollout's own call. (The
+    // remand-eligible X never pushes a cast trigger or a replicate copy above itself -- CollectActions
+    // excludes cascade / demonstrate / replicate -- so the Remand is the only thing between X and the top.)
+    if (remand_def != nullptr)
+    {
+        if (remand_countered)
+        {
+            const int x_number = remand_x_card.m_number;
+            for (auto sit = state.stack.end(); sit != state.stack.begin(); )
+            {
+                --sit;
+                if (sit->type == StackEntry::EntryType::Spell && !sit->is_copy
+                    && sit->source.m_number == x_number)
+                { state.stack.erase(sit); break; }
+            }
+        }
+        Card remand_card;
+        const std::size_t before_draw =
+            CastAndResolveRemand(state, state.active_player_index, *remand_def, m_exec_post_combat,
+                                 remand_countered, remand_x_card, &remand_card);
+        m_last_cast_remanded = true;
+        if (m_logger)
+        {
+            // The Remand's own cast line (its target named in the cost text -- a TargetDesc has no
+            // "spell" kind), then its draw: GameEngine::ResolveStack never sees this resolution.
+            m_logger->LogCastSpell(remand_card.m_number, remand_card.m_name,
+                                   remand_cost.ToString() + " (target: " + def->card.m_name.str()
+                                   + (remand_countered ? ", countered to hand)" : ", can't be countered)"));
+            const Player& cp = state.players[state.active_player_index];
+            for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
+            { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
+        }
     }
 }
 

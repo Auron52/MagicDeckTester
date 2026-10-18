@@ -56,6 +56,33 @@ inline std::uint64_t SelfTapSourceHoldBit(const GameState& state, int card_numbe
 // (AIEngine::EffectiveCost / TurnSolver's file-static EffectiveCost); both now delegate here.
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
 
+// THE REMAND RIDER's share of a cast's bill (Action::remand_by -- "cast X, then Remand it", one
+// combined action): the Remand's own EffectiveSpellCost on this board, so Hinata's per-target discount
+// applies to it (it has one target). The enumeration stamps X's cost + this into Action::cost; every
+// site that RE-derives a cast's bill from the definition (the rollout's apply_one, the executor's
+// CastSpellFromHand, SubsetPayableSequential, BatchPrepayMainCasts, the condemn stamper) adds it here
+// too, so all of them pay what the enumeration priced. No-op for an empty name (every other cast).
+void AddRemandRiderCost(ManaCost& bill, const GameState& state, const std::string& remand_name);
+
+// THE REMAND RIDER's cast + resolution, ONE body for both worlds (the rollout's apply_one and the
+// executor's CastSpellFromHand call it right after X's own cast-time block -- X paid with the Remand
+// in its bill, X's FireOnCastTriggers / FireProwess done):
+//   cast   -- the Remand copy leaves the hand (the cast-copy rule: earliest-expiring staged copy first,
+//             else the first), counts as a spell cast (storm, the CFT accumulator, the Irencrag
+//             budget, the main-2 stager stamp) and fires ITS cast triggers -- Niv-Mizzet, Parun draws
+//             on the Remand exactly as on X;
+//   resolve-- top of the stack (LIFO, and the passive opponent never responds): X is put into its
+//             owner's hand when `countered` (ReturnCounteredSpellToHand -- the caller removes X from
+//             wherever its world holds it; a can't-be-countered X stays and resolves after this),
+//             then "Draw a card" through the draw-spell path (DrawIntoHand, HandEntryReason::Draw,
+//             the per-turn count and CR 104.3c deck-out -- EffectHandler::ResolveDrawSpell's exact
+//             draw), and the Remand goes to the graveyard.
+// Returns the hand size just before the draw, so each world reports the drawn cards to its own
+// sink (the rollout's viewer draw sink, the executor's game log). `remand_out` gets the Remand card.
+std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDefinition& remand_def,
+                                 bool post_combat, bool countered, const Card& x_card,
+                                 Card* remand_out);
+
 // Apply a Ragemonger-style COLOURED pip reduction to `cost`: one plain pip of each of the
 // reduction's coloured pips comes off (floored at 0, generic untouched), consuming a PLAIN pip
 // before retiring a hybrid entry (see the hybrid note at the EffectiveSpellCost call site). Shared
