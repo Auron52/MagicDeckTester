@@ -21251,6 +21251,11 @@ static void Note(Site site, const TurnSolver::Plan& p, const SearchBudget* b)
 // THE GOOD SHAPE (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK..."): nothing is refused or reordered -- every
 // variant is still enumerated and, where the loop runs, applied and scored -- and at an UNLIMITED
 // budget (nullptr, or Unlimited()) the price is never read, so --budget-ms 0 is byte-identical.
+//
+// DEFAULT OFF (2026-10-18), measured: it buys work at a play cost. Held-out (same batch as the nested
+// bail's, price 2): Niv d3 b10 x300 -- 9 games slower, 1 faster, avg +0.0267 turns; d5 b20 x150 -- 2
+// slower, avg +0.0133; units NET of the price 0.908x / 0.909x (gross 1.35x / 1.23x). On top of the bail:
+// +0.0233 / +0.0067 for 0.849x / 0.892x net. "+1 is not neutral": the aggregate is worse on both cells.
 static bool PutBackPriceOn()
 {
     static const bool env = EnvOn("MTG_PUTBACK_PRICE", false);
@@ -75426,9 +75431,16 @@ static bool LaPassCeilingOn()
 // anytime rule). So it RE-PRICES work: a larger budget arms a proportionally larger ceiling and trips
 // later (or never), and at an UNLIMITED budget no ceiling is armed and Overrun() is never true -- inert
 // by construction. It refuses nothing the ceiling had not already condemned to a no-win score.
+//
+// DEFAULT ON (2026-10-18), measured. Held-out (fresh seeds, arms interleaved in one pooled batch):
+// Niv d3 b10 x300 (seed 93000) + d5 b20 x150 (seed 94000) -- 450/450 games BYTE-IDENTICAL (win turn and
+// play digest) to the bail off, units 193.2M -> 179.9M (0.931x) and 104.2M -> 99.5M (0.955x); the
+// discovery sample (d5 x60 seed 81000, d3 x60 seed 82000) 120/120 identical, 0.848x / 0.712x, its worst
+// game (d3 seed 82021 gi 21) 11.79M -> 1.66M units. No game was slower, so there is nothing to recover
+// at --budget-ms 0 (where the bail is not even read). =0 restores the unbailed nested loop.
 static bool LaNestedBailOn()
 {
-    static const bool env = EnvOn("MTG_LA_NESTED_BAIL", false);
+    static const bool env = EnvOn("MTG_LA_NESTED_BAIL", true);
     return heurarm::Flag(heurarm::LA_NESTED_BAIL, env);
 }
 

@@ -418,25 +418,37 @@ TEST_CASE("Brainstorm: the put-back price and the nested overrun bail are inert 
 {
     const GameState s = BoardBs({ "Island", "Lightning Bolt", "Goblin Guide" },
                                 { "Birds of Paradise", "Sol Ring", "Llanowar Elves" });
-    auto solve = [&](int price, int bail, SearchBudget* b, long long* charged) -> TurnSolver::Plan
+    // A plan's OUTCOME, not its bytes: Plan::putback_group is a per-enumeration sibling id (a running
+    // thread-local counter), so two enumerations of one board never agree on it.
+    auto outcome = [&](const TurnSolver::Plan& p)
+    {
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, p, true);
+        std::string o = "pb=" + std::to_string(p.putback_choice) + " hand=";
+        for (int n : HandNums(r)) { o += std::to_string(n) + ","; }
+        o += " lib=";
+        for (int n : LibNums(r)) { o += std::to_string(n) + ","; }
+        return o + " bf=" + std::to_string(r.battlefield.size());
+    };
+    auto solve = [&](int price, int bail, SearchBudget* b, long long* charged) -> std::string
     {
         const heurarm::Arm saved = heurarm::t_arm;
         heurarm::t_arm[heurarm::PUTBACK_PRICE]  = static_cast<std::int8_t>(price);
         heurarm::t_arm[heurarm::LA_NESTED_BAIL] = static_cast<std::int8_t>(bail);
         const long long c0 = TurnSolver::PutBackPriceCharged();
-        TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, true, 2, 8, b, b != nullptr, false, nullptr);
+        const TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, true, 2, 8, b, b != nullptr, false, nullptr);
         if (charged != nullptr) { *charged = TurnSolver::PutBackPriceCharged() - c0; }
         heurarm::t_arm = saved;
-        return p;
+        return outcome(p);
     };
     long long ch = -1;
-    const TurnSolver::Plan off = solve(0, 0, nullptr, nullptr);
+    const std::string off = solve(0, 0, nullptr, nullptr);
     CHECK(solve(1, 1, nullptr, &ch) == off);
     CHECK(ch == 0);
     SearchBudget u_on(0), u_off(0);   // 0 = UNLIMITED
-    const TurnSolver::Plan p_on = solve(1, 1, &u_on, &ch);
+    const std::string p_on = solve(1, 1, &u_on, &ch);
     CHECK(ch == 0);
-    const TurnSolver::Plan p_off = solve(0, 0, &u_off, nullptr);
+    const std::string p_off = solve(0, 0, &u_off, nullptr);
     CHECK(p_on == p_off);
     CHECK(u_on.Used() == u_off.Used());
     // A finite budget: the variants the root applies are billed the price.
