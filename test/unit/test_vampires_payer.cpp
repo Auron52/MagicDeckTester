@@ -452,3 +452,53 @@ TEST_CASE("payer L (search): main 2's 'cast Pit Fighter, then activate it' reall
     CHECK(exec.players[0].library.size() == s.players[0].library.size() - 2);
     CHECK(exec.players[0].hand.size() == roll.players[0].hand.size());
 }
+
+// ---- F x L: pain-last must not spend the only ability-legal colour on a cast (the integrator's follow-up) --
+
+TEST_CASE("payer F x L (search): cast Gorger off the Estate's pain so Pit Fighter's {1}{R} keeps the Courtyard, both worlds")
+{
+    // The sub-integrator's open question 1: Secluded Courtyard + Voldaren Estate + Swamp, a Falkenrath
+    // Pit Fighter on the battlefield, main 2 after combat damage. "Cast Falkenrath Gorger {R}, then
+    // activate Pit Fighter {1}{R}": the activation's {R} can come ONLY from the Courtyard (the Estate's
+    // colour is creature-SPELL mana, the Swamp makes none), so the Gorger must take the Estate's painful
+    // {R}. Pain-last alone sent the cast to the Courtyard and the activation silently no-op'd; the
+    // activation-line hold now reserves an ability-legal provider for the activation's own pips
+    // (PlanTraits::act_pips_cab).
+    GameState s = FreshVp(5);
+    s.phase = Phase::PostCombatMain;
+    s.opponent_lost_life_this_turn = true;
+    PutVp(s, "Falkenrath Pit Fighter", 20);
+    PutVp(s, "Vampire of the Dire Moon", 55);
+    PutVp(s, "Secluded Courtyard", 33);
+    PutVp(s, "Voldaren Estate", 58);
+    PutVp(s, "Swamp", 44);
+    HandVp(s, "Falkenrath Gorger", 16);
+    HandVp(s, "Swamp", 45);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false);
+    const TurnSolver::Plan* found = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        int gorger = 0, acts = 0, other = 0;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Falkenrath Gorger") { ++gorger; }
+            else if (a.kind == Action::Kind::SacCreatureOutlet) { ++acts; }
+            else { ++other; }
+        }
+        if (gorger == 1 && acts == 1 && other == 0) { found = &p; break; }
+    }
+    REQUIRE_MESSAGE(found != nullptr, "the enumerator does not offer cast Gorger + activate Pit Fighter");
+    TurnSolver::Plan line = *found;
+    if (line.bp_choice < 0) { line.bp_choice = TurnSolver::kBpEmptyChoice; line.bp_all = true; }
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/false);
+    CHECK(roll.players[0].library.size() == s.players[0].library.size() - 2);   // Pit Fighter drew two
+    CHECK(roll.players[0].life == s.players[0].life - 1);                       // the Estate's {R}, forced
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    eng.SetSearchPostCombat(true);
+    MtgTestSeam::CommitPhasePlan(eng, line, false);
+    GameState exec = s;
+    eng.TakeTurn(exec, false, ResolveAllVp);
+    CHECK(exec.players[0].library.size() == s.players[0].library.size() - 2);
+    CHECK(exec.players[0].life == roll.players[0].life);
+}
