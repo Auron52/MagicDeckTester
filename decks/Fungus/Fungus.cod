@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cockatrice_deck version="1">
-    <deckname>Fungus v2 (2026-10-16)</deckname>
+    <deckname>Fungus v3 (2026-10-16)</deckname>
     <comments>Adopted 2026-10-16 after a 39-round screen (~1.06M games, scripts/deck_compare.py). Beats the
 candidate-b base by -0.4697 +-0.0089 turns (std) / -0.5817 +-0.0105 (2hg), replicated across four
 disjoint seed blocks (1340000/1350000/1370000/1380000) at ~50 sigma. 36 spells / 24 lands, mono-green
@@ -22,9 +22,9 @@ pinned by the nonbasic-4 cap rather than by measurement. 24 lands is right: 25 i
 (+0.0072/+0.0092) and 23 gains only in std. Every other single-card change sits at or under the
 provisional floor (0.0068-0.0079).
 
-HISTORY: the predecessor is archived at v1-sporesower-shelldweller/ with its own profile, value
-sidecar and keep table (all three were fitted to that list and must never be read by this one). The
-unadopted user variant stays at candidate-b-2026-09/. Full screen record:
+HISTORY: this is v3. v1 is archived at v1-sporesower-shelldweller/ with its own profile, value
+sidecar and keep table (all three were fitted to that list and must never be read by this one). v2 is
+candidate B, the user's 2026-09-24 revision this screen started from, at candidate-b-2026-09/. Full screen record:
 docs/design/fungus-screen-2026-10-13.md and docs/design/analysis-Fungus.md.</comments>
     <zone name="main">
         <card number="4" name="Beastmaster Ascension"/>

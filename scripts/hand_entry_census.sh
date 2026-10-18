@@ -38,7 +38,7 @@ SEED=${SEED:-1001}
 # draw, th = DrawUntilNonland, hinata = cantrip chains, melira = pod, mirrorwing = trick payload).
 DECKS=(
   "goblins    decks/Goblins/Goblins.cod"
-  "fungus     decks/Fungus/v1-sporesower-shelldweller/Fungus.cod"
+  "fungus     decks/Fungus/Fungus.cod"
   "kitty      decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
   "th         decks/treasure_hunt/treasure_hunt.txt"
   "hinata     decks/Hinata2/Hinata2.cod"

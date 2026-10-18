@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cockatrice_deck version="1">
-    <deckname>Fungus - candidate B (2026-09-24)</deckname>
+    <deckname>Fungus v2 - candidate B (2026-09-24)</deckname>
     <comments>Candidate B -- the user's proposed Fungus revision, 2026-09-24. A VARIANT of Fungus, not a separate deck and NOT an adopted list. Artifacts in this folder are fitted to THIS list; references saved against it belong under references/Fungus/candidate-b-2026-09/.</comments>
     <zone name="main">
         <card number="1" name="Sol Ring"/>
