@@ -284,3 +284,28 @@ is admitted when:
 Both default ON (the USER's rule); =0 each -> the rule as first stated. Supersedes `MTG_COLOSSUS_TUTOR_LIZARD_DS` /
 `_NEEDS_HAMMER` (removed). Open: Forge Anew / Raubahn counted as one free equip each (once a turn / per attack) --
 the USER may want them treated differently.
+
+#### Measurement (run9 / run9nc, 2026-10-18, Release binary of `4f984afac`, src `d24d0b29`)
+
+Paired per game against the rule as first stated (both new flags `=0`); loss = 9; `units` = deterministic search
+decision units (wall moved 0.97-1.01x, noise). run9 reuses run8's seeds (`13800001+`).
+
+| run | cell | arm | games | diff | se | faster | slower | units |
+|---|---|---|---|---|---|---|---|---|
+| run9 | play settings | FIRST only | 3000 | -0.0020 | 0.0008 | 6 | 0 | 1.004x |
+| run9 | play settings | COUNT only | 3000 | 0.0000 | 0 | 0 | 0 | 1.003x |
+| run9 | play settings | both (shipped) | 3000 | -0.0020 | 0.0008 | 6 | 0 | 1.006x |
+| run9 | d3 | FIRST only | 4000 | -0.0035 | 0.0009 | 14 | 0 | 1.003x |
+| run9 | d3 | COUNT only | 4000 | -0.0003 | 0.0003 | 1 | 0 | 1.002x |
+| run9 | d3 | both | 4000 | -0.0037 | 0.0010 | 15 | 0 | 1.005x |
+| run9 | 2HG | both | 1000 | -0.0010 | 0.0010 | 1 | 0 | 1.007x |
+| run9nc | play settings, `MTG_NC_SEARCH=1` | both | 1000 | -0.0040 | 0.0020 | 4 | 0 | (NC) |
+
+No slower game in any cell. Under the search that cannot see the library (run9nc) the rule captures all four honest
+wins run8nc found for an amendment (gi 434 4->3, 470 5->4, 544 4->3, 571 6->5), so the gain is not clairvoyance.
+Almost all of it is FIRST (gi118's shape: Lizard Blades on T2 under one Hammer beats a 3-mana Ardenn that cannot
+attack before T4). The extra work is the search evaluating Lizard Blades as a second tutor target wherever the rule
+now admits it; COUNT costs ~0.2-0.3% units for one faster game in 8000 (at play settings it changed no game) --
+reported to the USER, kept as the USER's rule. For scale, the whole package is ~0.7x the work of the pushed play
+(run6). References on this binary: viewer protocol `--strict` 15/15 (9 ok, 6 repaired, 0 drift / enum-gap);
+ref_bench 0/15 short, search 3.200 vs human 3.267 (seed 7 one turn faster), hands verified.

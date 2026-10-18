@@ -278,6 +278,14 @@ gi34), regression 7 (4 Path clairvoyance + gi79 / gi129 / gi136, which recover a
 if we free equip") -- raised to the USER, not changed. Overnight GT for the Colossus rows is left to the periodic
 overnight run.
 
+After the USER's rulings (2026-10-18): the Lizard amendment above was REVERTED (USER: *"There is no reason to include
+it if we have both a body and a source to free-equip"*); the rule as stated was accepted (`39fef4c07`); then the USER
+amended it after the gi118 trace -- Lizard Blades also when it lands before every other creature, and when free equip
+cannot cover every Hammer held (`4f984afac`, `MTG_COLOSSUS_TUTOR_LIZARD_FIRST` / `_EQUIP_COUNT`, both ON). Measured
+against the rule as stated (run9 / run9nc, colossus-hammer-cast-order.md): play -0.0020, d3 -0.0037, 2HG -0.0010,
+NC search -0.0040, 0 slower anywhere, 1.005-1.007x search units. References on that binary: protocol 15/15, ref_bench
+0/15 short (3.200 vs 3.267).
+
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`); flagged seeds RE-CHECKED on the final engine (`51573d7e5`), see below
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
