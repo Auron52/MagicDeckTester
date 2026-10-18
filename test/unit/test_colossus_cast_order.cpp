@@ -133,3 +133,83 @@ TEST_CASE("Colossus cast order: =0 is the generic order and no activation order"
     CHECK(p.LandDropCastOrderRank() == -1);
     CHECK_FALSE(p.CastOrderTotalByName());
 }
+
+// ---- Equipment tutors (USER 2026-10-18): Colossus Hammer always and first; Lizard Blades only where the
+// Hammer falls short; Loxodon Warhammer / Dragonfire Blade never (MTG_COLOSSUS_TUTOR_OTHERS: with no cheap
+// attach only).
+namespace
+{
+GameState TutorBoard(const std::vector<std::string>& bf, const std::vector<std::string>& hand,
+                     const std::vector<std::string>& lib)
+{
+    EnsureCardsCo();
+    static const ColossusHammerProvider prov;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.m_provider          = &prov;
+    int n = 1;
+    for (const std::string& b : bf)
+    {
+        Permanent p;
+        p.card             = DefCo(b).card;
+        p.card.m_number    = n++;
+        p.controller_index = 0;
+        p.owner_index      = 0;
+        s.battlefield.push_back(p);
+    }
+    for (const std::string& h : hand) { Card c = DefCo(h).card; c.m_number = n++; s.players[0].hand.push_back(c); }
+    for (const std::string& l : lib)  { Card c = DefCo(l).card; c.m_number = n++; s.players[0].library.push_back(c); }
+    return s;
+}
+
+const std::vector<std::string> kTutorLib = { "Plains", "Loxodon Warhammer", "Colossus Hammer", "Dragonfire Blade",
+                                             "Lizard Blades", "Mountain" };
+
+std::vector<std::string> Picks(const GameState& s)
+{
+    return ResolveProvider(s).TutorCandidates(s, 0, DefCo("Steelshaper's Gift").params);
+}
+}   // namespace
+
+TEST_CASE("Colossus tutors: a cheap attach and a creature -> Colossus Hammer alone")
+{
+    using V = std::vector<std::string>;
+    CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" }, kTutorLib)) == V{ "Colossus Hammer" });
+    CHECK(Picks(TutorBoard({ "Plains", "Kor Duelist" }, { "Magnetic Theft" }, kTutorLib)) == V{ "Colossus Hammer" });
+    // A non-double-striker with a cheap attach is still the Hammer alone (Raubahn carries it himself).
+    CHECK(Picks(TutorBoard({ "Plains", "Raubahn, Bull of Ala Mhigo" }, {}, kTutorLib)) == V{ "Colossus Hammer" });
+    // ...and Open the Armory follows the same rule.
+    const GameState s = TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" }, kTutorLib);
+    CHECK(ResolveProvider(s).TutorCandidates(s, 0, DefCo("Open the Armory").params) == V{ "Colossus Hammer" });
+}
+
+TEST_CASE("Colossus tutors: no creature, or no double striker and no cheap attach -> Lizard Blades joins, second")
+{
+    using V = std::vector<std::string>;
+    CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, {}, kTutorLib)) == V{ "Colossus Hammer", "Lizard Blades" });
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens" }, {}, kTutorLib))
+          == V{ "Colossus Hammer", "Lizard Blades" });
+    // A double striker but no cheap attach: the Hammer alone (Lizard adds nothing it lacks).
+    CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, {}, kTutorLib)) == V{ "Colossus Hammer" });
+}
+
+TEST_CASE("Colossus tutors: Warhammer / Dragonfire Blade only under the test lever, and only with no cheap attach")
+{
+    using V = std::vector<std::string>;
+    ArmCo others(heurarm::COLOSSUS_TUTOR_OTHERS, 1);
+    CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, {}, kTutorLib))
+          == V{ "Colossus Hammer", "Loxodon Warhammer", "Dragonfire Blade" });
+    CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, { "Sigarda's Aid" }, kTutorLib)) == V{ "Colossus Hammer" });
+}
+
+TEST_CASE("Colossus tutors: no Hammer left -> every legal target; the rule off -> library order")
+{
+    using V = std::vector<std::string>;
+    CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" },
+                           { "Plains", "Loxodon Warhammer", "Dragonfire Blade", "Lizard Blades" }))
+          == V{ "Loxodon Warhammer", "Dragonfire Blade", "Lizard Blades" });
+    ArmCo off(heurarm::COLOSSUS_TUTOR_HAMMER, 0);
+    CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" }, kTutorLib))
+          == V{ "Loxodon Warhammer", "Colossus Hammer", "Dragonfire Blade", "Lizard Blades" });
+}

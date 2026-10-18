@@ -44805,6 +44805,104 @@ bool ColossusHammerProvider::NeverCast(const CardDefinition& def) const
     return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::UACast);
 }
 
+// ---- Equipment tutors: Colossus Hammer first, the rest only where the Hammer falls short ----------
+//
+// USER 2026-10-18: "Steelshaper and Open the Armory should always get Colossus Hammer when you have the
+// ability to auto-equip and a creature. If no creature in hand or the critter is lacking double-strike
+// but we have no auto-equip, Lizard Blades is an option. If no auto-equip we might consider one of the
+// other two equipment though they are pretty slow in that case. Honestly, Colossus Hammer is the pick
+// the vast majority of the time." / "We should always include it in the search, but the others we could
+// often drop." / "Honestly in a real game I would only search Hammer and Lizard Blades when there is no
+// creatures ... In Goldfish these are not very good." / "I don't know 100% if it will be lossless to
+// never get Warhammer or Dragonfire Blade, though. That is something to test." / "Certainly it will be
+// unnecessary if we free equip."
+//
+// A provider RESTRICTION (the search still branches over what is admitted), Hammer FIRST so it is also
+// the d0 / beyond-horizon pick and the human menu's default:
+//   * Colossus Hammer (equip_power_bonus >= 10) -- ALWAYS, while one is in the library.
+//   * Lizard Blades (the Equipment creature) -- when we have NO creature (battlefield or hand) to carry
+//     the Hammer, or when no creature we have can double strike AND no cheap attach is available.
+//   * the other Equipment (Loxodon Warhammer, Dragonfire Blade) -- NEVER by default; under
+//     MTG_COLOSSUS_TUTOR_OTHERS=1 (the arm that tests whether dropping them is lossless) only when no
+//     cheap attach is available ("unnecessary if we free equip").
+// "A cheap attach" = a card in hand or on our battlefield that puts Equipment on a creature without its
+// equip cost: Sigarda's Aid, Forge Anew (its waiver / return), Magnetic Theft, Raubahn, Ardenn.
+// No Hammer left in the library -> the generic list (every legal target). MTG_COLOSSUS_TUTOR_HAMMER=0
+// restores the generic list everywhere; human play keeps the full menu (RankedTutorCandidates puts
+// this ranking first).
+namespace
+{
+bool ColossusTutorRuleEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_HAMMER", true);   // DEFAULT ON (USER 2026-10-18)
+    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_HAMMER, on);
+}
+
+bool ColossusTutorOthersEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_OTHERS");   // DEFAULT OFF (USER: never, pending the test)
+    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_OTHERS, on);
+}
+
+bool IsCheapAttachSource(const CardParams& p)
+{
+    return p.attach_equipment_on_etb || p.first_equip_free || p.etb_return_equipment_from_gy
+        || p.attach_target_equipment || p.attack_attach_equipment || p.begin_combat_attach_all;
+}
+
+bool CanDoubleStrikeWithEquipment(const CardDefinition& d)
+{
+    return d.card.HasKeyword(Keyword::DoubleStrike) || d.params.double_strike_while_equipped;
+}
+}   // namespace
+
+std::vector<std::string>
+ColossusHammerProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
+    if (!ColossusTutorRuleEnabled() || !IsEquipmentTutor(pp) || DecisionUnpruned(UnprunedGate::Tutor))
+    { return all; }
+    std::string hammer, lizard;
+    std::vector<std::string> others;
+    for (const std::string& n : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+        if (d == nullptr || !d->params.is_equipment) { continue; }
+        if (d->params.equip_power_bonus >= 10)  { if (hammer.empty()) { hammer = n; } }
+        else if (d->card.IsCreature())          { if (lizard.empty()) { lizard = n; } }
+        else                                    { others.push_back(n); }
+    }
+    if (hammer.empty()) { return all; }
+
+    // What we have to carry it and to attach it cheaply: our battlefield and our hand.
+    bool creature = false, ds_creature = false, cheap_attach = false;
+    auto note = [&](const CardDefinition& d, bool is_creature_now)
+    {
+        if (is_creature_now)
+        {
+            creature = true;
+            if (CanDoubleStrikeWithEquipment(d)) { ds_creature = true; }
+        }
+        if (IsCheapAttachSource(d.params)) { cheap_attach = true; }
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr) { note(*d, p.card.IsCreature()); }
+    }
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr) { note(*d, d->card.IsCreature()); }
+    }
+
+    std::vector<std::string> out = { hammer };
+    if (!lizard.empty() && (!creature || (!ds_creature && !cheap_attach))) { out.push_back(lizard); }
+    if (ColossusTutorOthersEnabled() && !cheap_attach) { out.insert(out.end(), others.begin(), others.end()); }
+    return out;
+}
+
 // ---- Cleanup discard: the AI-DRAFTED 5i buckets (MTG_COLOSSUS_BUCKET_DISCARD, DEFAULT OFF) ------
 //
 // docs/design/colossus-hammer-discard-policy-proposal.md, drafted 2026-10-17 (analyze-deck 5i: the AI

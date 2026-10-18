@@ -717,6 +717,12 @@ public:
     // Human play and MTG_UNPRUNE=uacast still offer it. With it on, OffersRemovalCast above is never
     // reached for this deck.
     bool NeverCast(const CardDefinition& def) const override;
+    // EQUIPMENT TUTORS (Steelshaper's Gift, Open the Armory): Colossus Hammer ALWAYS and FIRST; Lizard
+    // Blades only with no creature to carry it, or no double striker and no cheap attach; Loxodon
+    // Warhammer / Dragonfire Blade never (MTG_COLOSSUS_TUTOR_OTHERS=1: only with no cheap attach). USER
+    // 2026-10-18; MTG_COLOSSUS_TUTOR_HAMMER (default ON). DecisionProviders.cpp, "Equipment tutors".
+    std::vector<std::string>
+    TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
     // CLEANUP DISCARD: the AI-DRAFTED 5i buckets (docs/design/colossus-hammer-discard-policy-proposal.md),
     // behind MTG_COLOSSUS_BUCKET_DISCARD (heurarm COLOSSUS_BUCKET_DISCARD), DEFAULT OFF until the USER
     // reviews them. ONE index; re-asked after every shed while on.
