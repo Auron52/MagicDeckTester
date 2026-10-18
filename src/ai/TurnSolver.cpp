@@ -21368,6 +21368,68 @@ static bool BpNodeEmptySkip()
     static const bool on = EnvOn("MTG_BP_NODE_EMPTYSKIP", true);
     return on;
 }
+// ---- THE NODE PUT-BACK FOLD (MTG_BP_NODE_PUTBACK_FOLD, DEFAULT ON; =0 restores the applies) ---------
+// The put-back fold (PutBackFoldMemo) one level down: a breakpoint NODE walks its pend's whole
+// continuation list, and when the pend's hand holds a Brainstorm that list carries every put-back clone
+// of each continuation that casts it -- sized by an UPPER bound (PutBackAxisWidth), so the ranks past the
+// resolution's real width clamp to its last candidate. Measured on NivMizzetCombo d3 b10 s2018 gi16:
+// 213,951 node children, 199,726 of them post-apply duplicates; a child's apply is ~64 us, ~90% of that
+// game's wall.
+// THE FOLD. Every member of one fan (Plan::putback_group) is its base with only putback_choice changed,
+// so from the pend's snapshot every member applies identically up to the put-back that consumes the
+// pin; that put-back sees the same hand and offers the same list, and a member whose rank RESOLVES --
+// min(k, width - 1), the resolver's own clamp -- to a rank an earlier child of the SAME pend already
+// applied reaches that child's state exactly, which the node's post-apply dedup would discard. The host
+// learns each entry's (group, choice) from child 0's apply (the channel below, filled at the targeted
+// resolution like g_bp_cands_has_empty) and each group's width / applied ranks from the children it
+// applies (g_apd_last_putback_w / _i). A folded child is STILL CHARGED its unit and counted as a child
+// duplicate -- the fold removes the apply, the state copy and the key build, nothing else -- so the
+// node's units, its dedup set and every later decision are unchanged.
+static bool BpNodePutBackFoldOn()
+{
+    static const bool on = EnvOn("MTG_BP_NODE_PUTBACK_FOLD", true);   // DEFAULT ON; =0 disables
+    return on;
+}
+// Child 0's targeted resolution publishes its list's (putback_group, putback_choice) per entry here.
+static thread_local std::vector<std::pair<int, int>> g_bp_cands_pb;
+static thread_local bool g_bp_cands_pb_ok = false;
+// One pend's memo: the entries' fan identities (copied from the channel after child 0) and, per fan,
+// the measured width and the resolved ranks some child has applied.
+struct NodePutBackFold
+{
+    struct Group { int width = -1; bool bad = false; std::vector<int> ranks; };
+    bool on = false;
+    std::vector<std::pair<int, int>> entry;   // per cands index: (putback_group, putback_choice)
+    std::unordered_map<int, Group> groups;
+    // After child 0's apply: take the channel the targeted resolution filled (if any).
+    void TakeChannel()
+    {
+        if (on && g_bp_cands_pb_ok) { entry = g_bp_cands_pb; }
+    }
+    // Before child k's apply: is it a clamped repeat of an applied sibling?
+    bool Folds(int k) const
+    {
+        if (!on || k <= 0 || k >= static_cast<int>(entry.size())) { return false; }
+        const auto [g, c] = entry[static_cast<std::size_t>(k)];
+        if (g == 0 || c < 1) { return false; }
+        const auto it = groups.find(g);
+        if (it == groups.end() || it->second.bad || it->second.width <= 0) { return false; }
+        const int r = std::min(c, it->second.width - 1);
+        return std::find(it->second.ranks.begin(), it->second.ranks.end(), r) != it->second.ranks.end();
+    }
+    // After child k's apply: the width and resolved rank of the put-back it resolved.
+    void Record(int k)
+    {
+        if (!on || k < 0 || k >= static_cast<int>(entry.size())) { return; }
+        const int g = entry[static_cast<std::size_t>(k)].first;
+        if (g == 0 || g_apd_last_putback_w <= 0 || g_apd_last_putback_i < 0) { return; }
+        Group& gr = groups[g];
+        if (gr.width < 0) { gr.width = g_apd_last_putback_w; }
+        else if (gr.width != g_apd_last_putback_w) { gr.bad = true; return; }   // siblings must agree
+        if (std::find(gr.ranks.begin(), gr.ranks.end(), g_apd_last_putback_i) == gr.ranks.end())
+        { gr.ranks.push_back(g_apd_last_putback_i); }
+    }
+};
 
 // [bp-node] anatomy probe (under MTG_ROLLOUT_STATS, like the units buckets): where does the
 // node's cost live -- how many base plans pend, how many collapse on the prefix dedup (the
@@ -21394,6 +21456,7 @@ namespace bpnode
     inline std::atomic<uint64_t> g_dupes_empty{0};
     inline std::atomic<uint64_t> g_fp_predictable{0};
     inline std::atomic<uint64_t> g_empty_preskips{0};  // EMPTY arms skipped pre-apply (exact)
+    inline std::atomic<uint64_t> g_pb_folded{0};       // put-back clamp repeats folded pre-apply (exact)
     // THE PARTITION'S OWN TRUNCATION RISK (MTG_ROLLOUT_STATS). Hosting REPLACES a free full-tail
     // greedy plan with an enumerated child list -- and that list is walked under the same
     // budget->Overrun() abort every other pass takes. On a WIDE site the walk can therefore stop
@@ -21593,12 +21656,13 @@ namespace bpnode
                          (unsigned long long)g_empty_adopted.load());
             std::fprintf(stderr,
                          "[bp-node] dupes_innode=%llu dupes_cross=%llu dupes_empty=%llu"
-                         " fp_predictable=%llu empty_preskips=%llu\n",
+                         " fp_predictable=%llu empty_preskips=%llu putback_folded=%llu\n",
                          (unsigned long long)g_dupes_innode.load(),
                          (unsigned long long)(g_child_dupes.load() - g_dupes_innode.load()),
                          (unsigned long long)g_dupes_empty.load(),
                          (unsigned long long)g_fp_predictable.load(),
-                         (unsigned long long)g_empty_preskips.load());
+                         (unsigned long long)g_empty_preskips.load(),
+                         (unsigned long long)g_pb_folded.load());
             if (g_dupes_vs_plan.load() + g_dupes_vs_child.load()
                 + g_dupes_vs_variant.load() + g_dupes_untraced.load() == 0) { return; }
             std::fprintf(stderr,
@@ -44463,6 +44527,21 @@ static bool BpChildTimingOn()
     static const bool v = EnvOn("MTG_BP_CHILD_TIMING");
     return v;
 }
+namespace bpnode
+{
+// A child the node put-back fold declined (NodePutBackFold): booked exactly as the post-apply dedup
+// books the in-node duplicate it would have been, plus its own counter (MTG_ROLLOUT_STATS only).
+inline void CountFoldedChild(int depth, const GameState& state)
+{
+    g_children.fetch_add(1, std::memory_order_relaxed);
+    g_children_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+    g_children_ahead[BpAheadBucket(state)].fetch_add(1, std::memory_order_relaxed);
+    (g_rollout_nest > 0 ? g_children_rollout : g_children_search).fetch_add(1, std::memory_order_relaxed);
+    g_child_dupes.fetch_add(1, std::memory_order_relaxed);
+    g_dupes_innode.fetch_add(1, std::memory_order_relaxed);
+    g_pb_folded.fetch_add(1, std::memory_order_relaxed);
+}
+}   // namespace bpnode
 
 static bool BpPrefixPrepayEnabled()
 {
@@ -45624,6 +45703,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (const TurnSolver::Plan& cp : cands)
                 { if (IsApplyEmptyPlan(cp)) { has_empty = true; break; } }
                 if (node_hosted) { g_bp_cands_has_empty = has_empty; }
+                // The node put-back fold's channel (see NodePutBackFold): each entry's fan identity.
+                if (node_hosted && BpNodePutBackFoldOn())
+                {
+                    g_bp_cands_pb.clear();
+                    g_bp_cands_pb.reserve(cands.size());
+                    for (const TurnSolver::Plan& cp : cands)
+                    { g_bp_cands_pb.emplace_back(cp.putback_group, cp.putback_choice); }
+                    g_bp_cands_pb_ok = true;
+                }
                 if (BpEmptyCensusOn() && site >= 0 && site < kBpSites)
                 {
                     g_bpempty_lists[site].fetch_add(1, std::memory_order_relaxed);
@@ -60540,6 +60628,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     if (PonderAxisEnabled() && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
+        // THE CANON FRONT DERIVATION reads only front(), which is never a Ponder clone (the put-back
+        // axis's argument below: a clone is its base with only ponder_choice changed, appended after
+        // every base plan, so no verdict separates it from its base and the stable value sort keeps
+        // it behind). This axis stamps nothing on its bases, so skipping the clones there leaves the
+        // base plans bit-for-bit the same. Full lists are never built this way.
+        const bool pond_materialize = t_bp_front_only_depth != g_bp_enum_depth;
         for (const TurnSolver::Plan& p : all)
         {
             // Base plans only -- one axis at a time, so cost stays additive.
@@ -60566,7 +60660,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     std::size_t k_max = 1;
                     for (int f = 2; f <= look; ++f) { k_max *= static_cast<std::size_t>(f); }
                     if (look <= 0) { k_max = 0; }
-                    for (std::size_t k = 1; k <= k_max; ++k)
+                    for (std::size_t k = 1; pond_materialize && k <= k_max; ++k)
                     {
                         TurnSolver::Plan v = p;
                         v.ponder_choice = static_cast<int>(k);
@@ -69042,6 +69136,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 g_bp_cands_fp_distinct = -1;
                 g_bp_cands_has_empty   = false;
                 const bool ct = BpChildTimingOn();   // hoisted: this is the hottest loop in the node
+                NodePutBackFold pb_node;              // MTG_BP_NODE_PUTBACK_FOLD (see NodePutBackFold)
+                pb_node.on = BpNodePutBackFoldOn();
+                g_bp_cands_pb_ok = false;
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take.
@@ -69067,6 +69164,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         break;
                     }
                     ConsumeAt(budget, unitsite::kFsBpNode);
+                    // THE NODE PUT-BACK FOLD: a clamped repeat of a sibling this pend already applied
+                    // -- the post-apply dedup's skip without the apply (charged and counted the same).
+                    if (pb_node.Folds(k))
+                    {
+                        if (s_rollout_stats) { bpnode::CountFoldedChild(depth, state); }
+                        continue;
+                    }
                     TurnSolver::Plan v = q;
                     v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
                     v.bp_at     = node_snap.bp_seen;
@@ -69079,6 +69183,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     g_bp_cands_last   = 0;
                     g_bp_demoted_last = 0;
                     ApplyPlanDirect(s3, v, false, &bp3, nullptr, &node_snap);
+                    if (k == 0) { pb_node.TakeChannel(); }
+                    pb_node.Record(k);
                     // The node's nested / demoted waves -- the FSLineWin host's twin (see there).
                     if (k == 0 && node_n < 0)
                     { NodeRecordChild0(node_nested, static_cast<std::size_t>(&q - post.data()), node_snap.bp_seen); }
@@ -70919,6 +71025,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pend_local;
                 g_bp_cands_fp_distinct = -1;
                 g_bp_cands_has_empty   = false;
+                NodePutBackFold pb_node;              // MTG_BP_NODE_PUTBACK_FOLD (see NodePutBackFold)
+                pb_node.on = BpNodePutBackFoldOn();
+                g_bp_cands_pb_ok = false;
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take (see the
@@ -70947,6 +71056,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
                         if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
                     }
+                    // THE NODE PUT-BACK FOLD -- see the m2 host.
+                    if (pb_node.Folds(k))
+                    {
+                        if (s_rollout_stats) { bpnode::CountFoldedChild(depth, state); }
+                        continue;
+                    }
                     TurnSolver::Plan v = p;
                     v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
                     v.bp_at     = node_snap.bp_seen;
@@ -70956,6 +71071,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     g_bp_cands_last   = 0;
                     g_bp_demoted_last = 0;
                     ApplyPlanDirect(s3, v, true, &bp3, nullptr, &node_snap);
+                    if (k == 0) { pb_node.TakeChannel(); }
+                    pb_node.Record(k);
                     // Child 0 is cands.front() -- what MTG_BP_NESTED_CANON hands every variant at an
                     // index it does not target -- so the class-on breakpoints IT reaches past the pend
                     // are exactly the nested slots the walker owes this plan (AddHostedNested), and its
