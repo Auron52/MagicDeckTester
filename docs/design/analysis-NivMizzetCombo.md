@@ -52,10 +52,42 @@ Bracket notes reclassified for this deck:
 
 ## Stage 2 — cards (in progress)
 
+Engine survey (2026-10-17, three read-only agents):
+- **No per-draw trigger exists**; draws happen at ~26 sites (`cards_drawn_this_turn +=`), several
+  helpers. Non-combat damage carries no source. No Aura grants a triggered ability. Soulbond exists
+  (Silverblade Paladin) with a searched pair-or-wait and a viewer prompt. Creature `{T}: draw` exists
+  (`tap_draw_cost`). Every triggered "any target" damage in the engine goes to the opponent's face
+  (Pashalik Mons / Omnath precedent).
+- **No stack window**: every cast resolves before the next; nothing can target a spell. Self-Remand
+  is modellable as one combined action (cast X + Remand X: both costs, both cast-time blocks, X
+  returns to hand, Remand draws), the splice / same-plan trick-target shape.
+- **Mana**: the shared payer is exact for Signet / Ferrous Lake (U+R). The FLAT affordability pool
+  over-credits single-colour feeders (Island+Island+Signet "affords" three `{U}` spells; the payer
+  then refuses) and under-credits Sol Ring feeding a Signet (C+U+R). Phyrexian mana and checklands
+  already exist. Sac-for-mana exists but has no summoning-sickness gate and no spend rider.
+
+Work split (2026-10-17 ~22:40 UTC), one worktree + branch each, integrated serially here:
+- `niv-core`: shared draw-trigger hook + damage-to-opponent watcher; Niv-Mizzet, the Firemind;
+  Niv-Mizzet, Parun; Curiosity; Tandem Lookout; same-turn reachability of trigger-drawn cards.
+- `niv-remand`: self-targeted Remand (combined action, lossless target folds, viewer), incl. the
+  can't-be-countered Parun cantrip case; revisit Hinata/Fluctuator "never cast" hooks.
+- `niv-mana`: Generator Servant (tap-gated sac mana + haste-rider pool), Gitaxian Probe, Sulfur
+  Falls, Brainstorm (searched put-back, viewer `put_back`), Signet/Sol Ring feed fidelity.
+
 ### Card table
 | Card | Tier | Summary | Deferrals (status) |
 |---|---|---|---|
 
 ## Open questions for the user (collected, never blocking)
+- **Q1 (stack).** The AI skill asks that a stack-order-dependent card raise "does the stack need
+  implementing first?". Self-targeted Remand is one. Default taken: no full stack — a combined
+  "cast X, Remand X" action is faithful against a passive opponent (it never casts, so no other
+  stack interaction exists). PROVISIONAL.
+- **Q2 (Niv's "any target").** Always the opponent's face, the human is not asked (Pashalik /
+  Omnath precedent; in a goldfish nothing else is worth hitting, and a 20-ping loop would be 20
+  prompts). PROVISIONAL.
+- **Q3 (Curiosity "you may draw").** Always drawn while the library is non-empty. PROVISIONAL.
+- **Q4 (Remand is a play change for Hinata2).** Remand was never cast; self-Remand is legal, so
+  Hinata2's play (and GT) will move. Tested as a play change (held-out A/B), not gated.
 
 ## Approved deferrals
