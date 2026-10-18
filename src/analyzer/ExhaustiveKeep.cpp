@@ -1955,6 +1955,24 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::atomic<long long> pre{ 0 };     // kind -1 tasks enqueued
         std::atomic<long long> prehit{ 0 };  // kind 0 tasks served from the memo instead of rolling
         std::atomic<long long> prebad{ 0 };  // memo values that FAILED the verify re-roll (must be 0)
+        // USEFULNESS ACCOUNTING (2026-10-18). Every speculative mechanism reports what it PRODUCED and
+        // what the table ultimately CONSUMED, so "the cores were busy" can be told apart from "the
+        // cores did work that shipped". Diagnostic only -- relaxed atomics, never a decision input.
+        std::atomic<long long> prerolled{ 0 };   // kind -1 rollouts actually rolled (not skipped as already held)
+        std::atomic<long long> spec7_fed{ 0 };   // size-7 floor-speculation rollouts fed (past r0, pre-refs)
+        std::atomic<long long> spec7_used{ 0 };  // ...of which ended inside the cell's FINAL count (end of run)
+        std::atomic<long long> sspec_req{ 0 };   // speculative sub-wave rollouts enqueued (kind -2)
+        std::atomic<long long> sspec_rolled{ 0 };// ...actually rolled (not dropped as already consumed)
+        std::atomic<long long> sspec_hit{ 0 };   // sub rollouts served from the speculative memo
+        std::atomic<long long> sspec_bad{ 0 };   // memo values that FAILED the verify re-roll (must be 0)
+        std::atomic<long long> sspec_plans{ 0 }; // speculative sub-wave plans computed
+        std::atomic<long long> split_batches{ 0 };  // sub batches split into per-rollout tasks
+        std::atomic<long long> split_rolls{ 0 };    // ...rollouts they carried
+        // WORKER IDLE: microseconds workers spent waiting on an EMPTY queue while the producer was
+        // still running. This is the direct measurement of a barrier -- a core with nothing it is
+        // allowed to do -- and the number every schedule change here is judged on.
+        std::atomic<long long> idle_us{ 0 };
+        std::atomic<int>       nthreads{ 0 };
         std::atomic<long long> subwsz{ 0 };  // cells marked by the LAST sub-refine wave. The sub half has no
                                              // frozen/total ratio to read (its work is the shrinking set of
                                              // still-ambiguous bottoming argmins, not a fixed cell count), so
@@ -2014,6 +2032,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 std::unique_lock<std::mutex> lk(mx);
                 long long prev_7 = 0, prev_rs = 0, prev_sd = 0; double prev_el = 0.0;
+                long long prev_idle = 0;
                 long long prev_fed_seen = 0;   // rollouts enqueued as of the previous wake (unbanked-work warning)
                 while (!cv.wait_for(lk, std::chrono::seconds(period), [this] { return stop; }))
                 {
@@ -2067,9 +2086,32 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     std::cerr << "  journal=" << jn << " (" << jage << "s ago)";
                     // Precompute, reported only once it has engaged (silent on a run that never idled).
                     if (const long long pq = gp.pre.load(std::memory_order_relaxed); pq > 0)
-                    { std::cerr << "  pre=" << pq << " hit=" << gp.prehit.load(std::memory_order_relaxed);
+                    { std::cerr << "  pre=" << pq << " rolled=" << gp.prerolled.load(std::memory_order_relaxed)
+                                << " hit=" << gp.prehit.load(std::memory_order_relaxed);
                       if (const long long pb = gp.prebad.load(std::memory_order_relaxed); pb > 0)
                       { std::cerr << " MISMATCH=" << pb; } }
+                    if (const long long s7 = gp.spec7_fed.load(std::memory_order_relaxed); s7 > 0)
+                    { std::cerr << "  spec7=" << s7; }
+                    if (const long long sq = gp.sspec_req.load(std::memory_order_relaxed); sq > 0)
+                    { std::cerr << "  subspec=" << sq << " rolled=" << gp.sspec_rolled.load(std::memory_order_relaxed)
+                                << " hit=" << gp.sspec_hit.load(std::memory_order_relaxed)
+                                << " plans=" << gp.sspec_plans.load(std::memory_order_relaxed);
+                      if (const long long sb = gp.sspec_bad.load(std::memory_order_relaxed); sb > 0)
+                      { std::cerr << " MISMATCH=" << sb; } }
+                    if (const long long sb = gp.split_batches.load(std::memory_order_relaxed); sb > 0)
+                    { std::cerr << "  split=" << sb << "/" << gp.split_rolls.load(std::memory_order_relaxed); }
+                    // IDLE share of the worker capacity since the last wake: the barrier read-out.
+                    {
+                        const long long iu = gp.idle_us.load(std::memory_order_relaxed);
+                        const int nt = gp.nthreads.load(std::memory_order_relaxed);
+                        if (nt > 0 && dt > 0.0)
+                        {
+                            const long long pm = static_cast<long long>(
+                                1000.0 * static_cast<double>(iu - prev_idle) / (dt * 1e6 * nt) + 0.5);
+                            std::cerr << "  idle=" << (pm / 10) << "." << (pm % 10) << "%";
+                        }
+                        prev_idle = iu;
+                    }
                     std::cerr << "  cap=" << gp.cap.load(std::memory_order_relaxed) << "\n" << std::flush;
                     // Feeding work while the journal is silent IS the violation of "resumable at any
                     // point", so name it rather than leaving the operator to infer it from an mtime.
@@ -4575,6 +4617,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::vector<double>            pre_val(pre_on ? SL : 0, 0.0);
         std::vector<std::atomic<char>> pre_have(pre_on ? SL : 0);
         for (auto& pf : pre_have) { pf.store(0, std::memory_order_relaxed); }   // explicit: atomics
+        // USEFULNESS of size-7 floor speculation: the [lo, hi) range each cell-side was speculated over.
+        std::vector<int> spec7_lo(static_cast<std::size_t>(NC) * 2, 0), spec7_hi(static_cast<std::size_t>(NC) * 2, 0);
         std::vector<long long> fed(static_cast<std::size_t>(NC) * 2, 0);
         std::vector<std::atomic<char>> afroze(static_cast<std::size_t>(NC) * 2);   // lock-free view for producer
         // Floor snapshot (sum/sumsq/cnt at exactly c==r0), captured at the r0-crossing under fold_mtx. vg_ref
@@ -4683,7 +4727,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 std::array<long long, 5> task;
                 {
                     std::unique_lock<std::mutex> lk(qmtx);
-                    q_ne.wait(lk, [&]{ return !q.empty() || !producing.load(); });
+                    if (q.empty() && producing.load())
+                    {
+                        // IDLE: a core with nothing it is allowed to do. Measured, not inferred.
+                        const auto ti0 = std::chrono::steady_clock::now();
+                        q_ne.wait(lk, [&]{ return !q.empty() || !producing.load(); });
+                        gen_prog.idle_us.fetch_add(static_cast<long long>(std::chrono::duration<double, std::micro>(
+                            std::chrono::steady_clock::now() - ti0).count()), std::memory_order_relaxed);
+                    }
                     if (q.empty()) { if (!producing.load()) { break; } else { continue; } }
                     task = q.front(); q.pop_front();
                 }
@@ -4699,6 +4750,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     const std::size_t ps = SLOT(pi, ppd, task[3]);
                     if (!pre_have[ps].load(std::memory_order_acquire))
                     {
+                        gen_prog.prerolled.fetch_add(1, std::memory_order_relaxed);
                         const double pv = run_one(ai, work_idx[0][pi], ppd, task[3], nullptr);
                         pre_val[ps] = pv;
                         pre_have[ps].store(1, std::memory_order_release);   // value BEFORE the flag
@@ -4983,6 +5035,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   << " threads (+ " << fused_sub_tasks.size() << " fused sub-table batches"
                   << (sub_refine_on ? " + adaptive sub-refine" : "") << ")\n" << std::flush;
         gen_prog.cap.store(r_max, std::memory_order_relaxed);
+        gen_prog.nthreads.store(nw, std::memory_order_relaxed);
+        const auto t_pool = std::chrono::steady_clock::now();
         gen_prog.cells.store(static_cast<long long>(NC) * 2, std::memory_order_relaxed);
         // A run with no adaptive sub-refine (bottoming-full, or the `recommend` scout) is converged from
         // the start -- report it that way rather than as a wave count stuck at zero.
@@ -5222,7 +5276,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         // cursor would walk past it forever, so remember to sweep once more.
                         if (c < r0)    { spec_resweep = true; continue; }
                         if (c >= r_max) { continue; }
-                        budget -= feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget));
+                        const long long f0 = fed[k];
+                        const long long nfed = feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget));
+                        budget -= nfed;
+                        // USEFULNESS: remember the speculated range; the end of the run counts how much of
+                        // it lies inside the cell's final count (the rest was truncated by reconcile/freeze).
+                        if (nfed > 0)
+                        {
+                            if (spec7_hi[k] == 0) { spec7_lo[k] = static_cast<int>(f0); }
+                            spec7_hi[k] = static_cast<int>(fed[k]);
+                            gen_prog.spec7_fed.fetch_add(nfed, std::memory_order_relaxed);
+                        }
                     }
                     if (spec_cursor >= NS)   // sweep complete
                     {
@@ -5423,6 +5487,40 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                           << std::flush;
             }
         }
+        // ---- USEFULNESS + IDLE SUMMARY (stderr only; never the report, never a result) -----------------
+        // What every speculative mechanism PRODUCED vs what the table CONSUMED, and how much of the
+        // pool's worker capacity sat idle. "Busy" is not "useful": this is the line that says which.
+        {
+            long long s7_used = 0;
+            for (std::size_t k = 0; k < spec7_hi.size(); ++k)
+            {
+                if (spec7_hi[k] <= spec7_lo[k]) { continue; }
+                const long long c = S7.cnt[static_cast<int>(k >> 1)][static_cast<int>(k & 1)];
+                s7_used += std::max<long long>(0, std::min<long long>(spec7_hi[k], c) - spec7_lo[k]);
+            }
+            gen_prog.spec7_used.store(s7_used, std::memory_order_relaxed);
+            const double pool_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_pool).count();
+            const double idle_s = static_cast<double>(gen_prog.idle_us.load()) / 1e6;
+            auto pct = [](long long a, long long b) -> double
+            { return b > 0 ? 100.0 * static_cast<double>(a) / static_cast<double>(b) : 0.0; };
+            const long long s7f = gen_prog.spec7_fed.load(), prr = gen_prog.prerolled.load(),
+                            prh = gen_prog.prehit.load(), ssr = gen_prog.sspec_rolled.load(),
+                            ssh = gen_prog.sspec_hit.load();
+            std::cerr << std::fixed << std::setprecision(1)
+                      << "[keepgen] usefulness: size7-spec used " << s7_used << "/" << s7f << " fed ("
+                      << pct(s7_used, s7f) << "%); precompute hit " << prh << "/" << prr << " rolled ("
+                      << pct(prh, prr) << "%); sub-spec hit " << ssh << "/" << ssr << " rolled ("
+                      << pct(ssh, ssr) << "%, " << gen_prog.sspec_req.load() << " requested, "
+                      << gen_prog.sspec_plans.load() << " plans";
+            if (gen_prog.sspec_bad.load() > 0) { std::cerr << ", " << gen_prog.sspec_bad.load() << " MISMATCH"; }
+            if (gen_prog.prebad.load() > 0)    { std::cerr << ", precompute " << gen_prog.prebad.load() << " MISMATCH"; }
+            std::cerr << "); split " << gen_prog.split_batches.load() << " batches / "
+                      << gen_prog.split_rolls.load() << " rollouts\n"
+                      << "[keepgen] worker idle: " << idle_s << " core-s of " << (pool_s * nw) << " ("
+                      << (pool_s > 0 ? 100.0 * idle_s / (pool_s * nw) : 0.0) << "% of " << nw
+                      << " workers x " << pool_s << " s pool wall)\n" << std::flush;
+            std::cerr.unsetf(std::ios::floatfield);
+        }
         recompute();
         // recompute() derives V from the fresh accumulators, so it clobbers the change-detection carry on
         // resolved cells -- re-assert it before the raw/profile/report are written off these tables.
@@ -5459,7 +5557,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // Superseded: close and remove it so a later invocation doesn't resume from a stale journal
                 // for an already-finished run.
                 journal_f.close();
-                std::error_code ec; std::filesystem::remove(journal_path, ec);
+                // MTG_KEEP_JOURNAL_KEEP=1 (DIAGNOSTIC ONLY): keep the superseded journal as
+                // <journal>.done instead of deleting it, so two runs' journal RECORDS can be diffed (sorted
+                // -- record order is commit order, which is scheduling). Never resumable under that name.
+                std::error_code ec;
+                if (EnvOn("MTG_KEEP_JOURNAL_KEEP")) { std::filesystem::rename(journal_path, journal_path + ".done", ec); }
+                else                                { std::filesystem::remove(journal_path, ec); }
             }
             else if (raw_ok)
             {
