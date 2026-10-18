@@ -111,6 +111,247 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
     return atk_idx;
 }
 
+
+// Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a card." Once
+// per connecting copy in `damaging_idx`. Only OUR half is modelled: the passive opponent never casts and
+// no decision reads their hand (disclosed deferral D10). The shed card is the provider's non-cleanup
+// discard pick (surfaced as `discard`), and the discard is what can switch Neheb's own hand-size anthem
+// ON. Shared by both damage-step shapes below (it was inline in the single-step loop's tail).
+static void FireNehebCombatDamageDiscards(GameState& state, int active, const std::vector<int>& damaging_idx)
+{
+    for (int idx : damaging_idx)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const CardDefinition* nd = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+        if (!nd || nd->params.combat_damage_each_discards <= 0) { continue; }
+        Player& ap = state.players[active];
+        for (int k = 0; k < nd->params.combat_damage_each_discards && !ap.hand.empty(); ++k)
+        {
+            const int hi = ChooseNonCleanupDiscardIndex(state, active,    // surfaced as `discard`
+                                                        state.battlefield[idx].card.m_name.str());
+            if (hi < 0) { break; }
+            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
+            ap.hand.erase(ap.hand.begin() + hi);
+        }
+    }
+}
+
+// Curiosity ("whenever enchanted creature deals damage to an opponent, you may draw a card") and
+// Tandem Lookout's pair grant ("...draw a card"): once per combat-damage EVENT per connecting
+// creature, then the Niv ping loop those draws start (OnCreatureDealtDamageToOpponent, the shared
+// hook the ping itself also feeds). Last among the combat-damage triggers -- the controller orders
+// them, and drawing after Neheb's discard is the order that keeps the drawn card. Nothing fires if
+// combat damage already killed (the hook's OpponentHasLost guard). Executor + rollout share this.
+// Re-found by m_number rather than trusting the recorded index: the hooks above only append today,
+// but a creature that left (or a shifted index) must not hand its draws to a different body.
+// `damaging_events` is filled iff the deck-constant gate (GameState::deck_has_draw_ping) is on, so it
+// is aligned with `damaging_idx`; an unnumbered permanent -- m_number 0, a hand-built test board --
+// keeps its recorded index. Shared by both damage-step shapes below.
+static void FireCombatDamageDrawGrants(GameState& state, const std::vector<int>& damaging_idx,
+                                       const std::vector<int>& damaging_num,
+                                       const std::vector<int>& damaging_events)
+{
+    for (std::size_t k = 0; k < damaging_events.size(); ++k)
+    {
+        int src = -1;
+        if (damaging_num[k] == 0) { src = damaging_idx[k]; }
+        for (int i = 0; src < 0 && i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == damaging_num[k]) { src = i; } }
+        if (src >= 0) { OnCreatureDealtDamageToOpponent(state, src, damaging_events[k]); }
+    }
+}
+
+// ---- CR 510.4: the TWO combat damage steps -----------------------------------------------------------
+//
+// "If at least one attacking or blocking creature has first strike or double strike as the combat
+// damage step begins, the only creatures that assign combat damage in that step are those with first
+// strike or double strike. After that step, instead of proceeding to the end of combat step, the phase
+// gets a second combat damage step. The only creatures that assign combat damage in that step are the
+// remaining attackers and blockers that had neither first strike nor double strike as the first combat
+// damage step began, as well as the remaining attackers and blockers that currently have double strike."
+//
+// Until 2026-10-18 the engine collapsed this into ONE step (double strike as power x2, first strike with
+// no reader). Against a passive, never-blocking opponent the collapse is exact EXCEPT for whatever happens
+// between the steps -- and that is not empty: Drana, Liberator of Malakir's counters land on every
+// attacker after the first-strike step (the Vampires card this was built for); a first-striker's lifelink
+// gain resolves Archangel of Thune / Ajani's Pridemate / Voice of the Blessed counters and can cross a
+// life-threshold anthem (Righteous Valkyrie, Serra Ascendant) before the regular step (Lyra Dawnbringer,
+// Ocelot Pride); a first-step combat-damage trigger (Neheb's discard) resolves before it. So the split is
+// applied wherever it is VALID -- every combat with a first/double striker, in every deck -- not gated to
+// one card (CLAUDE.md: scope a change by where it is valid). A combat with no first/double striker takes
+// the original single-step loop below, untouched.
+//
+// SHAPE, step by step (each step is one simultaneous damage event, CR 510.2):
+//   * membership is snapshotted ONCE, before the first step (CR 510.4 / 702.7c: a creature that gains or
+//     loses first strike between the steps does not change step; no between-step effect in this engine
+//     grants double strike, so "currently has double strike" equals the snapshot);
+//   * each step recomputes every member's power with the SAME assembly as the single-step loop
+//     (multiplier 1 -- a double striker simply appears in both steps), so counters / anthems that landed
+//     between the steps are read;
+//   * per step: life loss, the lost-life flag, Maelstrom's free-cast bank (one trigger per connecting
+//     step), lifelink (ONE GainLife event per lifelinking member per step, applied after the step's
+//     damage -- CR 510.2 / 702.15b / 119.10), then the step's combat-damage triggers in the single-step
+//     order (Drana's counters, Goblin Lackey, Shroofus, Neheb), each over the step's own connectors;
+//   * the ATTACK-trigger hooks the single-step path fires after damage (Leeching Sliver's life loss,
+//     Utvara's tokens) fire once, after the regular step's lifelink -- the same relative order as before.
+// Umezawa's Jitte keeps its closed form (JitteDamageMath, which already prices the DS mid-step spend):
+// applied ONCE, in the bearer's first step, with the original ds flag, and the bearer deals nothing more
+// in the regular step -- a disclosed approximation that only differs from the faithful split if a
+// between-step effect pumps a double-striking Jitte bearer (no deck holds Jitte with any such effect).
+// SBA between the steps: nothing blocks, so nothing dies; an opponent at <= 0 after the first step has
+// lost either way, and dealing the regular step changes no outcome (the win turn is the same).
+// The play-viewer description keeps ONE "<name> (<damage>)" per attacker, its total over both steps, in
+// attack order: test/viewer_protocol_check.py parses that line into the reference-replay attacker pin.
+static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std::vector<int>& atk_idx,
+                                                     int exalted_bonus, bool collect_descs,
+                                                     const BoardSources& bs_in,
+                                                     const std::vector<char>& fs_of,
+                                                     const std::vector<char>& ds_of)
+{
+    CombatDamageResult out;
+    const int active  = state.active_player_index;
+    const int opp_idx = 1 - active;
+    const std::size_t n = atk_idx.size();
+    std::vector<int>  dealt(n, 0);
+    std::vector<char> seen(n, 0);
+    std::vector<char> jitte_done(n, 0);
+
+    // The board-source lists are battlefield INDICES gathered before the first step. A first-step
+    // combat-damage hook can APPEND a permanent (a Lackey put, a Shroofus token) -- which may itself be
+    // a lord or an attachment the regular step must read -- so the lists are re-gathered for the second
+    // step whenever the battlefield grew. Appends never shift existing indices, so atk_idx stays valid.
+    BoardSources bs_re;
+    const BoardSources* bsp = &bs_in;
+    std::size_t bf_at_gather = state.battlefield.size();
+
+    auto deal_step = [&](bool first_step)
+    {
+        if (!first_step && state.battlefield.size() != bf_at_gather)
+        {
+            bs_re = GatherBoardSources(state.battlefield, active);
+            bsp = &bs_re;
+            bf_at_gather = state.battlefield.size();
+        }
+        const BoardSources& bs = *bsp;
+        std::vector<int> step_idx;    // this step's connectors, in attack order
+        std::vector<int> step_pw;     // ... and what each dealt (Shroofus: "that many")
+        std::vector<int> step_lifelink;
+        std::vector<int> step_events; // Curiosity / Tandem Lookout: ONE event per connector per step,
+        std::vector<int> step_num;    // ... keyed by m_number (filled only under deck_has_draw_ping)
+        for (std::size_t k = 0; k < n; ++k)
+        {
+            const bool in_step = first_step ? (fs_of[k] || ds_of[k]) : (!fs_of[k] || ds_of[k]);
+            if (!in_step) { continue; }
+            const int idx = atk_idx[k];
+            Permanent& p = state.battlefield[idx];
+            const bool animated = p.is_animated;
+            // The SAME power assembly as the single-step loop (keep the two in lockstep), multiplier 1.
+            auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, p.AnimatedAllTypes(), &p,
+                                                       &bs.lords, &bs.anthems);
+            (void)lord_tb;
+            int base_pw = p.EffectivePower() + lord_pb + exalted_bonus;
+            const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
+            if (adef)
+            {
+                if (animated) { base_pw += adef->params.animate_power; }
+                base_pw += DynamicBasePower(*adef, state, active);
+            }
+            base_pw += AuraBonusFor(p, state, &bs.attached).first;
+            base_pw += EquipBonusFor(p, state, &bs.attached).first;
+            int power = base_pw;
+            const int jitte_bf = FindAttachedChargeEquip(state, p, &bs.attached);
+            if (jitte_bf >= 0)
+            {
+                if (jitte_done[k]) { power = 0; }   // the closed form already dealt both halves
+                else
+                {
+                    Permanent& je = state.battlefield[jitte_bf];
+                    const CardDefinition* jd = CardDatabase::Instance().LookupCached(je.card);
+                    int req = ResolveProvider(state).JitteSpendCount(state, je.charge_counters);
+                    if (g_play_jitte_chooser)
+                    {
+                        int r = (*g_play_jitte_chooser)(state, active, atk_idx, je.charge_counters);
+                        if (r >= 0) { req = r; }
+                    }
+                    else if (HumanPlayActive()) { req = 0; }
+                    const auto [jdmg, jafter] = JitteDamageMath(
+                        base_pw, ds_of[k] != 0, je.charge_counters, jd->params.charge_pump_power, req);
+                    power              = jdmg;
+                    je.charge_counters = jafter;
+                    jitte_done[k]      = 1;
+                }
+            }
+            state.players[opp_idx].life -= power;
+            out.total_damage += power;
+            dealt[k] += power;
+            if (power > 0)
+            {
+                state.opponent_lost_life_this_turn = true;
+                step_idx.push_back(idx);
+                step_pw.push_back(power);
+                if (state.deck_has_draw_ping)
+                {
+                    step_events.push_back(1);
+                    step_num.push_back(p.card.m_number);
+                }
+                // Maelstrom Archangel: one free cast banked per connecting STEP (one trigger per
+                // combat-damage event).
+                if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
+                if (CreatureHasLifelink(p, state, &bs.lifelink)) { step_lifelink.push_back(power); }
+            }
+            if (!seen[k])
+            {
+                seen[k] = 1;
+                if (!CreatureHasVigilance(p, state, &bs.vigilance)) { p.tapped = true; }
+            }
+        }
+        // Lifelink: one life-gain EVENT per lifelinking member of THIS step (CR 510.2, 702.15b,
+        // 119.10). After a first step, its watchers (Thune / Pridemate counters, a threshold anthem)
+        // are what the regular step reads.
+        for (int amt : step_lifelink) { GainLife(state, active, amt); }
+        if (!first_step)
+        {
+            // The attack-trigger hooks the single-step path fires after its damage loop -- once, after
+            // the last damage, in the same order relative to lifelink and the combat-damage hooks.
+            std::vector<const Permanent*> attackers;
+            attackers.reserve(n);
+            for (int idx : atk_idx) { attackers.push_back(&state.battlefield[idx]); }
+            out.trigger_life_loss = CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
+            if (out.trigger_life_loss > 0)
+            {
+                state.players[opp_idx].life -= out.trigger_life_loss;
+                out.total_damage += out.trigger_life_loss;
+                state.opponent_lost_life_this_turn = true;
+            }
+            FireUtvaraAttackTokens(state, active, attackers);
+        }
+        // This step's combat-damage triggers (CR 603.2), in the single-step path's order. Drana first:
+        // her counters commute with every hook below (none of them reads power), and they must be on
+        // the attackers before the regular step.
+        FireCombatDamageTeamCounters(state, active, atk_idx, step_idx);
+        FireCombatDamageCheatIntoPlay(state, active, step_idx);
+        FireCombatDamageTokens(state, active, step_idx, step_pw);
+        FireNehebCombatDamageDiscards(state, active, step_idx);
+        // A double striker connects in BOTH steps, so it draws once per step -- the two events the
+        // single-step loop used to count as `ds ? 2 : 1` -- and a first step's draws (and the pings
+        // they start) resolve before the regular step.
+        FireCombatDamageDrawGrants(state, step_idx, step_num, step_events);
+    };
+    deal_step(/*first_step=*/true);
+    deal_step(/*first_step=*/false);
+
+    if (collect_descs)
+    {
+        for (std::size_t k = 0; k < n; ++k)
+        {
+            if (dealt[k] <= 0) { continue; }
+            out.attacker_descs.push_back(state.battlefield[atk_idx[k]].card.m_name.str()
+                                         + " (" + std::to_string(dealt[k]) + ")");
+        }
+    }
+    return out;
+}
+
 CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>& atk_idx,
                                        int exalted_bonus, bool collect_descs)
 {
@@ -126,8 +367,9 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // fact of connecting -- and it must be the post-lord / post-anthem / post-Jitte `power` below,
     // which is what actually left the opponent's life total.
     std::vector<int> damaging_pw;
-    // ...and how many combat-damage EVENTS each dealt (2 for a double striker -- two damage steps,
-    // CR 510.4), for the Curiosity / Tandem Lookout damage->draw grants. Filled only for a deck that
+    // ...and how many combat-damage EVENTS each dealt (always 1 here: a double striker, two damage
+    // steps under CR 510.4, takes the two-step path, which fires the grants per step), for the
+    // Curiosity / Tandem Lookout damage->draw grants. Filled only for a deck that
     // runs the Niv loop (GameState::deck_has_draw_ping), so every other deck allocates nothing.
     std::vector<int> damaging_events;
     std::vector<int> damaging_num;   // ...keyed by per-copy m_number, re-found at the hook (see there)
@@ -151,6 +393,24 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     const std::vector<int>& lord_idx = bs.lords;
     const std::vector<int>& ds_idx   = bs.ds;
 
+    // CR 510.4 step membership, snapshotted before any damage. The double-strike answer is computed
+    // here ONCE and reused by the single-step loop below (it reads only static board facts -- keyword,
+    // lords, attachments, soulbond, Valiant Knight's flag -- none of which that loop changes). Any
+    // first or double striker -> the two-step resolution above; otherwise the single-step loop runs
+    // exactly as before.
+    std::vector<char> fs_of(atk_idx.size(), 0), ds_of(atk_idx.size(), 0);
+    bool any_first_step = false;
+    for (std::size_t k = 0; k < atk_idx.size(); ++k)
+    {
+        const Permanent& p = state.battlefield[atk_idx[k]];
+        ds_of[k] = CreatureHasDoubleStrike(p, state, &ds_idx) ? 1 : 0;
+        fs_of[k] = CreatureHasFirstStrike(p, state, &bs.fs) ? 1 : 0;
+        if (ds_of[k] || fs_of[k]) { any_first_step = true; }
+    }
+    if (any_first_step)
+    { return ResolveCombatDamageTwoStep(state, atk_idx, exalted_bonus, collect_descs, bs, fs_of, ds_of); }
+
+    std::size_t atk_k = 0;
     for (int idx : atk_idx)
     {
         Permanent& p = state.battlefield[idx];
@@ -160,8 +420,9 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         (void)lord_tb;
         // The single shared oracle (SpellEffects.h) -- printed keyword, subtype lords, Equipment
         // grants, Valiant Knight's until-EOT activation and Silverblade Paladin's soulbond pair, in
-        // one place, so this site and TurnSolver's two projections cannot drift apart.
-        const bool ds = CreatureHasDoubleStrike(p, state, &ds_idx);
+        // one place, so this site and TurnSolver's two projections cannot drift apart. Precomputed in
+        // the membership pass above (always false here: a double striker takes the two-step path).
+        const bool ds = ds_of[atk_k++] != 0;
         int base_pw = p.EffectivePower() + lord_pb + exalted_bonus;
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)
@@ -249,6 +510,12 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // FireUtvaraAttackTokens reads before any CreateToken.
     FireUtvaraAttackTokens(state, active, attackers);
 
+    // Drana-style team counters (combat_damage_counters_each_attacker) from a source that dealt
+    // damage in this single step. Only reachable by a source WITHOUT first strike (Drana's own
+    // printed first strike sends her combat to the two-step path), and then its counters land after
+    // the last damage -- future turns only. Empty list (every other deck) -> skipped.
+    if (!bs.cd_counters.empty()) { FireCombatDamageTeamCounters(state, active, atk_idx, damaging_idx); }
+
     // Goblin Lackey: each attacker that dealt combat damage to the player may put a matching Goblin
     // permanent from hand onto the battlefield (shared enter cascade). Fired AFTER Utvara so the
     // pre-token attacker pointers above are already consumed.
@@ -268,41 +535,11 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // (disclosed deferral D10). The shed card is the provider's cleanup-discard pick, and the
     // discard is what can switch Neheb's own hand-size anthem ON -- but only for a LATER turn's
     // combat, since this fires after damage has already been dealt.
-    for (int idx : damaging_idx)
-    {
-        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
-        const CardDefinition* nd = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
-        if (!nd || nd->params.combat_damage_each_discards <= 0) { continue; }
-        Player& ap = state.players[active];
-        for (int k = 0; k < nd->params.combat_damage_each_discards && !ap.hand.empty(); ++k)
-        {
-            const int hi = ChooseNonCleanupDiscardIndex(state, active,    // surfaced as `discard`
-                                                        state.battlefield[idx].card.m_name.str());
-            if (hi < 0) { break; }
-            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
-            ap.hand.erase(ap.hand.begin() + hi);
-        }
-    }
-
-    // Curiosity ("whenever enchanted creature deals damage to an opponent, you may draw a card") and
-    // Tandem Lookout's pair grant ("...draw a card"): once per combat-damage EVENT per connecting
-    // creature, then the Niv ping loop those draws start (OnCreatureDealtDamageToOpponent, the shared
-    // hook the ping itself also feeds). Last among the combat-damage triggers -- the controller orders
-    // them, and drawing after Neheb's discard is the order that keeps the drawn card. Nothing fires if
-    // combat damage already killed (the hook's OpponentHasLost guard). Executor + rollout share this.
-    // Re-found by m_number rather than trusting the recorded index: the hooks above only append today,
-    // but a creature that left (or a shifted index) must not hand its draws to a different body.
-    for (std::size_t k = 0; k < damaging_events.size(); ++k)
-    {
-        // (damaging_events is filled iff the deck-constant gate is on, so it is aligned with
-        // damaging_idx; an unnumbered permanent -- m_number 0, a hand-built test board -- keeps its
-        // recorded index.)
-        int src = -1;
-        if (damaging_num[k] == 0) { src = damaging_idx[k]; }
-        for (int i = 0; src < 0 && i < static_cast<int>(state.battlefield.size()); ++i)
-        { if (state.battlefield[i].card.m_number == damaging_num[k]) { src = i; } }
-        if (src >= 0) { OnCreatureDealtDamageToOpponent(state, src, damaging_events[k]); }
-    }
+    FireNehebCombatDamageDiscards(state, active, damaging_idx);
+    // Curiosity / Tandem Lookout's damage->draw grants and the Niv ping loop (see the helper). In this
+    // single-step path every connector dealt ONE combat-damage event: a double striker takes the
+    // two-step path, which fires the grants once per step.
+    FireCombatDamageDrawGrants(state, damaging_idx, damaging_num, damaging_events);
     return out;
 }
 

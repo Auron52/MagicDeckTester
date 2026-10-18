@@ -4878,6 +4878,70 @@ inline bool CreatureHasDoubleStrike(const Permanent& creature, const GameState& 
     return false;
 }
 
+// THE single oracle for "does this creature have FIRST STRIKE?" (Vampires, 2026-10-18) -- the
+// CreatureHasDoubleStrike twin. Its readers are exactly the two places where first strike can change a
+// goldfish outcome: the CR 510.4 two-step combat damage split in ResolveCombatDamage (Combat.cpp,
+// shared by executor and rollout -- who deals damage in which step) and the attack projection's
+// matching addend (TurnSolver.cpp PendingAttackDamageImpl). Against a passive opponent that never
+// blocks, first strike matters only through what happens BETWEEN the two damage steps: Drana,
+// Liberator of Malakir's counters on every attacker, a first-step lifelink gain feeding Archangel of
+// Thune / a life-threshold anthem, a first-step combat-damage trigger. So a creature that SHOULD strike
+// first but reads false here is a silent over-count of exactly those effects (the Stromkirk Captain +
+// Drana anti-synergy) -- which is why every grant shape in the card pool is answered here, not just
+// the printed keyword.
+//
+// Grant shapes (one per-permanent pass over the controller's granters):
+//   * the printed Keyword::FirstStrike;
+//   * a grants_first_strike subtype LORD (Stromkirk Captain "Other Vampire creatures you control
+//     ... have first strike", Field Marshal, Neheb, the Worthy, Striking Sliver) -- subtypes_affected
+//     on the creature's LIVE subtypes (an all-types animation matches any typed lord, the lord rule),
+//     affects_all_creatures, and lord_excludes_self by per-copy m_number (the Lyra precedent);
+//   * an attached aura_grants_first_strike Aura (Hyena / Indrik Umbra, Ethereal Armor, Daybreak
+//     Coronet);
+//   * Rick, Steadfast Leader's chosen first strike (chosen_keyword_mask x keyword_grant_subtypes).
+// NOT answered (no source in the pool can reach a first-strike step today, each disclosed on its card):
+// Boros Reckoner's / Slaughter-Priest of Mogis' "gains first strike until end of turn" activations and
+// Cosmic Spider-Man's beginning-of-combat grant to OTHER Spiders.
+//
+// fs_idx (optional): BoardSources::fs; nullptr walks the whole battlefield. Same contract as
+// CreatureHasLifelink's granter_idx.
+inline bool CreatureHasFirstStrike(const Permanent& creature, const GameState& state,
+                                   const std::vector<int>* fs_idx = nullptr)
+{
+    if (creature.card.HasKeyword(Keyword::FirstStrike)) { return true; }
+    auto grants = [&](const Permanent& a) -> bool
+    {
+        if (a.controller_index != creature.controller_index) { return false; }
+        if (a.def_absent) { return false; }   // token: no definition, never a granter
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (!d) { return false; }
+        const CardParams& gp = d->params;
+        if (gp.is_aura && gp.aura_grants_first_strike
+            && a.aura_attached_to != 0 && a.aura_attached_to == creature.card.m_number)
+        { return true; }
+        if (gp.grants_first_strike
+            && !(gp.lord_excludes_self && a.card.m_number == creature.card.m_number))
+        {
+            if (gp.affects_all_creatures) { return true; }
+            if (creature.AnimatedAllTypes() && !gp.subtypes_affected.empty()) { return true; }
+            for (const std::string& sub : gp.subtypes_affected)
+            {
+                for (const std::string& cs : creature.card.m_subtypes) { if (cs == sub) { return true; } }
+            }
+        }
+        if ((a.chosen_keyword_mask & kChosenKwFirstStrike) != 0 && KeywordGrantReaches(gp, creature))
+        { return true; }
+        return false;
+    };
+    if (fs_idx)
+    {
+        for (int i : *fs_idx) { if (grants(state.battlefield[i])) { return true; } }
+        return false;
+    }
+    for (const Permanent& a : state.battlefield) { if (grants(a)) { return true; } }
+    return false;
+}
+
 // ---------------------------------------------------------------------------------------------
 // BoardSources -- every board-level source list a per-creature combat loop needs, gathered in ONE
 // walk. The generalisation of HasteSources (above) and of ResolveCombatDamage's hand-rolled
@@ -4912,6 +4976,13 @@ struct BoardSources
     // answers DeathOfWouldPay's victim-independent "would it pay" question over different params.
     std::vector<int> dwatch;
     std::vector<int> vigilance;  // attached ∪ chosen-keyword granters (Rick)   -> CreatureHasVigilance
+    // FIRST-STRIKE granters (Vampires 2026-10-18): grants_first_strike lords, aura_grants_first_strike
+    // Auras, and chosen-keyword granters (Rick) -> CreatureHasFirstStrike. Same superset contract.
+    std::vector<int> fs;
+    // Drana-style "whenever THIS deals combat damage to a player, +1/+1 counter on each attacking
+    // creature you control" sources (combat_damage_counters_each_attacker) -> the combat core's
+    // between-step trigger and the projection's matching addend. Empty for every other deck.
+    std::vector<int> cd_counters;
 
     // MAINTAIN THE LISTS ACROSS AN ERASE. Every list holds battlefield INDICES, so a caller that
     // removes a permanent mid-loop (SweepDeadFadeTokens) invalidates them: the erased index is gone
@@ -4937,6 +5008,7 @@ struct BoardSources
         };
         fix(haste.lords); fix(haste.equips);
         fix(lords); fix(anthems); fix(ds); fix(lifelink); fix(attached); fix(deaths); fix(dwatch); fix(vigilance);
+        fix(fs); fix(cd_counters);
     }
 };
 
@@ -4998,6 +5070,12 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         // OnCreatureDies' own two walks. The UNION of their predicates, so each keeps its own test.
         if (pp.own_creature_dies_lifegain > 0 || !pp.dies_watch_subtype.empty())
         { bs.dwatch.push_back(i); }
+        // CreatureHasFirstStrike's granters -- the union of its three grant shapes (a superset, so
+        // an empty list is a proof that only printed first strike can answer true).
+        if (pp.grants_first_strike || (pp.is_aura && pp.aura_grants_first_strike)
+            || pp.etb_choose_keyword_count > 0)
+        { bs.fs.push_back(i); }
+        if (pp.combat_damage_counters_each_attacker > 0) { bs.cd_counters.push_back(i); }
     }
     return bs;
 }
@@ -6408,6 +6486,10 @@ inline TokenProto BuildTokenProto(int                              power,
         // Marit Lage (Marit Lage's Slumber). Inert vs the passive opponent (no removal/damage)
         // but populated for faithfulness, same rationale as Flying above.
         else if (kw == "Indestructible") { token.card.AddKeyword(Keyword::Indestructible); }
+        // Mavren Fein, Dusk Apostle's 1/1 Vampire "with lifelink" (Vampires 2026-10-18) -- READ:
+        // CreatureHasLifelink tests the printed keyword, so a token swinging later gains life. The
+        // first token spec in cards.json to carry it, so every existing token is byte-identical.
+        else if (kw == "Lifelink")  { token.card.AddKeyword(Keyword::Lifelink); }
     }
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
@@ -7653,6 +7735,23 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                 && &w != &state.battlefield[entered_index]
                 && state.battlefield[entered_index].card.m_subtypes.HasId(w.chosen_subtype_id))
             { add += wd->params.other_chosen_subtype_enters_counters; }
+            // Vampire Socialite's clause 3: "As long as an opponent lost life this turn, each OTHER
+            // Vampire you control enters with an additional +1/+1 counter on it." The same CR 614
+            // as-enters slot (so the counter is on the body before any enter trigger reads it), keyed
+            // on GameState::opponent_lost_life_this_turn and the entrant's LIVE subtypes (empty
+            // subtype = any creature). Reaches every enter route through this cascade: casts, tokens
+            // (Mavren Fein's, Bloodline Keeper's), Aether Vial puts, graveyard returns. "Other" by
+            // address. CR 614.12: a Vampire entering simultaneously WITH Socialite should not get it;
+            // the engine enters permanents one at a time and no card in the pool puts two Vampires
+            // onto the battlefield in one event (disclosed on the card).
+            if (wd->params.opp_lost_life_other_enters_counters > 0
+                && state.opponent_lost_life_this_turn
+                && &w != &state.battlefield[entered_index]
+                && (wd->params.opp_lost_life_other_enters_subtype.empty()
+                    || state.battlefield[entered_index].AnimatedAllTypes()
+                    || CardHasSubtype(state.battlefield[entered_index].card,
+                                      wd->params.opp_lost_life_other_enters_subtype)))
+            { add += wd->params.opp_lost_life_other_enters_counters; }
             if (wd->params.other_subtype_enters_counters_per_each <= 0
                 || wd->params.other_subtype_enters_counters_subtype.empty()) { continue; }
             const std::string& sub = wd->params.other_subtype_enters_counters_subtype;
@@ -9045,7 +9144,17 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // counter addition commutes, so the order of the two passes is immaterial. Indexed loop:
     // AddPlusCounters adds no permanent. Hand-rolled subtype test (CardHasSubtype is defined further
     // down this header). Param-gated -> byte-identical for every other deck.
-    if (p.etb_each_other_own_creature_counters > 0)
+    //
+    // Vampire Socialite's clause 2 rides the same block: "When this creature enters, IF AN OPPONENT
+    // LOST LIFE THIS TURN, put a +1/+1 counter on each other Vampire you control" -- an intervening-if
+    // (CR 603.4) whose condition is GameState::opponent_lost_life_this_turn. That flag is only ever SET
+    // during a turn (it clears at the turn-start reset in both worlds), so "true when it would trigger"
+    // and "true on resolution" coincide and the single check here is exact. Our own life payments do
+    // not set it. Its own param so Socialite never matches the Soldiers routing signature.
+    const int etb_team_counters = p.etb_each_other_own_creature_counters
+        + ((p.etb_each_other_own_creature_counters_if_opp_lost_life > 0 && state.opponent_lost_life_this_turn)
+           ? p.etb_each_other_own_creature_counters_if_opp_lost_life : 0);
+    if (etb_team_counters > 0)
     {
         int hit = 0;
         for (int qi = 0; qi < static_cast<int>(state.battlefield.size()); ++qi)
@@ -9060,7 +9169,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
                 { if (cs == p.etb_counters_subtypes[si]) { ok = true; break; } }
             }
             if (!ok) { continue; }
-            PutPlusCounters(state, q, p.etb_each_other_own_creature_counters);   // doubler-aware chokepoint
+            PutPlusCounters(state, q, etb_team_counters);   // doubler-aware chokepoint
             ++hit;
         }
         if (g_play_event_sink && !g_tap_speculating)
@@ -9069,8 +9178,8 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
                                   ? std::string("creature") : p.etb_counters_subtypes.front();
             EmitPlayEvent(state.turn_number, "ability",
                           def->card.m_name.str() + ": +"
-                          + std::to_string(p.etb_each_other_own_creature_counters)
-                          + "/+" + std::to_string(p.etb_each_other_own_creature_counters)
+                          + std::to_string(etb_team_counters)
+                          + "/+" + std::to_string(etb_team_counters)
                           + " counter on each other " + who + " (" + std::to_string(hit) + ")");
         }
     }
@@ -15524,6 +15633,51 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
     { CreateTokens(state, controller, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
 }
 
+// Drana, Liberator of Malakir (Vampires, 2026-10-18): "Whenever Drana deals combat damage to a player,
+// put a +1/+1 counter on each attacking creature you control." Fired by ResolveCombatDamage once per
+// combat damage STEP, over the sources that dealt damage IN THAT STEP (`dealt_idx`) -- so a
+// first-striking Drana's counters are on every attacker before the regular step deals its damage
+// (CR 510.4), which is the whole card. Self-scoped: only the source's own damage triggers it, and a
+// double-striking Drana triggers once per step it connects in (the second wave lands after the last
+// damage this combat, i.e. it pays off next turn).
+//
+// "Each ATTACKING creature you control" = every index still in `atk_idx` (declared attackers plus the
+// tokens put onto the battlefield attacking), Drana included, that is still ours and still a creature
+// (CR 506.4). Counters go through PutPlusCounters (the doubler-aware chokepoint). Indices only, no
+// references held across the loop: the earlier combat-damage hooks only APPEND to the battlefield,
+// so every index stays valid. One trigger per damage event -- never multiplied by opponent heads.
+inline void FireCombatDamageTeamCounters(GameState& state, int controller,
+                                         const std::vector<int>& atk_idx,
+                                         const std::vector<int>& dealt_idx)
+{
+    if (dealt_idx.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int di : dealt_idx)
+    {
+        if (di < 0 || di >= bf_size) { continue; }
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(di)];
+        if (src.def_absent) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (!sd || sd->params.combat_damage_counters_each_attacker <= 0) { continue; }
+        const int per = sd->params.combat_damage_counters_each_attacker;
+        int hit = 0;
+        for (int ai : atk_idx)
+        {
+            if (ai < 0 || ai >= bf_size) { continue; }
+            Permanent& q = state.battlefield[static_cast<std::size_t>(ai)];
+            if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+            PutPlusCounters(state, q, per);
+            ++hit;
+        }
+        if (g_play_event_sink && !g_tap_speculating && hit > 0)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src.card.m_name.str() + ": +" + std::to_string(per) + "/+" + std::to_string(per)
+                          + " counter on each attacking creature (" + std::to_string(hit) + ")");
+        }
+    }
+}
+
 // ---- Goblins combat attack-trigger self-pumps (Piledriver / Muxus) -------------------------------
 // "Whenever this attacks, it gets +X/+Y until end of turn for each other <...>." Applied at
 // declare-attackers in BOTH worlds (executor CombatPhase + rollout SimulateCombat), writing
@@ -18410,6 +18564,66 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index,
         }
     }
     return start;
+}
+
+// Mavren Fein, Dusk Apostle (Vampires, 2026-10-18): "Whenever one or more nontoken Vampires you
+// control attack, create a 1/1 white Vampire creature token with lifelink." A PLAYER-scoped trigger
+// (the source need not attack, and counts itself) that fires ONCE per combat however many attackers
+// match (CR 603.2c "one or more"), over the DECLARED attackers only -- `declared` must be the
+// attacker list BEFORE any token was put onto the battlefield attacking (CR 508.4: those were never
+// declared). Called at declare-attackers in BOTH worlds (GameEngine::CombatPhase and
+// TurnSolver::SimulateCombat), immediately before the Adeline block, so its token is never appended
+// to the attacker list: it enters UNTAPPED and NOT attacking, summoning-sick, through CreateToken --
+// the enter cascade reaches it (Vampire lords, Vampire Socialite's as-enters counter) and Doubling
+// Season doubles it. Never scaled by opponent heads: "one or more ... attack" is one trigger in 2HG.
+// Specs gathered before any CreateToken (it push_backs and invalidates references).
+inline void FireAttackOneOrMoreTokens(GameState& state, int controller, const std::vector<int>& declared)
+{
+    if (declared.empty()) { return; }
+    struct Spec { int n, p, t; std::vector<std::string> subs, kws; std::string color, src; };
+    std::vector<Spec> specs;
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_size; ++i)
+    {
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(i)];
+        if (src.controller_index != controller || src.def_absent) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (!sd || sd->params.attack_one_or_more_tokens <= 0) { continue; }
+        const CardParams& pp = sd->params;
+        bool fires = false;
+        for (int ai : declared)
+        {
+            if (ai < 0 || ai >= bf_size) { continue; }
+            const Permanent& a = state.battlefield[static_cast<std::size_t>(ai)];
+            if (a.controller_index != controller) { continue; }
+            if (pp.attack_one_or_more_nontoken && a.is_token) { continue; }
+            bool m = pp.attack_one_or_more_subtypes.empty() || a.AnimatedAllTypes();
+            for (const std::string& sub : pp.attack_one_or_more_subtypes)
+            {
+                if (m) { break; }
+                if (CardHasSubtype(a.card, sub)) { m = true; }
+            }
+            if (m) { fires = true; break; }
+        }
+        if (!fires) { continue; }
+        specs.push_back({ pp.attack_one_or_more_tokens, pp.attack_one_or_more_token_power,
+                          pp.attack_one_or_more_token_toughness, pp.attack_one_or_more_token_subtypes,
+                          pp.attack_one_or_more_token_keywords, pp.attack_one_or_more_token_color,
+                          src.card.m_name.str() });
+    }
+    for (const Spec& sp : specs)
+    {
+        for (int k = 0; k < sp.n; ++k)
+        { CreateToken(state, controller, sp.p, sp.t, sp.subs, sp.color, sp.kws); }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            std::string what = std::to_string(sp.p) + "/" + std::to_string(sp.t);
+            for (const std::string& st : sp.subs) { what += " " + st; }
+            EmitPlayEvent(state.turn_number, "trigger",
+                          sp.src + ": created " + std::to_string(sp.n) + " " + what + " token"
+                          + (sp.n == 1 ? "" : "s") + " (not attacking)");
+        }
+    }
 }
 
 // CR 704.5m: "If an Aura is attached to an illegal object or player, or is not attached to an
