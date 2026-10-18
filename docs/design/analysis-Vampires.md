@@ -180,7 +180,10 @@ Secluded Courtyard with a sac outlet (Minotaur: Slaughter-Priest's {2} is generi
 already paid; Soldiers: Ranger-Captain / King Darien / Jirina outlets cost no mana) -- so the pay-scope
 fix moves nothing in the suite today. `provider_audit.py --check` rc 0 (Vampires has no profile yet:
 "NOT AUDITED"; the unit test pins its routing). `audit_card_costs.py` rc 0 (441/441 compared).
-`audit_viewer_decisions.py decks/Vampires/Vampire.cod --no-sweep`: clean. Sanity
+`audit_card_fields.py`: every hard field (cost, P/T, types, keywords) of the new cards matches the
+snapshot (Voldaren Estate / Bloodghast entries built from the stored Scryfall JSON after a 429; the
+audit's rc 1 is the pre-existing unfetched Temple of Abandon). `audit_viewer_decisions.py
+decks/Vampires/Vampire.cod --no-sweep`: clean. Sanity
 `mtg decks/Vampires/Vampire.cod --games 20 --seed 777 --depth 3 --budget-ms 20 --threads 8`: no crash, avg
 6.55 (4 unwon -- 9 of the 20 cards still unimplemented); one SLOW-GAME (seed 790 gi13, 66 s in the batch,
 2:42 single-threaded, 4.9M units) -- a flat profile (BuildSimKey 5.9%, operator new 4.3%, CollectActions
