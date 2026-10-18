@@ -61,7 +61,9 @@ def norm_cost(cost):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cards", default="src/cards/data/cards.json")
-    ap.add_argument("--throttle", type=float, default=0.1, help="seconds between API calls")
+    ap.add_argument("--throttle", type=float, default=0.5,
+                    help="seconds between API calls (0.1 drew HTTP 429 on 114-115 of 436 cards on "
+                         "2026-10-17/18; 0.5 compared all 436)")
     args = ap.parse_args()
 
     with open(args.cards, encoding="utf-8") as fh:

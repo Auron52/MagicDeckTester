@@ -235,11 +235,14 @@ All three tiers accepted with the leaf live.
 ## RESUME POINT (2026-10-18 ~05:30 UTC)
 Pipeline COMPLETE for Galadriel: cards, profile, suite (resized), scry/turn-order USER rules, 15 USER
 references (0/15 short), keep table (K=9), value leaf (model). All committed + pushed.
-OPEN USER QUESTIONS: the value leaf's model-vs-nlfit trade; the seeds 4/5 T5 scry choices. (Keep-policy
+Scryfall cost audit re-run 2026-10-18 at a 0.5 s throttle (now the default): all 436 costs match.
+Leaf A/B, 40 seeds x 1000 paired (seeds 700000+): model -0.0018 t (t -5.3) at 0.70x units / 0.86x core vs
+no leaf; nlesc -0.0003 (t -1.2) at 0.67x; nlfit -0.0004 (t -1.3) at 0.58x / 0.64x core; model vs nlfit
+-0.0014 (t -4.6) at 1.21x units; nlesc == nlfit in result, dominated on cost.
+OPEN USER QUESTIONS: the value leaf's model-vs-nlfit trade (data above); the seeds 4/5 T5 scry choices. (Keep-policy
 sign-off is MOOT: the keep table covers every composition, so the static rules are only the fallback. The
 Saproling Migration / Kili keyword items were already fixed in d5fe4897.)
-OWED: the cross-game RSS growth seen in the old value-leaf matrix (13 -> 19 GiB); the rate-limited Scryfall
-cost audit re-run (in progress 2026-10-18); a refresh of test/suite_cost.json on the next pooled tier run;
+OWED: the cross-game RSS growth seen in the old value-leaf matrix (13 -> 19 GiB); a refresh of test/suite_cost.json on the next pooled tier run;
 the settings screen will run before Galadriel's NEXT keep-table generation (its table was made at play
 settings d5 b20).
 Gotchas: 9p clock lag (delete .o files after edits; header edits via ninja -t deps); never pkill -f; gh CLI
