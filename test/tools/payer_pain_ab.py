@@ -59,7 +59,12 @@ def manifest(argv):
                 for arm, flags in ARMS.items():
                     job = {"name": f"{deck}.{arm}.{fmt}.d{depth}.b{budget}.{block}",
                            "deck": dfile[deck], "profile": dprof[deck], "games": n, "seed": seed,
-                           "depth": depth, "budget_ms": budget, "flags": dict(flags), "weight": depth}
+                           "budget_ms": budget, "flags": dict(flags), "weight": depth}
+                    # The suite's convention (test/regression.sh): a d5 row omits the depth so an ENABLED
+                    # value_play block owns it (else the built-in d5); a d0/d3 row overrides the profile.
+                    if depth != 5:
+                        job["depth"] = depth
+                        job["ignore_play_profile"] = True
                     job.update(FORMAT_FIELDS[fmt])
                     jobs.append(job)
     json.dump({"jobs": jobs}, sys.stdout, indent=1)
