@@ -1,0 +1,15 @@
+{
+  "_comment": "SEARCH COMPLETENESS for a CAST TRIGGER's draw: the card Niv-Mizzet, Parun's 'whenever a player casts an instant or sorcery spell, you draw a card' draws must be castable the same turn. Mid-turn frame (resume_at main1, land drop spent): a summoning-sick Parun, Island + Mountain, hand Ponder, Lightning Bolt on top; opponent at 5. Casting Ponder triggers Parun -- it draws the Bolt and pings (4) -- then Ponder draws and pings (3), and the Bolt Parun drew is cast off the Mountain (0). Fails if a cast trigger's draw stops reaching the post-cast re-solve.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 5,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Mountain" },
+    { "name": "Niv-Mizzet, Parun", "sick": true }
+  ],
+  "hand": [ "Ponder" ],
+  "library_top": [ "Lightning Bolt" ],
+  "library_filler": "Island", "library_size": 20,
+  "depth": 3, "budget_ms": 0, "max_turns": 4,
+  "expect_win_turn": 4
+}

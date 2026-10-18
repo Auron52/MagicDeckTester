@@ -49385,7 +49385,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // is not a hand entry, so g_hand_entry_seq says nothing about it (executor twin: the same OR).
     if (BpHandEntryEnabled() && !deferred_cantrip_resolve && !s_human_play && sink_stack.empty()
         && ((g_hand_entry_seq != seq_at_section
-             && TurnSolver::HandGainedACard(hand_at_section, state))
+             && TurnSolver::SectionHandGainedACard(hand_at_section, state))
             || TurnSolver::TopLandNewlyPlayable(top_at_section, state, karoo_deferred)
             // the graveyard-Equipment half (Forge Anew), likewise outside the sequence pre-filter
             || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_section, state)))
@@ -56401,6 +56401,27 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // belongs to the watcher, so the card that ENTERS carries no draw param whatsoever -- a vanilla
     // Apex Altisaur arms site 10 here. A plan casting the watcher itself counts for the reason the
     // Aura note gives (cast order resolves the watcher creature ahead of the bodies that follow it).
+    // Site 10 pre-scan, the CAST-TYPE watcher (Niv-Mizzet, Parun's cast_trigger_instant_sorcery_draw),
+    // the same shape as the three watchers around it (see its clause in the action loop).
+    bool parun_watcher = false;
+    if (BpPutInHandEnabled() && state.deck_has_draw_ping)
+    {
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+            if (w && w->params.cast_trigger_instant_sorcery_draw > 0) { parun_watcher = true; break; }
+        }
+        if (!parun_watcher)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d && d->params.cast_trigger_instant_sorcery_draw > 0) { parun_watcher = true; break; }
+            }
+        }
+    }
     bool creature_watcher = false;
     if (BpPutInHandEnabled())
     {
@@ -56466,6 +56487,17 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         {
             const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (td && !td->params.tap_draw_requires_top_supertype.empty()) { mask |= 1 << 8; }
+            // A PLAIN "{T}: Draw a card" (Niv-Mizzet, the Firemind) on a deck running the Niv loop:
+            // the draw is outside any cast window, so it arms site 10 through MTG_BP_HAND_ENTRY's
+            // section route -- and, being unmarked, its continuation was an unchallengeable
+            // cands.front(): the card the activation (and the pings' Curiosity/Lookout draws) put in
+            // hand could not be cast that phase at any budget (test/scenarios/
+            // niv_firemind_tap_draw_cast_same_turn.json). Marked here so the fan-out reaches it.
+            // DECK-GATED (deck_has_draw_ping) to keep every other deck byte-identical; the same gap
+            // exists for the other plain tap-draw sources (Troyan's loot, Mariposa Military Base) and
+            // is reported, not fixed here.
+            else if (td && state.deck_has_draw_ping && BpPutInHandEnabled() && BpHandEntryEnabled())
+            { mask |= 1 << 10; }
         }
         // Site 3, the acquisition family's NON-CAST route: Garth's conjure-and-cast reaches
         // Braingeyser (draw X) and Regrowth (graveyard -> hand), and its arming (ApplyPlanDirect,
@@ -56671,6 +56703,13 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                 static const bool unnamed_ok = EnvOn("MTG_BP_TUTOR_BF_UNNAMED", true);
                 if (ft.empty() && unnamed_ok) { mask |= 1 << 10; }
             }
+            // THE CAST-TYPE WATCHER (Niv-Mizzet, Parun: "whenever a player casts an instant or
+            // sorcery spell, you draw a card"). The Kor Spiritdancer / Sram shape, keyed on the cast
+            // card's TYPE: the draw belongs to the watcher, so an instant or sorcery with no draw of
+            // its own (a Lightning Bolt) arms site 10 through the cast window. State-keyed (Parun on
+            // the battlefield or cast by this plan -- a creature, so the cast order resolves it ahead
+            // of the noncreature spells). Deck-gated by the param's own presence (deck_has_draw_ping).
+            if (parun_watcher && (d->card.IsInstant() || d->card.IsSorcery())) { mask |= 1 << 10; }
             // THE CREATURE-ENTERS WATCHER (Vaultborn Tyrant, "whenever another creature you control
             // enters, draw a card"). State-keyed exactly like the equipment and Aura watchers above,
             // and it is the whole of stompy's site-10 traffic: the draw belongs to the WATCHER, so

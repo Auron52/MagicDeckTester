@@ -1730,6 +1730,24 @@ public:
     // ApplyPlanDirect's arming and AIEngine's draw-engine classification -- because a class one
     // world counts and the other does not shifts every later bp_at index.
     static bool HandGainedACard(const std::vector<int>& before, const GameState& state);
+    // THE SECTION WINDOW's form of that question (MTG_BP_HAND_ENTRY; ApplyPlanDirect's section check
+    // and AIEngine::TakeTurn's twin -- one definition, lockstep). HandGainedACard reads an EMPTY
+    // snapshot as "no snapshot was taken" and answers false -- but the section snapshot is ALWAYS
+    // taken whenever its check runs (both are gated on BpHandEntryEnabled), so an empty one there is
+    // a real EMPTY HAND, and then every card in hand now is new. Without this an activation that draws
+    // into an empty hand never arms the breakpoint: Niv-Mizzet, the Firemind tapped to draw with no
+    // cards left (the combo deck's ordinary hellbent turn) could not cast what it drew -- or what the
+    // pings' Curiosity draws brought -- in that phase at any budget
+    // (test/scenarios/niv_firemind_tap_draw_cast_same_turn.json).
+    // DECK-GATED (deck_has_draw_ping) so every other deck is byte-identical. The hole itself is
+    // GENERAL -- any activation / trigger that draws into an empty hand (Psychotrope Thallid's sac
+    // draw, Troyan's loot) never arms -- and is reported for a separate, measured change.
+    static bool SectionHandGainedACard(const std::vector<int>& before, const GameState& state)
+    {
+        if (HandGainedACard(before, state)) { return true; }
+        return state.deck_has_draw_ping && before.empty()
+            && !state.players[state.active_player_index].hand.empty();
+    }
     // THE LIBRARY-TOP TWIN of HandGainedACard (Courser of Kruphix, 2026-10-15): a playable top land
     // exists NOW that was not the playable top at the snapshot (`top_snapshot` = PlayableTopLandNumber
     // taken at the same points as the hand snapshot; 0 = none was playable), and the drop is open and

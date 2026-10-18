@@ -1,0 +1,15 @@
+{
+  "_comment": "SEARCH COMPLETENESS for an ACTIVATION's draw: a card Niv-Mizzet, the Firemind's '{T}: Draw a card' draws must be castable the same phase. Post-combat frame (resume_at main2, the last main of the last turn the fixture plays): an untapped, not-sick Firemind, one Mountain, empty hand, Lightning Bolt on top; opponent at 4. The only kill this turn is tap -> draw the Bolt (its draw pings: 3) -> cast the Bolt off the Mountain (0). The draw happens OUTSIDE any cast's window, so only the section-level hand-entry breakpoint (MTG_BP_HAND_ENTRY) lets the plan re-decide on it. Fails if that breakpoint stops seeing an activation's draw or the ping stops resolving before the re-solve.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 4,
+  "resume_at": "main2", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Niv-Mizzet, the Firemind" }
+  ],
+  "hand": [],
+  "library_top": [ "Lightning Bolt" ],
+  "library_filler": "Island", "library_size": 20,
+  "depth": 3, "budget_ms": 0, "max_turns": 4,
+  "expect_win_turn": 4
+}

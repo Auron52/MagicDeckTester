@@ -7424,15 +7424,45 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the re-solve. Full depth returns false from TakeTurn regardless, and its continuation arrives
     // through the committed script, so this must not (and does not) consume a breakpoint index.
     // Human play never auto-continues: the main-phase re-prompt is the human's own breakpoint.
+    // THE NO-COMMIT FALLBACK of that route (NivMizzetCombo, 2026-10-17). At full depth the route's
+    // continuation reaches the executor only through a COMMITTED line's recorded script; a plan from
+    // the fallback lookahead (no committed line -- a fresh main 2, a stale line) carries none, and the
+    // second pass is suppressed at depth > 0 (see the return below). So the rollout scored the plan
+    // WITH the continuation the section breakpoint applies, and the executor realised it WITHOUT:
+    // Niv-Mizzet, the Firemind tapped to draw a Lightning Bolt in a fallback main 2 never cast it
+    // (test/scenarios/niv_firemind_tap_draw_cast_same_turn.json). Re-solve here instead, exactly as
+    // the cast-armed classes' fallback (acq_pending, below) does: resolve_draw_breakpoint honours the
+    // plan's searched continuation or re-solves with the searched engine. DECK-GATED
+    // (deck_has_draw_ping) so every other deck is byte-identical; the gap is general (any activation
+    // or trigger draw in a fallback main) and is reported.
+    bool section_fallback = false;
     if (BpHandEntryEnabled() && !HumanPlayActive() && !cast_draw_engine
         && ((g_hand_entry_seq != exec_seq_at_section
-             && TurnSolver::HandGainedACard(exec_hand_at_section, state))
+             && TurnSolver::SectionHandGainedACard(exec_hand_at_section, state))
             // the library-top half, outside the sequence pre-filter (rollout twin: the same OR)
             || TurnSolver::TopLandNewlyPlayable(exec_top_at_section, state, karoo_deferred)
             // ...and the graveyard-Equipment half (Forge Anew; rollout twin: the same OR)
             || TurnSolver::EquipmentReturnedFromGraveyard(exec_gyeq_at_section, state)))
     {
         cast_draw_engine = true;
+        section_fallback = state.deck_has_draw_ping && s_full_depth && m_lookahead_depth > 0
+                        && !fd_plan_committed && !acq_pending && !staged_break;
+    }
+    if (section_fallback)
+    {
+        rdb_site           = nullptr;              // armed by no cast: the section route
+        rdb_hand           = exec_hand_at_section; // the hand as the section opened (empty = all new)
+        rdb_site_activated = true;                 // after the trailing pass, like site 8
+        if (TurnSolver::BreakpointHandSnapshotWanted(state))
+        {
+            rdb_plan_casts.clear();
+            for (const Action& pa : plan.actions)
+            {
+                if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+            }
+        }
+        resolve_draw_breakpoint(0);
     }
 
     // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have

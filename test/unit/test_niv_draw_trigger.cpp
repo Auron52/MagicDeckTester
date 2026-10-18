@@ -542,6 +542,49 @@ TEST_CASE("Niv-Mizzet, the Firemind: {T}: Draw a card pings through the shared a
     CHECK(offered);
 }
 
+// ---- 4b. search completeness: what the activation draws is castable the same phase -----------------
+
+TEST_CASE("Firemind {T} draw into an EMPTY hand: the drawn card is castable the same phase (main 1 and main 2)")
+{
+    EnsureCardsLoadedNiv();
+    // Opponent at 4, one Mountain, empty hand, Lightning Bolt on top: tap (ping, 3) -> Bolt (0). The
+    // draw is outside any cast window, so only the section hand-entry breakpoint can re-decide on it,
+    // and with an EMPTY section snapshot HandGainedACard reads "no snapshot" -- the reason
+    // SectionHandGainedACard exists. Each main: the searched pick, applied, kills.
+    auto board = [](bool loop_deck)
+    {
+        GameState s = FreshNiv(0);
+        s.players[0].library.push_back(CardNiv("Lightning Bolt", 30));
+        for (int k = 0; k < 20; ++k) { s.players[0].library.push_back(CardNiv("Island", 900 + k)); }
+        s.players[1].life = 4;
+        s.deck_has_draw_ping = loop_deck;
+        PutNiv(s, "Mountain", 50);
+        PutNiv(s, "Niv-Mizzet, the Firemind", 1);
+        return s;
+    };
+    for (int pre = 0; pre < 2; ++pre)
+    {
+        CAPTURE(pre);
+        GameState s = board(true);
+        s.phase = pre ? Phase::PreCombatMain : Phase::PostCombatMain;
+        const TurnSolver::Plan pick = TurnSolver::SolveWithLookahead(s, pre == 1, 3, s.turn_number);
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, pick, pre == 1);
+        CHECK(OpponentHasLost(r));
+        CHECK(r.players[0].hand.empty());          // the Bolt was cast, not held
+    }
+    // The helper's contract: an empty snapshot is a real empty hand for a loop deck only.
+    GameState g = board(true);
+    g.players[0].hand.push_back(CardNiv("Lightning Bolt", 31));
+    CHECK(TurnSolver::SectionHandGainedACard({}, g));
+    CHECK_FALSE(TurnSolver::HandGainedACard({}, g));
+    g.deck_has_draw_ping = false;                   // every other deck: unchanged (the general gap)
+    CHECK_FALSE(TurnSolver::SectionHandGainedACard({}, g));
+    g.players[0].hand.clear();
+    g.deck_has_draw_ping = true;
+    CHECK_FALSE(TurnSolver::SectionHandGainedACard({}, g));   // still empty: nothing entered
+}
+
 // ---- 5. lockstep: the executor and the rollout realise the same line ----------------------------------
 
 TEST_CASE("Niv loop LOCKSTEP: rollout ApplyPlan and the executor's TakeTurn realise every Curiosity line identically")
@@ -588,4 +631,5 @@ TEST_CASE("Niv loop LOCKSTEP: rollout ApplyPlan and the executor's TakeTurn real
     CHECK(curiosity_on_niv >= 1);              // the host is a searched variant and the Niv is one
     CHECK(compared >= 1);
 }
+
 
