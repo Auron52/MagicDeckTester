@@ -448,6 +448,28 @@ TEST_CASE("Vampires discard buckets: threats shed by castability x value")
     CHECK(order.size() == NamesVo(s).size());
 }
 
+TEST_CASE("Vampires discard buckets: a held Vial makes a 1-drop castable whatever its colour")
+{
+    // Board two tapped Swamps (no red), no land in hand, turn 3, an outlet's order. Every card here needs
+    // {R}, which only a drawn Territory (4 of the library's 20) can make: Pit Fighter 5 x ~0.46 = 2.3,
+    // Socialite 7 x ~0.46 = 3.2, Captain 11 x ~0.34 = 3.7. With an Aether Vial in hand the 1-drop
+    // Pit Fighter is put the turn after the Vial lands, colour or not: castability >= 0.75 -> EV 3.75,
+    // now behind the Socialite (d0 probe 2026-10-18, seed 1242: the pump shed the Pit Fighter that the
+    // same turn's Vial would have put for free).
+    const std::vector<BoardVo> board = {{"Swamp", true}, {"Swamp", true}};
+    {
+        const GameState s = MakeVo({"Vampire Socialite", "Falkenrath Pit Fighter", "Stromkirk Captain"}, board, 3);
+        const std::vector<std::string> order = ActivationVo(s, true);
+        CHECK(PosVo(order, "Falkenrath Pit Fighter") < PosVo(order, "Vampire Socialite"));
+    }
+    {
+        const GameState s = MakeVo({"Vampire Socialite", "Falkenrath Pit Fighter", "Stromkirk Captain",
+                                    "Aether Vial"}, board, 3);
+        const std::vector<std::string> order = ActivationVo(s, true);
+        CHECK(PosVo(order, "Vampire Socialite") < PosVo(order, "Falkenrath Pit Fighter"));
+    }
+}
+
 TEST_CASE("Vampires discard buckets: lever off is VialProvider's rule, byte for byte")
 {
     const GameState s = MakeVo({"Vampire of the Dire Moon", "Stromkirk Captain", "Markov Baron",
