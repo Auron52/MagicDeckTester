@@ -225,6 +225,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             ap2.aura_power_bonus  = def.params.aura_power_bonus;
             ap2.aura_tough_bonus  = def.params.aura_tough_bonus;
             ap2.aura_grants_lifelink = def.params.aura_grants_lifelink;
+            ap2.aura_grants_first_strike = def.params.aura_grants_first_strike;
             ap2.aura_color_bonuses   = def.params.aura_color_bonuses;
             ap2.aura_enchant_requires = def.params.aura_enchant_requires;
             ap2.aura_set_base_power     = def.params.aura_set_base_power;
@@ -841,6 +842,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.graveyard_replace_shuffle_library = params.value("graveyard_replace_shuffle_library", false);
     p.protection_from_everything        = params.value("protection_from_everything", false);
     p.combat_damage_free_cast = params.value("combat_damage_free_cast", false);
+    // Drana, Liberator of Malakir (Vampires 2026-10-18) -- see CardParams.
+    p.combat_damage_counters_each_attacker = params.value("combat_damage_counters_each_attacker", 0);
     p.landfall_damage        = params.value("landfall_damage", 0);
     // Landfall TRIGGERS (CardParams' LANDFALL TRIGGERS block; dispatched by OnLandEntered).
     p.landfall_creates_tokens  = params.value("landfall_creates_tokens", 0);
@@ -869,6 +872,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_haste           = params.value("grants_haste", false);
     p.grants_double_strike   = params.value("grants_double_strike", false);
     p.grants_lifelink        = params.value("grants_lifelink", false);
+    p.grants_first_strike    = params.value("grants_first_strike", false);   // Vampires 2026-10-18
     p.affinity_for_subtype   = params.value("affinity_for_subtype", false);
     p.upkeep_adds_charge     = params.value("upkeep_adds_charge", false);
     p.can_animate            = params.value("can_animate", false);
@@ -1044,6 +1048,19 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // creature-scoped "whenever THIS CREATURE attacks". See the CardParams comment.
     p.attack_tokens_require_self_attacking =
         params.value("attack_tokens_require_self_attacking", false);
+    // Mavren Fein, Dusk Apostle (Vampires 2026-10-18): "whenever one or more <matching> creatures you
+    // control attack, create <token>" -- see CardParams.
+    p.attack_one_or_more_tokens          = params.value("attack_one_or_more_tokens", 0);
+    for (const std::string& s : params.value("attack_one_or_more_subtypes", json::array()))
+        p.attack_one_or_more_subtypes.push_back(s);
+    p.attack_one_or_more_nontoken        = params.value("attack_one_or_more_nontoken", false);
+    p.attack_one_or_more_token_power     = params.value("attack_one_or_more_token_power", 0);
+    p.attack_one_or_more_token_toughness = params.value("attack_one_or_more_token_toughness", 0);
+    for (const std::string& s : params.value("attack_one_or_more_token_subtypes", json::array()))
+        p.attack_one_or_more_token_subtypes.push_back(s);
+    p.attack_one_or_more_token_color     = params.value("attack_one_or_more_token_color", std::string());
+    for (const std::string& s : params.value("attack_one_or_more_token_keywords", json::array()))
+        p.attack_one_or_more_token_keywords.push_back(s);
     p.battle_cry_power             = params.value("battle_cry_power", 0);
 
     // --- Dragonstorm kill-engine (Scourge / Lathliss / Utvara) ---
@@ -1375,6 +1392,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.aura_power_bonus          = params.value("aura_power_bonus", 0);
     p.aura_tough_bonus          = params.value("aura_tough_bonus", 0);
     p.aura_grants_lifelink      = params.value("aura_grants_lifelink", false);
+    p.aura_grants_first_strike  = params.value("aura_grants_first_strike", false);   // CR 510.4 split
     p.aura_scale_kind           = params.value("aura_scale_kind", std::string());
     p.aura_scale_power          = params.value("aura_scale_power", 0);
     p.aura_scale_tough          = params.value("aura_scale_tough", 0);
@@ -1718,6 +1736,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_each_other_own_creature_counters = params.value("etb_each_other_own_creature_counters", 0);
     for (const std::string& s : params.value("etb_counters_subtypes", json::array()))
         p.etb_counters_subtypes.push_back(s);
+    // Vampire Socialite (Vampires 2026-10-18) -- see CardParams.
+    p.etb_each_other_own_creature_counters_if_opp_lost_life =
+        params.value("etb_each_other_own_creature_counters_if_opp_lost_life", 0);
+    p.opp_lost_life_other_enters_counters = params.value("opp_lost_life_other_enters_counters", 0);
+    p.opp_lost_life_other_enters_subtype  =
+        params.value("opp_lost_life_other_enters_subtype", std::string());
     p.noncreature_spell_tax = params.value("noncreature_spell_tax", 0);
     for (const std::string& s : params.value("etb_untap_control_subtypes", json::array()))
         p.etb_untap_control_subtypes.push_back(s);

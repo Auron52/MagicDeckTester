@@ -731,6 +731,11 @@ void GameEngine::CombatPhase(GameState& state)
     FireCombatLandSearchCracks(state, state.active_player_index, atk_idx);
 
     const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
+    // Mavren Fein, Dusk Apostle: "whenever one or more nontoken Vampires you control attack, create a
+    // 1/1 white Vampire token with lifelink" -- once per combat, over the DECLARED attackers, BEFORE the
+    // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
+    // TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
+    FireAttackOneOrMoreTokens(state, state.active_player_index, atk_idx);
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
     if (!atk_idx.empty())

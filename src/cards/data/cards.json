@@ -386,9 +386,14 @@
    ],
    "power": 1,
    "toughness": 1,
-   "oracle_text": "Sliver creatures you control have first strike. (They deal combat damage before creatures without first strike.) [Keyword lord not modelled: first strike is not granted to other Slivers; Striking Sliver itself has first strike via its own effect. First strike has no effect in goldfishing (no blockers).]",
+   "oracle_text": "Sliver creatures you control have first strike. (They deal combat damage before creatures without first strike.) [Keyword lord MODELLED (2026-10-18): grants_first_strike + subtypes_affected [Sliver] (self-inclusive; its own first strike is also printed), read by CreatureHasFirstStrike for the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18). In slivers_vial nothing happens between the two damage steps (Leeching Sliver's loss is an attack trigger; no combat-damage trigger or life-gain watcher), so it changes no outcome there.]",
    "template": "vanilla_creature",
-   "parameters": {}
+   "parameters": {
+    "subtypes_affected": [
+     "Sliver"
+    ],
+    "grants_first_strike": true
+   }
   },
   {
    "name": "Cloudshredder Sliver",
@@ -1138,7 +1143,7 @@
    ],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "First strike\nOther Knight creatures you control get +1/+1 and have indestructible. [Indestructible grant + first strike inert in goldfishing (no blockers, no opponent removal); the +1/+1 Knight lord is modelled.]",
+   "oracle_text": "First strike\nOther Knight creatures you control get +1/+1 and have indestructible. [Indestructible grant inert in goldfishing (no blockers, no opponent removal). First strike is modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)); in its decks nothing happens between the two damage steps, so it changes no outcome. The +1/+1 Knight lord is modelled.]",
    "template": "lord_effect",
    "parameters": {
     "subtypes_affected": [
@@ -1192,7 +1197,7 @@
    "keywords": [],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "Knight creatures you control have double strike. [Fully modelled, no simplification: the STATIC subtype double-strike lord is Thrumming Hivepool's shape exactly (grants_double_strike + subtypes_affected Knight), resolved inside CreatureHasDoubleStrike -- the single shared oracle that ResolveCombatDamage and both of TurnSolver's attack projections consult -- so executor, rollout and search are lockstep for free. It is NOT Valiant Knight's shape: that card's grant is an ACTIVATED until-EOT team_pump costing {3}{W}{W}, this one is a permanent static that costs nothing once resolved. The grant reads 'Knight creatures you control', NOT 'Other', so it INCLUDES this creature -- which is what HasDoubleStrikeFromLords already does (it has no self-exclusion and this card is itself a Knight), the same self-inclusive shape Cloudshredder Sliver's haste grant has. Deliberately NOT template lord_effect and NOT lord_excludes_self: with power_bonus/tough_bonus 0 the card is not an IsLordPermanent, so it never enters BoardSources::lords and ComputeLordBonus stays untouched; it enters BoardSources::ds only. Goldfish reach: double strike is the ONE combat keyword that is not blocker-dependent -- ResolveCombatDamage multiplies the fully-assembled power (printed + lord + anthem + Adeline's characteristic-defining power + auras/equipment) by 2, so the card doubles the WHOLE team's damage, unlike the first strike on Knight Exemplar which is correctly noted inert. Tokens are not Knights (Worthy Knight's Soldiers, Adeline's Humans, Hero of Bladehold's Soldiers), so the grant covers the nontoken board only.]",
+   "oracle_text": "Knight creatures you control have double strike. [Fully modelled, no simplification: the STATIC subtype double-strike lord is Thrumming Hivepool's shape exactly (grants_double_strike + subtypes_affected Knight), resolved inside CreatureHasDoubleStrike -- the single shared oracle that ResolveCombatDamage and both of TurnSolver's attack projections consult -- so executor, rollout and search are lockstep for free. It is NOT Valiant Knight's shape: that card's grant is an ACTIVATED until-EOT team_pump costing {3}{W}{W}, this one is a permanent static that costs nothing once resolved. The grant reads 'Knight creatures you control', NOT 'Other', so it INCLUDES this creature -- which is what HasDoubleStrikeFromLords already does (it has no self-exclusion and this card is itself a Knight), the same self-inclusive shape Cloudshredder Sliver's haste grant has. Deliberately NOT template lord_effect and NOT lord_excludes_self: with power_bonus/tough_bonus 0 the card is not an IsLordPermanent, so it never enters BoardSources::lords and ComputeLordBonus stays untouched; it enters BoardSources::ds only. Goldfish reach: double strike is the ONE combat keyword that is not blocker-dependent -- ResolveCombatDamage deals the fully-assembled power (printed + lord + anthem + Adeline's characteristic-defining power + auras/equipment) in BOTH damage steps (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)), so the card doubles the WHOLE team's damage, unlike the first strike on Knight Exemplar, which only moves damage into the first step. Tokens are not Knights (Worthy Knight's Soldiers, Adeline's Humans, Hero of Bladehold's Soldiers), so the grant covers the nontoken board only.]",
    "template": "vanilla_creature",
    "parameters": {
     "grants_double_strike": true,
@@ -2613,13 +2618,14 @@
    "keywords": [
     "Enchant"
    ],
-   "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 for each enchantment you control and has first strike. [Scales +1/+1 per enchantment you control (aura_scale_kind=enchantments, incl. itself). First strike inert vs the passive opponent.]",
+   "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 for each enchantment you control and has first strike. [Scales +1/+1 per enchantment you control (aura_scale_kind=enchantments, incl. itself). First strike granted (aura_grants_first_strike, read by CreatureHasFirstStrike for the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)); nothing happens between the two damage steps in its deck that changes damage, so it changes no outcome there.]",
    "template": "custom",
    "parameters": {
     "aura_scale_kind": "enchantments",
     "aura_scale_power": 1,
     "aura_scale_tough": 1,
-    "is_aura": true
+    "is_aura": true,
+    "aura_grants_first_strike": true
    }
   },
   {
@@ -2654,14 +2660,15 @@
    "keywords": [
     "Enchant"
    ],
-   "oracle_text": "Enchant creature with another Aura attached to it\nEnchanted creature gets +3/+3 and has first strike, vigilance, and lifelink. [Restriction modelled (aura_enchant_requires=another_aura). Lifelink modelled; first strike + vigilance inert.]",
+   "oracle_text": "Enchant creature with another Aura attached to it\nEnchanted creature gets +3/+3 and has first strike, vigilance, and lifelink. [Restriction modelled (aura_enchant_requires=another_aura). Lifelink modelled. First strike granted (aura_grants_first_strike, read by CreatureHasFirstStrike for the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)): the host's damage and lifelink gain move to the first step, which changes no outcome in its deck (no life-gain watcher). Vigilance inert.]",
    "template": "custom",
    "parameters": {
     "aura_power_bonus": 3,
     "aura_tough_bonus": 3,
     "aura_grants_lifelink": true,
     "aura_enchant_requires": "another_aura",
-    "is_aura": true
+    "is_aura": true,
+    "aura_grants_first_strike": true
    }
   },
   {
@@ -2698,12 +2705,13 @@
     "Umbra armor",
     "Enchant"
    ],
-   "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has first strike.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [First strike + umbra armor inert vs the passive opponent.]",
+   "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has first strike.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [First strike granted (aura_grants_first_strike, read by CreatureHasFirstStrike for the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)); it changes damage only through a between-step effect, of which its deck has none. Umbra armor inert vs the passive opponent.]",
    "template": "custom",
    "parameters": {
     "aura_power_bonus": 1,
     "aura_tough_bonus": 1,
-    "is_aura": true
+    "is_aura": true,
+    "aura_grants_first_strike": true
    }
   },
   {
@@ -3357,7 +3365,7 @@
    ],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "First strike\nWhen Goblin Chainwhirler enters, it deals 1 damage to each creature and each planeswalker your opponents control and each opponent. [First strike INERT in goldfishing (no blockers). ETB pings 1 to each opponent (face, race-relevant) and each opponent creature/planeswalker via etb_damage_each_opponent (only matters vs opponent spawn tokens).]",
+   "oracle_text": "First strike\nWhen Goblin Chainwhirler enters, it deals 1 damage to each creature and each planeswalker your opponents control and each opponent. [First strike modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)): Chainwhirler deals its damage in the first-strike step; nothing in Goblins reads that step (Goblin Lackey has no first strike and triggers off its own regular-step damage), so it changes no outcome there. ETB pings 1 to each opponent (face, race-relevant) and each opponent creature/planeswalker via etb_damage_each_opponent (only matters vs opponent spawn tokens).]",
    "template": "vanilla_creature",
    "parameters": {
     "etb_damage_each_opponent": 1
@@ -3831,7 +3839,7 @@
    ],
    "power": 5,
    "toughness": 5,
-   "oracle_text": "Flying, first strike, trample, lifelink, haste\nAt the beginning of combat on your turn, other Spiders you control gain flying, first strike, trample, lifelink, and haste until end of turn. [Combat-trigger Spider anthem DEFERRED (user-approved 2026-08-06): FiveColour runs no other Spider and the legend rule caps this card to 1 on the battlefield, so 'other Spiders you control' provably has zero targets in this deck; implement when a Spider-tribal deck arrives. Flying/first strike/trample structurally inert vs the passive never-blocking opponent; lifelink and haste live. Legend rule engine-enforced (x2 copies).]",
+   "oracle_text": "Flying, first strike, trample, lifelink, haste\nAt the beginning of combat on your turn, other Spiders you control gain flying, first strike, trample, lifelink, and haste until end of turn. [Combat-trigger Spider anthem DEFERRED (user-approved 2026-08-06): FiveColour runs no other Spider and the legend rule caps this card to 1 on the battlefield, so 'other Spiders you control' provably has zero targets in this deck; implement when a Spider-tribal deck arrives. Flying/trample structurally inert vs the passive never-blocking opponent. First strike is modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)): it moves this creature's damage and lifelink gain into the first step, which changes nothing in FiveColour (no life-gain watcher; Maelstrom Archangel's trigger fires off its own regular-step damage). Lifelink and haste live. Legend rule engine-enforced (x2 copies).]",
    "template": "vanilla_creature",
    "parameters": {}
   },
@@ -5048,7 +5056,7 @@
    ],
    "power": 2,
    "toughness": 1,
-   "oracle_text": "First strike\nWhenever Dwalin enters or attacks, put a hone counter on each Equipment you control. [THE FIRST HONE COUNTER IN THIS FILE. ONE printed trigger with TWO conditions, modelled as one param read at two fire sites: the ENTERS half from the universal own-ETB cascade (so any enter route triggers it) and the ATTACKS half at DECLARE-ATTACKERS in BOTH worlds, beside the quest-counter attack trigger. BECAUSE THE ATTACK HALF RESOLVES IN THE DECLARE-ATTACKERS STEP, THE PUMP APPLIES TO THE SAME COMBAT -- the Beastmaster Ascension property -- which is why the two attack PROJECTIONS carry a matching addend: they read EquipBonusFor without firing the trigger, so without it the search under-rates attacking with Dwalin by one damage per Equipment attached to an attacker, a textbook projection-vs-executor divergence generator. THE +1/+0 IS INTRINSIC TO THE COUNTER, NOT TO DWALIN (the shield-counter class), so it is summed inside EquipBonusFor rather than at a Dwalin-specific site: one function, every combat/projection/SBA call site, and automatically correct for any future hone source. Counters live in a dedicated Permanent::hone_counters int (the spore/quest/fade pattern) and are folded into the plan sim key nonzero-gated, because the generic counter field records only the counter vector's SIZE -- the storage-counter key-hole defect this repo has already paid for once. Routed through the shared counter-put chokepoint, so Doubling Season correctly doubles them (CR 614). THE COUNTERS GO ON EVERY EQUIPMENT YOU CONTROL, ATTACHED OR NOT, which is what makes the dominance axis monotone: an unattached Equipment banks the bonus and cashes it on a later (metalcraft-free) equip, so a honed Colossus Hammer in play is a stored +N on top of its +10/+10. Hone counters are not artifacts and do not move the metalcraft count. An explicit colors array is carried because the {R/W} hybrid pip makes the card BOTH colours (CR 202.2b) and Dragonfire Blade's per-colour equip discount reads that count -- without it the Blade would silently cost {3} on Dwalin instead of {2}. Legend rule engine-enforced; inert at one copy. PARTIAL: FIRST STRIKE is parsed but structurally INERT -- Keyword::FirstStrike has no readers at all, there is no blocker path, and the combat damage step is collapsed into one event; WHY inert: the passive opponent never blocks, so strike ORDER cannot change an outcome. Note the contrast that makes this safe -- DOUBLE strike is NOT inert in this engine, so this is specifically the first-strike-alone collapse.]",
+   "oracle_text": "First strike\nWhenever Dwalin enters or attacks, put a hone counter on each Equipment you control. [THE FIRST HONE COUNTER IN THIS FILE. ONE printed trigger with TWO conditions, modelled as one param read at two fire sites: the ENTERS half from the universal own-ETB cascade (so any enter route triggers it) and the ATTACKS half at DECLARE-ATTACKERS in BOTH worlds, beside the quest-counter attack trigger. BECAUSE THE ATTACK HALF RESOLVES IN THE DECLARE-ATTACKERS STEP, THE PUMP APPLIES TO THE SAME COMBAT -- the Beastmaster Ascension property -- which is why the two attack PROJECTIONS carry a matching addend: they read EquipBonusFor without firing the trigger, so without it the search under-rates attacking with Dwalin by one damage per Equipment attached to an attacker, a textbook projection-vs-executor divergence generator. THE +1/+0 IS INTRINSIC TO THE COUNTER, NOT TO DWALIN (the shield-counter class), so it is summed inside EquipBonusFor rather than at a Dwalin-specific site: one function, every combat/projection/SBA call site, and automatically correct for any future hone source. Counters live in a dedicated Permanent::hone_counters int (the spore/quest/fade pattern) and are folded into the plan sim key nonzero-gated, because the generic counter field records only the counter vector's SIZE -- the storage-counter key-hole defect this repo has already paid for once. Routed through the shared counter-put chokepoint, so Doubling Season correctly doubles them (CR 614). THE COUNTERS GO ON EVERY EQUIPMENT YOU CONTROL, ATTACHED OR NOT, which is what makes the dominance axis monotone: an unattached Equipment banks the bonus and cashes it on a later (metalcraft-free) equip, so a honed Colossus Hammer in play is a stored +N on top of its +10/+10. Hone counters are not artifacts and do not move the metalcraft count. An explicit colors array is carried because the {R/W} hybrid pip makes the card BOTH colours (CR 202.2b) and Dragonfire Blade's per-colour equip discount reads that count -- without it the Blade would silently cost {3} on Dwalin instead of {2}. Legend rule engine-enforced; inert at one copy. FIRST STRIKE is MODELLED (2026-10-18, the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)): Dwalin deals its damage in the first-strike step. In KittyEquipment nothing that happens between the steps changes damage (an Umezawa's Jitte keeps its closed form; no combat-damage trigger or life-gain watcher reads the first step), so it changes no outcome there.]",
    "template": "custom",
    "parameters": {
     "hone_counters_on_enter_or_attack": 1
@@ -5117,7 +5125,7 @@
    "keywords": [],
    "power": 1,
    "toughness": 1,
-   "oracle_text": "As long as this creature is equipped, it has double strike. (It deals both first-strike and regular combat damage.) [Modeled: double_strike_while_equipped -> HasDoubleStrikeFromEquipment at the shared combat + projection ds sites; double strike = power x2 in the collapsed combat model (engine-wide grants_double_strike precedent).]",
+   "oracle_text": "As long as this creature is equipped, it has double strike. (It deals both first-strike and regular combat damage.) [Modeled: double_strike_while_equipped -> HasDoubleStrikeFromEquipment at the shared combat + projection ds sites; double strike = a hit in each of the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18).]",
    "template": "custom",
    "parameters": {
     "double_strike_while_equipped": true
@@ -5163,7 +5171,7 @@
    ],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "First strike\nBalan has double strike as long as two or more Equipment are attached to it.\n{1}{W}: Attach all Equipment you control to Balan. [First strike alone approved-inert (nothing blocks); the conditional DOUBLE strike IS modeled (double_strike_min_equipment=2 -> x2 damage at the shared ds sites). Attach-all = Action::Kind::AttachAllEquipment ({1}{W}, no tap, usable summoning-sick; instant speed collapsed to the main phase, approved): routes through the shared ApplyEquip so equip costs are BYPASSED (the Colossus Hammer line) and Grafted Wargear's re-host sacrifice fires. Legend rule engine-enforced (2 copies).]",
+   "oracle_text": "First strike\nBalan has double strike as long as two or more Equipment are attached to it.\n{1}{W}: Attach all Equipment you control to Balan. [First strike is modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)); alone it changes no outcome in its deck (nothing happens between the steps). The conditional DOUBLE strike IS modeled (double_strike_min_equipment=2 -> a hit in each of the two damage steps). Attach-all = Action::Kind::AttachAllEquipment ({1}{W}, no tap, usable summoning-sick; instant speed collapsed to the main phase, approved): routes through the shared ApplyEquip so equip costs are BYPASSED (the Colossus Hammer line) and Grafted Wargear's re-host sacrifice fires. Legend rule engine-enforced (2 copies).]",
    "template": "custom",
    "parameters": {
     "double_strike_min_equipment": 2,
@@ -5636,7 +5644,7 @@
    "keywords": [],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn. [Vanilla 3/3 Minotaur Wizard for goldfishing. The three {R/W} HYBRID pips are modelled as real either-colour pips (ManaCost::hybrid_pair), so the deck's black sources cannot pay them but any red source can; they also make the card RED AND WHITE (CR 202.2b) and give it DEVOTION TO RED 3, which is what Fanatic of Mogis reads. [PARTIAL: the damage-reflection trigger is inert -- nothing in this sim ever deals damage to our creatures (the opponent never blocks, casts, or removes; Combat.cpp has no blocker path), so the trigger has no event that could fire it. Disclosed deferral D1.] [PARTIAL: '{R/W}: gains first strike' is inert -- first strike is only observable against blockers. Disclosed deferral D2.]]",
+   "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn. [Vanilla 3/3 Minotaur Wizard for goldfishing. The three {R/W} HYBRID pips are modelled as real either-colour pips (ManaCost::hybrid_pair), so the deck's black sources cannot pay them but any red source can; they also make the card RED AND WHITE (CR 202.2b) and give it DEVOTION TO RED 3, which is what Fanatic of Mogis reads. [PARTIAL: the damage-reflection trigger is inert -- nothing in this sim ever deals damage to our creatures (the opponent never blocks, casts, or removes; Combat.cpp has no blocker path), so the trigger has no event that could fire it. Disclosed deferral D1.] [PARTIAL: '{R/W}: gains first strike until end of turn' is not modelled as an activation. First strike is otherwise modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)), and against a never-blocking opponent it is observable only through a between-step effect; the Minotaur deck's only one is Neheb, the Worthy's discard, and under Neheb this Minotaur already strikes first, so the activation can change no outcome. Disclosed deferral D2.]]",
    "template": "vanilla_creature",
    "parameters": {}
   },
@@ -5655,7 +5663,7 @@
    ],
    "power": 2,
    "toughness": 1,
-   "oracle_text": "First strike\n{1}{R}, Discard a card: This creature gets +2/+0 until end of turn. [The activated pump is modelled via firebreathing_cost/_power plus firebreathing_discard, which routes it OUT of the greedy combat-time firebreathing converter and INTO a searched main-phase Action::Kind::ActivatePump (one variant per activation count K, K also capped by hand size). That placement is deliberate: the converter's damage-per-MANA ratio cannot price a CARD, and in this deck an emptied hand is itself a payoff (Neheb, the Worthy's hand-size anthem), so the trade is a judgment the SEARCH must own. The discarded card is the provider's cleanup-discard pick. [PARTIAL: first strike is inert -- no blockers. Disclosed deferral D5.]]",
+   "oracle_text": "First strike\n{1}{R}, Discard a card: This creature gets +2/+0 until end of turn. [The activated pump is modelled via firebreathing_cost/_power plus firebreathing_discard, which routes it OUT of the greedy combat-time firebreathing converter and INTO a searched main-phase Action::Kind::ActivatePump (one variant per activation count K, K also capped by hand size). That placement is deliberate: the converter's damage-per-MANA ratio cannot price a CARD, and in this deck an emptied hand is itself a payoff (Neheb, the Worthy's hand-size anthem), so the trade is a judgment the SEARCH must own. The discarded card is the provider's cleanup-discard pick. [First strike is modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)). A first-step Neheb, the Worthy discard can switch Neheb's +2/+0 Minotaur anthem on before the regular step, but every Minotaur strikes first while Neheb is out, so it changes no damage this combat. (Was disclosed deferral D5.)]]",
    "template": "vanilla_creature",
    "parameters": {
     "firebreathing_cost": "{1}{R}",
@@ -5767,7 +5775,7 @@
    ],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "First strike\nOther Minotaurs you control have first strike.\nAs long as you have one or fewer cards in hand, Minotaurs you control get +2/+0.\nWhenever Neheb deals combat damage to a player, each player discards a card. [The CONDITIONAL anthem is hand_size_anthem_max 1 / hand_size_anthem_power 2, evaluated inside ComputeLordBonus (which is why that function takes the whole GameState -- the battlefield alone cannot see a hand). It is SELF-INCLUSIVE ('Minotaurs you control', not 'other'), so Neheb gets it too. The combat-damage trigger is combat_damage_each_discards 1: after Neheb connects, its controller sheds one card by the provider's cleanup-discard ranking -- which is also how the deck TURNS THE ANTHEM ON. Legend rule enforced (the deck runs 3 copies, so it binds). [PARTIAL: first strike, own and granted, is inert -- no blockers. Disclosed deferral D4.] [PARTIAL: the OPPONENT's half of 'each player discards' is not modelled -- the passive opponent never casts and no decision reads their hand. Disclosed deferral D10.]]",
+   "oracle_text": "First strike\nOther Minotaurs you control have first strike.\nAs long as you have one or fewer cards in hand, Minotaurs you control get +2/+0.\nWhenever Neheb deals combat damage to a player, each player discards a card. [The CONDITIONAL anthem is hand_size_anthem_max 1 / hand_size_anthem_power 2, evaluated inside ComputeLordBonus (which is why that function takes the whole GameState -- the battlefield alone cannot see a hand). It is SELF-INCLUSIVE ('Minotaurs you control', not 'other'), so Neheb gets it too. The combat-damage trigger is combat_damage_each_discards 1: after Neheb connects, its controller sheds one card by the provider's cleanup-discard ranking -- which is also how the deck TURNS THE ANTHEM ON. Legend rule enforced (the deck runs 3 copies, so it binds). [FIRST STRIKE, own and granted (grants_first_strike over subtypes_affected [Minotaur]; 'Other' is moot -- Neheb's own is printed), is MODELLED since 2026-10-18 (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)): Neheb connects in the first-strike step, so its discard -- and the anthem it can switch on -- resolves BEFORE the regular step. Every Minotaur also strikes first, so the anthem adds nothing to this combat's damage, and a non-Minotaur attacker is not pumped by it. (Was disclosed deferral D4.)] [PARTIAL: the OPPONENT's half of 'each player discards' is not modelled -- the passive opponent never casts and no decision reads their hand. Disclosed deferral D10.]]",
    "template": "vanilla_creature",
    "parameters": {
     "subtypes_affected": [
@@ -5775,7 +5783,8 @@
     ],
     "hand_size_anthem_max": 1,
     "hand_size_anthem_power": 2,
-    "combat_damage_each_discards": 1
+    "combat_damage_each_discards": 1,
+    "grants_first_strike": true
    }
   },
   {
@@ -5893,7 +5902,7 @@
    "keywords": [],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "Whenever you sacrifice a permanent, this creature gets +2/+0 until end of turn.\n{2}, Sacrifice another creature or an enchantment: This creature gains first strike until end of turn. [The SACRIFICE WATCHER (sacrifice_watch_pump_power 2) fires from FireSacrificeWatchers at every site where the controller sacrifices one of their own permanents -- including CRACKING A FETCHLAND, which is this deck's most common trigger: a Bloodstained Mire played on the attacking turn pumps the Priest for free. The outlet itself is modelled (sac_creature_outlet with sac_outlet_allows_enchantment + sac_outlet_excludes_self widening the victim filter to 'another creature OR an enchantment') even though its PAYLOAD is inert, because activating it is a real line: the sacrifice triggers the +2/+0 above, so trading a summoning-sick token for +2 damage is a legal, occasionally-correct play the search can find. [PARTIAL: the first-strike payload is inert -- no blockers. Disclosed deferral D9.]]",
+   "oracle_text": "Whenever you sacrifice a permanent, this creature gets +2/+0 until end of turn.\n{2}, Sacrifice another creature or an enchantment: This creature gains first strike until end of turn. [The SACRIFICE WATCHER (sacrifice_watch_pump_power 2) fires from FireSacrificeWatchers at every site where the controller sacrifices one of their own permanents -- including CRACKING A FETCHLAND, which is this deck's most common trigger: a Bloodstained Mire played on the attacking turn pumps the Priest for free. The outlet itself is modelled (sac_creature_outlet with sac_outlet_allows_enchantment + sac_outlet_excludes_self widening the victim filter to 'another creature OR an enchantment') even though its PAYLOAD is inert, because activating it is a real line: the sacrifice triggers the +2/+0 above, so trading a summoning-sick token for +2 damage is a legal, occasionally-correct play the search can find. [PARTIAL: the first-strike payload is not modelled. First strike is otherwise modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)), and against a never-blocking opponent it is observable only through a between-step effect; the Minotaur deck's only one is Neheb, the Worthy's discard, and under Neheb this Minotaur already strikes first, so the payload can change no outcome. Disclosed deferral D9.]]",
    "template": "custom",
    "parameters": {
     "sacrifice_watch_pump_power": 2,
@@ -8193,7 +8202,7 @@
    ],
    "power": 1,
    "toughness": 1,
-   "oracle_text": "First strike, lifelink\nAscend (If you control ten or more permanents, you get the city's blessing for the rest of the game.)\nAt the beginning of your end step, if you gained life this turn, create a 1/1 white Cat creature token. Then if you have the city's blessing, for each token you control that entered this turn, create a token that's a copy of it. [NOT LEGENDARY (Scryfall type_line \"Creature — Cat\"), so four copies coexist and their triggers COMPOUND -- see the doubling note below. THE TOKEN IS THE POINT, NOT THE BODY: each 1/1 Cat is a creature ENTERING, so in this deck one Cat fires Soul Warden x4, Soul's Attendant x4, Auriok Champion x4 and Daxos = up to 13 SEPARATE life-gain EVENTS (CR 119.10), each of which is a +1/+1 counter on every Ajani's Pridemate and Voice of the Blessed, a team-wide counter from every Archangel of Thune, and a Heliod, Sun-Crowned counter. Modelled as endstep_lifegain_tokens 1 + endstep_token_power/_toughness 1 + endstep_token_color \"W\" + endstep_token_subtypes [\"Cat\"], resolved by the shared PerformEndStepLifegainTokens called IDENTICALLY from GameEngine::EndStep (executor) and TurnSolver::SimulateEndAndStartNextTurn (rollout) -- lockstep, or the rollout projects a board the real game keeps growing every turn (a systematic fd-diverge). The token enters via CreateToken -> FireEtbWatchers, the universal enter cascade, so every watcher above fires exactly as it does for a cast creature. INTERVENING-IF (CR 603.4): \"if you gained life this turn\" is checked both when the ability would go on the stack and again on resolution; the engine reads Player::life_gained_this_turn once at the end step, which is equivalent here (one active player, nothing able to undo a gain in between). It reads the BOOLEAN \">0\", never the amount -- a turn that gained 1 life and a turn that gained 40 are the same trigger -- which is why the sim key folds a bare marker rather than the value. In this deck the condition is met on almost every turn: any creature entering on EITHER side, including the passive opponent's spawn tokens, gains us life. ASCEND = the `ascend` param -> Player::has_city_blessing, a per-PLAYER DESIGNATION (CR 702.131), not a permanent state and not a counter. Once gained it is held \"for the rest of the game\": dropping back below ten permanents, or losing every Ocelot Pride, does NOT take it back. CR 702.131b makes ascend a STATE TRIGGER, so RefreshCityBlessing is called wherever the permanent count can RISE -- the universal enter cascade (FireEtbWatchers) and the shared land drop (LandPlay::PlayLand; land drops deliberately do NOT route through that cascade) -- plus both turn-start resyncs as a backstop. Checking on the RISE is what makes a momentary peak count, which is the faithful reading: an Orzhov Basilica entering as the tenth permanent grants the blessing even though its own ETB bounce immediately drops the count back to nine. PARTIAL: a permanent whose CONTROL changes to us mid-turn would only be picked up at the next turn-start resync -- unreachable in this deck (nothing here steals a permanent or is given one), and the backstop bounds the error to one turn. THE COPY HALF (\"then if you have the city's blessing, for each token you control that entered this turn, create a token that's a copy of it\") = endstep_token_ascend_copy. Read ON RESOLUTION, i.e. AFTER this trigger's own Cat is created, over every own token with Permanent::is_token && entered_this_turn -- so it also copies an Ajani, Strength of the Pride -2 Pridemate token made this turn. The source set is SNAPSHOT before any copy is created: the copies are made simultaneously as one resolution and must not feed back into the set being iterated (and push_back would invalidate that iteration regardless). A copy of a NAMED token re-resolves the real definition through CreateTokenCopyOfCard, so a copied Ajani's Pridemate token keeps its own live lifegain_self_counters trigger. MULTIPLE COPIES COMPOUND, exactly as printed: each Ocelot Pride's trigger resolves separately and sees the tokens the earlier ones just made, so with the city's blessing and T tokens already entered this turn, N Prides end the turn on 2^N*(T+2)-2 entered-this-turn tokens (T=0: 2, 6, 14, 30 for N=1..4). Bounded PER TURN -- entered_this_turn clears at the next untap -- so it cannot run away across turns. LIFELINK is MODELLED and is NOT goldfish-inert: its combat damage is a life-gain event, which is a Pridemate/Voice/Heliod counter and an Archangel team pump; per CR 510.2 combat damage is simultaneous, so counters from a combat lifelink gain do NOT add to that same combat's damage (Combat.cpp defers the gains until after every attacker's damage is assigned). PARTIAL: FIRST STRIKE is parsed (Keyword::FirstStrike) but is structurally INERT here -- the passive opponent never blocks and the engine collapses the combat damage step into one event, so strike order can never change an outcome (the same disclosure Archangel of Thune's flying carries). The ascend reminder text is reminder text, not a separate ability.]",
+   "oracle_text": "First strike, lifelink\nAscend (If you control ten or more permanents, you get the city's blessing for the rest of the game.)\nAt the beginning of your end step, if you gained life this turn, create a 1/1 white Cat creature token. Then if you have the city's blessing, for each token you control that entered this turn, create a token that's a copy of it. [NOT LEGENDARY (Scryfall type_line \"Creature — Cat\"), so four copies coexist and their triggers COMPOUND -- see the doubling note below. THE TOKEN IS THE POINT, NOT THE BODY: each 1/1 Cat is a creature ENTERING, so in this deck one Cat fires Soul Warden x4, Soul's Attendant x4, Auriok Champion x4 and Daxos = up to 13 SEPARATE life-gain EVENTS (CR 119.10), each of which is a +1/+1 counter on every Ajani's Pridemate and Voice of the Blessed, a team-wide counter from every Archangel of Thune, and a Heliod, Sun-Crowned counter. Modelled as endstep_lifegain_tokens 1 + endstep_token_power/_toughness 1 + endstep_token_color \"W\" + endstep_token_subtypes [\"Cat\"], resolved by the shared PerformEndStepLifegainTokens called IDENTICALLY from GameEngine::EndStep (executor) and TurnSolver::SimulateEndAndStartNextTurn (rollout) -- lockstep, or the rollout projects a board the real game keeps growing every turn (a systematic fd-diverge). The token enters via CreateToken -> FireEtbWatchers, the universal enter cascade, so every watcher above fires exactly as it does for a cast creature. INTERVENING-IF (CR 603.4): \"if you gained life this turn\" is checked both when the ability would go on the stack and again on resolution; the engine reads Player::life_gained_this_turn once at the end step, which is equivalent here (one active player, nothing able to undo a gain in between). It reads the BOOLEAN \">0\", never the amount -- a turn that gained 1 life and a turn that gained 40 are the same trigger -- which is why the sim key folds a bare marker rather than the value. In this deck the condition is met on almost every turn: any creature entering on EITHER side, including the passive opponent's spawn tokens, gains us life. ASCEND = the `ascend` param -> Player::has_city_blessing, a per-PLAYER DESIGNATION (CR 702.131), not a permanent state and not a counter. Once gained it is held \"for the rest of the game\": dropping back below ten permanents, or losing every Ocelot Pride, does NOT take it back. CR 702.131b makes ascend a STATE TRIGGER, so RefreshCityBlessing is called wherever the permanent count can RISE -- the universal enter cascade (FireEtbWatchers) and the shared land drop (LandPlay::PlayLand; land drops deliberately do NOT route through that cascade) -- plus both turn-start resyncs as a backstop. Checking on the RISE is what makes a momentary peak count, which is the faithful reading: an Orzhov Basilica entering as the tenth permanent grants the blessing even though its own ETB bounce immediately drops the count back to nine. PARTIAL: a permanent whose CONTROL changes to us mid-turn would only be picked up at the next turn-start resync -- unreachable in this deck (nothing here steals a permanent or is given one), and the backstop bounds the error to one turn. THE COPY HALF (\"then if you have the city's blessing, for each token you control that entered this turn, create a token that's a copy of it\") = endstep_token_ascend_copy. Read ON RESOLUTION, i.e. AFTER this trigger's own Cat is created, over every own token with Permanent::is_token && entered_this_turn -- so it also copies an Ajani, Strength of the Pride -2 Pridemate token made this turn. The source set is SNAPSHOT before any copy is created: the copies are made simultaneously as one resolution and must not feed back into the set being iterated (and push_back would invalidate that iteration regardless). A copy of a NAMED token re-resolves the real definition through CreateTokenCopyOfCard, so a copied Ajani's Pridemate token keeps its own live lifegain_self_counters trigger. MULTIPLE COPIES COMPOUND, exactly as printed: each Ocelot Pride's trigger resolves separately and sees the tokens the earlier ones just made, so with the city's blessing and T tokens already entered this turn, N Prides end the turn on 2^N*(T+2)-2 entered-this-turn tokens (T=0: 2, 6, 14, 30 for N=1..4). Bounded PER TURN -- entered_this_turn clears at the next untap -- so it cannot run away across turns. LIFELINK is MODELLED and is NOT goldfish-inert: its combat damage is a life-gain event, which is a Pridemate/Voice/Heliod counter and an Archangel team pump; and FIRST STRIKE (modelled 2026-10-18, CR 510.4) makes that gain EARLY: the Pride deals its damage in the first-strike step, so its lifelink event -- every Pridemate / Voice of the Blessed / Heliod counter and every Archangel of Thune team wave it triggers, and a crossed Serra Ascendant / Ajani threshold -- lands BEFORE the regular step, and the attackers without first strike deal regular damage with it (Combat.cpp ResolveCombatDamageTwoStep, executor + rollout). Within ONE step damage is simultaneous (CR 510.2), so a gain never pumps an attacker in its own step. (This note used to call strike order outcome-irrelevant, which was wrong for this list.) Disclosed gap: the attack projection does not price the between-step gain -- a conservative under-credit; the rollouts realise it. The ascend reminder text is reminder text, not a separate ability.]",
    "template": "custom",
    "parameters": {
     "endstep_lifegain_tokens": 1,
@@ -8502,7 +8511,7 @@
    ],
    "power": 5,
    "toughness": 5,
-   "oracle_text": "Flying\nFirst strike (This creature deals combat damage before creatures without first strike.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nOther Angels you control get +1/+1 and have lifelink. [The +1/+1 half is the standard lord: lord_effect + subtypes_affected [\"Angel\"] + lord_excludes_self (Rageblood Shaman's shape), applied inside ComputeLordBonus -- the one shared P/T site combat, the lethal-damage SBA and board eval all read, so executor and rollout are lockstep. It reaches Angel TOKENS (Serra the Benevolent's -3 and Resplendent Angel's end step both spec subtype Angel). THE LIFELINK GRANT IS THE NEW PART: grants_lifelink, a static subtype keyword lord in the grants_haste / grants_double_strike family. It had no precedent -- the engine's prior lifelink grants were all attachment- or duration-scoped (aura_grants_lifelink, equip_grants_lifelink, Heliod's until-EOT temp_lifelink and its lifelink_grant_cost activation) -- so it is resolved inside CreatureHasLifelink, the SINGLE shared lifelink oracle that ResolveCombatDamage consults, rather than at any executor-only site. Self-exclusion is by per-instance m_number, so \"Other\" is faithful (inert for Lyra herself: her printed Lifelink short-circuits first). LIFELINK IS NOT GOLDFISH-INERT AND IS THE CARD'S REAL CONTRIBUTION: each lifelinking Angel's combat damage is its OWN life-gain EVENT (CR 119.10), so N granted Angels connecting is N events -- N team-wide +1/+1 counter waves from each Archangel of Thune -- and it feeds Righteous Valkyrie's life-threshold anthem and Resplendent Angel's gained-5-life end step. Per CR 510.2 combat damage is simultaneous, so counters from a combat lifelink gain do NOT add to that same combat's damage (Combat.cpp defers every gain until after all attackers' damage is assigned). LEGEND RULE is correctly ordered, but the current Angels list runs ONE copy (the archived v1 list ran 3), so it cannot fire on this card there -- the list's legend-rule duplicates are its 4 Giada, Font of Hope and 4 Lyra, Archangel of Dawn. EnforceLegendRule runs AFTER the enter cascade at every site, so a second Lyra still fires every Angel-enter watcher (Bishop of Wings, Youthful Valkyrie, Righteous Valkyrie, Seraph Sanctuary) before dying -- and dying is itself Bishop's \"an Angel you control dies\" trigger. Casting a redundant Lyra is a real line wherever a list runs more than one, not a no-op; do not score the extra copies as dead. [PARTIAL: FLYING is parsed (Keyword::Flying) but structurally INERT for combat -- the passive opponent never blocks and there is no blocker path in ResolveCombatDamage. WHY inert: structural. NOTE it is NOT inert for Serra the Benevolent's +2, which pumps \"creatures you control with flying\", so the keyword is load-bearing in this deck for a different reason.] [PARTIAL: FIRST STRIKE is parsed but structurally INERT -- no blockers, and the engine collapses the combat damage step into one event, so strike order can never change an outcome. WHY inert: structural. Ocelot Pride carries the same disclosure.]",
+   "oracle_text": "Flying\nFirst strike (This creature deals combat damage before creatures without first strike.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nOther Angels you control get +1/+1 and have lifelink. [The +1/+1 half is the standard lord: lord_effect + subtypes_affected [\"Angel\"] + lord_excludes_self (Rageblood Shaman's shape), applied inside ComputeLordBonus -- the one shared P/T site combat, the lethal-damage SBA and board eval all read, so executor and rollout are lockstep. It reaches Angel TOKENS (Serra the Benevolent's -3 and Resplendent Angel's end step both spec subtype Angel). THE LIFELINK GRANT IS THE NEW PART: grants_lifelink, a static subtype keyword lord in the grants_haste / grants_double_strike family. It had no precedent -- the engine's prior lifelink grants were all attachment- or duration-scoped (aura_grants_lifelink, equip_grants_lifelink, Heliod's until-EOT temp_lifelink and its lifelink_grant_cost activation) -- so it is resolved inside CreatureHasLifelink, the SINGLE shared lifelink oracle that ResolveCombatDamage consults, rather than at any executor-only site. Self-exclusion is by per-instance m_number, so \"Other\" is faithful (inert for Lyra herself: her printed Lifelink short-circuits first). LIFELINK IS NOT GOLDFISH-INERT AND IS THE CARD'S REAL CONTRIBUTION: each lifelinking Angel's combat damage is its OWN life-gain EVENT (CR 119.10), so N granted Angels connecting is N events -- N team-wide +1/+1 counter waves from each Archangel of Thune -- and it feeds Righteous Valkyrie's life-threshold anthem and Resplendent Angel's gained-5-life end step. FIRST STRIKE MAKES LYRA'S OWN GAIN EARLY (CR 510.4, modelled 2026-10-18): she deals her damage -- and gains her life -- in the first-strike damage step, so an Archangel of Thune's team counter wave and a crossed Righteous Valkyrie threshold land BEFORE the regular step, and every attacker without first strike (the other Angels) deals regular damage with them (Combat.cpp ResolveCombatDamageTwoStep, executor + rollout). Within ONE step damage is simultaneous (CR 510.2), so a gain never pumps an attacker in its own step: the granted Angels' lifelink (regular step) pays off only after the combat. LEGEND RULE is correctly ordered, but the current Angels list runs ONE copy (the archived v1 list ran 3), so it cannot fire on this card there -- the list's legend-rule duplicates are its 4 Giada, Font of Hope and 4 Lyra, Archangel of Dawn. EnforceLegendRule runs AFTER the enter cascade at every site, so a second Lyra still fires every Angel-enter watcher (Bishop of Wings, Youthful Valkyrie, Righteous Valkyrie, Seraph Sanctuary) before dying -- and dying is itself Bishop's \"an Angel you control dies\" trigger. Casting a redundant Lyra is a real line wherever a list runs more than one, not a no-op; do not score the extra copies as dead. [PARTIAL: FLYING is parsed (Keyword::Flying) but structurally INERT for combat -- the passive opponent never blocks and there is no blocker path in ResolveCombatDamage. WHY inert: structural. NOTE it is NOT inert for Serra the Benevolent's +2, which pumps \"creatures you control with flying\", so the keyword is load-bearing in this deck for a different reason.] [FIRST STRIKE is MODELLED and is NOT inert in this deck (see the lifelink note above; this note used to call strike order outcome-irrelevant, which was wrong for this list). Disclosed gap: the attack projection (TurnSolver PendingAttackDamage) does not price the between-step gain -- a conservative under-credit; the rollouts and the executor realise it.]",
    "template": "lord_effect",
    "parameters": {
     "subtypes_affected": [
@@ -10576,7 +10585,7 @@
    "keywords": [],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "Other Soldier creatures get +1/+1 and have first strike. (They deal combat damage before creatures without first strike.) [The +1/+1 Soldier lord is modelled: Knight Exemplar's / Goblin King's shape exactly (lord_effect, subtypes_affected Soldier, +1/+1, lord_excludes_self -- 'Other' is per-instance by address inside ComputeLordBonus, so Field Marshal never pumps itself but a second copy would pump it). Matching reads the creature's LIVE subtypes, so it reaches every Human Soldier in the deck, Soldier TOKENS (Myrel's colorless Soldier artifact tokens, King Darien's and General's Enforcer's Soldier tokens) and a typed-animated Gideon, Battle-Forged (4/4 Human Soldier) via animated_printed_types; it does NOT reach Moonrage Brute (Werewolf only) or Descendant of Storms' Spirit tokens. Field Marshal itself is a Soldier, so it counts for Harbin's five-Soldier attack and Myrel's X. [PARTIAL: the lord scope is 'Other Soldier creatures' on EVERY side, but ComputeLordBonus applies lords to the controller's creatures only. WHY inert: the passive opponent's only creatures are the scheduled GoldFishRunner::PopulateOpponentSpawns bodies (8 of 10 game indices), which carry no subtype at all -- no Soldier for the lord to reach -- and never attack or block; Goblin King carries the same disclosure. PROVISIONAL pending user sign-off.] [PARTIAL: the granted FIRST STRIKE is not modelled. WHY inert: structural -- the passive opponent never blocks, and the engine collapses combat damage into one event, so strike order can never change an outcome (Knight Exemplar, Ocelot Pride, Lyra carry the same disclosure). No card in this deck has double strike or reads 'creatures with first strike', so the keyword has no other reader. PROVISIONAL pending user sign-off.]]",
+   "oracle_text": "Other Soldier creatures get +1/+1 and have first strike. (They deal combat damage before creatures without first strike.) [The +1/+1 Soldier lord is modelled: Knight Exemplar's / Goblin King's shape exactly (lord_effect, subtypes_affected Soldier, +1/+1, lord_excludes_self -- 'Other' is per-instance by address inside ComputeLordBonus, so Field Marshal never pumps itself but a second copy would pump it). Matching reads the creature's LIVE subtypes, so it reaches every Human Soldier in the deck, Soldier TOKENS (Myrel's colorless Soldier artifact tokens, King Darien's and General's Enforcer's Soldier tokens) and a typed-animated Gideon, Battle-Forged (4/4 Human Soldier) via animated_printed_types; it does NOT reach Moonrage Brute (Werewolf only) or Descendant of Storms' Spirit tokens. Field Marshal itself is a Soldier, so it counts for Harbin's five-Soldier attack and Myrel's X. [PARTIAL: the lord scope is 'Other Soldier creatures' on EVERY side, but ComputeLordBonus applies lords to the controller's creatures only. WHY inert: the passive opponent's only creatures are the scheduled GoldFishRunner::PopulateOpponentSpawns bodies (8 of 10 game indices), which carry no subtype at all -- no Soldier for the lord to reach -- and never attack or block; Goblin King carries the same disclosure. PROVISIONAL pending user sign-off.] [The granted FIRST STRIKE is MODELLED (2026-10-18): grants_first_strike over subtypes_affected [Soldier], self excluded by lord_excludes_self, read by CreatureHasFirstStrike for the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18). In Soldiers nothing happens between the two damage steps (no combat-damage trigger, no life-gain watcher that changes power), so the split changes no outcome there; the grant is modelled because a step-sensitive card (Drana's counters, a first-strike lifelink feeding Archangel of Thune) makes strike order observable.]]",
    "template": "lord_effect",
    "parameters": {
     "subtypes_affected": [
@@ -10584,7 +10593,8 @@
     ],
     "power_bonus": 1,
     "tough_bonus": 1,
-    "lord_excludes_self": true
+    "lord_excludes_self": true,
+    "grants_first_strike": true
    }
   },
   {
@@ -10605,7 +10615,7 @@
    ],
    "power": 2,
    "toughness": 1,
-   "oracle_text": "First strike\nNoncreature spells cost {1} more to cast. [First strike: real keyword (Keyword::FirstStrike), inert vs the passive non-blocking goldfish opponent but kept faithful. The tax is SYMMETRIC and modelled via noncreature_spell_tax:1 -- each permanent with it, controlled by ANY player, adds {1} GENERIC to every noncreature spell's cost, applied to the RAW cost in EffectiveSpellCost BEFORE reducers (CR 601.2f: cost + increases - reductions). It binds OUR noncreature spells: in Soldiers that is Aether Vial ({1} -> {2} with one Thalia out). Its opponent-facing half is inert (the goldfish opponent never casts). Creature spells (incl. Cavern-cast ones) are untaxed; Vial PUTs and activated abilities are not casts and are untaxed. Legendary: the second copy dies to the engine's legend rule (GameEngine EnforceLegendRule). Same-turn ORDER: a hand-cast Thalia and a hand-cast Vial in one plan are cast in the provider's CastOrderRank order (unchanged -- Thalia ranks as a creature, before the Vial), falling back to the payable order (MTG_PAYABLE_ORDER) when that order cannot pay; ranking a taxer after noncreature spells is a USER-OWNED cast-order question, recorded in analysis-soldiers.md, not adopted here. A VIAL-PUT Thalia alongside a noncreature hand cast is a searched order: TurnSolver::VialOrderMatters emits the puts-last twin (Plan::vial_after_casts), so 'cast the second Vial for {1}, THEN Vial in Thalia' is a line the search scores. Taxed sites: EffectiveSpellCost (all three worlds), the sequenced feasibility walk (joins_for_mana), the viewer's declared-order CheckLine walk. NOT taxed (no instance in this list): free / without-paying-its-mana-cost casts that bypass EffectiveSpellCost -- a cross-card scope note, PROVISIONAL.]",
+   "oracle_text": "First strike\nNoncreature spells cost {1} more to cast. [First strike: real keyword (Keyword::FirstStrike), read by the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18); in Soldiers nothing happens between the two damage steps, so it changes no outcome. The tax is SYMMETRIC and modelled via noncreature_spell_tax:1 -- each permanent with it, controlled by ANY player, adds {1} GENERIC to every noncreature spell's cost, applied to the RAW cost in EffectiveSpellCost BEFORE reducers (CR 601.2f: cost + increases - reductions). It binds OUR noncreature spells: in Soldiers that is Aether Vial ({1} -> {2} with one Thalia out). Its opponent-facing half is inert (the goldfish opponent never casts). Creature spells (incl. Cavern-cast ones) are untaxed; Vial PUTs and activated abilities are not casts and are untaxed. Legendary: the second copy dies to the engine's legend rule (GameEngine EnforceLegendRule). Same-turn ORDER: a hand-cast Thalia and a hand-cast Vial in one plan are cast in the provider's CastOrderRank order (unchanged -- Thalia ranks as a creature, before the Vial), falling back to the payable order (MTG_PAYABLE_ORDER) when that order cannot pay; ranking a taxer after noncreature spells is a USER-OWNED cast-order question, recorded in analysis-soldiers.md, not adopted here. A VIAL-PUT Thalia alongside a noncreature hand cast is a searched order: TurnSolver::VialOrderMatters emits the puts-last twin (Plan::vial_after_casts), so 'cast the second Vial for {1}, THEN Vial in Thalia' is a line the search scores. Taxed sites: EffectiveSpellCost (all three worlds), the sequenced feasibility walk (joins_for_mana), the viewer's declared-order CheckLine walk. NOT taxed (no instance in this list): free / without-paying-its-mana-cost casts that bypass EffectiveSpellCost -- a cross-card scope note, PROVISIONAL.]",
    "template": "vanilla_creature",
    "parameters": {
     "noncreature_spell_tax": 1
@@ -10654,7 +10664,7 @@
    "keywords": [],
    "power": 3,
    "toughness": 4,
-   "oracle_text": "As Rick, Steadfast Leader enters, choose two abilities from among first strike, vigilance, and lifelink.\nHumans you control have each of the chosen abilities.\nAs long as you control four or more Humans, Humans you control get +2/+2. [Secret Lair printed name of GREYMOND, AVACYN'S STALWART (oracle text/cost/PT verified against that oracle card on Scryfall; the cards.json name is the deck's printed name; scryfall_name is ALSO an import alias -- CardDatabase::CanonicalName, applied by DeckLoader and analyze_deck.py, so a decklist may list either name -- and scryfall_image sld/143 pins the Secret Lair printing's art for both viewers). CLAUSE 1 (as-enters choice, CR 614.12 replacement, no stack): etb_choose_keyword_count 2 from etb_choose_keyword_menu [first strike, vigilance, lifelink], locked per OBJECT in Permanent::chosen_keyword_mask at the universal enter cascade (FireEtbWatchers), so a cast, a Cavern cast and an Aether Vial put all choose identically; a re-entering Rick is a new object and chooses afresh. Autonomous pick = provider EtbChosenKeywords (a provider one-option choice, Coldsteel Heart's EtbChosenColor precedent -- live-reader keywords first, i.e. Vigilance+Lifelink; PROVISIONAL pending user sign-off under the no-greedy rule); the human picks in the viewer (choose_abilities decision). CLAUSE 2 (static grant to Humans you control, SELF-INCLUSIVE -- Rick is a Human): lifelink read in CreatureHasLifelink, vigilance in CreatureHasVigilance (the Combat.cpp attack-tap), both via chosen_keyword_mask x keyword_grant_subtypes [Human]. FIRST STRIKE is recorded in the mask but STRUCTURALLY INERT -- Keyword::FirstStrike has no readers, there is no blocker path and combat damage is one event (Dwalin/Ocelot Pride disclosure); the passive opponent never blocks, so strike order cannot change an outcome. [PARTIAL: first-strike grant has no reader; PROVISIONAL pending user sign-off.] CLAUSE 3 (conditional static anthem, CR 611.3, continuously checked): lord_effect +2/+2 to Humans you control (self included, lord_excludes_self false) gated by lord_min_controlled_matching 4 -- counts Human PERMANENTS you control on the battlefield INCLUDING Rick; switches off the moment the count drops below four. Legend rule engine-enforced (2 copies in deck). In THIS deck vigilance and lifelink have no downstream consumer (no Human has a {T} ability; nothing reads life gained) -- disclosed, but modelled faithfully regardless.]",
+   "oracle_text": "As Rick, Steadfast Leader enters, choose two abilities from among first strike, vigilance, and lifelink.\nHumans you control have each of the chosen abilities.\nAs long as you control four or more Humans, Humans you control get +2/+2. [Secret Lair printed name of GREYMOND, AVACYN'S STALWART (oracle text/cost/PT verified against that oracle card on Scryfall; the cards.json name is the deck's printed name; scryfall_name is ALSO an import alias -- CardDatabase::CanonicalName, applied by DeckLoader and analyze_deck.py, so a decklist may list either name -- and scryfall_image sld/143 pins the Secret Lair printing's art for both viewers). CLAUSE 1 (as-enters choice, CR 614.12 replacement, no stack): etb_choose_keyword_count 2 from etb_choose_keyword_menu [first strike, vigilance, lifelink], locked per OBJECT in Permanent::chosen_keyword_mask at the universal enter cascade (FireEtbWatchers), so a cast, a Cavern cast and an Aether Vial put all choose identically; a re-entering Rick is a new object and chooses afresh. Autonomous pick = provider EtbChosenKeywords (a provider one-option choice, Coldsteel Heart's EtbChosenColor precedent -- live-reader keywords first, i.e. Vigilance+Lifelink; PROVISIONAL pending user sign-off under the no-greedy rule); the human picks in the viewer (choose_abilities decision). CLAUSE 2 (static grant to Humans you control, SELF-INCLUSIVE -- Rick is a Human): lifelink read in CreatureHasLifelink, vigilance in CreatureHasVigilance (the Combat.cpp attack-tap), both via chosen_keyword_mask x keyword_grant_subtypes [Human]. A chosen FIRST STRIKE is read by CreatureHasFirstStrike (2026-10-18) for the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18); in this deck nothing happens between the two damage steps, so it changes no outcome, and the provider's live-reader-first pick still prefers Vigilance+Lifelink (PROVISIONAL pending user sign-off). CLAUSE 3 (conditional static anthem, CR 611.3, continuously checked): lord_effect +2/+2 to Humans you control (self included, lord_excludes_self false) gated by lord_min_controlled_matching 4 -- counts Human PERMANENTS you control on the battlefield INCLUDING Rick; switches off the moment the count drops below four. Legend rule engine-enforced (2 copies in deck). In THIS deck vigilance and lifelink have no downstream consumer (no Human has a {T} ability; nothing reads life gained) -- disclosed, but modelled faithfully regardless.]",
    "template": "lord_effect",
    "parameters": {
     "subtypes_affected": [
@@ -10877,7 +10887,7 @@
    ],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "First strike\nWard—Pay 3 life.\nNightbound (If a player casts at least two spells during their own turn, it becomes day next turn.) [TRANSFORMING DFC, BACK FACE of Brutal Cathar // Moonrage Brute. NEVER CAST and never in any zone but the battlefield: the DB entry exists so a night-face permanent resolves its own characteristics (3/3, red by colour indicator, Werewolf only, first strike, ward) through LookupCached on its name -- the Kaldring precedent. mana_cost is empty (a TDFC back face has none); its mana value on the battlefield is the FRONT face's, 3 (transforming-DFC rule: a back face uses the front face's mana value) -- no Soldiers card reads a battlefield MV. Transforms back to Brutal Cathar (firing that face's transforms-into trigger) when it becomes day. PARTIAL: first strike inert (no blockers; Keyword::FirstStrike has no readers). PARTIAL: Ward -- Pay 3 life inert (the passive opponent never targets).]",
+   "oracle_text": "First strike\nWard—Pay 3 life.\nNightbound (If a player casts at least two spells during their own turn, it becomes day next turn.) [TRANSFORMING DFC, BACK FACE of Brutal Cathar // Moonrage Brute. NEVER CAST and never in any zone but the battlefield: the DB entry exists so a night-face permanent resolves its own characteristics (3/3, red by colour indicator, Werewolf only, first strike, ward) through LookupCached on its name -- the Kaldring precedent. mana_cost is empty (a TDFC back face has none); its mana value on the battlefield is the FRONT face's, 3 (transforming-DFC rule: a back face uses the front face's mana value) -- no Soldiers card reads a battlefield MV. Transforms back to Brutal Cathar (firing that face's transforms-into trigger) when it becomes day. First strike is modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)); in Soldiers nothing happens between the two damage steps, so it changes no outcome. PARTIAL: Ward -- Pay 3 life inert (the passive opponent never targets).]",
    "template": "custom",
    "parameters": {
     "nightbound_front_name": "Brutal Cathar"
@@ -11246,12 +11256,13 @@
     "Umbra armor",
     "Enchant"
    ],
-   "oracle_text": "Enchant creature\nEnchanted creature gets +4/+4 and has first strike, and all creatures able to block it do so.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [+4/+4 modelled (aura_power_bonus/aura_tough_bonus via AuraBonusFor). First strike inert: the passive opponent never blocks, so damage-step ordering never changes damage dealt. Lure clause ('all creatures able to block it do so') inert: it binds the OPPONENT's blockers only, and the goldfish opponent has no creatures and never blocks — it imposes nothing on us. Umbra armor inert: nothing in this deck or from the passive opponent destroys our creatures (Worldfire is not Wish-reachable; Boseiju targets opponent permanents only).]",
+   "oracle_text": "Enchant creature\nEnchanted creature gets +4/+4 and has first strike, and all creatures able to block it do so.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [+4/+4 modelled (aura_power_bonus/aura_tough_bonus via AuraBonusFor). First strike granted (aura_grants_first_strike, read by CreatureHasFirstStrike for the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)); it changes damage only through a between-step effect, of which its deck has none. Lure clause ('all creatures able to block it do so') inert: it binds the OPPONENT's blockers only, and the goldfish opponent has no creatures and never blocks — it imposes nothing on us. Umbra armor inert: nothing in this deck or from the passive opponent destroys our creatures (Worldfire is not Wish-reachable; Boseiju targets opponent permanents only).]",
    "template": "custom",
    "parameters": {
     "aura_power_bonus": 4,
     "aura_tough_bonus": 4,
-    "is_aura": true
+    "is_aura": true,
+    "aura_grants_first_strike": true
    }
   },
   {
@@ -12220,7 +12231,7 @@
    ],
    "power": 1,
    "toughness": 1,
-   "oracle_text": "Double strike (This creature deals both first-strike and regular combat damage.)\nVigilance (Attacking doesn't cause this creature to tap.)\nTrample (This creature can deal excess combat damage to the player or planeswalker it's attacking.) [DOUBLE STRIKE MODELED: the printed Keyword::DoubleStrike is read by CreatureHasDoubleStrike, the single oracle shared by Combat.cpp ResolveCombatDamage (executor + rollout) and TurnSolver's PendingAttackDamage projections; double strike = power x2 in the collapsed combat model, so under Colossus Hammer it deals (1+10) x 2 = 22. The equip-host rankers read the printed keyword off the card DEFINITION for a host still in hand (a hand Card is a bare placeholder whose keyword mask is empty). VIGILANCE MODELED: CreatureHasVigilance reads the printed keyword at the one combat tap site (shared executor + rollout). PARTIAL: TRAMPLE is parsed (Keyword::Trample) but structurally INERT -- no engine site reads it and Combat.cpp has no blocker path, so all of the attacker's power already reaches the player; approved-deferred 2026-08-13 (Loxodon Warhammer / Armadillo Cloak precedent). Colours derive from the pips (R+W), so Dragonfire Blade's per-colour discount equips it for {2}.]",
+   "oracle_text": "Double strike (This creature deals both first-strike and regular combat damage.)\nVigilance (Attacking doesn't cause this creature to tap.)\nTrample (This creature can deal excess combat damage to the player or planeswalker it's attacking.) [DOUBLE STRIKE MODELED: the printed Keyword::DoubleStrike is read by CreatureHasDoubleStrike, the single oracle shared by Combat.cpp ResolveCombatDamage (executor + rollout) and TurnSolver's PendingAttackDamage projections; double strike = a hit in EACH of the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18), power recomputed per step, so under Colossus Hammer it deals (1+10) + (1+10) = 22. The equip-host rankers read the printed keyword off the card DEFINITION for a host still in hand (a hand Card is a bare placeholder whose keyword mask is empty). VIGILANCE MODELED: CreatureHasVigilance reads the printed keyword at the one combat tap site (shared executor + rollout). PARTIAL: TRAMPLE is parsed (Keyword::Trample) but structurally INERT -- no engine site reads it and Combat.cpp has no blocker path, so all of the attacker's power already reaches the player; approved-deferred 2026-08-13 (Loxodon Warhammer / Armadillo Cloak precedent). Colours derive from the pips (R+W), so Dragonfire Blade's per-colour discount equips it for {2}.]",
    "template": "vanilla_creature",
    "parameters": {}
   },
@@ -12419,6 +12430,121 @@
     "produces": [
      "B"
     ]
+   }
+  },
+  {
+   "name": "Stromkirk Captain",
+   "mana_cost": "{1}{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Vampire",
+    "Soldier"
+   ],
+   "keywords": [
+    "First strike"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "First strike\nOther Vampire creatures you control get +1/+1 and have first strike. [Lord half: lord_effect + subtypes_affected [\"Vampire\"] + lord_excludes_self (Legion Lieutenant's shape), inside ComputeLordBonus -- it reaches Vampire TOKENS (Bloodline Keeper / Lord of Lineage 2/2s, Mavren Fein's 1/1s) and a creature taken with Captivating Vampire once it is a Vampire. FIRST-STRIKE GRANT: grants_first_strike (the grants_double_strike / grants_lifelink family) over the same subtypes, read by the single shared oracle CreatureHasFirstStrike; 'Other' honoured by per-copy m_number (inert for the Captain itself, whose first strike is printed). NOT goldfish-inert in this list: the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18) puts every first striker in the first damage step, and Drana, Liberator of Malakir's counters land BETWEEN the steps -- so with a Captain out every Vampire attacker has already dealt its damage when Drana's counters arrive (CR 702.7c, Scryfall ruling 2011-01-22: a creature that dealt first-strike damage does not deal it again), and her same-combat pump is worth 0 (the counters persist). Without a Captain each Vampire without first strike deals regular damage with the counter. Casting the Captain before or after combat on a Drana turn is therefore a real trade, searched through the second main; the main split is the USER's.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Vampire"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "grants_first_strike": true
+   }
+  },
+  {
+   "name": "Drana, Liberator of Malakir",
+   "mana_cost": "{1}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Vampire",
+    "Ally"
+   ],
+   "keywords": [
+    "Flying",
+    "First strike"
+   ],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Flying, first strike\nWhenever Drana deals combat damage to a player, put a +1/+1 counter on each attacking creature you control. [FIRST STRIKE + TRIGGER MODELLED (CR 510.4): when an attacker has first or double strike the shared combat core (Combat.cpp ResolveCombatDamageTwoStep, executor + rollout) runs TWO damage steps -- first/double strikers, then the first step's combat-damage triggers, then the creatures without first strike (and double strikers) with power recomputed. Drana strikes first, so her trigger (combat_damage_counters_each_attacker 1: a +1/+1 counter via the doubler-aware PutPlusCounters on every creature still attacking, Drana included; FireCombatDamageTeamCounters) lands before the regular step and every attacker without first strike deals +1 there. First strike is read by CreatureHasFirstStrike (printed keyword + Stromkirk Captain's grant), so under a Captain every Vampire strikes first and the counters add nothing THIS combat (they persist). TurnSolver's PendingAttackDamage carries the exact twin addend (first-step source connects -> per x regular-step attackers; 0 under a Captain). One trigger per damage event, never scaled by opponent heads (2HG: one team, one event). A double-striking Drana would trigger in both steps; the second wave pays off next turn. [PARTIAL: Flying is inert -- the passive opponent never blocks and no card in this deck reads flying. PROVISIONAL pending user sign-off.] [PARTIAL: no priority window between the two damage steps (an Aether Vial put or a madness cast of Vampire Socialite after Drana connects, before the regular step) -- the engine has no in-combat cast window here; ~<=1% of games (needs Drana + Socialite + the enabler + no Captain). PROVISIONAL pending user sign-off.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "combat_damage_counters_each_attacker": 1
+   }
+  },
+  {
+   "name": "Mavren Fein, Dusk Apostle",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Vampire",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever one or more nontoken Vampires you control attack, create a 1/1 white Vampire creature token with lifelink. [Fully modelled, nothing deferred. attack_one_or_more_tokens 1 with attack_one_or_more_subtypes [Vampire] + attack_one_or_more_nontoken: a PLAYER-scoped trigger (Mavren need not attack, and counts herself) that fires ONCE per combat in which at least one DECLARED nontoken Vampire attacks (CR 603.2c 'one or more'; tokens put onto the battlefield attacking were never declared, CR 508.4) -- FireAttackOneOrMoreTokens, called at declare-attackers in GameEngine::CombatPhase and TurnSolver::SimulateCombat, before the Adeline block. The token is created UNTAPPED and NOT attacking (summoning-sick) through CreateToken, so the enter cascade reaches it (the Vampire lords; Vampire Socialite's as-enters counter when an opponent already lost life this turn) and Doubling Season would double it; white (convoke reads its colour) with printed Lifelink (CreatureHasLifelink). A stolen (Captivating Vampire) creature is a NONTOKEN Vampire. Deliberately NOT Adeline's attack_creates_tokens (tapped-and-attacking, scales per opponent by default) and NOT Utvara's attack_per_matching_creates_tokens (per attacker, fires after damage, a Dragons routing signature). Never scaled by opponent heads: 'one or more ... attack' is one trigger in 2HG too. The token is a combat-created body (convoke fuel, Bloodline Keeper's five-Vampire count, sacrifice fodder), so DeckUsesSecondMain detects the param.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_one_or_more_tokens": 1,
+    "attack_one_or_more_subtypes": [
+     "Vampire"
+    ],
+    "attack_one_or_more_nontoken": true,
+    "attack_one_or_more_token_power": 1,
+    "attack_one_or_more_token_toughness": 1,
+    "attack_one_or_more_token_subtypes": [
+     "Vampire"
+    ],
+    "attack_one_or_more_token_color": "W",
+    "attack_one_or_more_token_keywords": [
+     "Lifelink"
+    ]
+   }
+  },
+  {
+   "name": "Vampire Socialite",
+   "mana_cost": "{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Vampire",
+    "Noble"
+   ],
+   "keywords": [
+    "Menace"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, if an opponent lost life this turn, put a +1/+1 counter on each other Vampire you control.\nAs long as an opponent lost life this turn, each other Vampire you control enters with an additional +1/+1 counter on it. [CLAUSE 2 (intervening-if ETB, CR 603.4): etb_each_other_own_creature_counters_if_opp_lost_life 1 with etb_counters_subtypes [Vampire], resolved in FireOwnEtbTriggers beside Thalia's Lieutenant's block -- every enter route (cast, Aether Vial, madness, rollout); recipients are the OTHER Vampires you control, tokens included, through the doubler-aware PutPlusCounters. The condition reads GameState::opponent_lost_life_this_turn, which only goes false at the turn-start reset, so checking it once at entry is EXACT for both the trigger and the resolution check. CLAUSE 3 (CR 614 replacement): opp_lost_life_other_enters_counters 1 + opp_lost_life_other_enters_subtype Vampire, in FireEtbWatchers' as-enters counter block (the Giada / Metallic Mimic slot, above the enter-trigger watchers), so tokens (Mavren Fein, Bloodline Keeper), Vial puts, madness casts and Bloodghast's return all get it. Our own life payments (Voldaren Estate, Asylum Visitor) do not set the flag. Deliberately NOT Lieutenant's etb_each_other_own_creature_counters (a Soldiers routing signature) nor Giada's other_subtype_enters_counters_* (an Angels signature). Both halves make the post-combat main a real decision (combat damage is what sets the flag in this deck), so DeckUsesSecondMain detects them. [PARTIAL: Menace is inert -- the passive opponent never blocks. PROVISIONAL pending user sign-off.] [PARTIAL: CR 614.12 -- a Vampire entering SIMULTANEOUSLY with Socialite does not get the static's counter; the engine enters permanents one at a time, and no card in this deck puts two Vampires onto the battlefield in one event. PROVISIONAL pending user sign-off.]]",
+   "template": "custom",
+   "parameters": {
+    "etb_each_other_own_creature_counters_if_opp_lost_life": 1,
+    "etb_counters_subtypes": [
+     "Vampire"
+    ],
+    "opp_lost_life_other_enters_counters": 1,
+    "opp_lost_life_other_enters_subtype": "Vampire"
    }
   }
  ]

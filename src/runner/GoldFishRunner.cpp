@@ -70,6 +70,17 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         if (def->params.spectacle_cost.has_value()) { return true; }
+        // VAMPIRES (2026-10-18). Vampire Socialite's ETB and its as-enters static both key on "an
+        // opponent lost life this turn", which in a goldfish usually only COMBAT DAMAGE sets -- the
+        // spectacle shape above: casting / Vialing / madness-casting Socialite, or any Vampire under
+        // her, AFTER damage is a play combat enables. Mavren Fein's attack token is a body combat
+        // creates (convoke fuel, Bloodline Keeper's five-Vampire count, a sacrifice). Each param alone
+        // flips it -- detection must not be parasitic on another card in the same list (Markov Baron's
+        // convoke), the Shroofus rule.
+        if (def->params.etb_each_other_own_creature_counters_if_opp_lost_life > 0
+            || def->params.opp_lost_life_other_enters_counters > 0
+            || def->params.attack_one_or_more_tokens > 0)
+        { return true; }
         // ARCANUM WINGS (2026-10-05, Bruna). An IN-COMBAT aura swap returns the Wings to HAND during
         // combat; recasting it ({1}{U}, a sorcery-speed Aura) is a play combat itself enables (the
         // 2c-bis "resources generated during combat" bucket), and a main-2 swap can use mana combat
@@ -1321,6 +1332,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 { subtype_enter_counters = true; }
                 // Metallic Mimic's chosen-type as-enters counter rides the same presence gate.
                 if (d->params.other_chosen_subtype_enters_counters > 0) { subtype_enter_counters = true; }
+                // ...and Vampire Socialite's opponent-lost-life as-enters counter (same block).
+                if (d->params.opp_lost_life_other_enters_counters > 0) { subtype_enter_counters = true; }
                 if (d->params.other_creature_etb_counter_cost.has_value()
                     && d->params.other_creature_etb_counters > 0)
                 { etb_counter_payer = true; }
