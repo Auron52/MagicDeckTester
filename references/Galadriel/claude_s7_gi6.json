@@ -1,0 +1,1168 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 7, "won": true,
+  "mulligan": { "count": 1, "bottom": [60] }, "combat_swap_timing": 1, "karoo_float": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 11, "name": "Rumble Arena" }, { "num": 36, "name": "Temple of Malady" }, { "num": 43, "name": "Temple of Mystery" }, { "num": 20, "name": "Temple of Abandon" }, { "num": 57, "name": "Zhalfirin Void" }, { "num": 37, "name": "Temple of Malady" }, { "num": 1, "name": "Crackle with Power" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 11, "name": "Rumble Arena" }, { "num": 9, "name": "Galadriel of Lothlórien" }, { "num": 52, "name": "Temple of Triumph" }, { "num": 12, "name": "Rumble Arena" }, { "num": 60, "name": "Zhalfirin Void" }, { "num": 38, "name": "Temple of Malady" }, { "num": 58, "name": "Zhalfirin Void" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 11, "name": "Rumble Arena", "win_optimal": true }, { "num": 9, "name": "Galadriel of Lothlórien", "win_optimal": true }, { "num": 52, "name": "Temple of Triumph", "win_optimal": true }, { "num": 12, "name": "Rumble Arena", "win_optimal": true }, { "num": 60, "name": "Zhalfirin Void", "win_optimal": true }, { "num": 38, "name": "Temple of Malady", "win_optimal": true }, { "num": 58, "name": "Zhalfirin Void", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 52, "name": "Temple of Triumph" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "The Grey Havens" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Temple of Malady", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Temple of Malady; cast: (nothing)", "land": "Temple of Malady", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Temple of Triumph; cast: (nothing)", "land": "Temple of Triumph", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 1,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Rumble Arena", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Rumble Arena"] }, { "index": 1, "label": "Top: Rumble Arena", "shuffle": false, "top": ["Rumble Arena"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 1, "source": "Scry", "cards": [{ "name": "Rumble Arena", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Temple of Abandon" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Temple of Abandon", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Temple of Triumph; cast: (nothing)", "land": "Temple of Triumph", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Temple of Abandon; cast: (nothing)", "land": "Temple of Abandon", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 2,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Epiphany", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Epiphany"] }, { "index": 1, "label": "Top: Temple of Epiphany", "shuffle": false, "top": ["Temple of Epiphany"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 2, "source": "Scry", "cards": [{ "name": "Temple of Epiphany", "disposition": "kept" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Temple of Epiphany" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Rumble Arena; cast: Galadriel of Lothlórien", "land": "Rumble Arena", "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 1, "summary": "land=Temple of Epiphany; cast: (nothing)", "land": "Temple of Epiphany", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Temple of Triumph; cast: (nothing)", "land": "Temple of Triumph", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 3,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Abandon", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Abandon"] }, { "index": 1, "label": "Top: Temple of Abandon", "shuffle": false, "top": ["Temple of Abandon"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 3, "source": "Scry", "cards": [{ "name": "Temple of Abandon", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Temple of Enlightenment" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Galadriel of Lothlórien", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Temple of Triumph", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Temple of Triumph; cast: Galadriel of Lothlórien", "land": "Temple of Triumph", "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 1, "summary": "land=Temple of Enlightenment; cast: Galadriel of Lothlórien", "land": "Temple of Enlightenment", "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 2, "summary": "land=Temple of Triumph (after the casts); cast: Galadriel of Lothlórien", "land": "Temple of Triumph", "land_after_casts": true, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 3, "summary": "land=Temple of Enlightenment (after the casts); cast: Galadriel of Lothlórien", "land": "Temple of Enlightenment", "land_after_casts": true, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 4, "summary": "land=Temple of Triumph (after Galadriel of Lothlórien); cast: Galadriel of Lothlórien", "land": "Temple of Triumph", "land_slot": 1, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 5, "summary": "land=Temple of Enlightenment (after Galadriel of Lothlórien); cast: Galadriel of Lothlórien", "land": "Temple of Enlightenment", "land_slot": 1, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 6, "summary": "land=Rumble Arena; cast: Galadriel of Lothlórien", "land": "Rumble Arena", "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 7, "summary": "land=Rumble Arena (after the casts); cast: Galadriel of Lothlórien", "land": "Rumble Arena", "land_after_casts": true, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 8, "summary": "land=Rumble Arena (after Galadriel of Lothlórien); cast: Galadriel of Lothlórien", "land": "Rumble Arena", "land_slot": 1, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 9, "summary": "land=Zhalfirin Void; cast: Galadriel of Lothlórien", "land": "Zhalfirin Void", "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 10, "summary": "land=The Grey Havens; cast: Galadriel of Lothlórien", "land": "The Grey Havens", "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 11, "summary": "land=Zhalfirin Void (after the casts); cast: Galadriel of Lothlórien", "land": "Zhalfirin Void", "land_after_casts": true, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 12, "summary": "land=The Grey Havens (after the casts); cast: Galadriel of Lothlórien", "land": "The Grey Havens", "land_after_casts": true, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 13, "summary": "land=Zhalfirin Void (after Galadriel of Lothlórien); cast: Galadriel of Lothlórien", "land": "Zhalfirin Void", "land_slot": 1, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 14, "summary": "land=The Grey Havens (after Galadriel of Lothlórien); cast: Galadriel of Lothlórien", "land": "The Grey Havens", "land_slot": 1, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 15, "summary": "land=none; cast: Galadriel of Lothlórien", "land": null, "casts": ["Galadriel of Lothlórien"], "actions": [{ "card": "Galadriel of Lothlórien" }] },
+    { "index": 16, "summary": "land=Temple of Triumph; cast: (nothing)", "land": "Temple of Triumph", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Temple of Enlightenment; cast: (nothing)", "land": "Temple of Enlightenment", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 21, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Triumph", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Triumph"] }, { "index": 1, "label": "Top: Temple of Triumph", "shuffle": false, "top": ["Temple of Triumph"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Triumph" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Saprazzan Skerry", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Saprazzan Skerry"] }, { "index": 1, "label": "Top: Saprazzan Skerry", "shuffle": false, "top": ["Saprazzan Skerry"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Malady" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 20,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Crystal Grotto", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Crystal Grotto"] }, { "index": 1, "label": "Top: Crystal Grotto", "shuffle": false, "top": ["Crystal Grotto"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Crystal Grotto" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Galadriel of Lothlórien", "is_land": false }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Galadriel of Lothlórien"] }, { "index": 1, "label": "Top: Galadriel of Lothlórien", "shuffle": false, "top": ["Galadriel of Lothlórien"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Malady" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 24,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Saprazzan Skerry", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Saprazzan Skerry"] }, { "index": 1, "label": "Top: Saprazzan Skerry", "shuffle": false, "top": ["Saprazzan Skerry"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Mystery" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 26,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Deceit", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Deceit"] }, { "index": 1, "label": "Top: Temple of Deceit", "shuffle": false, "top": ["Temple of Deceit"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 27,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Deceit" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 28,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Rumble Arena", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Rumble Arena"] }, { "index": 1, "label": "Top: Rumble Arena", "shuffle": false, "top": ["Rumble Arena"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 29,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Rumble Arena" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 30,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Deceit", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Deceit"] }, { "index": 1, "label": "Top: Temple of Deceit", "shuffle": false, "top": ["Temple of Deceit"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 31,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Deceit" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 32,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 42, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Crackle with Power", "is_land": false }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Crackle with Power"] }, { "index": 1, "label": "Top: Crackle with Power", "shuffle": false, "top": ["Crackle with Power"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 33,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 4, "source": "Scry", "cards": [{ "name": "Temple of Triumph", "disposition": "kept" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Triumph", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Saprazzan Skerry", "disposition": "to the bottom" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Malady", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Crystal Grotto", "disposition": "kept" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Crystal Grotto", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Galadriel of Lothlórien", "disposition": "to the bottom" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Malady", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Saprazzan Skerry", "disposition": "to the bottom" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Mystery", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Temple of Deceit", "disposition": "kept" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Deceit", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Rumble Arena", "disposition": "kept" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Rumble Arena", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Temple of Deceit", "disposition": "kept" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Deceit", "disposition": "battlefield (tapped)" }] }, { "turn": 4, "source": "Scry", "cards": [{ "name": "Crackle with Power", "disposition": "to the bottom" }] }, { "turn": 4, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Sol Ring", "disposition": "stays on top" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 42, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 34,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 42, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 35,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Sol Ring" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Temple of Enlightenment; cast: Sol Ring", "land": "Temple of Enlightenment", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 1, "summary": "land=Rumble Arena; cast: Sol Ring", "land": "Rumble Arena", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 2, "summary": "land=Zhalfirin Void; cast: Sol Ring", "land": "Zhalfirin Void", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 3, "summary": "land=The Grey Havens; cast: Sol Ring", "land": "The Grey Havens", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 4, "summary": "land=none; cast: Sol Ring", "land": null, "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 5, "summary": "land=Temple of Enlightenment; cast: (nothing)", "land": "Temple of Enlightenment", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 36,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 41, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Deceit", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Deceit"] }, { "index": 1, "label": "Top: Temple of Deceit", "shuffle": false, "top": ["Temple of Deceit"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 37,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 41, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Deceit" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 38,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 40, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Plenty", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Plenty"] }, { "index": 1, "label": "Top: Temple of Plenty", "shuffle": false, "top": ["Temple of Plenty"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 39,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 40, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Plenty" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 40,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 39, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Zhalfirin Void", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Zhalfirin Void"] }, { "index": 1, "label": "Top: Zhalfirin Void", "shuffle": false, "top": ["Zhalfirin Void"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 41,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 39, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Zhalfirin Void" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 42,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 38, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Epiphany", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Epiphany"] }, { "index": 1, "label": "Top: Temple of Epiphany", "shuffle": false, "top": ["Temple of Epiphany"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 43,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 38, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Epiphany" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 44,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 37, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Plenty", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Plenty"] }, { "index": 1, "label": "Top: Temple of Plenty", "shuffle": false, "top": ["Temple of Plenty"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 45,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 37, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Plenty" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 46,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 36, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Malice", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Malice"] }, { "index": 1, "label": "Top: Temple of Malice", "shuffle": false, "top": ["Temple of Malice"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 47,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 36, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Malice" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 48,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 35, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Crystal Grotto", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Crystal Grotto"] }, { "index": 1, "label": "Top: Crystal Grotto", "shuffle": false, "top": ["Crystal Grotto"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 49,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 35, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Crystal Grotto" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 50,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 34, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Galadriel of Lothlórien", "is_land": false }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Galadriel of Lothlórien"] }, { "index": 1, "label": "Top: Galadriel of Lothlórien", "shuffle": false, "top": ["Galadriel of Lothlórien"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 51,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 34, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Epiphany" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 52,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 33, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Enlightenment", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Enlightenment"] }, { "index": 1, "label": "Top: Temple of Enlightenment", "shuffle": false, "top": ["Temple of Enlightenment"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 53,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 33, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Enlightenment" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 54,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 32, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Malice", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Malice"] }, { "index": 1, "label": "Top: Temple of Malice", "shuffle": false, "top": ["Temple of Malice"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 55,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 32, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Malice" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 56,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 31, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "The Grey Havens", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["The Grey Havens"] }, { "index": 1, "label": "Top: The Grey Havens", "shuffle": false, "top": ["The Grey Havens"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 57,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 31, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "The Grey Havens" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 58,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 30, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Temple of Triumph", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Temple of Triumph"] }, { "index": 1, "label": "Top: Temple of Triumph", "shuffle": false, "top": ["Temple of Triumph"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 59,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 30, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Temple of Triumph" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 60,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 29, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Crystal Grotto", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Crystal Grotto"] }, { "index": 1, "label": "Top: Crystal Grotto", "shuffle": false, "top": ["Crystal Grotto"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 61,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 29, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Crystal Grotto" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 62,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 28, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "looked": [{ "name": "Galadriel of Lothlórien", "is_land": false }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Galadriel of Lothlórien"] }, { "index": 1, "label": "Top: Galadriel of Lothlórien", "shuffle": false, "top": ["Galadriel of Lothlórien"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 63,
+  "type": "dig",
+  "source": "Galadriel of Lothlórien (galadriel reveal)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 28, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Saprazzan Skerry" }],
+  "note": "reply 0 to reveal the top card and put that land onto the battlefield tapped (its own enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land stays on top). Default = reveal."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 64,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Deceit", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Deceit", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Plenty", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Plenty", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Zhalfirin Void", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Zhalfirin Void", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Epiphany", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Epiphany", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Plenty", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Plenty", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Malice", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Malice", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Crystal Grotto", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Crystal Grotto", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Galadriel of Lothlórien", "disposition": "to the bottom" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Epiphany", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Enlightenment", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Enlightenment", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Malice", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Malice", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "The Grey Havens", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "The Grey Havens", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Temple of Triumph", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Temple of Triumph", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Crystal Grotto", "disposition": "kept" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Crystal Grotto", "disposition": "battlefield (tapped)" }] }, { "turn": 5, "source": "Scry", "cards": [{ "name": "Galadriel of Lothlórien", "disposition": "to the bottom" }] }, { "turn": 5, "source": "Galadriel of Lothlórien (reveal)", "cards": [{ "name": "Saprazzan Skerry", "disposition": "battlefield (tapped)" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Saprazzan Skerry", "idx": 28, "num": 17, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Sol Ring", "idx": 29, "num": 19, "is_land": false, "taps": "C" }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 27, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 65,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Galadriel of Lothlórien (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "tapped": true, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Saprazzan Skerry", "idx": 28, "num": 17, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Sol Ring", "idx": 29, "num": 19, "is_land": false, "taps": "C" }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 24, "num": 40, "tapped": true, "is_land": true }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 27, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 66,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 6, "card": "Temple of Plenty" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Saprazzan Skerry", "idx": 28, "num": 17, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Sol Ring", "idx": 29, "num": 19, "is_land": false, "taps": "C" }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "is_land": true, "taps": "WU" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "is_land": true, "taps": "BR" }, { "name": "Temple of Malice", "idx": 24, "num": 40, "is_land": true, "taps": "BR" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "is_land": true, "taps": "GW" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "is_land": true, "taps": "GW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "is_land": true, "taps": "C" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Plenty", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 26, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Temple of Enlightenment; cast: (nothing)", "land": "Temple of Enlightenment", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Temple of Plenty; cast: (nothing)", "land": "Temple of Plenty", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 67,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Galadriel of Lothlórien (3) — 3 to opponent (17→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "tapped": true, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Saprazzan Skerry", "idx": 28, "num": 17, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Sol Ring", "idx": 29, "num": 19, "is_land": false, "taps": "C" }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "is_land": true, "taps": "WU" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "is_land": true, "taps": "BR" }, { "name": "Temple of Malice", "idx": 24, "num": 40, "is_land": true, "taps": "BR" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "is_land": true, "taps": "GW" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "is_land": true, "taps": "GW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "is_land": true, "taps": "C" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Plenty", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 26, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Temple of Enlightenment; cast: (nothing)", "land": "Temple of Enlightenment", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Temple of Plenty; cast: (nothing)", "land": "Temple of Plenty", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 68,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 7, "card": "Crackle with Power" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "is_land": true }, { "name": "Saprazzan Skerry", "idx": 28, "num": 17, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Sol Ring", "idx": 29, "num": 19, "is_land": false, "taps": "C" }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "is_land": true, "taps": "RG" }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "is_land": true, "taps": "UB" }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "is_land": true, "taps": "UB" }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "is_land": true, "taps": "WU" }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "is_land": true, "taps": "UR" }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "is_land": true, "taps": "UR" }, { "name": "Temple of Malady", "idx": 1, "num": 38, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 7, "num": 37, "is_land": true, "taps": "BG" }, { "name": "Temple of Malady", "idx": 9, "num": 39, "is_land": true, "taps": "BG" }, { "name": "Temple of Malice", "idx": 20, "num": 42, "is_land": true, "taps": "BR" }, { "name": "Temple of Malice", "idx": 24, "num": 40, "is_land": true, "taps": "BR" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "is_land": true, "taps": "GU" }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "is_land": true, "taps": "GW" }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "is_land": true, "taps": "GW" }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "is_land": true, "taps": "RW" }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "is_land": true, "taps": "RW" }, { "name": "The Grey Havens", "idx": 25, "num": 56, "is_land": true, "taps": "C" }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Crackle with Power", "cost": "{X}{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Plenty", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 25, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=9)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 9 }] },
+    { "index": 1, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=9)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 9 }] },
+    { "index": 2, "summary": "land=Rumble Arena; cast: Crackle with Power (X=9)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 9 }] },
+    { "index": 3, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=9)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 9 }] },
+    { "index": 4, "summary": "land=The Grey Havens; cast: Crackle with Power (X=9)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 9 }] },
+    { "index": 5, "summary": "land=none; cast: Crackle with Power (X=9)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 9 }] },
+    { "index": 6, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=8)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 8 }] },
+    { "index": 7, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=8)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 8 }] },
+    { "index": 8, "summary": "land=Rumble Arena; cast: Crackle with Power (X=8)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 8 }] },
+    { "index": 9, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=8)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 8 }] },
+    { "index": 10, "summary": "land=The Grey Havens; cast: Crackle with Power (X=8)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 8 }] },
+    { "index": 11, "summary": "land=none; cast: Crackle with Power (X=8)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 8 }] },
+    { "index": 12, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=7)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 7 }] },
+    { "index": 13, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=7)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 7 }] },
+    { "index": 14, "summary": "land=Rumble Arena; cast: Crackle with Power (X=7)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 7 }] },
+    { "index": 15, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=7)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 7 }] },
+    { "index": 16, "summary": "land=The Grey Havens; cast: Crackle with Power (X=7)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 7 }] },
+    { "index": 17, "summary": "land=none; cast: Crackle with Power (X=7)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 7 }] },
+    { "index": 18, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=6)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 6 }] },
+    { "index": 19, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=6)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 6 }] },
+    { "index": 20, "summary": "land=Rumble Arena; cast: Crackle with Power (X=6)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 6 }] },
+    { "index": 21, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=6)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 6 }] },
+    { "index": 22, "summary": "land=The Grey Havens; cast: Crackle with Power (X=6)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 6 }] },
+    { "index": 23, "summary": "land=none; cast: Crackle with Power (X=6)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 6 }] },
+    { "index": 24, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=5)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 5 }] },
+    { "index": 25, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=5)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 5 }] },
+    { "index": 26, "summary": "land=Rumble Arena; cast: Crackle with Power (X=5)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 5 }] },
+    { "index": 27, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=5)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 5 }] },
+    { "index": 28, "summary": "land=The Grey Havens; cast: Crackle with Power (X=5)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 5 }] },
+    { "index": 29, "summary": "land=none; cast: Crackle with Power (X=5)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 5 }] },
+    { "index": 30, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=4)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 4 }] },
+    { "index": 31, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=4)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 4 }] },
+    { "index": 32, "summary": "land=Rumble Arena; cast: Crackle with Power (X=4)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 4 }] },
+    { "index": 33, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=4)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 4 }] },
+    { "index": 34, "summary": "land=The Grey Havens; cast: Crackle with Power (X=4)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 4 }] },
+    { "index": 35, "summary": "land=none; cast: Crackle with Power (X=4)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 4 }] },
+    { "index": 36, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=3)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 3 }] },
+    { "index": 37, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=3)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 3 }] },
+    { "index": 38, "summary": "land=Rumble Arena; cast: Crackle with Power (X=3)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 3 }] },
+    { "index": 39, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=3)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 3 }] },
+    { "index": 40, "summary": "land=The Grey Havens; cast: Crackle with Power (X=3)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 3 }] },
+    { "index": 41, "summary": "land=none; cast: Crackle with Power (X=3)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 3 }] },
+    { "index": 42, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=2)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 2 }] },
+    { "index": 43, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=2)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 2 }] },
+    { "index": 44, "summary": "land=Rumble Arena; cast: Crackle with Power (X=2)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 2 }] },
+    { "index": 45, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=2)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 2 }] },
+    { "index": 46, "summary": "land=The Grey Havens; cast: Crackle with Power (X=2)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 2 }] },
+    { "index": 47, "summary": "land=none; cast: Crackle with Power (X=2)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 2 }] },
+    { "index": 48, "summary": "land=Temple of Enlightenment; cast: Crackle with Power (X=1)", "land": "Temple of Enlightenment", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 1 }] },
+    { "index": 49, "summary": "land=Temple of Plenty; cast: Crackle with Power (X=1)", "land": "Temple of Plenty", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 1 }] },
+    { "index": 50, "summary": "land=Rumble Arena; cast: Crackle with Power (X=1)", "land": "Rumble Arena", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 1 }] },
+    { "index": 51, "summary": "land=Zhalfirin Void; cast: Crackle with Power (X=1)", "land": "Zhalfirin Void", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 1 }] },
+    { "index": 52, "summary": "land=The Grey Havens; cast: Crackle with Power (X=1)", "land": "The Grey Havens", "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 1 }] },
+    { "index": 53, "summary": "land=none; cast: Crackle with Power (X=1)", "land": null, "casts": ["Crackle with Power"], "actions": [{ "card": "Crackle with Power", "x": 1 }] },
+    { "index": 54, "summary": "land=Temple of Enlightenment; cast: (nothing)", "land": "Temple of Enlightenment", "casts": [], "actions": [] },
+    { "index": 55, "summary": "land=Temple of Plenty; cast: (nothing)", "land": "Temple of Plenty", "casts": [], "actions": [] },
+    { "index": 56, "summary": "land=Rumble Arena; cast: (nothing)", "land": "Rumble Arena", "casts": [], "actions": [] },
+    { "index": 57, "summary": "land=Zhalfirin Void; cast: (nothing)", "land": "Zhalfirin Void", "casts": [], "actions": [] },
+    { "index": 58, "summary": "land=The Grey Havens; cast: (nothing)", "land": "The Grey Havens", "casts": [], "actions": [] },
+    { "index": 59, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 69,
+  "type": "target",
+  "source": "Crackle with Power",
+  "turn": 7,
+  "per_target_damage": 45, "max_targets": 3, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Crystal Grotto", "idx": 27, "num": 4, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 21, "num": 6, "tapped": true, "is_land": true }, { "name": "Crystal Grotto", "idx": 8, "num": 3, "tapped": true, "is_land": true }, { "name": "Galadriel of Lothlórien", "idx": 4, "num": 9, "is_land": false }, { "name": "Rumble Arena", "idx": 14, "num": 11, "tapped": true, "is_land": true }, { "name": "Rumble Arena", "idx": 12, "num": 14, "tapped": true, "is_land": true }, { "name": "Saprazzan Skerry", "idx": 28, "num": 17, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Sol Ring", "idx": 29, "num": 19, "tapped": true, "is_land": false }, { "name": "Temple of Abandon", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 11, "num": 25, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 13, "num": 24, "tapped": true, "is_land": true }, { "name": "Temple of Deceit", "idx": 15, "num": 27, "tapped": true, "is_land": true }, { "name": "Temple of Enlightenment", "idx": 23, "num": 29, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 3, "num": 33, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 22, "num": 32, "tapped": true, "is_land": true }, { "name": "Temple of Epiphany", "idx": 18, "num": 34, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 7, "num": 37, "tapped": true, "is_land": true }, { "name": "Temple of Malady", "idx": 9, "num": 39, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 20, "num": 42, "tapped": true, "is_land": true }, { "name": "Temple of Malice", "idx": 24, "num": 40, "is_land": true, "taps": "BR" }, { "name": "Temple of Mystery", "idx": 10, "num": 43, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 19, "num": 50, "tapped": true, "is_land": true }, { "name": "Temple of Plenty", "idx": 16, "num": 47, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 6, "num": 53, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 26, "num": 51, "tapped": true, "is_land": true }, { "name": "Temple of Triumph", "idx": 5, "num": 52, "tapped": true, "is_land": true }, { "name": "The Grey Havens", "idx": 25, "num": 56, "tapped": true, "is_land": true }, { "name": "Zhalfirin Void", "idx": 17, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 12, "name": "Rumble Arena", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Temple of Enlightenment", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Plenty", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "The Grey Havens", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Zhalfirin Void", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 25, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent" }, { "kind": "permanent", "index": 0, "label": "3/3 Creature" }, { "kind": "permanent", "index": 4, "label": "Galadriel of Lothlórien" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "3/3 Creature", "targets": [{ "kind": "permanent", "index": 0 }] }, { "index": 2, "label": "Opponent + 3/3 Creature", "targets": [{ "kind": "player", "index": 1 }, { "kind": "permanent", "index": 0 }] }, { "index": 3, "label": "Galadriel of Lothlórien", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 4, "label": "Opponent + Galadriel of Lothlórien", "targets": [{ "kind": "player", "index": 1 }, { "kind": "permanent", "index": 4 }] }, { "index": 5, "label": "3/3 Creature + Galadriel of Lothlórien", "targets": [{ "kind": "permanent", "index": 0 }, { "kind": "permanent", "index": 4 }] }, { "index": 6, "label": "Opponent + 3/3 Creature + Galadriel of Lothlórien", "targets": [{ "kind": "player", "index": 1 }, { "kind": "permanent", "index": 0 }, { "kind": "permanent", "index": 4 }] }],
+  "note": "reply an option index. Each chosen target takes 45 damage (up to 3 target(s)). Default = the AI's pick (face)."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 7, "kind": "damage", "text": "🔥 Crackle with Power: 45 to opponent (14→-31)" },
+    { "turn": 7, "kind": "combat", "text": "⚔ attacked: Galadriel of Lothlórien (3) — 3 to opponent (-31→-34)" }
+  ]
+}
