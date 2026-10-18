@@ -25361,7 +25361,9 @@ enum : uint64_t {
     // AccomplishedAlchemist chunk C2a: the LIFEGAIN breakpoint (a tappable mana_per_life_gained source's
     // yield, folded into the key's high bits -- see CollectActivationKeys) and the activated untappers.
     kActLifeYield = 202,
-    kActUntapper  = 203
+    kActUntapper  = 203,
+    // AccomplishedAlchemist chunk C2b: the closed-form untap loop's FLOAT now covers its payoff.
+    kActUntapLoopFunded = 204
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -25525,6 +25527,27 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
                 }
             }
             if (any) { out.push_back(ActKey(num, kActUntapper)); }
+        }
+    }
+    // THE CLOSED-FORM LOOP'S CONTINUATION (chunk C2b). ApplyUntapLoop runs until the FLOAT covers the
+    // cheapest kill (ComputeUntapLoopNeed); every payoff is then sized by the rest of the main phase
+    // against the real float -- Stroke's X, Scholar's drain count, Ezuri's pumps, the Staff's draws. That
+    // re-plan is THIS key: present exactly while an untapper can aim at this mana creature and the float
+    // funds the need, with the need's mana value in bits 40+. It cannot be in the plan-start snapshot of
+    // the plan that ran the loop (the provider offers the loop only when the board could NOT fund the
+    // need), so the delta rule fires right after it; a plan that merely spends float makes it disappear
+    // (an absent key never arms), and a later loop for a NEW need (a card the draws found) presents a new
+    // value. Scoped by validity: float > 0 and an untapper aimed at this creature, so no other deck --
+    // SelesnyaLifegain's Alchemist included -- ever computes it.
+    if (pp.mana_per_life_gained && state.floating_mana.Total() > 0)
+    {
+        std::vector<UntapAbilityRef> lrefs;
+        CollectCreatureUntapAbilities(state, ctrl, p, lrefs);
+        int need_mv = 0;
+        if (!lrefs.empty() && UntapLoopNeedFunded(state, ctrl, &need_mv))
+        {
+            out.push_back(ActKey(num, kActUntapLoopFunded)
+                          | (static_cast<uint64_t>(std::min(need_mv, 0xFFFF)) << 40));
         }
     }
 
@@ -31342,6 +31365,26 @@ static const CardDefinition* CollectedActionDef(const Player& ap, const Action& 
                              : CardDatabase::Instance().LookupInterned(a.card_name));
 }
 
+// The untap loop's KILL action of payoff kind `payoff` sized for `count` (chunk C2b; see the kill fold in
+// BpDeriveContinuationList): Stroke at the opponent for X >= the lethal X, the drain activated >= count
+// times, the main-phase team pump >= count times.
+static bool UntapLoopKillAction(const GameState& state, const Action& a, int payoff, int count)
+{
+    (void)state;
+    switch (payoff)
+    {
+        case kLoopPayStroke:
+            return a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.draw_target_player
+                && a.def->tmpl == CardTemplate::DrawX && a.draw_target == 1 && a.chosen_x >= count;
+        case kLoopPayDrain:
+            return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::Drain
+                && std::max(1, a.chosen_x) >= count;
+        case kLoopPayPump:
+            return a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 2 && a.chosen_x >= count;
+        default: return false;
+    }
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
@@ -37020,6 +37063,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         counts = ResolveProvider(state).UntapActivationCounts(state, *src, tgt, r.shape,
                                                                               affordable);
                     }
+                    else
+                    {
+                        // Human play / unpruned fold K to 1 (the phase re-prompts) -- but the closed-form
+                        // LOOP (chunk C2b) is not "K clicks": it runs to the payoff's exact need, so a
+                        // human gets it as ONE more option (verb untaploop=) whenever the provider
+                        // recognises it. Generic providers never return the sentinel: byte-identical.
+                        const std::vector<int> pc = ResolveProvider(state).UntapActivationCounts(
+                            state, *src, tgt, r.shape, affordable);
+                        if (std::find(pc.begin(), pc.end(), kUntapLoopToNeed) != pc.end())
+                        { counts.push_back(kUntapLoopToNeed); }
+                    }
                     const CardDefinition* sdef = src->def_absent ? nullptr
                                                : CardDatabase::Instance().LookupCached(src->card);
                     for (int k : counts)
@@ -37036,7 +37090,18 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.gy_exile_mode  = r.shape;
                         a.chosen_x       = k;
                         a.cost           = *unit;   // ONE activation (self-funding; see the kind)
-                        a.eval           = k;       // the rollout scores the real outcome
+                        // The closed-form LOOP on an UNTAPPED mana creature pays its own first
+                        // activation: the resolver taps the creature for X first and only then pays the
+                        // untap (X >= the cost, or the loop is not offered -- UntapLoopNextOp). So it
+                        // asks the plan's other mana for NOTHING, and pricing it at one activation would
+                        // drop "cast Nourish, then loop" from a board that pays Nourish exactly (the X
+                        // the loop runs on is the post-Nourish one, which the pre-plan pool cannot see).
+                        // Enumerate-optimistic; the resolver validates every payment.
+                        if (k >= kUntapLoopToNeed && live_mana) { a.cost = ManaCost{}; }
+                        // The rollout scores the real outcome; ORDERING only. The closed-form loop
+                        // (kUntapLoopToNeed, chunk C2b) is the deck's kill, priced as a decisive play
+                        // (the lethal-Stroke eval) so a saturated budget reaches it first.
+                        a.eval           = (k >= kUntapLoopToNeed) ? 5000 : k;
                         a.is_noncreature = true;
                         actions.push_back(std::move(a));
                     }
@@ -38524,6 +38589,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.eval           = k;             // rollout scores the real damage/haste
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
+                }
+            }
+            // A STACKING P/T team pump with no keyword rider and no {T} (Ezuri, Renegade Leader's
+            // "{2}{G}{G}{G}: Elf creatures you control get +3/+3"; AccomplishedAlchemist chunk C2b).
+            // The combat converter (ApplyFirebreathing) spends LAND mana on it at combat, so the
+            // generic hook proposes nothing and every other deck is byte-identical; what the converter
+            // cannot reach is FLOATING mana, which empties when main 1 ends (CR 500.4) -- the mana an
+            // unbounded untap loop makes. MainPhaseTeamPumpCounts proposes the lethal count from that
+            // float; the variant is mode 2 (ApplyActivatePump: +power AND +toughness to the subtype).
+            else if (sd->params.team_pump_cost.has_value() && sd->params.team_pump_power > 0
+                     && !sd->params.team_pump_taps_source && sd->params.team_pump_cost->hybrid_count == 0
+                     && state.floating_mana.Total() > 0)   // the float is the only mana the converter misses
+            {
+                const ManaCost per = sd->params.team_pump_cost.value();
+                ManaPool have = AvailableManaPool(state);
+                have.AddPool(state.floating_mana);
+                const int afford = static_cast<int>(have.Total()) / std::max(1, per.ManaValue());
+                if (afford >= 1)
+                {
+                    for (int k : ResolveProvider(state).MainPhaseTeamPumpCounts(state, src, afford))
+                    {
+                        if (k < 1 || k > afford) { continue; }
+                        Action a;
+                        a.kind           = Action::Kind::ActivatePump;
+                        a.card_name      = src.card.m_name;
+                        a.def            = sd;
+                        a.hand_index     = -1;
+                        a.sac_source_id  = src.card.m_number;
+                        a.chosen_x       = k;
+                        a.gy_exile_mode  = 2;
+                        ManaCost c = per;
+                        c.generic *= k; c.white *= k; c.blue *= k; c.black *= k;
+                        c.red *= k; c.green *= k; c.colorless *= k;
+                        a.cost           = c;
+                        a.eval           = 5000;          // the lethal pump: ordering only
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
                 }
             }
 
@@ -40803,6 +40906,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             actions[i].chosen_x = vals[0];
         }
+    }
+
+    // THE UNTAP LOOP'S KILL FOLD (chunk C2b): only inside BpDeriveContinuationList's kill derivation --
+    // admit the payoff's kill action alone (see that function for the dominance argument).
+    if (g_untap_loop_kill_only != 0)
+    {
+        std::vector<Action> kept;
+        for (Action& a : actions)
+        { if (UntapLoopKillAction(state, a, g_untap_loop_kill_only, g_untap_loop_kill_count)) { kept.push_back(std::move(a)); } }
+        actions.swap(kept);
     }
 
     // Identical creature-Aura HOSTS -> the first k of each class (MTG_AURA_HOST_FOLD; see the function).
@@ -56284,8 +56397,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // shared resolver, which re-checks the ability, pays per activation through the unified
             // TapForCostDirect and stops at the first it cannot pay or that would be a no-op. The
             // executor calls the identical function (AIEngine), so the worlds are lockstep.
-            const int done = ApplyActivatedUntap(state, state.active_player_index, a.gy_exile_mode,
-                                                 a.sac_source_id, a.sac_victim_id, std::max(1, a.chosen_x));
+            // ApplyUntapAction: the closed-form loop (chunk C2b) for the kUntapLoopToNeed count, the
+            // K-activation resolver otherwise -- the executor calls the identical dispatch.
+            const int done = ApplyUntapAction(state, state.active_player_index, a.gy_exile_mode,
+                                              a.sac_source_id, a.sac_victim_id, a.chosen_x);
             if (ActDropAuditOn())
             {
                 if (done > 0) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
@@ -65417,7 +65532,14 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (w->params.mana_per_life_gained && perm.CanTap()) { alch = true; }
             if (EnterLifegainWatcher(w->params)) { enter_watch = true; }
         }
-        if (alch)
+        // The closed-form untap LOOP (chunk C2b) always ends in the kActUntapLoopFunded re-plan, even
+        // when its mana creature is TAPPED at plan start (the loop's first activation untaps it).
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::ActivateUntap && a.chosen_x >= kUntapLoopToNeed)
+            { mask |= 1 << 9; break; }
+        }
+        if (alch && (mask & (1 << 9)) == 0)
         {
             if (!enter_watch)
             {
@@ -89340,7 +89462,52 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     // this one is interrupted too).
     const bool bp_outer_interrupted = g_bp_derive_interrupted;
     g_bp_derive_interrupted = false;
-    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    std::vector<TurnSolver::Plan> plans;
+    // THE UNTAP LOOP'S KILL FOLD (AccomplishedAlchemist chunk C2b; MTG_UNTAP_LOOP_KILL_FOLD, DEFAULT ON,
+    // =0 disables). The closed-form loop stops exactly when its FLOAT pays the cheapest this-turn kill
+    // (UntapLoopFloatPays -- the same float drain the payer runs, payment by payment), so at that point a
+    // plan that IS the kill -- Stroke at the opponent for the lethal X, the lethal drain count, the lethal
+    // team pump -- is on the menu and wins THIS turn. Nothing can beat that in a goldfish (the score is the
+    // win turn), so every other continuation is DOMINATED: a sound dominance fold, not a pick. It is also
+    // the only thing that keeps the continuation tractable -- with ~50 floating mana every subset of the
+    // hand is affordable, and the measured lists ran to 9k-360k plans per continuation (seed 9113 d5:
+    // 175 s and 4.7 GB for one game, vs 9 s / 148 MB without the loop). Enumerated through CollectActions
+    // with only the kill kind admitted (g_untap_loop_kill_only), kept only when such a plan exists; any
+    // miss falls back to the full list. Shared by both worlds (this derivation is what the executor
+    // replays by index), never in human play.
+    {
+        static const bool s_kill_fold = EnvOn("MTG_UNTAP_LOOP_KILL_FOLD", true);   // DEFAULT ON; =0 disables
+        UntapLoopNeed kn;
+        if (s_kill_fold && !HumanPlayActive() && state.floating_mana.Total() > 0
+            && UntapLoopNeedFunded(state, state.active_player_index, nullptr, &kn)
+            && (kn.payoff == kLoopPayStroke || kn.payoff == kLoopPayDrain || kn.payoff == kLoopPayPump))
+        {
+            struct KillScope
+            {
+                int pk, pc;
+                KillScope(int k, int c) : pk(g_untap_loop_kill_only), pc(g_untap_loop_kill_count)
+                { g_untap_loop_kill_only = k; g_untap_loop_kill_count = c; }
+                ~KillScope() { g_untap_loop_kill_only = pk; g_untap_loop_kill_count = pc; }
+            } _ks(kn.payoff, kn.count);
+            std::vector<TurnSolver::Plan> kills = EnumeratePlansWithLandUncached(state, is_pre_combat);
+            std::vector<TurnSolver::Plan> keep, keep_noland;
+            for (TurnSolver::Plan& kp : kills)
+            {
+                int n_kill = 0, n_other = 0;
+                bool land = false;
+                for (const Action& a : kp.actions)
+                {
+                    if (a.kind == Action::Kind::PlayLand) { land = true; continue; }
+                    if (UntapLoopKillAction(state, a, kn.payoff, kn.count)) { ++n_kill; } else { ++n_other; }
+                }
+                if (n_kill != 1 || n_other != 0) { continue; }
+                (land || !kp.land_to_play.empty() ? keep : keep_noland).push_back(std::move(kp));
+            }
+            if (!keep_noland.empty())  { plans = std::move(keep_noland); }
+            else if (!keep.empty())    { plans = std::move(keep); }
+        }
+    }
+    if (plans.empty()) { plans = EnumeratePlansWithLand(state, is_pre_combat); }
     const bool bp_interrupted = g_bp_derive_interrupted;
     g_bp_derive_interrupted = bp_outer_interrupted || bp_interrupted;
     if (bp_interrupted)
@@ -90326,7 +90493,8 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
             std::string lbl = a.card_name + ": untap" + (tn.empty() ? "" : " " + tn);
             if (a.gy_exile_mode == 4) { lbl += " (+3/+3)"; }
             const int uk = std::max(1, a.chosen_x);
-            if (uk > 1) { lbl += " x" + std::to_string(uk); }
+            if (uk >= kUntapLoopToNeed) { lbl += " -- LOOP until the kill is funded"; }
+            else if (uk > 1) { lbl += " x" + std::to_string(uk); }
             cast_names.push_back(lbl);
         }
         // Battlefield tap abilities (Mariposa's draw, Shivan Gorge's damage, investigate): also
@@ -90987,6 +91155,7 @@ static bool UntapActAssign(const std::vector<TurnSolver::LineSpec::UntapActSpec>
     for (size_t j = 0; j < have.size(); ++j)
     {
         if (used[j] || have[j].name != want[i].name) { continue; }
+        if (want[i].loop != have[j].loop) { continue; }   // untaploop= vs untapact= (chunk C2b)
         if (want[i].source != 0 && want[i].source != have[j].source) { continue; }
         if (want[i].target != 0 && want[i].target != have[j].target) { continue; }
         used[j] = true;
@@ -91469,7 +91638,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 && a.ability_mode == Action::AbilityMode::TapDraw)
             { tapDrawNames.push_back(a.card_name); continue; }
             if (a.kind == Action::Kind::ActivateUntap)
-            { untapActs.push_back({ a.card_name.str(), a.sac_source_id, a.sac_victim_id }); continue; }
+            { untapActs.push_back({ a.card_name.str(), a.sac_source_id, a.sac_victim_id,
+                                    a.chosen_x >= kUntapLoopToNeed }); continue; }
             if (landsearch_declared && a.kind == Action::Kind::ActivatePermAbility
                 && (a.ability_mode == Action::AbilityMode::SacLandSearch
                     || a.ability_mode == Action::AbilityMode::QuestSacLandSearch))
@@ -91966,7 +92136,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       || a.kind == Action::Kind::JitteModeAbility)   // Jitte +N/+N: how many counters
                      && a.chosen_x > 0)
             {
-                const std::string times = "\xC3\x97" + std::to_string(a.chosen_x);   // ×K
+                // The closed-form untap LOOP (chunk C2b) carries a sentinel count, not a K: name it.
+                const std::string times = (a.kind == Action::Kind::ActivateUntap && a.chosen_x >= kUntapLoopToNeed)
+                    ? std::string("loop")
+                    : "\xC3\x97" + std::to_string(a.chosen_x);   // ×K
                 addSub(a.card_name + " " + times, a.card_name + " activations", times,
                        a.card_name, "activations");
             }

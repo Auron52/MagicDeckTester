@@ -99,6 +99,8 @@
   //   untapact=   Crab Umbra / Galvanic Alchemist's grant / Staff of Domination / Seedcradle Witch,
   //               "<source>[#<source m_number>][@<target m_number>]"       (LineSpec::untap_acts)
   //   tapdraw=    Staff of Domination's "{5},{T}: draw" (names the SOURCE)  (LineSpec::tap_draws)
+  //   untaploop=  the closed-form untap LOOP on an untapper (same "#src@target" shape as untapact=;
+  //               runs until the float funds the kill -- chunk C2b)        (LineSpec::untap_acts, loop)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
   const MODE_VERBS = { jittemode: true, gyexile: true };
@@ -125,6 +127,9 @@
     // source, so a same-named copy in HAND cannot match instead. Snow seed 9 T3 (USER 2026-10-06):
     // `cast=Frost Augur` matched both, and the human got a "Frost Augur X?" dialog for nothing.
     const v = p.verb || (p.sacout ? 'sacout' : 'cast');
+    // The closed-form untap LOOP (AccomplishedAlchemist chunk C2b) is an untapact= option flagged
+    // untapLoop: it writes its own verb so a single activation and the loop never match each other.
+    if (v === 'untapact' && p.untapLoop) return 'untaploop';
     return v === 'cast' ? 'act' : v;
   }
 
@@ -531,7 +536,7 @@
                             : NUM_VERBS[v] ? String(p.hostNum || 0)
                             : p.name)
                  + (v === 'equip' ? equipIds(p) : v === 'blink' ? blinkIds(p)
-                    : v === 'untapact' ? untapIds(p) : ''));
+                    : (v === 'untapact' || v === 'untaploop') ? untapIds(p) : ''));
     }
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);
     return parts.length ? parts.join(';') : 'pass';

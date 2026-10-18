@@ -491,19 +491,21 @@ TEST_CASE("Stroke of Genius: the search is offered BOTH targets; the opponent va
     CHECK(opp_kills);
     CHECK(self_draws);
 
-    // One mana short of lethal: the opponent variant is not offered at all; self still is.
+    // One mana short of lethal: the opponent is offered only the MAX-affordable X (chunk C2b: the
+    // two-turn split deck-out the minimal-lethal-only prune made unfindable); self still is offered.
     GameState u = FreshAa();
     for (int k = 0; k < 6; ++k) { PutAa(u, "Island"); }
     HandAa(u, "Stroke of Genius");
     DealOppAa(u, 4);
-    bool any_opp = false, any_self = false;
+    std::set<int> u_opp_x;
+    bool any_self = false;
     for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(u, true))
     {
         const Action* a = StrokeCastAa(p);
         if (a == nullptr) { continue; }
-        if (a->draw_target != 0) { any_opp = true; } else { any_self = true; }
+        if (a->draw_target != 0) { u_opp_x.insert(a->chosen_x); } else { any_self = true; }
     }
-    CHECK_FALSE(any_opp);
+    CHECK(u_opp_x == std::set<int>{ 3 });                 // 6 mana - {2}{U} = X 3 < lethal 4
     CHECK(any_self);
 }
 
@@ -1068,4 +1070,317 @@ TEST_CASE("Accomplished Alchemist pays a TWO-colour cost only with a second sour
     PutAa(s, "Forest");
     GameState u = s;
     CHECK(TapForCostDirect(u, c, false));
+}
+
+// ==== Chunk C2b: the closed-form untap loop and its payoffs ==========================================
+namespace
+{
+const Action* LoopActionAa(const TurnSolver::Plan& p)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::ActivateUntap && a.chosen_x >= kUntapLoopToNeed) { return &a; } }
+    return nullptr;
+}
+
+ManaCost StrokeNeedAa(int x)
+{
+    ManaCost c; c.generic = x + 2; c.blue = 1; return c;
+}
+
+const AccomplishedAlchemistProvider& AaProv()
+{
+    static const AccomplishedAlchemistProvider p;
+    return p;
+}
+}   // namespace
+
+TEST_CASE("Untap loop: Crab Umbra on a 6-life Alchemist loops until the float pays Stroke's lethal X")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    PutAa(s, "Island");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    const int umbra = AttachAa(s, "Crab Umbra", alch);
+    s.players[0].life_gained_this_turn = 6;
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 40);
+    s.m_provider = &AaProv();
+
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, 0);
+    CHECK(need.payoff == kLoopPayStroke);
+    CHECK(need.count == 40);
+    CHECK(need.cost.ManaValue() == 43);
+
+    // The resolver: 6 - 3 = 3 net blue per iteration; it stops the moment the float pays {42}{U}.
+    GameState t = s;
+    const int n = ApplyUntapLoop(t, 0, kUntapEnchanted, umbra, alch);
+    CHECK(n > 0);
+    CHECK(t.floating_mana.CanPay(StrokeNeedAa(40)));
+    CHECK(t.floating_mana.Total() < 43 + 6);          // EXACT need: stopped within one iteration of it
+    CHECK_FALSE(ByNumAa(t, alch)->tapped);             // the loop leaves its creature untapped
+
+    // The search is offered it as ONE more searched variant (the generic 1..3 are still there).
+    std::set<int> ks;
+    TurnSolver::Plan pick;
+    bool offered = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = OnlyActionAa(p, Action::Kind::ActivateUntap);
+        if (a == nullptr) { continue; }
+        ks.insert(a->chosen_x);
+        if (a->chosen_x == kUntapLoopToNeed) { offered = true; pick = p; }
+    }
+    CHECK(ks.count(1) == 1);
+    REQUIRE(offered);
+
+    // executor == rollout: the ONE dispatch (ApplyUntapAction) in both worlds, and the loop's continuation
+    // (kActUntapLoopFunded, site 9 -- folded to the proven kill) casts Stroke X = 40 off the float in BOTH.
+    bool both_win = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = OnlyActionAa(p, Action::Kind::ActivateUntap);
+        if (a == nullptr || a->chosen_x != kUntapLoopToNeed) { continue; }
+        GameState ro = s;
+        TurnSolver::ApplyPlan(ro, p, true);
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        GameState ex = s;
+        eng.TakeTurn(ex, true, ResolveStackAa);
+        CHECK(OpponentHasLost(ro) == OpponentHasLost(ex));
+        if (OpponentHasLost(ro) && OpponentHasLost(ex)) { both_win = true; }
+    }
+    CHECK(both_win);
+    (void)pick;
+}
+
+namespace
+{
+// Apply `p` in BOTH worlds from `s`: the rollout (TurnSolver::ApplyPlan, continuations included) and the
+// executor (AIEngine::TakeTurn on the committed plan).
+std::pair<GameState, GameState> BothWorldsAa(const GameState& s, const TurnSolver::Plan& p)
+{
+    GameState ro = s;
+    TurnSolver::ApplyPlan(ro, p, true);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, p, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, ResolveStackAa);
+    return { ro, ex };
+}
+
+// Every plan whose only action is the closed-form loop: the base plan and its site-9 continuation
+// variants (bp_choice >= 0 -- the wave's fan-out of what the loop's re-plan does with the float).
+std::vector<TurnSolver::Plan> LoopPlansAa(const GameState& s)
+{
+    std::vector<TurnSolver::Plan> out;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        bool only = true; const Action* hit = nullptr;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::PlayLand) { continue; }
+            if (a.kind == Action::Kind::ActivateUntap && a.chosen_x >= kUntapLoopToNeed && hit == nullptr) { hit = &a; }
+            else { only = false; }
+        }
+        if (hit != nullptr && only) { out.push_back(p); }
+    }
+    return out;
+}
+
+bool FindLoopPlanAa(const GameState& s, TurnSolver::Plan& out)
+{
+    const std::vector<TurnSolver::Plan> v = LoopPlansAa(s);
+    if (v.empty()) { return false; }
+    out = v.front();
+    return true;
+}
+
+// Does SOME loop plan (a continuation variant) satisfy `ok` in BOTH worlds? Returns it via `out`.
+template <class F>
+bool LoopPlanBothAa(const GameState& s, F ok, TurnSolver::Plan* out = nullptr)
+{
+    for (const TurnSolver::Plan& p : LoopPlansAa(s))
+    {
+        const auto both = BothWorldsAa(s, p);
+        if (ok(both.first) && ok(both.second)) { if (out) { *out = p; } return true; }
+    }
+    return false;
+}
+
+int PowerAa(const GameState& s, int num) { return CombatPowerOf(*ByNumAa(s, num), s); }
+}   // namespace
+
+TEST_CASE("Untap loop thresholds: Umbra X = 3 is not a loop, X = 4 is; the Staff bootstrap's minimal P")
+{
+    // The pure search: Umbra/Galvanic ({2}{U}, no Staff to gain with) -- net X - 3.
+    CHECK(UntapLoopBootOp(10, 3, false, false, false, 3, 0, false, 0) == -1);
+    CHECK(UntapLoopBootOp(10, 4, false, false, false, 3, 0, false, 0) == 0);
+    CHECK(UntapLoopBootOp(2, 4, false, true, false, 3, 0, false, 0) == -1);   // tapped, cannot pay the first untap
+    CHECK(UntapLoopBootOp(3, 4, false, true, false, 3, 0, false, 0) == 3);    // ...three can: untap first
+    // The Staff ({3},{T} + {1}: untap Staff) needs X >= 5; "{2},{T}: gain 1 life" buys X. Minimal other
+    // mana P per starting X (docs/design/alchemist-untap-loop.md: 2, 5, 8 for X = 4, 3, 2).
+    CHECK(UntapLoopBootOp(1, 4, false, false, true, 3, 1, true, 2) == -1);
+    CHECK(UntapLoopBootOp(2, 4, false, false, true, 3, 1, true, 2) >= 1);
+    CHECK(UntapLoopBootOp(4, 3, false, false, true, 3, 1, true, 2) == -1);
+    CHECK(UntapLoopBootOp(5, 3, false, false, true, 3, 1, true, 2) >= 1);
+    CHECK(UntapLoopBootOp(7, 2, false, false, true, 3, 1, true, 2) == -1);
+    CHECK(UntapLoopBootOp(8, 2, false, false, true, 3, 1, true, 2) >= 1);
+    CHECK(UntapLoopBootOp(0, 5, false, false, true, 3, 1, true, 2) == 0);     // X = 5 is already unbounded
+
+    // ...and the provider does NOT offer a net-zero loop: Umbra at X = 3, no lifegain in hand.
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    PutAa(s, "Island");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    AttachAa(s, "Crab Umbra", alch);
+    s.players[0].life_gained_this_turn = 3;
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 40);
+    s.m_provider = &AaProv();
+    TurnSolver::Plan none;
+    CHECK_FALSE(FindLoopPlanAa(s, none));
+    s.players[0].life_gained_this_turn = 4;
+    CHECK(FindLoopPlanAa(s, none));
+}
+
+TEST_CASE("Untap loop: Staff of Domination bootstraps X with its own lifegain, then loops; executor == rollout")
+{
+    GameState s = FreshAa();
+    const int staff = PutAa(s, "Staff of Domination");
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    PutAa(s, "Island");                                  // P = 5 other mana: exactly the X = 3 minimum
+    s.players[0].life_gained_this_turn = 3;
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 12);
+    s.m_provider = &AaProv();
+
+    GameState t = s;
+    CHECK(ApplyUntapLoop(t, 0, kUntapStaffTarget, staff, alch) > 0);
+    INFO("float=", t.floating_mana.Total(), " U=", t.floating_mana.blue, " gained=", t.players[0].life_gained_this_turn,
+         " staffT=", ByNumAa(t, staff)->tapped, " alchT=", ByNumAa(t, alch)->tapped);
+    CHECK(t.players[0].life_gained_this_turn >= 5);     // two {2},{T}: gain 1 life bought X to 5
+    CHECK(t.floating_mana.CanPay(StrokeNeedAa(12)));
+    CHECK_FALSE(ByNumAa(t, alch)->tapped);
+    CHECK_FALSE(ByNumAa(t, staff)->tapped);              // {1} out of the float leaves the Staff usable
+
+    // A continuation variant of the loop plan casts Stroke X = 12 off the float, in both worlds.
+    CHECK(LoopPlanBothAa(s, [](const GameState& g) { return OpponentHasLost(g); }));
+
+    // One mana less and the bootstrap is unreachable: no loop variant.
+    GameState u = FreshAa();
+    PutAa(u, "Staff of Domination");
+    PutAa(u, "Accomplished Alchemist");
+    for (int k = 0; k < 3; ++k) { PutAa(u, "Forest"); }
+    PutAa(u, "Island");
+    u.players[0].life_gained_this_turn = 3;
+    HandAa(u, "Stroke of Genius");
+    DealOppAa(u, 12);
+    u.m_provider = &AaProv();
+    TurnSolver::Plan q;
+    CHECK_FALSE(FindLoopPlanAa(u, q));
+}
+
+TEST_CASE("Untap loop: a Galvanic pair drains with Scholar of Athreos to lethal; black floated; executor == rollout")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    const int galv = PutAa(s, "Galvanic Alchemist");
+    MutAa(s, alch)->paired_with = galv;
+    MutAa(s, galv)->paired_with = alch;
+    PutAa(s, "Scholar of Athreos");
+    PutAa(s, "Island");
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 6;
+    s.players[1].life = 8;
+    s.m_provider = &AaProv();
+
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, 0);
+    CHECK(need.payoff == kLoopPayDrain);
+    CHECK(need.count == 8);
+    GameState t = s;
+    CHECK(ApplyUntapLoop(t, 0, kUntapSoulbondSelf, alch, alch) > 0);
+    CHECK(t.floating_mana.black >= 8);                   // the colour plan floated the drains' {B}s
+
+    // A continuation variant drains 8 times off the float, in both worlds.
+    CHECK(LoopPlanBothAa(s, [](const GameState& g) { return OpponentHasLost(g); }));
+}
+
+TEST_CASE("Untap loop: Ezuri's main-phase pump sized to lethal off the float (mode 2 adds toughness too)")
+{
+    GameState s = FreshAa();
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    const int ezuri = PutAa(s, "Ezuri, Renegade Leader");
+    AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Island");
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 7;
+    s.m_provider = &AaProv();
+
+    // Attackers: Alchemist 2 + Ezuri 2 = 4 of 20 -> 16 short, 2 Elves x 3 = 6 per pump -> 3 pumps.
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, 0);
+    CHECK(need.payoff == kLoopPayPump);
+    CHECK(need.count == 3);
+
+    // The float is what the main-phase hook reads (empty -> nothing; combat converter's job).
+    CHECK(AaProv().MainPhaseTeamPumpCounts(s, *ByNumAa(s, ezuri), 10).empty());
+    GameState t = s;
+    t.floating_mana.green = 15;
+    CHECK(AaProv().MainPhaseTeamPumpCounts(t, *ByNumAa(t, ezuri), 3) == std::vector<int>{ 3 });
+
+    // A continuation variant pumps 3 times off the float, in both worlds; the loop leaves the Alchemist
+    // untapped to attack.
+    CHECK(LoopPlanBothAa(s, [&](const GameState& g)
+    {
+        return PowerAa(g, alch) == 2 + 9 && PowerAa(g, ezuri) == 2 + 9
+            && ByNumAa(g, ezuri)->temp_tough_bonus == 9 && !ByNumAa(g, alch)->tapped;
+    }));
+}
+
+TEST_CASE("Untap loop: Seedcradle Witch alternates G/W taps, and its own +3/+3 is the kill")
+{
+    GameState s = FreshAa();
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    const int witch = PutAa(s, "Seedcradle Witch");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    PutAa(s, "Plains");
+    s.players[0].life_gained_this_turn = 6;
+    s.m_provider = &AaProv();
+
+    // No mana payoff anywhere: the Witch loop buys power. Attackers: Alchemist 2 (Witch is sick? no --
+    // staged unsick) + Witch 1 = 3; 17 short at +3 per iteration -> 6 iterations.
+    CHECK(UntapLoopPumpIterations(s, 0, kUntapPumpTarget, witch, alch) == 6);
+    GameState t = s;
+    CHECK(ApplyUntapLoop(t, 0, kUntapPumpTarget, witch, alch) == 6);
+    CHECK(PowerAa(t, alch) == 2 + 18);
+    CHECK_FALSE(ByNumAa(t, alch)->tapped);
+
+    TurnSolver::Plan p;
+    REQUIRE(FindLoopPlanAa(s, p));
+    const auto [ro, ex] = BothWorldsAa(s, p);
+    CHECK(PowerAa(ro, alch) == PowerAa(ex, alch));
+    CHECK(PowerAa(ro, alch) >= 2 + 18);
+}
+
+TEST_CASE("Untap loop: the Staff draws TO FIND Stroke inside the loop, then the loop funds it")
+{
+    GameState s = FreshAa();
+    s.players[0].library = Library{};
+    for (int k = 0; k < 2; ++k) { LibAa(s, "Forest"); }
+    LibAa(s, "Stroke of Genius");                        // depth 3
+    for (int k = 0; k < 6; ++k) { LibAa(s, "Forest"); }
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    PutAa(s, "Staff of Domination");
+    AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Island");
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 7;
+    DealOppAa(s, 10);
+    s.m_provider = &AaProv();
+
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, 0);
+    CHECK(need.payoff == kLoopPayDraw);
+    CHECK(need.count == 3);
+    // Drew 3 inside the loop; a continuation variant cast the drawn Stroke off the float -- both worlds.
+    CHECK(LoopPlanBothAa(s, [](const GameState& g) { return OpponentHasLost(g) && g.players[0].library.size() == 6; }));
 }

@@ -3013,7 +3013,10 @@ public:
         // is `target` 0. ALWAYS its own verb (the kind is new, like auraswap=): a plan with an
         // untapper activation never matches a line that does not declare it. No count: human play
         // folds the activation count to 1 and re-prompts after each segment.
-        struct UntapActSpec { std::string name; int source = 0; int target = 0; };
+        // `loop` (chunk C2b): "untaploop=<source>[#n][@target]" -- the closed-form untap loop
+        // (ActivateUntap, chosen_x = kUntapLoopToNeed): activate until the float funds the kill.
+        // A single activation and the loop never match each other.
+        struct UntapActSpec { std::string name; int source = 0; int target = 0; bool loop = false; };
         std::vector<UntapActSpec> untap_acts;
         // "tapdraw=<source name>": PermAbilityMode::TapDraw on a source that ALSO carries another
         // {T} ability family (Staff of Domination: self_untap_cost / tap_lifegain_cost). The taplife=

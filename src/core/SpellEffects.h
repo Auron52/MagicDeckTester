@@ -14417,6 +14417,9 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                 { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
                 if (!m) { continue; }
                 q.temp_power_bonus += sd->params.team_pump_power;
+                // ...and +toughness (Ezuri's "+3/+3", chunk C2b). 0 for every keyword team pump
+                // (Sethron, Valiant Knight, Vito), so they are unchanged.
+                q.temp_tough_bonus += sd->params.team_pump_tough;
                 if (sd->params.team_pump_grants_haste) { q.temp_haste = true; }
                 // Valiant Knight: "Knights you control gain double strike until end of turn."
                 // Idempotent (a flag, not an increment), which is why K is capped at 1 for a
@@ -14435,7 +14438,8 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                 // Knight's activation as pumping Minotaurs by 0 and granting haste.
                 std::string what;
                 if (sd->params.team_pump_power != 0)
-                { what = "+" + std::to_string(sd->params.team_pump_power) + "/+0"; }
+                { what = "+" + std::to_string(sd->params.team_pump_power) + "/+"
+                         + std::to_string(sd->params.team_pump_tough); }
                 auto add = [&what](const char* kw)
                 { if (!what.empty()) { what += " and "; } what += kw; };
                 if (sd->params.team_pump_grants_haste)         { add("haste"); }
@@ -30399,6 +30403,51 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                         Color col, ManaPool& floating, ManaPool* available, bool for_creature,
                         const std::vector<int>* aura_colors);   // ManaPayment.cpp
 
+// THE LOOP'S COLOUR PLAN (AccomplishedAlchemist chunk C2b). Accomplished Alchemist adds X mana of ONE
+// colour per tap, so a closed-form loop (ApplyUntapLoop) must choose each tap's colour from what is still
+// OWED -- Stroke of Genius wants {U}, Ezuri's pump {G}{G}{G}, Scholar's drain {B}, Seedcradle Witch's own
+// untap {G}{W}. Non-null ONLY while ApplyUntapLoop runs (a scoped thread_local, the g_etb_untap_priority
+// shape), so every other caller of ApplyActivatedUntap keeps C2a's fixed rule byte-for-byte. A mana-payment
+// choice (the standing exemption): it never decides WHAT the mana buys, only which colour of it floats.
+inline thread_local const ManaCost* g_untap_loop_owed = nullptr;
+
+// The colour to tap a live mana target for ahead of ONE untap activation costing `unit`, given the float.
+//   * no loop running (g_untap_loop_owed null): C2a's rule -- the unit's first coloured pip the creature
+//     makes, else green, else its first colour;
+//   * inside a loop: (1) a pip of THIS activation the float cannot cover (the untap must stay payable --
+//     the Witch's {G}{W} alternates); else (2) the colour with the largest remaining deficit
+//     owed + unit - float; else (3) the C2a rule. Re-evaluated every activation against the REAL float,
+//     so the payer's generic order (WUBRG) eating a banked colour is simply re-tapped later.
+inline Color UntapPreTapColour(const ManaPool& fl, const ManaCost& unit, const std::vector<Color>& prod)
+{
+    auto makes = [&prod](Color c) { return std::find(prod.begin(), prod.end(), c) != prod.end(); };
+    if (g_untap_loop_owed != nullptr)
+    {
+        const ManaCost& ow = *g_untap_loop_owed;
+        const Color cols[5]   = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+        const int   upips[5]  = { unit.white, unit.blue, unit.black, unit.red, unit.green };
+        const int   opips[5]  = { ow.white, ow.blue, ow.black, ow.red, ow.green };
+        const int   have[5]   = { fl.white, fl.blue, fl.black, fl.red, fl.green };
+        for (int i = 0; i < 5; ++i)
+        { if (upips[i] > have[i] && makes(cols[i])) { return cols[i]; } }
+        int best = -1, best_d = 0;
+        for (int i = 0; i < 5; ++i)
+        {
+            const int d = opips[i] + upips[i] - have[i];
+            if (d > best_d && makes(cols[i])) { best = i; best_d = d; }
+        }
+        if (best >= 0) { return cols[best]; }
+    }
+    Color col = prod.front();
+    if      (unit.white > 0 && makes(Color::White)) { col = Color::White; }
+    else if (unit.blue  > 0 && makes(Color::Blue))  { col = Color::Blue; }
+    else if (unit.black > 0 && makes(Color::Black)) { col = Color::Black; }
+    else if (unit.red   > 0 && makes(Color::Red))   { col = Color::Red; }
+    else if (unit.green > 0 && makes(Color::Green)) { col = Color::Green; }
+    else if (makes(Color::Green))                   { col = Color::Green; }
+    return col;
+}
+
 // Perform up to K activations of (shape, source, target). Returns how many resolved. Per activation:
 //   1. re-locate source and target (by number) and re-read the ability through the oracle -- a pair
 //      broken, an Aura moved or a Staff gone mid-loop ends the loop (stranded = no payment);
@@ -30457,14 +30506,7 @@ inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source
             Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
             const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
             const std::vector<Color>& prod = EffectiveProducesFor(state, ctrl, *td, &t);
-            auto makes = [&prod](Color c) { return std::find(prod.begin(), prod.end(), c) != prod.end(); };
-            Color col = prod.front();
-            if      (unit->white > 0 && makes(Color::White)) { col = Color::White; }
-            else if (unit->blue  > 0 && makes(Color::Blue))  { col = Color::Blue; }
-            else if (unit->black > 0 && makes(Color::Black)) { col = Color::Black; }
-            else if (unit->red   > 0 && makes(Color::Red))   { col = Color::Red; }
-            else if (unit->green > 0 && makes(Color::Green)) { col = Color::Green; }
-            else if (makes(Color::Green))                    { col = Color::Green; }
+            const Color col = UntapPreTapColour(state.floating_mana, *unit, prod);
             TapSourceIntoFloat(state, ctrl, t, *td, col, state.floating_mana, nullptr,
                                /*for_creature=*/false, nullptr);
         }
@@ -30525,6 +30567,605 @@ inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source
         }
     }
     return done;
+}
+
+// ==== THE CLOSED-FORM UNTAP LOOP (AccomplishedAlchemist chunk C2b) =====================================
+// Design: docs/design/alchemist-untap-loop.md. Accomplished Alchemist taps for X = life gained this turn;
+// an activated untapper costing c < X on it (Crab Umbra / Galvanic's grant {2}{U}: X >= 4; Staff of
+// Domination {3}+{1}: X >= 5; Seedcradle Witch {2}{G}{W}: X >= 5) makes the mana UNBOUNDED. Each iteration
+// returns the board to the same state plus X - c mana (the Witch adds +3/+3 too, the Staff's bootstrap adds
+// life -- both only ever MORE), unspent mana empties with no burn and the opponent is passive, so every
+// iteration count >= what the payoff needs is outcome-equivalent: K = the EXACT need is a sound dominance
+// fold, not a pick. WHICH payoff and WHETHER to loop stay searched -- the loop is one more ActivateUntap
+// variant (chosen_x = kUntapLoopToNeed, proposed by the provider's UntapActivationCounts), the base plans
+// without it still exist, and the payoff itself (Stroke's X, Scholar's drains, Ezuri's pumps) is cast by
+// the CONTINUATION the loop opens (site 9, kActUntapLoopFunded): every payoff is priced there against the
+// REAL post-loop float, so nothing is ever over-credited.
+//
+// The loop runs the C2a primitives only -- ApplyActivatedUntap (one activation at a time),
+// SpendSelfUntapRepeats (the Staff's gain-life bootstrap and its draws) and TapSourceIntoFloat -- and stops
+// the moment the FLOAT pays the need (both worlds recompute the same need off the same state, so they stop
+// together).
+constexpr int kUntapLoopToNeed  = 1 << 20;   // ActivateUntap chosen_x sentinel: "loop until the payoff is funded"
+constexpr int kUntapLoopCeiling = 256;       // SAFETY ONLY (a mis-modelled free loop cannot hang a rollout);
+                                             // never a lever: every real need is reached far below it
+
+enum UntapLoopPayoff : int
+{
+    kLoopPayNone   = 0,
+    kLoopPayStroke = 1,   // a "target player draws X" spell in hand, at the opponent, X = minimal lethal
+    kLoopPayDrain  = 2,   // Scholar of Athreos' drain to lethal (a drain source already on the battlefield)
+    kLoopPayPump   = 3,   // Ezuri's team pump sized to lethal on the creatures that can attack
+    kLoopPayDraw   = 4,   // Staff of Domination's draw TO FIND a Stroke (only when no kill is reachable)
+};
+struct UntapLoopNeed
+{
+    int      payoff = kLoopPayNone;
+    ManaCost cost;          // the payoff's total mana (pips exact, generic summed)
+    int      count  = 0;    // X / drains / pumps / draws
+    int      source = 0;    // kLoopPayDraw: the drawing permanent's m_number
+    ManaCost unit;          // kLoopPayDrain: ONE activation (the drains are paid one at a time)
+};
+
+// The continuation's KILL FOLD (BpDeriveContinuationList): while non-zero, CollectActions keeps only the
+// kill action of this payoff kind sized >= the count. Set ONLY around that derivation.
+inline thread_local int g_untap_loop_kill_only  = 0;
+inline thread_local int g_untap_loop_kill_count = 0;
+
+ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies);   // ManaPayment.cpp
+
+inline ManaCost ScaleFlatManaCost(const ManaCost& u, int k)
+{
+    ManaCost c;
+    for (int i = 0; i < k; ++i) { SumManaCostInto(c, u); }
+    return c;
+}
+
+inline bool UntapLoopDrainCard(const CardParams& p) { return p.drain_cost.has_value() && p.drain_amount > 0; }
+
+// Ezuri ("{2}{G}{G}{G}: Elf creatures you control get +3/+3"): how many activations make this turn's
+// combat lethal, counting every creature that can attack once the loop has run (the loop's mana creature
+// ends UNTAPPED, so a tapped Alchemist is counted as it will be). -1 = no beneficiary can attack / not a
+// stacking P/T team pump; 0 = combat is already lethal without it.
+inline int TeamPumpLethalCount(const GameState& s, int ctrl, const CardDefinition& sd)
+{
+    const CardParams& pp = sd.params;
+    if (!pp.team_pump_cost.has_value() || pp.team_pump_power <= 0 || pp.team_pump_taps_source) { return -1; }
+    int power = 0, n = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != ctrl || (!q.card.IsCreature() && !q.is_animated)) { continue; }
+        Permanent t = q;
+        if (t.tapped && !t.def_absent)
+        {
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(t.card);
+            if (qd && qd->params.mana_per_life_gained) { t.tapped = false; }
+        }
+        if (!CanAttackFull(t, s.battlefield, ctrl)) { continue; }
+        power += std::max(0, CombatPowerOf(q, s));
+        bool m = pp.team_pump_subtypes.empty();
+        for (const std::string& sub : pp.team_pump_subtypes)
+        { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
+        if (m) { ++n; }
+    }
+    if (n == 0) { return -1; }
+    const int deficit = s.players[static_cast<std::size_t>(1 - ctrl)].life - power;
+    if (deficit <= 0) { return 0; }
+    const int per = pp.team_pump_power * n;
+    return (deficit + per - 1) / per;
+}
+
+// Is library card `d` something an unbounded loop can turn into a kill THIS main once drawn? Only a card
+// the loop's continuation can CAST and that kills on resolution: Stroke of Genius at the opponent. A drawn
+// Scholar of Athreos / Ezuri / Living Wish would need a further post-entry re-plan after its own cast
+// (site 9 opens once per apply -- the first-occurrence rule), so drawing for one this turn buys nothing
+// this turn; the loop does not dig for them (recorded in docs/design/alchemist-untap-loop.md).
+inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefinition& d)
+{
+    (void)ctrl;
+    return d.params.draw_target_player && d.tmpl == CardTemplate::DrawX && s.opponent_library_dealt
+        && !s.opponent_decked;
+}
+
+// THE NEED: the cheapest payoff that WINS this turn (every win this turn is the same goldfish outcome, so
+// funding the cheapest one is the dominance fold -- the continuation still searches every payoff the float
+// affords); failing any, the Staff's draws to the first Stroke in the library (the EDF "draw only to find"
+// precedent; the search is clairvoyant about library order, as the gated look-at-top already is), never the
+// last card. Only payoffs the loop's ONE continuation can complete count: Stroke from hand, a drain source
+// or team pump already on the battlefield. Scholar of Athreos from hand / via Living Wish would need a
+// second post-entry re-plan after its own cast (site 9 opens once per apply), so it is not a this-turn
+// kill and is not funded. payoff == kLoopPayNone -> nothing to buy, so no loop (unbounded mana a goldfish
+// cannot spend is pure cost -- the EldraziFlicker no-sink clause).
+inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
+{
+    UntapLoopNeed best;
+    auto consider = [&best](int payoff, const ManaCost& c, int count, const ManaCost& unit)
+    {
+        if (best.payoff == kLoopPayNone || c.ManaValue() < best.cost.ManaValue())
+        { best.payoff = payoff; best.cost = c; best.count = count; best.unit = unit; best.source = 0; }
+    };
+    const Player& me = s.players[static_cast<std::size_t>(ctrl)];
+    const int opp_life = std::max(1, s.players[static_cast<std::size_t>(1 - ctrl)].life);
+    // (a) Stroke of Genius at the opponent, X = the minimal lethal X (one copy suffices).
+    const int lx = opponentdeck::ForcedDrawLethalX(s);
+    if (lx > 0)
+    {
+        for (const Card& h : me.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (d == nullptr || !d->params.draw_target_player || d->tmpl != CardTemplate::DrawX) { continue; }
+            ManaCost c = EffectiveSpellCost(*d, s, 1);
+            c.generic += lx * std::max(1, static_cast<int>(d->card.m_mana_cost.x_pips));
+            consider(kLoopPayStroke, c, lx, ManaCost{});
+        }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != ctrl || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        // (b) a drain source already out (no {T}, so summoning sickness does not matter).
+        if (UntapLoopDrainCard(d->params))
+        {
+            const int per = std::max(1, DrainLossPerActivation(d->params));
+            const int n = (opp_life + per - 1) / per;
+            const ManaCost unit = EffectiveActivationCost(s, ctrl, p.card, *d->params.drain_cost);
+            consider(kLoopPayDrain, ScaleFlatManaCost(unit, n), n, unit);
+        }
+        // (c) the team pump to lethal.
+        if (d->params.team_pump_cost.has_value())
+        {
+            const int k = TeamPumpLethalCount(s, ctrl, *d);
+            if (k > 0)
+            {
+                consider(kLoopPayPump,
+                         ScaleFlatManaCost(EffectiveActivationCost(s, ctrl, p.card, *d->params.team_pump_cost), k),
+                         k, ManaCost{});
+            }
+        }
+    }
+    if (best.payoff != kLoopPayNone) { return best; }
+    // (d) no kill reachable: the Staff's "{5},{T}: draw" (with its {1} self-untap between draws) TO FIND one.
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != ctrl || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.tap_draw_cost.has_value() || !d->params.self_untap_cost.has_value()) { continue; }
+        const auto& lib = me.library;
+        int k = 0;
+        for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card: drawing it is a loss later
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[i]);
+            if (ld && UntapLoopPayoffCard(s, ctrl, *ld)) { k = static_cast<int>(i) + 1; break; }
+        }
+        if (k <= 0) { continue; }
+        const ManaCost draw  = EffectiveActivationCost(s, ctrl, p.card, *d->params.tap_draw_cost);
+        const ManaCost untap = EffectiveActivationCost(s, ctrl, p.card, *d->params.self_untap_cost);
+        ManaCost c = draw;
+        if (p.tapped) { SumManaCostInto(c, untap); }
+        for (int i = 1; i < k; ++i) { SumManaCostInto(c, draw); SumManaCostInto(c, untap); }
+        if (best.payoff == kLoopPayNone || c.ManaValue() < best.cost.ManaValue())
+        { best.payoff = kLoopPayDraw; best.cost = c; best.count = k; best.source = p.card.m_number; best.unit = ManaCost{}; }
+    }
+    return best;
+}
+
+// Seedcradle Witch's loop is a kill BY ITSELF when its target attacks: each iteration is "+3/+3 and untap"
+// on the same creature, so K iterations give it +3K power -- the (e) payoff "leave the Alchemist untapped to
+// attack". Returns how many iterations make this turn's combat lethal (counting every creature that can
+// attack, the target as it will be -- untapped), or 0 when the shape has no pump / the target cannot
+// attack this turn / combat is already lethal.
+inline int UntapLoopPumpIterations(const GameState& s, int ctrl, int shape, int source_id, int target_id)
+{
+    if (shape != kUntapPumpTarget) { return 0; }
+    const Permanent* src = nullptr;
+    const Permanent* tgt = nullptr;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number == source_id && p.controller_index == ctrl) { src = &p; }
+        if (p.card.m_number == target_id) { tgt = &p; }
+    }
+    if (src == nullptr || tgt == nullptr || tgt->controller_index != ctrl || src->def_absent) { return 0; }
+    const CardDefinition* sd = CardDatabase::Instance().LookupCached(src->card);
+    if (sd == nullptr || sd->params.untap_pump_power <= 0) { return 0; }
+    int power = 0;
+    bool tgt_attacks = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != ctrl || (!q.card.IsCreature() && !q.is_animated)) { continue; }
+        Permanent t = q;
+        if (&q == tgt) { t.tapped = false; }
+        if (!CanAttackFull(t, s.battlefield, ctrl)) { continue; }
+        power += std::max(0, CombatPowerOf(q, s));
+        if (&q == tgt) { tgt_attacks = true; }
+    }
+    if (!tgt_attacks) { return 0; }
+    const int deficit = s.players[static_cast<std::size_t>(1 - ctrl)].life - power;
+    if (deficit <= 0) { return 0; }
+    return (deficit + sd->params.untap_pump_power - 1) / sd->params.untap_pump_power;
+}
+
+// The Staff whose "{2},{T}: You gain 1 life" (+ "{1}: Untap this artifact") can BOOTSTRAP X, or -1.
+inline int UntapLoopGainStaffIndex(const GameState& s, int ctrl, int prefer_id)
+{
+    int found = -1;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != ctrl || p.def_absent || p.card.m_number == 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.tap_lifegain_cost.has_value() || !d->params.self_untap_cost.has_value()
+            || TapLifegainAmount(s, ctrl, *d) <= 0) { continue; }
+        if (p.card.m_number == prefer_id) { return i; }
+        if (found < 0) { found = i; }
+    }
+    return found;
+}
+
+// THE BOOTSTRAP, an exact small search (not a formula) over the abstract state
+// (P = other mana incl. the float, X = the target's yield, Staff tapped, target tapped). Ops:
+//   1 GAIN  -- the Staff's {2},{T}: gain 1 life (+{1} first when it is tapped): X + 1;
+//   2 TAP   -- tap the target for X into the float;
+//   3 UNTAP -- one activation of the untapper (the Staff's {3},{T} + {1} when tapped; Umbra/Galvanic {2}{U};
+//              the Witch {2}{G}{W}).
+// Goal: target untapped with X > the steady per-iteration cost -- from there every TAP+UNTAP nets mana.
+// Returns the FIRST op of a shortest path, 0 when already at the goal, -1 when unreachable. Recomputed
+// from the REAL state before every op by ApplyUntapLoop (so a payment that tapped something else just
+// re-plans), and called by the provider to recognise a reachable loop -- the same function, so the
+// recognition and the execution cannot disagree.
+inline int UntapLoopBootOp(int P, int X, bool sT, bool aT, bool staff_shape, int c_untap, int self_untap,
+                           bool can_gain, int gain_cost)
+{
+    const int c_steady = staff_shape ? c_untap + self_untap : c_untap;
+    const int xgoal = c_steady + 1;
+    if (!aT && X >= xgoal) { return 0; }
+    constexpr int kPCap = 63;
+    P = std::max(0, std::min(P, kPCap));
+    X = std::max(0, std::min(X, xgoal));
+    auto enc = [xgoal](int p, int x, bool s, bool a) { return ((p * (xgoal + 1) + x) * 2 + (s ? 1 : 0)) * 2 + (a ? 1 : 0); };
+    const int nstates = (kPCap + 1) * (xgoal + 1) * 4;
+    std::vector<signed char> first(static_cast<std::size_t>(nstates), 0);   // 0 = unvisited, else first op
+    struct Node { int p, x; bool s, a; };
+    std::vector<Node> q;
+    q.reserve(256);
+    first[static_cast<std::size_t>(enc(P, X, sT, aT))] = -1;   // root marker
+    q.push_back({ P, X, sT, aT });
+    for (std::size_t h = 0; h < q.size(); ++h)
+    {
+        const Node n = q[h];
+        const int f = first[static_cast<std::size_t>(enc(n.p, n.x, n.s, n.a))];
+        for (int op = 1; op <= 3; ++op)
+        {
+            Node m = n;
+            if (op == 1)
+            {
+                const int c = gain_cost + (n.s ? self_untap : 0);
+                if (!can_gain || n.p < c) { continue; }
+                m.p -= c; m.s = true; m.x = std::min(n.x + 1, xgoal);
+            }
+            else if (op == 2)
+            {
+                if (n.a) { continue; }
+                m.p = std::min(n.p + n.x, kPCap); m.a = true;
+            }
+            else
+            {
+                const int c = c_untap + ((staff_shape && n.s) ? self_untap : 0);
+                if (!n.a || n.p < c) { continue; }
+                m.p -= c; m.a = false; if (staff_shape) { m.s = true; }
+            }
+            signed char& slot = first[static_cast<std::size_t>(enc(m.p, m.x, m.s, m.a))];
+            if (slot != 0) { continue; }
+            const int fo = (f < 0) ? op : f;
+            if (!m.a && m.x >= xgoal) { return fo; }
+            slot = static_cast<signed char>(fo);
+            q.push_back(m);
+        }
+    }
+    return -1;
+}
+
+// The abstract state of (shape, source, target) off the real board, fed to UntapLoopBootOp. -1 when the
+// target cannot be a loop target at all (not ours, not a mana creature, summoning-sick, the ability gone).
+// `x_extra` projects life the plan has yet to gain onto a mana_per_life_gained target (recognition only).
+inline int UntapLoopNextOp(const GameState& s, int ctrl, int shape, int si, int ti, int* gain_staff,
+                           int x_extra = 0)
+{
+    const Permanent& src = s.battlefield[static_cast<std::size_t>(si)];
+    const Permanent& tgt = s.battlefield[static_cast<std::size_t>(ti)];
+    if (tgt.controller_index != ctrl || tgt.def_absent) { return -1; }
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(tgt.card);
+    if (td == nullptr || td->params.produces.empty()) { return -1; }
+    {
+        Permanent probe = tgt;
+        probe.tapped = false;
+        if (!CanTapNow(probe, s.battlefield)) { return -1; }   // summoning-sick: no tap, no loop
+    }
+    const CardDefinition* sd = src.def_absent ? nullptr : CardDatabase::Instance().LookupCached(src.card);
+    const bool staff_shape = shape == kUntapStaffTarget;
+    int c_untap = 0, self_untap = 0;
+    if (staff_shape)
+    {
+        if (!sd || !sd->params.untap_target_creature_cost || !sd->params.self_untap_cost) { return -1; }
+        c_untap    = EffectiveActivationCost(s, ctrl, src.card, *sd->params.untap_target_creature_cost).ManaValue();
+        self_untap = EffectiveActivationCost(s, ctrl, src.card, *sd->params.self_untap_cost).ManaValue();
+    }
+    else
+    {
+        const std::optional<ManaCost> u = UntapUnitCost(s, ctrl, shape, src, tgt);
+        if (!u) { return -1; }
+        c_untap = u->ManaValue();
+    }
+    const int X = PermanentManaYield(s, tgt, *td) + (td->params.mana_per_life_gained ? x_extra : 0);
+    const int gi = UntapLoopGainStaffIndex(s, ctrl, staff_shape ? src.card.m_number : 0);
+    if (gain_staff) { *gain_staff = gi; }
+    bool sT = staff_shape ? src.tapped : false;
+    int gain_cost = 0, gain_untap = self_untap;
+    if (gi >= 0)
+    {
+        const Permanent& gs = s.battlefield[static_cast<std::size_t>(gi)];
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(gs.card);
+        gain_cost  = EffectiveActivationCost(s, ctrl, gs.card, *gd->params.tap_lifegain_cost).ManaValue();
+        gain_untap = EffectiveActivationCost(s, ctrl, gs.card, *gd->params.self_untap_cost).ManaValue();
+        if (!staff_shape || gs.card.m_number == src.card.m_number) { sT = gs.tapped; }
+    }
+    // A Staff that gains but is NOT the untapper keeps its own tapped state; the abstract model shares one
+    // "Staff tapped" bit, exact when the Staff is the untapper and when it is the only Staff -- the real
+    // payments validate every op either way.
+    const int P = static_cast<int>(AvailableManaPool(s, &tgt).Total() + s.floating_mana.Total());
+    return UntapLoopBootOp(P, X, sT, tgt.tapped, staff_shape, c_untap, staff_shape ? self_untap : gain_untap,
+                           gi >= 0, gain_cost);
+}
+
+inline int UntapLoopFindNum(const GameState& s, int num, int ctrl, bool own)
+{
+    if (num == 0) { return -1; }
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (p.card.m_number == num && (!own || p.controller_index == ctrl)) { return i; }
+    }
+    return -1;
+}
+
+// The life the active player's HAND can still gain this main (Nourish, Feed the Clan's ferocious mode,
+// Weather the Storm's storm copies, Trufflesnout's ETB mode, ...), summed -- a SUPERSET for the loop's
+// recognition only. A plan holds its casts BEFORE its trailing activations, so "cast Nourish, then loop"
+// is ONE plan whose loop is enumerated against the plan-START X; projecting the hand's gain onto it is the
+// enumerate-optimistic half of that, and the resolver (which re-runs the same search off the REAL post-cast
+// state) is the apply-validates half: an over-offered loop does nothing and costs one duplicate variant.
+inline int UntapLoopHandLifegain(const GameState& s, int ctrl)
+{
+    int sum = 0;
+    const int storm_n = std::max(1, s.spells_cast_this_turn + 1);
+    for (const Card& h : s.players[static_cast<std::size_t>(ctrl)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        int g = std::max({ p.cast_lifegain, p.cast_lifegain_ferocious, p.etb_lifegain, p.etb_self_lifegain,
+                           p.etb_modal_lifegain });
+        if (p.storm) { g *= storm_n; }
+        sum += std::max(0, g);
+    }
+    return sum;
+}
+
+// Does the FLOAT alone pay the payoff EXACTLY as it will be paid -- through the same float drain the payer
+// runs first (SpendFloatingTowardCost), one payment at a time? ManaPool::CanPay over the summed cost is not
+// enough for the drains: K separate {2}{B} payments let the WUBRG generic order eat a {B} that a later
+// drain's pip needed, so the summed check passes on a float the payments then strand. A pure check on a
+// copy of the pool (no state touched): Stroke and the team pump are ONE payment, the drains `count` of
+// `unit`, the draws one summed payment (the loop re-funds whatever a short draw round leaves).
+inline bool UntapLoopFloatPays(const ManaPool& fl, const UntapLoopNeed& need)
+{
+    if (need.payoff == kLoopPayNone) { return false; }
+    ManaPool pool = fl;
+    auto pay = [&pool](const ManaCost& c) -> bool
+    {
+        ManaCost left = c;
+        SpendFloatingTowardCost(pool, left);
+        return left.generic == 0 && left.white == 0 && left.blue == 0 && left.black == 0 && left.red == 0
+            && left.green == 0 && left.colorless == 0;
+    };
+    if (need.payoff == kLoopPayDrain && need.count > 0 && need.unit.ManaValue() > 0)
+    {
+        for (int i = 0; i < need.count; ++i) { if (!pay(need.unit)) { return false; } }
+        return true;
+    }
+    return pay(need.cost);
+}
+
+// Is the loop (shape, source, target) reachable from here AND does it buy something the board cannot
+// already pay for? The provider's recognition test (UntapActivationCounts) -- the same need and the same
+// bootstrap search the resolver runs (with the hand's lifegain projected onto X, see above), so an
+// offered loop is one the resolver will drive once the plan's casts have resolved.
+inline bool UntapLoopWorthOffering(const GameState& s, int ctrl, int shape, int source_id, int target_id)
+{
+    const int si = UntapLoopFindNum(s, source_id, ctrl, true);
+    const int ti = UntapLoopFindNum(s, target_id, ctrl, false);
+    if (si < 0 || ti < 0) { return false; }
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, ctrl);
+    bool buys = UntapLoopPumpIterations(s, ctrl, shape, source_id, target_id) > 0;
+    if (!buys && need.payoff != kLoopPayNone)
+    {
+        ManaPool have = AvailableManaPool(s, nullptr);
+        have.AddPool(s.floating_mana);
+        buys = !have.CanPay(need.cost);   // the board already funds it: no loop needed
+    }
+    if (!buys) { return false; }
+    // HUMAN PLAY gets no projection: a loop offered on life the human has not gained yet would be a silent
+    // no-op on the menu if they then skip the gain (the Wirewood Lodge rule) -- they cast the gain, and the
+    // re-prompt offers the loop off the real X.
+    return UntapLoopNextOp(s, ctrl, shape, si, ti, nullptr,
+                           HumanPlayActive() ? 0 : UntapLoopHandLifegain(s, ctrl)) >= 0;
+}
+
+// Does the FLOAT alone pay the loop's need right now? (The site-9 kActUntapLoopFunded key's test, and the
+// continuation's kill fold.)
+inline bool UntapLoopNeedFunded(const GameState& s, int ctrl, int* need_mv, UntapLoopNeed* need_out = nullptr)
+{
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, ctrl);
+    if (need.payoff == kLoopPayNone) { return false; }
+    if (need_mv) { *need_mv = need.cost.ManaValue(); }
+    if (need_out) { *need_out = need; }
+    return UntapLoopFloatPays(s.floating_mana, need);
+}
+
+// Run the loop to its need. Returns the number of UNTAP activations performed (0 = nothing happened).
+inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, int target_id)
+{
+    UntapLoopNeed need = ComputeUntapLoopNeed(state, ctrl);
+    const int k_pump = UntapLoopPumpIterations(state, ctrl, shape, source_id, target_id);
+    if (need.payoff == kLoopPayNone && k_pump <= 0) { return 0; }
+    const bool staff_shape = shape == kUntapStaffTarget;
+    ManaCost goal = need.cost;
+    int staff_untap_mv = 0;
+    if (staff_shape)
+    {
+        // Leave the Staff UNTAPPED at the end ({1} out of the float): a tapped Staff is strictly less
+        // useful (its draw / gain need it untapped to be offered) and the {1} comes out of unbounded mana.
+        const int si0 = UntapLoopFindNum(state, source_id, ctrl, true);
+        if (si0 >= 0)
+        {
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(si0)].card);
+            if (sd && sd->params.self_untap_cost)
+            { staff_untap_mv = EffectiveActivationCost(state, ctrl, sd->card, *sd->params.self_untap_cost).ManaValue(); }
+        }
+        goal.generic += staff_untap_mv;
+    }
+    struct OwedScope
+    {
+        const ManaCost* prev;
+        explicit OwedScope(const ManaCost* o) : prev(g_untap_loop_owed) { g_untap_loop_owed = o; }
+        ~OwedScope() { g_untap_loop_owed = prev; }
+    } _owed(&goal);
+    int done = 0;
+    int draw_rounds = 0;
+    for (int step = 0; step < kUntapLoopCeiling; ++step)
+    {
+        if (OpponentHasLost(state)) { break; }
+        if (k_pump > 0 && done >= k_pump) { break; }   // the Witch's own pump already makes combat lethal
+        if (need.payoff != kLoopPayNone && state.floating_mana.CanPay(goal)
+            && UntapLoopFloatPays(state.floating_mana, need))
+        {
+            // DRAW ONLY TO FIND (the EDF precedent, SpendSurplusOnDrawSinks inside ApplyBlinkLoop): the
+            // float now pays the Staff's draws down to the first Stroke, so draw them HERE -- a card drawn
+            // by an activation opens no re-plan of its own, while the loop's continuation (site 9, after
+            // this trailing action) sees the drawn Stroke in hand. Then the need is recomputed off the new
+            // hand (Stroke's lethal X) and the loop funds THAT. Bounded rounds; a draw it cannot pay ends
+            // the round and the loop funds the rest.
+            if (need.payoff == kLoopPayDraw && draw_rounds < 4)
+            {
+                ++draw_rounds;
+                const int di = UntapLoopFindNum(state, need.source, ctrl, true);
+                if (di < 0) { break; }
+                const CardDefinition* dd = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(di)].card);
+                if (dd == nullptr) { break; }
+                for (int k = 0; k < need.count; ++k)
+                {
+                    if (SpendSelfUntapRepeats(state, ctrl, need.source, PermAbilityMode::TapDraw, *dd, 1) != 1) { break; }
+                }
+                need = ComputeUntapLoopNeed(state, ctrl);
+                if (need.payoff == kLoopPayNone) { break; }
+                goal = need.cost;
+                goal.generic += staff_untap_mv;
+                continue;
+            }
+            break;
+        }
+        const int si = UntapLoopFindNum(state, source_id, ctrl, true);
+        const int ti = UntapLoopFindNum(state, target_id, ctrl, false);
+        if (si < 0 || ti < 0) { break; }
+        int gain_staff = -1;
+        const int op = UntapLoopNextOp(state, ctrl, shape, si, ti, &gain_staff);
+        if (op < 0) { break; }
+        if (op == 0 || op == 3)
+        {
+            if (ApplyActivatedUntap(state, ctrl, shape, source_id, target_id, 1) != 1) { break; }
+            ++done;
+        }
+        else if (op == 1)
+        {
+            if (gain_staff < 0) { break; }
+            const Permanent& gs = state.battlefield[static_cast<std::size_t>(gain_staff)];
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(gs.card);
+            if (!gd || SpendSelfUntapRepeats(state, ctrl, gs.card.m_number, PermAbilityMode::TapLifegain, *gd, 1) != 1)
+            { break; }
+        }
+        else   // op == 2: tap the target into the float, colour by the loop's plan
+        {
+            Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+            if (t.tapped || !UntapTargetIsLiveManaCreature(state, t)) { break; }
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
+            const std::optional<ManaCost> unit =
+                UntapUnitCost(state, ctrl, shape, state.battlefield[static_cast<std::size_t>(si)], t);
+            if (!td || !unit) { break; }
+            const std::vector<Color>& prod = EffectiveProducesFor(state, ctrl, *td, &t);
+            const Color col = UntapPreTapColour(state.floating_mana, *unit, prod);
+            TapSourceIntoFloat(state, ctrl, t, *td, col, state.floating_mana, nullptr, /*for_creature=*/false, nullptr);
+        }
+    }
+    if (staff_shape && done > 0 && staff_untap_mv > 0)
+    {
+        const int si = UntapLoopFindNum(state, source_id, ctrl, true);
+        if (si >= 0 && state.battlefield[static_cast<std::size_t>(si)].tapped
+            && static_cast<int>(state.floating_mana.Total()) >= need.cost.ManaValue() + staff_untap_mv)
+        {
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(si)].card);
+            // Paid out of the float's SURPLUS colour, never a pip the payoff still needs (the payer's
+            // generic order is WUBRG and would eat Stroke's only {U}) -- a mana-payment choice, the
+            // standing exemption; the {1} is generic, so any surplus unit pays it.
+            auto pay_from_surplus = [&](const ManaCost& c) -> bool
+            {
+                if (c.white + c.blue + c.black + c.red + c.green + c.colorless > 0) { return false; }
+                ManaPool f = state.floating_mana;
+                for (int k = 0; k < c.generic; ++k)
+                {
+                    int* slot[7] = { &f.colorless, &f.wild, &f.white, &f.blue, &f.black, &f.red, &f.green };
+                    const int owe[7] = { 0, 0, need.cost.white, need.cost.blue, need.cost.black, need.cost.red,
+                                         need.cost.green };
+                    int best = -1, best_s = 0;
+                    for (int i = 0; i < 7; ++i)
+                    {
+                        const int sur = *slot[i] - owe[i];
+                        if (sur > best_s) { best = i; best_s = sur; }
+                    }
+                    if (best < 0) { return false; }
+                    --*slot[best];
+                    if (best == 1 && f.wild_c > f.wild) { f.wild_c = f.wild; }
+                }
+                // Only if the payoff is still paid exactly afterwards (otherwise the Staff stays tapped).
+                if (need.payoff != kLoopPayNone && !UntapLoopFloatPays(f, need)) { return false; }
+                state.floating_mana = f;
+                return true;
+            };
+            const ManaCost su = (sd && sd->params.self_untap_cost)
+                ? EffectiveActivationCost(state, ctrl, sd->card, *sd->params.self_untap_cost) : ManaCost{};
+            if (sd && sd->params.self_untap_cost && pay_from_surplus(su))
+            {
+                state.battlefield[static_cast<std::size_t>(si)].tapped = false;
+                state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+            }
+        }
+    }
+    if (g_play_event_sink && !g_tap_speculating && done > 0)
+    {
+        static const char* const kPayoff[] = { "combat", "Stroke of Genius", "the drain", "the team pump", "the draws" };
+        EmitPlayEvent(state.turn_number, "ability",
+                      "untap loop x" + std::to_string(done) + " -- floating "
+                      + std::to_string(state.floating_mana.Total()) + " mana for "
+                      + kPayoff[std::clamp(need.payoff, 0, 4)]);
+    }
+    return done;
+}
+
+// THE ONE DISPATCH both worlds call for an ActivateUntap action: the closed-form loop for the sentinel
+// count, the K-activation resolver otherwise.
+inline int ApplyUntapAction(GameState& state, int ctrl, int shape, int source_id, int target_id, int chosen_x)
+{
+    if (chosen_x >= kUntapLoopToNeed) { return ApplyUntapLoop(state, ctrl, shape, source_id, target_id); }
+    return ApplyActivatedUntap(state, ctrl, shape, source_id, target_id, std::max(1, chosen_x));
 }
 
 // Is the source of a battlefield ActivatePermAbility a CREATURE (Recruitment Officer's dig, King

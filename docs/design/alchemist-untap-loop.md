@@ -1,6 +1,6 @@
 # Accomplished Alchemist untap loop — design (AccomplishedAlchemist deck)
 
-Status: IMPLEMENTATION IN PROGRESS (2026-10-18). Per-deck ledger: `analysis-AccomplishedAlchemist.md`.
+Status: IMPLEMENTATION IN PROGRESS (2026-10-18) -- chunks A, B, C1, C2a, C2b landed; Stage 5 verification next. Per-deck ledger: `analysis-AccomplishedAlchemist.md`.
 Card drafts (research fan-out, gitignored): `logs/aa_drafts/*.md|json` in the worktree.
 
 ## What the engine could not do (verified 2026-10-18, file:line at fork 2176032d)
@@ -80,6 +80,14 @@ SEARCHED (one Action variant per payoff K). Ceiling = safety cap only, never a l
   Galvanic's searched partner, the Staff's {1} interleave, the LIFEGAIN breakpoint as a site-9 route
   (kActLifeYield), viewer verbs untapact= / tapdraw=). The closed-form loop + payoff sizing is C2b; its
   hand-off list is in the ledger's "Chunk C2a" section.
+  **C2b LANDED 2026-10-18** (the closed-form loop + its payoffs; details in the ledger's "Chunk C2b"):
+  `ActivateUntap` with `chosen_x = kUntapLoopToNeed` (no new Action kind -- every ActivateUntap site already
+  handles it) resolved by ONE shared `ApplyUntapLoop` behind `ApplyUntapAction` (rollout + executor), driving
+  only the C2a primitives. It stops when the FLOAT pays the cheapest this-turn kill exactly
+  (`ComputeUntapLoopNeed` + `UntapLoopFloatPays`); the Staff bootstrap is an exact BFS (`UntapLoopBootOp`);
+  tap colour per iteration = what is still owed (`UntapPreTapColour`). The payoff is cast by the site-9
+  continuation the loop opens (`kActUntapLoopFunded`), folded to the proven kill (`MTG_UNTAP_LOOP_KILL_FOLD`).
+  Viewer: `untaploop=`.
 * **Chunk D — viewer.** Verbs for untap activations / loop, etb_mode, colour; DECISIONS.md rows;
   audit_viewer_decisions manifest.
 
@@ -92,3 +100,38 @@ SEARCHED (one Action variant per payoff K). Ceiling = safety cap only, never a l
 4. Proven loop stamps infinite life (Melira-style tiebreak)? default: no until measured.
 5. Weather the Storm cast order (storm wants late, Alchemist wants life early) — USER-owned; generic
    order kept, storm-last proposed.
+
+## What C2b chose, and why (2026-10-18)
+
+* **Funding: resolve the loop, then a BREAKPOINT -- not a ritual_float credit.** A credit would have the
+  enumerator price casts against mana the loop has not made yet (the loop's yield depends on the X the plan's
+  own casts reach, and on colours). Instead the loop is a trailing action; when it stops, the float pays the
+  need, which presents a NEW site-9 key (`kActUntapLoopFunded`, the need's mana value in bits 40+), and the
+  continuation enumerates against the REAL float. Enumerate-optimistic only where it is safe: the loop's
+  recognition projects the hand's lifegain onto X (autonomous only), and a loop on an untapped mana creature
+  is priced at zero plan mana (its first activation is paid by its own first tap); the resolver validates.
+* **Need = the cheapest this-turn kill** (every win this turn scores the same), so ONE loop variant per
+  (untapper, target) instead of one per payoff -- a sound fold. Payoffs the ONE continuation can finish:
+  Stroke of Genius from hand at the opponent (minimal lethal X), a drain source on the battlefield (Scholar,
+  lethal count -- provider `ManaSinkActivationCounts`), Ezuri's main-phase pump to lethal (new
+  `MainPhaseTeamPumpCounts` hook, float-gated; mode 2 now adds toughness), the Witch's own +3/+3 on an
+  attacking target, and the Staff's draws TO FIND a Stroke (done INSIDE the loop -- a drawn card opens no
+  re-plan of its own -- then the loop funds the Stroke).
+* **NOT reachable this turn, by the engine's structure (recorded, not a deferral of a card):** Scholar of
+  Athreos from hand or via Living Wish, Ezuri from hand. Each needs a SECOND post-entry re-plan after its own
+  cast, and site 9 opens once per apply (the first-occurrence rule). Wishing / casting it this turn and
+  looping next turn is still searched.
+* **The kill fold** (`MTG_UNTAP_LOOP_KILL_FOLD`, default ON): when the float pays the need, the continuation
+  list is the proven kill alone. Without it a post-loop continuation (~50 floating mana, every hand subset
+  affordable) enumerated 9k-360k plans; one d5 game went 9 s / 148 MB -> 175 s / 4.7 GB and the pooled
+  probe tripped the RSS cap. Sound: a win this turn dominates every alternative in a goldfish.
+* **Proven-loop memo marker: NOT built.** With the kill fold the post-loop states are no longer a
+  fragmentation problem, and folding `life_gained_this_turn` would be unsound for a state whose payoff is
+  still being funded off a specific X.
+* **Remaining search cost (diagnosed, not changed -- engine-wide folds):** the slow games are per-node cost
+  in the greedy subset walk (`SolveUncached`; d3 gi55: 11.8 M subset visits, 7.9 M payment calls, ~250-800
+  payment solves per unit) and the EnumeratePlans odometer. `MTG_BRANCH_SHAPE` prices an
+  INTERCHANGEABLE-COPY fold at 7.26x odo (4 Nourish / Feed the Clan / Stroke / Living Wish copies are each a
+  x2 group) and a one-per-class LAND-AURA host fold at 3.7x (Utopia Sprawl x 18 Forests x its colour axis;
+  `FoldInterchangeableAuraHosts` keeps one member per land-Aura in hand). Both are engine-wide and move other
+  decks' ground truth -- surfaced to the USER, not adopted here.

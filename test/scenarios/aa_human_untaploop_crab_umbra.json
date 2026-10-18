@@ -1,0 +1,55 @@
+{
+  "_comment": [
+    "VIEWER WIRING (chunk C2b, 2026-10-18): the closed-form untap LOOP is reachable by a human through its",
+    "own line verb `untaploop=` (ActivateUntap, chosen_x = kUntapLoopToNeed). Mid-turn frame: Nourish already",
+    "resolved (life_gained_this_turn 6), Crab Umbra on an untapped Accomplished Alchemist, Stroke of Genius in",
+    "hand, opponent library 20. The line `untaploop=Crab Umbra` names exactly one plan (accept); committing it",
+    "runs the loop with the summary naming it. (Human play gets no lifegain PROJECTION: a loop offered before",
+    "the gain would be a silent no-op if the gain were then skipped -- the human casts Nourish, and the",
+    "re-prompt offers the loop off the real X.)"
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Crab Umbra",
+      "equips": "Accomplished Alchemist"
+    }
+  ],
+  "hand": [
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "validate_line": "untaploop=Crab Umbra",
+  "expect_verdict": "accept",
+  "human_lines": [
+    "untaploop=Crab Umbra"
+  ],
+  "expect_human_summary_contains": "LOOP until the kill is funded",
+  "life_gained_this_turn": 6
+}

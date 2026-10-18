@@ -3138,6 +3138,21 @@ public:
     // never a pick: the search still branches over all four.
     std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
                                          const CardDefinition& def) const override;
+    // THE CLOSED-FORM UNTAP LOOP (chunk C2b): the generic 1..3 counts PLUS kUntapLoopToNeed whenever
+    // the untapper is aimed at a mana_per_life_gained creature, the loop is reachable (bootstrap
+    // included -- UntapLoopNextOp, the resolver's own search) and it buys a payoff the board cannot
+    // already pay for (UntapLoopWorthOffering). One more searched variant, never a replacement.
+    std::vector<int> UntapActivationCounts(const GameState& s, const Permanent& source,
+                                           const Permanent& target, int shape,
+                                           int max_affordable) const override;
+    // The loop's payoffs, sized against the post-loop float: Scholar of Athreos' drain to LETHAL
+    // (the EldraziFlicker finish count) and Staff of Domination's draw TO FIND a payoff (the first
+    // payoff card's depth, never the last card). Added to the generic 1..3, never replacing it.
+    std::vector<int> ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                              PermAbilityMode mode, int max_affordable) const override;
+    // Ezuri's main-phase pump to lethal, only while FLOATING mana funds it (see the base hook).
+    std::vector<int> MainPhaseTeamPumpCounts(const GameState& s, const Permanent& source,
+                                             int max_affordable) const override;
 };
 
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval

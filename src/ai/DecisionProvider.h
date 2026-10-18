@@ -1521,6 +1521,17 @@ public:
         return out;
     }
 
+    // MainPhaseTeamPumpCounts -- MAIN-PHASE activation counts for a stacking P/T team pump with no
+    // keyword rider and no {T} (Ezuri, Renegade Leader's "{2}{G}{G}{G}: Elf creatures you control get
+    // +3/+3"; Action::Kind::ActivatePump mode 2). The combat converter (ApplyFirebreathing) already
+    // spends LAND mana on such a pump at combat, which is why the generic answer is EMPTY (every other
+    // deck byte-identical); what it cannot spend is FLOATING mana, which empties when main 1 ends (CR
+    // 500.4) -- exactly what an unbounded untap loop makes. A provider that recognises that proposes the
+    // count that makes combat lethal (AccomplishedAlchemist chunk C2b); the search picks.
+    virtual std::vector<int> MainPhaseTeamPumpCounts(const GameState& s, const Permanent& source,
+                                                     int max_affordable) const
+    { (void)s; (void)source; (void)max_affordable; return {}; }
+
     // BlinkTargetCandidates -- which creatures a blink outlet may target, as m_numbers. Empty means
     // "no narrowing": the enumerator offers EVERY legal target, which is the generic answer and the
     // only correct one absent a measured reason (dropping a target would be the enumerator stealing

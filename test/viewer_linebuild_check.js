@@ -312,6 +312,9 @@ function checkActivationVerbs() {
        untapSrc: 7, untapTarget: 42 }, 'untapact=Staff of Domination#7@42'],
     [{ name: 'Crab Umbra', src: 'Crab Umbra', kind: 'activate', verb: 'untapact', untapTarget: 42 },
      'untapact=Crab Umbra@42'],
+    // The closed-form untap LOOP (chunk C2b): the same shape under its own verb.
+    [{ name: 'Crab Umbra', src: 'Crab Umbra', kind: 'activate', verb: 'untapact', untapTarget: 42,
+       untapLoop: true }, 'untaploop=Crab Umbra@42'],
     [{ name: 'Staff of Domination', src: 'Staff of Domination', kind: 'activate', verb: 'tapdraw' },
      'tapdraw=Staff of Domination'],
   ];

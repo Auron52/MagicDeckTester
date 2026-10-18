@@ -6386,13 +6386,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // Activated untappers (executor twin of ApplyPlanDirect's trailing branch): the SAME shared
             // resolver, so the K activations, their payments and their stop conditions are identical.
-            const int done = ApplyActivatedUntap(state, state.active_player_index, a.gy_exile_mode,
-                                                 a.sac_source_id, a.sac_victim_id, std::max(1, a.chosen_x));
+            // ApplyUntapAction: the closed-form loop (chunk C2b) for the kUntapLoopToNeed count.
+            const int done = ApplyUntapAction(state, state.active_player_index, a.gy_exile_mode,
+                                              a.sac_source_id, a.sac_victim_id, a.chosen_x);
             if (m_logger && done > 0)
             {
                 m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
                                      "untap " + a.victim_name.str()
-                                     + (done > 1 ? " x" + std::to_string(done) : std::string()));
+                                     + (done > 1 ? " x" + std::to_string(done) : std::string())
+                                     + (a.chosen_x >= kUntapLoopToNeed ? " (loop)" : ""));
             }
             if (ActDropAuditOn())
             {

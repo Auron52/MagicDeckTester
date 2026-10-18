@@ -1392,7 +1392,7 @@ function activatableSources(){
                 + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '')
                 // An activated UNTAPPER (untapact=) is the blink case: the TARGET is the choice, and
                 // the SOURCE copy joins the key too (two Staffs / two Crab Umbras share a name).
-                + (a.verb==='untapact' ? '|'+a.untap_target+'|'+(a.untap_src||0) : '');
+                + (a.verb==='untapact' ? '|'+a.untap_target+'|'+(a.untap_src||0)+(a.untap_loop ? '|loop' : '') : '');
       // An Aura swap the engine will apply IN COMBAT (human-play swap timing, `in_combat` on the
       // action) -- OR'd over the plans, since the swap-only line is the one that carries it.
       const inCombat = !!a.in_combat || !!((opts[src]||{})[key] || {}).inCombat;
@@ -1415,7 +1415,9 @@ function activatableSources(){
                                          untapTarget:(a.verb==='untapact' ? a.untap_target : undefined),
                                          untapTargetName:(a.verb==='untapact' ? a.untap_target_name : undefined),
                                          untapSrc:(a.verb==='untapact' ? (a.untap_src||0) : undefined),
-                                         untapShape:(a.verb==='untapact' ? a.untap_shape : undefined) };
+                                         untapShape:(a.verb==='untapact' ? a.untap_shape : undefined),
+                                         // The closed-form LOOP (chunk C2b): `untaploop=` on the line.
+                                         untapLoop:(a.verb==='untapact' && !!a.untap_loop) };
       // FUSED "Investigate & crack" (docs/design/viewer-line-macros.md): a SECOND, synthetic option
       // beside the plain Investigate, so the picker offers both and the human's ordinary click is
       // unchanged. It is synthesised in the viewer rather than enumerated by the engine because
@@ -1458,6 +1460,8 @@ function optTarget(o){ return o.verb==='blink' ? o.blinkTarget : o.verb==='untap
 // What an untapper option does to its target, in words ("untap X", Seedcradle Witch's "+3/+3 and untap X").
 function untapActText(o){
   const t = o.untapTargetName || 'a creature';
+  // The closed-form LOOP (AccomplishedAlchemist chunk C2b): repeat until the floating mana pays the kill.
+  if (o.untapLoop) return `LOOP: tap and ${o.untapShape===4 ? 'pump+untap' : 'untap'} ${t} until the mana funds the kill`;
   return o.untapShape===4 ? `give ${t} +3/+3 and untap it` : `untap ${t}`;
 }
 // Umezawa's Jitte counter-spend modes, in ONE place: three sites labelled them and a fourth mode
@@ -1650,7 +1654,9 @@ function toggleActivate(name, which){
   // An activated UNTAPPER with several targets (Staff of Domination, Seedcradle Witch, two Crab
   // Umbras) is the blink shape exactly: the choice is a creature on the board, so it is made by
   // clicking that creature. Same armed mode, same cancel gesture.
-  if (opts.length > 1 && opts.every(o=>o.verb==='untapact')
+  // A closed-form LOOP option (chunk C2b) shares its target with the single activation, so a board
+  // click could not tell them apart: with one on offer the ordinary picker lists every option instead.
+  if (opts.length > 1 && opts.every(o=>o.verb==='untapact' && !o.untapLoop)
       && new Set(opts.map(o=>o.untapTarget)).size > 1) {
     S.blinkMode = { src:name, opts };
     S.leMode=false; S.vialMode=null; S.actPick=null;
@@ -1719,7 +1725,9 @@ function queueActivation(src, opt){
                 blinkCount: opt.blinkCount,
                 // An activated untapper: `untapact=<source>#<source num>@<target num>` (LB.untapIds).
                 untapTarget: opt.untapTarget, untapTargetName: opt.untapTargetName,
-                untapSrc: opt.untapSrc, untapShape: opt.untapShape });
+                untapSrc: opt.untapSrc, untapShape: opt.untapShape,
+                // ...and the closed-form LOOP variant writes `untaploop=` (chunk C2b).
+                untapLoop: opt.untapLoop || undefined });
   flashHint(sac
     ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
     : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
@@ -1734,6 +1742,7 @@ function queueActivation(src, opt){
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
     : opt.verb==='taplife' ? `${src}: tapping it to gain life. Commit the phase to resolve it.`
     : opt.verb==='tapdraw' ? `${src}: tapping it to draw a card. Commit the phase to resolve it.`
+    : (opt.verb==='untapact' && opt.untapLoop) ? `${src}: ${untapActText(opt)}. Commit the phase to run the loop; the rest of the main phase then spends the floating mana.`
     : opt.verb==='untapact' ? `${src}: ${untapActText(opt)}. Click again to repeat it, then commit.`
     : opt.verb==='landsearch' ? `${src}: sacrificing it to search for land(s). Commit the phase to resolve it — you pick WHICH lands as it resolves.`
     : opt.verb==='steal' ? `${src}: tapping five untapped Vampires to gain control of a creature. Commit the phase to resolve it — you pick the creature, then the five Vampires to tap, as it resolves.`

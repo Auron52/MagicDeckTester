@@ -4815,6 +4815,12 @@ std::vector<int> DecisionProvider::DrawXCandidates(const GameState& s, const Car
             return out;
         }
         if (lethal > 0 && lethal <= max_affordable) { out.push_back(lethal); }
+        // ...and when the lethal X is NOT affordable, the MAX-affordable X as one extra option
+        // (AccomplishedAlchemist chunk C2b, restoring the multi-turn line the caveat above names: a
+        // deck-out split over two turns -- "make them draw max now, finish next turn" -- is a real
+        // line the minimal-lethal-only prune made unfindable at any budget). When lethal IS
+        // affordable, max is dominated by it (the same kill for more mana), so it is not added.
+        else if (lethal > 0 && max_affordable >= 1) { out.push_back(max_affordable); }
         return out;
     }
     // SELF: capped at our library -- drawing past it loses the game (CR 104.3c), so no autonomous
@@ -42937,6 +42943,60 @@ std::vector<int> AccomplishedAlchemistProvider::EtbChoiceCandidates(const GameSt
     std::vector<int> kept;
     for (int v : kOrder) { if (std::find(out.begin(), out.end(), v) != out.end()) { kept.push_back(v); } }
     return kept.empty() ? out : kept;
+}
+
+// ---- AccomplishedAlchemistProvider: the closed-form untap loop and its payoffs (chunk C2b) ---------
+std::vector<int> AccomplishedAlchemistProvider::UntapActivationCounts(const GameState& s, const Permanent& source,
+                                                                      const Permanent& target, int shape,
+                                                                      int max_affordable) const
+{
+    std::vector<int> out = SelesnyaLifegainProvider::UntapActivationCounts(s, source, target, shape, max_affordable);
+    if (target.def_absent || target.controller_index != source.controller_index) { return out; }
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(target.card);
+    if (td == nullptr || !td->params.mana_per_life_gained) { return out; }
+    if (UntapLoopWorthOffering(s, source.controller_index, shape, source.card.m_number, target.card.m_number))
+    { out.push_back(kUntapLoopToNeed); }
+    return out;
+}
+
+std::vector<int> AccomplishedAlchemistProvider::ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                                                         PermAbilityMode mode,
+                                                                         int max_affordable) const
+{
+    std::vector<int> out = SelesnyaLifegainProvider::ManaSinkActivationCounts(s, source, mode, max_affordable);
+    const CardDefinition* d = source.def_absent ? nullptr : CardDatabase::Instance().LookupCached(source.card);
+    if (d == nullptr) { return out; }
+    const int me = source.controller_index;
+    int finish = 0;
+    if (mode == PermAbilityMode::Drain && UntapLoopDrainCard(d->params))
+    {
+        const int per = std::max(1, DrainLossPerActivation(d->params));
+        finish = (std::max(1, s.players[1 - me].life) + per - 1) / per;
+    }
+    else if (mode == PermAbilityMode::TapDraw && d->params.self_untap_cost.has_value())
+    {
+        const auto& lib = s.players[me].library;
+        for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[i]);
+            if (ld && UntapLoopPayoffCard(s, me, *ld)) { finish = static_cast<int>(i) + 1; break; }
+        }
+    }
+    if (finish > 0 && finish <= max_affordable
+        && std::find(out.begin(), out.end(), finish) == out.end())
+    { out.push_back(finish); }
+    return out;
+}
+
+std::vector<int> AccomplishedAlchemistProvider::MainPhaseTeamPumpCounts(const GameState& s, const Permanent& source,
+                                                                        int max_affordable) const
+{
+    if (s.floating_mana.Total() <= 0 || source.def_absent) { return {}; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+    if (d == nullptr) { return {}; }
+    const int k = TeamPumpLethalCount(s, source.controller_index, *d);
+    if (k <= 0 || k > max_affordable) { return {}; }
+    return { k };
 }
 
 // ---- SelesnyaLifegainProvider::CleanupDiscardCandidates ----------------------

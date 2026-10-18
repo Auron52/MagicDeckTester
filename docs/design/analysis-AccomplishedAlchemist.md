@@ -6,9 +6,10 @@ forked from `phase-1-2-deck-analyzer` @ 2176032d).
 
 ## RESUME POINT
 
-Chunks A, B, C1, C2a landed (C2a: the four untappers as faithful single / K-repeat activations, Galvanic's
-searched partner, the LIFEGAIN breakpoint, viewer verbs). Next: chunk C2b (closed-form untap loop + payoff
-sizing on the C2a primitives -- see "Chunk C2a" below for the hand-off), then Stage 5 verification.
+Chunks A, B, C1, C2a, C2b landed (C2b: the closed-form untap loop + its payoffs, the continuation kill fold,
+viewer `untaploop=`). Next: Stage 5 verification (claude-play sweep, mismatch harnesses), the suite entry
+(regression_cases.sh + suite_gate --cost), then profile -> mulligan -> value leaf. Open USER items are listed
+under "Open questions surfaced to USER".
 
 ## The deck
 
@@ -54,6 +55,75 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk C2b (2026-10-18) -- landed: the closed-form untap loop and its payoffs
+
+* **Shape.** No new Action kind: the loop is `ActivateUntap` with `chosen_x = kUntapLoopToNeed` (1<<20), so
+  every ActivateUntap site (family key, trailing pass, dedup sig, line hold, viewer) already carries it. ONE
+  dispatch `ApplyUntapAction` (rollout trailing pass + AIEngine twin) -> `ApplyUntapLoop` (SpellEffects.h),
+  which drives ONLY the C2a primitives: `ApplyActivatedUntap` one activation at a time, `SpendSelfUntapRepeats`
+  (the Staff's gain-life bootstrap and its draws), `TapSourceIntoFloat`. Safety ceiling 256 steps (never a lever).
+* **Sizing = the exact need** (`ComputeUntapLoopNeed`): the cheapest this-turn kill -- Stroke of Genius from hand
+  at the opponent (X = minimal lethal), a drain source ON the battlefield (Scholar, lethal count), Ezuri's team
+  pump to lethal on the creatures that can attack (the loop's Alchemist counted untapped); failing all, the
+  Staff's draws to the first Stroke in the library (never the last card). The loop stops when the FLOAT pays it
+  EXACTLY (`UntapLoopFloatPays`: the payer's own float drain, payment by payment -- K separate drains can strand a
+  {B} that a summed CanPay passes). Seedcradle Witch: its own +3/+3 on an attacking target is a kill by itself
+  (`UntapLoopPumpIterations`). Every K >= need is outcome-equivalent (same board + mana each iteration, no burn,
+  passive opponent), so the stop is a dominance fold; one variant per (untapper, target), not per payoff (every
+  win this turn scores the same).
+* **Colour per tap** (`UntapPreTapColour`, scoped `g_untap_loop_owed`): a pip of THIS untap the float lacks
+  first (the Witch's {G}{W} alternates), else the colour with the largest remaining deficit (U for Stroke, B for
+  the drain, G for Ezuri), else C2a's rule. Null outside the loop: C2a byte-identical.
+* **Staff bootstrap** (`UntapLoopBootOp`): an exact BFS over (P, X, Staff tapped, target tapped) with ops gain /
+  tap / untap -> the first op of a shortest path to "target untapped, X > steady cost"; re-run off the REAL state
+  before every op. Minimal P matches the hand formula (X = 4/3/2 -> P = 2/5/8; unit-pinned). The loop ends by
+  untapping the Staff out of the float's SURPLUS colour (never the payoff's pip).
+* **Funding the payoff: a breakpoint, not a credit.** When the loop stops, the new site-9 key
+  `kActUntapLoopFunded` (need MV in bits 40+) arms the continuation, which prices the payoff against the real
+  float. PlanOpensBreakpoint marks any loop plan. Provider recognition (`UntapActivationCounts` override ->
+  `UntapLoopWorthOffering`): the bootstrap search with the HAND's lifegain projected onto X (so "cast Nourish,
+  then loop" is one plan; autonomous only -- human play gets no projection, the Wirewood rule), and only when the
+  board cannot already pay the need. A loop on an UNTAPPED mana creature is priced at zero plan mana (its first
+  activation is paid by its own first tap). Enumerate-optimistic, the resolver validates.
+* **THE KILL FOLD** (`MTG_UNTAP_LOOP_KILL_FOLD`, DEFAULT ON, =0 hatch) in `BpDeriveContinuationList`: when the
+  float pays the need, the continuation list is the proven kill only (CollectActions under
+  `g_untap_loop_kill_only`). Without it the continuations ran to 9k-360k plans (every hand subset affordable);
+  seed 9113 d5 went 9 s / 148 MB -> 175 s / 4.7 GB and the first pooled probe tripped the RSS cap. A win this turn
+  dominates every alternative in a goldfish: sound.
+* **Payoff hooks.** Chunk B's `DrawXCandidates` now also offers the opponent the MAX-affordable X when the lethal X
+  is not affordable (the two-turn split deck-out; dominated when lethal is affordable, so not added then).
+  `AccomplishedAlchemistProvider::ManaSinkActivationCounts`: Scholar's lethal drain count; the Staff's draw-to-find
+  depth. New `DecisionProvider::MainPhaseTeamPumpCounts` (generic empty; the engine asks only while FLOATING mana
+  exists) -> Ezuri's main-phase ActivatePump mode 2 with the lethal K; `ApplyActivatePump` mode 2 now adds
+  `team_pump_tough` too (0 for Sethron / Valiant Knight / Vito).
+* **Not reachable THIS turn (engine structure, not a card deferral):** Scholar from hand / via Living Wish and
+  Ezuri from hand -- each needs a second post-entry re-plan after its own cast, and site 9 opens once per apply.
+  Their two-turn lines stay searched.
+* **Proven-loop memo marker: not built** (post-loop states are folded to the kill; folding life_gained would be
+  unsound while a need is still being funded off a specific X).
+* **Viewer.** `untaploop=<source>[#n][@target]` (`UntapActSpec::loop`; plan JSON `"untap_loop": true` on the
+  untapact verb; linebuild writes the verb; index.html lists it in the ordinary picker beside the single
+  activation, never the board-click arm). DECISIONS.md row; audit manifest note (rides the four untapper params).
+  New scenario key `life_gained_this_turn` (mid-turn frames). Scenarios `aa_loop_umbra_stroke` (autonomous:
+  Nourish -> loop -> Stroke X = 40 T4) and `aa_human_untaploop_crab_umbra`; linebuild case.
+* **Tests** (test_accomplished_alchemist.cpp): Umbra loop to Stroke's lethal X (need, exact stop, offered as one
+  more variant, both worlds win); thresholds (Umbra X = 3 no loop / X = 4 loop; Staff minimal P 2/5/8; tapped
+  target); Staff bootstrap from X = 3 with P = 5 (and no loop at P = 4), Staff left untapped, both worlds win;
+  Galvanic pair -> Scholar drains (black floated, both worlds win); Ezuri main-phase pump (lethal K = 3, +9/+9,
+  hook float-gated, both worlds); Witch alternating G/W, its own +3/+3 as the kill (6 iterations); Staff draws to
+  a Stroke at depth 3 inside the loop then the kill (both worlds). mtg-test 1482/1482; scenarios 225/225;
+  viewer linebuild 0 FAIL.
+* **Deck measurement** (60 games seed 9100, pooled, contended wall): d3 b20 avg 6.3167 -> 5.6500 (24 faster,
+  1 slower: gi30 T7 -> T8), d5 b40 6.2667 -> 5.5333 (27 faster, 1 slower: gi40 T6 -> T7); job ms d3 1,991,498 ->
+  551,414, d5 2,804,299 -> 898,106; slowest game 1,161 s (gi54, T8) -> 82 s (d5 gi53, T5); C2a's unwon seed 9118
+  now T5; still unwon gi24, gi48 (both arms). The two slower games recover at 10x budget (d3 gi30 b200 T6,
+  d5 gi40 b400 T5; C2a HEAD T7 / T7 there). Smoke: every non-AA case byte-identical to C2a HEAD (selesnya /
+  critter_d0 carry only their known earlier moves).
+* **Remaining search cost (diagnosed, engine-wide, NOT changed):** per-node cost in the greedy subset walk
+  (`SolveUncached`, d3 gi55: 11.8 M subset visits, 7.9 M payment calls, 250-800 payment solves per unit) and the
+  EnumeratePlans odometer; MTG_BRANCH_SHAPE prices an interchangeable-copy fold at 7.26x odo and a one-per-class
+  land-aura host fold at 3.7x (Utopia Sprawl x 18 Forests x its colour axis). Both move other decks' GT: USER.
 
 ## Chunk C2a (2026-10-18) -- landed: the four untappers, Galvanic's searched partner, the lifegain breakpoint
 
@@ -239,6 +309,13 @@ smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLif
   `tap_lifegain_flat` -- each the payload of a verb, never a separate choice): sign-off owed.
 * SelesnyaLifegain play moved by the lifegain breakpoint (5 games faster, 0 slower in smoke) -- GT not
   accepted; acceptance is the USER's call through the normal flow.
+* Chunk C2b: (1) the continuation KILL FOLD (MTG_UNTAP_LOOP_KILL_FOLD default ON) -- a sound dominance fold
+  (a proven win this turn), but it is what made the deck tractable; (2) Stroke at the opponent now also offers
+  the max-affordable X when lethal is unaffordable (your completeness point from chunk B, taken as the default);
+  (3) two engine-wide folds priced but NOT built -- interchangeable hand copies (7.26x odo on the slow games) and
+  one-per-class land-aura hosts (3.7x) -- they move every deck's GT, so they are yours to call; (4) Scholar via
+  Living Wish / Ezuri from hand cannot kill the SAME turn as the loop (site 9 opens once per apply) -- an engine
+  structure question, not a card deferral.
 
 ## Approved deferrals
 

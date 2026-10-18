@@ -620,6 +620,9 @@ BOARD_ACTIVATIONS = {
     "soulbond_grants_untap_self_cost":           ("verb:untapact",  truthy,   "soulbond_grants_untap_self_cost"),
     "untap_target_creature_cost":                ("verb:untapact",  truthy,   "untap_target_creature_cost"),
     "untap_pump_cost":                           ("verb:untapact",  truthy,   "untap_pump_cost"),
+    # (chunk C2b) The closed-form untap LOOP rides the SAME four params: the plan action is the same
+    # ActivateUntap (verb "untapact" + "untap_loop": true in the plan JSON), written `untaploop=` on the
+    # line by linebuild.js -- so no new manifest entry; DECISIONS.md carries its own row.
     "tap_lifegain_cost":                         ("verb:taplife",   truthy,   "tap_lifegain_cost"),  # Staff {2},{T}
     "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
     # Lizard Blades: reconfigure's ATTACH half rides the Equip kind, so it is offered as verb:equip at

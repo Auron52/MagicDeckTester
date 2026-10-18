@@ -965,7 +965,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + ": untap " + EnchantTargetName(s, a.sac_victim_id);
                 if (a.gy_exile_mode == 4) { tag += " (+3/+3)"; }
                 const int uk = std::max(1, a.chosen_x);
-                if (uk > 1) { tag += " x" + std::to_string(uk); }
+                if (uk >= kUntapLoopToNeed) { tag += " -- LOOP until the kill is funded"; }
+                else if (uk > 1) { tag += " x" + std::to_string(uk); }
                 break;
             }
             // Channel is a from-HAND ability, so "(other)" was indistinguishable from casting the
@@ -2697,6 +2698,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                    << ", \"untap_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
                 os << ", \"untap_src\": " << ac.sac_source_id
                    << ", \"untap_shape\": " << ac.gy_exile_mode;
+                // The closed-form LOOP (chunk C2b): verb untaploop= on the line.
+                if (ac.chosen_x >= kUntapLoopToNeed) { os << ", \"untap_loop\": true"; }
             }
             // REPEATABLE (no {T} and no sacrifice in the cost, so activation count is bounded only
             // by mana): tells the viewer it may STACK this activation -- clicking it K times queues
@@ -4539,9 +4542,11 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         // "untapact=<source>[#<source num>][@<target num>]": an activated untapper (Crab Umbra,
         // Galvanic Alchemist's soulbond grant, Staff of Domination, Seedcradle Witch). The equip=
         // '#'/'@' convention: both numbers optional, 0 = wildcard. See LineSpec::UntapActSpec.
-        else if (key == "untapact")
+        // "untaploop=..." (chunk C2b): the same shape, naming the closed-form LOOP variant.
+        else if (key == "untapact" || key == "untaploop")
         {
             TurnSolver::LineSpec::UntapActSpec us;
+            us.loop = (key == "untaploop");
             const size_t at = val.rfind('@');
             if (at != std::string::npos)
             { us.target = std::atoi(val.c_str() + at + 1); val = val.substr(0, at); }
@@ -7650,6 +7655,8 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "graveyard": [ "Scourge of Valkas" ],       // stage cards in the graveyard (gy-reading abilities)
 //     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
 //     "energy_counters": 1,          // stage {E} (Aether Hub's any-colour tap is gated on it)
+//     "life_gained_this_turn": 6,    // with "resume_at": life gained earlier THIS turn (Accomplished
+//                                    // Alchemist's X)
 //     "opponent_library_size": 2,    // stage the OPPONENT'S library (forces opponent_library_dealt
 //                                    // on); they draw one at the end of each of OUR turns, and
 //                                    // drawing from empty is a deck-out win on THAT turn
@@ -7777,6 +7784,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // enumerates ZERO plans (the drop-open path always offers its no-land pass), so the host-appended
     // idle pass -- and every pin it carries into combat -- was unreachable from a fixture.
     state.players[0].lands_played_this_turn = j.value("lands_played_this_turn", 0);
+    // Stage LIFE ALREADY GAINED this turn ("life_gained_this_turn": 6, with "resume_at"): Accomplished
+    // Alchemist's X. A mid-turn frame after a Nourish resolved (AccomplishedAlchemist chunk C2b).
+    state.players[0].life_gained_this_turn = j.value("life_gained_this_turn", 0);
     // Stage a FLOATING POOL ("floating_mana": {"W": 1, "G": 2, "C": 1}). A reconstructed mid-turn
     // frame was otherwise always asked with an EMPTY pool (the combo-off sweep's first listed blind
     // spot), so a construct that hinges on WHICH floating colour pays a generic pip -- claude_s6_gi5

@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "THE CLOSED-FORM UNTAP LOOP (AccomplishedAlchemist chunk C2b): Crab Umbra on Accomplished Alchemist,",
+    "Nourish for 6, loop the Umbra until the float pays Stroke of Genius for the opponent's whole library.",
+    "",
+    "Turn 4: 3 Forests + an Island + a non-sick Alchemist wearing a Crab Umbra ({2}{U}: untap enchanted",
+    "creature). Hand: Nourish ({G}{G}: gain 6) and Stroke of Genius. Opponent library 40, so the kill is",
+    "Stroke at the opponent for X = 40 = {40}{2}{U} = 43 mana. Without the loop the turn tops out at",
+    "1 Forest + Island + the Alchemist's 6 = 8 mana. With it: Nourish -> (lifegain re-plan) -> the Umbra",
+    "loop (ActivateUntap, chosen_x = kUntapLoopToNeed) nets 6 - 3 = 3 blue per iteration until the float",
+    "covers 43 -> (kActUntapLoopFunded re-plan) -> Stroke X = 40 at the opponent decks them THIS turn."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 40,
+  "battlefield": [
+    { "name": "Forest", "controller": 0 },
+    { "name": "Forest", "controller": 0 },
+    { "name": "Forest", "controller": 0 },
+    { "name": "Island", "controller": 0 },
+    { "name": "Accomplished Alchemist", "controller": 0, "sick": false },
+    { "name": "Crab Umbra", "controller": 0, "equips": "Accomplished Alchemist" }
+  ],
+  "hand": [
+    "Nourish",
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 4
+}
