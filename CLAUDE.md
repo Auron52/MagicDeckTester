@@ -847,7 +847,10 @@ how a deck changed between v1 and now**, or for **a write-up of what a list adop
 read `.claude/skills/deck-update-summary.md` first. It is the retrospective measurement — two lists that
 each already shipped, one pooled batch per format, one document page per deck. Distinct from
 `deck-screening.md` (which compares *candidate* lists against a SHARED apparatus to decide what to
-adopt) and from the adoption pipeline; nothing here regenerates an artifact.
+adopt) and from the adoption pipeline; nothing here regenerates an artifact. **Two outputs every time**
+(USER 2026-10-18): the full document in `docs/design/`, and a condensed one-page-per-section printable
+summary in `docs/deck-update-summaries/` (`<name>.md` rendered to `<name>.html` by
+`scripts/md_to_print_html.py`).
 
 **Rule 0 it enforces:** each arm plays with **its own** shipped apparatus out of its own directory
 (`decks/<Deck>/v1-<slug>/` carries a full profile + value sidecar + keep table), which is the right

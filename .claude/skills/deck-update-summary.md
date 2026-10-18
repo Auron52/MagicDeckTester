@@ -16,6 +16,11 @@ section — copy their shape:
 * `docs/design/v1-vs-current-stompy-angels-critter.md`
 * `docs/design/v1-vs-current-fungus-kitty-whiteknights.md`
 
+**Every run produces TWO outputs (USER 2026-10-18):** the full document above (the record), AND a
+condensed, printable summary in `docs/deck-update-summaries/` (`<name>.md` + the rendered `<name>.html`)
+— see THE PRINTABLE SUMMARY at the end. Worked references:
+`docs/deck-update-summaries/v1-vs-current-{stompy-angels-critter,fungus-kitty-whiteknights}.{md,html}`.
+
 **Six decks fit badly in one document and three fit well.** The first draft put all six in one file and
 the user split it; a six-deck front page cannot carry both a headline table and a `<=T4` table without
 one of them becoming unreadable. Group decks three at a time, and prefer a grouping that lets the front
@@ -232,3 +237,53 @@ it a reader cannot tell which engine produced them.
 **Embed the manifest generator in the appendix.** The run apparatus lives under `logs/` (gitignored),
 so a document that only references those paths is not reproducible from a clean clone. The generator
 *is* the experiment definition — especially the `seed`/`game_index` pairing — so paste it in full.
+
+## THE PRINTABLE SUMMARY (`docs/deck-update-summaries/`)
+
+The full document is the record; the user also wants something they can print and read in one sitting.
+USER 2026-10-18: *"make each of the sections fit on one page"*, *"Focus on cutting low-priority content
+and focus on headline numbers and changes"*, *"Could we show just the common part of the decklist as
+well?"*. Write `docs/deck-update-summaries/<name>.md` (same `<name>` as the full document), then render:
+
+```
+python3 scripts/md_to_print_html.py docs/deck-update-summaries/<name>.md     # -> <name>.html beside it
+```
+
+One page per section, split with the same `<div style="page-break-after: always;"></div>` divs:
+
+* **Front page:** the headline table (deck, format, v1, current, change, blocks better: no se/t, no
+  games/arm), the `<=T4` / `>=T6` table, three or four takeaway bullets, and a two-line method note
+  (games, depth/budget, `max_turns`, 2HG definition, paired blocks, own apparatus per arm).
+* **Per deck page, in this order:**
+  1. The headline in the `#` title, plus one bold summary sentence.
+  2. **Shared core**: the cards both lists play, at `min(old, new)` copies, three columns wide.
+  3. **Cards added** and **Cards removed**, adjacent with nothing between them. The renderer puts the pair
+     side by side, but only when the two `h2 + table` blocks are adjacent. A note goes after both tables.
+  4. **Win-turn table**: columns `T3 | T4 | T5 | >=T6 | <=T4`, rows v1 / current / change for each format.
+  5. **Averages and cost**: one row per format, with `avg turn v1 -> current | change | win% | ms/game`.
+  6. Two or three bullets: the mechanism, and anything a reader would otherwise get wrong.
+* **Cut:** the full current decklist (the core plus the changes covers it), the T2/T7/T8 columns, se/t,
+  non-wins and `avg(won)` (keep a bullet when they tell a story, as Kitty's do), long explanations, the
+  method detail, and the appendix.
+
+Build the core, added and removed tables from the `.cod` files, never from the full document's text:
+`python3 scripts/deck_list_diff.py <old.cod> <new.cod> --md` prints all three, and asserts that
+core + added = new and core + removed = old. **Verify every number mechanically**: each number in the
+summary must appear verbatim in the full document, apart from deliberate roundings, which you check by
+hand. That is the same transcription check the full document gets.
+
+**The renderer** (`scripts/md_to_print_html.py`, stdlib only, nothing to install) produces one
+self-contained HTML file. It has one stylesheet for screen and print, A4 pages, and a fit script that
+scales any section taller than a page down to fit. On screen, each page carries a red "printed at N%"
+label (hidden when printing). **This container cannot render pages**, so ask the user to report any page
+whose label shows a low percentage, and trim that page rather than shrinking it further.
+
+**Wording — the user corrected both of these (2026-10-18):**
+* **A goldfish measures SPEED, not deck strength.** Do not call a deck "losing late", "a dead-zone deck"
+  or "losses in practice" from its goldfish turns. Interactive decks (lifegain, removal) push real games
+  long. Angels v1 was "a good deck even before any changes"; its weakness was fast combo. Say "too slow
+  against a fast deck", and note that the speed gain kept the decks' interaction.
+* **A card-change reason comes from the card itself and the deck's alternatives**, not from a nearby
+  mechanic. Arbor Elf was cut because it needs a Forest and has no upside over Fyndhorn Elves, not
+  because it "doesn't scale" with Priest of Titania. If you don't know why a card changed, give the
+  measured effect and leave the reason out.

@@ -48,9 +48,16 @@ actually worth:
 | **Angels** | 7.31% → **44.93%** | 1.58% → **12.96%** | 27.02% → 6.61% | 54.70% → 20.38% |
 | **Critter Lifegain** | 34.91% → **65.91%** | 15.96% → **39.17%** | 9.69% → 2.50% | 22.98% → 6.09% |
 
-`≥T6` counts non-wins, i.e. it is the share of games that are losses in practice. **Angels v1 was a
-dead-zone deck** — 27% of its standard games and 55% of its 2HG games landed at turn 6 or later — and
-the current list cuts that to 6.6% and 20.4%. No mean conveys that.
+`≥T6` counts non-wins, i.e. it is the share of games that are too slow against a fast deck. Angels v1
+needed turn 6 or later in 27% of its standard games and 55% of its 2HG games, and the current list cuts
+that to 6.6% and 20.4%. No mean conveys that.
+
+**What a goldfish cannot show (USER, 2026-10-18).** All three decks also carry ways to slow the opponent
+down — lifegain, removal and other answers — and the speed gains here were made without giving up much
+of that. Angels in particular was already a good deck in real games: its lifegain and removal push the
+game long, so its late goldfish turns overstate how often v1 actually lost. Its weakness was fast combo,
+which it lost to unless it had the right removal at the right time; winning sooner while keeping that
+interaction should improve that matchup and others.
 
 **The format reorders the gains, and it nearly changes the ranking.** **Stompy gains 36% more at 2HG**
 (−0.4130 → −0.5609) and Critter Lifegain slightly more (−0.4006 → −0.4363), while **Angels is the only
@@ -148,8 +155,8 @@ Natural Order is `tutor_to_battlefield_single` for a **green creature** at the a
 **sacrificing a green creature**, so every mana dork is simultaneously the ramp, the fodder and the
 enabler. Taking dorks from 10 to 14 also feeds Priest of Titania, which taps for mana *per Elf on the
 battlefield* (`mana_per_creature_count_all: true`) — so each added Elf is worth more than one mana. Arbor
-Elf, which untaps a Forest rather than producing mana itself, is the one dork that does **not** scale
-that way, and it is the one cut. Meanwhile Worldspine Wurm at 4 copies was mostly a dead 11-mana draw
+Elf is the one dork cut: it needs a Forest to untap and has no upside over Fyndhorn Elves (USER,
+2026-10-18). Meanwhile Worldspine Wurm at 4 copies was mostly a dead 11-mana draw
 when the point is to cheat it in: 4 → 1, with the fetch targets diversified instead (Craterhoof 1 → 2,
 plus Ghalta and Apex Altisaur).
 
@@ -244,9 +251,10 @@ from "more Lyra Dawnbringer" — which is why both Lyras appear, at 4 and 1.
 | | current | 0.00% | 0.00% | 12.96% | 66.66% | 16.41% | 2.88% | 0.76% | 0.32% | **12.96%** | 20.38% |
 | | change | +0.00 | +0.00 | **+11.38** | +22.94 | −25.43 | −6.28 | −1.66 | −0.96 | **+11.38** | −34.32 |
 
-**This is the clearest dead-zone rescue measured.** v1 put 27% of standard games and **54.70% of 2HG
-games** at turn 6 or later — more than half of its 2HG games were, in practice, losses. The current list
-takes that to 6.61% and 20.38%. At 2HG the mass has not yet reached the fast region (12.96% by turn 4);
+**The largest speed gain measured here.** v1 put 27% of standard games and **54.70% of 2HG games** at
+turn 6 or later; the current list takes that to 6.61% and 20.38%. A goldfish undersells v1: its lifegain
+and removal push real games long, and its weak matchup was fast combo, where it needed the right removal
+at the right time. At 2HG the mass has not yet reached the fast region (12.96% by turn 4);
 the whole move is out of T6+ and into T5, which the mean records faithfully but understates in value.
 
 ## How the averages changed
@@ -325,7 +333,7 @@ the same Remote Farm addition Angels made, and the only edit shared across this 
 
 Turn 4 is this deck's floor in both lists — it never wins on turn 3 — so the whole gain is the T5→T4
 conversion, and the current list makes it in **two games in three** at standard. The 2HG `≥T6` share
-falls from 22.98% to 6.09%, a 3.8× reduction in games that are losses in practice.
+falls from 22.98% to 6.09%, a 3.8× reduction in games too slow against a fast deck.
 
 ## How the averages changed
 
