@@ -305,13 +305,18 @@ better in both modes).
   unpruned honest search keeps it and wins T4 (rule: T5).
 - A/B ARM `MTG_GALADRIEL_ACCEL_HAND` (default OFF): acceleration held in hand (Skerry = next land drop, Sol
   Ring off one land) counts as settled. Clairvoyant, 24 seeds x 1000 (850000+): -0.0002 t (t -0.6; 36 / 32).
-  Non-clairvoyant: 12 seeds x 1000, see below / the closing report.
+  Non-clairvoyant, 12 seeds x 1000 (850000+): -0.0007 t (t -0.8; 30 / 24). Neutral in both modes; stays OFF -- the
+  USER's call (it reads "acceleration on board" as "held").
+- Rebased onto origin 8b3776df (Colossus): GT conflict taken from origin and galadriel re-accepted on the rebased
+  binary -- every galadriel row reproduced its pre-rebase value and digest; every other smoke row byte-identical.
 
 ## PARKED (USER 2026-10-18: "once this is done I would like to park this deck")
 Shipped: exhaustive keep table (K=9, R=40); leaf = nlfit (USER); the USER's scry rule as a firm prune; the
 Crackle-pile rule; land timing; every suite row resized; smoke + regression GT accepted (overnight GT is left
 for the periodic overnight run).
 OPEN USER QUESTIONS (none blocks anything):
+- `MTG_GALADRIEL_ACCEL_HAND` (acceleration held in hand counts as settled; fixes seed 1026): neutral, OFF.
+  Turn it on?
 - `MTG_GALADRIEL_SCRY_NONEED` (keep on top when nothing is needed): measured worse than the plain rule in both
   modes (+0.011 t non-clairvoyant); OFF. Drop it or keep it as an option?
 - The seeds 4/5 turn-5 scry choices in the USER's references.
