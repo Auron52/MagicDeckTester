@@ -580,6 +580,8 @@ enum Slot : int
     PAY_NARROW_RESTRICTED_FIRST,// MTG_PAY_NARROW_RESTRICTED_FIRST  among colored_creature_only sources, the shared payer spends one WITHOUT colored_creature_ability_ok (Unclaimed Territory, Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard), whose colour is the only restricted mana that can also pay a creature source's ABILITY: a within-rank tiebreak in the greedy, and in the whole-turn prepay's shrink post-pass the Courtyard is the first equally-flexible source it tries to give back. Vampires sweep L (seed 91001: Pit Fighter's {R} took the Courtyard, its post-combat {1}{R} activation then had no legal {R}). Default ON; =0 -> battlefield order
     VAMPIRES_ORDER,           // MTG_VAMPIRES_ORDER  Vampires' AI-DRAFTED TOTAL cast order (2026-10-18, docs/design/vampires-cast-order-2026-10-18.md; awaiting the USER): Socialite > Gorger > the static lords > every other creature cheapest first then by name > Markov Baron (convoke after the bodies) > Aether Vial. DEFAULT OFF; =1 enables (VampiresProvider::CastOrderRank)
     VAMPIRES_BUCKET_DISCARD,  // MTG_VAMPIRES_BUCKET_DISCARD  Vampires' AI-DRAFTED 5i cleanup buckets + the order of the searched outlet discard pins (2026-10-18, same doc; awaiting the USER): free sheds (madness-castable now, Bloodghast with a land) > dead > lands past 4 > late Vial > threats past a floor of 2 by castability x value > early Vial > floor > lands. DEFAULT OFF; =1 enables
+    VAMP_MADNESS_COLOR_FOLD,  // MTG_VAMP_MADNESS_COLOR_FOLD  Vampires perf (2026-10-18, docs/design/vampires-search-cost.md): a madness CAST variant whose cost (with the outlet's own) the turn's OPTIMISTIC pool (AvailableManaPool + the ceiling's extra as wild) cannot pay in ANY colour is not emitted -- it would resolve as the decline it duplicates. Identity fold. DEFAULT ON; =0 -> the total-mana gate only
+    VAMP_OUTLET_NOT_GROWTH,   // MTG_VAMP_OUTLET_NOT_GROWTH   Vampires perf (same doc): a DISCARD-cost sac outlet (Falkenrath Pit Fighter: draw two) no longer disarms OptimisticTurnMana's ceiling -- it adds no mana to the enumeration it is in (its draws reach only a breakpoint continuation, a new enumeration). Sound (the ceiling only prunes the never-payable). DEFAULT ON; =0 -> every sac outlet is growth
     COUNT
 };
 
@@ -1110,6 +1112,8 @@ inline const char* Name(int slot)
         "MTG_PAY_NARROW_RESTRICTED_FIRST",
         "MTG_VAMPIRES_ORDER",
         "MTG_VAMPIRES_BUCKET_DISCARD",
+        "MTG_VAMP_MADNESS_COLOR_FOLD",
+        "MTG_VAMP_OUTLET_NOT_GROWTH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
