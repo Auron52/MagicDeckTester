@@ -21269,6 +21269,122 @@ static void Note(Site site, const TurnSolver::Plan& p, const SearchBudget* b)
 }
 }   // namespace pbsite
 
+// MTG_CANTRIP_ATTRIB (DIAGNOSTIC, default off; counters and clocks only -- no behaviour reads them).
+// What do the three cantrip menus cost? Two reads, printed at exit:
+//   * MENU WIDTH per resolution, every world alike: Brainstorm = the put-back candidate count the
+//     resolution saw (g_putback_resolved_w), Ponder = TopDispositionCandidates(Reorder) over its look
+//     (orders + shuffle, heuristic first, duplicates dropped), Preordain = TopDispositionCandidates(Scry)
+//     over its look -- and whether that resolution was PINNED by a searched variant or resolved by the
+//     provider's default. Plus the enumeration-side fan: base plans fanned and variants emitted.
+//   * UNITS / WALL SPENT UNDER A VARIANT: from the moment a candidate loop applies a put-back variant
+//     (putback_choice >= 1) or a Ponder variant (ponder_choice >= 1) -- or a breakpoint-node child whose
+//     continuation resolved to one -- until that candidate's evaluation ends (its rollout / recursion
+//     included). Nested variant scopes are counted once (depth-counted per axis), so a share is "of
+//     the game's units, how many were spent evaluating some variant of this axis".
+namespace cantripattr
+{
+enum Axis { kPutBack = 0, kPonder = 1, kAxes = 2 };
+enum Card3 { kBrainstorm = 0, kPonderCard = 1, kPreordain = 2, kCards = 3 };
+inline bool On() { static const bool v = EnvOn("MTG_CANTRIP_ATTRIB"); return v; }
+inline thread_local int  t_depth[kAxes] = { 0, 0 };
+inline thread_local long long t_u0[kAxes] = { 0, 0 };
+inline thread_local std::chrono::steady_clock::time_point t_w0[kAxes];
+inline std::atomic<long long> g_units[kAxes], g_ns[kAxes], g_scopes[kAxes];
+inline std::atomic<long long> g_fan_plans[kAxes], g_fan_vars[kAxes];
+// [card][pinned?] resolutions and summed width; [card][width] histogram.
+constexpr int kHist = 1024;   // widths >= kHist-1 share the last bucket
+inline std::atomic<long long> g_res[kCards][2], g_res_w[kCards][2], g_hist[kCards][kHist];
+inline void NoteResolution(int card, int width, bool pinned)
+{
+    if (!On() || width < 0) { return; }
+    g_res[card][pinned ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+    g_res_w[card][pinned ? 1 : 0].fetch_add(width, std::memory_order_relaxed);
+    g_hist[card][std::min(width, kHist - 1)].fetch_add(1, std::memory_order_relaxed);
+}
+inline void NoteFan(int axis, long long variants)
+{
+    if (!On() || variants <= 0) { return; }
+    g_fan_plans[axis].fetch_add(1, std::memory_order_relaxed);
+    g_fan_vars[axis].fetch_add(variants, std::memory_order_relaxed);
+}
+inline int AxisOf(const TurnSolver::Plan& p)
+{ return p.putback_choice >= 1 ? kPutBack : p.ponder_choice >= 1 ? kPonder : -1; }
+// The axis of the continuation the last ranked breakpoint resolution handed out (a node child's
+// cands[k]); reset by the node host before each child's apply and read right after it.
+inline thread_local int t_last_cont_axis = -1;
+struct Scope
+{
+    int ax = -1;
+    explicit Scope(int axis) { Open(axis); }
+    void Open(int axis)
+    {
+        if (!On() || axis < 0 || ax >= 0) { return; }
+        ax = axis;
+        if (t_depth[ax]++ == 0)
+        {
+            t_u0[ax] = gamework::t_used;
+            t_w0[ax] = std::chrono::steady_clock::now();
+            g_scopes[ax].fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+    ~Scope()
+    {
+        if (ax < 0) { return; }
+        if (--t_depth[ax] == 0)
+        {
+            g_units[ax].fetch_add(gamework::t_used - t_u0[ax], std::memory_order_relaxed);
+            g_ns[ax].fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                   std::chrono::steady_clock::now() - t_w0[ax]).count(),
+                               std::memory_order_relaxed);
+        }
+    }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+struct Report
+{
+    std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+    ~Report()
+    {
+        if (!On()) { return; }
+        const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        static const char* axn[kAxes] = { "putback", "ponder" };
+        for (int a = 0; a < kAxes; ++a)
+        {
+            const long long u = g_units[a].load();
+            const double s = static_cast<double>(g_ns[a].load()) / 1e9;
+            std::fprintf(stderr, "[cantrip-attrib] axis=%s fanned_plans=%lld variants=%lld (%.1f/plan) "
+                                 "scopes=%lld units=%lld wall=%.1fs (%.3f of %.1fs process wall)\n",
+                         axn[a], g_fan_plans[a].load(), g_fan_vars[a].load(),
+                         g_fan_plans[a].load() ? static_cast<double>(g_fan_vars[a].load()) / g_fan_plans[a].load() : 0.0,
+                         g_scopes[a].load(), u, s, wall > 0 ? s / wall : 0.0, wall);
+        }
+        static const char* cn[kCards] = { "Brainstorm", "Ponder", "Preordain" };
+        for (int c = 0; c < kCards; ++c)
+        {
+            const long long n0 = g_res[c][0].load(), n1 = g_res[c][1].load();
+            if (n0 + n1 == 0) { continue; }
+            std::string h;
+            long long seen = 0, med = -1, p90 = -1;
+            for (int w = 0; w < kHist; ++w)
+            {
+                const long long k = g_hist[c][w].load();
+                if (k == 0) { continue; }
+                seen += k;
+                if (med < 0 && 2 * seen >= n0 + n1) { med = w; }
+                if (p90 < 0 && 10 * seen >= 9 * (n0 + n1)) { p90 = w; }
+                h += " " + std::to_string(w) + ":" + std::to_string(k);
+            }
+            std::fprintf(stderr, "[cantrip-attrib] %s resolutions default=%lld (mean width %.1f) pinned=%lld "
+                                 "(mean width %.1f) median=%lld p90=%lld hist{width:count}%s\n",
+                         cn[c], n0, n0 ? static_cast<double>(g_res_w[c][0].load()) / n0 : 0.0,
+                         n1, n1 ? static_cast<double>(g_res_w[c][1].load()) / n1 : 0.0, med, p90, h.c_str());
+        }
+    }
+};
+inline Report g_report;
+}   // namespace cantripattr
+
 // THE PUT-BACK VARIANT PRICE (MTG_PUTBACK_PRICE, per-job; MTG_PUTBACK_PRICE_UNITS = the price, default 2).
 // A Brainstorm fan is every distinct ordered pair of hand classes -- median ~76 per base plan, 280+ on a
 // Niv-Mizzet hand -- and every variant is a full plan applied and scored. The budget otherwise bills a
@@ -45814,6 +45930,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 out      = cands[plan.bp_choice];
                 resolved = true;
+                if (cantripattr::On()) { cantripattr::t_last_cont_axis = cantripattr::AxisOf(out); }
             }
         }
         // Whether the PLAN itself carried this continuation (rank / chain / EMPTY arm / node child).
@@ -47560,6 +47677,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (is_ei) { ResolveExpressiveIteration(state); }
             // Scry-then-draw (Preordain) / reorder-or-shuffle-then-draw (Ponder): mirror
             // ResolveDrawSpell exactly so the rollout's realised draw matches the executor.
+            if (cantripattr::On() && !is_ei && (def.params.cast_scry > 0 || def.params.cast_reorder > 0))
+            {
+                // MTG_CANTRIP_ATTRIB: the menu this look offers (diagnostic; nothing reads it).
+                const bool scry = def.params.cast_scry > 0;
+                const int  look = std::min(scry ? def.params.cast_scry : def.params.cast_reorder,
+                                           static_cast<int>(ap.library.size()));
+                if (look > 0)
+                {
+                    std::vector<Card> looked;
+                    for (int i = 0; i < look; ++i) { looked.push_back(ap.library[static_cast<std::size_t>(i)]); }
+                    const int w = static_cast<int>(TopDispositionCandidates(
+                        state, looked, scry ? LookKind::Scry : LookKind::Reorder, scry ? -1 : ponder_keep).size());
+                    const bool pinned = scry ? g_scripted_top_choice >= 0
+                                             : (g_scripted_reorder_choice >= 0 || ponder_keep >= 0);
+                    cantripattr::NoteResolution(scry ? cantripattr::kPreordain : cantripattr::kPonderCard, w, pinned);
+                }
+            }
             if (!is_ei && def.params.cast_scry > 0)    { ScryTop(state, def.params.cast_scry); }
             if (!is_ei && def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, ponder_keep); }
             int n = is_ei ? 0 : std::min(def.params.draw, static_cast<int>(ap.library.size()));
@@ -47608,7 +47742,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (def.params.put_back_from_hand > 0)
                 {
                     g_putback_resolved_w = -1;
+                    const bool pb_pinned = g_scripted_putback_choice >= 0;   // MTG_CANTRIP_ATTRIB only
                     ResolvePutBackFromHand(state, state.active_player_index, def.params.put_back_from_hand, def.card.m_name.str());
+                    cantripattr::NoteResolution(cantripattr::kBrainstorm, g_putback_resolved_w, pb_pinned);
                     if (apd_pb_w < 0 && g_putback_resolved_w >= 0)
                     { apd_pb_w = g_putback_resolved_w; apd_pb_i = g_putback_resolved_i; }
                 }
@@ -60660,6 +60796,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     std::size_t k_max = 1;
                     for (int f = 2; f <= look; ++f) { k_max *= static_cast<std::size_t>(f); }
                     if (look <= 0) { k_max = 0; }
+                    if (pond_materialize) { cantripattr::NoteFan(cantripattr::kPonder, static_cast<long long>(k_max)); }   // diagnostic
                     for (std::size_t k = 1; pond_materialize && k <= k_max; ++k)
                     {
                         TurnSolver::Plan v = p;
@@ -60723,6 +60860,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (++s_putback_group <= 0) { s_putback_group = 1; }
                     putback_based.emplace_back(pi, s_putback_group);
                 }
+                if (pb_materialize) { cantripattr::NoteFan(cantripattr::kPutBack, w - 1); }   // diagnostic
                 for (int k = 1; pb_materialize && k < w; ++k)
                 {
                     TurnSolver::Plan v = p;
@@ -69039,6 +69177,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             ++m2_scanned;
             ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
             pbsite::Note(pbsite::kFsM2, q, budget);
+            cantripattr::Scope _cas(cantripattr::AxisOf(q));   // MTG_CANTRIP_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, q);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             if (s_rollout_stats)
             {
@@ -69182,9 +69321,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     std::vector<Action> bp3;
                     g_bp_cands_last   = 0;
                     g_bp_demoted_last = 0;
+                    cantripattr::t_last_cont_axis = -1;
                     ApplyPlanDirect(s3, v, false, &bp3, nullptr, &node_snap);
                     if (k == 0) { pb_node.TakeChannel(); }
                     pb_node.Record(k);
+                    // MTG_CANTRIP_ATTRIB: the rest of this child (dedup, recursion) is spent under the
+                    // variant its continuation resolved to, if any (the apply itself is not counted).
+                    cantripattr::Scope _cas_node(cantripattr::On() ? cantripattr::t_last_cont_axis : -1);
                     // The node's nested / demoted waves -- the FSLineWin host's twin (see there).
                     if (k == 0 && node_n < 0)
                     { NodeRecordChild0(node_nested, static_cast<std::size_t>(&q - post.data()), node_snap.bp_seen); }
@@ -70824,6 +70967,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
         ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
         pbsite::Note(pbsite::kFsPre, p, budget);
+        cantripattr::Scope _cas(cantripattr::AxisOf(p));   // MTG_CANTRIP_ATTRIB (diagnostic)
         ChargePutBackVariant(budget, p);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
         if (s_rollout_stats)
         {
@@ -76813,6 +76957,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // main); the remaining turns are counted inside SimulateToEnd.
             ConsumeAt(budget, unitsite::kLookaheadCand);
             pbsite::Note(is_pre_combat ? pbsite::kLaPre : pbsite::kLaPost, plan, budget);
+            cantripattr::Scope _cas(cantripattr::AxisOf(plan));   // MTG_CANTRIP_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
