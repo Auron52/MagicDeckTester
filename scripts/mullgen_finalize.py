@@ -75,6 +75,25 @@ def discover_k(deck, cards_json, binary, timeout_note=True, play=None):
     return (int(m.group(1)) if m else None), blob
 
 
+def write_expected_buckets(vpath, k):
+    """Set value_play.expected_buckets with a byte-preserving TEXT edit (the derive script has already
+    made sure a value_play block exists). Replace the value if present, else insert it right after the
+    block's opening brace."""
+    txt = vpath.read_text()
+    m = re.search(r'("expected_buckets"\s*:\s*)\d+', txt)
+    if m:
+        out = txt[:m.start()] + m.group(1) + str(k) + txt[m.end():]
+    else:
+        i = txt.find('"value_play"')
+        if i < 0:
+            raise SystemExit("no value_play block in %s -- run the setting screen first" % vpath)
+        br = txt.index("{", i)
+        out = txt[:br + 1] + ' "expected_buckets": %d,' % k + txt[br + 1:]
+    d = json.loads(out)
+    assert d["value_play"]["expected_buckets"] == k
+    vpath.write_text(out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("deck", help="path to the decklist (.txt/.cod)")
@@ -91,8 +110,14 @@ def main():
     deck = pathlib.Path(args.deck)
     vpath = deck.parent / (deck.stem + ".value.json")
     if not vpath.exists():
-        print("phase F: no %s -- the value leaf must exist first" % vpath.name)
-        return 1
+        # No value leaf (USER 2026-10-18: the screen is a MULLIGAN-profile stage, run before the first
+        # generation, which may well precede the value leaf). The contract then lives in the deck's
+        # profile -- a sidecar must NOT be created: its presence activates the value hybrid in play.
+        vpath = deck.parent / (deck.stem + ".profile.json")
+        if not vpath.exists():
+            print("settings screen: neither %s.value.json nor %s.profile.json exists" % (deck.stem, deck.stem))
+            return 1
+        print("settings screen: no value sidecar -- the contract goes into %s" % vpath.name)
 
     rc = 0
     # ---------------------------------------------------------------- 1. the generation setting
@@ -137,8 +162,9 @@ def main():
         return rc
     print("  discovered K = %d" % k)
     if args.write:
-        vp["expected_buckets"] = k
-        json.dump(v, open(vpath, "w"), indent=1)
+        # Text edit, not a json round-trip (that reformats the whole file -- see
+        # derive_mullgen_setting.write_mull_gen); the screen above has just written value_play.
+        write_expected_buckets(vpath, k)
         print("  RECORDED in %s." % vpath.name)
         print("  CONFIRM THIS NUMBER. Every later generation must match it or it refuses to run;\n"
               "  that is deliberate -- a silently different K means a differently-bucketed deck and a\n"

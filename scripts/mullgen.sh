@@ -504,6 +504,54 @@ case "$CMD" in
         exit 3
       }
     fi
+    # ---- GENERATION SETTING SCREEN (USER 2026-10-18) ---------------------------------------------
+    # "I'm not so fond of using play settings, though. We should have run the setting test first. I
+    # would like to change the process to do that screen if it hasn't been run yet ... remove it as a
+    # value-leaf stage and make it a mulligan profile stage that only runs when it hasn't been done."
+    # So: before the FIRST generation of a deck, measure its mull_gen_depth / mull_gen_budget_ms
+    # (derive_mullgen_setting.py via mullgen_finalize.py, which also records K) unless the deck's
+    # contract already holds both -- in <stem>.value.json's value_play when a sidecar exists, else in
+    # <stem>.profile.json's (a sidecar must never be CREATED for this: presence activates the value
+    # hybrid). The screen always writes its pick, even when it equals play settings, so presence of the
+    # pair IS the "screened" marker. Skipped while a journal exists: a banked generation is pinned to
+    # the settings it started at, and changing them now would make it unresumable.
+    if [ ! -e "$DECKDIR/$STEM.keepmodel.exhaustive.raw.json.journal" ] && ! python3 - "$DECKDIR" "$STEM" <<'HAVESET'
+import json, pathlib, sys
+sys.path.insert(0, "scripts")
+d, stem = pathlib.Path(sys.argv[1]), sys.argv[2]
+v, prof = d / (stem + ".value.json"), d / (stem + ".profile.json")
+def pair(path):
+    try:
+        vp = json.load(open(path)).get("value_play") or {}
+    except Exception:
+        return {}, False
+    return vp, all(isinstance(vp.get(k), int) and vp.get(k) > 0 for k in ("mull_gen_depth", "mull_gen_budget_ms"))
+src = v if v.exists() else prof
+vp, ok = pair(src)
+if v.exists() and not ok:
+    # A value sidecar's value_play REPLACES the profile's generation keys wholesale, so a setting screened
+    # into the profile before the value leaf existed would silently stop counting. Carry it (and K) over:
+    # the screen runs ONCE per deck (USER 2026-10-18), not once per artifact location.
+    pvp, pok = pair(prof)
+    if pok:
+        from derive_mullgen_setting import write_mull_gen
+        from mullgen_finalize import write_expected_buckets
+        write_mull_gen(v, pvp["mull_gen_depth"], pvp["mull_gen_budget_ms"])
+        if isinstance(pvp.get("expected_buckets"), int) and pvp["expected_buckets"] > 0:
+            write_expected_buckets(v, pvp["expected_buckets"])
+        print(f"[settings] carried the profile's screened setting d{pvp['mull_gen_depth']} b{pvp['mull_gen_budget_ms']}"
+              f" into {v.name} (a sidecar's value_play replaces the profile's)", flush=True)
+        vp, ok = pair(v)
+print(f"[settings] {src.name}: mull_gen_depth={vp.get('mull_gen_depth')} mull_gen_budget_ms={vp.get('mull_gen_budget_ms')}"
+      + ("  (screened -- not re-run)" if ok else "  -> NOT screened yet"), flush=True)
+sys.exit(0 if ok else 1)
+HAVESET
+    then
+      log "=== SETTINGS SCREEN ($(stamp)) deck=$STEM: no measured generation setting yet ==="
+      python3 scripts/mullgen_finalize.py "$DECK" --write 2>&1 | tee -a "$OUT/settings.log"
+      [ "${PIPESTATUS[0]}" -eq 0 ] || { log "SETTINGS SCREEN FAILED -- see $OUT/settings.log (nothing generated)"; exit 1; }
+      grep -E "^PICK:|== play|written to|RECORDED|discovered K" "$OUT/settings.log" | while read -r l; do log "  $l"; done
+    fi
     # ---- IRREPLACEABLE-ARTIFACT PREFLIGHT (2026-10-02) -------------------------------------------
     # WHY THIS EXISTS. On 2026-10-02 a 350 MB / 5.58M-record candidate-b journal -- DAYS of compute,
     # the only copy in existence -- was destroyed by running this driver with the wrong recipe. The
@@ -555,6 +603,9 @@ want = {}
 if recipe_R is not None:
     want["R"] = recipe_R
 try:
+    import os
+    if not os.path.exists(vpath):   # no sidecar: the contract lives in the deck profile
+        vpath = vpath[:-len(".value.json")] + ".profile.json"
     vp = (json.load(open(vpath)).get("value_play") or {})
     if "mull_gen_depth" in vp:     want["depth"]     = vp["mull_gen_depth"]
     if "mull_gen_budget_ms" in vp: want["budget_ms"] = vp["mull_gen_budget_ms"]

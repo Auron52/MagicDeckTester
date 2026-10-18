@@ -1464,7 +1464,7 @@ phase_adopt() {
                printf '%s\n' "$v" | sed 's/^/    /'
                echo "    the staged model stays at $staged; nothing in $dir changed. To adopt a candidate anyway:"
                echo "    cp '$staged' '$dir/$stem.value.json' (or $VLQ/$stem.value.NLESC.json / .NLFIT.json for a"
-               echo "    leafless shape), delete the E6_skipcal and F_mullgen markers, and re-run."
+               echo "    leafless shape), delete the E6_skipcal marker, and re-run."
                echo; } >> "$DECISIONS" ;;
           *) log "  $stem: verdict FAILED (rc=$rc) -- see $alog"; printf '%s\n' "$v" | while IFS= read -r l; do log "    $l"; done
              return 1 ;;
@@ -1509,53 +1509,9 @@ phase_skipcal() {
     mark E6_skipcal
 }
 
-# ------------- PHASE F: the deck's MULLIGAN-GENERATION contract, written into its play profile
-# Last, because both halves need the value model to exist (user: "a step near the end of the value-leaf
-# that fills in the play profile with the right generation setting for mulligan profiles... At the same
-# time as we are figuring out the best mulligan settings we can also store K if it isn't already there").
-#
-#   * mull_gen_depth / mull_gen_budget_ms -- picked by MEASUREMENT (derive_mullgen_setting.py), not
-#     read off the depth table. That rule was tried and disproven: burn is trusted at its play depth
-#     yet its play settings cost 15x d1 b3 for +0.001 rank fidelity, and the H ladder measures how a
-#     depth PLAYS, not how it RANKS hands. See docs/design/mullgen-setting-is-a-trust-question.md.
-#   * expected_buckets (K) -- recorded ONCE, from a discovery-only pass (minutes, not the hours a
-#     table costs). ExhaustiveKeep already REFUSES to generate when discovery disagrees with this
-#     field, but nothing wrote it, so that guard sat inert: a check whose input never arrives is not
-#     a check.
-phase_mullgen() {
-    done_p F_mullgen && return 0
-    log "PHASE F: mulligan-generation contract (setting by measurement, + record K)"
-    local row key dir stem mkey base games df failed="" skipped=""
-    for row in "${DECK_TABLE[@]}"; do
-        IFS='|' read -r key dir stem mkey base games <<< "$row"
-        # Only decks this run actually staged a model for.
-        [ -s "logs/eval/$stem.value.STAGED.json" ] || continue
-        df=$(deck_file "$dir" "$stem")
-        [ -n "$df" ] || { log "  PHASE F: no decklist for $stem under $dir -- skipped"; continue; }
-        # A staged leaf that phase E.5 did NOT adopt has no live sidecar to fit the contract under, and
-        # that is a decision, not a failure: skip it WITHOUT stopping, and leave F unmarked so a re-run
-        # after a human installs the leaf fills it in.
-        if [ ! -e "$dir/$stem.value.json" ]; then
-            log "  PHASE F: $stem has no live leaf (not adopted, see $DECISIONS) -- skipped; re-run after installing"
-            skipped="$skipped $stem"; continue
-        fi
-        # PIPESTATUS[0], not $?: $? is `tee`, which always succeeds. mullgen_finalize DID report the
-        # failure (rc=1) when it could not derive a setting -- the pipeline threw the status away and
-        # `mark` below then recorded the phase as done, so the run reported success while the deck
-        # shipped with no generation setting at all. That is how KittyEquipment spent weeks
-        # generating at the d5/b20 default: not an unimplemented step, a swallowed exit code.
-        python3 scripts/mullgen_finalize.py "$df" --write 2>&1 | tee -a "$VLQ/driver.log"
-        [ "${PIPESTATUS[0]}" -eq 0 ] || { failed="$failed $stem"; }
-    done
-    if [ -n "$failed" ]; then
-        log "  PHASE F: FAILED for:$failed -- phase NOT marked done, so a re-run retries it."
-        log "  PHASE F: those decks would otherwise generate mulligan profiles at the built-in"
-        log "  PHASE F: default play settings, silently and at full cost."
-        return 1
-    fi
-    [ -n "$skipped" ] && { log "  PHASE F: NOT marked done (skipped:$skipped) -- nothing is pending on it in this run"; return 0; }
-    mark F_mullgen
-}
+# ------------- (PHASE F, the mulligan-generation setting screen, MOVED to scripts/mullgen.sh run, USER
+# 2026-10-18: "remove it as a value-leaf stage and make it a mulligan profile stage that only runs when it
+# hasn't been done yet." The screen runs before a deck's first keep-table generation, value leaf or not.)
 
 case "${1:-status}" in
 finish|run)
@@ -1581,7 +1537,7 @@ finish|run)
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
     _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
     for ph in phase_freeze phase_rows phase_split phase_train phase_leafcal phase_matrix phase_riskgate \
-              phase_meta phase_measure phase_adopt phase_skipcal phase_mullgen; do
+              phase_meta phase_measure phase_adopt phase_skipcal; do
         check_freeze || exit 1
         check_decks  || exit 1
         check_leaf_keys || exit 1
@@ -1600,8 +1556,7 @@ status)
         C_matrix)  echo "C matrix      ";; C_riskgate) echo "C.5 risk gate ";;
         D_meta)    echo "D metadata    ";; E_measure)  echo "E measure     ";;
         E_adopt)   echo "E.5 adopt     ";;
-        E6_skipcal) echo "E.6 skip allow";;
-        F_mullgen) echo "F mullgen set ";; esac; }
+        E6_skipcal) echo "E.6 skip allow";; esac; }
     echo "queue dir  : $VLQ"
     echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
     now=$(src_fingerprint); frz=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
@@ -1617,7 +1572,7 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E_measure E_adopt E6_skipcal F_mullgen; do
+    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E_measure E_adopt E6_skipcal; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done

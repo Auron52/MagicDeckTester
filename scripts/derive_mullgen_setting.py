@@ -326,8 +326,13 @@ def main():
         best = max(rows, key=lambda r: r["rho"])
         print("\nNO candidate clears the rho floor %.3f. Best is d%d b%d at %.4f."
               % (args.floor_rho, best["d"], best["b"], best["rho"]))
-        print("Falling back to PLAY SETTINGS (no override) -- generating under a labeller that "
+        print("Falling back to PLAY SETTINGS -- generating under a labeller that "
               "measurably\nreorders hands is not a saving, it is a different policy.")
+        if args.write:
+            # Recorded EXPLICITLY even though it equals play: the pair's presence is the "screened"
+            # marker mullgen.sh reads (USER 2026-10-18: run the screen only "if it hasn't been run yet").
+            write_mull_gen(vpath, play_d, play_b)
+            print("  written to %s (play settings, recorded as screened)" % vpath.name)
         return
 
     # PREFER AN EXACT ARM THAT IS CHEAPER THAN PLAY. rho 1.0 means the labeller orders hands
@@ -370,9 +375,11 @@ def main():
         print("\nPICK: d%d b%d  (rho %.4f >= floor %.3f, cheapest clearing it; %.2fx the play cost)"
               % (pick["d"], pick["b"], pick["rho"], args.floor_rho,
                  pick["cost"] / ref_cost if ref_cost else float("nan")))
-    if (pick["d"], pick["b"]) == (play_d, play_b):
-        print("  == play settings; emit no override.")
-    elif args.write:
+    if args.write:
+        # Written even when it equals play settings: the pair's presence is the "screened" marker
+        # mullgen.sh reads (USER 2026-10-18), so an un-recorded "== play" would re-run the screen.
+        if (pick["d"], pick["b"]) == (play_d, play_b):
+            print("  == play settings; recorded explicitly as the screened setting.")
         write_mull_gen(vpath, pick["d"], pick["b"])
         print("  written to %s" % vpath.name)
     else:

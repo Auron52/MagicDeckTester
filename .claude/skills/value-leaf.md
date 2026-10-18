@@ -69,10 +69,10 @@ This generation owns the box. No mulligan gen, no `recommend` scout, no regressi
 alongside it -- generation stages are strictly serial (CLAUDE.md). Two reasons beyond the obvious
 core-splitting:
 
-* **Downstream stages depend on this one's OUTPUT.** The final stage writes `<deck>.value.json`
-  carrying `value_play` (`mull_gen_depth` / `mull_gen_budget_ms`, `expected_buckets`) -- the
-  settings the mulligan generator reads. Anything mulligan-shaped started before this finishes is
-  measuring the wrong deck at the wrong depth.
+* **Downstream stages depend on this one's OUTPUT.** An adopted leaf becomes `<deck>.value.json`, whose
+  `value_play` the mulligan generator reads. (The mulligan-generation setting screen is no longer a
+  value-leaf phase: USER 2026-10-18 moved it to `mullgen.sh run`, which screens a deck once before its
+  first keep table and carries a profile-screened setting into a later sidecar.)
 * **This model changes performance by 1.35-84.8x.** The H-cell ladder is guarded on the sidecar
   existing, so any timing measured while this is still running (or before it lands) describes the
   slow path and is not a number anyone can plan with.
@@ -277,11 +277,10 @@ human deletes it. **Read it and report it to the user**; it is how the run asks 
 
 Installing is adoption in that tree only: nothing is committed. Committing it -- with GT for the deck's
 smoke + regression keys re-accepted, since the leaf changes play (the overnight tier is left to the
-periodic run) -- is the next step. A first model that IS installed goes straight on to phase F, which
-measures the mulligan-generation setting under the live leaf and records K (it has to: once a sidecar
-exists its `value_play` REPLACES the profile's generation keys wholesale). One that is NOT installed is
-skipped by F without failing; if the user later adopts it, `cp` the staged file into place and re-run
-(finished phases skip, F fills in). Soldiers 2026-10-08 (`docs/design/analysis-soldiers.md`) is the
+periodic run) -- is the next step. (There is no phase F any more: the mulligan-generation setting is
+screened by `mullgen.sh run`, once per deck, USER 2026-10-18. A sidecar's `value_play` REPLACES the
+profile's generation keys wholesale, so that stage copies a profile-screened setting and K into a newly
+installed sidecar rather than re-screening.) Soldiers 2026-10-08 (`docs/design/analysis-soldiers.md`) is the
 hand-run precedent; Prevent Damage 2026-10-11 is the trade case (-0.036 t at 1.21x core-s).
 
 **Phase E also screens the leafless shapes, and E.5 can adopt one instead of the model** (USER 2026-10-14:

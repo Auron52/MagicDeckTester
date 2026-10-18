@@ -81,11 +81,16 @@ CLAUDE.md is authoritative; the three reasons, strongest first:
    model silently costs **1.35-84.8x**. A probe run before it times the SLOW path, so its
    projection can be wrong by more than an order of magnitude, always pessimistically. **Never
    record a feasibility verdict measured without the value leaf attached** -- it is worthless.
-2. **The settings live in the value leaf's output.** Depth and budget come from `value_play`
-   (`mull_gen_depth` / `mull_gen_budget_ms`, `expected_buckets`) in `<deck>.value.json`, which the
-   value leaf's FINAL stage writes. Before that the gen silently inherits the play depth. Do not
-   hand-write that file to work around it: **sidecar presence activates the hybrid in play**, so
-   creating one mid-generation changes the play a running value leaf is being fitted to.
+2. *(Superseded 2026-10-18.)* The generation settings used to come only from the value leaf's last
+   phase. `mullgen.sh run` now screens them itself before the first table (see "Generating a profile"),
+   writing into `<deck>.profile.json` when there is no sidecar. Still true: never CREATE a
+   `<deck>.value.json` by hand -- **sidecar presence activates the hybrid in play**.
+
+**ORDER UNDER REVIEW (USER 2026-10-18):** *"Realistically it seems that mulligan profile first and then
+value-leaf is pretty much always the right order now"* -- before a keep table, lookahead bottoming is the
+dominant cost of every game the value leaf plays (Galadriel: ~96% of CPU at d3 b10), and the leaf is fitted
+on the hand mix the keep policy produces. Galadriel ran mulligan -> value leaf on the USER's instruction;
+whether that becomes the general order (CLAUDE.md) is the USER's open decision.
 3. **Contention corrupts a timing deliverable.** A `recommend` projection IS a wall-clock number;
    measured on a shared box it cannot answer the question it was run for.
 
@@ -304,9 +309,16 @@ profile** (`value_play`), and prints its effective settings so a run is self-doc
 
 - **complete** = full bottoming + cap R40; **fast** = adaptive bottoming + cap R30; keep is always
   adaptive (floor 2). See the recipe study (quality cost ≤ ~0.02t; fast saves ~22–38% of gen).
-- **Depth/budget** come from `value_play` (`target_depth`/`budget_ms`); set the optional
-  `value_play.mull_gen_depth` / `mull_gen_budget_ms` in `<deck>.value.json` when mulligan gen should run at
-  a **cheaper depth than shipped play** for cost (0/unset → inherit the play depth → built-in default).
+- **Depth/budget** come from `value_play.mull_gen_depth` / `mull_gen_budget_ms` (in `<deck>.value.json`
+  when a sidecar exists, else `<deck>.profile.json`); unset → inherit the play depth → built-in default.
+- **THE SETTING SCREEN IS A STAGE OF `mullgen.sh run` (USER 2026-10-18):** *"I'm not so fond of using play
+  settings ... We should have run the setting test first ... make it a mulligan profile stage that only
+  runs when it hasn't been done yet."* Before the first generation (no journal), if the contract lacks
+  that pair, `mullgen_finalize.py --write` measures it (`derive_mullgen_setting.py`: candidate settings
+  scored for rank fidelity vs play, cheapest clearing rho 0.99) and records K. The pick is ALWAYS written,
+  even when it equals play settings -- the pair's presence is the "screened" marker. Never hand-write it
+  to skip the screen. Galadriel 2026-10-18 is the case that prompted it: its first table generated at
+  play settings (d5 b20) because the screen lived in a value-leaf phase that had not run.
 
 ### Three properties every run has, that nothing can switch off
 
