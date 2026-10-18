@@ -31,40 +31,32 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
-## RESUME STATE (2026-10-18 ~03:45 UTC, written before a context compaction)
+## RESUME STATE (2026-10-18 ~09:45 UTC)
 Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
-- `niv` = branch `niv-analysis` (integration; HEAD `0b955f153` + this note). Build there = T2
-  (`c52ed5c9d` src); do NOT rebuild while the Stage-4 analyzer below is running off it.
-- `niv-core`, `niv-remand`, `niv-mana`, `niv-d0`: merged into niv-analysis (keep; T1 binary = niv-mana).
-- `niv-base`: detached at `42480e6c6` (origin src), built -- the BASE arm for attribution.
-- `niv-bs`: AGENT RUNNING (Brainstorm put-back search cost: lossless memo, sound folds, a budget
-  PRICE in the equip-route good shape; report pending). Integrate when it reports.
-- `niv-aura`: UNCOMMITTED fix (TurnSolver.cpp + test_generator_servant.cpp, built, its unit test
-  passes): `SubsetHasHostSacrificedForMana` -- reject a subset whose Aura spell / soulbond pairing
-  targets a creature the same subset cracks for mana (Generator Servant; SacForMana is applied in the
-  pre-pass, so the host is gone on resolution -> silent fallback; [enchant-retarget] read 3.7M on the
-  analyzer pass). Identity/dominance fold, lockstep in Solve's consider + eval_and_push +
-  RetargetSolveAuraHosts. Negative control running (`logs/arms/aura_niv*.txt`: 20 games d3 b10
-  s5001, retarget count + win turns, niv vs niv-aura). Then commit + integrate.
-Running: Stage 4 `logs/stage4.sh` (status `logs/stage4.status`; analyzer JSON
-`logs/stage4_analyze.json`, err `logs/stage4_analyze.err`). Card scores DONE (2h, a slow tail of
-games stuck in PutBackCandidates per perf), `decks/NivMizzetCombo/NivMizzetCombo.profile.json`
-WRITTEN (uncommitted); the cost-aggregate diagnostic batch (reframe A/B, ~400 games d5/b20) is in
-its own slow tail.
-Aura negative control RESULT (20 games d3 b10 s5001): retargets 93,663 -> 15,352 (-84%, a SECOND path remains -- find it with MTG_ENCHANT_RETARGET_ABORT=1 on the niv-aura binary); one game moved, gi10 T4 -> T5 (an identity fold should only move play via budget redistribution -- re-run gi10 at --budget-ms 0 on both arms before committing).
-NEXT, in order: (1) finish the aura fold (second path, gi10 at b0) -> commit `niv-aura`, ff into niv-analysis; (2) Stage 4
-finishes -> read `stage4_analyze.json` (mulligan_flags, card scores), commit the profile;
-`python3 scripts/provider_audit.py --check` (the deck is audited once it has a profile);
-(3) integrate niv-bs; rebuild niv; (4) `python3 logs/add_niv_rows.py` (suite rows, all three tiers,
-key `niv` + `niv2hg`), `python3 scripts/suite_gate.py --measure decks/NivMizzetCombo` -> the 3x
-rule (budget 8086 ms/game = 3 x pd 2695). OVER 3x -> the deck goes in NO tier and getting it under
-becomes the first goal (Brainstorm fan, second main) -- report to the user; (5) if in: run each
-tier `--deck=niv,niv2hg` + full smoke/regression for the integrated tree, analyze every searched
-slower game, accept (smoke/regression full; overnight --deck=niv,niv2hg only), check_gt_logs;
-(6) Stage 5: verify_deck.py, nonconv/fd-diverge, multi-depth d0/3/5, 5c2 leaf_tiebreak_check,
-5h audit_viewer_decisions (full sweep), 5d claude-play sweep (Opus/Sonnet fan-out ~15-20 games),
-5i discard buckets (AUTHOR + REPORT, user approves); (7) push niv-analysis onto
-phase-1-2-deck-analyzer (rebase first), watch CI, ff primary, check_references_safe.
+- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP: niv-analysis (`b9580aa6d`) + Servant host fold
+  + niv-bs's three commits + the Aura/cantrip bundle `41950c0f0` + ledger. Built. UNCOMMITTED there:
+  the suite rows in `test/regression_cases.sh` (from `logs/add_niv_rows2.py`, CASES=...). Do NOT rebuild
+  it while the claude-play sweep runs (workflow `wf_64ca898c-6fa`, 16 seeds 71000-71015, Opus).
+- `niv` = branch `niv-analysis` (behind niv-aura; ff it to niv-aura once Stage 4 is done). Its build
+  is the OLD T2 binary the Stage-4 analyzer is still running on (discard evidence, 400 games d3,
+  single thread, 4h+): do NOT rebuild it until `logs/stage4.status` says done.
+- `niv-perf` = branch `niv-perf` (from niv-aura `d09f881e7`): PERF AGENT running (goal: the 3x cost
+  rule; leads = uncharged work: d3 b10 `--seed 2018 --game-index 16` 347 s / 246k units, `--seed 3007
+  --game-index 4` 1,507 s / 1.64M units; d5 b20 s3007 gi4 >20 min, 4.6 GB).
+- `niv-bs` (agent done; integrated), `niv-base` (origin src, BASE arm), `niv-core`/`-remand`/`-mana`/`-d0`.
+Running: `suite_gate.py --measure decks/NivMizzetCombo` from niv-aura (`logs/niv/suite_gate_measure.txt`;
+expected FAR over 8,086 ms/game -> the deck goes in NO tier, perf is the first goal, report to the
+user); gi73 d3 b0 on niv-bs vs niv-aura (`build/scratch/niv-aura/ab/gi73_b0_*.txt`, the A/B's one
+slower game). Sweep AI benchmarks done (`build/scratch/niv-sweep/bench.err`: all 16 won, 7xT4 9xT5).
+verify_deck --no-sweep: coverage/viewer/viewer_wiring PASS; card_costs INCOMPLETE (Scryfall 429 on 120
+cards of the whole DB -- re-run); regression_tiers no GT (pending the cost gate).
+NEXT: (1) sweep returns -> record `## Claude-play sweep` (commit d09f881e7, seeds 71000-71015, flags
+N unresolved), fix real flags; (2) measurement verdict -> report; (3) perf agent report -> integrate,
+re-measure; (4) Stage 4 done -> stage4_analyze.json (mulligan_flags, discard buckets = AUTHOR+REPORT),
+commit profile, provider_audit --check, ff niv-analysis; (5) Stage 5 runtime: verify_deck full
+(nonconv/fd-diverge), multi-depth, 5c2 leaf_tiebreak_check; (6) when it fits: tiers + full
+smoke/regression (the nested bail + Action::def fix are GENERAL -> attribute every moved deck);
+(7) push (rebase onto origin phase-1-2-deck-analyzer), CI, ff primary, check_references_safe.
 
 ## Stage 1 — coverage (2026-10-17)
 Missing (8): Niv-Mizzet, the Firemind; Niv-Mizzet, Parun; Curiosity; Tandem Lookout; Generator
