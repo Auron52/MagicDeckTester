@@ -69,11 +69,14 @@ viewer wiring, unit-test plans. Summary of what they established:
 3. **Searched discards / sac victims for OTHER decks** (Burning-Fist, Neheb, Troyan, Siege-Gang, Pashalik,
    Psychotrope take the provider's first pick today — an in-window greedy). [default: Vampires only now]
 4. **Madness at cleanup**: one-option "cast if payable" (dominance argument in design_A1 §3) vs searched.
-   [default: one-option rule, PROVISIONAL]
+   [default: one-option rule, PROVISIONAL] -- LANDED (A1) as DecisionProvider::MadnessCastDefault (base rule;
+   the dominance argument is on the hook's declaration); the human is still asked through `madness`.
 5. **Convoke tap order** for the attackers it taps: lowest power first vs a provider order keeping Drana /
-   Mavren untapped. [default: lowest power first]
+   Mavren untapped. [default: lowest power first] -- LANDED (A1): CreatureConvokeArms adds COSTLY bodies
+   lowest power first; every k is a searched arm, so only WHICH k bodies is the order's choice.
 6. **Own-death checks on for Vampires** (Asylum Visitor's mandatory loss, Voldaren Estate's pay-1-life).
-   [default: on]
+   [default: on] -- LANDED (A1): GoldFishRunner arms own_death_live on hellbent_upkeep_life_loss or
+   tap_blood_cost (both Vampires-only params; no other deck arms).
 7. **Bloodghast "may return" = always yes** in autonomous play (the human is still asked). [PROVISIONAL]
 8. **Goldfish-inert collapses** (PROVISIONAL until signed off): Bloodghast can't block; flying (Drana,
    Keeper, tokens); Socialite's menace; Dire Moon's deathtouch; instant-speed activations folded into the
@@ -95,6 +98,25 @@ viewer wiring, unit-test plans. Summary of what they established:
     the Vampires buckets are yours to set]
 13. **Searched discard pins grow `sizeof(Action)` 472 -> 480** for every deck (one InternedName; no padding
     hole holds a pointer). Byte-identical play; a small copy-cost increase everywhere. [default: keep]
+14. **Madness emission gate is OPTIMISTIC** (A1): an outlet's cast variants are gated on the turn's optimistic
+    mana (OptimisticTurnMana), not on an exact payability probe of the pre-plan board, because the plan may
+    play a land / add mana before its trailing pass (an exact pre-plan probe would make "land, then Condemned
+    discarding Baron, cast it" unfindable at any budget). Cost: a cast variant that cannot pay at the trigger
+    resolves as the decline (a duplicate, never phantom mana). [default: optimistic -- the completeness rule]
+15. **Madness / creature-convoke in ROLLOUT LEAVES** (A1): a rollout leaf (estimating, beyond the horizon)
+    emits only the provider's front madness variant and convoke arm 0 -- the phyrexian precedent; the searched
+    collect and the executor keep every variant. [default: on; PROVISIONAL, the permitted playout policy]
+16. **Creature convoke drops the no-convoke cast when a free body helps** (A1; Chord's weak dominance: a free
+    body has no other use vs the passive opponent and the land mana it saves is at least as flexible).
+    [default: on, PROVISIONAL]
+17. **Chord of Calling keeps the LEGACY convoke rules** (A1): the creature-spell terms (every body free after
+    combat; a live non-mana {T} body is costly) apply to creature spells only, so Melira Pod is byte-identical.
+    Adopting them for Chord is a play change (main-2 arm 0 widens). [default: legacy for Chord]
+18. **VampiresProvider declines Bloodghast's madness while the land drop is open** (MadnessCastDefault, draft,
+    MTG_VAMP_DRAFT_ORDERS): it orders the fan (decline first) and decides beyond the horizon only. [default: on]
+19. **Asylum Visitor's loss to 0 at upkeep** is detected at the post-main-1 own-death check in both worlds (no
+    SBA checkpoint between upkeep and main 1 exists; nothing in this list gains life in main 1).
+    [default: disclose; PROVISIONAL]
 
 ## Track A -- cluster A2 integrated (2026-10-18, integrator; branch `vampires-analysis`, NOT pushed)
 Cards (cards.json, verbatim Scryfall costs): Falkenrath Pit Fighter, Stromkirk Condemned, Voldaren Estate,
@@ -214,3 +236,108 @@ by the unit tests' revive-decline case) -- owed to Stage 5h.
   madness. A madness-cast Vampire lowers Voldaren's Blood cost only if Blood creation runs after it
   (provider ActivationOrderRank puts Blood creation FIRST in the trailing pass today).
 - My outlet sites already increment `cards_cycled_or_discarded_this_turn` themselves (the hook does not).
+
+## Track A -- cluster A1 integrated (2026-10-18, integrator; branch `vampires-analysis`, NOT pushed)
+Commits `34ccb465a` (engine + viewer + unit tests) and `51a60b624` (Scryfall snapshot, audit tweak). Cards
+(cards.json, verbatim Scryfall costs): **Falkenrath Gorger** {R}, **Markov Baron** {2}{B}, **Asylum Visitor**
+{1}{B} -- every clause modelled (design_A1 §1); `Keyword::Madness` (inert tag) maps Scryfall's keyword.
+
+**Engine (shared, both worlds):**
+- THE DISCARD HOOK `DiscardCardFromHand(state, ctl, idx, mq*, cause)` now carries EVERY real discard: the cleanup
+  (`GameEngine::CleanupStep`, `CleanupDiscardShed` + the legacy loop), Burning-Fist (`ApplyActivatePump` mode 1),
+  Neheb (`FireNehebCombatDamageDiscards`), the Troyan loot, `ApplyChannel`, `ApplyTransmute`, Celes's rummage,
+  Gamble (`PerformTutor`), retrace (both worlds), cycling (D1/D2/D3), Land's Edge (both worlds, hand order kept),
+  the dormant `ChooseDiscard` probe trial, and A2's three outlets. A madness card (own `madness_cost`, or a
+  `grants_madness_creature_subtype` granter we control -- snapshotted at the discard) goes to exile and is queued;
+  `GameState::deck_has_madness` (padding, sizeof unchanged at 1136) skips the lookup for every other deck.
+- `ResolvePendingMadness` (FIFO; pin -> option by (cost, arm), stranded -> decline; unpinned -> provider
+  `MadnessCastDefault`; human `madness` chooser) pays through a CALLER-OWNED creature-SPELL payer
+  (`MadnessHostScope`: rollout `RolloutMadnessPayer` = TapForCostDirect, executor `AIEngine::MadnessPayer` =
+  TapForCost + fresh pool; never inside the outlet's ability pay scope). `CastFromMadness` = the cast bookkeeping
+  (storm / MV counters, Irencrag budget, on-cast triggers, prowess) + the shared enter cascade (D-A1-1: no
+  stack traversal, provably inert for the pool). Order at the outlets: discard -> sacrifice -> madness -> effect
+  (Pit Fighter's lone Gorger still grants; Condemned's pump reaches the madness-cast creature). Cleanup: after
+  the CR 514.2 reset, the step's float emptied, the provider rule.
+- Convoke generalised (`ConvokeRules`, `ClassifyConvokeBodiesEx`, `ApplyConvokeReduction(.., pip)`,
+  `ApplyConvokeTapsForCard`, `CreatureConvokeArms`): a creature spell's pip colour, every body free after
+  combat / at cleanup, a live non-mana {T} body costly (`ConvokeBodyTapAbilityLive` -- cluster B adds Bloodline
+  Keeper's param there). Chord keeps the legacy rules (open question 17). Every recompute site passes the pip.
+- Asylum Visitor: `PerformUpkeepHellbentDraw` (top of `GameEngine::UpkeepStep` / before the rollout's suspend
+  arrivals; intervening-if on non-staged cards; one draw for N Visitors; empty library = the draw-step loss) and
+  `PerformOpponentUpkeepHellbentDraw` (before `opponentdeck::EndOfTurnDraw` in both worlds; only with a dealt,
+  empty opponent hand; each Visitor resolves). Own death armed (question 6).
+- `greedywindow` moved verbatim to `src/core/GreedyWindow.h` (the core resolver's in-window counter reads it).
+
+**Search:** `Action::madness_choice / madness_arm / madness_mv` (in padding: sizeof(Action) stays 480).
+`MadnessFanFor` crosses each madness-capable outlet discard pin with decline + one cast per (cost x convoke arm),
+provider default first, gated on the optimistic turn mana (question 14); a Gorger IN HAND opens the grant and
+`SubsetVampOutletInvalid` rule 5 requires its cast. Folded into plan_signature (#M), ActionFoldSig,
+BpCandFingerprint, PlanDomKey, the diff printer (all gated on >= 0). `madness_mv` rides `a.cost` as generic;
+the six trailing-pass pay sites pay `OutletOwnCost(a)`. `PutsGyLandfallFeeder` ignores a discard whose pin casts
+the card. Baron's hard cast: a CollectActions post-pass (arm 0 replaces the base when it taps a body; arms k
+searched; rollout leaves keep arm 0); the emit prune exempts convoke creatures and gates each arm on its reduced
+cost. Counters (`MTG_ROLLOUT_STATS`): `madness_variants`, `madness_unpinned_in_window`, `madness_unhosted`.
+
+**Viewer:** bucket-B `madness` (GameLogger `MadnessChooser` + RevealLogPause / ComboOffApplyPause nulling;
+call site ResolvePendingMadness, asked only for UNPINNED triggers with a payable cast; `WriteMadnessDecisionJson`
++ RunClaudePlay lambda; `madnessPanelHtml` centred card-image modal; SUBDECISIONS; DECISIONS.md row; audit
+MANIFEST `madness_cost` / `grants_madness_creature_subtype` -> madness, INERT the three Visitor params --
+PENDING USER OK per the self-guard). Baron's convoke arms ride `main_phase` plan variants (the Chord precedent).
+
+**Deviations from design_A1 (and why):**
+1. The pin names (cost index, convoke ARM), not raw tap counts -- a plan whose earlier casts add free bodies
+   still realises "every free body"; a pinned option that no longer exists resolves as decline.
+2. Emission gate optimistic, not an exact copy probe (question 14). The apply-time options ARE probed exactly.
+3. A Gorger in hand opens the fan + rule 5 (the design's emission only read the pre-plan board, which would make
+   "cast Gorger, then discard a Vampire for madness" unfindable).
+4. Rollout leaves keep the front variant / arm 0 (question 15).
+5. The human is asked only when a cast is payable (a forced decline is not a decision; the event log says it).
+6. Creature-spell convoke rules are keyed on the card being a creature; Chord stays legacy (question 17).
+7. Resolution-time discards outside a hosted pass (Neheb in combat, Gamble, Celes outside the trailing pass)
+   have no payer -> decline (unreachable today: no current deck pairs them with a madness card).
+8. `MTG_DISCARD_SHED_VERIFY` was not extended to madness outcomes (it compares shed NAMES; the madness outcome is
+   covered by the unit sweep instead).
+
+**Verification (A1, 2026-10-18):** `mtg-test` **1499/1499** (new `test/unit/test_vampires_madness.cpp`, 18
+cases: card data; MadnessCostsFor incl. scope / fold / gate; the hook; decline / cast / unpayable / unpinned;
+Territory pays the madness SPELL but not an ability; Pit Fighter sacrificing the lone Gorger still casts;
+Condemned pumps the madness-cast Baron; convoke arms pre/post combat + Chord byte-identity; Baron's arm
+enumeration; the madness fan (decline AND cast survive the dedup, both realise); a Gorger in hand + rule 5; two
+Gorgers = one option; cleanup in both worlds (cast / decline, float emptied); Visitor ours (two Visitors = one
+draw, staged-only hand, empty library) and the opponent's; the chooser (asked unpinned, nulled under
+RevealLogPause, not asked when pinned); a rollout-vs-executor lockstep sweep over madness / convoke plans in
+both mains with `g_madness_unpinned_in_window` unchanged; routing). **Smoke** (`regression.sh --smoke`, NOT
+accepted): `120 passed, 8 failed`, scenarios 217/217 -- exactly cluster C's 8 rows (critter d0/d3/d5/2hg,
+angels d0/d3/d5/2hg) with C's values and C's per-tier counts (searched faster=19 play-changed=136, d0 faster=65
+play-changed=459, 0 slower); **every other deck byte-identical**, including every deck whose discard site moved
+(Melira Pod's Chord, Minotaur's Burning-Fist / Neheb, Hinata's Gamble, Treasure Hunt's Land's Edge / retrace /
+cycling, Bruna's Troyan, FiveColour's Progenitus / transmute). **Madness decision repro** (the real resolution
+paths): cleanup -- `build/Release/mtg decks/Vampires/Vampire.cod --claude-play --seed 101 --game-index 0
+--max-turns 9 --choices 1,2,-1,-1,4,-1,-1,11,-1,-1,11,11,0` -> exit 70, `madness` (source `cleanup`, Markov
+Baron, option 0 "Cast for {2}{B}"); reply 0 puts Baron onto the battlefield, -1 into the graveyard. Outlet --
+`--choices 1,2,-1,-1,4,-1,-1,11,-1,-1,9,-1,-1,77,0` (T5: Stromkirk Condemned's unpinned entry -> `discard` ->
+Baron) -> exit 70, `madness` (source `Stromkirk Condemned`, options "Cast for {2}{B}" and "Cast for {2},
+tapping 1 creature (convoke)"). **Sanity** `mtg decks/Vampires/Vampire.cod --games 40 --seed 777 --depth 3
+--budget-ms 20 --threads 16`: no crash, avg **4.5000** (22 T4 / 16 T5 / 2 T6, **0 unwon**), 4.05 s wall at 16
+threads, no game over 10 s (`--batch` SLOW-GAME), `madness_variants=219751 madness_unpinned_in_window=0
+madness_unhosted=0`; a crash check at d0 (200 games, seed 4242: avg 4.915) and d5 b20 (20 games, seed 9100: avg 4.600) also kept both counters at 0. `audit_card_costs.py` **rc 0** (448/448 compared). `audit_card_fields.py --update`
+(targeted) + offline: every hard field matches (rc 1 = the pre-existing unfetched Temple of Abandon).
+`provider_audit.py --check` rc 0 (Vampires NOT AUDITED: no profile yet; the routing test pins Vampires ->
+Vampires and Melira Pod -> MeliraPod). `audit_viewer_decisions.py --no-sweep`: expected {discard, madness,
+revive, vial_charge}, oracle cross-check clean. `test/viewer_decision_types_check.js`: 37/37 answerable.
+
+**Notes for the next integrator (cluster B: Captivating Vampire, Bloodline Keeper // Lord of Lineage):**
+- Bloodline Keeper's "{T}: Create a 2/2 black Vampire token with flying" makes it a COSTLY convoke body: add its
+  param to `ConvokeBodyTapAbilityLive` (SpellEffects.h) -- the creature-spell convoke rules then never count it
+  free (and the post-combat collapse still leaves it costly). Captivating Vampire's "Tap five untapped Vampires
+  you control" competes with convoke for the same bodies -- that is a cost on OTHER creatures, not a {T} on
+  itself, so it does not belong in that predicate; the search already sees both (casts / activations in one plan).
+- Madness casts enter through the shared enter path (`CastFromMadness` -> FireEtbWatchers / FireOwnEtbTriggers),
+  so Keeper's five-Vampire transform count and Captivating's lord bonus see them for free.
+- `sizeof(Action)` is 480 with A1's three int8 pins in padding; `sizeof(GameState)` 1136. No Action size pin
+  exists. The outlet trailing passes now install `MadnessHostScope` around every ApplyPermAbility /
+  ApplyActivatePump / discard-sac apply -- a new activation kind that can discard must do the same (both worlds)
+  and fan its discard pin through `PushWithMadnessFan(actions, a, MadnessFanFor(...))`.
+- Bloodline Keeper is still a name-only placeholder in the deck (cost "" in the viewer); it is never castable
+  until B lands.
+
