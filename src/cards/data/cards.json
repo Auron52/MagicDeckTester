@@ -12354,6 +12354,72 @@
     "land_search_tapped": true,
     "land_search_optional": true
    }
+  },
+  {
+   "name": "Legion Lieutenant",
+   "mana_cost": "{W}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Vampire",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Vampires you control get +1/+1. [Lord: lord_effect + subtypes_affected [\"Vampire\"] + lord_excludes_self (Inspiring Veteran's shape), applied inside ComputeLordBonus -- the one P/T site combat, SBA and eval read, so executor and rollout are lockstep. Matches each creature's OWN subtypes, so it reaches Vampire TOKENS (Bloodline Keeper / Lord of Lineage 2/2s, Mavren Fein 1/1s) and a creature taken with Captivating Vampire (which becomes a Vampire). 'Other Vampires' (any Vampire permanent) is evaluated for creatures only -- EXACT for this list: it has no noncreature Vampire permanent (Blood tokens are untyped artifacts).]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Vampire"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Vampire of the Dire Moon",
+   "mana_cost": "{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [],
+   "subtypes": [
+    "Vampire"
+   ],
+   "keywords": [
+    "Deathtouch",
+    "Lifelink"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.) [Lifelink: printed keyword, read by CreatureHasLifelink in the shared combat core (executor + rollout) -- a life-gain event per connecting swing; our life total matters to Asylum Visitor's draw-and-lose-1 and Voldaren Estate's pay-1-life, nothing in the list triggers on gaining life. PARTIAL, PROVISIONAL: Deathtouch is parsed (Keyword::Deathtouch) but has no reader -- structurally inert: it only ever deals damage to the opponent's face (the passive opponent never blocks; no fight/bite effect in the list).]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Swamp",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Basic"
+   ],
+   "subtypes": [
+    "Swamp"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {B}.)",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B"
+    ]
+   }
   }
  ]
 }

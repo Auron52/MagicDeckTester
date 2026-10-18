@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Falkenrath Pit Fighter"/>
+        <card number="4" name="Falkenrath Gorger"/>
+        <card number="4" name="Legion Lieutenant"/>
+        <card number="4" name="Stromkirk Captain"/>
+        <card number="3" name="Stromkirk Condemned"/>
+        <card number="2" name="Captivating Vampire"/>
+        <card number="2" name="Bloodghast"/>
+        <card number="4" name="Voldaren Estate"/>
+        <card number="4" name="Unclaimed Territory"/>
+        <card number="6" name="Swamp"/>
+        <card number="4" name="Aether Vial"/>
+        <card number="4" name="Markov Baron"/>
+        <card number="2" name="Asylum Visitor"/>
+        <card number="4" name="Secluded Courtyard"/>
+        <card number="2" name="Blackcleave Cliffs"/>
+        <card number="3" name="Vampire of the Dire Moon"/>
+        <card number="1" name="Vampire Socialite"/>
+        <card number="1" name="Mavren Fein, Dusk Apostle"/>
+        <card number="1" name="Drana, Liberator of Malakir"/>
+        <card number="2" name="Bloodline Keeper"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Anje Falkenrath"/>
+        <card number="2" name="Anje's Ravager"/>
+        <card number="1" name="Worldfire"/>
+        <card number="1" name="Mountain"/>
+    </zone>
+</cockatrice_deck>
