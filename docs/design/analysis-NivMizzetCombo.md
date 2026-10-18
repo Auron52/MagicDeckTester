@@ -31,19 +31,18 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
-## RESUME STATE (2026-10-18 ~10:40 UTC, before a context compaction)
+## RESUME STATE (2026-10-18 ~11:00 UTC)
 **PUSH HOLD (USER, 2026-10-18 ~10:10 UTC): do NOT push until ~16:10 UTC ("hold off on pushing until maybe 6 hours from now"). Local commits only.**
+**USER NOTE (2026-10-18 ~10:50 UTC):** *"We may need to work more on heuristics for this deck next week.
+Ponder, Preordain and Brainstorm are especially troublesome in terms of potential branches."* -> the
+cantrip-branching census goes in `docs/design/niv-cantrip-branching.md` (from the perf agent's report),
+as next week's starting point.
 Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
-- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP (HEAD = latest ledger commit). UNCOMMITTED, built:
-  the draw-loop LIFO rewrite (SpellEffects.h `RunDrawPingStack` / `PushDrawPings` / `BuildDrawPingTable`
-  / `DrawPingStackLease`, replacing ResolveDamageDraws; ResolveDrawTriggers + OnCreatureDealtDamageToOpponent
-  rewritten), the put-back chooser guard (`&& !OpponentHasLost(state)`), main.cpp dig-note text, tests
-  in test_niv_draw_trigger.cpp ("...the stack draws ONE per ping", "Two Nivs, Curiosity on ONE...").
-  COMMITTED as the "rules(niv): the draw/ping loop resolves LIFO" commit (1491 unit, 229 scenarios).
-  running (task output only). NEXT: confirm units + scenarios -> commit "rules(niv): the draw loop
-  resolves LIFO ..." -> re-run `TAG=ab2 bash logs/arms/aura_ab.sh` in worktree niv (A/B vs niv-bs; compare
-  with `python3 logs/arms/aura_ab_cmp.py ab2`). Also uncommitted (keep uncommitted): the suite rows in
-  `test/regression_cases.sh` + `test/suite_cost.json` (niv 124,304 ms/game).
+- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP. The LIFO draw loop is COMMITTED (0d0892e19; 1491
+  unit, 229 scenarios). Uncommitted (keep uncommitted): the suite rows in `test/regression_cases.sh` +
+  `test/suite_cost.json` (niv 124,304 ms/game). RUNNING: ab2 = niv-aura@0d0892e19 vs niv-bs (base arm
+  reused from ab1, same binary; `build/scratch/niv-aura/ab/ab2_aura_only.sh`, marker `ab2.done`; compare
+  `python3 <niv>/logs/arms/aura_ab_cmp.py ab2`).
 - `niv` = branch `niv-analysis` (behind niv-aura; ff to niv-aura once Stage 4 is done). Its build is the
   OLD T2 binary the Stage-4 analyzer runs on (discard evidence, 400 games d3, single thread, 4.5h+): do
   NOT rebuild until `logs/stage4.status` says done.
@@ -60,8 +59,8 @@ verify_deck --no-sweep static checks.
 NEXT after that: (1) integrate niv-pay + niv-perf reports (rebase onto niv-aura), re-measure the cost
 (`suite_gate.py --measure`; NOT `--cost`, which re-measures); (2) Stage 4 done -> stage4_analyze.json
 (mulligan_flags; discard buckets = AUTHOR + REPORT), commit profile, provider_audit --check, ff
-niv-analysis; (3) Stage 5 runtime: verify_deck full (nonconv/fd-diverge), multi-depth, 5c2; card-cost
-audit re-run (Scryfall 429); (4) when the deck fits 3x: tiers + full smoke/regression (nested bail,
+niv-analysis; (3) Stage 5 runtime: verify_deck full (nonconv/fd-diverge), multi-depth, 5c2 (card-cost
+audit DONE 10:55 UTC: 12/12 costed cards match Scryfall, rc=0); (4) when the deck fits 3x: tiers + full smoke/regression (nested bail,
 Action::def and AuraSpellCastLegal are GENERAL -> attribute every moved deck); (5) AFTER the hold:
 rebase onto origin phase-1-2-deck-analyzer, push, CI, ff primary, check_references_safe.
 
