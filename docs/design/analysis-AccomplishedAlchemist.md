@@ -6,8 +6,9 @@ forked from `phase-1-2-deck-analyzer` @ 2176032d).
 
 ## RESUME POINT
 
-Chunks A, B, C1, C2a, C2b landed (C2b: the closed-form untap loop + its payoffs, the continuation kill fold,
-viewer `untaploop=`). Next: Stage 5 verification (claude-play sweep, mismatch harnesses), the suite entry
+Chunks A, B, C1, C2a, C2b, P landed (P: the performance chunk -- three sound identity folds + two lossless
+payer deferrals; the deck's per-game cost is now ~4.1 s (d3 b20) / ~7.1 s (d5 b40) contended, under the 3x
+line's 8,907 ms). Next: Stage 5 verification (claude-play sweep, mismatch harnesses), the suite entry
 (regression_cases.sh + suite_gate --cost), then profile -> mulligan -> value leaf. Open USER items are listed
 under "Open questions surfaced to USER".
 
@@ -55,6 +56,77 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk P (2026-10-18) -- landed: performance (the 3x cost rule)
+
+Goal: per-game cost under `suite_gate.py`'s line (3 x galadriel's 2,969 ms = **8,907 ms/game**, the max over
+the deck's searched cases of case-ms / games). Measured on one pooled batch, 60 games x {d3 b20, d5 b40},
+seed 9100, 32 workers (contended wall), before = C2b HEAD 0875a951.
+
+* **Where the time was** (perf, d3 gi55 / d5 gi53): the GREEDY subset walk (`SolveUncached`, the rollout
+  leaf) was 56-81% of CPU, and inside it `SubsetPayableAsExecuted` -- the land-Aura payer check (a whole-turn
+  prepay + a per-cast walk on two GameState copies) -- was ~46%. It answered "payable" on 6,239,728 of
+  6,239,848 calls.
+* **Fold 1 -- `MTG_HAND_COPY_CLASS_FOLD` (default ON, heurarm slot).** The Aura-copy class
+  (`AppendFungibleAuraClasses`, digits non-increasing in group order) generalised to ANY hand-cast group
+  (`AppendFungibleHandCopyClasses`) and to battlefield activation groups of identical non-mana, non-creature
+  permanents (`AppendFungibleActivationClasses`: two Staffs of Domination). WHY THE EXISTING FOLDS MISSED
+  THEM: `MTG_FOLD_HAND_CASTS`'s CONDITION 2 refuses any slot with >1 action (Stroke's (target, X), Sprawl's
+  host x colour, Galvanic's partner, Harbinger's tutor, Living Wish), the canonical-prefix rule reaches the
+  search walk only on Snow (`FoldSearchOdometerOptIn`), and the plan-signature dedup catches the copies only
+  AFTER each was walked, priced and scored (the greedy walk has no dedup at all). Identity bar: card content
+  (`HandCardContentHash`) + m1 side, option lists equal member for member under `ActionFoldSig` (+ the fields
+  it omits); refuses mana-side/accelerant/splice/restrictor casts, free casts, Equipment spells and Magnetic
+  Theft (MTG_EQUIP_HOST_FOLD's restricted-growth string reads those in card order -- claiming them failed
+  test_equip_host_fold.cpp's mirror cases), a copy another candidate names by number, and a class whose group
+  order disagrees with candidate order (the equiv_tag prefix keeps the earliest candidates).
+* **Fold 2 -- `MTG_LAND_AURA_HOST_CLASS_FOLD` (default ON, heurarm slot).** (a) a land carrying only land
+  Auras joins a (name, tapped, sorted (Aura, locked colour) multiset) class instead of always keeping its own
+  slot; (b) `AppendLandAuraHostPrefix`: the odometer keeps only positions whose used hosts are a PREFIX of
+  each class (relabelling identical lands is a symmetry of the whole option set; compatible with the copy
+  class -- relabel first, then sort the copies' digits). The candidate fold still keeps `keep` = land Auras
+  in hand members, so a SPREAD and a STACK both survive.
+  **NOT built: one host per class.** C2b priced it at 3.7x, but (1) that pricing collapsed every candidate of
+  an Aura group to one host, i.e. it also priced Sprawl's COLOUR axis away (unsound); (2) one-per-class forces
+  two Auras to stack, which is a dominance only within one phase -- a stacked host's surplus floats away at a
+  phase end where a spread host's stays on the battlefield (main 1 needs {G}{U}, main 2 needs {G}{B}). Lossy,
+  so not an identity fold. (Moot for play anyway: the autonomous plan dedup already folds land-Aura hosts by
+  name except on the karoo branch -- the prefix removes walk positions that dedup would discard.)
+* **Lossless payer work.** (1) `MTG_SOLVE_AURA_PAYER_DEFER` (default ON): the greedy keeps ONE subset, so the
+  land-Aura payer is asked only of a subset that would REPLACE the best (a rejected subset and a non-improving
+  one are both discarded); stands down while the walk's mana-verdict cache is armed (its one non-local
+  consumer). 6.24 M -> 231 k calls on d5 gi53. (2) `MTG_SOLVE_RESCUE_DEFER` (default ON): the same for the
+  filter-board real-payment rescue of a flat-unpayable subset (3.95 M calls, 33% rescued) -- only when a filter
+  makes it the expensive kind. (3) `MTG_PAY_PROBE_INPLACE` (default ON): after a successful prepay the
+  per-cast walk runs on the prepay's own scratch board instead of copying it again (the only reads of the
+  original board precede the first mutation when the self-funding taps are off; falls back otherwise).
+  `MTG_PAY_PROBE_STATS=1` prints the probe counts.
+* **Work removed** (single-threaded census, before -> after): d3 gi55 greedy visits 11.83 M -> 6.84 M, search
+  walk 6.95 M -> 4.59 M, payment calls 53.9 M -> 7.9 M, wall 50.1 s -> 9.8 s; d5 gi53 visits 19.6 M -> 16.0 M,
+  payment calls 55.5 M -> 4.3 M, wall 65.8 s -> 16.9 s. Distinct plans after dedup unchanged (89,595 on gi55).
+* **Deck cost** (pooled, contended): d3 b20 total 545.1 -> 244.5 core-s (0.449x), mean 9.1 -> 4.1 s, p90 29.4
+  -> 10.3 s, max 62.3 -> 22.8 s; d5 b40 895.2 -> 424.5 core-s (0.474x), mean 14.9 -> 7.1 s, p90 55.0 -> 19.2 s,
+  max 85.4 -> 54.8 s. **Play byte-identical**: both digests unchanged (c8103c26751617f1, 52fbfad72e5b0a2c),
+  avg 5.6500 / 5.5333, 0 games faster, 0 slower -- so no slower game to classify.
+* **Smoke** (not accepted): 124/128; the three known moves carry their C2a digests (selesnya d3 a1937cded0ab6f58,
+  d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9); ONE new move, `melira_smoke_d0_s1001` (avg 6.3380
+  unchanged, 14 games play-changed at the SAME win turn, 0 slower / 0 faster, digest 0f633c1012b4fb11). Traced
+  (gi230, gi463): the first diverging greedy call scores the IDENTICAL set of distinct subsets (gi463: 38 = 38,
+  best rank 4 both), the fold only halves the duplicates, and the pick differs among tied subsets -- the
+  greedy's tie-break `mask |= 1 << j` overflows past 31 candidates (Melira's Chord variants), so which of
+  several equal-rank plans wins depends on which positions exist. Tie-break churn on an isomorphic board, all
+  on d0. Searched cases: no other digest moved.
+* **Residual** (the tail, not the mean): d5 gi40 (54.8 s, 5.09 M units) is NODE-bound, not walk-bound -- three
+  decisions (T4/T5, `root=2`) spend ~900 k units each against a 36,000-unit budget, 95% of it in `u_la_cand`
+  (SolveWithLookahead's candidate loop): a budget-honouring question at that site, not branching. The rest
+  of the per-node cost is the exact payment DFS (`TapForCostShared*`) at the search walk's payability checks
+  (EnumeratePlans emits every feasible plan, so its checks cannot be deferred).
+* **Measured, NOT adopted (USER's call, not needed for the line):** `MTG_SOLVE_CHARGE_W=16` (bill the greedy
+  walk, Snow's setting) on top of the folds: d3 0.52x core-ms at avg 5.6500 (1 faster / 1 slower), d5 0.55x at
+  5.5333 -> 5.6000 (2 faster / 4 slower).
+* Tests: 4 new cases (Stroke copies + a soulbond-named copy refused; Sprawl + Wild Growth prefix -- stack AND
+  spread kept, mirrors dropped; decorated-host classes, blue/blue folds and blue/green does not; two Staffs,
+  enumeration + greedy pick identical up to relabelling). mtg-test 1486/1486, scenarios 225/225.
 
 ## Chunk C2b (2026-10-18) -- landed: the closed-form untap loop and its payoffs
 
@@ -316,6 +388,16 @@ smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLif
   one-per-class land-aura hosts (3.7x) -- they move every deck's GT, so they are yours to call; (4) Scholar via
   Living Wish / Ezuri from hand cannot kill the SAME turn as the loop (site 9 opens once per apply) -- an engine
   structure question, not a card deferral.
+
+* Chunk P: (1) the three folds and the two payer deferrals are DEFAULT ON engine-wide (sound identity
+  folds / lossless reorders; the collapse doctrine). Note the hand-copy class also folds ONE-option copies on
+  the SEARCH walk for every deck -- the thing `FoldSearchOdometerOptIn` kept per deck (Snow only) after the
+  2026-10-01 fleet screen; smoke shows no searched digest moved. (2) `melira_smoke_d0_s1001` moves 14 d0 games
+  at the same win turn (tie-break churn, traced) -> accept through the normal flow. (3) a latent defect worth a
+  decision: the greedy tie-break `mask |= 1 << j` in SolveUncached is undefined past 31 candidates, so ties
+  there are arbitrary on Chord/Pod-sized menus; fixing it moves GT wherever it bites. (4) the one-host-per-class
+  land-Aura fold was NOT built (a dominance that fails across a phase boundary -- lossy); C2b's 3.7x pricing of
+  it was unsound. (5) `MTG_SOLVE_CHARGE_W=16` measured (0.55x, d5 +0.067 turns), not adopted -- not needed.
 
 ## Approved deferrals
 

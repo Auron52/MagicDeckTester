@@ -602,6 +602,8 @@ enum Slot : int
     VAMP_ALWAYS_LAND_FODDER,  // MTG_VAMP_ALWAYS_LAND_FODDER  amendment to MTG_VAMP_ALWAYS_LAND: the hold stays while the discard outlets this turn are at least the hand's non-land cards (the held land is fodder). DEFAULT OFF
     PAY_ENERGY_LAST,          // MTG_PAY_ENERGY_LAST  amendment to MTG_PAY_PAIN_LAST (2026-10-21): a coloured tap that spends ENERGY (Aether Hub) is a costly mode too -- banded with pain in the greedy, withheld with pain in the backtracker's painless-first pass, and refused by the prepay give-back guard. Without it pain-last spent EDF's single Hub energy to save one life (smoke edf d0 gi712: no {W}{W} for Emiel on T3, T4 -> loss). Default ON; =0 -> energy counts as painless
     KAROO_POSITION,           // MTG_KAROO_POSITION  the Karoo drop's POSITION is searched (USER 2026-10-22: "allow the sanctuary to be played at the end of the phase at latest"): besides the after-the-casts default, a Karoo plan is cloned with the drop right BEFORE each cast that can observe the land entering (Plan::land_slot <= -2; TurnSolver::KarooSlotCounts, pruned by DecisionProvider::KarooEntryObserver). KarooPositionSearchOn, EngineFlags.h
+    HAND_COPY_CLASS_FOLD,     // MTG_HAND_COPY_CLASS_FOLD   SOUND identity fold (chunk P, AccomplishedAlchemist 2026-10-18): identical hand copies of ANY card whose option lists are identical (ActionFoldSig, member for member) are ONE odometer class -- the MTG_AURA_COPY_FOLD canonical form (digits non-increasing in group order) generalised past creature Auras, on BOTH walks. Refuses mana-side/accelerant/splice/restrictor casts, free casts, and a copy another candidate names by number. Default ON; =0 restores the unfolded walk
+    LAND_AURA_HOST_CLASS_FOLD,// MTG_LAND_AURA_HOST_CLASS_FOLD  SOUND identity fold (chunk P): land-Aura hosts carrying only land Auras join a (name, tapped, attachments) class instead of always keeping their own slot, and the odometer keeps only positions whose used hosts are a PREFIX of each class (relabelling identical lands is a symmetry of the option set). Never collapses a spread onto a stack. Default ON; =0 restores the first cut
     COUNT
 };
 
@@ -1154,6 +1156,8 @@ inline const char* Name(int slot)
         "MTG_VAMP_ALWAYS_LAND_FODDER",
         "MTG_PAY_ENERGY_LAST",
         "MTG_KAROO_POSITION",
+        "MTG_HAND_COPY_CLASS_FOLD",
+        "MTG_LAND_AURA_HOST_CLASS_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

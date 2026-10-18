@@ -8855,7 +8855,8 @@ inline Dump g_dump;
 }   // namespace paymemo
 
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
-                                         const std::vector<int>& sel, bool tap_sources)
+                                         const std::vector<int>& sel, bool tap_sources,
+                                         GameState* inplace = nullptr)
 {
     // PROFILED HOTSPOT (2026-09-07), now on a REUSED board (2026-09-08). This copy is the single
     // largest GameState-copy cost in the engine on this deck: a task-clock profile (EDF s3001 gi0,
@@ -8882,8 +8883,14 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
     // this whole function is 58.79% inclusive and the payment walk under it (TapForCostShared*,
     // whose own per-call battlefield snapshot/restore is 18.1% of all instructions) is where the
     // rest of it lives.
-    PayScratch _pay_scratch(state);
-    GameState& cp = _pay_scratch.Board();
+    // IN-PLACE (SubsetPayableWithFiltersInPlace): the caller hands a board that is ALREADY a disposable
+    // scratch copy of `state` (state IS *inplace), so the second full copy is skipped. Only legal with
+    // tap_sources off: every read of `state` below happens before the first mutation of cp exactly when
+    // the self-funding taps are not applied (SameSubsetRevealSurcharge, CastOrderLess), and none after.
+    std::optional<PayScratch> _pay_scratch;
+    GameState* cpp = inplace;
+    if (cpp == nullptr || tap_sources) { _pay_scratch.emplace(state); cpp = &_pay_scratch->Board(); }
+    GameState& cp = *cpp;
     // SELF-FUNDING ACTIVATIONS (MTG_RESCUE_TAP_SOURCE, default OFF pending a rebaseline).
     //
     // The loop below pays every selected action's mana cost -- casts AND `{cost}, {T}` activations --
@@ -9117,6 +9124,25 @@ static int RescueTapTraceLimit()
     return v;
 }
 
+// MTG_PAY_PROBE_STATS=1 (diagnostic, default off): how often the two subset payability probes run and
+// what they answer -- the per-node cost the greedy walk pays on a land-Aura deck (chunk P,
+// AccomplishedAlchemist: SubsetPayableAsExecuted was ~46% of a slow game's CPU).
+namespace payprobe
+{
+inline bool On() { static const bool on = EnvOn("MTG_PAY_PROBE_STATS"); return on; }
+inline std::atomic<long long> g_asexec{0}, g_asexec_ok{0}, g_asexec_declined{0}, g_filters{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[pay-probe] as_executed calls=%lld ok=%lld prepay_declined=%lld | with_filters calls=%lld\n",
+                     g_asexec.load(), g_asexec_ok.load(), g_asexec_declined.load(), g_filters.load());
+    }
+};
+inline Dumper g_dumper;
+}   // namespace payprobe
+
 static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
                                      const std::vector<int>& sel)
 {
@@ -9158,6 +9184,7 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
     }
     const bool ok  = SubsetPayableWithFiltersImpl(state, cands, sel, tap);
     if (paycensus::On()) { paycensus::Record(paycensus::SPWF, state, cands, sel, ok, _pc_t0); }
+    if (payprobe::On()) { payprobe::g_filters.fetch_add(1, std::memory_order_relaxed); }
     const int  lim = RescueTapTraceLimit();
     if (lim > 0 && tap && !ok)
     {
@@ -9213,8 +9240,44 @@ static bool SolveAuraPayerAsExecutedOn()
     static const bool s_env = EnvOn("MTG_SOLVE_AURA_PAYER_AS_EXECUTED", true);
     return heurarm::Flag(heurarm::SOLVE_AURA_PAYER_AS_EXECUTED, s_env);
 }
+static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel);
+
 static bool SubsetPayableAsExecuted(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
+{
+    if (payprobe::On())
+    {
+        const bool ok = SubsetPayableAsExecutedImpl(state, cands, sel);
+        payprobe::g_asexec.fetch_add(1, std::memory_order_relaxed);
+        if (ok) { payprobe::g_asexec_ok.fetch_add(1, std::memory_order_relaxed); }
+        return ok;
+    }
+    return SubsetPayableAsExecutedImpl(state, cands, sel);
+}
+
+// SubsetPayableWithFilters on a board the caller owns and discards (a PayScratch it already copied):
+// the same verdict without the second whole-GameState copy. Falls back to the copying path whenever
+// the self-funding taps or the rescue-tap trace are on (both read `state` after cp moves -- the trace
+// re-runs the walk on the untouched board).
+static bool SubsetPayableWithFiltersInPlace(GameState& scratch, const std::vector<Action>& cands,
+                                            const std::vector<int>& sel)
+{
+    static const bool s_inplace = EnvOn("MTG_PAY_PROBE_INPLACE", true);   // DEFAULT ON; =0 copies again
+    // The payability census and the supply gate's verifier are diagnostics that read the untouched
+    // board after the walk, so they take the copying path too (their counts stay comparable).
+    if (!s_inplace || RescueTapSourceOn() || RescueTapTraceLimit() > 0 || paycensus::On()
+        || (SpwfSupplyGateOn() && SpwfSupplyVerifyOn()))
+    { return SubsetPayableWithFilters(scratch, cands, sel); }
+    // The real payer's total-supply gate (MTG_SPWF_SUPPLY_GATE), exactly as SubsetPayableWithFilters
+    // applies it: a necessary condition, so a refusal here is the walk's own "unpayable".
+    if (SpwfSupplyGateOn() && SpwfProvablySupplyShort(scratch, cands, sel)) { return false; }
+    if (payprobe::On()) { payprobe::g_filters.fetch_add(1, std::memory_order_relaxed); }
+    return SubsetPayableWithFiltersImpl(scratch, cands, sel, /*tap_sources=*/false, &scratch);
+}
+
+static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
 {
     const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
     std::vector<Action> acts;
@@ -9227,8 +9290,13 @@ static bool SubsetPayableAsExecuted(const GameState& state, const std::vector<Ac
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, acts); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
-    const bool r = !TurnSolver::BatchPrepayMainCasts(cp, acts) ? SubsetPayableWithFilters(state, cands, sel)
-                                                                : SubsetPayableWithFilters(cp, cands, sel);
+    bool r;
+    if (!TurnSolver::BatchPrepayMainCasts(cp, acts))
+    {
+        if (payprobe::On()) { payprobe::g_asexec_declined.fetch_add(1, std::memory_order_relaxed); }
+        r = SubsetPayableWithFilters(state, cands, sel);
+    }
+    else { r = SubsetPayableWithFiltersInPlace(cp, cands, sel); }
     if (paycensus::On()) { paycensus::Record(paycensus::ASEXEC, state, cands, sel, r, _pc_t0); }
     return r;
 }
@@ -20532,6 +20600,13 @@ static constexpr int kMaxFungibleClasses = 16;
 //
 // `nclass` bounds the per-call `last[]` initialisation. Class ids are dense (0..nclass-1, see the
 // numbering loop below), so a 2-class board initialises 2 slots rather than kMaxFungibleClasses=16.
+// Thread-local fold counters behind CopyHostFoldTestCount (TurnSolver.h) -- always on, one increment per
+// enumeration (or per rejected position for the host prefix), read only by the unit tests.
+namespace copyfoldtest
+{
+inline thread_local long long t_classes_built = 0, t_hp_frames = 0, t_hp_rejects = 0, t_act_classes_built = 0;
+}
+
 struct FungibleEquipClasses
 {
     std::vector<int> class_of;       // group -> class id, -1 = in no multi-group class
@@ -20541,12 +20616,39 @@ struct FungibleEquipClasses
     // "the selected copies are the first ones" instead of "digits non-increasing" -- see
     // AppendFungibleAuraClasses for why a land Aura cannot take the multiset form.
     std::uint32_t    prefix_mask = 0;
+    // LAND-AURA HOST PREFIX (MTG_LAND_AURA_HOST_CLASS_FOLD; AppendLandAuraHostPrefix). `hp_groups` are
+    // the groups whose options name a host of an interchangeable land class; hp_code[i][c] is digit c's
+    // (host class << 4 | rank) in group hp_groups[i], -1 = a host in no class (index 0, "not cast", is
+    // always -1). A position is canonical when, per host class, the ranks it uses are 0..r-1.
+    std::vector<int>                       hp_groups;
+    std::vector<std::vector<signed char>>  hp_code;
+    int                                    hp_nclass = 0;
 
     // `empty()` deliberately answers "can either predicate ever fire?", which is what every caller
     // is asking -- a map that is all -1 is as inert as no map at all.
-    bool empty() const { return members.empty(); }
-    void clear() { class_of.clear(); members.clear(); nclass = 0; prefix_mask = 0; }
+    bool empty() const { return members.empty() && hp_groups.empty(); }
+    void clear() { class_of.clear(); members.clear(); nclass = 0; prefix_mask = 0; hp_groups.clear(); hp_code.clear(); hp_nclass = 0; }
 };
+
+static constexpr int kMaxLandHostClasses = 8;
+// The land-aura host half of the copy predicates: true when some host class's used ranks are not a
+// prefix 0..r-1. No radix jump is claimed (callers see fix_digit = -1 and take the ordinary carry).
+static inline bool LandAuraHostPrefixViolated(const FungibleEquipClasses& fc, const std::vector<int>& choice)
+{
+    if (fc.hp_groups.empty()) { return false; }
+    unsigned used[kMaxLandHostClasses] = {};
+    for (std::size_t i = 0; i < fc.hp_groups.size(); ++i)
+    {
+        const int c = choice[static_cast<std::size_t>(fc.hp_groups[i])];
+        if (c <= 0) { continue; }
+        const signed char code = fc.hp_code[i][static_cast<std::size_t>(c)];
+        if (code < 0) { continue; }
+        used[code >> 4] |= 1u << (code & 15);
+    }
+    for (int k = 0; k < fc.hp_nclass; ++k)
+    { if ((used[k] & (used[k] + 1u)) != 0u) { ++copyfoldtest::t_hp_rejects; return true; } }
+    return false;
+}
 
 // Depends only on cands/groups/state, all fixed across one enumeration, so it runs ONCE per plan
 // enumeration (the same discipline BuildAccelPrefixOrder follows). Returns the class count; 0 means
@@ -20869,9 +20971,583 @@ static int AppendFungibleAuraClasses(const GameState& state, const std::vector<A
     return nclass;
 }
 
-// The two fungible-copy halves together, as the enumerators consume them: the Equipment classes (when
-// MTG_EQUIP_COPY_COLLAPSE is on) and then the Aura classes (MTG_AURA_COPY_FOLD). Empty when neither finds
-// a class -- so a board with nothing to fold costs the walk nothing.
+// The enumeration branch whose land drop is a DEFERRED KAROO (EnumeratePlansWithLand's
+// add_for_land): true only while EnumeratePlans runs for that branch. Read by the autonomous plan
+// signature to keep land-Aura host variants distinct exactly there (MTG_EDF_AURA_HOST_SIG_KAROO),
+// and by FoldInterchangeableAuraHosts below for the same reason.
+static thread_local bool g_enum_karoo_drop = false;
+static bool EnumKarooDropActive() { return g_enum_karoo_drop; }
+// ...and WHICH card that deferred karoo is (its m_number, 0 = none): a land Aura may name it as its
+// host (Bruna sweep D -- Wild Growth on a same-turn Azorius Chancery), cast after the karoo lands.
+static thread_local int  g_enum_karoo_num  = 0;
+
+// MTG_LAND_AURA_HOST_CLASS_FOLD -- DEFAULT ON; =0 restores the first cut exactly (bare lands only; no
+// odometer canonical form). Chunk P of the AccomplishedAlchemist analysis, 2026-10-18. Two IDENTITY
+// halves, neither a dominance:
+//
+// (1) DECORATED HOSTS GET A CLASS. The first cut refused every land with anything attached, so once one
+//     Forest carries a Utopia Sprawl every later land Aura sees that Forest as its own host forever --
+//     and so does every OTHER enchanted Forest, each a singleton. A land carrying only land Auras (no
+//     counters on them, nothing else attached) now keys on (name, tapped, the sorted multiset of
+//     (Aura name, locked colour) it carries): two Forests each with a blue-locked Sprawl are one class,
+//     a bare Forest another, a green-locked one a third. Interchangeable in every modelled respect --
+//     the same identity the bare-land fold already relies on (the Aura bonus is credited per HOST,
+//     PaymentCacheKey's commutative per-host fold, and the Aura permanents themselves carry no state
+//     beyond name + colour).
+//
+// (2) USED HOSTS FORM A PREFIX OF THEIR CLASS (the odometer half; AppendLandAuraHostPrefix). The
+//     candidate-level fold keeps the FIRST `keep` members of a class (keep = land Auras in hand) so two
+//     Auras can still be SPREAD -- a spread and a stack are different lines (a stacked host's surplus
+//     floats away at a phase end that a spread host's does not), so collapsing to one member would be a
+//     dominance argument that does not hold and is NOT made here. But with k members kept, "Sprawl on
+//     Forest #2" and "Sprawl on Forest #1" are the same line, and so are "Sprawl #1, Wild Growth #2" and
+//     "Sprawl #2, Wild Growth #1": relabelling the members of a class is a symmetry of the whole option
+//     set. The canonical form keeps a position only when, per class, the members it uses are the FIRST
+//     r of them (rank 0..r-1). Every position has such a twin (relabel the used members onto the prefix),
+//     reaching the same board up to which identical land carries which Aura.
+//     Compatible with the hand-copy class fold (two identical Sprawls): relabelling hosts first and then
+//     sorting the copies' digits keeps the set of used hosts, so the canonical twin of either form exists
+//     inside the other.
+static bool LandAuraHostClassFoldOn()
+{
+    static const bool on = EnvOn("MTG_LAND_AURA_HOST_CLASS_FOLD", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::LAND_AURA_HOST_CLASS_FOLD, on);   // per-JOB so one pooled batch runs both arms
+}
+
+// The board-side facts the class key needs, built once per call (CollectActions' host fold and the
+// odometer's prefix builder share it so the two can never disagree about what a class is).
+struct LandHostClassCtx
+{
+    std::set<int> attached_to;                          // every attachment target
+    std::set<int> refuse;                               // hosts carrying anything a key cannot express
+    std::map<int, std::vector<std::string>> aura_sig;   // host -> its land-Aura attachments
+};
+static void BuildLandHostClassCtx(const GameState& state, LandHostClassCtx& ctx)
+{
+    const bool deco = LandAuraHostClassFoldOn();
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.aura_attached_to != 0)
+        {
+            ctx.attached_to.insert(p.aura_attached_to);
+            const CardDefinition* ad = deco ? CardDatabase::Instance().LookupCached(p.card) : nullptr;
+            if (ad != nullptr && ad->params.is_land_aura && p.counters.empty() && p.equipped_to == 0
+                && p.aura_attached_to > 0)
+            {
+                ctx.aura_sig[p.aura_attached_to].push_back(p.card.m_name.str() + ":"
+                                                           + std::to_string(static_cast<int>(p.chosen_color)));
+            }
+            else { ctx.refuse.insert(p.aura_attached_to); }
+        }
+        if (p.equipped_to != 0) { ctx.attached_to.insert(p.equipped_to); ctx.refuse.insert(p.equipped_to); }
+    }
+}
+// "" = this host folds with nothing (unknown, refused decoration, fresh, or carrying counters).
+static std::string LandHostClassKey(const GameState& state, const LandHostClassCtx& ctx, int tgt)
+{
+    const Permanent* lp = nullptr;
+    for (const Permanent& p : state.battlefield) { if (p.card.m_number == tgt) { lp = &p; break; } }
+    if (lp == nullptr) { return std::string(); }
+    const bool attached = ctx.attached_to.find(tgt) != ctx.attached_to.end();
+    const bool decorated_ok = attached && LandAuraHostClassFoldOn() && ctx.refuse.find(tgt) == ctx.refuse.end();
+    const bool plain = (!attached || decorated_ok)
+                    && !lp->entered_this_turn
+                    && lp->charge_counters == 0 && lp->verse_counters == 0
+                    && lp->lore_counters == 0   && lp->storage_counters == 0
+                    && lp->ice_counters == 0    && lp->age_counters == 0
+                    && lp->spore_counters == 0  && lp->fade_counters == 0
+                    && lp->quest_counters == 0
+                    && (!LandAuraHostClassFoldOn() || lp->counters.empty());
+    if (!plain) { return std::string(); }
+    std::string key = lp->card.m_name.str() + (lp->tapped ? "|T" : "|U");
+    if (decorated_ok)
+    {
+        auto it = ctx.aura_sig.find(tgt);
+        if (it != ctx.aura_sig.end())
+        {
+            std::vector<std::string> at = it->second;
+            std::sort(at.begin(), at.end());
+            for (const std::string& x : at) { key += "|A" + x; }
+        }
+    }
+    return key;
+}
+
+// ---- Fungible HAND-COPY collapse: identical hand copies of ANY card (MTG_HAND_COPY_CLASS_FOLD) -----------
+// The Aura-copy collapse above, generalised from creature Auras to every hand-cast group (chunk P of the
+// AccomplishedAlchemist analysis, 2026-10-18). WHY THE EXISTING FOLDS MISS THESE COPIES, verified rather
+// than assumed:
+//   * MTG_FOLD_HAND_CASTS (the canonical-prefix equiv_tag fold) refuses any hand slot that offers MORE THAN
+//     ONE action (FinalizeFoldTags' CONDITION 2), so every card with a searched axis is outside it: Stroke of
+//     Genius (target player x X), Utopia Sprawl (host x locked colour), Galvanic Alchemist (soulbond
+//     partner), Elvish Harbinger (tutor target + decline), Living Wish (wish target). Two copies of any of
+//     them are two independent odometer groups -- (1+s)^2 positions for C(s+2, 2) distinct multisets.
+//   * Even for one-option slots it reaches only the GREEDY walk: on the search's own walk (EnumeratePlans)
+//     the prefix rule is armed per deck (FoldSearchOdometerOptIn) and only Snow opts in, so two Nourish
+//     there are 4 positions for 3 outcomes.
+//   * The plan-signature dedup does catch the duplicates -- AFTER each one has been walked, priced and
+//     scored (EnumeratePlans' plans -> dedup, 342,325 -> 89,595 on AccomplishedAlchemist seed 9155), and
+//     the greedy walk (SolveUncached, the rollout leaf -- ~75% of that game's CPU) has no dedup at all.
+//
+// SOUND, NOT HEURISTIC -- the same canonical form and the same two-part identity test as the Aura half:
+//   * the HAND CARD: identical content (HandCardContentHash: every Card field but its number) and the same
+//     side of the m1_hand order-condemnation snapshot;
+//   * the OPTION LIST: every member of both groups a plain CastFromHand from that one slot, and the two lists
+//     equal member-for-member IN ODOMETER ORDER under ActionFoldSig plus the few Action fields that hash
+//     leaves out (needs_cast_mask, the mint fields, attach_equip_hand_ord, the land-drop fields; a
+//     continuation pin refuses), so digit c names the same cast in either group.
+// Every rejected position has a surviving twin that casts the same multiset of variants, differing only in
+// WHICH physical copy left the hand -- the symmetry MTG_FOLD_HAND_CASTS already ships on (a different
+// surviving m_number on an isomorphic board; play digests may move, averages may not).
+//
+// WHAT IS REFUSED, and why each refusal exists (a refused group keeps its own digit -- the failure direction
+// is "kept a redundant digit", never "deleted a line"):
+//   * a copy whose m_number another candidate NAMES (an Aura host cast first, a soulbond partner pin, a
+//     sacrifice victim, an Equipment target, the deferred-karoo host): a reference by number breaks the
+//     symmetry, so substituting the other copy would not reproduce the line;
+//   * mana-side / accelerant / splice / restrictor casts (ritual_float, rock_mana, ritual_floating_mana,
+//     splice, max_casts_after): those groups have their OWN canonicalisations (the cheapest-first accelerant
+//     prefix, the splice index) and two canonical forms over one digit set can each reject the other's
+//     representative -- so they are left to theirs;
+//   * Equipment spells and Magnetic Theft (is_equipment, attach_equip_id): MTG_EQUIP_HOST_FOLD reads them
+//     in CARD order inside its restricted-growth string, and MTG_EQUIP_UNLANDED_COPY_FOLD reads Equipment
+//     copies by hand ordinal -- the two forms are only known to compose on disjoint digits (that fold's own
+//     fence), and test_equip_host_fold.cpp's mirror-image cases fail when this one also claims them;
+//   * free / alternative-bank casts (free_cast groups key on a bank slot, not the hand slot) and anything not
+//     a CastFromHand (a Vial deploy shares the slot -- the knights gi497 lesson);
+//   * a class whose group order disagrees with candidate order: the greedy walk's equiv_tag prefix keeps the
+//     EARLIEST candidates and this keeps the EARLIEST groups, so the two must agree on which copy is first or
+//     each could reject the other's survivor. Groups are built in candidate order, so this never fires today;
+//     it is checked because a future reordering pass would otherwise turn it lossy silently.
+// NOT applied in human play or the un-pruned enumeration (the viewer offers every copy; references replay by
+// card number). Creature-Aura groups are taken by the Aura half first and never reach this one.
+namespace handcopyfold
+{
+inline std::atomic<long long> g_enum_with_class{0}, g_classes{0}, g_groups{0}, g_hp_frames{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!aurafold::On()) { return; }
+        std::fprintf(stderr, "[hand-copy-fold] %lld enumerations built %lld classes over %lld groups"
+                     " | land-host prefix armed in %lld enumerations\n",
+                     g_enum_with_class.load(), g_classes.load(), g_groups.load(), g_hp_frames.load());
+    }
+};
+inline Dumper g_dumper;
+}   // namespace handcopyfold
+
+static bool HandCopyClassFoldEnabled()
+{
+    static const bool env = EnvOn("MTG_HAND_COPY_CLASS_FOLD", true);   // DEFAULT ON; =0 restores the unfolded walk
+    return heurarm::Flag(heurarm::HAND_COPY_CLASS_FOLD, env);   // per-JOB so one pooled batch runs both arms
+}
+
+static int AppendFungibleHandCopyClasses(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<std::vector<int>>& groups, FungibleEquipClasses& out)
+{
+    if (out.class_of.size() != groups.size()) { out.class_of.assign(groups.size(), -1); out.members.clear(); out.nclass = 0; }
+    if (!HandCopyClassFoldEnabled() || HumanPlayActive() || DecisionUnpruned()) { return out.nclass; }
+    if (out.nclass >= kMaxFungibleClasses) { return out.nclass; }
+    const Player& ap = state.ActivePlayer();
+    const int hand_n = static_cast<int>(ap.hand.size());
+    // Cheap pre-pass: a class needs two unclassed hand-cast groups of the SAME interned name.
+    static thread_local std::vector<int> hg;
+    hg.clear();
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        if (groups[g].empty() || out.class_of[g] >= 0) { continue; }
+        const Action& a0 = cands[groups[g][0]];
+        if (a0.kind == Action::Kind::CastFromHand && a0.hand_index >= 0 && a0.hand_index < hand_n && !a0.free_cast)
+        { hg.push_back(static_cast<int>(g)); }
+    }
+    if (hg.size() < 2) { return out.nclass; }
+    bool any_pair = false;
+    for (std::size_t x = 0; x < hg.size() && !any_pair; ++x)
+    {
+        for (std::size_t y = x + 1; y < hg.size(); ++y)
+        {
+            const Action& ax = cands[groups[static_cast<std::size_t>(hg[x])][0]];
+            const Action& ay = cands[groups[static_cast<std::size_t>(hg[y])][0]];
+            if (groups[static_cast<std::size_t>(hg[x])].size() == groups[static_cast<std::size_t>(hg[y])].size()
+                && &ax.card_name.str() == &ay.card_name.str()) { any_pair = true; break; }
+        }
+    }
+    if (!any_pair) { return out.nclass; }
+
+    // Card numbers some candidate NAMES (see the refusal list above). Collected once per enumeration.
+    static thread_local std::vector<int> named;
+    named.clear();
+    auto name = [&](int n) { if (n > 0) { named.push_back(n); } };
+    for (const Action& a : cands)
+    {
+        name(a.enchant_target); name(a.sac_victim_id); name(a.sac_source_id); name(a.attach_equip_id);
+        // chosen_x names a HAND card only as a soulbond partner pin (SoulbondPartnerPinCandidates); the
+        // other number pin on chosen_x (an ETB blink target) names a battlefield permanent. Reading every
+        // chosen_x would let an X value (Stroke of Genius at X = 33) coincide with a card number and
+        // refuse a fold for nothing. (The deferred-karoo host is a LAND drop, never a cast group.)
+        if (a.def != nullptr && a.def->params.soulbond) { name(a.chosen_x); }
+    }
+    const bool m1_live = state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number;
+
+    static thread_local std::vector<std::uint64_t> sig;   // 0 => ineligible
+    sig.assign(groups.size(), 0ull);
+    for (int gi : hg)
+    {
+        const std::size_t g = static_cast<std::size_t>(gi);
+        const std::vector<int>& mem = groups[g];
+        const Action& a0 = cands[mem[0]];
+        const Card& c = ap.hand[static_cast<std::size_t>(a0.hand_index)];
+        if (c.m_name != a0.card_name) { continue; }
+        if (std::find(named.begin(), named.end(), c.m_number) != named.end()) { continue; }
+        std::uint64_t h = HandCardContentHash(c);
+        if (m1_live)
+        {
+            bool in_m1 = false;
+            for (int i = 0; i < state.m1_hand_n; ++i) { if (state.m1_hand[i] == c.m_number) { in_m1 = true; break; } }
+            FoldMix(h, in_m1 ? 0x9d1u : 0x2f7u);
+        }
+        FoldMix(h, static_cast<std::uint64_t>(mem.size()));
+        bool ok = true;
+        for (int j : mem)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::CastFromHand || a.hand_index != a0.hand_index || a.free_cast
+                || a.ritual_float > 0 || a.rock_mana.Total() > 0 || a.splice_count > 0 || a.max_casts_after >= 0
+                || a.cont_pins != nullptr || a.attach_equip_id != 0
+                || (a.def != nullptr && (a.def->params.ritual_floating_mana > 0 || a.def->params.splice_onto_arcane
+                                         || a.def->params.is_equipment)))
+            { ok = false; break; }
+            FoldMix(h, ActionFoldSig(a));
+            FoldMix(h, static_cast<std::uint64_t>(a.needs_cast_mask));
+            FoldMix(h, static_cast<std::uint64_t>(a.mint_gain));
+            FoldMix(h, (a.mint_hand_magnet ? 2u : 0u) | (a.mint_magnet ? 1u : 0u));
+            FoldMix(h, static_cast<std::uint64_t>(a.attach_equip_hand_ord));
+            FoldMix(h, static_cast<std::uint64_t>(a.land_rad_mode + 1));
+            FoldMix(h, a.land_from_top ? 1u : 0u);
+        }
+        if (ok) { sig[g] = (h == 0 ? 1ull : h); }
+    }
+    const int before = out.nclass;
+    int nclass = out.nclass;
+    long long grouped = 0;
+    for (std::size_t g = 0; g < groups.size() && nclass < kMaxFungibleClasses; ++g)
+    {
+        if (sig[g] == 0 || out.class_of[g] >= 0) { continue; }
+        int id = -1;
+        int last_first = groups[g][0];   // candidate index of the class's latest member so far
+        for (std::size_t h = g + 1; h < groups.size(); ++h)
+        {
+            if (sig[h] != sig[g] || out.class_of[h] >= 0) { continue; }
+            if (groups[h][0] < last_first) { continue; }   // group order != candidate order: leave it out
+            if (id < 0) { id = nclass++; out.class_of[g] = id; ++grouped; }
+            out.class_of[h] = id;
+            ++grouped;
+            last_first = groups[h][0];
+        }
+    }
+    if (nclass == before) { return nclass; }
+    ++copyfoldtest::t_classes_built;
+    if (aurafold::On())
+    {
+        handcopyfold::g_enum_with_class.fetch_add(1, std::memory_order_relaxed);
+        handcopyfold::g_classes.fetch_add(nclass - before, std::memory_order_relaxed);
+        handcopyfold::g_groups.fetch_add(grouped, std::memory_order_relaxed);
+    }
+    out.members.clear();
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    { if (out.class_of[g] >= 0) { out.members.push_back(static_cast<int>(g)); } }
+    out.nclass = nclass;
+    return nclass;
+}
+
+// The odometer half of MTG_LAND_AURA_HOST_CLASS_FOLD (see LandAuraHostClassFoldOn for the soundness
+// argument). Builds out.hp_* once per enumeration. It REFUSES (builds nothing for the class, or for the
+// whole frame) wherever relabelling a class's members might not be a symmetry of the option set:
+//   * the karoo-drop branch, human play, the un-pruned enumeration (the candidate fold's own exclusions);
+//   * a group that mixes land-Aura host casts with any other action, or carries a mana-side action (the
+//     two-stage split judges mana-side digits on a partial vector -- see the straddle guard);
+//   * a class some group offers only PART of (a provider narrowing or a heuristic pick can hand two
+//     Auras different host lists; relabelling would then map a legal option onto a missing one);
+//   * a class whose members do not offer the same options (compared by ActionFoldSig with the host
+//     blanked, as a sorted multiset per member -- the colour fan, cost, alt flags...);
+//   * a class one of whose members some OTHER candidate names by number (an untap/sacrifice/Equipment
+//     target, a blink pin): a reference by number breaks the symmetry.
+// ---- Fungible ACTIVATION-SOURCE copies: identical permanents' multi-option ability groups -------------
+// The battlefield sibling of the hand-copy class fold (part of MTG_HAND_COPY_CLASS_FOLD; chunk P). Every
+// activation family is keyed on its SOURCE permanent (ActivationFamilyKey), so two identical Staffs of
+// Domination on the battlefield -- each offering {untap target creature} x K plus its tap-lifegain / tap-draw
+// repeats -- are two odometer groups walking (1+s)^2 positions for C(s+2, 2) distinct multisets. The
+// canonical-prefix fold (FoldActSourcesOn) cannot reach them: its CONDITION 2 refuses a source offering more
+// than one action. Same canonical form as the copy classes above (digits non-increasing in group order), and
+// the same identity bar ("identical in all state"):
+//   * the SOURCE: PermIsPlainForFold (no damage, counters, attachments, temp effects, chosen values...), the
+//     same card content, tapped and entered_this_turn in the signature, and NOT a mana producer or a creature
+//     (the real payer taps mana sources by ORDER, and a creature's attack is read elsewhere -- the
+//     MTG_AURA_HOST_FOLD refusal), and not named by number by any candidate outside its own group;
+//   * the OPTION LIST: every member an activation of that one source (not a cast, an Equip -- the Equipment
+//     copy fold's -- or a sac-for-mana / mana-side action), equal member-for-member under ActionFoldSig, which
+//     leaves out exactly the source key for an activation. An option naming its own source (a self-target)
+//     differs between the copies by construction, so such a pair never forms a class.
+// Every rejected position has a twin activating the other copy identically: the same board up to which
+// identical permanent was used.
+static int AppendFungibleActivationClasses(const GameState& state, const std::vector<Action>& cands,
+                                           const std::vector<std::vector<int>>& groups, FungibleEquipClasses& out)
+{
+    if (out.class_of.size() != groups.size()) { out.class_of.assign(groups.size(), -1); out.members.clear(); out.nclass = 0; }
+    if (!HandCopyClassFoldEnabled() || HumanPlayActive() || DecisionUnpruned()) { return out.nclass; }
+    if (out.nclass >= kMaxFungibleClasses) { return out.nclass; }
+    auto act_ok = [](const Action& a)
+    {
+        return a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::Equip
+            && a.kind != Action::Kind::SacForMana && a.kind != Action::Kind::ActivateVial
+            && a.hand_index < 0 && a.sac_source_id > 0 && !a.free_cast
+            && a.ritual_float <= 0 && a.rock_mana.Total() == 0 && a.cont_pins == nullptr;
+    };
+    static thread_local std::vector<int> ag;
+    ag.clear();
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        if (groups[g].size() < 2 || out.class_of[g] >= 0) { continue; }
+        if (act_ok(cands[groups[g][0]])) { ag.push_back(static_cast<int>(g)); }
+    }
+    if (ag.size() < 2) { return out.nclass; }
+    static thread_local std::vector<std::uint64_t> sig;
+    sig.assign(groups.size(), 0ull);
+    for (int gi : ag)
+    {
+        const std::size_t g = static_cast<std::size_t>(gi);
+        const std::vector<int>& mem = groups[g];
+        const int src_num = cands[mem[0]].sac_source_id;
+        const Permanent* src = nullptr;
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == state.active_player_index && p.card.m_number == src_num) { src = &p; break; } }
+        if (src == nullptr || src->card.IsCreature() || src->is_animated || !PermIsPlainForFold(state, *src)) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src->card);
+        if (sd == nullptr || !sd->params.produces.empty() || sd->params.mana_rock) { continue; }
+        // Named by any candidate OUTSIDE this group?
+        bool named = false;
+        for (std::size_t j = 0; j < cands.size() && !named; ++j)
+        {
+            if (std::find(mem.begin(), mem.end(), static_cast<int>(j)) != mem.end()) { continue; }
+            const Action& o = cands[j];
+            named = o.enchant_target == src_num || o.sac_victim_id == src_num || o.attach_equip_id == src_num
+                 || (o.sac_source_id == src_num && o.kind != Action::Kind::CastFromHand)
+                 || (o.def != nullptr && (o.def->params.soulbond || o.def->params.etb_blink_permanent)
+                     && o.chosen_x == src_num);
+        }
+        if (named) { continue; }
+        std::uint64_t h = HandCardContentHash(src->card);
+        FoldMix(h, src->tapped ? 0x71u : 0x55u);
+        FoldMix(h, src->entered_this_turn ? 0x3e1u : 0x1c3u);
+        FoldMix(h, static_cast<std::uint64_t>(mem.size()));
+        bool ok = true;
+        for (int j : mem)
+        {
+            const Action& a = cands[j];
+            if (!act_ok(a) || a.sac_source_id != src_num || a.sac_victim_id == src_num || a.enchant_target == src_num)
+            { ok = false; break; }
+            FoldMix(h, ActionFoldSig(a));
+            FoldMix(h, static_cast<std::uint64_t>(a.needs_cast_mask));
+            FoldMix(h, static_cast<std::uint64_t>(a.mint_gain));
+        }
+        if (ok) { sig[g] = (h == 0 ? 1ull : h); }
+    }
+    const int before = out.nclass;
+    int nclass = out.nclass;
+    for (std::size_t g = 0; g < groups.size() && nclass < kMaxFungibleClasses; ++g)
+    {
+        if (sig[g] == 0 || out.class_of[g] >= 0) { continue; }
+        int id = -1;
+        int last_first = groups[g][0];
+        for (std::size_t h = g + 1; h < groups.size(); ++h)
+        {
+            if (sig[h] != sig[g] || out.class_of[h] >= 0) { continue; }
+            if (groups[h][0] < last_first) { continue; }   // group order != candidate (= battlefield) order
+            if (id < 0) { id = nclass++; out.class_of[g] = id; }
+            out.class_of[h] = id;
+            last_first = groups[h][0];
+        }
+    }
+    if (nclass == before) { return nclass; }
+    ++copyfoldtest::t_act_classes_built;
+    out.members.clear();
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    { if (out.class_of[g] >= 0) { out.members.push_back(static_cast<int>(g)); } }
+    out.nclass = nclass;
+    return nclass;
+}
+
+static bool LandAuraHostFoldOn();   // MTG_LAND_AURA_HOST_FOLD, defined with FoldInterchangeableAuraHosts
+static void AppendLandAuraHostPrefix(const GameState& state, const std::vector<Action>& cands,
+                                     const std::vector<std::vector<int>>& groups, FungibleEquipClasses& out)
+{
+    out.hp_groups.clear(); out.hp_code.clear(); out.hp_nclass = 0;
+    if (!LandAuraHostClassFoldOn() || !LandAuraHostFoldOn() || HumanPlayActive() || DecisionUnpruned()
+        || g_enum_karoo_drop) { return; }
+    auto is_la = [](const Action& a)
+    { return a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.is_land_aura
+             && a.enchant_target > 0; };
+    static thread_local std::vector<int> lag;
+    lag.clear();
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        int n_la = 0;
+        for (int j : groups[g]) { if (is_la(cands[j])) { ++n_la; } }
+        if (n_la == 0) { continue; }
+        if (n_la != static_cast<int>(groups[g].size())) { return; }   // mixed group: refuse the frame
+        for (int j : groups[g])
+        { if (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0) { return; } }
+        lag.push_back(static_cast<int>(g));
+    }
+    if (lag.empty()) { return; }
+    // Any group with a land Aura offering two hosts? Otherwise nothing can be relabelled.
+    bool any_multi = false;
+    for (int g : lag)
+    {
+        const std::vector<int>& mem = groups[static_cast<std::size_t>(g)];
+        for (int j : mem) { if (cands[j].enchant_target != cands[mem[0]].enchant_target) { any_multi = true; break; } }
+        if (any_multi) { break; }
+    }
+    if (!any_multi) { return; }
+
+    LandHostClassCtx ctx;
+    BuildLandHostClassCtx(state, ctx);
+    // Distinct hosts named by the land-Aura casts, in BATTLEFIELD order (rank order), with their keys.
+    struct Host { int num; std::string key; int cls = -1; int rank = -1; };
+    std::vector<Host> hosts;
+    for (const Permanent& p : state.battlefield)
+    {
+        bool named_by_la = false;
+        for (int g : lag)
+        {
+            for (int j : groups[static_cast<std::size_t>(g)])
+            { if (cands[j].enchant_target == p.card.m_number) { named_by_la = true; break; } }
+            if (named_by_la) { break; }
+        }
+        if (!named_by_la) { continue; }
+        hosts.push_back({ p.card.m_number, LandHostClassKey(state, ctx, p.card.m_number) });
+    }
+    // Numbers some NON-land-Aura candidate names.
+    std::vector<int> named;
+    for (const Action& a : cands)
+    {
+        if (is_la(a)) { continue; }
+        for (int n : { a.enchant_target, a.sac_victim_id, a.sac_source_id, a.attach_equip_id })
+        { if (n > 0) { named.push_back(n); } }
+        if (a.def != nullptr && (a.def->params.soulbond || a.def->params.etb_blink_permanent) && a.chosen_x > 0)
+        { named.push_back(a.chosen_x); }
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.is_aura && a.enchant_target > 0)
+        { named.push_back(a.enchant_target); }
+    }
+    // Assign classes (>= 2 members, none named elsewhere) and ranks.
+    std::vector<std::string> keys;
+    for (Host& h : hosts)
+    {
+        if (h.key.empty()) { continue; }
+        if (std::find(keys.begin(), keys.end(), h.key) == keys.end()) { keys.push_back(h.key); }
+    }
+    int ncls = 0;
+    std::vector<int> key_cls(keys.size(), -1);
+    for (std::size_t k = 0; k < keys.size(); ++k)
+    {
+        int n = 0;
+        bool bad = false;
+        for (const Host& h : hosts)
+        {
+            if (h.key != keys[k]) { continue; }
+            ++n;
+            if (std::find(named.begin(), named.end(), h.num) != named.end()) { bad = true; }
+        }
+        if (n < 2 || n > 15 || bad || ncls >= kMaxLandHostClasses) { continue; }
+        key_cls[k] = ncls++;
+    }
+    if (ncls == 0) { return; }
+    for (Host& h : hosts)
+    {
+        if (h.key.empty()) { continue; }
+        const int k = static_cast<int>(std::find(keys.begin(), keys.end(), h.key) - keys.begin());
+        h.cls = key_cls[static_cast<std::size_t>(k)];
+    }
+    {
+        std::vector<int> next(static_cast<std::size_t>(ncls), 0);
+        for (Host& h : hosts) { if (h.cls >= 0) { h.rank = next[static_cast<std::size_t>(h.cls)]++; } }
+    }
+    auto host_of = [&](int num) -> const Host*
+    { for (const Host& h : hosts) { if (h.num == num) { return &h; } } return nullptr; };
+
+    // Per class: every group offering any member must offer every member, each with the same option
+    // multiset (ActionFoldSig with the host blanked).
+    std::vector<char> cls_ok(static_cast<std::size_t>(ncls), 1);
+    std::vector<int> cls_size(static_cast<std::size_t>(ncls), 0);
+    for (const Host& h : hosts) { if (h.cls >= 0) { ++cls_size[static_cast<std::size_t>(h.cls)]; } }
+    for (int g : lag)
+    {
+        const std::vector<int>& mem = groups[static_cast<std::size_t>(g)];
+        for (int k = 0; k < ncls; ++k)
+        {
+            if (!cls_ok[static_cast<std::size_t>(k)]) { continue; }
+            std::vector<std::vector<std::uint64_t>> per_rank(static_cast<std::size_t>(cls_size[static_cast<std::size_t>(k)]));
+            bool touches = false;
+            for (int j : mem)
+            {
+                const Host* h = host_of(cands[j].enchant_target);
+                if (h == nullptr || h->cls != k) { continue; }
+                touches = true;
+                Action blank = cands[j];
+                blank.enchant_target = 0;
+                std::uint64_t sg = ActionFoldSig(blank);
+                FoldMix(sg, static_cast<std::uint64_t>(blank.needs_cast_mask));
+                FoldMix(sg, static_cast<std::uint64_t>(blank.mint_gain));
+                FoldMix(sg, blank.cont_pins != nullptr ? 1u : 0u);
+                per_rank[static_cast<std::size_t>(h->rank)].push_back(sg);
+            }
+            if (!touches) { continue; }
+            for (std::vector<std::uint64_t>& v : per_rank) { std::sort(v.begin(), v.end()); }
+            for (std::size_t r = 1; r < per_rank.size(); ++r)
+            { if (per_rank[r].empty() || per_rank[r] != per_rank[0]) { cls_ok[static_cast<std::size_t>(k)] = 0; break; } }
+            if (per_rank[0].empty()) { cls_ok[static_cast<std::size_t>(k)] = 0; }
+        }
+    }
+    // Compact the surviving classes and emit the digit codes.
+    std::vector<int> remap(static_cast<std::size_t>(ncls), -1);
+    int nk = 0;
+    for (int k = 0; k < ncls; ++k) { if (cls_ok[static_cast<std::size_t>(k)]) { remap[static_cast<std::size_t>(k)] = nk++; } }
+    if (nk == 0) { return; }
+    for (int g : lag)
+    {
+        const std::vector<int>& mem = groups[static_cast<std::size_t>(g)];
+        std::vector<signed char> code(mem.size() + 1, static_cast<signed char>(-1));
+        bool any = false;
+        for (std::size_t d = 0; d < mem.size(); ++d)
+        {
+            const Host* h = host_of(cands[mem[d]].enchant_target);
+            if (h == nullptr || h->cls < 0 || remap[static_cast<std::size_t>(h->cls)] < 0) { continue; }
+            code[d + 1] = static_cast<signed char>((remap[static_cast<std::size_t>(h->cls)] << 4) | h->rank);
+            any = true;
+        }
+        if (!any) { continue; }
+        out.hp_groups.push_back(g);
+        out.hp_code.push_back(std::move(code));
+    }
+    out.hp_nclass = out.hp_groups.empty() ? 0 : nk;
+    if (!out.hp_groups.empty()) { ++copyfoldtest::t_hp_frames; }
+    if (aurafold::On() && !out.hp_groups.empty())
+    { handcopyfold::g_hp_frames.fetch_add(1, std::memory_order_relaxed); }
+}
+
+long long CopyHostFoldTestCount(int which)
+{
+    return which == 0 ? copyfoldtest::t_classes_built
+         : which == 1 ? copyfoldtest::t_hp_frames
+         : which == 2 ? copyfoldtest::t_hp_rejects
+         : copyfoldtest::t_act_classes_built;
+}
+
+// The fungible-copy halves together, as the enumerators consume them: the Equipment classes (when
+// MTG_EQUIP_COPY_COLLAPSE is on), the Aura classes (MTG_AURA_COPY_FOLD), then every other identical hand
+// copy (MTG_HAND_COPY_CLASS_FOLD). Empty when none finds a class -- so a board with nothing to fold costs
+// the walk nothing.
 // `land_prefix`: also fold land-Aura copies (MTG_LAND_AURA_COPY_FOLD). The SEARCH enumerator only: its
 // dedup keeps the earliest-emitted member of a tie, which is the twin. Solve's greedy walk breaks a tie
 // on the smallest CANDIDATE mask instead, and candidate order need not follow group order, so there the
@@ -20883,6 +21559,9 @@ static void BuildFungibleCopyClasses(const GameState& state, const std::vector<A
     out.clear();
     if (EquipCopyCollapseEnabled() && BuildFungibleEquipClasses(state, cands, groups, out) == 0) { out.clear(); }
     if (AppendFungibleAuraClasses(state, cands, groups, out, land_prefix) == 0) { out.clear(); }
+    if (AppendFungibleHandCopyClasses(state, cands, groups, out) == 0) { out.clear(); }
+    if (AppendFungibleActivationClasses(state, cands, groups, out) == 0) { out.clear(); }
+    AppendLandAuraHostPrefix(state, cands, groups, out);
 }
 
 // ---- Identical creature-Aura HOSTS (MTG_AURA_HOST_FOLD) -- the other half of the duplicate-copy fold ----
@@ -21058,7 +21737,8 @@ static inline bool FungibleEquipCopyViolated(const FungibleEquipClasses& fc,
     if (fc.prefix_mask != 0)
     {
         int z = -1;
-        return PrefixClassViolation(fc, choice, z) || FungibleEquipCopyViolatedNonPrefix(fc, choice);
+        return PrefixClassViolation(fc, choice, z) || FungibleEquipCopyViolatedNonPrefix(fc, choice)
+            || LandAuraHostPrefixViolated(fc, choice);
     }
     int last[kMaxFungibleClasses];
     for (int c = 0; c < fc.nclass; ++c) { last[c] = std::numeric_limits<int>::max(); }
@@ -21068,7 +21748,7 @@ static inline bool FungibleEquipCopyViolated(const FungibleEquipClasses& fc,
         if (choice[g] > last[c]) { return true; }
         last[c] = choice[g];
     }
-    return false;
+    return LandAuraHostPrefixViolated(fc, choice);
 }
 
 // MTG_EQUIP_COPY_SKIP -- turn the rejection above into a RADIX CUT instead of a per-position refusal.
@@ -21137,7 +21817,9 @@ static inline bool FungibleEquipCopyAdvance(const FungibleEquipClasses& fc,
         // group has at least one option) and zeroing below it skips exactly those.
         int z = -1;
         if (PrefixClassViolation(fc, choice, z)) { fix_digit = z; fix_value = 1; return true; }
-        return FungibleEquipCopyAdvanceNonPrefix(fc, choice, fix_digit, fix_value);
+        if (FungibleEquipCopyAdvanceNonPrefix(fc, choice, fix_digit, fix_value)) { return true; }
+        if (LandAuraHostPrefixViolated(fc, choice)) { fix_digit = -1; return true; }   // no jump claimed
+        return false;
     }
     int last[kMaxFungibleClasses];
     int last_g[kMaxFungibleClasses];
@@ -21155,6 +21837,7 @@ static inline bool FungibleEquipCopyAdvance(const FungibleEquipClasses& fc,
         last[c] = choice[g];
         last_g[c] = g;
     }
+    if (LandAuraHostPrefixViolated(fc, choice)) { fix_digit = -1; return true; }   // no jump claimed
     return false;
 }
 
@@ -29621,15 +30304,6 @@ static std::vector<int> FadeKLandmarks(const FadeBoardRead& r, int C, int cost, 
     return out;
 }
 
-// The enumeration branch whose land drop is a DEFERRED KAROO (EnumeratePlansWithLand's
-// add_for_land): true only while EnumeratePlans runs for that branch. Read by the autonomous plan
-// signature to keep land-Aura host variants distinct exactly there (MTG_EDF_AURA_HOST_SIG_KAROO),
-// and by FoldInterchangeableAuraHosts below for the same reason.
-static thread_local bool g_enum_karoo_drop = false;
-static bool EnumKarooDropActive() { return g_enum_karoo_drop; }
-// ...and WHICH card that deferred karoo is (its m_number, 0 = none): a land Aura may name it as its
-// host (Bruna sweep D -- Wild Growth on a same-turn Azorius Chancery), cast after the karoo lands.
-static thread_local int  g_enum_karoo_num  = 0;
 
 // May a land Aura with params `pp` name that deferred karoo (a HAND card, m_number g_enum_karoo_num)
 // as its host? "Enchant land" -> always; an enchant restriction ("Enchant Forest", Utopia Sprawl) ->
@@ -29763,36 +30437,20 @@ static std::vector<int> FoldInterchangeableAuraHosts(const GameState& state,
     if (keep < 1) { keep = 1; }
     if (static_cast<int>(hosts.size()) <= keep) { return hosts; }
 
-    // Anything ATTACHED to a land makes that land distinguishable, so it must not fold. One pass
-    // over the battlefield collects every attachment target rather than rescanning per host.
-    std::set<int> attached_to;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.aura_attached_to != 0) { attached_to.insert(p.aura_attached_to); }
-        if (p.equipped_to != 0)      { attached_to.insert(p.equipped_to); }
-    }
+    // Anything ATTACHED to a land makes that land distinguishable from a bare one; with
+    // MTG_LAND_AURA_HOST_CLASS_FOLD a land carrying only land Auras joins a decorated class instead of
+    // being refused (LandHostClassKey). One pass over the battlefield, not one per host.
+    LandHostClassCtx ctx;
+    BuildLandHostClassCtx(state, ctx);
 
     std::vector<int> out;
     out.reserve(hosts.size());
     std::map<std::string, int> seen;   // class key -> members already kept
     for (int tgt : hosts)
     {
-        const Permanent* lp = nullptr;
-        for (const Permanent& p : state.battlefield)
-        { if (p.card.m_number == tgt) { lp = &p; break; } }
-
-        // Unknown, decorated, or freshly-played lands are never folded -- they keep their slot.
-        const bool plain = lp != nullptr
-                        && attached_to.find(tgt) == attached_to.end()
-                        && !lp->entered_this_turn
-                        && lp->charge_counters == 0 && lp->verse_counters == 0
-                        && lp->lore_counters == 0   && lp->storage_counters == 0
-                        && lp->ice_counters == 0    && lp->age_counters == 0
-                        && lp->spore_counters == 0  && lp->fade_counters == 0
-                        && lp->quest_counters == 0;
-        if (!plain) { out.push_back(tgt); continue; }
-
-        const std::string key = lp->card.m_name.str() + (lp->tapped ? "|T" : "|U");
+        // Unknown, refused-decorated, or freshly-played lands are never folded -- they keep their slot.
+        const std::string key = LandHostClassKey(state, ctx, tgt);
+        if (key.empty()) { out.push_back(tgt); continue; }
         int& n = seen[key];
         if (n < keep) { ++n; out.push_back(tgt); }
     }
@@ -45870,6 +46528,26 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
         // constructed line evaluated inside a nested rollout cannot inherit this frame's value.
         const bool fold_from_odometer = foldsel::Take();
+        // MTG_SOLVE_AURA_PAYER_DEFER (DEFAULT ON; =0 asks the land-Aura payer eagerly, as before). The
+        // greedy walk keeps ONE subset -- the best by (wins, rank, smallest mask) -- so a subset's
+        // payability can change the result only when that subset would REPLACE the best: a subset the
+        // payer rejects and a subset that does not beat the best are both discarded. The payer
+        // (SubsetPayableAsExecuted: a whole-turn prepay plus a per-cast walk on a board copy) was ~46%
+        // of a slow AccomplishedAlchemist game and answered "payable" on 6,239,728 of 6,239,848 calls;
+        // asked only of would-be bests it runs a few hundred times per decision instead.
+        // BYTE-IDENTICAL BY CONSTRUCTION: the walk order, the subsets and every verdict are unchanged;
+        // nothing between the eager site and the best update reads whether the payer ran (the code in
+        // between is pure scoring plus REJECT-only gates, and the budget charge is taken at entry). The
+        // one consumer of the eager verdict that is NOT local is the walk's mana-verdict cache (a later
+        // position with the same group mask inherits "payable" without re-asking), so the deferral
+        // stands down whenever that cache is armed.
+        static const bool s_aura_payer_defer = EnvOn("MTG_SOLVE_AURA_PAYER_DEFER", true);
+        // ...and the same deferral for the filter-board RESCUE below (MTG_SOLVE_RESCUE_DEFER, DEFAULT ON;
+        // =0 asks it eagerly). Same argument; it rides MTG_SOLVE_AURA_PAYER_DEFER's arming condition.
+        static const bool s_rescue_defer = EnvOn("MTG_SOLVE_RESCUE_DEFER", true);
+        const bool aura_payer_defer = s_aura_payer_defer && !mana_cache_on;
+        bool aura_payer_pending = false;
+        bool rescue_pending = false;
         // Greedy-walk budget charge (MTG_SOLVE_CHARGE; see GreedyChargeGuard above the function):
         // one unit per subset visit, walk stops (keeping best-so-far) when the rollout budget is
         // spent. g_greedy_charge_budget is null unless the flag is on AND a budgeted rollout host
@@ -46497,7 +47175,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             ApplyDeckCastArrangement(state, cands, arr);
             return arr != rk && SubsetPayableSequential(state, cands, sel);
         };
-        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel)) && !range_rescue())
+        // The real-payment RESCUE of a subset the flat gates call unpayable, DEFERRED like the land-Aura
+        // payer (see aura_payer_defer) when it is the expensive kind (a filter board -> a board copy and
+        // a full payment walk). Only then: without a filter the rescue is free to refuse, and scoring
+        // every refused subset would cost more than asking.
+        if (!mana_ok && any_filter && aura_payer_defer && s_rescue_defer) { rescue_pending = true; }
+        else if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel)) && !range_rescue())
         { mc_store_reject(); return; }
         // Reached here on a !mana_ok subset => the real payment RESCUED it. If that subset was also
         // total-short the shortcut's argument is false; say so loudly rather than silently shipping.
@@ -46619,7 +47302,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 // ...priced the way the executor pays it: the whole-turn prepay first, the per-cast
                 // walk only behind a declined prepay (SubsetPayableAsExecuted;
                 // MTG_SOLVE_AURA_PAYER_AS_EXECUTED, =0 -> the per-cast walk alone).
-                if (casts_aura
+                // DEFERRED to the one place its verdict can matter (MTG_SOLVE_AURA_PAYER_DEFER, below):
+                // a subset that would not become the new best is discarded either way.
+                if (casts_aura && aura_payer_defer) { aura_payer_pending = true; }
+                else if (casts_aura
                     && !(SolveAuraPayerAsExecutedOn() ? SubsetPayableAsExecuted(state, cands, sel)
                                                       : SubsetPayableWithFilters(state, cands, sel)))
                 { mc_store_reject(); return; }
@@ -46966,6 +47652,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         else if (rank_value != best.value) { better = rank_value > best.value; } // then higher (learned) value
         else                               { better = mask < best_mask; }        // tie -> smallest mask
         if (!better) { return; }
+        // The deferred land-Aura payer (MTG_SOLVE_AURA_PAYER_DEFER): asked only now, of a subset that
+        // would REPLACE the best. Same verdict, same subset, same order as the eager form -- see
+        // aura_payer_defer for why the result is byte-identical.
+        if (rescue_pending && !SubsetPayableWithFilters(state, cands, sel) && !range_rescue()) { return; }
+        if (aura_payer_pending
+            && !(SolveAuraPayerAsExecutedOn() ? SubsetPayableAsExecuted(state, cands, sel)
+                                              : SubsetPayableWithFilters(state, cands, sel)))
+        { return; }
 
         best_sel    = sel;                      // indices only -- Actions materialize at return
         best_fill_j = fill_j;

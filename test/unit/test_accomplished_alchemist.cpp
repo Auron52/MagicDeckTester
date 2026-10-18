@@ -30,6 +30,8 @@
 #include "deck/DeckLoader.h"
 #include "runner/GoldFishRunner.h"
 
+#include <algorithm>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -1383,4 +1385,237 @@ TEST_CASE("Untap loop: the Staff draws TO FIND Stroke inside the loop, then the 
     CHECK(need.count == 3);
     // Drew 3 inside the loop; a continuation variant cast the drawn Stroke off the float -- both worlds.
     CHECK(LoopPlanBothAa(s, [](const GameState& g) { return OpponentHasLost(g) && g.players[0].library.size() == 6; }));
+}
+
+// ---- chunk P (2026-10-18): the two SOUND identity folds the branch census priced on this deck ----------------
+//  * MTG_HAND_COPY_CLASS_FOLD -- identical hand copies of ANY card (not just creature Auras) are one odometer
+//    class: the copies' option lists must match member for member, so "copy #1 X, copy #2 Y" and its mirror are
+//    one position;
+//  * MTG_LAND_AURA_HOST_CLASS_FOLD -- a land carrying only land Auras gets a (name, tapped, attachments) class
+//    instead of its own slot, and the odometer keeps only positions whose used hosts are a PREFIX of their class.
+// Each case compares the folded enumeration with the unfolded one as a set of plans CANONICALISED over the very
+// symmetry the fold claims (which physical copy / which identical land), and shows the fold actually armed.
+#include "ai/HeuristicArm.h"
+namespace
+{
+// Both arms also keep every land-Aura host a DISTINCT plan in the dedup (MTG_EDF_AURA_HOST_SIG_KAROO=0, the
+// unconditional host signature): the shipped autonomous dedup folds hosts by name, which would hide exactly the
+// host axis these cases compare.
+struct CopyFoldArmsAa
+{
+    std::int8_t ph, pl, pk;
+    explicit CopyFoldArmsAa(bool on)
+        : ph(heurarm::t_arm[heurarm::HAND_COPY_CLASS_FOLD]), pl(heurarm::t_arm[heurarm::LAND_AURA_HOST_CLASS_FOLD]),
+          pk(heurarm::t_arm[heurarm::EDF_AURA_HOST_SIG_KAROO])
+    {
+        heurarm::t_arm[heurarm::HAND_COPY_CLASS_FOLD]      = on ? 1 : 0;
+        heurarm::t_arm[heurarm::LAND_AURA_HOST_CLASS_FOLD] = on ? 1 : 0;
+        heurarm::t_arm[heurarm::EDF_AURA_HOST_SIG_KAROO]   = 0;
+    }
+    ~CopyFoldArmsAa()
+    {
+        heurarm::t_arm[heurarm::HAND_COPY_CLASS_FOLD]      = ph;
+        heurarm::t_arm[heurarm::LAND_AURA_HOST_CLASS_FOLD] = pl;
+        heurarm::t_arm[heurarm::EDF_AURA_HOST_SIG_KAROO]   = pk;
+    }
+};
+
+// A plan as the multiset of its casts, with every host relabelled by its CLASS label (`cls` maps a host number
+// to a class string; a host not in the map keeps its number) and the class members renamed to the
+// lexicographically least assignment -- i.e. the plan modulo "which identical land".
+std::string CanonPlanAa(const TurnSolver::Plan& p, const std::map<int, std::string>& cls)
+{
+    std::vector<int> hosts;
+    for (const Action& a : p.actions)
+    {
+        for (int n : { a.enchant_target, a.sac_source_id })
+        {
+            if (n > 0 && cls.count(n) && std::find(hosts.begin(), hosts.end(), n) == hosts.end()) { hosts.push_back(n); }
+        }
+    }
+    std::sort(hosts.begin(), hosts.end());
+    std::string best;
+    bool first = true;
+    do
+    {
+        std::map<int, std::string> lab;
+        std::map<std::string, int> next;
+        for (int h : hosts) { const std::string& c = cls.at(h); lab[h] = c + "#" + std::to_string(next[c]++); }
+        std::vector<std::string> parts;
+        for (const Action& a : p.actions)
+        {
+            std::string k = std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str()
+                          + ":x" + std::to_string(a.chosen_x) + ":d" + std::to_string(a.draw_target);
+            if (a.enchant_target > 0)
+            { k += ":h" + (lab.count(a.enchant_target) ? lab[a.enchant_target] : std::to_string(a.enchant_target)); }
+            if (a.sac_source_id > 0)
+            { k += ":s" + (lab.count(a.sac_source_id) ? lab[a.sac_source_id] : std::to_string(a.sac_source_id)); }
+            k += ":v" + std::to_string(a.sac_victim_id) + ":m" + std::to_string(static_cast<int>(a.ability_mode));
+            parts.push_back(k);
+        }
+        std::sort(parts.begin(), parts.end());
+        std::string s;
+        for (const std::string& x : parts) { s += x + ";"; }
+        if (first || s < best) { best = s; first = false; }
+    } while (std::next_permutation(hosts.begin(), hosts.end()));
+    return best;
+}
+
+std::set<std::string> CanonPlansAa(const std::vector<TurnSolver::Plan>& plans, const std::map<int, std::string>& cls)
+{
+    std::set<std::string> out;
+    for (const TurnSolver::Plan& p : plans) { out.insert(CanonPlanAa(p, cls)); }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Hand-copy class fold: two Stroke of Genius (a searched (target, X) axis) -- the same plans, folded or not")
+{
+    GameState s = FreshAa();
+    for (int k = 0; k < 6; ++k) { PutAa(s, "Island"); }
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    HandAa(s, "Stroke of Genius");
+    HandAa(s, "Stroke of Genius");
+    HandAa(s, "Nourish");
+    HandAa(s, "Nourish");
+    DealOppAa(s, 40);
+    s.m_provider = &AaProv();
+    const std::map<int, std::string> no_cls;
+    std::vector<TurnSolver::Plan> on, off;
+    long long built = 0;
+    {
+        CopyFoldArmsAa a(true);
+        const long long b0 = CopyHostFoldTestCount(0);
+        on = TurnSolver::EnumerateMainPlans(s, true);
+        built = CopyHostFoldTestCount(0) - b0;
+    }
+    { CopyFoldArmsAa a(false); off = TurnSolver::EnumerateMainPlans(s, true); }
+    CHECK(built > 0);                                   // the Stroke class (and the Nourish class) armed
+    CHECK(on.size() > 1);
+    CHECK(CanonPlansAa(on, no_cls) == CanonPlansAa(off, no_cls));
+    // A copy another candidate NAMES by number is refused: Galvanic Alchemist's soulbond partner pin names a
+    // creature card in HAND, so two Scholars in hand with a Galvanic stay two groups -- and still the same plans.
+    GameState g = FreshAa();
+    for (int k = 0; k < 8; ++k) { PutAa(g, "Island"); }
+    for (int k = 0; k < 4; ++k) { PutAa(g, "Plains"); }
+    HandAa(g, "Galvanic Alchemist");
+    HandAa(g, "Scholar of Athreos");
+    HandAa(g, "Scholar of Athreos");
+    g.m_provider = &AaProv();
+    std::vector<TurnSolver::Plan> gon, goff;
+    { CopyFoldArmsAa a(true);  gon  = TurnSolver::EnumerateMainPlans(g, true); }
+    { CopyFoldArmsAa a(false); goff = TurnSolver::EnumerateMainPlans(g, true); }
+    CHECK(CanonPlansAa(gon, no_cls) == CanonPlansAa(goff, no_cls));
+}
+
+TEST_CASE("Land-Aura host prefix: Sprawl + Wild Growth over four bare Forests -- stack AND spread survive, mirrors do not")
+{
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    std::map<int, std::string> cls;
+    for (int k = 0; k < 4; ++k) { cls[PutAa(s, "Forest")] = "F"; }
+    HandAa(s, "Utopia Sprawl");
+    HandAa(s, "Wild Growth");
+    s.m_provider = &AaProv();
+    std::vector<TurnSolver::Plan> on, off;
+    long long armed = 0, rejected = 0;
+    {
+        CopyFoldArmsAa a(true);
+        const long long f0 = CopyHostFoldTestCount(1), r0 = CopyHostFoldTestCount(2);
+        on = TurnSolver::EnumerateMainPlans(s, true);
+        armed = CopyHostFoldTestCount(1) - f0;
+        rejected = CopyHostFoldTestCount(2) - r0;
+    }
+    { CopyFoldArmsAa a(false); off = TurnSolver::EnumerateMainPlans(s, true); }
+    CHECK(armed > 0);
+    CHECK(rejected > 0);
+    CHECK(on.size() < off.size());                      // "Sprawl on Forest #2 alone" etc. are gone...
+    CHECK(CanonPlansAa(on, cls) == CanonPlansAa(off, cls));   // ...and every distinct line is still there
+    // Both the STACK and the SPREAD of the two Auras are offered (the fold never collapses one onto the other).
+    bool stacked = false, spread = false;
+    for (const TurnSolver::Plan& p : on)
+    {
+        const Action* sp = CastOfAa(p, "Utopia Sprawl");
+        const Action* wg = CastOfAa(p, "Wild Growth");
+        if (sp == nullptr || wg == nullptr) { continue; }
+        if (sp->enchant_target == wg->enchant_target) { stacked = true; } else { spread = true; }
+    }
+    CHECK(stacked);
+    CHECK(spread);
+}
+
+TEST_CASE("Land-Aura host class: identically-decorated Forests are one class; a differently-locked colour is not")
+{
+    auto board = [](int colour_a, int colour_b, std::map<int, std::string>& cls, std::vector<int>& deco)
+    {
+        GameState s = FreshAa();
+        s.deck_has_land_aura = true;
+        const int fa = PutAa(s, "Forest");
+        const int fb = PutAa(s, "Forest");
+        cls[PutAa(s, "Forest")] = "bare";
+        MutAa(s, AttachAa(s, "Utopia Sprawl", fa))->chosen_color = static_cast<int8_t>(colour_a);
+        MutAa(s, AttachAa(s, "Utopia Sprawl", fb))->chosen_color = static_cast<int8_t>(colour_b);
+        cls[fa] = "deco" + std::to_string(colour_a);
+        cls[fb] = "deco" + std::to_string(colour_b);
+        deco = { fa, fb };
+        HandAa(s, "Wild Growth");
+        s.m_provider = &AaProv();
+        return s;
+    };
+    auto hosts_of = [](const std::vector<TurnSolver::Plan>& plans)
+    {
+        std::set<int> h;
+        for (const TurnSolver::Plan& p : plans)
+        { if (const Action* a = CastOfAa(p, "Wild Growth")) { h.insert(a->enchant_target); } }
+        return h;
+    };
+    const int blue = static_cast<int>(Color::Blue), green = static_cast<int>(Color::Green);
+    {   // two blue-locked Sprawls: one decorated class + the bare Forest = two hosts (three unfolded)
+        std::map<int, std::string> cls; std::vector<int> deco;
+        const GameState s = board(blue, blue, cls, deco);
+        std::vector<TurnSolver::Plan> on, off;
+        { CopyFoldArmsAa a(true);  on  = TurnSolver::EnumerateMainPlans(s, true); }
+        { CopyFoldArmsAa a(false); off = TurnSolver::EnumerateMainPlans(s, true); }
+        CHECK(hosts_of(on).size() == 2);
+        CHECK(hosts_of(off).size() == 3);
+        CHECK(CanonPlansAa(on, cls) == CanonPlansAa(off, cls));
+    }
+    {   // a blue and a green Sprawl are different hosts: nothing folds between them
+        std::map<int, std::string> cls; std::vector<int> deco;
+        const GameState s = board(blue, green, cls, deco);
+        std::vector<TurnSolver::Plan> on;
+        { CopyFoldArmsAa a(true); on = TurnSolver::EnumerateMainPlans(s, true); }
+        const std::set<int> h = hosts_of(on);
+        CHECK(h.size() == 3);
+        CHECK(h.count(deco[0]) == 1);
+        CHECK(h.count(deco[1]) == 1);
+    }
+}
+
+TEST_CASE("Activation-source copy classes: two identical Staffs of Domination -- the same plans, folded or not")
+{
+    GameState s = FreshAa();
+    std::map<int, std::string> cls;
+    cls[PutAa(s, "Staff of Domination")] = "staff";
+    cls[PutAa(s, "Staff of Domination")] = "staff";
+    PutAa(s, "Accomplished Alchemist");
+    for (int k = 0; k < 7; ++k) { PutAa(s, "Forest"); }
+    s.m_provider = &AaProv();
+    std::vector<TurnSolver::Plan> on, off;
+    long long built = 0;
+    {
+        CopyFoldArmsAa a(true);
+        const long long b0 = CopyHostFoldTestCount(3);
+        on = TurnSolver::EnumerateMainPlans(s, true);
+        built = CopyHostFoldTestCount(3) - b0;
+    }
+    { CopyFoldArmsAa a(false); off = TurnSolver::EnumerateMainPlans(s, true); }
+    CHECK(built > 0);
+    CHECK(on.size() > 1);
+    CHECK(CanonPlansAa(on, cls) == CanonPlansAa(off, cls));
+    // The greedy pick (the rollout leaf's walk, where the class matters most) is the same line up to which Staff.
+    TurnSolver::Plan gon, goff;
+    { CopyFoldArmsAa a(true);  gon  = TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0)); }
+    { CopyFoldArmsAa a(false); goff = TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0)); }
+    CHECK(CanonPlanAa(gon, cls) == CanonPlanAa(goff, cls));
 }

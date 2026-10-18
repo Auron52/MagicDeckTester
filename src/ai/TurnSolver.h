@@ -3377,3 +3377,10 @@ const std::function<bool(GameState&, const ManaCost&)>& RolloutMadnessPayer();
 // over-counting there would discard the original Zada for a phantom lethal. Mutates `state`
 // (damage, taps, pumps): call on a throwaway copy only.
 void RolloutSimulateCombat(GameState& state);
+
+// TEST HOOK (chunk P copy/host folds): this THREAD's running count of enumerations in which the fold
+// armed -- 0 = hand-copy classes built (MTG_HAND_COPY_CLASS_FOLD), 1 = land-Aura host prefix armed
+// (MTG_LAND_AURA_HOST_CLASS_FOLD), 2 = odometer positions the host prefix rejected, 3 = activation-source
+// copy classes built (the battlefield half of MTG_HAND_COPY_CLASS_FOLD). Thread-local and
+// never reset, so a test reads a delta around the call it makes.
+long long CopyHostFoldTestCount(int which);
