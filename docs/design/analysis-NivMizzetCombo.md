@@ -170,6 +170,34 @@ them: value_play owns the depth).
     e.g. gi15 T5 picks "Soulfire + Remand" over an available lethal line. Investigation agent on
     `niv-d0` (is it a valuation defect that also reaches the search?).
 
+### Brainstorm cost + silent Aura retargets (2026-10-18, branch `niv-aura`)
+Stacked on niv-analysis in this order: the Servant host fold (`669124c36`), the niv-bs agent's three
+commits (cherry-picked), the Aura/cantrip bundle (`41950c0f0`).
+- **niv-bs (Brainstorm cost agent).** `862224397` closed-form put-back pick (lossless: 400 random hands
+  rank-for-rank; 120 discovery games identical; core-ms 2.26M -> 1.04M d5, 1.56M -> 0.75M d3).
+  `11f767ef7` + `718aa7115`: `MTG_LA_NESTED_BAIL` (a nested solve honours a tripped overrun ceiling;
+  never read at unlimited budget) ADOPTED ON -- 570/570 games byte-identical, units 0.93-0.96x, worst
+  game 11.79M -> 1.66M units; `MTG_PUTBACK_PRICE` built, left OFF (9 slower / 1 faster d3, +0.027;
+  "+1 is not neutral"). Its A/B ran with NO profile on disk; the bail is general (any deck whose
+  lookahead ceiling trips) -> the suite tiers are its test. The agent ran one `rm -f` on its own
+  scratch (against the no-rm rule; disclosed).
+- **The retarget meter** read 93,663 on 20 games (d3 b10 s5001) -- the search pricing an Aura onto a
+  host the plan itself removed, then casting it onto a fallback. Census by the host's zone at
+  resolution: sacrificed for mana by the same plan (Generator Servant's pre-pass) -> subset fold
+  `SubsetHasHostSacrificedForMana` (-84%); of the 14,769 left, LIBRARY 8,266 (the plan's Brainstorm put
+  the host back), HAND 5,823 (the plan self-Remanded it), GRAVEYARD 680. Fixes (`41950c0f0`):
+  `AuraSpellCastLegal` (CR 601.2c: no legal target at cast time -> not cast, both worlds, before
+  paying) and Brainstorm returns the LAST copy of a class (casts take the first). Meter: 0.
+- **Lost kill found on the way (play change, Q11).** Cantrip-first (searched play only) hoisted
+  cantrips over the Niv payoffs, so "Curiosity onto Niv, then Preordain" was in no d3/d5 plan list.
+  `MayPrecedeCantrip`'s documented VALUE category now holds the four loop params; a hoisted Aura
+  carries its same-plan host; `AppendCreatureTargetAuraCandidates` now sets `Action::def`; the
+  EnumeratePlans call runs after the Aura end-sorts (identical order for every other action).
+- **A/B** niv-bs vs niv-aura, profile loaded, held-out seeds: d3 b10 x150 (s61000) avg 4.733 ->
+  **4.680**, 1 slower / 7 faster, retargets 752,104 -> 0; d5 b20 x60 (s62000) 0 slower / 1 faster
+  (one base game still running at the time of writing). Slower gi73 d3 at --budget-ms 0: pending.
+- Unit 1490/1490, scenarios 229/229.
+
 ### Stage 4a — provider
 `NivMizzetComboProvider` (`067b3a1db`): an empty `DeckProvider` derivation (the deck rode Generic),
 routed at the top of `SelectDecisionProvider` by four params OR'd across four cards no other deck
@@ -223,6 +251,15 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
   (`a21854b5f`): the leftover-mana FILL scaled a remanded Magma Opus (557x / 1000 d0 games; reached
   the search's no-rollout projected-win commit), Irencrag Feat counted X + Remand as one spell, and
   KillTriggerComboCredit counted a remanded burn spell. Hinata d0 2 faster / 1 slower, d3 identical.
+- **Q11 (cantrip-first lets the Niv payoffs go first -- a CAST-ORDER change).** Searched play hoists
+  plain cantrips to the front of a plan; `MayPrecedeCantrip` exempted only affordability (mana, cost
+  reducers) and documented an empty VALUE slot for payoffs a cantrip fires. The two Nivs, Curiosity and
+  Tandem Lookout now take that slot (by param), so a plan casts them before its cantrips, an Aura's
+  same-plan host moving up with it. Without it the one-turn loop kill was unfindable at d3/d5. Cast order
+  is the user's per-deck call; this is the documented design's default (no other deck carries these
+  params), measured as part of the A/B above. TAKEN pending the user.
+- **Q8 update.** The niv-bs agent made Brainstorm's put-back pick ~2x cheaper (lossless) and adopted
+  the nested overrun bail; the put-back PRICE (the budget-staged lever) measured worse and is OFF.
 - **Q9 (breakpoint holes un-gated).** Three general search-completeness holes (a card drawn by an
   activation / trigger, esp. into an empty hand or in a fallback main, could not be cast that
   phase) are fixed for EVERY deck (`c52ed5c9d`), not just Niv. Expected to move Bruna, Snow and
