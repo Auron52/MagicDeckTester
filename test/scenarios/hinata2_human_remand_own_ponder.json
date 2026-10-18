@@ -1,0 +1,33 @@
+{
+  "deck": "decks/Hinata2/Hinata2.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Island", "controller": 0, "tapped": false },
+    { "name": "Island", "controller": 0, "tapped": false },
+    { "name": "Island", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Ponder",
+    "Remand"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "human_lines": [
+    "cast=Ponder;cast=Remand"
+  ],
+  "expect_no_win": true,
+  "expect_human_summary_contains": "Ponder + Remand on it (back to hand; draw a card)",
+  "expect_history_contains": [
+    "Remand targets Ponder -- countered, back to hand; draw a card"
+  ],
+  "comment": "REMAND aimed at our OWN spell through the play viewer's line path (2026-10-17, docs/design/remand-self-target.md). The passive opponent never casts, so Remand's only legal target is one of our own spells on the stack: the human declares the line the way it is played, `cast=Ponder;cast=Remand`, CheckLine matches the remand variant (Action::remand_by on Ponder's cast, both cards in its cast multiset), and the shared apply resolves it: three Islands pay {U} + {1}{U}, Ponder is countered back to hand without resolving, Remand draws a card. No other plan in the menu casts Remand -- it has no cast of its own."
+}

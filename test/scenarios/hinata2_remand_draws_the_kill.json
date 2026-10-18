@@ -1,0 +1,29 @@
+{
+  "deck": "decks/Hinata2/Hinata2.cod",
+  "turn": 3,
+  "resume_at": "main1",
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 5,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Hinata, Dawn-Crowned", "controller": 0, "sick": true },
+    { "name": "Island", "controller": 0, "tapped": false },
+    { "name": "Island", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Sol Ring",
+    "Remand"
+  ],
+  "library_top": [ "Crackle with Power" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "expect_win_turn": 3,
+  "comment": "REMAND aimed at our OWN spell is a real line, and the search must find it (2026-10-17, docs/design/remand-self-target.md). Opponent at 5, Hinata summoning-sick, no land drop left, hand Sol Ring + Remand, Crackle with Power on top. The only T3 kill: cast Sol Ring and Remand it ({1} + Remand's {1}{U} less Hinata's one-target {1}), Sol Ring returns to hand, Remand draws the Crackle -- whose X=1 cast (RRR after Hinata's discount) off the three Mountains deals the 5. It needs the remand variant to be enumerated AND the Remand's draw to open the cantrip breakpoint whose continuation casts the drawn card. Casting Sol Ring plainly makes mana but draws nothing: the kill waits for T4."
+}
