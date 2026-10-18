@@ -8526,7 +8526,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // Convoke (Chord of Calling): the committed taps reduce this cast's cost -- the SAME shared
     // reduction the enumeration emitted (5d dropped-cast bug: pricing the FULL cost here dropped
     // a mana-legal convoke cast after its bodies were already tapped).
-    if (def->params.convoke && (convoke_green > 0 || convoke_other > 0))
+    // A CREATURE spell's convoke (Markov Baron) is NOT reduced here: its bodies tap at the payment below
+    // and the cost comes down by the bodies actually tapped (ConvokeCastTaps; Vampires sweep item A).
+    if (def->params.convoke && (convoke_green > 0 || convoke_other > 0) && !ConvokeTapsAtCast(def))
     { ApplyConvokeReduction(effective, convoke_green, convoke_other, ConvokePipColor(*def)); }
     // Phyrexian ({G/P} -- Birthing Pod's cast): the variant's life-paid pips come OFF the
     // recomputed cost, the SAME strip the enumeration and rollout applied (lockstep); the life
@@ -8641,6 +8643,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             }
             if (reserved_host > 0) { available = AvailableManaPool(state); }
         }
+        // CREATURE-SPELL CONVOKE AT THE CAST (lockstep twin of apply_one): tap the arm's bodies on the
+        // board as it stands now and reduce by what was tapped; untapped again if the payment fails.
+        ConvokeCastTaps _cv;
+        _cv.Tap(state, state.active_player_index, *def, convoke_green, convoke_other, effective);
         SpellSubtypePayScope _ssps(&def->card);   // see the Giada note at the other cast site
         // GENERATOR SERVANT: a creature SPELL spends one haste-tagged {C} on its own bill first --
         // the executor twin of apply_one's take (TakeHasteFloatForCreatureSpell). `effective` stays
@@ -8701,6 +8707,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             }
             return;
         }
+        _cv.Commit();   // the convoke bodies stay tapped (and the event names them)
         // ...and the life half of a phyrexian payment, now that the mana half is committed
         // (CR 601.2h; lockstep twin of the rollout apply's deduction).
         if (phyrexian_life > 0)

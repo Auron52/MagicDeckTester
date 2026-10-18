@@ -339,6 +339,8 @@ add_executable(mtg-test
     test/unit/test_vampires_outlets.cpp
     test/unit/test_vampires_madness.cpp
     test/unit/test_vampires_lords.cpp
+    test/unit/test_vampires_convoke.cpp
+    test/unit/test_vampires_sweep.cpp
     test/unit/test_sigardas_aid.cpp
     test/unit/test_cast_riders.cpp
     test/unit/test_remand_self_target.cpp

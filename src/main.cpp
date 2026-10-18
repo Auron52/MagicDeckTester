@@ -349,11 +349,107 @@ static std::string AuraHostLabel(const GameState& s, int m_number)
     return (total <= 1 || ordinal == 0) ? name : (name + " #" + std::to_string(ordinal));
 }
 
+// THE EXECUTED ORDER of a plan's actions, for DISPLAY (Vampires sweep item J, seed 91015): a plan listed
+// "Stromkirk Condemned: +1/+1, Voldaren Estate: create a Blood token" ran the Blood first -- the trailing
+// pass runs its activations in TurnSolver::OrderTrailingActivations' order (the provider's
+// ActivationOrderRank + the count bands), not the plan vector's -- so the human read one sequence and
+// got another (here at {1} rather than the {0} the pump's madness Baron would have made). Listed in the
+// order it runs: every non-trailing action in vector order, then the trailing activations sorted
+// exactly as both worlds sort them. Only for a plan holding a Vampires activation (every other deck's
+// menu is byte-identical); identity otherwise.
+static std::vector<std::size_t> DisplayActionOrder(const GameState& s, const TurnSolver::Plan& plan)
+{
+    std::vector<std::size_t> ord(plan.actions.size());
+    for (std::size_t i = 0; i < ord.size(); ++i) { ord[i] = i; }
+    bool vamp = false;
+    int trailing = 0;
+    for (const Action& a : plan.actions)
+    {
+        if (TurnSolver::IsTrailingActivation(a.kind)) { ++trailing; }
+        if ((a.kind == Action::Kind::ActivatePermAbility
+             && (a.ability_mode == Action::AbilityMode::TransformSelf || a.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                 || a.ability_mode == Action::AbilityMode::TapBlood || a.ability_mode == Action::AbilityMode::BloodDraw))
+            || (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4)
+            || (a.kind == Action::Kind::SacCreatureOutlet && a.def != nullptr && IsDiscardSacOutlet(a.def->params)))
+        { vamp = true; }
+    }
+    if (!vamp || trailing < 2 || plan.human_action_order) { return ord; }
+    std::vector<std::size_t> out;
+    std::vector<Action> tr;
+    for (std::size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        if (!TurnSolver::IsTrailingActivation(plan.actions[i].kind)) { out.push_back(i); continue; }
+        tr.push_back(plan.actions[i]);
+        tr.back().eval = static_cast<int>(i);   // a carrier for the index (the sort never reads eval)
+    }
+    TurnSolver::OrderTrailingActivations(s, tr);
+    for (const Action& a : tr) { out.push_back(static_cast<std::size_t>(a.eval)); }
+    return out;
+}
+
+// THE CONVOKE BODIES each creature-spell convoke cast of `plan` REALLY taps (Markov Baron; Vampires sweep
+// item D: plans differing only in their convoke arm printed identically). Off a PROBE apply of the plan on
+// a copy -- every chooser and sink paused, so no human is asked -- with the display recorder armed at the
+// probe's own apply depth (g_convoke_tap_record; nested search rollouts never record): the realised taps,
+// so a body the plan's own land returns (Bloodghast) or its own earlier cast adds is named, and two casts
+// never both claim one body. Records are matched to the plan's actions by (card, requested counts) in
+// execution order. One label per action; empty for every action without a creature convoke arm, and the
+// probe is skipped entirely for a plan without one (every other deck).
+static std::vector<std::string> ConvokeLabelsFor(const GameState& s, const TurnSolver::Plan& plan)
+{
+    std::vector<std::string> labels(plan.actions.size());
+    auto is_arm = [](const Action& a) -> bool
+    {
+        if (a.kind != Action::Kind::CastFromHand || (a.convoke_green <= 0 && a.convoke_other <= 0)) { return false; }
+        return ConvokeTapsAtCast(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+    };
+    bool any = false;
+    for (const Action& a : plan.actions) { if (is_arm(a)) { any = true; break; } }
+    if (!any) { return labels; }
+    std::vector<ConvokeTapRecord> recs;
+    {
+        RevealLogPause _quiet;
+        GameState c = s;
+        std::vector<ConvokeTapRecord>* const prev = g_convoke_tap_record;
+        const int prev_depth = g_convoke_record_depth;
+        g_convoke_tap_record  = &recs;
+        g_convoke_record_depth = 1;   // the probe's own ApplyPlanDirect
+        TurnSolver::ApplyPlan(c, plan, s.phase != Phase::PostCombatMain);
+        g_convoke_tap_record  = prev;
+        g_convoke_record_depth = prev_depth;
+    }
+    std::vector<char> used(recs.size(), 0);
+    for (std::size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (!is_arm(a)) { continue; }
+        for (std::size_t r = 0; r < recs.size(); ++r)
+        {
+            if (used[r] || recs[r].spell != a.card_name.str()
+                || recs[r].want_pip != a.convoke_green || recs[r].want_other != a.convoke_other) { continue; }
+            used[r] = 1;
+            for (const std::string& b : recs[r].bodies) { if (!labels[i].empty()) { labels[i] += ", "; } labels[i] += b; }
+            if (labels[i].empty()) { labels[i] = "no untapped body"; }
+            break;
+        }
+        if (!labels[i].empty()) { continue; }
+        // Not realised on the probe (the cast dropped): the pre-plan projection, said as such.
+        const CardDefinition* cvd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (cvd == nullptr) { continue; }
+        for (const std::string& b : ConvokeArmBodyLabels(s, s.active_player_index, *cvd, a.convoke_green,
+                                                         a.convoke_other, a.convoke_plan_pip, a.convoke_plan_other))
+        { if (!labels[i].empty()) { labels[i] += ", "; } labels[i] += b; }
+        labels[i] += " -- projected; the cast does not resolve on the probe";
+    }
+    return labels;
+}
+
 // `swap_in_combat` = the action index of a main-phase Aura swap human play will apply in the COMBAT
 // window instead (TurnSolver::HumanSwapDefersToCombat), -1 = none; that swap's label says so.
 static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& s, int swap_in_combat = -1)
 {
     std::ostringstream os;
+    const std::vector<std::string> convoke_labels = ConvokeLabelsFor(s, plan);   // item D
     // Pure dig line (human play): cycle a land / sacrifice Fiery Islet to draw -- show just the
     // ability, not "land=none; cast: ...", since a dig spends no land drop and casts nothing.
     if (plan.actions.size() == 1 && plan.actions[0].kind == Action::Kind::DigDraw
@@ -423,8 +519,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
     else if (plan.land_decided)                           { os << "land=none; "; }
     std::vector<std::string> casts;
     std::vector<char>        vial_tag;   // parallel to casts: 1 = an ActivateVial entry, 2 = a cast, 0 = other
-    for (const Action& a : plan.actions)
+    for (const std::size_t disp_i : DisplayActionOrder(s, plan))   // item J: the order it executes in
     {
+        const Action& a = plan.actions[disp_i];
         std::string tag;
         switch (a.kind)
         {
@@ -469,6 +566,16 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                         break;
                     }
                     tag += ")";
+                }
+                // CREATURE-SPELL CONVOKE (Markov Baron; Vampires sweep item D): plans that differ only in
+                // their convoke arm printed byte-identically ("land=Swamp; cast: Markov Baron" four times
+                // over). Name the bodies the arm taps -- projected on the pre-plan board, cheapest first
+                // (ConvokeArmBodyLabels) -- so the menu never holds twins. Gated on a creature convoke
+                // arm, so every other deck's summary is unchanged.
+                {
+                    const std::size_t ai = static_cast<std::size_t>(&a - plan.actions.data());
+                    if (ai < convoke_labels.size() && !convoke_labels[ai].empty())
+                    { tag += " (convoke: " + convoke_labels[ai] + ")"; }
                 }
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
                 // The no-own-creature "cash the cantrip off their body" variant (kTrickOpponentTarget).
@@ -1629,6 +1736,35 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 { hide_bundle[i] = 1; }
             }
         }
+        // CONVOKE-ARM TWIN COLLAPSE (Vampires sweep item D). A creature-spell convoke arm (Markov Baron)
+        // taps cheapest first AT THE CAST, so two arms of one cast can realise the same bodies -- the
+        // board-only arm and the same-plan-body arm once the arrival is cast first ("Pit Fighter, Baron
+        // (convoke: Falkenrath Pit Fighter #21)" twice). Their summaries name the REALISED bodies
+        // (ConvokeLabelsFor), so two such plans with one summary are one line: hide the later twin.
+        // Hidden, not removed (the REAL index stays pickable). Only plans holding a creature convoke
+        // arm are keyed, so every other deck's menu is unchanged.
+        // ...and the IDENTICAL-ESTATES twin (item G): "Voldaren Estate: create a Blood token" off Estate
+        // #58 and off an identical untapped #59 is one line (the search folds the pair -- the
+        // ActivationEquivTag fold; human play is never folded at enumeration, so the menu hides it).
+        if (HumanPlayActive())
+        {
+            std::unordered_set<std::string> cv_seen;
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                if (hide_bundle[i]) { continue; }
+                bool arm = false;
+                for (const Action& a : plans[i].actions)
+                {
+                    if (a.kind == Action::Kind::CastFromHand && (a.convoke_green > 0 || a.convoke_other > 0)
+                        && ConvokeTapsAtCast(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name)))
+                    { arm = true; break; }
+                    if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapBlood)
+                    { arm = true; break; }
+                }
+                if (!arm) { continue; }
+                if (!cv_seen.insert(SummarizePlan(plans[i], s)).second) { hide_bundle[i] = 1; }
+            }
+        }
     }
     // DIVERSITY-AWARE display cap. With variant-heavy enumerations (tutor-target cross products)
     // the FIRST n_emit plans can all be variants of one cast set, hiding whole SPELLS from the
@@ -1714,6 +1850,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                  + (a.attach_equip_id != 0 ? "|mt" + std::to_string(a.attach_equip_id) : std::string())
                  // REMAND rider: "cast X" and "cast X, Remand it" are different payloads.
                  + (a.remand_by.empty() ? std::string() : "|rm" + a.remand_by.str())
+                 // A creature-spell convoke arm (Markov Baron; Vampires item D) is a payload too: two
+                 // arms are two lines. Gated on such an arm, so every other key is unchanged.
+                 + (((a.convoke_green > 0 || a.convoke_other > 0) && ConvokeTapsAtCast(a.def))
+                    ? "|cv" + std::to_string(a.convoke_green) + "/" + std::to_string(a.convoke_other)
+                      + "+" + std::to_string(static_cast<int>(a.convoke_plan_pip))
+                      + "/" + std::to_string(static_cast<int>(a.convoke_plan_other)) : std::string())
                  + "|" + tgt;
         };
         // The PLAN-level identity: its land, its face, and its actions' payload keys IN VECTOR
@@ -2012,9 +2154,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // ... plus the per-action variant params (tutor target / X / Ponder keep / Soulfire
         // own-targets) so the GUI can show WHICH variant when several plans share the same casts.
         os << ", \"actions\": [";
-        for (size_t a = 0; a < p.actions.size(); ++a)
+        const std::vector<std::string> cv_labels = ConvokeLabelsFor(s, p);   // item D (empty: no arm)
+        const std::vector<std::size_t> disp_order = DisplayActionOrder(s, p);   // item J (identity elsewhere)
+        for (size_t di = 0; di < disp_order.size(); ++di)
         {
-            if (a) { os << ", "; }
+            if (di) { os << ", "; }
+            const size_t a = disp_order[di];
             const Action& ac = p.actions[a];
             os << "{ \"card\": "; JsonStr(os, ac.card_name);
             // PER-COPY IDENTITY of a board activation's source (Action::sac_source_id is the
@@ -2028,6 +2173,21 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.sac_source_id) { os << ", \"src_num\": " << ac.sac_source_id; }
             if (ac.kind == Action::Kind::DiscardToLandsEdge) { os << ", \"landsedge\": " << ac.discard_lands; }
             if (ac.kind == Action::Kind::DigDraw) { os << ", \"dig\": true, \"dig_sacrifice\": " << (ac.dig_sacrifice ? "true" : "false"); }
+            // A CREATURE-SPELL CONVOKE arm (Markov Baron; Vampires sweep item D): the counts (pip-coloured
+            // / other bodies; how many of them this plan casts first) and the projected bodies, so two
+            // arms of one cast never serialise identically. Absent for every other action.
+            if (ac.kind == Action::Kind::CastFromHand && (ac.convoke_green > 0 || ac.convoke_other > 0))
+            {
+                const CardDefinition* cvd = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
+                if (cvd != nullptr && ConvokeTapsAtCast(cvd))
+                {
+                    os << ", \"convoke\": { \"pip\": " << ac.convoke_green << ", \"other\": " << ac.convoke_other
+                       << ", \"plan_bodies\": " << (static_cast<int>(ac.convoke_plan_pip) + static_cast<int>(ac.convoke_plan_other))
+                       << ", \"taps\": ";
+                    JsonStr(os, a < cv_labels.size() ? cv_labels[a] : std::string());
+                    os << " }";
+                }
+            }
             // An activated ability of a permanent ALREADY ON THE BATTLEFIELD (Krenko's "{T}: create X
             // Goblins"; a Skirk Prospector / Siege-Gang sac outlet). CheckLine matches these by card_name
             // inside the ordinary cast multiset (see CheckLine's `orderNames`), so the human commits one

@@ -8659,7 +8659,17 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             // Convoke (Chord of Calling): the committed action's taps reduce this cast's cost
             // (shared ApplyConvokeReduction, identical to the enumeration's emission) and the
             // bodies tap in this sim copy so later state (combat, further convoke) is faithful.
-            if (def.params.convoke && (a.convoke_green > 0 || a.convoke_other > 0))
+            // A CREATURE spell (Markov Baron) taps its bodies here on the walk's board and is reduced by
+            // the bodies actually tapped -- the apply sites' ConvokeCastTaps (a same-plan arrival is not
+            // on this scratch board, so a plan-body arm reads under-reduced: a missed rescue, never an
+            // unsound one).
+            if (def.params.convoke && (a.convoke_green > 0 || a.convoke_other > 0) && ConvokeTapsAtCast(&def))
+            {
+                ConvokeCastTaps _cv;
+                _cv.Tap(cp, cp.active_player_index, def, a.convoke_green, a.convoke_other, ec);
+                _cv.committed = true;
+            }
+            else if (def.params.convoke && (a.convoke_green > 0 || a.convoke_other > 0))
             {
                 ApplyConvokeReduction(ec, a.convoke_green, a.convoke_other, ConvokePipColor(def));
                 ApplyConvokeTapsForCard(cp, cp.active_player_index, ActionCastDef(a), a.convoke_green, a.convoke_other);
@@ -12031,9 +12041,136 @@ static bool SubsetHasComboRouteWithOthers(const std::vector<Action>& cands, cons
 //      permanent up to their number, so "#1 discards A, #2 discards B" and "#1 discards B, #2 discards
 //      A" are one line; keep only the selection whose copies are a PREFIX of the class (battlefield
 //      order) carrying NON-DECREASING discard indices (the shared pin order) -- the multiset form.
+// Rule 7 (Vampires sweep items A / B, 2026-10-18): CREATURE-SPELL CONVOKE BODIES. A body taps once, so
+// the selection's convoke casts (Markov Baron; Action::convoke_green / convoke_other, which INCLUDE the
+// plan bodies convoke_plan_pip / convoke_plan_other) cannot together count more bodies than exist: the
+// untapped board creatures (the classifier's eligibility -- a live mana dork is excluded) plus the
+// creatures the selection itself puts onto the battlefield (hand casts and Vial puts; a convoke cast is
+// one of them, but the LAST convoke cast can serve no other, hence `n_cv - 1`), per colour class and in
+// total; and each cast's plan need must be met by arrivals OTHER than itself. A selection over the books
+// is the line "both Barons convoked by the same three creatures" -- phantom mana at apply before the
+// cast-time taps (item A), a cast that pays more or drops after them, never the line it reads as.
+// NECESSARY conditions (the order of arrivals is the apply's; ConvokeArrivalsFirst places plan-body
+// casts after them), so the rule can only reject a selection that cannot be realised as booked.
+static bool SubsetConvokeBodiesInvalid(const GameState& state, const std::vector<Action>& cands,
+                                       const std::vector<int>& sel)
+{
+    const int me = state.active_player_index;
+    int n_cv = 0, dem_p = 0, dem_o = 0, plan_p = 0, plan_o = 0;
+    Color pip = Color::Black;
+    for (int idx : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(idx)];
+        if (c.kind != Action::Kind::CastFromHand || (c.convoke_green <= 0 && c.convoke_other <= 0)) { continue; }
+        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        if (!ConvokeTapsAtCast(cd)) { continue; }
+        if (n_cv == 0) { pip = ConvokePipColor(*cd); }
+        ++n_cv; dem_p += c.convoke_green; dem_o += c.convoke_other;
+        plan_p += c.convoke_plan_pip; plan_o += c.convoke_plan_other;
+    }
+    if (n_cv == 0) { return false; }
+    int bp = 0, bo = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.tapped || !q.card.IsCreature()) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield, nullptr)) { continue; }
+        (q.card.HasColor(pip) ? bp : bo) += 1;
+    }
+    int ap = 0, ao = 0, cvp = 0, cvo = 0;   // non-convoke arrivals / convoke-cast arrivals, by class
+    for (int idx : sel)
+    {
+        const Action& d = cands[static_cast<std::size_t>(idx)];
+        const bool cast = d.kind == Action::Kind::CastFromHand && !d.bestow && !d.adventure && !d.sacrifice_land;
+        if (!cast && d.kind != Action::Kind::ActivateVial) { continue; }
+        const CardDefinition* dd = d.def != nullptr ? d.def : CardDatabase::Instance().Lookup(d.card_name);
+        if (dd == nullptr || !dd->card.IsCreature()) { continue; }
+        const bool is_pip = dd->card.HasColor(pip);
+        const bool is_cv  = cast && (d.convoke_green > 0 || d.convoke_other > 0) && ConvokeTapsAtCast(dd);
+        if (is_cv) { (is_pip ? cvp : cvo) += 1; } else { (is_pip ? ap : ao) += 1; }
+    }
+    if (dem_p > bp + ap + cvp || dem_o > bo + ao + cvo) { return true; }
+    if (dem_p + dem_o > bp + bo + ap + ao + cvp + cvo - 1) { return true; }
+    if (plan_p > ap + cvp || plan_o > ao + cvo) { return true; }
+    if (plan_p + plan_o > ap + ao + std::max(0, cvp + cvo - 1)) { return true; }
+    for (int idx : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(idx)];
+        if (c.convoke_plan_pip <= 0 && c.convoke_plan_other <= 0) { continue; }
+        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const bool self_pip = cd != nullptr && cd->card.HasColor(pip);
+        if (c.convoke_plan_pip > ap + cvp - (self_pip ? 1 : 0)) { return true; }
+        if (c.convoke_plan_other > ao + cvo - (self_pip ? 0 : 1)) { return true; }
+    }
+    return false;
+}
+
+// Rule 8 (Vampires sweep items E / J, 2026-10-18): every DISCARD-COST OUTLET of the selection -- Stromkirk
+// Condemned's pump, the Blood crack, Falkenrath Pit Fighter -- PINNED OR NOT must have a card to discard
+// when its turn comes in the EXECUTED trailing order (TurnSolver::OrderTrailingActivations, the order both
+// worlds run the pass in). Human play emits these UNPINNED (the card is asked at resolution), so rule 1's
+// per-name count never saw them: a plan whose own land / casts / puts empty the hand offered "cast X,
+// Condemned: +1/+1 (discard a card)" and the pump was silently skipped (seeds 91009 / 91011 / 91013), and
+// "pump, then crack" with ONE card ran the pump on it and dropped the crack (91007). The hand count starts
+// at the non-staged hand, loses one card per hand cast / Vial put of the selection, then each outlet in
+// executed order needs one and discards one, and draws what it draws (the crack 1, Pit Fighter 2) -- a
+// madness cast never returns the card. A NECESSARY condition: a selection over it cannot be realised as
+// listed (its outlet would no-op), so it is the plan without that outlet, which the walk also emits.
+static bool SubsetDiscardOutletsUnpayable(const GameState& state, const std::vector<Action>& cands,
+                                          const std::vector<int>& sel)
+{
+    thread_local std::vector<Action> outs;
+    outs.clear();
+    auto discard_draws = [](const Action& c, int& draws) -> bool
+    {
+        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { draws = 0; return true; }
+        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::BloodDraw)
+        { draws = 1; return true; }
+        if (c.kind == Action::Kind::SacCreatureOutlet && c.def != nullptr && c.def->params.sac_outlet_discard_cost > 0)
+        { draws = c.def->params.sac_outlet_draw; return true; }
+        return false;
+    };
+    for (int idx : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(idx)];
+        int d = 0;
+        if (discard_draws(c, d)) { outs.push_back(c); }
+    }
+    if (outs.empty()) { return false; }
+    const Player& ap = state.ActivePlayer();
+    int h = 0;
+    for (const Card& hc : ap.hand) { if (!hc.m_is_staged) { ++h; } }
+    for (int idx : sel)
+    {
+        const Action& d = cands[static_cast<std::size_t>(idx)];
+        if (d.kind == Action::Kind::CastFromHand || d.kind == Action::Kind::ActivateVial) { --h; }
+    }
+    TurnSolver::OrderTrailingActivations(state, outs);
+    for (const Action& c : outs)
+    {
+        int draws = 0;
+        discard_draws(c, draws);
+        const int cost = (c.kind == Action::Kind::SacCreatureOutlet && c.def != nullptr)
+                       ? std::max(1, c.def->params.sac_outlet_discard_cost) : 1;
+        if (h < cost) { return true; }
+        h += draws - cost;
+    }
+    return false;
+}
+
+bool TurnSolver::VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
+                                            const std::vector<int>& sel, int rule)
+{
+    if (rule == 7) { return SubsetConvokeBodiesInvalid(state, cands, sel); }
+    if (rule == 8) { return SubsetDiscardOutletsUnpayable(state, cands, sel); }
+    return false;
+}
+
 static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel, bool fold_from_odometer)
 {
+    if (SubsetConvokeBodiesInvalid(state, cands, sel)) { return true; }   // rule 7
+    if (SubsetDiscardOutletsUnpayable(state, cands, sel)) { return true; }   // rule 8
     const Player& ap = state.ActivePlayer();
     auto def_of = [](const Action& c) -> const CardDefinition*
     { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
@@ -14125,6 +14262,10 @@ static std::uint64_t ActionFoldSig(const Action& a)
     if (a.twobrid_colored > 0) { FoldMix(h, 0x7B2Cu + static_cast<std::uint64_t>(a.twobrid_colored)); }
     FoldMix(h, static_cast<std::uint64_t>(a.convoke_green));
     FoldMix(h, static_cast<std::uint64_t>(a.convoke_other));
+    // Vampires sweep item B: a plan-body convoke arm (folded only when set -> every other key unchanged).
+    if (a.convoke_plan_pip != 0 || a.convoke_plan_other != 0)
+    { FoldMix(h, 0xC0B0ull + static_cast<std::uint64_t>(a.convoke_plan_pip) * 16
+                 + static_cast<std::uint64_t>(a.convoke_plan_other)); }
     FoldMix(h, static_cast<std::uint64_t>(a.soulfire_own_targets));
     FoldMix(h, static_cast<std::uint64_t>(a.crackle_targets));
     FoldMix(h, static_cast<std::uint64_t>(a.max_casts_after));
@@ -17491,7 +17632,13 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
             // Vampires B: the steal / the transform (rule 6 -- the hand-source cast, the arrivals).
             || (a.kind == Action::Kind::ActivatePermAbility
                 && (a.ability_mode == Action::AbilityMode::TapSubtypeSteal
-                    || a.ability_mode == Action::AbilityMode::TransformSelf)))
+                    || a.ability_mode == Action::AbilityMode::TransformSelf))
+            // Vampires sweep items A / B: a creature-spell convoke arm (rule 7, the body books).
+            || (a.kind == Action::Kind::CastFromHand && (a.convoke_green > 0 || a.convoke_other > 0)
+                && ConvokeTapsAtCast(d))
+            // Vampires sweep item E: an UNPINNED discard outlet (human play) -- rule 8's hand count.
+            || (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::BloodDraw)
+            || (a.kind == Action::Kind::SacCreatureOutlet && d != nullptr && d->params.sac_outlet_discard_cost > 0))
         { p.vamp_outlet = true; }   // Vampires A2 (SubsetVampOutletInvalid)
         if (a.free_cast)          { p.dup_source = true; }   // bank slots, and the paid/free pair
         if (a.equiv_tag != 0)     { p.dup_source = true; }   // canonical-prefix fold (see the note above)
@@ -19814,6 +19961,11 @@ static thread_local int g_apply_caller_line = 0;
 // "the apply the candidate loop is about to make", i.e. depth g_apd_depth + 1, so a nested apply (a
 // breakpoint continuation's trial, a payability probe) can never answer for it. See BounceProbe.
 static thread_local int g_apd_depth = 0;
+// Vampires sweep items E / I / J (2026-10-18): every trailing activation the rollout apply SKIPPED (its
+// source not live, or its cost unpaid) -- counted, never acted on, except by the HUMAN-PLAY menu's
+// all-or-nothing filter (EnumeratePlans, drop_partial_vamp): a menu plan whose own probe apply skips one
+// of its activations is not offered (it would run its other half and silently drop that one).
+static thread_local long long g_trailing_act_skips = 0;
 // THE LAND-POSITION PREFIX PROBE (Plan::land_slot k >= 1; Landfall claude-play sweep flag 1,
 // 2026-10-16). A "land right after the k-th landfall-watcher cast" plan is cloned from a LAND-FIRST
 // plan, whose casts were enumerated WITH the land's mana -- so a cast dispatched BEFORE the land can
@@ -20971,6 +21123,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         }
         fold(static_cast<uint64_t>(a.convoke_green) * 37
              + static_cast<uint64_t>(a.convoke_other));
+        if (a.convoke_plan_pip != 0 || a.convoke_plan_other != 0)   // Vampires item B; gated on set
+        { fold(0x43564250ull + static_cast<uint64_t>(a.convoke_plan_pip) * 16
+               + static_cast<uint64_t>(a.convoke_plan_other)); }   // "CVBP"
         fold(static_cast<uint64_t>(a.gy_exile_mode + 2) * 11
              + static_cast<uint64_t>(a.loyalty_ability + 2));
         // Vampires A2: the searched discard pin / Blood cost variant / same-plan victim -- must-folds
@@ -21166,6 +21321,12 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.convoke_other) != static_cast<long long>(y.convoke_other))
     { add("convoke_other", std::to_string(static_cast<long long>(x.convoke_other)),
            std::to_string(static_cast<long long>(y.convoke_other))); }
+    if (x.convoke_plan_pip != y.convoke_plan_pip)
+    { add("convoke_plan_pip", std::to_string(static_cast<int>(x.convoke_plan_pip)),
+           std::to_string(static_cast<int>(y.convoke_plan_pip))); }
+    if (x.convoke_plan_other != y.convoke_plan_other)
+    { add("convoke_plan_other", std::to_string(static_cast<int>(x.convoke_plan_other)),
+           std::to_string(static_cast<int>(y.convoke_plan_other))); }
     if (static_cast<long long>(x.soulfire_own_targets) != static_cast<long long>(y.soulfire_own_targets))
     { add("soulfire_own_targets", std::to_string(static_cast<long long>(x.soulfire_own_targets)),
            std::to_string(static_cast<long long>(y.soulfire_own_targets))); }
@@ -27276,13 +27437,15 @@ static void EmitTransformAction(const GameState& state, const Card& src_card, co
     const int me = state.active_player_index;
     const int now = pp.transform_min_controlled_count > 0
         ? CountControlledSubtypePermanents(state, me, pp.transform_min_controlled_subtype) : 0;
-    if (HumanPlayActive())
-    {
-        // Legality only: the restriction NOW (the human's main phase re-prompts after each cast).
-        if (hand_src || !TransformRestrictionMet(state, me, pp)) { return; }
-    }
-    else if (pp.transform_min_controlled_count > 0
-             && SubtypeCountUpperBound(state, pp.transform_min_controlled_subtype) < pp.transform_min_controlled_count)
+    // Human play takes the SAME gate as the search (Vampires sweep item H, seed 91012): it used to offer the
+    // transform only when the restriction already held on the PRE-plan board ("the main phase re-prompts
+    // after each cast"), so "cast Legion Lieutenant -- the fifth Vampire -- then transform" was never one
+    // plan, and committing the cast first spent the {B} the follow-up frame needed. Now the plan that
+    // reaches five carries it (rule 6b checks the arrivals; the apply re-checks the restriction exactly),
+    // and the human menu's all-or-nothing probe (EnumeratePlans, drop_partial_vamp) drops any plan whose
+    // transform its own payment cannot fund.
+    if (pp.transform_min_controlled_count > 0
+        && SubtypeCountUpperBound(state, pp.transform_min_controlled_subtype) < pp.transform_min_controlled_count)
     { return; }
     Action a;
     a.kind            = Action::Kind::ActivatePermAbility;
@@ -32958,8 +33121,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // the steal, transforming while sick -- so each distinct name in HAND emits its variants with
         // needs_cast_mask bit0 (SubsetVampOutletInvalid rule 6 requires the cast; the apply re-resolves
         // the source by name, ResolveHandSourceActivation). Deck-stamp gated: no other deck scans.
-        if ((state.deck_has_tap_steal || state.deck_has_transform) && !HumanPlayActive())
+        // Human play (Vampires sweep item H) takes the TRANSFORM of a same-plan Keeper too -- "cast Keeper
+        // as the fifth Vampire, transform it" is one line there as well (the menu's all-or-nothing probe
+        // drops one its payment cannot fund); the steal's hand-source variants stay search-only (its
+        // target and bodies are board clicks at resolution).
+        if (state.deck_has_tap_steal || state.deck_has_transform)
         {
+            const bool human_hs = HumanPlayActive();
             std::vector<InternedName> seen_src;
             for (const Card& hc : ap.hand)
             {
@@ -32968,7 +33136,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     || (hd->params.steal_tap_count <= 0 && hd->params.transform_back_name.empty())) { continue; }
                 if (std::find(seen_src.begin(), seen_src.end(), hc.m_name) != seen_src.end()) { continue; }
                 seen_src.push_back(hc.m_name);
-                if (hd->params.steal_tap_count > 0)         { EmitStealVariants(state, hc, hd, /*hand_src=*/true, actions); }
+                if (hd->params.steal_tap_count > 0 && !human_hs) { EmitStealVariants(state, hc, hd, /*hand_src=*/true, actions); }
                 if (!hd->params.transform_back_name.empty()) { EmitTransformAction(state, hc, hd, /*hand_src=*/true, actions); }
             }
         }
@@ -33715,6 +33883,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // k exact, or (the top variant) "k or more" -- encoded +16 (see the guard).
                     a.vamp_casts_needed = static_cast<std::int8_t>(k == kmax ? k + 16 : k);
                     a.cost              = c;
+                    // IDENTICAL ESTATES FOLD (Vampires sweep item G): two untapped, plain Voldaren Estates
+                    // make the same Blood off the same cost, so "Estate #58 makes it" and "#59 makes it"
+                    // are one line -- the interchangeable-source fold every ModeSpec mode already takes
+                    // (canonical prefix of the class; the variant k rides the tag, so k variants never
+                    // fold into each other). Autonomous only (FinalizeFoldTags never folds human play;
+                    // the viewer hides the menu twin instead -- main.cpp).
+                    a.equiv_tag         = ActivationEquivTag(
+                        state, src, static_cast<const std::string&>(src.card.m_name),
+                        static_cast<int>(Action::AbilityMode::TapBlood), c, 1 + 64 * a.vamp_casts_needed);
                     a.eval              = 1;   // a banked card (ordering / depth-0 only)
                     a.is_noncreature    = true;
                     actions.push_back(std::move(a));
@@ -36244,6 +36421,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         const int me = state.active_player_index;
         const std::size_t cv_n = actions.size();
         std::vector<std::size_t> cv_drop;
+        // PLAN BODIES and CONTENTION (Vampires sweep items A / B; CreatureConvokeArms has the rules).
+        // Read once: the hand's creature cards by colour class (the bodies a plan can put onto the
+        // battlefield ahead of a convoke cast), and whether another claimant for the same bodies exists
+        // this turn -- a second convoke creature in hand (a second hard cast or a madness cast) or a
+        // tap-five steal source on our board / in hand.
+        int cv_hand_convoke = 0;
+        bool cv_steal = false;
+        {
+            const Player& cvp = state.players[static_cast<std::size_t>(me)];
+            for (const Card& hc : cvp.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd == nullptr) { continue; }
+                if (hd->params.convoke && hd->card.IsCreature()) { ++cv_hand_convoke; }
+                if (hd->params.steal_tap_count > 0) { cv_steal = true; }
+            }
+            if (cv_hand_convoke > 0 && !cv_steal)
+            {
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != me || q.def_absent) { continue; }
+                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                    if (qd != nullptr && qd->params.steal_tap_count > 0) { cv_steal = true; break; }
+                }
+            }
+        }
         for (std::size_t i = 0; i < cv_n; ++i)
         {
             const Action& base = actions[i];
@@ -36252,16 +36455,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const CardDefinition* cd = base.def;
             if (cd == nullptr || !cd->params.convoke || !cd->card.IsCreature()) { continue; }
             const ConvokeRules r = ConvokeRulesFor(*cd, !is_pre_combat);
-            const std::vector<ConvokeArmSpec> arms = CreatureConvokeArms(state, me, base.cost, r);
+            int hp = 0, ho = 0;
+            {
+                const Player& cvp = state.players[static_cast<std::size_t>(me)];
+                for (int hi = 0; hi < static_cast<int>(cvp.hand.size()); ++hi)
+                {
+                    if (hi == base.hand_index) { continue; }   // this cast's own card
+                    const Card& hc = cvp.hand[static_cast<std::size_t>(hi)];
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd == nullptr || !hd->card.IsCreature()) { continue; }
+                    (hd->card.HasColor(r.pip) ? hp : ho) += 1;
+                }
+            }
+            const bool contention = cv_hand_convoke >= 2 || cv_steal;
+            const std::vector<ConvokeArmSpec> arms = CreatureConvokeArms(state, me, base.cost, r, hp, ho, contention);
             const Action b0 = base;   // copy BEFORE any push_back (reallocation)
             const std::size_t lim = cv_decision_space ? arms.size() : 1;
             for (std::size_t k = 1; k < lim; ++k)
             {
                 if (arms[k].reduced.ManaValue() > mana_ceiling) { continue; }
                 Action v = b0;
-                v.convoke_green = arms[k].pip;
-                v.convoke_other = arms[k].other;
-                v.cost          = arms[k].reduced;
+                v.convoke_green      = arms[k].pip;
+                v.convoke_other      = arms[k].other;
+                v.convoke_plan_pip   = static_cast<std::int8_t>(arms[k].plan_pip);
+                v.convoke_plan_other = static_cast<std::int8_t>(arms[k].plan_other);
+                v.cost               = arms[k].reduced;
                 actions.push_back(std::move(v));
             }
             Action& a0 = actions[i];
@@ -44999,6 +45217,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
         // Twobrid variant (Beseech): the coloured pips replace {2} each, as enumerated.
         if (a.twobrid_colored > 0) { ec.PayTwobridWithColor(a.twobrid_colored); }
+        // CONVOKE (Vampires sweep item K, 2026-10-18): the arm's bodies pay part of the bill, the same
+        // ApplyConvokeReduction the enumeration emitted. Without it a multi-cast line with a convoked
+        // Markov Baron tapped the bodies AND the lands for the full cost (seed 91016 T5: Pit Fighter +
+        // a 3-body Baron tapped all four lands, floated {B}{B}{B}, and the Estate a planned Blood
+        // activation needed was gone). The bodies themselves tap at the cast (ConvokeCastTaps); the
+        // subset rule (SubsetConvokeBodiesInvalid) guarantees the plan's arms are realisable, so the
+        // bill matches what the casts will pay -- and a short realisation only leaves the cast paying
+        // the difference itself. Chord of Calling never reaches here (an X spell declines above).
+        if (d->params.convoke && (a.convoke_green > 0 || a.convoke_other > 0))
+        { ApplyConvokeReduction(ec, a.convoke_green, a.convoke_other, ConvokePipColor(*d)); }
         // Remand rider: the Remand joins X's bill, as enumerated (AddRemandRiderCost).
         AddRemandRiderCost(ec, state, a.remand_by.str());
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
@@ -48159,7 +48387,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // reduction the enumeration emitted, so a committed convoke cast pays here exactly what
         // the search priced (the 5d dropped-cast bug: recomputing the FULL cost dropped a
         // mana-legal cast after its bodies were already tapped).
-        if (def.params.convoke && (convoke_green > 0 || convoke_other > 0))
+        // A CREATURE spell's convoke (Markov Baron) taps AT THE PAYMENT below instead and is reduced by
+        // the bodies actually tapped (ConvokeCastTaps; Vampires sweep item A).
+        if (def.params.convoke && (convoke_green > 0 || convoke_other > 0) && !ConvokeTapsAtCast(&def))
         { ApplyConvokeReduction(ec, convoke_green, convoke_other, ConvokePipColor(def)); }
         // Phyrexian ({G/P} -- Birthing Pod's cast): the variant's life-paid pips come OFF the
         // recomputed cost, the SAME strip the enumeration emitted (the convoke idiom above);
@@ -48247,6 +48477,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // path (and the shared one claude-play executes through), so without this the rollout
             // would happily pay for a Human Cleric off an Angel-only source while the executor
             // refuses -- a rollout-vs-real divergence, i.e. exactly an [fd-diverge].
+            // CREATURE-SPELL CONVOKE AT THE CAST (lockstep twin of CastSpellFromHand): tap the arm's
+            // bodies on the board as it stands now (a creature this plan cast earlier is there, sick)
+            // and reduce by what was tapped; untapped again if the payment fails.
+            ConvokeCastTaps _cv;
+            _cv.Tap(state, state.active_player_index, def, convoke_green, convoke_other, ec);
             SpellSubtypePayScope _ssps(&def.card);
             // GENERATOR SERVANT (sac_for_mana_grants_haste): a creature SPELL spends one haste-tagged
             // {C} on its own bill first -- a sound fold, see TakeHasteFloatForCreatureSpell. `ec`
@@ -48262,6 +48497,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!paid_ok) { paid_ok = TapForCostDirect(state, pay_bill, is_creature); }
             }
             if (!paid_ok && cast_haste_from_mana) { UndoHasteFloatTake(state); cast_haste_from_mana = false; }
+            if (paid_ok)
+            {
+                _cv.Commit();
+                if (g_convoke_tap_record != nullptr && g_apd_depth == g_convoke_record_depth)
+                { _cv.RecordInto(*g_convoke_tap_record); }   // the viewer's convoke labels (item D)
+            }
             if (!paid_ok)
             {
                 if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
@@ -51075,7 +51316,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         ApplyDiscardSacOutlet(state, state.active_player_index, a.sac_source_id,
                                               a.sac_victim_id, a.victim_name.str(), pin);
                     }
+                    else { ++g_trailing_act_skips; }
                 }
+                else { ++g_trailing_act_skips; }
                 continue;
             }
             // Every other sac outlet: its {cost} is an ability of a CREATURE source, so Secluded
@@ -51490,6 +51733,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // because nothing else counts it -- see g_stranded_activation_count. Behaviour
                     // is unchanged: the tap is restored exactly as before.
                     ++g_stranded_activation_count;
+                    ++g_trailing_act_skips;
                     if (a.ability_mode == Action::AbilityMode::TapDraw)
                     { ++g_stranded_tapdraw_count; }
                     if (taps)
@@ -51503,7 +51747,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             // MTG_ACT_DROP_AUDIT: source not live -- PermAbilityDeadReason splits "tapped for MANA by
             // a cast payment" (the defect) from gone/summoning-sick. Nothing counted this before.
-            else if (ActDropAuditOn() && a.def != nullptr)
+            else if ((++g_trailing_act_skips, ActDropAuditOn()) && a.def != nullptr)
             {
                 const int _why = PermAbilityDeadReason(state, state.active_player_index,
                                                        src_id, a.ability_mode);
@@ -51536,7 +51780,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.discard_name.empty() && !HumanPlayActive() && greedywindow::InWindow(0))
                 { g_activation_discard_unpinned.fetch_add(1, std::memory_order_relaxed); }
                 if (!DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
-                                         a.discard_name.str())) { continue; }
+                                         a.discard_name.str())) { ++g_trailing_act_skips; continue; }
             }
             if (TapForCostDirect(state, OutletOwnCost(a), /*for_creature=*/false))
             {
@@ -51544,6 +51788,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
                                   a.gy_exile_mode, a.chosen_x, a.discard_name.str());
             }
+            else { ++g_trailing_act_skips; }
         }
         else if (a.kind == Action::Kind::UntapCreature)
         {
@@ -57737,7 +57982,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                         || act.def->params.tutor_mv_max_is_x))
                            ? ("#X" + std::to_string(act.chosen_x) + "#T" + act.tutor_target
                               + "#C" + std::to_string(act.convoke_green) + "/"
-                              + std::to_string(act.convoke_other)) : "")
+                              + std::to_string(act.convoke_other)
+                              + ((act.convoke_plan_pip != 0 || act.convoke_plan_other != 0)
+                                 ? "+" + std::to_string(act.convoke_plan_pip) + "/"
+                                   + std::to_string(act.convoke_plan_other) : std::string())) : "")
                         // Felidar Guardian: distinct flicker targets (and the decline) are
                         // DISTINCT plans (core invariant); gated on the param.
                         + ((act.def && act.def->params.etb_blink_permanent)
@@ -58779,10 +59027,62 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         ApplyPlanDirect(trial, pl, is_pre_combat);
         return g_attach_cast_probe.stranded;
     };
-    auto drop_attach_illegal = [&](std::vector<TurnSolver::Plan>& v)
+    auto drop_attach_illegal_core = [&](std::vector<TurnSolver::Plan>& v)
     {
         if (!human_attach) { return; }
         v.erase(std::remove_if(v.begin(), v.end(), attach_order_illegal), v.end());
+    };
+    // HUMAN-PLAY ALL-OR-NOTHING for the Vampires activations (sweep items E / I / J, 2026-10-18). A menu
+    // plan is a promise: picking it runs every action it lists. A plan whose apply SKIPS one of its
+    // trailing activations -- a Stromkirk Condemned pump whose discard the plan's own casts used up, a
+    // Bloodline Keeper transform whose {B} only Unclaimed Territory's creature-SPELL mana could have paid,
+    // a Blood crack after the pump ate the only card -- would run its other half and silently drop that
+    // one (seed 91004: the pump discarded a card, the transform did nothing). Each such plan is probed on
+    // a copy (every chooser paused) and dropped when its apply skips an activation
+    // (g_trailing_act_skips); the same plan WITHOUT the dead activation is its own subset, still offered,
+    // so nothing realisable is lost. Human play only (the search scores what the apply realises, so a
+    // dead activation there is a duplicate, never a wrong line), and only for plans holding a Vampires
+    // activation (the steal / transform / Blood / the discard outlets), so every other deck's human
+    // menu is unchanged.
+    auto has_vamp_activation = [](const std::vector<Action>& acts) -> bool
+    {
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::ActivatePermAbility
+                && (a.ability_mode == Action::AbilityMode::TransformSelf
+                    || a.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                    || a.ability_mode == Action::AbilityMode::TapBlood
+                    || a.ability_mode == Action::AbilityMode::BloodDraw)) { return true; }
+            if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4) { return true; }
+            if (a.kind == Action::Kind::SacCreatureOutlet && a.def != nullptr && IsDiscardSacOutlet(a.def->params))
+            { return true; }
+        }
+        return false;
+    };
+    auto drop_partial_vamp = [&](std::vector<TurnSolver::Plan>& v)
+    {
+        if (!HumanPlayActive()) { return; }
+        v.erase(std::remove_if(v.begin(), v.end(), [&](const TurnSolver::Plan& pl)
+        {
+            if (!has_vamp_activation(pl.actions)) { return false; }
+            RevealLogPause _quiet;
+            GameState trial = state;
+            // `state` already holds this frame's land choice (EnumeratePlansWithLand plays the land on
+            // the copy it enumerates, and the defer option passes the land-less board), and the plan
+            // is not land-tagged yet -- so the probe must not let ApplyPlanDirect greedy-play a drop
+            // the plan does not make (that funded the transform's {B} off a Swamp the plan never played).
+            TurnSolver::Plan probe = pl;
+            probe.land_decided = true;
+            probe.land_to_play.clear();
+            const long long before = g_trailing_act_skips;
+            ApplyPlanDirect(trial, probe, is_pre_combat);
+            return g_trailing_act_skips != before;
+        }), v.end());
+    };
+    auto drop_attach_illegal = [&](std::vector<TurnSolver::Plan>& v)
+    {
+        drop_attach_illegal_core(v);
+        drop_partial_vamp(v);
     };
     if (!OrderingSearchEnabled(state)) { drop_attach_illegal(deduped); return deduped; }
     // SATURATED CAST-ORDER COLLAPSE (see HumanEnumSaturated). This expansion APPLIES every
@@ -58889,6 +59189,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // ...or a Magnetic Theft before the same-plan cast of its Equipment / creature target (it
             // would resolve to nothing; the explicit route plays this order verbatim). No-op without one.
             if (OrderingPlacesAttachSpellBeforeTarget(cand.actions)) { continue; }
+            // ...or a plan-body convoke arm before the creatures it convokes with (Vampires item B; the
+            // explicit route plays this order verbatim, so its bodies would not exist). No-op without one.
+            if (OrderingPlacesConvokeBeforeArrivals(cand.actions)) { continue; }
             // ...or a target-less Path BEFORE a Theft whose piece an Equip in this plan needs freed again
             // (only a Path after the Theft can; see attach_order_illegal above).
             const bool probe_attach = human_attach && PlanHasTheftAndOpenRemoval(cand.actions);
@@ -58951,6 +59254,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (ordered.size() == ordered_before && !attach_order_illegal(p)) { ordered.push_back(std::move(p)); }
     }
 
+    drop_partial_vamp(ordered);
     return ordered;
 }
 
@@ -64974,6 +65278,13 @@ static std::string PlanDomKey(const Action& a)
     if (a.vamp_casts_needed != 0) { k += "|B"; k += std::to_string(static_cast<int>(a.vamp_casts_needed)); }
     if (a.steal_spec != 0)   // Vampires B: the steal's target + tap spec content
     { k += "|S"; k += std::to_string(a.enchant_target); k += "/"; k += StealSpecText(a.steal_spec); }
+    // Vampires sweep items A-C: a creature-spell convoke arm (its body counts and plan-body need).
+    if (a.def != nullptr && ConvokeTapsAtCast(a.def) && (a.convoke_green != 0 || a.convoke_other != 0))
+    {
+        k += "|C"; k += std::to_string(a.convoke_green); k += "/"; k += std::to_string(a.convoke_other);
+        k += "+"; k += std::to_string(static_cast<int>(a.convoke_plan_pip));
+        k += "/"; k += std::to_string(static_cast<int>(a.convoke_plan_other));
+    }
     return k;
 }
 
@@ -86152,7 +86463,7 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.soulfire_own_targets, a.crackle_targets, a.ponder_keep, a.evoke ? 1 : 0,
                               a.adventure ? 1 : 0, a.bestow ? 1 : 0, a.gy_exile_mode, a.loyalty_ability,
                               a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
-                              a.attach_equip_id };
+                              a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other };
             for (int v : f) { k += "|" + std::to_string(v); }
             ks.push_back(std::move(k));
         }
