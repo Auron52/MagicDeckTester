@@ -1,22 +1,11 @@
-# Regression ground truth -- commit d05536f8  date 2026-10-18
+# Regression ground truth -- commit bff87208d  date 2026-10-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: ADOPT the v3 exhaustive keep table (a9a17e64) -- all 12 overnight keys improve, mean -0.6251t (range -0.4800..-0.7380), measured against the table-ABSENT baseline accepted on these same resized rows in 16842c72 so the only difference is the table; held-out confirmation of generation's keep A/B -0.724933t and confounded-bottoming -0.155600t.
-# accepted-with-regressions (smoke, 2026-10-17): colossus + colossus2hg: deck ADDED to all three tiers (4 NEW smoke keys; analysis-Colossus Hammer.md). melira + melira2hg: play-only change at the SAME avg (d3 s1001 gi3, still T4) from the breakpoint cast-record fix 0d410db07 -- the committed T4 continuation convokes Chord of Calling, which the old replay could not pay and skipped. Every other smoke cell byte-identical (116/116).
-# accepted-with-regressions (regression, 2026-10-17): colossus: deck ADDED to all three tiers (5 NEW regression keys; analysis-Colossus Hammer.md), measured on 0d410db07 (the breakpoint cast-record fixes). Every other regression cell byte-identical (166/166), references 600 / 0 drift.
 # accepted-with-regressions (overnight, 2026-10-17): colossus: deck ADDED to all three tiers with the overnight ENTRY set (12 NEW keys, d0 4x2000, d3 4x400 b10, d5 4x300 b20; analysis-Colossus Hammer.md), PGO binary of 0d410db07, makespan 2m23s. Expands to the FULL set just before a keep table is adopted.
-# accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17: attach folds (7b5863d22) + USER-ruled Sigarda's Aid host heuristic (8f2b54551); 0 slower; searched 13 same-turn line changes, d0 7 faster; every other deck byte-identical in the same combined run
-# accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17 (2): Magnetic Theft every-pair offer + joint mirror fold (aecb9c84f); searched 0 slower / 3 same-turn; d0 gi539 T6->unwon (d0 greedy tie-break picks a self-Path that exiles its only attacker; RECOVERS stage 1, d6 b100 T3), gi344 T7->T6; every other deck byte-identical
-# accepted-with-regressions (regression, 2026-10-17): colossus + snow regression 2026-10-17: colossus = attach folds, USER-ruled Sigarda's Aid host heuristic, Theft every-pair/per-copy offers (searched 16 same-turn line changes, d0 6 faster); snow d3 s2002 gi31 = the breakpoint MISMATCH fix (pre-target occurrences mirror the scored line), same T7; 0 slower anywhere; every other deck byte-identical; refs 600/0 drift
-# accepted-with-regressions (smoke, 2026-10-17): colossus smoke 2026-10-17 (3): a Magnetic Theft with no legal pair is not cast (CR 601.2c, 56937ba8a) -- d0 gi539 same score (loss both), its two Thefts now stay in hand after Path exiles the only creature; searched 0 changed; every other deck byte-identical; regression 171/171 PASS, refs 600/0 drift
-# accepted-with-regressions (smoke, 2026-10-18): colossus only (10-18 package b3ce59cc7: USER full cast order + equips, Path never cast, tutor rule + Lizard amendment, Aid lethal-first): every colossus row faster (d0 4.963->4.737, d3 3.647->3.593, d5 3.693->3.640, 2hg 4.48->4.44); 4 searched slower = s1001 gi31 d3+d5 and 2hg gi26 need the Path shuffle (clairvoyance, USER 2026-10-13) + 2hg gi34 (the tutor rule drops Dragonfire Blade beside a free attach; its +1 was lethal at 30 life -- raised to the USER)
-# accepted-with-regressions (regression, 2026-10-18): colossus only (10-18 package b3ce59cc7): every colossus row faster (d0 5.159->4.874, d3 3.853->3.800 / 3.687->3.633, d5 3.733->3.707 / 3.587->3.493); 7 searched slower = s2002 gi31 d3+d5, gi96, s3003 gi80 need the Path shuffle (clairvoyance, USER 2026-10-13) + s2002 gi79 / gi129 / gi136 recover at depth W b100 (budget truncation); refs 630 / 0 drift
-# accepted-with-regressions (smoke, 2026-10-18): colossus2hg only (the narrowed Lizard amendment c10464762, after the USER's '+10/+10 will beat double strike'): 4.44->4.46, the ONE changed game s1001 gi22 T4->T5 is the case the narrowing drops on purpose -- one Gift and no Hammer on T1, the Lizard paid only because a second Gift is drawn on T4 (clairvoyance; non-clairvoyant run8nc: the narrowed and broad forms are identical)
-# accepted-with-regressions (smoke, 2026-10-18): colossus only (e03dd1e07, the USER's tutor rule as stated: 'There is no reason to include it if we have both a body and a source to free-equip'): d3 3.5933->3.6000 (s1001 gi118, Ardenn + Theft: the Hammer, not Lizard Blades) and 2hg 4.46->4.48 (gi33, a different T1 tutor fetch; draws diverge from T2) -- the cases the USER's rule decides, by the USER's ruling
-# accepted-with-regressions (regression, 2026-10-18): colossus only (e03dd1e07, the USER's tutor rule as stated): d3 s2002 3.8000->3.8133 and d5 s2002 3.7067->3.7200 (gi25 at d3/d5, gi112: a body + a free attach -> the Hammer, not Lizard Blades) -- by the USER's ruling; refs 630 / 0 drift
-# accepted-with-regressions (smoke, 2026-10-18): colossus + colossus2hg only (4f984afac, the USER's Lizard amendment: Lizard Blades when it lands before every other creature, or when free equip cannot cover every Hammer held): d3 3.6000->3.5933 (gi118 4->3, the gi118 trace), 2HG 4.48->4.44 (gi22, gi33 5->4); 0 slower; every other deck byte-identical on the rebase onto 42d189e58
-# accepted-with-regressions (regression, 2026-10-18): colossus only (4f984afac, the USER's Lizard amendment): d3 s2002 3.8133->3.8000 (gi25, gi112 4->3), d5 s2002 3.7200->3.7067 (gi25 4->3) -- the games the rule as stated lost, back; 0 slower; every other deck byte-identical, refs 630 / 0 drift on the rebase onto 42d189e58
+# accepted-with-regressions (smoke, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 4 slower / 6 faster, ALL hinata + hinata2hg = the Remand self-target rider (every slower game ties or beats base at unlimited budget; analysis-NivMizzetCombo.md T2). Same-turn line moves: auras d3/d5/2hg, kittyv3 2hg, bruna 2hg, snow d3 = the breakpoint un-gate c52ed5c9d (a card drawn mid-turn is cast that phase). d0: hinata 6.723->6.783 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); goblins d0 = un-gate; bruna/dragons/fivecolour/mirrorwing/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; +-0.001 greedy churn). galadriel + colossus byte-identical to origin GT. CARRIED (colossus cells unchanged by this accept): the USER's full cast order + equips, Path never cast, tutor rule + Lizard amendment (4f984afac), Aid lethal-first; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); 2hg gi34 (the tutor rule drops Dragonfire Blade beside a free attach) was raised to the USER.
+# accepted-with-regressions (regression, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 15 slower / 29 faster: ALL 15 slower are hinata + hinata2hg = the Remand self-target rider (the same 15 as the T2 isolation run; at unlimited budget new <= base on every one -- 13 tie, d5 s3003 gi64 new T5 vs base T7, gi27 a loss in BOTH; analysis-NivMizzetCombo.md T2). hinata d3 s3003 gi128 5->4 = MTG_LA_NESTED_BAIL (re-price). Same-turn line moves: goblins d3/d5/2hg + bruna d3 = the breakpoint un-gate c52ed5c9d; fivecolour2hg d3 gi38 same turn. d0: hinata 6.791->6.847 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); breaching 4.832->4.826 + fungusv2 = the mana-fidelity fixes; bruna/dragons/fivecolour/mirrorwing (5.884->5.889)/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; d0 greedy churn, e.g. mirrorwing gi236: T4 now affords Ancestral Anger beside Zada). galadriel + colossus byte-identical to origin GT. Refs 630 / 0 drift. CARRIED (colossus cells unchanged by this accept): the USER's tutor rule as stated + Lizard amendment (4f984afac) decide s2002 gi25 / gi112; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); s2002 gi79 / gi129 / gi136 recover at depth W b100 (budget truncation).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -31,7 +20,7 @@ slivers_smoke_d5_s1001=4.1867/145078195f97d144
 burn_smoke_d0_s1001=4.4480/8808f5d3c280c2ca
 burn_smoke_d3_s1001=4.3167/d6eb3f854a66bbd9
 burn_smoke_d5_s1001=4.3360/ec1a796445e8b9e3
-th_smoke_d0_s1001=5.5500/455a06ae9b791252
+th_smoke_d0_s1001=5.5490/f005ea93a168fff0
 th_smoke_d3_s1001=4.0733/fd4f0aee2432725b
 th_smoke_d5_s1001=3.9867/abf1658f6d7a4630
 knights_smoke_d0_s1001=4.5400/f2e519a246d1a703
@@ -43,25 +32,25 @@ whiteknights_smoke_d5_s1001=4.1467/be2f0e7be56975f6
 antilife_smoke_d0_s1001=4.8920/c0982042fca8bf38
 antilife_smoke_d3_s1001=4.1800/616246c99fb9fa0d
 antilife_smoke_d5_s1001=4.1800/98f08878a259d50a
-hinata_smoke_d0_s1001=6.7230/2d804fb02ce9a910
-hinata_smoke_d3_s1001=5.6400/4752e79d826008b3
-hinata_smoke_d5_s1001=5.8267/edfff9345250c146
+hinata_smoke_d0_s1001=6.7830/0b80ac146283b4df
+hinata_smoke_d3_s1001=5.6533/762a2e5b8f7e79ad
+hinata_smoke_d5_s1001=5.7867/5ed565656e495510
 dragonstorm_smoke_d0_s1001=4.9950/4f537f4fc4d2b5dd
 dragonstorm_smoke_d3_s1001=4.4733/6eed29d25647c08f
 dragonstorm_smoke_d5_s1001=4.4667/33a37fbbe5b64b2f
 auras_smoke_d0_s1001=4.3650/4554540dea59a72f
-auras_smoke_d3_s1001=4.1267/d6eab38290b1ccc0
-auras_smoke_d5_s1001=4.1200/e41095ca6809d9df
-goblins_smoke_d0_s1001=4.0630/8ac149d7fa506d7a
+auras_smoke_d3_s1001=4.1267/221c08a92aca0ffb
+auras_smoke_d5_s1001=4.1200/e9a0e2d4e73d6f36
+goblins_smoke_d0_s1001=4.0630/de60bcadb8d11d13
 goblins_smoke_d3_s1001=3.6467/8c79dd727fcfeda2
 goblins_smoke_d5_s1001=3.5867/5126de1ede62c39d
 creature_giving_smoke_d0_s1001=5.5090/9521f918916d9475
 creature_giving_smoke_d3_s1001=4.6867/84c0527b204f06ae
 creature_giving_smoke_d5_s1001=4.6667/93b9b2f0183ec4bd
-mirrorwing_smoke_d0_s1001=5.7340/e0096e47c110c975
+mirrorwing_smoke_d0_s1001=5.7350/3a6a1c895b35f24b
 mirrorwing_smoke_d3_s1001=4.2133/bce2ae8b7df3651e
 mirrorwing_smoke_d5_s1001=4.2933/1ee0b9edf410b41b
-fivecolour_smoke_d0_s1001=5.4720/93b0e7ced2f86850
+fivecolour_smoke_d0_s1001=5.4720/bbd8b3358c286cdd
 fivecolour_smoke_d3_s1001=4.8267/3fc9d38ce59fc359
 fivecolour_smoke_d5_s1001=4.8933/82238530e222ae1f
 stompy_smoke_d0_s1001=4.8370/a0166060c77c1b0f
@@ -73,7 +62,7 @@ minotaur_smoke_d5_s1001=4.9067/214a41b9370bbd27
 kittyv3_smoke_d0_s1001=4.7840/66c96a2ddbb657da
 kittyv3_smoke_d3_s1001=3.8800/37598fe03e3ff954
 kittyv3_smoke_d5_s1001=3.9400/23d544e42b6f3d35
-dragons_smoke_d0_s1001=5.9350/6dae5c3fc0194a31
+dragons_smoke_d0_s1001=5.9360/ea55948520e18aee
 dragons_smoke_d3_s1001=5.6840/cfd49f8135748ad3
 dragons_smoke_d5_s1001=5.5733/052989f42c90ba12
 breaching_smoke_d0_s1001=4.8460/e6658eb80c19dada
@@ -88,7 +77,7 @@ melira_smoke_d5_s1001=4.7200/0ae9eef65f5bc091
 angels_smoke_d0_s1001=5.2170/00204aa6ee761234
 angels_smoke_d3_s1001=4.6280/05c5860f92aa164f
 angels_smoke_d5_s1001=4.5867/677ca09e8e80251d
-hinata2hg_smoke_d3_s1001=5.5733/f3710ad4f91339ea
+hinata2hg_smoke_d3_s1001=5.5867/0d7c1f2b84d1c005
 antilife2hg_smoke_d3_s1001=3.9600/80edfddc8a011b4d
 minotaur2hg_smoke_d3_s1001=5.3500/6864ca4d91aab3f6
 goblins2hg_smoke_d3_s1001=4.0400/097f3b408bda91fc
@@ -101,11 +90,11 @@ slivers2hg_smoke_d3_s1001=4.8000/e480c2da4e05e5ea
 burn2hg_smoke_d3_s1001=5.8200/26dbfa14846ce9a2
 th2hg_smoke_d3_s1001=4.4600/e21974e5502c0b5a
 dragonstorm2hg_smoke_d3_s1001=4.7000/6e46bcd2bc917d2c
-auras2hg_smoke_d3_s1001=4.5200/184e527039c5969e
+auras2hg_smoke_d3_s1001=4.5200/bf6ca830e6615d91
 creature_giving2hg_smoke_d3_s1001=5.0000/346b1d376cb8ebe6
 mirrorwing2hg_smoke_d3_s1001=4.6400/c6fa022b2b11ec14
 stompy2hg_smoke_d3_s1001=4.3200/c5489373dbb3638c
-kittyv32hg_smoke_d3_s1001=4.3800/f56115cd7d17bdd4
+kittyv32hg_smoke_d3_s1001=4.3800/4c43a73d68798318
 dragons2hg_smoke_d3_s1001=6.2800/736c7b527ffc7ae5
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 critter2hg_smoke_d3_s1001=4.7600/a5edfe66f0792867
@@ -123,7 +112,7 @@ giants_smoke_d5_s1001=5.6933/95fb0e42aba08889
 pirates_smoke_d0_s1001=4.7390/1c7cce78ee5347b7
 pirates_smoke_d3_s1001=4.3533/d24950fed379b713
 pirates_smoke_d5_s1001=4.3467/abc848d90f53225a
-selesnya_smoke_d0_s1001=5.7160/3fac8202493f1b99
+selesnya_smoke_d0_s1001=5.7150/4efce3ea6a335341
 selesnya_smoke_d3_s1001=5.2000/5489a15626eda148
 selesnya_smoke_d5_s1001=5.2533/fbb1a50dd72793f6
 soldiers_smoke_d0_s1001=4.4180/4a07071ba36a2998
@@ -132,12 +121,12 @@ soldiers_smoke_d5_s1001=4.2933/36b109405fa9b26d
 pd_smoke_d0_s1001=7.3020/78dee9f01e7fbe96
 pd_smoke_d3_s1001=5.3600/12a8d118275be0da
 pd_smoke_d5_s1001=5.3333/acad116598e096ec
-bruna2hg_smoke_d3_s1001=5.4000/fcec0fe419ada77e
-bruna_smoke_d0_s1001=6.1470/319ee56b56ed4bcf
+bruna2hg_smoke_d3_s1001=5.4000/2e922bfe7cbeee71
+bruna_smoke_d0_s1001=6.1460/a35da4523e8d5492
 bruna_smoke_d3_s1001=4.8400/0f9a162c0feb8cf3
 bruna_smoke_d5_s1001=4.9200/b46b1507da4cf508
 snow_smoke_d0_s1001=6.1710/72d36f9ec29bf8da
-snow_smoke_d3_s1001=5.8400/8d858cde51d5832a
+snow_smoke_d3_s1001=5.8400/0250540527c14a97
 snow_smoke_d5_s1001=5.8000/51401cf5b384e6fc
 landfall_smoke_d0_s1001=7.5910/d4bff365cee69d95
 landfall_smoke_d3_s1001=6.0000/c930836eb68a3888
@@ -151,7 +140,7 @@ colossus_smoke_d3_s1001=3.5933/9d160417d1498579
 colossus_smoke_d5_s1001=3.6400/a71c3b3bb9881698
 
 # --- regression ---
-fungusv2_regression_d0_s2002=5.3740/3a06b8600502945f
+fungusv2_regression_d0_s2002=5.3740/3e4466ecbee3860b
 fungusv2_regression_d3_s2002=4.5450/2b64b198c45c44dd
 fungusv2_regression_d3_s3003=4.5750/b028e948a9e93f76
 fungusv2_regression_d5_s2002=4.5500/e779bb71ffa6da52
@@ -166,7 +155,7 @@ burn_regression_d3_s2002=4.3360/aa04bb6b4bc7b392
 burn_regression_d3_s3003=4.2360/b0bb314e1aaa83df
 burn_regression_d5_s2002=4.3360/aa04bb6b4bc7b392
 burn_regression_d5_s3003=4.2360/017a2196ae756350
-th_regression_d0_s2002=5.5140/7ffd68e52cb5f6e8
+th_regression_d0_s2002=5.5140/f3b059b10da22532
 th_regression_d3_s2002=4.1420/816fff5e7b96f447
 th_regression_d3_s3003=3.9780/0cbda3bc1f522e97
 th_regression_d5_s2002=4.0600/33ba8c748fe93044
@@ -186,11 +175,11 @@ antilife_regression_d3_s2002=4.2833/12a5d791d3ac66b6
 antilife_regression_d3_s3003=4.2000/75b5f051c60e9731
 antilife_regression_d5_s2002=4.3000/230b712d1d37d360
 antilife_regression_d5_s3003=4.1880/ea2badbabc780092
-hinata_regression_d0_s2002=6.7910/c1bbf8a162e9bb76
-hinata_regression_d3_s2002=5.5700/59ae0e62068d1350
-hinata_regression_d3_s3003=5.6450/20daceb993a16aaa
-hinata_regression_d5_s2002=5.6900/21e4fb4282cef1b7
-hinata_regression_d5_s3003=5.6300/1db21a7149ac428f
+hinata_regression_d0_s2002=6.8470/297e0148af67319b
+hinata_regression_d3_s2002=5.5600/926a0c568a10b98c
+hinata_regression_d3_s3003=5.6100/7caee4ad2ded2158
+hinata_regression_d5_s2002=5.6600/cbb82b3a9730fabd
+hinata_regression_d5_s3003=5.6300/c8b91e50bab650aa
 dragonstorm_regression_d0_s2002=5.0120/cde74120c7eb5150
 dragonstorm_regression_d3_s2002=4.3067/5782d4140d30fa16
 dragonstorm_regression_d3_s3003=4.5033/a1f153b0e089d367
@@ -202,21 +191,21 @@ auras_regression_d3_s3003=4.1480/a4a7c084da7da6cc
 auras_regression_d5_s2002=4.0720/81f429d2edbcc2ae
 auras_regression_d5_s3003=4.1480/960dff8bf6dde21c
 goblins_regression_d0_s2002=4.1040/f223061cdd5b6b7b
-goblins_regression_d3_s2002=3.8067/17aca5c401573a07
-goblins_regression_d3_s3003=3.8367/1c1b5fd1aa5087ff
-goblins_regression_d5_s2002=3.8280/34f6f832c5f2e1c9
-goblins_regression_d5_s3003=3.8160/938e150747a95511
+goblins_regression_d3_s2002=3.8067/b15765f47714e948
+goblins_regression_d3_s3003=3.8367/08a7d15b7f9a1516
+goblins_regression_d5_s2002=3.8280/ad9f241fe571d2ca
+goblins_regression_d5_s3003=3.8160/aab349331cdab228
 creature_giving_regression_d0_s2002=5.5670/1c860c962c6fc5a5
 creature_giving_regression_d3_s2002=4.6200/e31024c7b1af7e66
 creature_giving_regression_d3_s3003=4.6467/702847cf817c5f41
 creature_giving_regression_d5_s2002=4.6120/16736dd5691ef92a
 creature_giving_regression_d5_s3003=4.6520/2f3b799f1db944e8
-mirrorwing_regression_d0_s2002=5.8840/4cd2f41662b27158
+mirrorwing_regression_d0_s2002=5.8890/310c6b848e05e6ad
 mirrorwing_regression_d3_s2002=4.2500/e624d36e6438847a
 mirrorwing_regression_d3_s3003=4.1150/de2c12a538c8625a
 mirrorwing_regression_d5_s2002=4.2500/fbc85ac4140f6e49
 mirrorwing_regression_d5_s3003=4.1100/1f0c61fe57802f82
-fivecolour_regression_d0_s2002=5.5560/498e79f4218fa8d8
+fivecolour_regression_d0_s2002=5.5560/807651a6fa93a1da
 fivecolour_regression_d3_s2002=4.8650/b1bcd3fe521d3add
 fivecolour_regression_d3_s3003=4.8050/f43900e1284f7f34
 fivecolour_regression_d5_s2002=4.7700/2ac87a7b3075c5a1
@@ -236,12 +225,12 @@ kittyv3_regression_d3_s2002=3.7200/aa4b74b718d90bf4
 kittyv3_regression_d3_s3003=3.5800/c1132530755bdbe1
 kittyv3_regression_d5_s2002=3.7400/29df3ff7a51aac67
 kittyv3_regression_d5_s3003=3.5800/7e6de36dadef982d
-dragons_regression_d0_s2002=5.9050/81439c4592a0ba43
+dragons_regression_d0_s2002=5.9060/b5c50b76edc762a6
 dragons_regression_d3_s2002=5.5267/c0a13fc13aadbd7d
 dragons_regression_d3_s3003=5.6133/4545e430484164b3
 dragons_regression_d5_s2002=5.4800/7c7e24ac6b6354c1
 dragons_regression_d5_s3003=5.6400/283dc106d8617a0b
-breaching_regression_d0_s2002=4.8320/099cc82270530e92
+breaching_regression_d0_s2002=4.8260/10bc06170586c206
 breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026
 breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
@@ -261,14 +250,14 @@ angels_regression_d3_s2002=4.5733/341837eedcf3d631
 angels_regression_d3_s3003=4.6767/49a03a877acf3b7e
 angels_regression_d5_s2002=4.5680/a8cdc4dbc1f9cc32
 angels_regression_d5_s3003=4.6560/19837494b92852f7
-hinata2hg_regression_d3_s2002=5.5000/6b06c56dba9ed4fd
-hinata2hg_regression_d5_s2002=5.5200/7654007eaf368778
+hinata2hg_regression_d3_s2002=5.4600/3baf49537a1b9a2e
+hinata2hg_regression_d5_s2002=5.5400/c3edebb39e43af9c
 antilife2hg_regression_d3_s2002=4.3133/54a0458ddcfa0b91
 minotaur2hg_regression_d3_s2002=5.3733/683462ef030fe6c1
-goblins2hg_regression_d3_s2002=4.1500/1d7beb9a0c54ccd2
+goblins2hg_regression_d3_s2002=4.1500/bf34b37ea75f35a6
 knights2hg_regression_d3_s2002=4.9800/eec05b6998419bd9
 whiteknights2hg_regression_d3_s2002=4.5800/c9daec079b5fc993
-fivecolour2hg_regression_d3_s2002=5.3600/d6bb84ad98049d8b
+fivecolour2hg_regression_d3_s2002=5.3600/605a8193e190d1e8
 fluctuator2hg_regression_d3_s2002=3.5300/ea5813264bdb4177
 angels2hg_regression_d3_s2002=5.1467/8efaa66e2e88dd5c
 pd2hg_regression_d3_s2002=5.8000/771d096cc8673433
@@ -287,7 +276,7 @@ pirates_regression_d3_s2002=4.3533/4481d78c621f8ab9
 pirates_regression_d3_s3003=4.4267/af26c0ad2293b00a
 pirates_regression_d5_s2002=4.4000/654fb7d77c1e3797
 pirates_regression_d5_s3003=4.4133/6fa339523b9a475f
-selesnya_regression_d0_s2002=5.7190/72f058b63bd48a26
+selesnya_regression_d0_s2002=5.7170/4973625cc1f41a76
 selesnya_regression_d3_s2002=5.0667/31372d609a710b42
 selesnya_regression_d3_s3003=5.1533/cf80fd9c02589527
 selesnya_regression_d5_s2002=5.0000/ec6d3189f8c01022
@@ -302,9 +291,9 @@ pd_regression_d3_s2002=5.6250/b830c4dbcd23ed01
 pd_regression_d3_s3003=5.5000/5f581878b0c1c5cf
 pd_regression_d5_s2002=5.7200/1d296ad4b11f0cd8
 pd_regression_d5_s3003=5.3600/c5ddc2fe8c5e820e
-bruna_regression_d0_s2002=6.1900/09fff0186b2cbbe4
-bruna_regression_d3_s2002=5.1400/b5485687bff8faf9
-bruna_regression_d3_s3003=5.0400/6cc9668f814044ea
+bruna_regression_d0_s2002=6.1890/785f797543916e4f
+bruna_regression_d3_s2002=5.1400/16e25d56451fc2cb
+bruna_regression_d3_s3003=5.0400/9af3b004f66b9f11
 bruna_regression_d5_s2002=5.0533/e0d204fa5add4481
 bruna_regression_d5_s3003=5.0933/9e638bd457cd7215
 snow_regression_d0_s2002=6.2000/84ab754e3ba4031c
