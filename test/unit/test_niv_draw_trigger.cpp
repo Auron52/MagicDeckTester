@@ -467,22 +467,32 @@ TEST_CASE("Curiosity's HOST: the Aura host ranking puts it on the NIV, and the a
     PutNiv(s, "Niv-Mizzet, the Firemind", 9, 0, /*sick=*/true);
     s.players[0].hand.push_back(CardNiv("Curiosity", 10));
     s.players[0].hand.push_back(CardNiv("Preordain", 11));
-    bool kill = false, host_niv = false, host_guide = false;
-    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    // BOTH plan-list modes: searched play (any AIEngine at depth > 0 sets it, thread-locally) hoists
+    // plain cantrips first (cantrip-first), and the payoffs must still precede Preordain there -- the
+    // kill was missing from every SEARCHED list until MayPrecedeCantrip's VALUE clause.
+    const bool saved_searched = g_searched_play;
+    for (const bool searched : { false, true })
     {
-        for (const Action& a : p.actions)
+        TurnSolver::SetSearchedPlay(searched);
+        INFO("searched=" << searched);
+        bool kill = false, host_niv = false, host_guide = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
         {
-            if (a.card_name.str() != "Curiosity") { continue; }
-            if (a.enchant_target == 9) { host_niv = true; }
-            if (a.enchant_target == 3) { host_guide = true; }
+            for (const Action& a : p.actions)
+            {
+                if (a.card_name.str() != "Curiosity") { continue; }
+                if (a.enchant_target == 9) { host_niv = true; }
+                if (a.enchant_target == 3) { host_guide = true; }
+            }
+            GameState r = s;
+            TurnSolver::ApplyPlan(r, p, true);
+            if (OpponentHasLost(r)) { kill = true; }
         }
-        GameState r = s;
-        TurnSolver::ApplyPlan(r, p, true);
-        if (OpponentHasLost(r)) { kill = true; }
+        CHECK(host_niv);
+        CHECK_FALSE(host_guide);               // the dedup keeps the ranking's pick, not battlefield order
+        CHECK(kill);                           // ...and Curiosity -> Preordain on it is the kill
     }
-    CHECK(host_niv);
-    CHECK_FALSE(host_guide);                   // the dedup keeps the ranking's pick, not battlefield order
-    CHECK(kill);                               // ...and Curiosity -> Preordain on it is the kill
+    TurnSolver::SetSearchedPlay(saved_searched);
     // The resolution-time fallback agrees (one ranking, both worlds).
     GameState t = s;
     const int cur = PutNiv(t, "Curiosity", 12);
@@ -633,3 +643,48 @@ TEST_CASE("Niv loop LOCKSTEP: rollout ApplyPlan and the executor's TakeTurn real
 }
 
 
+
+TEST_CASE("Cantrip-first carries a hoisted Aura's SAME-PLAN host with it (searched play)")
+{
+    EnsureCardsLoadedNiv();
+    // Searched play hoists plain cantrips first, except payoffs (MayPrecedeCantrip's VALUE clause), so
+    // Curiosity goes ahead of Preordain. Its host here is cast in the SAME plan (a Generator Servant
+    // from hand): the Servant must move up with it, or Curiosity would come first, have no legal target
+    // (AuraSpellCastLegal) and never be cast -- the line would be in no plan at all.
+    GameState s = FreshNiv(40);
+    PutNiv(s, "Island", 50);
+    PutNiv(s, "Island", 51);
+    PutNiv(s, "Mountain", 52);
+    PutNiv(s, "Mountain", 53);
+    s.players[0].hand.push_back(CardNiv("Generator Servant", 12));
+    s.players[0].hand.push_back(CardNiv("Curiosity", 10));
+    s.players[0].hand.push_back(CardNiv("Preordain", 11));
+    const bool saved_searched = g_searched_play;
+    TurnSolver::SetSearchedPlay(true);
+    const long long before = g_enchant_retargets.load();
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        int servant = -1, curiosity = -1, preordain = -1;
+        for (std::size_t i = 0; i < p.actions.size(); ++i)
+        {
+            const Action& a = p.actions[i];
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.card_name.str() == "Generator Servant") { servant = static_cast<int>(i); }
+            if (a.card_name.str() == "Curiosity" && a.enchant_target == 12) { curiosity = static_cast<int>(i); }
+            if (a.card_name.str() == "Preordain") { preordain = static_cast<int>(i); }
+        }
+        if (servant < 0 || curiosity < 0 || preordain < 0) { continue; }
+        found = true;
+        CHECK(servant < curiosity);     // the host first...
+        CHECK(curiosity < preordain);   // ...and the payoff still ahead of the cantrip
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, p, true);
+        bool attached = false;
+        for (const Permanent& q : r.battlefield) { if (q.card.m_number == 10 && q.aura_attached_to == 12) { attached = true; } }
+        CHECK(attached);
+    }
+    CHECK(found);
+    CHECK(g_enchant_retargets.load() == before);
+    TurnSolver::SetSearchedPlay(saved_searched);
+}

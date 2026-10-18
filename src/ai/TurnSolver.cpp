@@ -23294,12 +23294,11 @@ static bool IsPlainCantrip(const Action& a)
 // a name list -- an omission there would silently lose a real line):
 //   AFFORDABILITY -- it funds the cantrip: mana acceleration (ritual float / same-turn rock /
 //                    sac-for-mana) or cost reduction (Hinata, Goblin Warchief).
-//   VALUE         -- it is a cast-triggered PAYOFF whose trigger the cantrip's own cast would then
-//                    fire (Guttersnipe / Vivi). NOT YET REPRESENTABLE: the existing
-//                    on_cast_trigger_* pair models Eidolon of the Great Revel, which damages the
-//                    CASTER (a punisher, opposite polarity), and no suite deck has a payoff card --
-//                    so this category is currently EMPTY, not mis-modelled. When such a card is
-//                    implemented it needs a payoff-polarity param, and the check goes here.
+//   VALUE         -- it is a PAYOFF whose trigger the cantrip's own cast or draw would then fire.
+//                    The Niv-Mizzet draw loop's pieces (see the check below). A Guttersnipe / Vivi
+//                    cast payoff is still NOT REPRESENTABLE: the on_cast_trigger_* pair models Eidolon
+//                    of the Great Revel, which damages the CASTER (a punisher, opposite polarity);
+//                    such a card needs a payoff-polarity param, and its check goes here too.
 // Where neither applies, cantrip-first is a strict dominance improvement.
 static bool MayPrecedeCantrip(const Action& a)
 {
@@ -23318,10 +23317,21 @@ static bool MayPrecedeCantrip(const Action& a)
     // mana-dead and the T4 win unreachable. Affordability is this classifier's own first
     // charter clause; she is the deck's cost reducer.
     if (d->params.hinata_cost_reducer)            { return true; }   // (Hinata, Dawn-Crowned)
+    // VALUE (NivMizzetCombo, 2026-10-18 -- the category above is no longer empty): a DRAW-LOOP PAYOFF
+    // whose trigger the cantrip itself fires. Niv-Mizzet pings on every draw (draw_trigger_damage),
+    // Parun also draws on every instant/sorcery cast (cast_trigger_instant_sorcery_draw), and Curiosity /
+    // a Tandem Lookout pair turn that ping into another draw (aura_damage_trigger_draw,
+    // soulbond_damage_trigger_draw). Hoisting the cantrip over them made the loop's own kill -- "Curiosity
+    // onto Niv, then Preordain" -- absent from every SEARCHED plan list (cantrip-first is depth-gated, so
+    // only d0 still held it): the cantrip's draw resolved before any watcher was out, and the breakpoint
+    // re-solve after it cannot take that draw back.
+    if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
+        || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
+    { return true; }
     return false;
 }
 
-static void ApplyCantripFirstOrder(std::vector<Action>& acts)
+static void ApplyCantripFirstOrder(const GameState& state, std::vector<Action>& acts)
 {
     if (!CantripFirstEnabled() || acts.size() < 2) { return; }
     bool any = false;
@@ -23334,6 +23344,41 @@ static void ApplyCantripFirstOrder(std::vector<Action>& acts)
         if      (IsPlainCantrip(a))    { cantrips.push_back(std::move(a)); }
         else if (MayPrecedeCantrip(a)) { pre.push_back(std::move(a)); }
         else                           { rest.push_back(std::move(a)); }
+    }
+    // A creature Aura hoisted as a VALUE payoff (Curiosity) keeps its SAME-PLAN HOST ahead of it: the
+    // host's cast (named by enchant_target = that hand card's number) moves up with it, just before the
+    // Aura. Left behind, the Aura would come first and AuraSpellCastLegal would refuse it (no legal
+    // target yet), so "cast the Servant, Curiosity onto it, then Preordain" would be in no plan at all.
+    if (!pre.empty())
+    {
+        const Player& ap = state.ActivePlayer();
+        for (std::size_t i = 0; i < pre.size(); ++i)
+        {
+            const int host = pre[i].enchant_target;
+            const CardDefinition* d = pre[i].def;
+            if (pre[i].kind != Action::Kind::CastFromHand || host <= 0 || d == nullptr
+                || !d->params.is_aura || d->params.is_land_aura)
+            { continue; }
+            auto pull = [&](std::vector<Action>& from) -> bool
+            {
+                for (std::size_t k = 0; k < from.size(); ++k)
+                {
+                    const Action& h = from[k];
+                    if (h.kind != Action::Kind::CastFromHand || h.hand_index < 0
+                        || h.hand_index >= static_cast<int>(ap.hand.size()))
+                    { continue; }
+                    const Card& hc = ap.hand[static_cast<std::size_t>(h.hand_index)];
+                    if (hc.m_number != host || hc.m_name != h.card_name) { continue; }
+                    Action moved = std::move(from[k]);
+                    from.erase(from.begin() + static_cast<std::ptrdiff_t>(k));
+                    pre.insert(pre.begin() + static_cast<std::ptrdiff_t>(i), std::move(moved));
+                    ++i;   // back onto the Aura
+                    return true;
+                }
+                return false;
+            };
+            if (!pull(rest)) { pull(cantrips); }
+        }
     }
     acts.clear();
     for (Action& a : pre)      { acts.push_back(std::move(a)); }
@@ -39513,7 +39558,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // shared damage key puts them (see RetargetSolveAuraHosts). Self-gating: no creature Aura
         // with two candidate hosts in the plan -> nothing scored, nothing changes.
         RetargetSolveAuraHosts(state, is_pre_combat, cands, best_sel, pre.aura_shroud_src, best.actions);
-        ApplyCantripFirstOrder(best.actions);   // no-op unless MTG_CANTRIP_FIRST
+        ApplyCantripFirstOrder(state, best.actions);   // no-op unless MTG_CANTRIP_FIRST
         return best;
     };
     // Per-candidate FILL eligibility + draw flag, computed ONCE (perf, 2026-09-06): the surplus-
@@ -46062,6 +46107,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             { g_attach_cast_probe.stranded = true; }
             return;
         }
+        // ...nor an Aura spell whose searched host is not a legal target now (the SHARED
+        // AuraSpellCastLegal; AIEngine::CastSpellFromHand returns before paying on the same predicate).
+        if (!AuraSpellCastLegal(state, state.active_player_index, def, enchant_target)) { return; }
 
         // REMAND: the rider is LIVE only for a plain paid hand cast with a copy of the Remand in hand
         // and a cast left in the Irencrag budget for it (X takes one, the Remand another). Checked
@@ -52154,6 +52202,10 @@ static void AppendCreatureTargetAuraCandidates(const GameState& state, std::vect
             a.is_noncreature = true;   // enchantments are noncreature spells
             a.card_mv        = def->card.m_mana_cost.ManaValue();
             a.enchant_target = ap.hand[ci].m_number;   // resolves once the creature (cast first) is in play
+            // The def memo every CollectActions candidate carries (Action::def: "behaviour-identical to
+            // Lookup(card_name)"). Missing here, every reader that takes a null def for "unknown card"
+            // misread these injected casts -- cantrip-first's MayPrecedeCantrip never saw Curiosity.
+            a.def            = def;
             cands.push_back(std::move(a));
         }
     }
@@ -54578,7 +54630,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
         plan.atk_forfeit    = SubsetAttackForfeit(state, cands, sel);   // ordering-only (gated OFF)
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
-        ApplyCantripFirstOrder(plan.actions);   // no-op unless MTG_CANTRIP_FIRST
         // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER
         // its enabler aura, so stable-sort those conditional payoffs to the end (key 1 vs 0). Apply's own
         // clean-set sort is rank-equal for auras (all rank 20) and stable, so it preserves this order. A
@@ -54637,6 +54688,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 [&](const Action& x, const Action& y)
                 { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); });
         }
+        // Cantrip-first runs AFTER the three Aura sorts (no-op unless searched play). Every Aura those
+        // sorts move is in cantrip-first's "rest" group and keeps its place at the end of it, so the
+        // order is the one the old call-before-the-sorts produced -- EXCEPT a VALUE payoff Aura
+        // (MayPrecedeCantrip: Curiosity), which the end-sort used to drag back behind the cantrip; now
+        // it goes ahead of the cantrip right after its same-plan host (ApplyCantripFirstOrder's pull).
+        ApplyCantripFirstOrder(state, plan.actions);   // no-op unless MTG_CANTRIP_FIRST
         if (BfCensusOn()) { bfcensus::g_subsets_scored[1].fetch_add(1, std::memory_order_relaxed); }
         if (enumstats::Enabled()) { enumstats::g_e_surv.fetch_add(1, std::memory_order_relaxed); }
         plans.push_back(std::move(plan));

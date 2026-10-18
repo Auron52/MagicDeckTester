@@ -11409,6 +11409,28 @@ inline bool AttachSpellCastLegal(const GameState& state, int controller)
     return false;
 }
 
+// CAN AN AURA SPELL BE CAST ONTO ITS SEARCHED HOST? (CR 303.4a: an Aura spell targets what it will
+// enchant; CR 601.2c: no legal target, no cast.) A creature Aura whose plan named a host
+// (enchant_target > 0) that is not a legal target NOW -- the plan's own Brainstorm put every copy back,
+// its own Remand bounced it, it never got cast -- stays in hand with its mana untapped, exactly as
+// AttachSpellCastLegal's Theft does. Before this it was cast anyway and ResolveEnchantTarget's fallback
+// put it on whatever the ranking chose, a plan no sibling enumerates ([enchant-retarget] on 20
+// NivMizzetCombo games d3 b10: 14,769 -> 0 with this check). Now the realised state is the sibling's without the Aura, which the post-apply
+// dedup folds. An unset host (0), a land Aura and a target lost AFTER the cast (a payment that sacrifices
+// it) are untouched (the resolution's fallback still covers the last). Read by the rollout's hand cast
+// (TurnSolver's apply_one) and the executor's (AIEngine::CastSpellFromHand), both BEFORE paying.
+inline bool AuraSpellCastLegal(const GameState& state, int controller, const CardDefinition& def, int enchant_target)
+{
+    if (!def.params.is_aura || def.params.is_land_aura || enchant_target <= 0) { return true; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsCreature() && p.card.m_number == enchant_target
+            && CreatureTargetableByAuraSpell(p, state, controller))
+        { return true; }
+    }
+    return false;
+}
+
 // The IDENTITY CLASS of a creature as an attach HOST, shared by the two attach-effect enumerations
 // that fold interchangeable targets (Magnetic Theft's pair axis, BuildAttachSpellPairs; Raubahn's
 // attack attach, FireAttackAttachEquipment): two creatures with the same key reach the same board up
@@ -30459,6 +30481,37 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
         if (static_cast<int>(chosen.size()) == take) { pick = chosen.data(); }
     }
     Player& pl = state.players[controller];
+    // WHICH COPY of a class goes back: the LAST one in hand. A candidate names classes, not copies (the
+    // identity fold above), so any copy is the same play -- except to the plan's own later actions, which
+    // name a same-plan host BY NUMBER: "Brainstorm, cast Tandem Lookout, Curiosity onto that Lookout"
+    // carries the FIRST copy's m_number, because every cast-by-name takes the first copy (apply_one,
+    // AIEngine::cast_by_name). Putting that copy back made the cast take the other one and Curiosity's
+    // target vanish (one source of the [enchant-retarget] fallback). Taking the last copy leaves the one
+    // the casts will use. One rule in the shared resolver -> both worlds agree. (Putting back EVERY copy
+    // leaves nothing to cast; AuraSpellCastLegal then keeps the Aura in hand.)
+    // Human play keeps the copy it picked.
+    int remap[8];
+    if (pick != nullptr && pick != chosen.data() && take <= 8)
+    {
+        for (int j = 0; j < take; ++j)
+        {
+            const int orig = pick[j];
+            const std::uint64_t k = PutBackClassKey(state, pl.hand[static_cast<std::size_t>(orig)]);
+            int best = orig;
+            for (int i = static_cast<int>(pl.hand.size()) - 1; i >= 0; --i)
+            {
+                const Card& c = pl.hand[static_cast<std::size_t>(i)];
+                if (!PutBackEligible(c) || PutBackClassKey(state, c) != k) { continue; }
+                bool used = false;
+                for (int q = 0; q < j; ++q) { if (remap[q] == i) { used = true; break; } }
+                if (used) { continue; }
+                best = i;
+                break;
+            }
+            remap[j] = best;
+        }
+        pick = remap;
+    }
     // Copy the cards out first (indices refer to the current hand), then erase highest index first.
     std::vector<Card> moved;
     moved.reserve(static_cast<std::size_t>(take));

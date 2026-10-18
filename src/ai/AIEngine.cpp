@@ -8129,6 +8129,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // creature left to a Path to Exile that resolved first. Not cast, nothing paid: the card stays in
     // hand with its {R}. The SHARED AttachSpellCastLegal; lockstep twin of apply_one's guard.
     if (def->params.attach_target_equipment && !AttachSpellCastLegal(state, state.active_player_index)) { return; }
+    // ...and an Aura spell whose searched host is not a legal target now (CR 303.4a / 601.2c; the SHARED
+    // AuraSpellCastLegal; lockstep twin of apply_one's guard).
+    if (!AuraSpellCastLegal(state, state.active_player_index, *def, enchant_target)) { return; }
 
     // REMAND rider: live only for a plain paid hand cast with a copy of the Remand in hand and a cast
     // left in the Irencrag budget for it -- the EXACT conditions of the rollout's apply_one (lockstep);

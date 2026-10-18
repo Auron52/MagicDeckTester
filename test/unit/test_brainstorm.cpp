@@ -396,12 +396,29 @@ TEST_CASE("Brainstorm: PutBackPickAt == PutBackCandidates rank for rank (random 
                 {
                     GameState t = s;
                     const std::vector<int>& want = ref[static_cast<std::size_t>(k)];
-                    std::vector<int> nums;
-                    for (int hi : want) { nums.push_back(t.players[0].hand[static_cast<std::size_t>(hi)].m_number); }
+                    // By CLASS: the resolver puts back the LAST copy of each named class (see the next case).
+                    std::vector<std::uint64_t> keys;
+                    for (int hi : want) { keys.push_back(PutBackClassKey(t, t.players[0].hand[static_cast<std::size_t>(hi)])); }
                     { ScriptedPutBack pin(k); ResolvePutBackFromHand(t, 0, n, kBs); }
                     CHECK(g_putback_resolved_w == static_cast<int>(ref.size()));
                     CHECK(g_putback_resolved_i == k);
-                    for (std::size_t j = 0; j < nums.size(); ++j) { CHECK(t.players[0].library[j].m_number == nums[j]); }
+                    for (std::size_t j = 0; j < keys.size(); ++j) { CHECK(PutBackClassKey(t, t.players[0].library[j]) == keys[j]); }
+                    // ...and no copy left in hand comes AFTER a put-back copy of its class (last copies go).
+                    for (std::size_t j = 0; j < keys.size(); ++j)
+                    {
+                        bool later_left = false;
+                        const int num = t.players[0].library[j].m_number;
+                        int pos = -1;
+                        for (int i = 0; i < static_cast<int>(s.players[0].hand.size()); ++i) { if (s.players[0].hand[static_cast<std::size_t>(i)].m_number == num) { pos = i; } }
+                        for (const Card& c : t.players[0].hand)
+                        {
+                            if (!PutBackEligible(c) || PutBackClassKey(t, c) != keys[j]) { continue; }
+                            int cpos = -1;
+                            for (int i = 0; i < static_cast<int>(s.players[0].hand.size()); ++i) { if (s.players[0].hand[static_cast<std::size_t>(i)].m_number == c.m_number) { cpos = i; } }
+                            if (cpos > pos) { later_left = true; }
+                        }
+                        CHECK_FALSE(later_left);
+                    }
                     CHECK(t.players[0].hand.size() == s.players[0].hand.size() - want.size());
                 }
             }
@@ -455,4 +472,89 @@ TEST_CASE("Brainstorm: the put-back price and the nested overrun bail are inert 
     SearchBudget fin(SearchBudget::FromVirtualMs(1000));
     solve(1, 0, &fin, &ch);
     CHECK(ch > 0);
+}
+
+TEST_CASE("Brainstorm: a put-back returns the LAST copy of a class, and an Aura whose host went back is not cast")
+{
+    // "Brainstorm, cast Tandem Lookout, Curiosity onto that Lookout": Curiosity names the FIRST
+    // Lookout copy by number (every cast-by-name takes the first copy). Putting that copy back made
+    // the cast take the other one and the target vanish -- the silent [enchant-retarget] fallback
+    // (~15k on 20 NivMizzetCombo games). Every variant that puts a Lookout back must now realise the
+    // plan as priced, in both worlds.
+    // Nothing drawn is castable afterwards (a drawn cantrip would be cast and spend the Lookout's mana).
+    GameState s = BoardBs({ "Tandem Lookout", "Tandem Lookout", "Curiosity" }, { "Island", "Niv-Mizzet, Parun", "Island" });
+    for (int k = 2; k <= 5; ++k) { PutBs(s, "Island", k); }   // U + 2U + U
+    const int first_lookout = 21;
+    REQUIRE(s.players[0].hand[1].m_name == "Tandem Lookout");
+    REQUIRE(s.players[0].hand[1].m_number == first_lookout);
+    // Unsearched plan order (Brainstorm first) is the shape under test; searched play hoists the
+    // Lookout and Curiosity over the cantrip (MayPrecedeCantrip's VALUE clause), where no put-back can
+    // touch the cast host -- both must realise every plan as priced.
+    const bool saved_searched = g_searched_play;
+    for (const bool searched : { false, true })
+    {
+    TurnSolver::SetSearchedPlay(searched);
+    INFO("searched=" << searched);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    int checked = 0, lookout_back = 0, both_back = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool bs = false, lookout = false, onto_first = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            bs |= a.card_name == kBs;
+            lookout |= a.card_name == "Tandem Lookout";
+            onto_first |= a.card_name == "Curiosity" && a.enchant_target == first_lookout;
+        }
+        if (!bs || !lookout || !onto_first || !p.land_to_play.empty()) { continue; }
+        const long long r0 = g_enchant_retargets.load();
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, p, true);
+        GameState exec = RunExecutorBs(s, p);
+        INFO("putback_choice=" << p.putback_choice);
+        CHECK(HandNums(roll) == HandNums(exec));
+        CHECK(LibNums(roll) == LibNums(exec));
+        CHECK(g_enchant_retargets.load() == r0);   // never cast onto a fallback host
+        int back = 0;
+        for (const Card& c : roll.players[0].library) { if (c.m_name == "Tandem Lookout") { ++back; } }
+        bool host_on = false, curiosity_in_hand = false;
+        for (const Permanent& q : roll.battlefield) { if (q.card.m_number == first_lookout) { host_on = true; } }
+        for (const Card& c : roll.players[0].hand) { if (c.m_name == "Curiosity") { curiosity_in_hand = true; } }
+        if (back >= 2)
+        {
+            // Both copies back: no Lookout to cast, so Curiosity has no legal host and is NOT cast
+            // (CR 601.2c, AuraSpellCastLegal) -- it stays in hand, its {U} untapped.
+            CHECK_FALSE(host_on);
+            CHECK(curiosity_in_hand);
+            ++both_back;
+            continue;
+        }
+        CHECK(host_on);
+        CHECK_FALSE(curiosity_in_hand);
+        lookout_back += back;
+        ++checked;
+    }
+    REQUIRE(checked > 0);
+    if (!searched)
+    {
+        CHECK(lookout_back > 0);   // the variants that put ONE Lookout back were among them
+        CHECK(both_back > 0);      // ...and the one that puts both back
+    }
+    }
+    TurnSolver::SetSearchedPlay(saved_searched);
+}
+
+TEST_CASE("AuraSpellCastLegal: an Aura spell needs its searched host to be a legal target at cast time (CR 601.2c)")
+{
+    GameState s = BoardBs({ "Tandem Lookout", "Curiosity" }, {});
+    const CardDefinition& cur = DefBs("Curiosity");
+    const CardDefinition& isl = DefBs("Island");
+    CHECK(AuraSpellCastLegal(s, 0, cur, 0));      // unset host: the resolution's ranking picks
+    CHECK_FALSE(AuraSpellCastLegal(s, 0, cur, 21));   // the Lookout is still in hand (never cast / bounced)
+    CHECK(AuraSpellCastLegal(s, 0, isl, 21));     // not an Aura: nothing to check
+    PutBs(s, "Tandem Lookout", 30);
+    CHECK(AuraSpellCastLegal(s, 0, cur, 30));     // on the battlefield, ours, targetable
+    s.battlefield.back().controller_index = 1;
+    CHECK_FALSE(AuraSpellCastLegal(s, 0, cur, 30));   // not ours: the plan never names one
 }
