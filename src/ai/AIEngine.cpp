@@ -1634,6 +1634,8 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     const int saved_atk_pin = m_atk_release_pin;
     m_atk_release_pin = -1;
     GameEngine engine(*this);
+    engine.SetStopAfterTurn(m_bottom_turn_cap);   // MTG_BOTTOM_TURN_CUT (0 = off); consumed here
+    m_bottom_turn_cap = 0;
     int win_turn = engine.PlayOutFrom(trial, max_turns, from);
     if (lands_out)
     {
@@ -1770,6 +1772,20 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     const int eff_beval_topk   = s_beval_topk_set   ? s_beval_topk_env : m_profile.bottom_eval_topk;
     static const int  s_beval_units_env  = EnvInt("MTG_BOTTOM_EVAL_UNITS", -1);
     const int eff_beval_units  = EnvSet("MTG_BOTTOM_EVAL_UNITS") ? s_beval_units_env : m_profile.bottom_eval_units;
+    // TURN CUT (MTG_BOTTOM_TURN_CUT, SOUND, default ON; =0 plays every candidate out). A candidate whose
+    // trial game has finished the incumbent best win turn without winning can neither beat nor tie it,
+    // and what the pick reads is only WHICH candidates tie the minimum: `allowed` below, and in the
+    // legal-subset table which masks equal the global best G (every step's best is G, since each pick
+    // stays inside a G-mask). So the game is stopped there (GameEngine::SetStopAfterTurn -- a loop
+    // check, the search inside the trial never sees it) and scores max_turns+1 like an unwon game:
+    // still above G, so the pick is unchanged. Off where a score is read for more than that: the
+    // two-stage refine ranks EVERY candidate (MTG_BOTTOM_EVAL_TOPK), and an external chooser may pick
+    // outside the best, after which a later step's minimum is taken over non-best masks.
+    // NivMizzetCombo: with no keep table the losing candidates' turns 5-8 were most of the bottoming
+    // wall, itself 51-64% of the deck's tier cost (docs/design/analysis-NivMizzetCombo.md).
+    static const bool s_turn_cut_env = EnvOn("MTG_BOTTOM_TURN_CUT", true);
+    const bool turn_cut = heurarm::Flag(heurarm::BOTTOM_TURN_CUT, s_turn_cut_env)
+                       && eff_beval_topk <= 0 && !m_external_bottom_chooser;
     struct BottomEvalScope
     {
         AIEngine& eng; int save_d; int save_b; long long save_u;
@@ -1861,6 +1877,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                     }
                     return c;
                 };
+                int incumbent = max_turns + 1;   // best win over the masks rolled so far (MTG_BOTTOM_TURN_CUT)
                 for (std::uint32_t m = 0; m < (1u << h0); ++m)
                 {
                     if (popcnt(m) != count) { continue; }
@@ -1874,7 +1891,10 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                             continue;
                         }
                     }
+                    m_bottom_turn_cap = (turn_cut && incumbent <= max_turns) ? incumbent : 0;
                     subset_win[m] = roll_mask(m);
+                    m_bottom_turn_cap = 0;
+                    incumbent = std::min(incumbent, subset_win[m]);
                     if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
                 }
             }
@@ -2018,7 +2038,9 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                         Player& trial_ap = trial.ActivePlayer();
                         trial_ap.library.push_back(trial_ap.hand[j]);
                         trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                        m_bottom_turn_cap = (turn_cut && best_win <= max_turns) ? best_win : 0;   // MTG_BOTTOM_TURN_CUT
                         win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                        m_bottom_turn_cap = 0;
                         if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
                     }
                 }

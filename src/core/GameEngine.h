@@ -42,11 +42,18 @@ public:
     // PlayOut. The resumed turn runs the same steps in the same order the real turn would.
     int PlayOutFrom(GameState& state, int max_turns, ResumeAt from);
 
+    // Stop the fresh-turn loop of PlayOutFrom once `turn` has been PLAYED without a win (0 = off),
+    // returning -1 as for an unwon game. A loop check only: the AI's max_turns (and so every search
+    // inside the game) is untouched, so play up to the stop is exactly the uncapped game's. Used by
+    // the bottoming pass (MTG_BOTTOM_TURN_CUT), whose losing candidates need no result past it.
+    void SetStopAfterTurn(int turn) { m_stop_after_turn = turn; }
+
     void SetLogger(GameLogger* logger);
 
 private:
     AIEngine&    m_ai;
     GameLogger*  m_logger = nullptr;
+    int          m_stop_after_turn = 0;   // SetStopAfterTurn
 
     void RunTurn(GameState& state);
     void RunTurnFrom(GameState& state, ResumeAt from);

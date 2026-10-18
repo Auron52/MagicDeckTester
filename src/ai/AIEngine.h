@@ -352,6 +352,11 @@ private:
     // regression check. See project-cross-turn-reuse / project-search-optimizations.
     TranspositionTable*      m_shared_tt           = nullptr;
 
+    // MTG_BOTTOM_TURN_CUT: the NEXT RolloutWinTurn's stop turn (0 = play it out), set by BottomCards
+    // around one candidate's trial and consumed (zeroed) by RolloutWinTurnFrom, so a trial nested
+    // inside that game (a searched cleanup discard, a Vial charge) is never capped.
+    int                      m_bottom_turn_cap     = 0;
+
     // Game-persistent LEAF cache (MTG_LEAF_CACHE, opt-in; default off => byte-identical).
     // Shares SimulateToEnd rollout results across a game's decisions (not just per-call).
     // Cleared per game in HandleMulligan; used only on the real top-level path (not the

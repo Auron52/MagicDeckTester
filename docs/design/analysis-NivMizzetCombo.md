@@ -267,6 +267,13 @@ never sees). PER THE RULE: the deck is in NO tier (rows not committed), and gett
 the first goal, ahead of the value leaf and the mulligan profile -- perf agent on `niv-perf`.
 (A re-run via `--cost` was started by mistake and stopped within a minute -- it re-measures; it
 overwrote `test/logs/regression/batch.log`'s per-case breakdown. The cached figure above stands.)
+- **Re-measure after the search-cost cut** (2026-10-18 13:37-13:47 UTC, `suite_gate.py --measure`,
+  niv-aura `80aeeca6c` src, THREADS=20 on a quiet box, load ~3): **12,096.7 ms/game** (worst
+  `niv_regression_d5_s3003`), 1,372.6 core-s (was 8,459.4) -- 10.3x cheaper, still **1.50x over** the
+  8,085.6 limit (4.49x pd). Per case (ms total / games): d5 s3003 241,934/20, d5 s2002 122,449/20, d3
+  s3003 332,412/40, d3 s2002 320,923/40, 2HG d3 354,607/40, d0 289/1000. The worst case's gi4 (67 s),
+  gi8 (59 s) and gi3 (34 s) are 66% of it -- all bottoming-probe games. Logs kept in
+  `build/scratch/niv-aura/measure2/`.
 
 ### Stage 4a — provider
 `NivMizzetComboProvider` (`067b3a1db`): an empty `DeckProvider` derivation (the deck rode Generic),

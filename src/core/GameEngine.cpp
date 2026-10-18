@@ -141,6 +141,7 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
     while (state.turn_number < max_turns)
     {
         if (state.player_lost_on_draw) { return -1; }
+        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return -1; }   // SetStopAfterTurn
         // Stop playing a game that has already been voided. The search bails out of its recursion as
         // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
         // running turns on rolled-back lines -- cheap per turn, yet unbounded in count, and every one
