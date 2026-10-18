@@ -42,10 +42,11 @@ BYTE-IDENTICAL to the accepted GT (no accept needed), refs 600 / 0 drift. Commit
 ledger predate the rebase -- find each by its subject (`git log --oneline --grep`).
 10-18 (USER: "make sure they are pushed and that the engine matches them ... so we can launch the mulligan
 generation later"): the USER's 15 references pushed (`1ec3620be`, `313654130`); the 10-18 package (full order with
-the equips, Path never cast, tutor rule + Warhammer/Dragonfire fallback + the Lizard amendment PENDING the USER,
-Aid lethal-first) measured, every slower game attributed, smoke + regression GT accepted, rebased onto origin
-`729f43471` (smoke 128/128 + regression 177/177 byte-identical there; refs 630 / 0 drift; ref_bench 0/15 short,
-3.200 vs human 3.267). NOT pushed (awaiting the USER). Next stage for this deck under the 10-18 pipeline order
+the equips, Path never cast, tutor rule + Warhammer/Dragonfire fallback + the Lizard amendment NARROWED after the
+USER's "+10/+10 will beat double strike" (still PENDING the USER), Aid lethal-first) measured, every slower game
+attributed, smoke + regression GT accepted (full tiers byte-identical on the narrowed engine except the one intended
+colossus2hg game), rebased onto origin `0744b1417` (Galadriel value leaf; Galadriel + Colossus rows re-verified
+there; refs 630 / 0 drift; ref_bench 0/15 short, 3.200 vs human 3.267). NOT pushed (awaiting the USER). Next stage for this deck under the 10-18 pipeline order
 (profile -> MULLIGAN -> value leaf): `bash scripts/mullgen.sh run "decks/Colossus Hammer"` (screens its own
 generation setting first; alone on the box) -- the USER launches it.
 Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
