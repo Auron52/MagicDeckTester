@@ -466,9 +466,11 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          static_cast<unsigned long long>(state.search_count), ap.hand.size(),
                          victim, victim_name.c_str(), hs.c_str());
         }
-        ap.graveyard.push_back(ap.hand[victim]);
-        ap.hand.erase(ap.hand.begin() + victim);
+        // THE SHARED DISCARD HOOK (Vampires A1); a madness card's trigger resolves after the spell.
+        std::vector<MadnessPending> mq;
+        DiscardCardFromHand(state, controller_index, victim, &mq, source_name);
         if (g_reveal_logger) { g_reveal_logger->LogDiscard(victim_num, victim_name); }
+        ResolveEffectMadness(state, mq, source_name);
     }
 }
 

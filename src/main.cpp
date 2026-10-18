@@ -3498,6 +3498,36 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     d.Note("reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick.");
 }
 
+// MADNESS decision (Vampires A1, 2026-10-18; CR 702.35): a discarded card with madness is in EXILE and its
+// trigger offers "cast it for its madness cost or put it into your graveyard". Asked from the shared
+// ResolvePendingMadness at every UNPINNED madness trigger of a real resolution -- an outlet's discard
+// cost (Falkenrath Pit Fighter / Stromkirk Condemned / the Blood token -- human play emits ONE unpinned
+// outlet entry, so the answer is given here), the cleanup discard, any resolving discard. `options` = the
+// payable casts (one per distinct madness cost x convoke arm); reply an option index to cast, or -1 to put
+// the card into the graveyard. `heuristic_default` = the provider's pick (MadnessCastDefault; -1 =
+// decline). No reference predates this type (no madness card was in any recorded deck), so the default
+// needs no predates-rule. The card is in no visible zone, so the viewer asks in a MODAL with its image
+// (the cascade free_cast precedent).
+static void WriteMadnessDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                     const Card& card, const std::vector<MadnessChoice>& options,
+                                     int heuristic_default, int decision_index,
+                                     const std::vector<PlayReveal>& reveals = {})
+{
+    DecisionJson d(os, decision_index);
+    d.Type("madness").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
+    d.Int("ai_pick", heuristic_default);
+    d.Str("card", card.m_name.str());
+    d.Int("card_number", card.m_number);
+    d.Array("options", options.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"cost\": "; JsonStr(os, options[i].cost_text);
+        os << ", \"convoke_taps\": " << options[i].convoke_taps << ", \"label\": ";
+        JsonStr(os, options[i].label); os << " }";
+    });
+    EmitRevealsField(os, reveals);
+    d.Note("reply an option index to CAST the card for its madness cost (the label says what it pays and taps), or -1 to put it into the graveyard. Default = the AI's pick.");
+}
+
 // Creative Technique demonstrate decision (CR 702.145): "you may copy this spell" -- a yes/no
 // asked as the demonstrate trigger resolves, BEFORE the spell's payload runs. Reply 1 = copy
 // (the near-dominant line and the engine default), 0/-1 = don't. The opponent's copy is inert
@@ -4358,6 +4388,7 @@ g_play_treasurify_chooser = nullptr;
 g_play_rummage_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
 g_play_free_cast_chooser = nullptr;
+g_play_madness_chooser = nullptr;
 g_play_demonstrate_chooser = nullptr;
 g_play_attack_mode_chooser = nullptr;
 g_play_lifegain_counters_chooser = nullptr;
@@ -4636,6 +4667,7 @@ struct ClaudePlayHarness
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
     FreeCastChooser       free_cast_chooser;
+    MadnessChooser        madness_chooser;      // Vampires A1
     DemonstrateChooser    demonstrate_chooser;
     AttackModeChooser     attack_mode_chooser;
     LifegainCountersChooser lifegain_counters_chooser;
@@ -5822,6 +5854,42 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_free_cast_chooser = &free_cast_chooser;
+
+    // Madness (Vampires A1; see WriteMadnessDecisionJson). Default = the provider's MadnessCastDefault.
+    // Fires only from a REAL resolution (RevealLogPause nulls it in every search/rollout scope).
+    madness_chooser =
+        [this](const GameState& s, int controller, const std::string& source, const Card& card,
+               const std::vector<MadnessChoice>& options, int heuristic_index) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+        claude_retry_31:  // --interactive: new picks arrived on stdin; re-test the consume branch
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                const bool ok = (chosen == -1)
+                             || (chosen >= 0 && chosen < static_cast<int>(options.size()));
+                if (!ok) { chosen = -1; }   // unusable index -> decline (always legal), never a phantom cast
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteMadnessDecisionJson(ss, s, source, card, options, heuristic_index, di, reveal_log);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                reveal_log.clear();   // this frame CARRIED the pending reveals (EmitRevealsField)
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteMadnessDecisionJson(std::cout, s, source, card, options, heuristic_index, di, reveal_log);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_31; }
+            std::exit(70);
+        };
+    g_play_madness_chooser = &madness_chooser;
 
     // Creative Technique demonstrate (yes/no; see WriteDemonstrateDecisionJson). Default = copy
     // (the provider's call). Human-play only, so ground truth is unaffected.

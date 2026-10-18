@@ -238,6 +238,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     AIEngine::LandDrawCensusEndTurn(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
+    // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
+    // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
+    if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
     // The passive opponent's notional draw for THEIR turn, which falls between ours (see
     // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
     // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
@@ -382,6 +385,11 @@ void GameEngine::UntapStep(GameState& state)
 void GameEngine::UpkeepStep(GameState& state)
 {
     state.step = Step::Upkeep;
+
+    // Asylum Visitor (Vampires A1): FIRST among our upkeep triggers -- see PerformUpkeepHellbentDraw.
+    // Here at the top of UpkeepStep, so a ResumeAt::UpkeepTail resume never re-runs it. An empty-library
+    // draw loses exactly as the draw step's. Lockstep twin: SimulateEndAndStartNextTurn.
+    if (!PerformUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
 
     // Suspend (Lotus Bloom): at the controller's upkeep, remove one time counter from each suspended
     // card and CAST off suspend any whose last counter is now gone (arrive_turn <= this turn). Runs
@@ -929,6 +937,9 @@ void GameEngine::CleanupStep(GameState& state)
     {
         m_logger->StartPhase(state.turn_number, "CLEANUP");
     }
+    // MADNESS (Vampires A1): a madness card shed here is exiled and queued by the shared hook, and its
+    // trigger resolves after the CR 514.2 reset below (lockstep twin: SimulateEndAndStartNextTurn).
+    std::vector<MadnessPending> madness_q;
     while (!unlimited_hand && ap.hand.size() > 7)
     {
         Card* discard = m_ai.ChooseDiscard(state);
@@ -945,13 +956,10 @@ void GameEngine::CleanupStep(GameState& state)
             if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { discard = &ap.hand[chosen]; }
         }
         if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
-        // Progenitus: shuffled into its owner's library instead of the graveyard (replacement).
-        if (!MaybeReplaceGraveyardWithLibraryShuffle(state, state.active_player_index, *discard))
-        {
-            ap.graveyard.push_back(*discard);
-        }
-        ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
-            [discard](const Card& c) { return &c == discard; }));
+        // THE SHARED DISCARD HOOK: madness exile + queue, else Progenitus (shuffled into its owner's
+        // library instead of the graveyard -- a replacement), else the graveyard.
+        DiscardCardFromHand(state, state.active_player_index, static_cast<int>(discard - ap.hand.data()),
+                            &madness_q, "cleanup");
     }
     if (m_logger && m_logger->InPhase())
     {
@@ -973,6 +981,19 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it
+    }
+
+    // MADNESS at cleanup (Vampires A1; CR 514.3a: the trigger is put on the stack after the 514.2 reset,
+    // the player gets priority, then a new cleanup step whose hand-size check madness cannot fail). Mana
+    // empties between steps (CR 500.4): main 2's float is gone before this payment. The decision is the
+    // provider's MadnessCastDefault (the PROVISIONAL cleanup dominance rule -- no plan axis); the human
+    // is asked through `madness`. Lockstep twin: SimulateEndAndStartNextTurn.
+    if (!madness_q.empty())
+    {
+        state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
+        state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;
+        const MadnessHostScope _mh(&m_ai.MadnessPayer(), MadnessPin{});
+        ResolvePendingMadness(state, madness_q, MadnessWindow::Cleanup, MadnessPin{}, "cleanup");
     }
 
     // Storage-counter lands (Dwarven Hold, Mercadian Bazaar): a storage land left UNTAPPED this turn

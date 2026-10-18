@@ -539,6 +539,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Aura Swap")     { return Keyword::AuraSwap; }   // inert tag; param-modelled (aura_swap_cost)
     if (s == "Landfall")      { return Keyword::Landfall; }   // inert ability-word tag; landfall_* params
     if (s == "Reconfigure")   { return Keyword::Reconfigure; } // tag; mechanic is param-modelled (reconfigure_cost)
+    if (s == "Madness")       { return Keyword::Madness; }    // inert tag; param-modelled (madness_cost)
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -1785,6 +1786,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.blood_draw_cost = ManaCostFromString(params["blood_draw_cost"].get<std::string>());
     p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
     p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
+
+    // ---- Vampires A1 (2026-10-18): madness + Asylum Visitor -- see CardParams.
+    if (params.contains("madness_cost"))
+        p.madness_cost = ManaCostFromString(params["madness_cost"].get<std::string>());
+    p.grants_madness_creature_subtype = params.value("grants_madness_creature_subtype", std::string{});
+    p.hellbent_upkeep_draw        = params.value("hellbent_upkeep_draw", 0);
+    p.hellbent_upkeep_life_loss   = params.value("hellbent_upkeep_life_loss", 0);
+    p.hellbent_upkeep_each_player = params.value("hellbent_upkeep_each_player", false);
 
     return p;
 }

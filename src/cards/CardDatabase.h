@@ -3965,6 +3965,29 @@ struct CardParams
     // the one landfall chokepoint (FireLandfallTriggers) for every copy ALREADY in the graveyard when
     // the land enters (the 2009 ruling; CR 113.6k: the ability functions only there).
     bool                     landfall_return_self_from_gy = false;
+
+    // ---- Vampires A1 (2026-10-18): MADNESS + Asylum Visitor ------------------------------------
+    // Every field below is new and gated (nullopt / empty / 0 / false inert), so every deck that does
+    // not carry one is byte-identical. Design: docs/design/vampires/design_A1_madness.md.
+    //
+    // Madness (CR 702.35): this card's OWN madness cost (Markov Baron {2}{B}, Asylum Visitor {1}{B}).
+    // nullopt = no own madness. Read at every discard by MadnessCostsFor (SpellEffects.h).
+    std::optional<ManaCost>  madness_cost;
+    // Falkenrath Gorger: "Each Vampire creature card you own that isn't on the battlefield has
+    // madness. The madness cost is equal to its mana cost." While a permanent with this param is on
+    // the battlefield under the discarding player's control, every discarded CREATURE card carrying
+    // this subtype has madness for its own printed mana cost (front face). A STATIC grant, read AT THE
+    // DISCARD and snapshotted into the pending madness record (a Gorger that leaves before the trigger
+    // resolves does not revoke it -- the 2016-04-08 ruling). Empty = no grant.
+    std::string              grants_madness_creature_subtype;
+    // Asylum Visitor: "At the beginning of each player's upkeep, if that player has no cards in hand,
+    // you draw a card and you lose 1 life." hellbent_upkeep_draw = cards drawn (0 = off),
+    // hellbent_upkeep_life_loss = life LOST (not damage), hellbent_upkeep_each_player = the trigger
+    // also watches the OPPONENT's upkeep (false = "your upkeep" only). PerformUpkeepHellbentDraw /
+    // PerformOpponentUpkeepHellbentDraw, lockstep in both worlds.
+    int                      hellbent_upkeep_draw        = 0;
+    int                      hellbent_upkeep_life_loss   = 0;
+    bool                     hellbent_upkeep_each_player = false;
 };
 
 // Rick's chosen-keyword bits (Permanent::chosen_keyword_mask).

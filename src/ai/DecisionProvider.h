@@ -65,6 +65,7 @@
 #include "../cards/CardDatabase.h"
 #include "KeepModel.h"    // KeepGuard (Undecided / ForceKeep / ForceMulligan) for the keep-floor hook
 #include "PlanContext.h"  // PlanTraits for the reserve-override hooks (Action-free header)
+#include "../core/MadnessTypes.h"   // MadnessOption / MadnessWindow (MadnessCastDefault)
 #include <algorithm>
 #include <cstdint>
 #include <optional>
@@ -1723,6 +1724,25 @@ public:
     // SacExpendabilityRank (most expendable first), every class kept.
     virtual std::vector<int> SacOutletVictimCandidates(
         const GameState& s, const Permanent& src, const std::vector<int>& reps) const;
+
+    // ---- Vampires A1 (2026-10-18): MADNESS -------------------------------------------------------
+    // MadnessCastDefault -- the madness cast-or-decline taken WITHOUT a searched pin. Reached only
+    // where no search branch exists: beyond the search horizon (the playout's trailing pass, the
+    // depth-0 runner), at the CLEANUP step (no plan axis -- see below), as the human chooser's
+    // preselect, and at a resolving discard effect no current deck pairs with a madness card. Inside
+    // the search window every outlet discard carries an explicit pin (Action::madness_choice), and an
+    // unpinned in-window event is COUNTED (g_madness_unpinned_in_window) and must read 0.
+    // `opts` = the payable options (MadnessOptionsNow, never empty here), cheapest cost first, arm 0
+    // (every free convoke body) first within a cost. Returns an index into `opts`, or -1 = decline.
+    // DEFAULT: cast option 0. At CLEANUP this is a sound weak-dominance fold, PROVISIONAL pending the
+    // USER (ledger question 4; design_A1 §3.3): cleanup mana has no other use (no end-step window, the
+    // pool empties at the step boundary), convoke taps cost nothing (the bodies untap next turn, the
+    // passive opponent never attacks), the hand is the same either way (the card left it in both
+    // branches), and the cast creature is on the battlefield untapped-next-turn instead of in the
+    // graveyard. A deck with GRAVEYARD payoffs (flashback, delve, threshold, a graveyard-landfall
+    // return such as Bloodghast) must override it -- VampiresProvider does, for Bloodghast.
+    virtual int MadnessCastDefault(const GameState& s, int controller, const CardDefinition& def,
+                                   const std::vector<MadnessOption>& opts, MadnessWindow w) const;
 
     // EtbDestroyVictimClass -- Terastodon's own-permanent victim ORDER class for `q` (lower = eaten
     // first, -1 = not a victim). Shared by the resolution loop, the emission's K cap and the K

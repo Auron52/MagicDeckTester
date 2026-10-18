@@ -123,14 +123,16 @@ static void FireNehebCombatDamageDiscards(GameState& state, int active, const st
         const CardDefinition* nd = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
         if (!nd || nd->params.combat_damage_each_discards <= 0) { continue; }
         Player& ap = state.players[active];
+        const std::string src_nm = state.battlefield[idx].card.m_name.str();
+        std::vector<MadnessPending> mq;   // the shared discard hook (Vampires A1)
         for (int k = 0; k < nd->params.combat_damage_each_discards && !ap.hand.empty(); ++k)
         {
-            const int hi = ChooseNonCleanupDiscardIndex(state, active,    // surfaced as `discard`
-                                                        state.battlefield[idx].card.m_name.str());
+            const int hi = ChooseNonCleanupDiscardIndex(state, active, src_nm);   // surfaced as `discard`
             if (hi < 0) { break; }
-            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
-            ap.hand.erase(ap.hand.begin() + hi);
+            DiscardCardFromHand(state, active, hi, &mq, src_nm);
         }
+        // A madness card discarded by a RESOLVING trigger: its trigger resolves after this one completes.
+        ResolveEffectMadness(state, mq, src_nm);
     }
 }
 

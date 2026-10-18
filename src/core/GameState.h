@@ -332,6 +332,13 @@ struct GameState
     // room left: a bool there cost sizeof(GameState) +8, measured), so sizeof(GameState) does not move.
     // A deck constant: never folded into any key.
     bool                     deck_has_cond_haste          = true;
+    // MADNESS (Vampires A1, 2026-10-18): the deck (main + sideboard) carries a card with its own
+    // madness_cost or a grants_madness_creature_subtype granter (Falkenrath Gorger). The deck_has_*
+    // presence-gate family: DiscardCardFromHand's MadnessCostsFor lookup + battlefield walk runs only
+    // while this is set, so a clear bit PROVES no discard can be a madness discard. DEFAULT TRUE (an
+    // unstamped GameState keeps checking -- the only-err-true rule). In the same padding as the bit
+    // above (sizeof(GameState) unchanged). A deck constant: never folded into any key.
+    bool                     deck_has_madness             = true;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack

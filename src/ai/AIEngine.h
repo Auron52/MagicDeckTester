@@ -285,7 +285,14 @@ public:
     static void LandDrawCensusEndTurn(const GameState& state);
     static void LandDrawCensusBeginTurn();   // ...and its reset at every new turn
 
+    // VAMPIRES A1: the executor's madness payer (a creature-SPELL payment through TapForCost with a
+    // fresh accounting pool) -- installed with MadnessHostScope by the trailing pass's outlet applies and
+    // by GameEngine::CleanupStep. Lockstep twin of the rollout's RolloutMadnessPayer (TurnSolver.cpp).
+    // Rebuilt on every call (the lambda captures `this`, and an AIEngine may be copied).
+    const std::function<bool(GameState&, const ManaCost&)>& MadnessPayer();
+
 private:
+    std::function<bool(GameState&, const ManaCost&)> m_madness_payer;
     // Unit-test seam (backlog C2): test/unit drives the private payment path (TapForCost)
     // directly against the rollout's TapForCostDirect in the twin-equivalence tests. Friend
     // keeps the members private for all src/ callers.
