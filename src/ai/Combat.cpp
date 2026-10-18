@@ -186,8 +186,19 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
     const int opp_idx = 1 - active;
     const std::size_t n = atk_idx.size();
     std::vector<int>  dealt(n, 0);
-    std::vector<char> seen(n, 0);
     std::vector<char> jitte_done(n, 0);
+
+    // Attackers are TAPPED as they are declared (CR 508.1f), i.e. before ANY damage step -- so
+    // vigilance is read on the pre-damage board. Reading it lazily at a creature's first damage step
+    // would let a regular-step attacker dodge the tap by GAINING vigilance between the steps (Voice of
+    // the Blessed reaching four counters off a first striker's lifelink). The single-step loop taps as
+    // it goes, which is equivalent there: nothing between its iterations can grant vigilance, and no
+    // power read looks at `tapped`.
+    for (std::size_t k = 0; k < n; ++k)
+    {
+        Permanent& p = state.battlefield[atk_idx[k]];
+        if (!CreatureHasVigilance(p, state, &bs_in.vigilance)) { p.tapped = true; }
+    }
 
     // The board-source lists are battlefield INDICES gathered before the first step. A first-step
     // combat-damage hook can APPEND a permanent (a Lackey put, a Shroofus token) -- which may itself be
@@ -264,11 +275,6 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
                 // combat-damage event).
                 if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
                 if (CreatureHasLifelink(p, state, &bs.lifelink)) { step_lifelink.push_back(power); }
-            }
-            if (!seen[k])
-            {
-                seen[k] = 1;
-                if (!CreatureHasVigilance(p, state, &bs.vigilance)) { p.tapped = true; }
             }
         }
         // Lifelink: one life-gain EVENT per lifelinking member of THIS step (CR 510.2, 702.15b,
