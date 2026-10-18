@@ -31,32 +31,39 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
-## RESUME STATE (2026-10-18 ~09:45 UTC)
+## RESUME STATE (2026-10-18 ~10:40 UTC, before a context compaction)
+**PUSH HOLD (USER, 2026-10-18 ~10:10 UTC): do NOT push until ~16:10 UTC ("hold off on pushing until maybe 6 hours from now"). Local commits only.**
 Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
-- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP: niv-analysis (`b9580aa6d`) + Servant host fold
-  + niv-bs's three commits + the Aura/cantrip bundle `41950c0f0` + ledger. Built. UNCOMMITTED there:
-  the suite rows in `test/regression_cases.sh` (from `logs/add_niv_rows2.py`, CASES=...). Do NOT rebuild
-  it while the claude-play sweep runs (workflow `wf_64ca898c-6fa`, 16 seeds 71000-71015, Opus).
-- `niv` = branch `niv-analysis` (behind niv-aura; ff it to niv-aura once Stage 4 is done). Its build
-  is the OLD T2 binary the Stage-4 analyzer is still running on (discard evidence, 400 games d3,
-  single thread, 4h+): do NOT rebuild it until `logs/stage4.status` says done.
-- `niv-perf` = branch `niv-perf` (from niv-aura `d09f881e7`): PERF AGENT running (goal: the 3x cost
-  rule; leads = uncharged work: d3 b10 `--seed 2018 --game-index 16` 347 s / 246k units, `--seed 3007
-  --game-index 4` 1,507 s / 1.64M units; d5 b20 s3007 gi4 >20 min, 4.6 GB).
-- `niv-bs` (agent done; integrated), `niv-base` (origin src, BASE arm), `niv-core`/`-remand`/`-mana`/`-d0`.
-Running: `suite_gate.py --measure decks/NivMizzetCombo` from niv-aura (`logs/niv/suite_gate_measure.txt`;
-expected FAR over 8,086 ms/game -> the deck goes in NO tier, perf is the first goal, report to the
-user); gi73 d3 b0 on niv-bs vs niv-aura (`build/scratch/niv-aura/ab/gi73_b0_*.txt`, the A/B's one
-slower game). Sweep AI benchmarks done (`build/scratch/niv-sweep/bench.err`: all 16 won, 7xT4 9xT5).
-verify_deck --no-sweep: coverage/viewer/viewer_wiring PASS; card_costs INCOMPLETE (Scryfall 429 on 120
-cards of the whole DB -- re-run); regression_tiers no GT (pending the cost gate).
-NEXT: (1) sweep returns -> record `## Claude-play sweep` (commit d09f881e7, seeds 71000-71015, flags
-N unresolved), fix real flags; (2) measurement verdict -> report; (3) perf agent report -> integrate,
-re-measure; (4) Stage 4 done -> stage4_analyze.json (mulligan_flags, discard buckets = AUTHOR+REPORT),
-commit profile, provider_audit --check, ff niv-analysis; (5) Stage 5 runtime: verify_deck full
-(nonconv/fd-diverge), multi-depth, 5c2 leaf_tiebreak_check; (6) when it fits: tiers + full
-smoke/regression (the nested bail + Action::def fix are GENERAL -> attribute every moved deck);
-(7) push (rebase onto origin phase-1-2-deck-analyzer), CI, ff primary, check_references_safe.
+- `niv-aura` = branch `niv-aura` = THE INTEGRATION TIP (HEAD = latest ledger commit). UNCOMMITTED, built:
+  the draw-loop LIFO rewrite (SpellEffects.h `RunDrawPingStack` / `PushDrawPings` / `BuildDrawPingTable`
+  / `DrawPingStackLease`, replacing ResolveDamageDraws; ResolveDrawTriggers + OnCreatureDealtDamageToOpponent
+  rewritten), the put-back chooser guard (`&& !OpponentHasLost(state)`), main.cpp dig-note text, tests
+  in test_niv_draw_trigger.cpp ("...the stack draws ONE per ping", "Two Nivs, Curiosity on ONE...").
+  Units passed 1491/1491 on the LIFO build; a rebuild + units + scenarios with the chooser guard was
+  running (task output only). NEXT: confirm units + scenarios -> commit "rules(niv): the draw loop
+  resolves LIFO ..." -> re-run `TAG=ab2 bash logs/arms/aura_ab.sh` in worktree niv (A/B vs niv-bs; compare
+  with `python3 logs/arms/aura_ab_cmp.py ab2`). Also uncommitted (keep uncommitted): the suite rows in
+  `test/regression_cases.sh` + `test/suite_cost.json` (niv 124,304 ms/game).
+- `niv` = branch `niv-analysis` (behind niv-aura; ff to niv-aura once Stage 4 is done). Its build is the
+  OLD T2 binary the Stage-4 analyzer runs on (discard evidence, 400 games d3, single thread, 4.5h+): do
+  NOT rebuild until `logs/stage4.status` says done.
+- `niv-perf`: PERF AGENT running (goal: the 3x rule; leads = per-unit cost explosions: d3 b10 s3007 gi4
+  1,507 s / 1.64M units, s2018 gi16 347 s / 246k units, s2029 gi27; d5 b20 s3007 gi4 >20 min). Told NOT
+  to touch the draw loop or the payment code.
+- `niv-pay`: PAYMENT AGENT running (sweep defects P1 PP_FLOAT_NZ with a Servant float, P2 ramp-filter
+  scarcity; acceptance seeds s71004/s71011/s71014 where Claude beat the AI).
+- `niv-bs` (done, integrated; the A/B base), `niv-base` (origin src), `niv-core`/`-remand`/`-mana`/`-d0`.
+Running: gi73 d3 b0 on niv-bs vs niv-aura (`build/scratch/niv-aura/ab/gi73_b0_*.txt`, 1.5h+), Stage 4.
+DONE this session: 3x cost rule FAIL (Stage 5j section); claude-play sweep recorded (## Claude-play
+sweep: 5 unresolved -> 2 are the payment agent's, 3 deferred low/cosmetic need the user's sign-off);
+verify_deck --no-sweep static checks.
+NEXT after that: (1) integrate niv-pay + niv-perf reports (rebase onto niv-aura), re-measure the cost
+(`suite_gate.py --measure`; NOT `--cost`, which re-measures); (2) Stage 4 done -> stage4_analyze.json
+(mulligan_flags; discard buckets = AUTHOR + REPORT), commit profile, provider_audit --check, ff
+niv-analysis; (3) Stage 5 runtime: verify_deck full (nonconv/fd-diverge), multi-depth, 5c2; card-cost
+audit re-run (Scryfall 429); (4) when the deck fits 3x: tiers + full smoke/regression (nested bail,
+Action::def and AuraSpellCastLegal are GENERAL -> attribute every moved deck); (5) AFTER the hold:
+rebase onto origin phase-1-2-deck-analyzer, push, CI, ff primary, check_references_safe.
 
 ## Stage 1 — coverage (2026-10-17)
 Missing (8): Niv-Mizzet, the Firemind; Niv-Mizzet, Parun; Curiosity; Tandem Lookout; Generator
@@ -210,6 +217,36 @@ carries (`draw_trigger_damage`, `cast_trigger_instant_sorcery_draw`, `aura_damag
 `soulbond_damage_trigger_draw`). Certificate `NotAssessed` (with what a bound must price). Before this,
 Tandem Lookout's bare `soulbond` misrouted the deck to WhiteKnightsProvider; niv-core re-keyed the
 WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
+
+## Claude-play sweep
+- commit: `d09f881e7` (niv-aura; workflow `wf_64ca898c-6fa`, Opus players + an Opus skeptic per flag)
+- seeds: 71000-71015 games: 16 (claude-play varies by SEED; AI benchmark = one pooled batch, d5 b20)
+- flags: 5 unresolved
+- Win turns: AI 7xT4 / 9xT5. Claude = AI on 12, FASTER on 3 (s71004, s71011, s71014: T4 vs T5),
+  slower on 1 (s71006). s71004 / s71014 used exactly the payment shapes of P1/P2 below (a Servant-
+  hasted Niv + Curiosity; a filter-fed Parun) -> acceptance checks for the payment fix; s71011's player
+  reports the search still takes T5 at d5/b200 (an AI-misplay candidate to trace).
+- 19 flags -> 15 upheld by the skeptic, 8 distinct defects:
+  - FIXED -- **draw loop breadth-first** (s71008, s71009): Curiosity + a Lookout pair on one Niv drew
+    ~2 cards per ping; the stack (LIFO) draws one. A 33-card library LOST where the real game wins
+    with 18. Now an explicit LIFO trigger stack (RunDrawPingStack).
+  - FIXED -- the Brainstorm put-back chooser was still ASKED after lethal in human play (s71003).
+  - FIXED -- the dig decision's note said "hand index"; the reply indexes `examined` (s71010).
+  - UNRESOLVED (agent on `niv-pay`) P1 -- a floated sac-for-mana (Generator Servant) makes
+    BatchPrepayMainCasts decline (PP_FLOAT_NZ), and the per-cast payer then strands a later cast:
+    "hasty Niv + Curiosity on Niv" unreachable at any budget (s71009, s71013).
+  - UNRESOLVED (agent on `niv-pay`) P2 -- the payer's scarcity pass never routes a generic through a
+    ramp filter: Ferrous Lake land + Izzet Signet + a second spell unreachable (s71005).
+  - UNRESOLVED, deferred (low) -- an emptied depletion land (Skerry / Needle) is sacrificed at the end
+    of the plan / at SBA, not inside its mana ability; visible mid-plan (s71001, s71002). It could
+    matter to a fastland played later in the same plan (it counts the dead land).
+  - UNRESOLVED, deferred (cosmetic) -- combat still runs after a main-phase kill (s71006, s71009); the
+    win turn is unchanged. A fix moves the post-kill log (= the digest) of every deck that kills in
+    main 1 with no play change.
+  - UNRESOLVED, deferred (cosmetic) -- Ponder's shuffle is logged "to the bottom" (s71003, s71005,
+    s71009); the reveal folds into the play digest, so the fix rebaselines every Ponder deck's digest.
+- Dismissed (4): the Ponder `ponder_keep` replay (protocol misuse), a "drops" plan (documented
+  annotation), combat-after-lethal (one verifier: documented), a breakpoint-crossing prepay (documented).
 
 ## Open questions for the user (collected, never blocking)
 - **Q1 (stack).** The AI skill asks that a stack-order-dependent card raise "does the stack need
