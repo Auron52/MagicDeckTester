@@ -80514,9 +80514,23 @@ static bool BpCanonFrontOn()
     static const bool v = EnvOn("MTG_BP_CANON_FRONT", true);   // DEFAULT ON; =0 disables
     return v;
 }
+// Could this state's derivation build a clone the front-only derivation skips? Only the put-back and
+// Ponder axes are skipped, and both fan a plan's CastFromHand of a card carrying their param, so a hand
+// with no such card derives the same list either way -- and then the canon takes the full-list route
+// exactly as before (it fills the shared cache the other consumers read), so a deck that never holds a
+// Brainstorm or a Ponder keeps its caching, its units and its play byte for byte.
+static bool BpCanonFrontPays(const GameState& state)
+{
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && (d->params.put_back_from_hand > 0 || d->params.cast_reorder > 0)) { return true; }
+    }
+    return false;
+}
 static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver::Plan& out)
 {
-    if (!BpCanonFrontOn())
+    if (!BpCanonFrontOn() || !BpCanonFrontPays(state))
     {
         const std::vector<TurnSolver::Plan>& c = TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
         if (c.empty()) { return false; }
