@@ -539,7 +539,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Modelled as producing all five colours plus {C}. colored_creature_only enforces the restriction in the payer (ProducesForPayment / TapFlowInfeasible / the backtracking payer): for a noncreature spell, or any activated ability, this land yields only {C}. So it cannot pay Lightning Bolt's {R} or Siren Stormtamer's {U}, but it pays generic costs such as Aether Vial {1} and a Clue's {2}. The ETB creature-type choice is simplified to 'any creature spell'. That is outcome-exact for Pirates: every creature except Metallic Mimic {2} and Adaptive Automaton {3} is a Pirate, and those two cost only generic mana, which the land's unrestricted {C} pays identically. Search-side only: with MTG_CCO_NONCREATURE_POOL off (default) the noncreature enumeration pool counts this land as any-colour, so a Bolt plan relying on it can be offered and is then refused by the payer (no illegal play).] [Soldiers (2026-10-04): EXACT there too -- every creature in that list is BOTH a Human and a Soldier (Scryfall type lines verified), so naming either type pays for every creature it casts; King Darien XLVIII's {G}/{1}{G}{W} and Harbin's {U} are castable ONLY through these lands (Harbin also off Fortified Beachhead).]",
+   "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Modelled as producing all five colours plus {C}. colored_creature_only enforces the restriction in the payer (ProducesForPayment / TapFlowInfeasible / the backtracking payer): for a noncreature spell, or any activated ability, this land yields only {C}. So it cannot pay Lightning Bolt's {R} or Siren Stormtamer's {U}, but it pays generic costs such as Aether Vial {1} and a Clue's {2}. The ETB creature-type choice is simplified to 'any creature spell'. That is outcome-exact for Pirates: every creature except Metallic Mimic {2} and Adaptive Automaton {3} is a Pirate, and those two cost only generic mana, which the land's unrestricted {C} pays identically. Search-side only: with MTG_CCO_NONCREATURE_POOL off (default) the noncreature enumeration pool counts this land as any-colour, so a Bolt plan relying on it can be offered and is then refused by the payer (no illegal play).] [Soldiers (2026-10-04): EXACT there too -- every creature in that list is BOTH a Human and a Soldier (Scryfall type lines verified), so naming either type pays for every creature it casts; King Darien XLVIII's {G}/{1}{G}{W} and Harbin's {U} are castable ONLY through these lands (Harbin also off Fortified Beachhead).] [Vampires (2026-10-18): EXACT there too -- every creature card in that list is a Vampire (Scryfall type lines verified for all 14 creature cards, both faces of Bloodline Keeper included), so naming Vampire pays for every creature spell it casts, madness casts included; its coloured mana is correctly unusable for the list's creature abilities (Falkenrath Pit Fighter's {1}{R}, Bloodline Keeper's {B} transform), which this land's oracle does not cover.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -582,7 +582,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Modelled as producing all five colors; the ETB type choice is simplified to \"any creature\" (exact for the mono-tribal decks that run it). colored_creature_only restricts the coloured mana to creature spells; colored_creature_ability_ok additionally permits it for an ACTIVATED ABILITY whose source is a creature (D12 fix: Burning-Fist / Sethron activations, paid under the CreatureAbilityPayScope guard). Ability sources are simplified to battlefield creatures -- the oracle's any-zone \"source\" (e.g. cycling a creature card) is not modelled.] [Soldiers (2026-10-04): EXACT there too -- every creature in that list is BOTH a Human and a Soldier (Scryfall type lines verified), so naming either type pays for every creature it casts; King Darien XLVIII's {G}/{1}{G}{W} and Harbin's {U} are castable ONLY through these lands (Harbin also off Fortified Beachhead).] [Soldiers: its coloured mana also pays the abilities of Recruitment Officer ({3}{W}) and King Darien XLVIII ({3}{G}{W} -- its ONLY green source for that ability): every ActivatePermAbility whose source is a creature now pays under CreatureAbilityPayScope at both apply sites, as ActivatePump always did.]",
+   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Modelled as producing all five colors; the ETB type choice is simplified to \"any creature\" (exact for the mono-tribal decks that run it). colored_creature_only restricts the coloured mana to creature spells; colored_creature_ability_ok additionally permits it for an ACTIVATED ABILITY whose source is a creature (D12 fix: Burning-Fist / Sethron activations, paid under the CreatureAbilityPayScope guard). Ability sources are simplified to battlefield creatures -- the oracle's any-zone \"source\" (e.g. cycling a creature card) is not modelled.] [Soldiers (2026-10-04): EXACT there too -- every creature in that list is BOTH a Human and a Soldier (Scryfall type lines verified), so naming either type pays for every creature it casts; King Darien XLVIII's {G}/{1}{G}{W} and Harbin's {U} are castable ONLY through these lands (Harbin also off Fortified Beachhead).] [Soldiers: its coloured mana also pays the abilities of Recruitment Officer ({3}{W}) and King Darien XLVIII ({3}{G}{W} -- its ONLY green source for that ability): every ActivatePermAbility whose source is a creature now pays under CreatureAbilityPayScope at both apply sites, as ActivatePump always did.] [Vampires (2026-10-18): EXACT there too -- every creature card in that list is a Vampire (Scryfall type lines verified for all 14 creature cards, both faces of Bloodline Keeper included), so naming Vampire pays for every creature spell it casts and every creature-source ability it activates (Falkenrath Pit Fighter's {1}{R}, Bloodline Keeper's {B} transform, both paid under CreatureAbilityPayScope).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -12732,6 +12732,104 @@
     "hellbent_upkeep_draw": 1,
     "hellbent_upkeep_life_loss": 1,
     "hellbent_upkeep_each_player": true
+   }
+  },
+  {
+   "name": "Captivating Vampire",
+   "mana_cost": "{1}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Vampire"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Vampire creatures you control get +1/+1.\nTap five untapped Vampires you control: Gain control of target creature. It becomes a Vampire in addition to its other types. [Lord: lord_effect + subtypes_affected [\"Vampire\"] + lord_excludes_self, inside ComputeLordBonus (tokens and a stolen-and-Vampired creature included). STEAL: PermAbilityMode::TapSubtypeSteal (steal_tap_count 5 / steal_tap_subtype Vampire / steal_adds_subtype Vampire). No {T} in the cost, so the five may include summoning-sick Vampires and this creature itself (2010-08-15 ruling; CR 302.6 restricts only {T}/{Q} abilities): the cost is paid by ONE shared payer (PayTapSubtypeCost, inside ApplyPermAbility -- both trailing passes) after the target is chosen (CR 601.2c before 601.2h). LIVE in a goldfish: the passive opponent's scheduled spawns (8 of 10 game indices; a 4/4 on T3 in slot 7, a 6/6 + 1/1 on T3 in slot 8) are the targets. Gain control is permanent (no duration), sets gained_control_this_turn so the creature cannot attack until our next turn (CR 302.6, the Bolas -2 precedent), leaves its tapped status alone, and adds the Vampire subtype permanently (layer 4) -- so every Vampire lord reaches it (Stromkirk Captain's first strike too) and it counts as a Vampire for Bloodline Keeper's transform, Falkenrath Pit Fighter's sacrifice and Voldaren Estate's discount; its OWNER stays the opponent (sacrificed, it goes to the opponent's graveyard). SEARCHED, both mains, no main-1 prune: the TARGET (one variant per identity class of creature we do not control -- identical spawns fold) and the FIVE BODIES (one variant per distinct count vector over the identity classes of untapped Vampires -- a FREE class per colour and live-{T}-ability for bodies that cannot attack this turn, a full-identity ATTACK class for bodies that still can -- counting the Vampires the plan casts / Vial-puts / madness-casts / token-taps / returns before its trailing pass); within a class the lowest-numbered bodies are tapped (an identity fold). Trailing-pass order: after token taps and the other Vampire activations, before Bloodline Keeper's transform and before sacrifices. Human play: the target and then the five bodies are board-click `target` prompts at resolution (viewer verb steal=). PARTIAL, PROVISIONAL (USER sign-off pending): own creatures are not offered as targets (a legal no-op that taps five Vampires for nothing -- the Bolas precedent); no opponent-turn activation window (provably equivalent to the post-combat main: the untapped non-attackers are the same bodies and a creature stolen at the opponent's end step attacks on the same turn); 'does not take attached Auras/Equipment' is unmodelled (spawns carry none); one steal per Captivating per main phase (a second needs ten untapped Vampires).]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Vampire"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "steal_tap_count": 5,
+    "steal_tap_subtype": "Vampire",
+    "steal_adds_subtype": "Vampire"
+   }
+  },
+  {
+   "name": "Bloodline Keeper",
+   "mana_cost": "{2}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Vampire"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Flying\n{T}: Create a 2/2 black Vampire creature token with flying.\n{B}: Transform this creature. Activate only if you control five or more Vampires. [TRANSFORMING DFC, FRONT FACE (Bloodline Keeper // Lord of Lineage); listed under the front name as in every zone but the battlefield (CR 712.8). TOKEN: the tap_token family (Speaker of the Heavens' shape, cost {0}): {T} the source -- summoning sickness applies (TapTokenSourceLive, CR 302.6) -- for a 2/2 BLACK Vampire token with Flying, entering summoning-sick; the colour is load-bearing (a black body pays Markov Baron's {B} by convoke) and every Vampire lord reaches the token. Tapping it means it does not attack: the activation is a searched plan candidate, both mains; a live token tap makes the body a COSTLY convoke body (ConvokeBodyTapAbilityLive). TRANSFORM: PermAbilityMode::TransformSelf -- no {T}, so legal while summoning-sick or tapped; {B} paid as a creature-source ability (Secluded Courtyard's coloured mana may pay it; Unclaimed Territory's and Voldaren Estate's restricted mana may not); the restriction counts Vampire PERMANENTS you control, this one, tokens and a stolen creature included, re-checked on activation (CR 602.5b). Transforming swaps the permanent to the Lord of Lineage entry in place: same object (card number, counters, tapped and summoning-sick status kept), not an entering -- no enter watcher or ETB fires (Vampire Socialite's enters-with-a-counter does not apply). One-shot: the back face has no transform ability. Searched in main 1, main 2 and an IN-COMBAT window after declare-attackers (Plan::combat_transform_choice -> ApplyCombatTransforms), which is the only route when Mavren Fein's attack token is the fifth Vampire; a Keeper cast this turn may transform (no {T}). Trailing-pass order: token taps and the steal before the transform, sacrifices after. Flying: parsed, inert for combat (no blockers). PARTIAL, PROVISIONAL (USER sign-off pending): no opponent-turn window for the token tap (provably equivalent to tapping in our main phase when the Keeper does not attack).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_token_cost": "{0}",
+    "tap_token_power": 2,
+    "tap_token_toughness": 2,
+    "tap_token_subtypes": [
+     "Vampire"
+    ],
+    "tap_token_color": "B",
+    "tap_token_keywords": [
+     "Flying"
+    ],
+    "transform_back_name": "Lord of Lineage",
+    "transform_cost": "{B}",
+    "transform_min_controlled_subtype": "Vampire",
+    "transform_min_controlled_count": 5
+   }
+  },
+  {
+   "name": "Lord of Lineage",
+   "mana_cost": "",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Vampire"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "colors": [
+    "B"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Flying\nOther Vampire creatures you control get +2/+2.\n{T}: Create a 2/2 black Vampire creature token with flying. [TRANSFORMING DFC, BACK FACE of Bloodline Keeper // Lord of Lineage. NEVER CAST and never in any zone but the battlefield: the entry exists so a transformed permanent resolves its own characteristics through LookupCached on its name (the Moonrage Brute precedent). Black by colour indicator (load-bearing: convoke). Lord: lord_effect + subtypes_affected [\"Vampire\"] + lord_excludes_self, +2/+2, read by ComputeLordBonus off the swapped face. Token ability identical to the front face's (tap_token family, summoning sickness through TapTokenSourceLive -- a Keeper that transformed on the turn it entered is still sick). Leaving the battlefield it becomes a Bloodline Keeper card (CR 712.8a; NormalizeLeftDayboundFace keyed on transform_front_name) -- reachable through Falkenrath Pit Fighter's sacrifice. PARTIAL, PROVISIONAL: its mana value on the battlefield reads 0 (empty cost) where the rules give the front face's 4 (CR 712.8e) -- no card in this list reads a battlefield permanent's mana value, and copying the front's cost onto the face would wrongly give it a mana cost (devotion). Flying parsed, inert (no blockers).]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Vampire"
+    ],
+    "power_bonus": 2,
+    "tough_bonus": 2,
+    "lord_excludes_self": true,
+    "tap_token_cost": "{0}",
+    "tap_token_power": 2,
+    "tap_token_toughness": 2,
+    "tap_token_subtypes": [
+     "Vampire"
+    ],
+    "tap_token_color": "B",
+    "tap_token_keywords": [
+     "Flying"
+    ],
+    "transform_front_name": "Bloodline Keeper"
    }
   }
  ]

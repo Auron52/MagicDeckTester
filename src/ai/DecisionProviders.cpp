@@ -21302,10 +21302,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // archetype-NEUTRAL (any madness card -- a Fiery Temper burn list -- carries it), so it would
         // pull a non-Vampires deck here. hellbent_upkeep_draw is left out for the same reason (Asylum
         // Visitor is a fine card for a non-tribal hellbent list).
+        // + B: Captivating Vampire's tap-Vampires steal and Bloodline Keeper's five-Vampire transform --
+        // both KEYED ON THE VAMPIRE SUBTYPE (the generic params would be another tribe's otherwise), both
+        // carried by no other card, so a list that cuts the outlets and the madness cards keeps routing.
         if (p.sac_outlet_discard_cost > 0 || p.activate_only_if_opp_lost_life
             || p.discard_team_pump_power > 0 || p.tap_blood_cost.has_value()
             || p.landfall_return_self_from_gy
-            || p.grants_madness_creature_subtype == "Vampire")
+            || p.grants_madness_creature_subtype == "Vampire"
+            || p.steal_tap_subtype == "Vampire"
+            || p.transform_min_controlled_subtype == "Vampire")
         { vampires = true; }
         if (p.attack_gather_auras) { bruna = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }

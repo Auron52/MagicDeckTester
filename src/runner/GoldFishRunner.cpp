@@ -1326,6 +1326,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool cond_haste = false;
         // Madness (GameState::deck_has_madness): an own madness cost or Falkenrath Gorger's grant.
         bool madness = false;
+        // Vampires B: an activated transform (GameState::deck_has_transform) and a tap-N steal
+        // (GameState::deck_has_tap_steal) -- the params their scans test. NOTE for every stamp in this
+        // scan: a transforming DFC's BACK face (Lord of Lineage) is never in the decklist, so its params
+        // (its lord_effect, its tap_token_*) are invisible here. No stamp gates a lord or tap-token walk
+        // today, so it plays correctly; a future stamp that does must follow transform_back_name.
+        bool transform = false, tap_steal = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1362,6 +1368,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.haste_if_opp_life_at_most > 0) { cond_haste = true; }
                 if (d->params.madness_cost.has_value()
                     || !d->params.grants_madness_creature_subtype.empty()) { madness = true; }
+                if (!d->params.transform_back_name.empty()
+                    || !d->params.transform_front_name.empty())           { transform = true; }
+                if (d->params.steal_tap_count > 0)                       { tap_steal = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
@@ -1433,6 +1442,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no discard can be a madness discard (the stamp
         // tests the very params MadnessCostsFor reads), so the per-discard lookup is dead code.
         state.deck_has_madness             = garth || madness;
+        // Same reasoning, no lever: a clear bit proves no transform source / steal source can exist.
+        state.deck_has_transform           = garth || transform;
+        state.deck_has_tap_steal           = garth || tap_steal;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

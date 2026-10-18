@@ -294,6 +294,20 @@ enum class PermAbilityMode
     // artifact is never summoning sick, so a Blood made this turn cracks now. WHICH card is discarded
     // is a SEARCHED pin (Action::discard_name, one variant per distinct hand name). Appended LAST.
     BloodDraw,
+    // Tap five untapped Vampires you control: Gain control of target creature. It becomes a Vampire in
+    // addition to its other types  (Captivating Vampire; CardParams::steal_tap_count / _subtype /
+    // steal_adds_subtype; Vampires B). NO {T} on the source -- the cost taps OTHER permanents (the
+    // source may be one of them, summoning-sick or not: CR 302.6 restricts only {T}/{Q} abilities), so
+    // it is in PermAbilityTaps' exclusion list. WHICH creature and WHICH five bodies are SEARCHED
+    // (Action::enchant_target + the interned tap spec, StealPin); the cost is paid by the shared
+    // PayTapSubtypeCost inside ApplyPermAbility in both worlds. Emitted out of band (never a K block).
+    // Appended LAST.
+    TapSubtypeSteal,
+    // {B}: Transform this creature. Activate only if you control five or more Vampires  (Bloodline
+    // Keeper; CardParams::transform_*; Vampires B). NO {T} -- legal while summoning-sick or tapped --
+    // so in PermAbilityTaps' exclusion list. One-shot (the back face carries no transform). The face
+    // swap keeps the permanent (CR 701.28 / 712.8: same object, no ETB). Appended LAST.
+    TransformSelf,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -314,7 +328,9 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::PingAll
         && m != PermAbilityMode::ActivatedDig         // Recruitment Officer: "{3}{W}:" -- no {T}
         && m != PermAbilityMode::QuestSacLandSearch   // Khalni Heart Expedition: counters + sac, no {T}
-        && m != PermAbilityMode::ReconfigureUnattach; // Lizard Blades: "{2}: unattach" -- no {T}
+        && m != PermAbilityMode::ReconfigureUnattach  // Lizard Blades: "{2}: unattach" -- no {T}
+        && m != PermAbilityMode::TapSubtypeSteal      // Captivating Vampire: taps five OTHER bodies
+        && m != PermAbilityMode::TransformSelf;       // Bloodline Keeper: "{B}: Transform" -- no {T}
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding

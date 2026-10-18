@@ -339,6 +339,14 @@ struct GameState
     // unstamped GameState keeps checking -- the only-err-true rule). In the same padding as the bit
     // above (sizeof(GameState) unchanged). A deck constant: never folded into any key.
     bool                     deck_has_madness             = true;
+    // VAMPIRES B (2026-10-18), same padding, same deck_has_* contract (DEFAULT TRUE == scan; a clear bit
+    // PROVES the scan finds nothing): deck_has_transform -- a card with an ACTIVATED transform
+    // (CardParams::transform_back_name / transform_front_name: Bloodline Keeper // Lord of Lineage), gating
+    // the in-combat transform window, its axis fan and its projection; deck_has_tap_steal -- a card with
+    // Captivating Vampire's "tap N untapped X: gain control" (CardParams::steal_tap_count), gating the
+    // hand-source steal scan. Deck constants: never folded into any key.
+    bool                     deck_has_transform           = true;
+    bool                     deck_has_tap_steal           = true;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
@@ -816,6 +824,14 @@ struct GameState
     // dedup key; read only by the combat land entries (which bump combatpin::t_reads). The axis width is
     // capped at 4, so int8_t holds every value.
     std::int8_t              scripted_combat_landfall_target = -1;
+    // BLOODLINE KEEPER'S IN-COMBAT TRANSFORM (Plan::combat_transform_choice, Vampires B 2026-10-18) -- a
+    // per-turn COMBAT PIN of the same class, also int8_t in this padding: a BITMASK over the untransformed
+    // transform sources we control in battlefield order at the declare-attackers window (after Mavren
+    // Fein's attack token), consumed by ApplyCombatTransforms (SpellEffects.h) in both combat worlds and
+    // the projection twin. -1 / 0 = hold. Written by the main-1 plan (WritePostApplyStatePins), cleared
+    // with the combat pins at both turn starts, folded value-gated into the dominance key and the
+    // post-apply dedup key. At most 7 sources are addressable (the list runs two Keepers).
+    std::int8_t              scripted_combat_transform = -1;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.

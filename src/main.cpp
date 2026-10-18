@@ -2224,6 +2224,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                          && (ac.ability_mode == Action::AbilityMode::SacLandSearch
                              || ac.ability_mode == Action::AbilityMode::QuestSacLandSearch))
                 { os << ", \"verb\": \"landsearch\""; }
+                // Captivating Vampire's steal and Bloodline Keeper's transform (Vampires B): the list
+                // runs two copies of each card, so `cast=<name>` is ambiguous with a HAND copy -- the
+                // taplife= reason. The value is the SOURCE on the battlefield; the steal's target and
+                // its five bodies are asked at resolution (board-click `target` prompts).
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && ac.ability_mode == Action::AbilityMode::TapSubtypeSteal)
+                { os << ", \"verb\": \"steal\""; }
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && ac.ability_mode == Action::AbilityMode::TransformSelf)
+                { os << ", \"verb\": \"transform\""; }
                 // Birthing Pod: names the SOURCE artifact (never castable), carries the fetch on
                 // tutor_target (already serialised) + the victim id, so the GUI writes
                 // `pod=<fetch>#<victim>` instead of an ambiguous `cast=Birthing Pod`.
@@ -3293,6 +3303,17 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                "unattached; Sigarda's Aid may then attach it). The return is mandatory, so -1 takes "
                "the AI's pick. Default = the AI's pick.");
     }
+    else if (source.find("(combat transform)") != std::string::npos)
+    {
+        // Bloodline Keeper's in-combat window (SpellEffects.h ApplyCombatTransforms; Vampires B) reuses
+        // this modal: nothing is dug -- the pick is a Bloodline Keeper on the battlefield to TRANSFORM
+        // (pay {B}). Asked only while the five-Vampire restriction holds and {B} is affordable. The
+        // default is -1 (hold), the engine's own unpinned behaviour.
+        d.Note("reply an examined index to pay {B} and transform that Bloodline Keeper into Lord of "
+               "Lineage now, before combat damage (its +2/+2 reaches this combat's attackers), or -1 "
+               "to keep it as it is. You are asked again after each transform. Default = keep it (the "
+               "AI transforms in combat only when its search committed to it).");
+    }
     else if (source.find("(combat crack)") != std::string::npos)
     {
         // Khalni Heart Expedition's in-combat window (LandSearch.h FireCombatLandSearchCracks) reuses
@@ -4148,7 +4169,9 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
         else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"
         else if (key == "taplife")   { ls.tap_lifes.push_back(val); }     // Wellwisher "{T}: gain 1 per Elf"
-        else if (key == "landsearch"){ ls.land_searches.push_back(val); } // Wilds / Myriad / Khalni crack
+        else if (key == "landsearch"){ ls.land_searches.push_back(val); }
+        else if (key == "steal")     { ls.steals.push_back(val); }       // Captivating Vampire's steal (Vampires B)
+        else if (key == "transform") { ls.transforms.push_back(val); }   // Bloodline Keeper's {B} transform // Wilds / Myriad / Khalni crack
         // "pod=<fetch>[#<victim num>]": Birthing Pod activation (fetch name + optional victim id).
         else if (key == "pod")
         {

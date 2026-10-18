@@ -480,6 +480,11 @@ static_assert(sizeof(Player) == 200,
 // after inf_life_possible -- beside the other deck_has_* bools before m_provider it cost +8). Classification:
 // DECK CONSTANT, stamped once in StampDeckTraits; it only skips RefreshOppLifeHaste's provably-empty walk --
 // nothing to fold. The graveyard state Bloodghast reads is folded under GyR_GyLandfallNames above.
+// +0 bytes (2026-10-18, Vampires B; measured 1136 -> 1136): `scripted_combat_transform` (an int8_t beside
+// scripted_combat_landfall_target, same padding) -- FUTURE-DETERMINING, the in-combat Khalni crack's class
+// (set by the main-1 plan, read at THIS turn's declare-attackers), FOLDED in Build(), value-gated; and the
+// bools `deck_has_transform` / `deck_has_tap_steal` (beside deck_has_madness, same padding) -- DECK
+// CONSTANTS stamped once in StampDeckTraits that only skip provably-empty scans, nothing to fold.
 static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -830,6 +835,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // future-determining class as the crack mask, value-gated, its own domain tag.
     if (s.scripted_combat_landfall_target >= 0)
     { fold(0x1A60000000ull + static_cast<std::uint64_t>(s.scripted_combat_landfall_target)); }
+    // Bloodline Keeper's in-combat transform mask (Vampires B): the same class, its own domain tag.
+    if (s.scripted_combat_transform >= 0)
+    { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP

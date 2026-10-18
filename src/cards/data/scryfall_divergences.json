@@ -39,5 +39,11 @@
  },
  "Moonrage Brute": {
   "keywords": "Transforming DFC back face: Scryfall's card-level keywords include the front's Daybound and the layout's Transform; Nightbound is modelled structurally (nightbound_front_name). First strike and Ward ARE tagged on this entry (both inert: no blockers, the passive opponent never targets). Reviewed 2026-10-04 (Soldiers)."
+ },
+ "Bloodline Keeper": {
+  "keywords": "Transforming DFC (Bloodline Keeper // Lord of Lineage): Scryfall reports CARD-LEVEL keywords for both faces (Flying, Transform). Transform is the layout itself, modelled structurally (transform_back_name + PermAbilityMode::TransformSelf, an activated ability -- not daybound); Flying IS tagged on this entry (inert: no blockers). Reviewed 2026-10-18 (Vampires)."
+ },
+ "Lord of Lineage": {
+  "keywords": "Transforming DFC back face: Scryfall's card-level keywords include the layout's Transform; the back face carries no transform of its own (transform_front_name only re-faces it off the battlefield, CR 712.8a). Flying IS tagged on this entry (inert: no blockers). Reviewed 2026-10-18 (Vampires)."
  }
 }

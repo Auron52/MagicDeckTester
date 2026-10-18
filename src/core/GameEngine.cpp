@@ -277,6 +277,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
+    state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
@@ -802,6 +803,11 @@ void GameEngine::CombatPhase(GameState& state)
     // Bruna / an Aura-swap pin is present.
     FireAttackGatherAuras(state, state.active_player_index, atk_idx);
     ApplyCombatAuraSwap(state, state.active_player_index, atk_idx);
+    // Bloodline Keeper's IN-COMBAT transform (Vampires B): after every attack trigger (Mavren Fein's
+    // token may be the fifth Vampire) and before anything reads power, so Lord of Lineage's +2/+2
+    // reaches THIS combat's attackers. Searched (Plan::combat_transform_choice); the human is asked.
+    // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Gated inert.
+    ApplyCombatTransforms(state, state.active_player_index, atk_idx);
 
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Delegated to the

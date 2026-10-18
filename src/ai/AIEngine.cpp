@@ -489,6 +489,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
+        || p.combat_transform_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
 // A re-solve's payment pair (tap mode, fresh-spend) matters exactly when it differs from the committed
@@ -522,6 +523,8 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.combat_crack_choice >= 0     && s.scripted_combat_land_search_crack != p.combat_crack_choice) { ok = false; }
     if (p.combat_landfall_target_choice >= 0
         && s.scripted_combat_landfall_target != p.combat_landfall_target_choice)                   { ok = false; }
+    if (p.combat_transform_choice >= 0
+        && s.scripted_combat_transform != p.combat_transform_choice)                               { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
@@ -5617,6 +5620,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
         }
+        if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
         if (_any)
         {
             _ord_buf = trailing_acts_in;
@@ -6067,8 +6071,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::ActivatePermAbility)
         {
+            // Vampires B (lockstep twin of the rollout's): the hand-source re-resolution and the steal's
+            // searched target + tap spec scope.
+            const int src_id = ResolveHandSourceActivation(state, a);
+            const StealPinScope _steal_pin(a.enchant_target, a.steal_spec);
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
-                                                          a.sac_source_id, a.ability_mode,
+                                                          src_id, a.ability_mode,
                                                           &a.discard_name.str()))
             {
                 // {T} half first -- see the rollout twin and SetPermTapped.
@@ -6076,19 +6084,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // Lockstep twin of the rollout's creature-source pay scope (D12: Secluded Courtyard
                 // may pay an ability of a creature source). Covers the K-1 repeat payments too.
                 std::optional<CreatureAbilityPayScope> creature_ability_scope;
-                if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+                if (PermAbilitySourceIsCreature(state, state.active_player_index, src_id))
                 { creature_ability_scope.emplace(); }
                 // Voldaren Estate's TRUE Blood cost at activation (lockstep twin of the rollout's).
                 const ManaCost act_cost = (a.ability_mode == Action::AbilityMode::TapBlood)
                     ? TapBloodCostNow(state, state.active_player_index, *a.def) : OutletOwnCost(a);
                 const ActivationDiscardPinScope _discard_pin(&a.discard_name.str());   // BloodDraw
                 const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));       // A1 (rollout twin)
-                if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
+                if (taps) { SetPermTapped(state, state.active_player_index, src_id, true); }
                 ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
                 ManaPool avail = AvailableManaPool(state);
                 if (!TapForCost(state, act_cost, avail, /*for_creature=*/false))
                 {
-                    if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
+                    if (taps) { SetPermTapped(state, state.active_player_index, src_id, false); }
                     // MTG_ACT_DROP_AUDIT "unpaid": the mana half failed and rolled back, so a pip the
                     // casts already spent is what lost this activation. Counter only -- see GameLogger.h.
                     if (ActDropAuditOn())
@@ -6112,7 +6120,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     std::vector<int> snow_hand_before;
                     if (snow_look && TurnSolver::BreakpointHandSnapshotWanted(state))
                     { snow_hand_before = TurnSolver::HandCardNumbers(state); }
-                    ApplyPermAbility(state, state.active_player_index, a.sac_source_id,
+                    ApplyPermAbility(state, state.active_player_index, src_id,
                                      a.ability_mode);
                     if (m_logger)
                     {
@@ -6120,7 +6128,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // not a draw (USER reveal!=draw convention, 2026-09-06) -- the generic
                         // TapDraw label would log "draw a card" and misrepresent it. Param-keyed,
                         // so every real tap-draw keeps its exact label (digest-stable elsewhere).
-                        m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                        m_logger->LogAbility(src_id, a.card_name.str(),
                                              snow_look ? "look at top; put a snow card into hand"
                                                        : PermAbilityLabel(a.ability_mode));
                     }
@@ -6137,17 +6145,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const int extra =
                             (a.ability_mode == Action::AbilityMode::SporeSaproling)
                             ? SpendSporeActivations(state, state.active_player_index,
-                                                    a.sac_source_id, *a.def, a.chosen_x - 1)
+                                                    src_id, *a.def, a.chosen_x - 1)
                             : (a.ability_mode == Action::AbilityMode::FadeSaproling)
                             ? SpendFadeActivations(state, state.active_player_index,
-                                                   a.sac_source_id, *a.def, a.chosen_x - 1)
+                                                   src_id, *a.def, a.chosen_x - 1)
                             : SpendRepeatActivations(state, state.active_player_index,
-                                                   a.sac_source_id, a.ability_mode, *a.def,
+                                                   src_id, a.ability_mode, *a.def,
                                                    a.chosen_x - 1);
                         if (m_logger)
                         {
                             for (int i = 0; i < extra; ++i)
-                            { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                            { m_logger->LogAbility(src_id, a.card_name.str(),
                                                    PermAbilityLabel(a.ability_mode)); }
                         }
                     }
@@ -6206,7 +6214,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // (tapped for mana, so the {T} half of its own cost was spent by a cast) from the two
             // benign answers (it left the battlefield; it is summoning-sick). See GameLogger.h.
             else if (ActDropAuditOn() && a.def != nullptr)
-            { NoteActDrop(PermAbilityDeadReason(state, state.active_player_index, a.sac_source_id,
+            { NoteActDrop(PermAbilityDeadReason(state, state.active_player_index, src_id,
                                                 a.ability_mode),
                           a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
         }
