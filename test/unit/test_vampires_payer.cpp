@@ -502,3 +502,258 @@ TEST_CASE("payer F x L (search): cast Gorger off the Estate's pain so Pit Fighte
     CHECK(exec.players[0].library.size() == s.players[0].library.size() - 2);
     CHECK(exec.players[0].life == roll.players[0].life);
 }
+
+// ---- the payer A/B follow-ups (2026-10-18: the slower games of the pooled held-out A/B) -----------------
+
+namespace
+{
+// vampires std d3 b10 / d5 b20 block B gi129 (seed 13480130), the T4 horizon-leaf board: three Estates and
+// the Courtyard just played, Legion Lieutenant + Stromkirk Captain able to attack, Pit Fighter in hand.
+GameState MakeGi129T4(bool with_attacker)
+{
+    GameState s = FreshVp(4);
+    s.phase = Phase::PreCombatMain;
+    PutVp(s, "Voldaren Estate", 58);
+    PutVp(s, "Voldaren Estate", 59);
+    if (with_attacker) { PutVp(s, "Legion Lieutenant", 24); }
+    PutVp(s, "Voldaren Estate", 60);
+    if (with_attacker) { PutVp(s, "Stromkirk Captain", 37); }
+    PutVp(s, "Secluded Courtyard", 33);
+    HandVp(s, "Falkenrath Pit Fighter", 20);
+    HandVp(s, "Swamp", 44);
+    return s;
+}
+
+int IndexOfVp(const GameState& s, int number)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == number) { return i; } }
+    return -1;
+}
+
+TurnSolver::Plan CastOnlyPlanVp(const GameState& s, const std::string& name)
+{
+    TurnSolver::Plan p;
+    p.actions.push_back(CastVp(s, name));
+    p.land_decided = true;   // the land drop is already made (lands_played_this_turn = 1)
+    return p;
+}
+}   // namespace
+
+TEST_CASE("payer A/B gi129 (search): a main-1 attack turn casts Pit Fighter off the Estate's pain, keeping the Courtyard for its main-2 draw-two, both worlds")
+{
+    // Pit Fighter's "{1}{R}, discard, sacrifice a Vampire: draw two" needs an opponent to have lost life,
+    // so it is always a MAIN-2 plan and the main-1 plan never carries it. Pain-last alone paid the cast's
+    // {R} with the Courtyard -- the only land here whose colour may pay a creature ABILITY -- and the
+    // main-2 activation had no legal {R}: gi129's horizon leaf lost its T5 kill, and the budgeted root
+    // then skipped its turn-1 land. PlanTraits now owes the outlet's pips as creature-ability demand.
+    GameState s = MakeGi129T4(/*with_attacker=*/true);
+    const TurnSolver::Plan line = CastOnlyPlanVp(s, "Falkenrath Pit Fighter");
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/true);
+    REQUIRE(IndexOfVp(roll, 20) >= 0);                                           // Pit Fighter resolved
+    CHECK_FALSE(TappedVp(roll, IndexOfVp(roll, 33)));                            // the Courtyard is kept
+    CHECK(roll.players[0].life == s.players[0].life - 1);                         // the Estate's {R}
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, line, true);
+    GameState exec = s;
+    eng.TakeTurn(exec, true, ResolveAllVp);
+    REQUIRE(IndexOfVp(exec, 20) >= 0);
+    CHECK_FALSE(TappedVp(exec, IndexOfVp(exec, 33)));
+    CHECK(exec.players[0].life == roll.players[0].life);
+    // ...and after combat the activation's {R} is the Courtyard's (it would be unpayable otherwise).
+    roll.phase = Phase::PostCombatMain;
+    roll.opponent_lost_life_this_turn = true;
+    CreatureAbilityPayScope scope;
+    CHECK(TapForCostDirect(roll, Pips(1, 0, 1), /*for_creature=*/false));
+}
+
+TEST_CASE("payer A/B gi129: scoped -- no attacker (the restriction cannot arm) or MTG_PAY_NARROW_RESTRICTED_FIRST=0 keeps pain-last's painless Courtyard")
+{
+    {
+        GameState s = MakeGi129T4(/*with_attacker=*/false);
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, CastOnlyPlanVp(s, "Falkenrath Pit Fighter"), /*is_pre_combat=*/true);
+        CHECK(TappedVp(roll, IndexOfVp(roll, 33)));
+        CHECK(roll.players[0].life == s.players[0].life);
+    }
+    {
+        PayerArms arms(/*pain=*/-1, /*narrow=*/0);
+        GameState s = MakeGi129T4(/*with_attacker=*/true);
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, CastOnlyPlanVp(s, "Falkenrath Pit Fighter"), /*is_pre_combat=*/true);
+        CHECK_MESSAGE(TappedVp(roll, IndexOfVp(roll, 33)), "precondition: the =0 arm reproduces gi129's leaf");
+        CHECK(roll.players[0].life == s.players[0].life);
+    }
+}
+
+namespace
+{
+ManaCost GreenPip() { ManaCost g; g.green = 1; return g; }   // Crop Rotation's {G}
+
+// creature_giving std d0 block B gi24 (seed 13480025) T4: City of Brass + two Forbidden Orchards up, Birds,
+// Crop Rotation and Sylvan Scrying in hand, Orchards left in the library to fetch.
+GameState MakeGi24T4()
+{
+    EnsureCardsVp();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.players[0].life     = gamesetup::StartingLife();
+    s.players[1].life     = gamesetup::StartingLife();
+    s.players[0].lands_played_this_turn = 0;
+    s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
+        ResolveHeuristicDefaultsPath("decks/Creature Giving/Creature Giving.cod")));
+    for (int k = 0; k < 6; ++k)
+    {
+        Card c = DefVp("Forbidden Orchard").card;
+        c.m_number = 900 + k;
+        s.players[0].library.push_back(c);
+    }
+    PutVp(s, "City of Brass", 7);
+    PutVp(s, "Forbidden Orchard", 26);
+    PutVp(s, "Forbidden Orchard", 24);
+    HandVp(s, "Birds of Paradise", 3);
+    HandVp(s, "Crop Rotation", 11);
+    HandVp(s, "Sylvan Scrying", 50);
+    return s;
+}
+}   // namespace
+
+TEST_CASE("payer A/B gi24 (sac-land victim pays first): Crop Rotation's {G} taps the City it sacrifices, leaving two lands for Sylvan Scrying, both worlds")
+{
+    // Pain-last makes City of Brass the last source tapped, so Birds' and Crop Rotation's {G} came off the
+    // Orchards; the additional cost (tapped-first, Orchard last) then sacrificed the UNTAPPED City, and the
+    // plan's Sylvan Scrying {1}{G} -- payable by the walk, which never models the sacrifice -- found one
+    // untapped land. The victim now pays: the City's {G} (1 life) for Crop Rotation, then it is sacrificed.
+    auto untapped_lands = [](const GameState& st)
+    {
+        int n = 0;
+        for (const Permanent& q : st.battlefield) { if (q.card.IsLand() && !q.tapped) { ++n; } }
+        return n;
+    };
+    for (int pain = -1; pain <= 0; ++pain)
+    {
+        PayerArms arms(pain, /*narrow=*/-1);
+        GameState s = MakeGi24T4();
+        TurnSolver::Plan line;
+        line.land_decided = true;
+        line.actions = { CastVp(s, "Birds of Paradise"), CastVp(s, "Crop Rotation") };
+        line.actions[1].sacrifice_land = true;   // as the enumerator stamps it (the rollout sacrifices on the flag)
+        auto check = [&](const GameState& st, const std::string& world)
+        {
+            std::string bf, gy;
+            for (const Permanent& q : st.battlefield) { bf += q.card.m_name.str() + (q.tapped ? "(T) " : " "); }
+            for (const Card& c : st.players[0].graveyard) { gy += c.m_name.str() + " "; }
+            INFO(world << " pain=" << pain << " bf: " << bf << "| gy: " << gy << "| life " << st.players[0].life);
+            CHECK(IndexOfVp(st, 7) < 0);                                        // the City was the victim
+            if (pain != 0)
+            {
+                CHECK(untapped_lands(st) == 2);                                  // Scrying's {1}{G} is still up
+                CHECK(st.players[0].life == gamesetup::StartingLife() - 1);      // the City's tap
+            }
+            else
+            {
+                // The historical payer by battlefield order: the City (first) pays Birds, Crop Rotation
+                // then sacrifices it TAPPED -- the same two lands, as the off arm of gi24 played it.
+                CHECK(untapped_lands(st) == 2);
+            }
+        };
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/true);
+        check(roll, "rollout");
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, line, true);
+        GameState exec = s;
+        eng.TakeTurn(exec, true, ResolveAllVp);
+        check(exec, "executor");
+    }
+}
+
+TEST_CASE("payer A/B gi24: without the victim promotion, pain-last strands the City (the defect's precondition)")
+{
+    // The payer half alone, on the same board: with nothing published, pain-last pays both {G} pips off the
+    // Orchards and leaves the City -- the land the cost will take -- untapped; published, the City pays.
+    GameState s = MakeGi24T4();
+    CHECK(SacLandPayVictim(s, GreenPip()) == 7);
+    {
+        PaySacVictimScope none(0);
+        GameState t = s;
+        ManaCost g; g.green = 1;
+        REQUIRE(TapForCostDirect(t, g, /*for_creature=*/true));     // Birds
+        REQUIRE(TapForCostDirect(t, g, /*for_creature=*/false));    // Crop Rotation, no victim published
+        CHECK_MESSAGE(!t.battlefield[static_cast<std::size_t>(IndexOfVp(t, 7))].tapped,
+                      "precondition: pain-last leaves the City (the victim) untapped");
+    }
+    {
+        GameState t = s;
+        ManaCost g; g.green = 1;
+        REQUIRE(TapForCostDirect(t, g, /*for_creature=*/true));
+        PaySacVictimScope victim(SacLandPayVictim(t, GreenPip()));
+        REQUIRE(TapForCostDirect(t, g, /*for_creature=*/false));
+        CHECK(t.battlefield[static_cast<std::size_t>(IndexOfVp(t, 7))].tapped);
+    }
+}
+
+TEST_CASE("payer A/B gi24: MTG_PAY_PAIN_LAST=0 is the historical payment (the predictor publishes nothing)")
+{
+    PayerArms arms(/*pain=*/0, /*narrow=*/-1);
+    GameState s = MakeGi24T4();
+    CHECK(SacLandPayVictim(s, GreenPip()) == 0);
+}
+
+TEST_CASE("payer A/B gi24: SacLandPayVictim names the ranking's untapped front, and nothing when the front is already tapped")
+{
+    GameState s = MakeGi24T4();
+    CHECK(SacLandPayVictim(s, GreenPip()) == 7);                     // City of Brass: fungible band, Orchards last
+    s.battlefield[static_cast<std::size_t>(IndexOfVp(s, 7))].tapped = true;
+    CHECK(SacLandPayVictim(s, GreenPip()) == 0);                     // a tapped front is already free
+    // An Island beside the City: less flexible, but it cannot pay Crop Rotation's {G}, so the City is
+    // still the land promoted (and for a generic pip the Island would be).
+    GameState u = MakeGi24T4();
+    PutVp(u, "Island", 40);
+    CHECK(SacLandPayVictim(u, GreenPip()) == 7);
+    ManaCost one; one.generic = 1;
+    CHECK(SacLandPayVictim(u, one) == 40);
+}
+
+TEST_CASE("payer A/B gi1565: the promoted victim is the LEAST flexible best-band land -- Crop Rotation eats the Forest, never the Stomping Ground, both worlds and both arms")
+{
+    // creature_giving std d0 block A seed 13181566 T2: Stomping Ground (fetched T1) and the Forest just
+    // played, Crop Rotation in hand. The scarcity payer taps the Forest for {G} and tapped-first then
+    // sacrifices it -- the historical line. The first build of the victim promotion published the
+    // ranking's FRONT (battlefield order: the Stomping Ground), tapped and sacrificed the dual, and the
+    // game slipped T7 -> T8.
+    for (int pain = -1; pain <= 0; ++pain)
+    {
+        PayerArms arms(pain, /*narrow=*/-1);
+        GameState s = MakeGi24T4();
+        s.battlefield.clear();
+        s.players[0].hand.clear();
+        s.turn_number = 2;
+        PutVp(s, "Stomping Ground", 50);
+        PutVp(s, "Forest", 28);
+        HandVp(s, "Crop Rotation", 12);
+        if (pain != 0) { CHECK(SacLandPayVictim(s, GreenPip()) == 28); }
+        TurnSolver::Plan line;
+        line.land_decided = true;
+        line.actions = { CastVp(s, "Crop Rotation") };
+        line.actions[0].sacrifice_land = true;
+        auto check = [&](const GameState& st, const std::string& world)
+        {
+            INFO(world << " pain=" << pain);
+            CHECK(IndexOfVp(st, 28) < 0);                                        // the Forest was eaten
+            REQUIRE(IndexOfVp(st, 50) >= 0);
+            CHECK_FALSE(st.battlefield[static_cast<std::size_t>(IndexOfVp(st, 50))].tapped);
+        };
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/true);
+        check(roll, "rollout");
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, line, true);
+        GameState exec = s;
+        eng.TakeTurn(exec, true, ResolveAllVp);
+        check(exec, "executor");
+    }
+}

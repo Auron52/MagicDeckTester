@@ -32925,6 +32925,93 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
     }
 }
 
+// THE LAND A SACRIFICE-A-LAND CAST IS ABOUT TO SACRIFICE PAYS FIRST (MTG_PAY_PAIN_LAST's companion;
+// payer A/B 2026-10-18, creature_giving std d0 block B gi24, T4 -> T5). The m_number to publish as
+// g_pay_sac_victim (PaySacVictimScope) around a sacrifice_land cast's payment, or 0.
+//
+// The additional cost is paid AFTER the mana (PerformSacrificeLandCost runs post-payment in both
+// worlds) and the victim ranking is tapped-first inside its band -- so the historical payer got the
+// victim's mana for free only when the payment happened to tap a land of the ranking's best band.
+// Pain-last made the miss systematic: City of Brass (pain) is now the LAST source the greedy taps, so
+// with Forbidden Orchards up Crop Rotation's {G} came off an Orchard, and the ranking (Orchard last --
+// MTG_SAC_SPAWN_LAND_LAST, the USER's "sacrifice Orchard last") then sacrificed the UNTAPPED City: a
+// whole mana gone, and the plan's Sylvan Scrying -- payable by the walk, which never models the
+// sacrifice -- dropped at execution. Tapping the victim for the pip costs its tap damage (1 life) and
+// nothing else: the land is leaving.
+//
+// WHICH land. Not simply the ranking's front: inside the best band the ranking is battlefield order,
+// while the payer's scarcity order would tap the LEAST flexible land there, and tapped-first then
+// sacrifices exactly that one -- a Forest, keeping the Stomping Ground (creature_giving d0 block A
+// gi1565, T7 -> T8 on the first build, which promoted the front and so sacrificed the dual). So the
+// candidates are the untapped lands the ranking would put FIRST were they tapped (asked of the
+// provider's own ranking on a probe copy -- exactly its best band, whatever the provider), and the
+// published victim is the least flexible of them (ManaSourceRank; battlefield order on a tie) --
+// the land the scarcity payer would have spent from that band anyway. A TAPPED front (some best-band
+// land already paid) -> 0: tapped-first takes it, free. A non-zero searched pin (the search chose
+// another target) -> 0: the at-resolution ranking it indexes is not this one. Rank is ordering, never
+// exclusion: a victim whose mana the cost cannot use is simply not tapped, exactly as before -- and a
+// best-band land that cannot pay any pip of `cost` is no candidate at all (a {G} Crop Rotation with an
+// Island and a City of Brass in the best band promotes the City, not the less flexible Island).
+// MTG_PAY_PAIN_LAST=0 -> 0, the historical payment byte for byte.
+inline int SacLandPayVictim(const GameState& state, const ManaCost& cost)
+{
+    if (!PayPainLastOn()) { return 0; }
+    if (g_scripted_sac_pins != nullptr
+        && g_scripted_sac_cursor < static_cast<int>(g_scripted_sac_pins->size())
+        && (*g_scripted_sac_pins)[g_scripted_sac_cursor] > 0) { return 0; }
+    std::vector<int> lands;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
+        lands.push_back(i);
+    }
+    if (lands.size() < 2) { return 0; }   // a sole land is the victim whatever pays
+    const DecisionProvider& prov = ResolveProvider(state);
+    const std::vector<int> ranked = prov.SacrificeLandCandidates(state, state.active_player_index, lands);
+    if (ranked.empty()) { return 0; }
+    const int front = ranked.front();
+    if (state.battlefield[static_cast<std::size_t>(front)].tapped) { return 0; }
+    // Can this land's mana pay some pip of `cost`? A generic pip takes anything; a coloured one needs the
+    // colour, which a colored_creature_only land never gives a sacrifice-a-land spell (an instant or a
+    // sorcery). Conservative (printed `produces`): a miss only withholds the promotion.
+    auto can_pay = [&](const CardDefinition& d) -> bool
+    {
+        if (d.params.produces.empty()) { return false; }
+        if (cost.generic > 0) { return true; }
+        const int need[6] = { cost.white, cost.blue, cost.black, cost.red, cost.green, cost.colorless };
+        for (Color c : d.params.produces)
+        {
+            const int ci = static_cast<int>(c);
+            if (ci < 0 || ci > 5 || need[ci] <= 0) { continue; }
+            if (ci < 5 && d.params.colored_creature_only) { continue; }
+            return true;
+        }
+        return false;
+    };
+    int best = front, best_rank = INT_MAX;
+    std::optional<GameState> probe;   // built only when a second untapped land can compete
+    for (int i : lands)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.tapped) { continue; }
+        if (i != front)
+        {
+            if (!probe) { probe.emplace(state); }
+            probe->battlefield[static_cast<std::size_t>(i)].tapped = true;
+            const std::vector<int> r2 = prov.SacrificeLandCandidates(*probe, state.active_player_index, lands);
+            probe->battlefield[static_cast<std::size_t>(i)].tapped = false;
+            if (r2.empty() || r2.front() != i) { continue; }   // not in the best band
+        }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !can_pay(*d)) { continue; }
+        const int r = prov.ManaSourceRank(state, *d);
+        if (r < best_rank) { best_rank = r; best = i; }
+    }
+    if (best_rank == INT_MAX) { return 0; }   // no best-band land can pay any of it
+    return state.battlefield[static_cast<std::size_t>(best)].card.m_number;
+}
+
 // Battlefield indices of the controller's creatures legal for a "sacrifice a <color> creature"
 // additional cost (Natural Order: green), most-expendable-first: tokens before real cards, then
 // lowest effective power, then battlefield order. Colour read off the live card (a token copy /

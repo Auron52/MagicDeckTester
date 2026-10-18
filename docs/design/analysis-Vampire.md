@@ -692,3 +692,52 @@ d3 b20 40 games seed 777 avg **4.3750** (was 4.4250), 5.56 s wall, 1,011 core-ms
 37. **The payer sub-integrator's open questions** (in `6939bd4d3`): MTG_HUMAN_PREPAY_DEMAND still outranks pain-last
     (91016 plan 50 costs a life in human play only); the backtracker's needless first-candidate taps; recorded
     `--tap-pref` taps still win over the new order in reference replays. [defaults: as shipped]
+
+## Payer A/B -- the slower games root-caused (2026-10-18, branch `vampires-payer2`, NOT pushed)
+The pooled held-out A/B (`test/tools/payer_pain_ab.py`, 8 decks x {std d0, d3 b10, d5 b20, 2hg d3 b10} x blocks
+A/B, both levers on vs =0, 81,600 games) left six slower games and two decks net slower (vampires +1,
+creature_giving +1). Per game, from a levers-on vs -off single-game log diff (MTG_TRACE_SOLVE /
+MTG_FSW_TRACE / the new MTG_TRACE_SOLVE_BOARD):
+
+- **vampires gi129 block B (d3 b10 and d5 b20, T5 -> T6) -- DEFECT, fixed.** The budgeted root skipped its T1
+  land drop. Pass 1's horizon leaf (the 1-ply SimulateToEnd) under "T1 Voldaren Estate" played T4 "Courtyard,
+  Pit Fighter" and paid the {R} with Secluded Courtyard (painless) instead of an Estate's pay-1-life colour; main
+  2's Pit Fighter draw-two ({1}{R}, a creature ABILITY -- only the Courtyard's colour or an unrestricted {R} may
+  pay it) then had no legal {R}, the leaf's kill slipped T5 -> T7, the T1 roots scored Estate 7 / no-land 6, and
+  the 8x costlier pass 1 (7,987 units vs 963) left no budget for pass 2. Unbudgeted (d3 b0, d8 b0) both arms win
+  T5. Sweep defect L one phase later: the activation-line hold (`act_pips_cab`) sees an activation only inside the
+  plan, and Pit Fighter's lost-life restriction makes its activation a main-2 plan. Fix: a main-1 plan that
+  attacks with such an outlet on board or among its casts owes the outlet's pips as creature-ability demand
+  (`ComputePlanTraits`, NARROW-gated; Pit Fighter is the only card it matches). Now T5 at both budgets.
+- **creature_giving gi24 block B (d0, T4 -> T5) -- DEFECT, fixed.** Pain-last tapped the Forbidden Orchards for
+  Birds' and Crop Rotation's {G}; the additional cost (tapped-first, Orchard last) then sacrificed the UNTAPPED
+  City of Brass and the plan's Sylvan Scrying (payable by the walk, which never models the sacrifice) had one
+  land. Fix: `SacLandPayVictim` (SpellEffects.h) publishes the land the cost will take as the sac-fodder victim
+  around the cast's payment, both worlds (pain-last-gated). Its first build promoted the ranking's FRONT and
+  sacrificed a Stomping Ground over a Forest (gi1565 block A, T7 -> T8, a new slower game in the re-run); it now
+  promotes the LEAST flexible best-band land that can pay a pip of the cost -- what the scarcity payer would have
+  tapped from that band. Burn (Shard Volley, all Mountains) is byte-identical.
+- **th gi1155 block A (d0, T6 -> T9 = a loss) -- legitimate.** The painless order routes both Fiery Islet taps
+  through the Cascade Bluffs, so T5 pays TWO Treasure Hunts for the 2 life the old order spent on ONE (both
+  Islets for a single {1}{U}); the d0 runner casts the second, it draws the rest of the library (no nonland card
+  left), and the T6 draw decks it. Off could not afford the second Hunt, cast it T6 with Land's Edge and won.
+  The payment is strictly better; the deck-out is the d0 policy's (open question 38).
+- **minotaur gi83 block A (d0, T5 -> T6) -- legitimate.** Narrow-first pays Slaughter-Priest with the two
+  Territories and keeps the Courtyard + Blood Crypt, so the d0 runner can now pump Burning-Fist on T4; it
+  discards Bloodstained Mire for it, and T5 then has neither the fetch's Slaughter-Priest sacrifice trigger
+  (+2/+0) nor a card for the T5 pump -- 2 short of off's T5 kill. Same total pump damage; the discard choice and
+  the timing are the d0 policy's.
+- **soldiers gi1554 block B (d0, T5 -> T6) -- legitimate** (the probe's gi49/817 class). Champion's {W} comes
+  off a Territory (painless) instead of Silent Clearing (1 life); the d0 runner then sacrifice-cycles the
+  untapped Clearing with the other Territory, is a land short on T4 and cannot activate Recruitment Officer.
+
+**Re-run** (same manifest, final binary, one pooled batch, 22 threads): per-deck net vampires -1, auras 0,
+creature_giving -3, minotaur -2, pirates -2, selesnya 0, soldiers 0 (d0 +1, 2hg -1), th -4; 0 slower in any
+searched cell; slower games: th gi1155, minotaur gi83, soldiers gi1554 (the three d0 games above). The =0 arm is
+byte-identical to the first run (64/64 wins files, digests included). Tests: `test_vampires_payer.cpp` "payer
+A/B ..." (gi129 both worlds + scoping; gi24 both worlds and both arms; the predictor's band / tapped / cost
+rules; gi1565's least-flexible pick).
+
+38. **A flood engine that empties the library** (th gi1155): the d0 runner casts a DrawUntilNonland Treasure
+    Hunt when the library holds no nonland card and no same-turn kill, and decks itself. A provider prune
+    (TreasureHuntProvider::ShouldCastDrawEngine) would be the place. [default: unchanged -- d0 policy, yours]
