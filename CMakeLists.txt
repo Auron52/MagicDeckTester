@@ -340,6 +340,7 @@ add_executable(mtg-test
     test/unit/test_vampires_lords.cpp
     test/unit/test_vampires_convoke.cpp
     test/unit/test_vampires_sweep.cpp
+    test/unit/test_vampires_payer.cpp
     test/unit/test_sigardas_aid.cpp
     test/unit/test_cast_riders.cpp
     test/unit/test_forge_anew.cpp

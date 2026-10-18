@@ -229,6 +229,37 @@ inline bool LineSpareTightOn()
     return heurarm::Flag(heurarm::LINE_SPARE_TIGHT, env_on);
 }
 
+// MTG_PAY_PAIN_LAST (Vampires sweep F, 2026-10-18; DEFAULT ON, =0 restores the historical order) --
+// COLOURED MANA THAT COSTS LIFE IS THE PAYER'S LAST RESORT. The scarcity greedy (TapForCostSharedOnce,
+// ManaPayment.cpp) ranks a source whose tap for the pip being paid is a damaging COLOURED mode behind
+// every painless plain land, and the backtracker (TapForCostBacktrackTop, SpellEffects.cpp -- the
+// per-cast fallback AND the whole-turn prepay's joint solve) first solves with those modes withheld,
+// re-solving unrestricted only when no painless assignment exists; the prepay's shrink post-pass
+// (BatchPrepayMainCasts) refuses a give-back whose re-solve costs life. A painland's painless {C} and Ancient
+// Tomb's colourless burst are not coloured modes and are untouched. Unarmed boards only: Prevent Damage's
+// armed policy (dmgev::PainAwarePay / PayWithPain) owns pain there, deliberate pain included. One payer
+// for executor and rollout, so lockstep holds by construction.
+inline bool PayPainLastOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_PAIN_LAST", true);
+    return heurarm::Flag(heurarm::PAY_PAIN_LAST, env_on);
+}
+
+// MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
+// among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
+// Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's
+// colour is the only restricted mana that can also pay a creature source's ABILITY, so it is the one to
+// keep. A within-rank tiebreak in the greedy, and the first equally-flexible source the whole-turn
+// prepay's shrink post-pass (BatchPrepayMainCasts) tries to give back. No backtracker candidate order:
+// its first-found assignment taps the leading sources whenever a solution exists below them (the
+// generic-representative colour is explored first), so an order among two cco lands it taps either way
+// decides nothing -- the shrink is what returns a surplus source. Same shared payer, same lockstep.
+inline bool PayNarrowRestrictedFirstOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_NARROW_RESTRICTED_FIRST", true);
+    return heurarm::Flag(heurarm::PAY_NARROW_RESTRICTED_FIRST, env_on);
+}
+
 // MTG_DRAGONSTORM_DRAGON_ORDER (DEFAULT ON; =0 disables) -- DragonstormProvider::CastOrderingCandidates
 // also offers every distinct order of the set's hard-cast Dragons (USER order on). Read only there; the
 // searched order rides Plan::searched_order into both apply worlds.
