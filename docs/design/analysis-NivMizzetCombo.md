@@ -51,7 +51,8 @@ Running: Stage 4 `logs/stage4.sh` (status `logs/stage4.status`; analyzer JSON
 games stuck in PutBackCandidates per perf), `decks/NivMizzetCombo/NivMizzetCombo.profile.json`
 WRITTEN (uncommitted); the cost-aggregate diagnostic batch (reframe A/B, ~400 games d5/b20) is in
 its own slow tail.
-NEXT, in order: (1) aura negative control -> commit `niv-aura`, ff into niv-analysis; (2) Stage 4
+Aura negative control RESULT (20 games d3 b10 s5001): retargets 93,663 -> 15,352 (-84%, a SECOND path remains -- find it with MTG_ENCHANT_RETARGET_ABORT=1 on the niv-aura binary); one game moved, gi10 T4 -> T5 (an identity fold should only move play via budget redistribution -- re-run gi10 at --budget-ms 0 on both arms before committing).
+NEXT, in order: (1) finish the aura fold (second path, gi10 at b0) -> commit `niv-aura`, ff into niv-analysis; (2) Stage 4
 finishes -> read `stage4_analyze.json` (mulligan_flags, card scores), commit the profile;
 `python3 scripts/provider_audit.py --check` (the deck is audited once it has a profile);
 (3) integrate niv-bs; rebuild niv; (4) `python3 logs/add_niv_rows.py` (suite rows, all three tiers,
