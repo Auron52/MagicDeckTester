@@ -5602,7 +5602,7 @@ struct Acc { double sum[2] = { 0, 0 }; double sumsq[2] = { 0, 0 }; long long cnt
 // Reproduces the in-game A/B delta cheaply. VALIDATION: slivers full-bottom raw -> +~0.006 (in-game
 // was +0.0057). Knobs: MTG_KEEP_SIM_FLOOR (sub-table floor R, default 2 = the project's adaptive_
 // bottom floor), MTG_KEEP_SIM_TRIALS (Monte-Carlo floor-noise realizations, default 128),
-// MTG_KEEP_SIM_FLIP_EPS (refine stop gate, default 0.02 = cfg.flip_eps), MTG_KEEP_SIM_SEED. Reads the
+// MTG_KEEP_SIM_FLIP_EPS (refine stop gate, default 0.10 = cfg.flip_eps), MTG_KEEP_SIM_SEED. Reads the
 // pooled true means+variances directly; writes nothing (a measurement) -> returns without a profile.
 // Extracted from RunKeepMerge verbatim (B1). The block always returned, so the caller now returns
 // unconditionally after the call -- same control flow, one less 330-line branch in a 958-line function.
@@ -5618,7 +5618,7 @@ static void RunAdaptiveBottomRegretSim(std::ostream& os, const Decklist& deck,
     const int trials = []{ const char* s = std::getenv("MTG_KEEP_SIM_TRIALS");
         return (s && *s) ? std::max(1, std::atoi(s)) : 128; }();
     const double flip_eps = []{ const char* s = std::getenv("MTG_KEEP_SIM_FLIP_EPS");
-        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();
     const uint64_t sim_seed = []{ const char* s = std::getenv("MTG_KEEP_SIM_SEED");
         return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xADA1B0770DULL; }();
     // MTG_KEEP_SIM_CAP=k: model a cheaper gen whose sub-tables (both the full baseline AND the
@@ -6305,7 +6305,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     // SYNTH_BOTTOM_R (which corrupts the argmin with noise and mis-plays), this reproduces the SELECTIVE
     // refinement the real gen does -> validated to PLAY like a real adaptive gen (slivers in-game).
     //   floor = MTG_KEEP_SYNTH_ABOT_FLOOR (default 2); cap for refined cells = SYNTH_R if set else raw R;
-    //   flip_eps = MTG_KEEP_SYNTH_ABOT_FLIP_EPS (default 0.02); one deterministic realization (ABOT_SEED).
+    //   flip_eps = MTG_KEEP_SYNTH_ABOT_FLIP_EPS (default 0.10); one deterministic realization (ABOT_SEED).
     long long recon_bottom_floor = -1;
     if (EnvOn("MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM"))
     {
@@ -6315,7 +6315,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
             const long long ab_floor = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLOOR");
                 return (s && *s) ? std::max<long long>(1, std::atoll(s)) : 2LL; }();
             const double ab_eps = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLIP_EPS");
-                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();
             const uint64_t ab_seed = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_SEED");
                 return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xABE770DDULL; }();
             const long long ab_cap = (synth_r > 0) ? synth_r : std::max<long long>(1, effective_R);

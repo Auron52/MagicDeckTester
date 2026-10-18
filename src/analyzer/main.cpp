@@ -203,7 +203,7 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     // R_BATCH the per-wave add -- those tune the schedule without being able to switch it off.
     cfg.r_batch   = env_int("MTG_KEEP_R_BATCH", 16, 1);
     cfg.flip_eps  = []{ const char* s = std::getenv("MTG_KEEP_FLIP_EPS");
-                        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+                        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();   // USER 2026-10-18: 0.10 for every run
     cfg.se_prior  = []{ const char* s = std::getenv("MTG_KEEP_SE_PRIOR");
                         return (s && *s) ? std::max(0.0, std::atof(s)) : 8.0; }();
     // max_mull is FIXED at 6 (a 7-card hand down to keep-1) -- there is no knob. A shipped profile
