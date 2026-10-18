@@ -472,6 +472,16 @@ inline bool PrepayFloatPoolOn()
     return heurarm::Flag(heurarm::PREPAY_FLOAT_POOL, env_on);
 }
 
+// MTG_RAMP_FEED_ROUTE -- DEFAULT ON; =0 restores the feed-blind greedy. The shared per-cast payer
+// re-pays a cast whose greedy spent the last feeder of an untapped ramp filter, routing that feeder
+// through the filter, when only the routed board still pays the rest of the line (RampFeedRouteRepay,
+// ManaPayment.cpp). Executor and rollout share the payer, so the two stay in lockstep.
+inline bool RampFeedRouteOn()
+{
+    static const bool env_on = EnvOn("MTG_RAMP_FEED_ROUTE", true);
+    return heurarm::Flag(heurarm::RAMP_FEED_ROUTE, env_on);
+}
+
 // MTG_PAY_ROLLBACK -- DEFAULT OFF until measured. The same-turn mana-payment rollback: see
 // src/ai/PayRollback.h. Read in the shared payment entry and both dig-gate twins (lockstep).
 inline bool PayRollbackOn()

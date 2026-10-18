@@ -18,6 +18,7 @@
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
 #include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
+#include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
 #include <vector>
 
 // ---- NEEDS-BASED TAP ORDER (MTG_NEEDS_TAP_ORDER; NeedsTapOrderOn in EngineFlags.h) -------------
@@ -617,6 +618,41 @@ struct FloatGenericHoldScope
     FloatGenericHoldScope(const FloatGenericHoldScope&)            = delete;
     FloatGenericHoldScope& operator=(const FloatGenericHoldScope&) = delete;
 };
+
+// MTG_RAMP_FEED_ROUTE: the scarcity greedy may route a ramp filter's LAST feeder through it. Armed only
+// around the payments RampFeedRouteRepay (TapForCostShared) chose for it -- its scratch trial and the
+// real payment that repeats it; false for every other payment, so the greedy is untouched there.
+static thread_local bool t_ramp_route = false;
+struct RampRouteScope
+{
+    bool prev;
+    RampRouteScope() : prev(t_ramp_route) { t_ramp_route = true; }
+    ~RampRouteScope() { t_ramp_route = prev; }
+    RampRouteScope(const RampRouteScope&)            = delete;
+    RampRouteScope& operator=(const RampRouteScope&) = delete;
+};
+
+// A source that can FEED a ramp filter's generic {1} on its own this payment: an untapped mana source
+// of ours whose mana is unrestricted (a creature-only / big-spell-only unit may not pay an activation)
+// and that needs no feed itself -- a plain land, rock or tappable dork, or a filter tapped for its free
+// {C}. Not a ramp filter or an any-colour filter with no free mode (each needs a feed of its own), and
+// not a source that makes no mana right now (an uncharged storage land, Deathrite with no graveyard
+// land, Arbor Elf with no Forest). An approximation of the payer's own `usable`, shared by the two
+// strand tests below; the route itself is only ever taken after a real payment trial proves it.
+static bool RampFeederLive(const GameState& s, int active, const Permanent& p)
+{
+    if (p.controller_index != active || p.tapped || p.def_absent) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr) { return false; }
+    const CardParams& q = d->params;
+    if (q.ramp_filter || (q.any_color_filter && q.filter_no_free_colorless)) { return false; }
+    if (q.creature_mana_only || BigSpellOnlySource(q)) { return false; }
+    const bool src = d->tmpl == CardTemplate::BasicLand || q.mana_rock
+                  || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield))
+                  || PaySacSpendableNow(s, p, *d);
+    if (!src) { return false; }
+    return StorageSourceLive(p, *d) && GraveyardFuelLive(s, active, *d) && ManaSubtypeGateLive(s, active, *d);
+}
 
 static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
                                      std::uint64_t reserved_mask, ManaPool* available,
@@ -1802,6 +1838,104 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     }
                     if (chosen_feeds && feeders == 1 && !chain_feed) { best_i = ff_i; best_kind = 2; }
                 }
+            }
+            // RAMP-FILTER FEED ROUTE (MTG_RAMP_FEED_ROUTE; t_ramp_route is armed only for a payment that
+            // RampFeedRouteRepay proved needs it -- see there). The ramp_filter twin of the feed-aware
+            // reroute above: this loop never offers a ramp filter (it `continue`s on one), so when the
+            // chosen direct source is the LAST thing that could feed an untapped ramp filter, tapping
+            // it straight strands the filter for the turn. Route it AS the filter's {1} instead: the
+            // same source is spent, the filter's {U}{R} lands in the pool, one unit pays this pip and
+            // the other floats -- one more unit than the direct tap, and nothing the direct tap kept,
+            // because the filter it kept had no feed left. Only a ONE-mana direct source (a two-mana
+            // tap leaves its second unit floating, which still feeds the filter -- no strand), only
+            // with nothing floating (a floating unit feeds it), never for a snow pip (the filter's
+            // output carries the filter's snow-ness, not the pip's) or inside a feed.
+            int rr_f = -1;
+            if (t_ramp_route && best_kind == 1 && !paying_snow && !feeding && !restricted_in_float
+                && floating.Total() == 0)
+            {
+                const Permanent& sp = state.battlefield[best_i];
+                const CardDefinition* sd = sp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(sp.card);
+                const bool one_mana = sd != nullptr && PermanentManaYield(state, sp, *sd) == 1
+                                   && RampFeederLive(state, active, sp);
+                for (int i = 0; one_mana && i < bn && rr_f < 0; ++i)
+                {
+                    if (i == best_i) { continue; }
+                    Permanent& f = state.battlefield[i];
+                    if (f.controller_index != active || f.tapped || f.def_absent) { continue; }
+                    const CardDefinition* fd = CardDatabase::Instance().LookupCached(f.card);
+                    if (fd == nullptr || !fd->params.ramp_filter || fd->params.produces.empty() || !usable(f, *fd)) { continue; }
+                    if (!any)
+                    {
+                        bool makes = false;
+                        for (Color c : fd->params.produces) { if (c == needed) { makes = true; break; } }
+                        if (!makes) { continue; }
+                    }
+                    bool other = false;
+                    for (int k = 0; k < bn && !other; ++k)
+                    {
+                        if (k == best_i || k == i) { continue; }
+                        const Permanent& o = state.battlefield[k];
+                        if (!RampFeederLive(state, active, o)) { continue; }
+                        if (reserved_mask && k < 64 && (reserved_mask & (1ull << k))) { continue; }
+                        other = true;
+                    }
+                    if (!other) { rr_f = i; }
+                }
+            }
+            if (rr_f >= 0)
+            {
+                // The feed: the chosen source's one unit (its painless mode, as on any generic tap),
+                // consumed at once -- the pool was empty, so ConsumeFloatingAny takes exactly it.
+                Permanent& sp = state.battlefield[best_i];
+                const CardDefinition& sdef = *CardDatabase::Instance().LookupCached(sp.card);
+                const std::vector<Color>& sprod = pay_produces(sdef, &sp);
+                if (!sprod.empty())
+                {
+                    tap_source(sp, sdef, DripLandAnyPipColor(state, active, sdef, sprod[0]));
+                    Color fed;
+                    if (ConsumeFloatingAny(floating, fed))
+                    {
+                        // ...then the filter, exactly as the legacy ramp-filter step (4) taps it.
+                        Permanent& f = state.battlefield[rr_f];
+                        const CardDefinition& fdef = *CardDatabase::Instance().LookupCached(f.card);
+                        f.tapped = true;
+                        dmgev::MarkLandTap(state, f);   // Manabarbs: a land tapped for mana (armed only)
+                        for (Color c : fdef.params.produces) { floating.Add(c, 1); }
+                        if (available && available->wild > 0) { --available->wild; }  // ramp filter counted as 1 wild
+                        if (LandAuraBonus(state, f) > 0)
+                        {
+                            ManaPool bonus;
+                            LandAuraAddToPool(bonus, state, f);
+                            floating.AddPool(bonus);
+                            if (available)
+                            {
+                                available->white -= bonus.white; available->blue      -= bonus.blue;
+                                available->black -= bonus.black; available->red       -= bonus.red;
+                                available->green -= bonus.green; available->colorless -= bonus.colorless;
+                                available->wild  -= bonus.wild;
+                            }
+                        }
+                        // A generic pip spends the output colour the REST of the line owes least, so the
+                        // unit that floats is the one a later pip can use (pay() honours spare_take).
+                        if (any)
+                        {
+                            int later[5];
+                            LineOwedAfterOwnPips(later);
+                            int best_c = -1, best_owed = 1 << 30;
+                            for (Color c : fdef.params.produces)
+                            {
+                                const int ci = static_cast<int>(c);
+                                const int owed = (ci >= 0 && ci < 5) ? later[ci] : 0;
+                                if (owed < best_owed) { best_owed = owed; best_c = ci; }
+                            }
+                            spare_take = best_c;
+                        }
+                        return true;
+                    }
+                }
+                // Unreachable in practice (a one-mana source always makes its unit); fall back to the
+                // direct tap below if the feed could not be raised.
             }
             Permanent& bp = state.battlefield[best_i];
             // MUST use the same resolver the SELECTION loop above used. This site re-derives the
@@ -5375,6 +5509,215 @@ static thread_local int t_pay_nest = 0;
 static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool for_creature,
                                  ManaPool* available, bool honor_legacy_cco);
 
+// ---- MTG_RAMP_FEED_ROUTE: re-pay a cast that strands a ramp filter the rest of its line needed -------------
+//
+// THE HOLE (NivMizzetCombo claude-play sweep, seed 71005 T3; adversarially reproduced). Board Island + Sulfur
+// Falls, land drop Ferrous Lake ("{1}, {T}: Add {U}{R}"), line {Izzet Signet {2}, Generator Servant {1}{R}}.
+// The scarcity greedy never offers a ramp filter (it is "left to the backtracker"), so it paid the Signet
+// with Island + Falls and SUCCEEDED -- and the complete backtracker only runs when the greedy fails. The
+// Servant then met an unfed Lake and an unfed Signet: dropped. The legal line routes one land THROUGH the
+// Lake ({U}{R} pays the Signet) and feeds the Signet with the other ({U}{R} pays the Servant). The
+// whole-turn prepay cannot see it either: the Signet mints its mana mid-turn (PP_PRODUCER). So the line was
+// unreachable at any budget -- a completeness hole, not a tap-order preference.
+//
+// THE REPAIR is the "re-solve when a later cast fails" shape, decided BEFORE the payment so a payment is
+// still made exactly once: when the line still owes casts after this one and an untapped ramp filter could
+// be stranded by it, the payment is TRIED on a scratch board. Only if that trial strands a ramp filter
+// (nothing left to feed it) AND leaves the rest of the line unpayable is the routed trial run (t_ramp_route:
+// the last feeder goes through the filter -- see the scarcity loop); it is taken only if the rest of the line
+// IS payable on the board it leaves. "The rest of the line" is g_line_unpaid_cost net of this payment,
+// judged as one bill by the complete backtracker, with this cast's own untapped rock on the board (its mana
+// is what the later casts meet). Neither trial credits a LATER cast's production. On the greedy board that
+// can only matter for a FREE later producer -- the strand left nothing to pay for any other, which is why
+// the filter was stranded -- so the comparison is like-for-like; and production added to the routed board
+// can only keep its bill payable.
+//
+// COST. The precheck is a board scan; the trials run only when a ramp filter is untapped, the line owes
+// more, and this payment needs at least as many taps as the filter has feeders (it cannot strand one
+// otherwise). Executor and rollout share this payer, so the two worlds take the same route.
+//
+// HUMAN PLAY TOO, on ActLineHoldMask's argument: the human CHOSE a line holding both casts, so paying it in
+// a way that drops one is not a tap-order preference being overridden, it is the line not being executed.
+// The route fires only where the plain payment would have dropped a later cast of that line, so a replayed
+// reference moves only if its recorded line itself lost a cast to this hole; its --tap-pref preference is
+// consulted by the trials exactly as by the real payment.
+
+// A warm per-thread scratch board pool (PayScratch's shape in TurnSolver.cpp): the trials copy-ASSIGN into
+// a reused GameState, so their zone vectors reuse capacity. A deque, so a nested trial (none today) could
+// never relocate a board an outer frame holds.
+namespace
+{
+struct RampScratch
+{
+    explicit RampScratch(const GameState& src)
+    {
+        static thread_local std::deque<GameState> pool;
+        static thread_local std::size_t           depth = 0;
+        while (pool.size() <= depth) { pool.emplace_back(); }
+        m_state = &pool[depth];
+        m_depth = &depth;
+        ++depth;
+        *m_state = src;
+    }
+    ~RampScratch() { --(*m_depth); }
+    RampScratch(const RampScratch&)            = delete;
+    RampScratch& operator=(const RampScratch&) = delete;
+    GameState& Board() const { return *m_state; }
+private:
+    GameState*   m_state = nullptr;
+    std::size_t* m_depth = nullptr;
+};
+
+// The rest of the applying line after THIS payment: the line hold net of this cost (clamped per field,
+// SubManaCost's rule -- the same subtraction the cast sites make once the payment lands).
+ManaCost RampLaterBill(const ManaCost& cost_in)
+{
+    ManaCost later = g_line_unpaid_cost;
+    SubManaCost(later, cost_in);
+    return later;
+}
+
+// The cheap gate. A ramp filter of ours is untapped and could be fed now, and this payment needs at least
+// as many taps as there are feeders (a payment of n mana taps at most n sources, so with more feeders than
+// that one always survives).
+bool RampFeedRoutePrecheck(const GameState& s, const ManaCost& cost_in, const ManaCost& later)
+{
+    if (later.ManaValue() <= 0) { return false; }
+    const int need = cost_in.ManaValue() - static_cast<int>(s.floating_mana.Total());
+    if (need <= 0) { return false; }
+    const int active = s.active_player_index;
+    bool any_rf = false;
+    int feeders = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.ramp_filter && !d->params.produces.empty()) { any_rf = true; continue; }
+        if (RampFeederLive(s, active, p)) { ++feeders; }
+    }
+    return any_rf && feeders >= 1 && feeders <= need;
+}
+
+// Did the payment from `pre` to `post` leave a ramp filter untapped with nothing to feed it (no feeder up,
+// nothing floating) while one of ITS feeders was spent? That is the strand the route repairs.
+bool RampFilterStranded(const GameState& pre, const GameState& post)
+{
+    if (post.floating_mana.Total() > 0) { return false; }
+    const int active = post.active_player_index;
+    bool stranded_rf = false;
+    for (const Permanent& p : post.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.ramp_filter && !d->params.produces.empty()) { stranded_rf = true; continue; }
+        if (RampFeederLive(post, active, p)) { return false; }   // a feeder survived
+    }
+    if (!stranded_rf) { return false; }
+    // ...and the payment spent a feeder (a filter with no feeder to begin with was not stranded by it).
+    for (const Permanent& p : pre.battlefield)
+    {
+        if (!RampFeederLive(pre, active, p)) { continue; }
+        for (const Permanent& q : post.battlefield)
+        {
+            if (q.card.m_number == p.card.m_number && q.controller_index == active && q.tapped) { return true; }
+        }
+    }
+    return false;
+}
+
+// Can the rest of the line be paid on `s` -- with the cast being paid now on the board as an untapped rock
+// when it is one (`rock`; it enters untapped and the later casts meet its mana)? One complete backtracker
+// solve over the line's remaining bill, starting from what floats -- behind the payer's own fail-fast
+// AMOUNT bound (PaymentManaCovers: a short total is a proof of unpayability), which also tells the caller
+// when the board is short of mana outright rather than of a route (`amount_short`).
+bool RampLaterPayable(const GameState& s, const ManaCost& later, const CardDefinition* rock,
+                      bool* amount_short = nullptr)
+{
+    RampScratch sc(s);
+    GameState& c = sc.Board();
+    if (rock != nullptr)
+    {
+        Permanent perm;
+        perm.card             = rock->card;
+        perm.controller_index = c.active_player_index;
+        perm.owner_index      = c.active_player_index;
+        c.battlefield.push_back(perm);
+    }
+    if (amount_short != nullptr) { *amount_short = false; }
+    if (!PaymentManaCovers(c, /*for_creature=*/false,
+                           later.ManaValue() - static_cast<int>(c.floating_mana.Total())))
+    {
+        if (amount_short != nullptr) { *amount_short = true; }
+        return false;
+    }
+    ManaPool start = c.floating_mana;
+    return TapForCostBacktrack(c, later, /*for_creature=*/false, start);
+}
+}   // namespace
+
+// MTG_RAMP_ROUTE_STATS=1 (diagnostic only, printed at exit): how often each stage of the repair runs --
+// the precheck passing is what costs a scratch trial, so `trial` over payments is the overhead to watch;
+// `fired` is how often the plain greedy would have dropped a later cast of its line.
+namespace
+{
+std::atomic<unsigned long long> g_rr_trial{0}, g_rr_strand{0}, g_rr_routed{0}, g_rr_fired{0};
+struct RampRouteStats
+{
+    ~RampRouteStats()
+    {
+        if (!EnvOn("MTG_RAMP_ROUTE_STATS")) { return; }
+        std::fprintf(stderr, "[ramp-route] trials=%llu stranded=%llu routed_trials=%llu fired=%llu\n",
+                     g_rr_trial.load(), g_rr_strand.load(), g_rr_routed.load(), g_rr_fired.load());
+    }
+};
+RampRouteStats g_rr_stats;
+}   // namespace
+
+static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, bool for_creature,
+                               ManaPool* available, bool honor_legacy_cco)
+{
+    const ManaCost later = RampLaterBill(cost_in);
+    if (!RampFeedRoutePrecheck(state, cost_in, later)) { return false; }
+    g_rr_trial.fetch_add(1, std::memory_order_relaxed);
+    // The cast being paid, if it is a mana rock that enters untapped (Izzet Signet, Sol Ring).
+    const CardDefinition* rock = nullptr;
+    if (const Card* pc = PayingSpellCard())
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(*pc);
+        if (d != nullptr && d->params.mana_rock && !d->card.IsCreature() && !d->params.enters_tapped) { rock = d; }
+    }
+    // Both trials are silent: no game-log line, no [tapdbg], no human chooser (RevealLogPause) -- except
+    // the reference replay's tap preference (--tap-pref), a pure predicate the REAL payment consults, so a
+    // trial must too or it would not be a trial of that payment.
+    TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
+    RevealLogPause _quiet;
+    g_play_tap_pref_chooser = tap_pref;   // the pause's destructor restores the same pointer
+    RampScratch a(state);
+    ManaPool av_a = available ? *available : ManaPool{};
+    if (!TapForCostSharedDiag(a.Board(), cost_in, for_creature, available ? &av_a : nullptr, honor_legacy_cco))
+    { return false; }
+    if (!RampFilterStranded(state, a.Board())) { return false; }
+    g_rr_strand.fetch_add(1, std::memory_order_relaxed);
+    // Short of MANA, not of a route: the routed trial leaves the same amount (the filter's +1 the bound
+    // already credits on the greedy board becomes the routed board's floating unit), so it cannot pay
+    // what this board cannot either -- no second trial.
+    bool a_short = false;
+    if (RampLaterPayable(a.Board(), later, rock, &a_short) || a_short) { return false; }
+    g_rr_routed.fetch_add(1, std::memory_order_relaxed);
+    RampScratch b(state);
+    ManaPool av_b = available ? *available : ManaPool{};
+    bool ok_b;
+    {
+        RampRouteScope _route;
+        ok_b = TapForCostSharedDiag(b.Board(), cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco);
+    }
+    const bool fire = ok_b && RampLaterPayable(b.Board(), later, rock);
+    if (fire) { g_rr_fired.fetch_add(1, std::memory_order_relaxed); }
+    return fire;
+}
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
@@ -5382,6 +5725,12 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // audit below wants the OUTERMOST failure, the same depth-1 notion the damage flush uses.
     ++t_pay_nest;
     struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
+    // MTG_RAMP_FEED_ROUTE (see RampFeedRouteRepay): the outermost payment of an applying line, decided
+    // before it is made. Off, outside a line, or with no ramp filter up: a board scan and out.
+    std::optional<RampRouteScope> _ramp_route;
+    if (t_pay_nest == 1 && !t_ramp_route && RampFeedRouteOn()
+        && RampFeedRouteRepay(state, cost_in, for_creature, available, honor_legacy_cco))
+    { _ramp_route.emplace(); }
     bool ok;
     if (!state.dmg_events_armed)
     { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
