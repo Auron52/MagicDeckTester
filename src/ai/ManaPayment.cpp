@@ -1371,6 +1371,37 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // Needs-based order (MTG_NEEDS_TAP_ORDER): demand/supply once per payment.
             const bool nd_live = NeedsTapOrderOn();
             if (nd_live && !nd_ready) { nd_ready = true; ComputeNeedsDemandSupply(state, active, cost, nd_D, nd_S); }
+            // Pain-last / narrow-restricted-first (see the key block below). Unarmed boards only for the
+            // pain half: Prevent Damage's armed policy (dmgev::PainAwarePay) owns pain there.
+            const bool pay_pain_last    = PayPainLastOn() && !state.dmg_events_armed;
+            const bool pay_narrow_first = PayNarrowRestrictedFirstOn();
+            constexpr int kPainBand = 64;   // > every plain-ladder rank (0..59)
+            // A FED filter's colour mode (kind 2) is only as painless as its feed: the kind-2 tap below
+            // feeds it from the float when one of its colours is there, else from an untapped source of
+            // one of its colours. Painful when every such feeder is a pain source -- treasure_hunt d0
+            // gi680 T5: with Fiery Islet (a horizon land, every tap 1 life) the ONLY {U}/{R} feeder, the
+            // pain band sent Treasure Hunt's {U} through Cascade Bluffs fed BY the Islet -- the same life,
+            // plus the Bluffs, and Land's Edge's {R}{R} stranded. Mirrors the tap site's feeder test.
+            auto filter_feed_painful = [&](const CardDefinition& fd) -> bool
+            {
+                if (!restricted_in_float)
+                {
+                    for (Color c : fd.params.produces)
+                    { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { return false; } }
+                }
+                for (int q = 0; q < bn; ++q)
+                {
+                    const Permanent& fq = state.battlefield[q];
+                    if (fq.controller_index != active || fq.tapped) { continue; }
+                    const CardDefinition* sd = CardDatabase::Instance().LookupCached(fq.card);
+                    if (!sd || IsManaConversionSource(sd->params) || !usable(fq, *sd)) { continue; }
+                    if (sd->params.creature_mana_only || BigSpellOnlySource(sd->params)) { continue; }
+                    if (sd->params.tap_self_damage > 0) { continue; }   // a painful feeder
+                    for (Color pc : EffectiveProducesFor(state, active, *sd, &fq))
+                    { for (Color ic : fd.params.produces) { if (pc == ic) { return false; } } }
+                }
+                return true;
+            };
             // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): the needs model's demand/supply for this
             // pip and every candidate's key, real payments only (the [tapdbg]/[paydbg] contract).
             static const bool s_nddbg = EnvOn("MTG_TAPDBG");
@@ -1719,9 +1750,52 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // counter for a lone generic pip over an Island (th d3/d5 s3003 gi69, T5 -> T6).
                 // hold is 0 for every plain-tier source (ManaSourceHoldValue is creature-only, and
                 // creatures sit in the 64+ band), so the plain key's fourth slot is free for it.
+                //
+                // PAIN LAST + NARROW RESTRICTED FIRST (MTG_PAY_PAIN_LAST / MTG_PAY_NARROW_RESTRICTED_FIRST,
+                // EngineFlags.h; Vampires sweep F + L). Both are folded INTO the plain-land key, so with
+                // both levers off it is the historical key exactly (pain 0 adds nothing; the doubled
+                // fraction is a monotone relabel):
+                //   * a source whose tap for THIS pip is a damaging COLOURED mode is ranked behind every
+                //     painless plain land (key[2] += kPainBand, past the whole 0-59 plain ladder, still
+                //     ahead of the reserve tiers and the creature band in key[0]). Voldaren Estate's
+                //     pay-1-life colour tied Secluded Courtyard at 59, so battlefield order decided and a
+                //     painless {B} went unused (s91007 T3, s91017 T5, s91018 T4: one life each, and the
+                //     Estate's {T} that its Blood activation wants). A painland's GENERIC pip still taps
+                //     its painless {C} (DripLandAnyPipColor) and is not demoted; nor is Ancient Tomb's
+                //     colourless burst (not a coloured mode). A FED filter's colour mode carries its
+                //     feed's pain (filter_feed_painful above). Rank is ordering, never exclusion: when the
+                //     painful source is the only one left that makes the colour, it still pays.
+                //   * among EQUAL keys, a colored_creature_only source WITH colored_creature_ability_ok
+                //     (Secluded Courtyard) taps after one without (Unclaimed Territory): its colour is the
+                //     only restricted mana that can also pay a creature source's ABILITY (s91001 T4: Pit
+                //     Fighter's {R} took the Courtyard and its {1}{R} activation then had no legal {R}).
+                //     They always share a rank (identical params but the one flag), so a tiebreak is
+                //     enough -- and it never moves the Courtyard behind an UNrestricted source, which a
+                //     narrow-restricted rank deliberately spends it ahead of (NarrowRestrictedMask).
+                int pain = 0, broad = 0;
+                if (kind == 2 && pay_pain_last) { pain = filter_feed_painful(*def) ? 1 : 0; }
+                if (kind == 1)
+                {
+                    if (pay_pain_last && def->params.tap_self_damage > 0)
+                    {
+                        if (!any) { pain = (needed != Color::Colorless) ? 1 : 0; }
+                        else
+                        {
+                            // A generic pip takes the painless {C} mode when the source has one (the
+                            // DripLandAnyPipColor rule tap_source applies below).
+                            bool has_c = false;
+                            if (PainlandCModeEnabled())
+                            { for (Color c : def->params.produces) { if (c == Color::Colorless) { has_c = true; break; } } }
+                            pain = has_c ? 0 : 1;
+                        }
+                    }
+                    if (pay_narrow_first && def->params.colored_creature_only
+                        && def->params.colored_creature_ability_ok) { broad = 1; }
+                }
                 int key[4];
                 if (kind != 5 && rank >= 0 && rank < 60)
-                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank; key[3] = harm % kNdScale; }
+                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank + pain * kPainBand;
+                  key[3] = (harm % kNdScale) * 2 + broad; }
                 else                                     { key[0] = rank; key[1] = hold; key[2] = harm; key[3] = 0;    }
                 int cmp = 0;
                 for (int k = 0; k < 4 && cmp == 0; ++k) { cmp = (key[k] < best_key[k]) ? -1 : (key[k] > best_key[k] ? 1 : 0); }
@@ -1736,6 +1810,9 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             {
                 // The deferred filter competes at the best direct source's own harm (its key[1] and key[3]),
                 // so only the ladder rank, dep and sur decide between them -- the historical order.
+                // (key[3] also carries the direct source's narrow-restricted tiebreak bit; inheriting it
+                // keeps the comparison neutral. A filter's modes are painless, so its key[2] is its bare
+                // rank and it outranks a pain-banded direct source -- MTG_PAY_PAIN_LAST.)
                 const int fkey[4] = { 0, best_i >= 0 ? best_key[1] : 0, best_f_rank, best_i >= 0 ? best_key[3] : 0 };
                 int cmp = 0;
                 for (int k = 0; k < 4 && cmp == 0; ++k) { cmp = (fkey[k] < best_key[k]) ? -1 : (fkey[k] > best_key[k] ? 1 : 0); }
@@ -2031,6 +2108,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
                     if (!m) { continue; }
                     int r = ResolveProvider(state).ManaSourceRank(state, *sd);
+                    // MTG_PAY_PAIN_LAST: a feed is a coloured tap, so a pain source feeds last.
+                    if (pay_pain_last && sd->params.tap_self_damage > 0) { r += kPainBand; }
                     // Sac-fodder-first, same bias as the direct-source loop above.
                     if (g_pay_sac_victim != 0 && s.card.m_number == g_pay_sac_victim) { r = -1000; }
                     // Same depletion tiebreak as the direct-source loop above.

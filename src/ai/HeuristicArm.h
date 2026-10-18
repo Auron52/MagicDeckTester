@@ -576,6 +576,8 @@ enum Slot : int
     SELESNYA_PAYOFF_DISTINCT, // MTG_SELESNYA_PAYOFF_DISTINCT PROPOSED clause for the SelesnyaLifegain payoff quota, NOT adopted: a SECOND copy of an effective payoff ranks after every other effective payoff, so the 2 hard + soft 3rd slots take different payoffs before a duplicate. Default OFF; =1 -> on
     SELESNYA_WAVE_HARD_SLOT,  // MTG_SELESNYA_WAVE_HARD_SLOT PROPOSED clause for the SelesnyaLifegain payoff quota, NOT adopted: an EFFECTIVE Genesis Wave (its mana rule holds) takes a HARD payoff slot, the way "keep one Paragon when reachable soon and enabled" does, instead of falling to the soft 3rd behind more castable payoffs. Default OFF; =1 -> on
     LANDFALL_TITAN_MIXED,     // MTG_LANDFALL_TITAN_MIXED  PROPOSED amendment to the USER's Primeval Titan pick rule (2026-10-20, DEFAULT OFF -- the USER's call): besides the rule's picks holding the MOST Wilds / Myriad, also SEARCH every pick holding at least one (the other land any nonbasic: Radiant Fountain, Haunted Fengraf, Gruul Turf), listed after the rule's picks. Overnight landfall s7007 g31: the only T6 line is T4 Titan -> Myriad + Fountain (the CRN reshuffle would put Fountain on top; taking it draws Avenger), unfindable at any budget under the rule. LandfallTitanAllowed; =1 searches the mixed picks
+    PAY_PAIN_LAST,            // MTG_PAY_PAIN_LAST  the shared payer (executor + rollout + payability walks + the whole-turn prepay) treats COLOURED MANA THAT COSTS LIFE as the last resort: the greedy ranks a source whose tap for THIS pip is a damaging coloured mode (Voldaren Estate's / a painland's colour, City of Brass, a horizon land) behind every painless plain land, and the backtracker first solves with those modes withheld (a painland keeps its painless {C}), falling back to the unrestricted solve only when no painless assignment exists, and the whole-turn prepay's shrink post-pass never gives a source back at the price of a damaging mode. An ORDER, never a filter: a cost payable only with pain is still paid. Unarmed boards only (Prevent Damage's armed pain policy owns its own). Vampires sweep F (seeds 91004/91007/91012/91013/91016/91017/91018: the Estate's pay-1-life colour taken over a painless Swamp/Courtyard by battlefield order). Default ON; =0 -> the historical order
+    PAY_NARROW_RESTRICTED_FIRST,// MTG_PAY_NARROW_RESTRICTED_FIRST  among colored_creature_only sources, the shared payer spends one WITHOUT colored_creature_ability_ok (Unclaimed Territory, Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard), whose colour is the only restricted mana that can also pay a creature source's ABILITY: a within-rank tiebreak in the greedy, and in the whole-turn prepay's shrink post-pass the Courtyard is the first equally-flexible source it tries to give back. Vampires sweep L (seed 91001: Pit Fighter's {R} took the Courtyard, its post-combat {1}{R} activation then had no legal {R}). Default ON; =0 -> battlefield order
     COUNT
 };
 
@@ -1102,6 +1104,8 @@ inline const char* Name(int slot)
         "MTG_SELESNYA_PAYOFF_DISTINCT",
         "MTG_SELESNYA_WAVE_HARD_SLOT",
         "MTG_LANDFALL_TITAN_MIXED",
+        "MTG_PAY_PAIN_LAST",
+        "MTG_PAY_NARROW_RESTRICTED_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
