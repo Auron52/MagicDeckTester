@@ -42,8 +42,8 @@ BYTE-IDENTICAL to the accepted GT (no accept needed), refs 600 / 0 drift. Commit
 ledger predate the rebase -- find each by its subject (`git log --oneline --grep`).
 10-18 (USER: "make sure they are pushed and that the engine matches them ... so we can launch the mulligan
 generation later"): the USER's 15 references pushed (`1ec3620be`, `313654130`); the 10-18 package (full order with
-the equips, Path never cast, the USER's tutor rule as stated + Warhammer/Dragonfire fallback (a Lizard amendment
-was measured and DECLINED by the USER), Aid lethal-first) measured, every slower game
+the equips, Path never cast, the USER's tutor rule + Warhammer/Dragonfire fallback + the USER's Lizard amendment
+(lands first / free equip counted per Hammer), Aid lethal-first) measured, every slower game
 attributed, smoke + regression GT accepted (full tiers byte-identical on the narrowed engine except the one intended
 colossus2hg game), rebased onto origin `0744b1417` (Galadriel value leaf; Galadriel + Colossus rows re-verified
 there; refs 630 / 0 drift; ref_bench 0/15 short, 3.200 vs human 3.267). NOT pushed (awaiting the USER). Next stage for this deck under the 10-18 pipeline order
@@ -430,6 +430,11 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
    -> RULED 2026-10-18: *"Essentially the blades is good as a body or rarely could be worth it if we cannot afford
    equipping hammer. There is no reason to include it if we have both a body and a source to free-equip."* The rule
    as stated stands; `MTG_COLOSSUS_TUTOR_LIZARD_DS` default OFF (forgoes -0.0040 honest, 4 games in 1,000).
+   -> AMENDED by the USER 2026-10-18 after the gi118 trace (*"our rule is too strict. We should accept Lizard Blades
+   if it lands before all other creatures"*, *"We need enough free-equip for both Hammers if we already have one in
+   hand"*, *"But, if we do, then the Hammer wins"*): Lizard Blades also when it would land first
+   (`MTG_COLOSSUS_TUTOR_LIZARD_FIRST`), and the no-double-striker clause counts free equip against every Hammer held
+   (`MTG_COLOSSUS_TUTOR_LIZARD_EQUIP_COUNT`). LIZARD_DS / NEEDS_HAMMER removed. OPEN: Forge Anew / Raubahn = one each.
 
 ## Provisional deferrals (await USER sign-off)
 

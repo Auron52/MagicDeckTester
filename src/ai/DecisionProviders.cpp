@@ -44853,9 +44853,12 @@ bool ColossusHammerProvider::NeverCast(const CardDefinition& def) const
 // the d0 / beyond-horizon pick and the human menu's default:
 //   * Colossus Hammer (equip_power_bonus >= 10) -- ALWAYS, while one is in the library.
 //   * Lizard Blades (the Equipment creature) -- as a BODY when we have no creature (battlefield or hand), or when
-//     no creature we have can double strike AND no cheap attach is available (we cannot afford the Hammer's equip).
-//     USER 2026-10-18: "There is no reason to include it if we have both a body and a source to free-equip."
-//     (MTG_COLOSSUS_TUTOR_LIZARD_DS=1: the measured alternative, default OFF.)
+//     it would LAND FIRST (no creature on our battlefield, every creature in hand of higher mana value;
+//     MTG_COLOSSUS_TUTOR_LIZARD_FIRST, default ON), or when no creature we have can double strike AND no cheap
+//     attach is ENOUGH for every Hammer we would hold (we cannot afford the Hammer's equip; Aid / Ardenn unlimited,
+//     each Theft / Raubahn one, Forge Anew one -- MTG_COLOSSUS_TUTOR_LIZARD_EQUIP_COUNT, default ON). USER 2026-10-18: "There is no reason to include
+//     it if we have both a body and a source to free-equip" / "We should accept Lizard Blades if it lands before
+//     all other creatures."
 //   * the other Equipment (Loxodon Warhammer, Dragonfire Blade) -- ONLY when no cheap attach is available
 //     ("unnecessary if we free equip"; MTG_COLOSSUS_TUTOR_OTHERS, default ON). The USER's goldfish call
 //     was "never", conditioned on a test ("I don't know 100% if it will be lossless"): it is NOT lossless
@@ -44881,26 +44884,27 @@ bool ColossusTutorOthersEnabled()
     return heurarm::Flag(heurarm::COLOSSUS_TUTOR_OTHERS, on);
 }
 
-// A MEASURED ALTERNATIVE the USER declined (2026-10-18): Lizard Blades beside a non-double-striking creature and a
-// cheap attach, as a faster double-strike body (s1001 gi118: Ardenn + Theft + two Gifts -- Gift -> Lizard, cast it,
-// Gift -> Hammer, Theft it onto the Lizard, T3 instead of T4). The USER: "Essentially the blades is good as a body or
-// rarely could be worth it if we cannot afford equipping hammer. There is no reason to include it if we have both a
-// body and a source to free-equip." Non-clairvoyant search: -0.0040 (4 games in 1,000). Default OFF; =1 -> it.
-bool ColossusTutorLizardDsEnabled()
+// The USER's amendment (2026-10-18): Lizard Blades also when it would LAND FIRST -- no creature on our battlefield
+// and every creature in hand of higher mana value. "We should accept Lizard Blades if it lands before all other
+// creatures." / "Otherwise there is no excuse I can come up with." The case (s1001 gi118): Ardenn (3 mana) the only
+// creature, Magnetic Theft and a second Gift in hand -- Gift -> Lizard T1, cast it T2, Gift -> Hammer + Theft it onto
+// the Lizard T3 (22), while Ardenn cannot attack before T4 (two Hammers on it: 24, a turn later).
+bool ColossusTutorLizardFirstEnabled()
 {
-    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_DS", false);   // DEFAULT OFF: the USER declined it (2026-10-18)
-    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_DS, on);
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_FIRST", true);   // DEFAULT ON (USER 2026-10-18)
+    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_FIRST, on);
 }
 
-// With MTG_COLOSSUS_TUTOR_LIZARD_DS=1 only: the alternative only where a Hammer is already reachable -- in hand, on
-// our battlefield, or through a second Equipment tutor in hand (default ON, inert while LIZARD_DS is off). Non-clairvoyant search (run8nc, 1,000 paired):
-// identical to the broad form (-0.0040, the same 4 faster games) at 1.006x wall vs 1.024x. USER: "+10/+10 will beat double strike": fetching the
-// Lizard is right only when it becomes the double-strike body FOR a Hammer we will have anyway; with no other route
-// to a Hammer, the Hammer itself is the pick.
-bool ColossusTutorLizardNeedsHammerEnabled()
+// The USER (2026-10-18): "Except lacking free equip. If we have only 1 free equip like Magnetic Theft that could make
+// sense" / "We need enough free-equip for both Hammers if we already have one in hand." / "But, if we do, then the
+// Hammer wins." The Lizard clause's "no free equip" is "not ENOUGH free equip for every Hammer we would hold" (the
+// fetched one + those in hand + unattached ones on our battlefield). Capacity: Sigarda's Aid and Ardenn attach
+// everything (unlimited); each Magnetic Theft is one; Forge Anew one (its waiver is once a turn); each Raubahn one
+// (one per attack).
+bool ColossusTutorLizardEquipCountEnabled()
 {
-    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER", true);   // DEFAULT ON (inert unless LIZARD_DS=1)
-    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER, on);
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_EQUIP_COUNT", true);   // DEFAULT ON (USER 2026-10-18)
+    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_EQUIP_COUNT, on);
 }
 
 bool IsCheapAttachSource(const CardParams& p)
@@ -44934,7 +44938,14 @@ ColossusHammerProvider::TutorCandidates(const GameState& s, int controller, cons
     if (hammer.empty()) { return all; }
 
     // What we have to carry it and to attach it cheaply: our battlefield and our hand.
-    bool creature = false, ds_creature = false, cheap_attach = false, hammer_reachable = false;
+    bool creature = false, ds_creature = false, cheap_attach = false;
+    bool unlimited_attach = false;   // Sigarda's Aid / Ardenn: every Hammer gets attached free
+    int  attach_capacity  = 0;       // otherwise: one per Magnetic Theft, Forge Anew (once a turn), Raubahn (per attack)
+    bool forge = false;
+    int  hammers_held = 1;           // the one this tutor fetches + those in hand + unattached ones on our battlefield
+    bool lands_first = true;   // Lizard Blades would be our first body: no creature out, every creature in hand dearer
+    const CardDefinition* lizard_def = lizard.empty() ? nullptr : CardDatabase::Instance().Lookup(lizard);
+    const int lizard_mv = lizard_def != nullptr ? lizard_def->card.m_mana_cost.ManaValue() : 0;
     auto note = [&](const CardDefinition& d, bool is_creature_now)
     {
         if (is_creature_now)
@@ -44942,30 +44953,41 @@ ColossusHammerProvider::TutorCandidates(const GameState& s, int controller, cons
             creature = true;
             if (CanDoubleStrikeWithEquipment(d)) { ds_creature = true; }
         }
-        if (IsCheapAttachSource(d.params)) { cheap_attach = true; }
-        if (d.params.is_equipment && d.params.equip_power_bonus >= 10) { hammer_reachable = true; }
+        if (IsCheapAttachSource(d.params))
+        {
+            cheap_attach = true;
+            const CardParams& q = d.params;
+            if (q.attach_equipment_on_etb || q.begin_combat_attach_all) { unlimited_attach = true; }
+            else if (q.first_equip_free || q.etb_return_equipment_from_gy) { forge = true; }   // one waiver a turn, however many
+            else                                                         { ++attach_capacity; } // Theft (once), Raubahn (per attack)
+        }
     };
+    auto is_hammer = [](const CardDefinition& d) { return d.params.is_equipment && d.params.equip_power_bonus >= 10; };
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr) { note(*d, p.card.IsCreature()); }
+        if (d != nullptr)
+        {
+            note(*d, p.card.IsCreature());
+            if (is_hammer(*d) && p.equipped_to == 0) { ++hammers_held; }
+        }
+        if (p.card.IsCreature()) { lands_first = false; }
     }
     for (const Card& c : s.players[controller].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr)
-        {
-            note(*d, d->card.IsCreature());
-            if (IsEquipmentTutor(d->params)) { hammer_reachable = true; }   // the resolving tutor is on the stack, not here
-        }
+        if (d == nullptr) { continue; }
+        note(*d, d->card.IsCreature());
+        if (is_hammer(*d)) { ++hammers_held; }
+        if (d->card.IsCreature() && d->card.m_mana_cost.ManaValue() <= lizard_mv) { lands_first = false; }
     }
+    const bool enough_free_equip = unlimited_attach || attach_capacity + (forge ? 1 : 0) >= hammers_held;
 
     std::vector<std::string> out = { hammer };
-    const bool stated = !creature || (!ds_creature && !cheap_attach);
-    const bool amend  = ColossusTutorLizardDsEnabled() && !ds_creature
-                     && (!ColossusTutorLizardNeedsHammerEnabled() || hammer_reachable);
-    const bool lizard_ok = stated || amend;
+    const bool free_equip_short = ColossusTutorLizardEquipCountEnabled() ? !enough_free_equip : !cheap_attach;
+    const bool lizard_ok = !creature || (!ds_creature && free_equip_short)
+                        || (ColossusTutorLizardFirstEnabled() && lands_first);
     if (!lizard.empty() && lizard_ok) { out.push_back(lizard); }
     if (ColossusTutorOthersEnabled() && !cheap_attach) { out.insert(out.end(), others.begin(), others.end()); }
     return out;

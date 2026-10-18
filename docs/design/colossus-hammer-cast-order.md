@@ -261,3 +261,26 @@ only with no creature (a body), or with no double striker and no free attach (th
 beside a body and a free attach the tutor fetches the Hammer alone. `MTG_COLOSSUS_TUTOR_LIZARD_DS` is now default
 OFF (the measured alternative, kept as a hatch); what it would buy, for the record: -0.0040 under the
 non-clairvoyant search (4 games in 1,000, each with a slow non-double-striker such as a 3-mana Ardenn the only body).
+
+### USER amendment (2026-10-18, after the gi118 trace): Lizard Blades when it lands first, or when free equip falls short
+
+The USER challenged the gi118 example (*"How about if you put down both hammers and then attack with Ardenn?"*,
+*"If you have 2 Hammers then equip 2 Hammers."*) -- the trace shows exactly that line, a turn later: Ardenn (3
+mana) cannot attack before T4 (two Hammers: 24 on T4), while Lizard Blades lands T2 and carries one Hammer for 22
+on T3. The USER: *"Okay, I see then. In that case our rule is too strict. We should accept Lizard Blades if it lands
+before all other creatures."* / *"Otherwise there is no excuse I can come up with."* / *"Except lacking free equip.
+If we have only 1 free equip like Magnetic Theft that could make sense"* / *"We need enough free-equip for both
+Hammers if we already have one in hand."* / *"But, if we do, then the Hammer wins."*
+
+The rule now (Hammer always and first; Warhammer / Dragonfire unchanged -- only with no free attach). Lizard Blades
+is admitted when:
+1. we have no creature (battlefield or hand) -- a body;
+2. **it would land first** (`MTG_COLOSSUS_TUTOR_LIZARD_FIRST`): no creature on our battlefield and every creature
+   in hand of higher mana value than its 2 (in this list: Ardenn the only one);
+3. no creature can double strike AND **our free equip is not enough for every Hammer we would hold**
+   (`MTG_COLOSSUS_TUTOR_LIZARD_EQUIP_COUNT`): Hammers = the fetched one + those in hand + unattached ones on our
+   battlefield; capacity = Sigarda's Aid / Ardenn unlimited, each Magnetic Theft 1, Forge Anew 1 (once a turn),
+   each Raubahn 1 (one per attack). Replaces "no free attach at all". With enough, the Hammer alone.
+Both default ON (the USER's rule); =0 each -> the rule as first stated. Supersedes `MTG_COLOSSUS_TUTOR_LIZARD_DS` /
+`_NEEDS_HAMMER` (removed). Open: Forge Anew / Raubahn counted as one free equip each (once a turn / per attack) --
+the USER may want them treated differently.

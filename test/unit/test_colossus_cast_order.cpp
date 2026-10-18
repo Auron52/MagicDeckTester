@@ -177,16 +177,11 @@ TEST_CASE("Colossus tutors: a cheap attach and a creature -> Colossus Hammer alo
     using V = std::vector<std::string>;
     CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" }, kTutorLib)) == V{ "Colossus Hammer" });
     CHECK(Picks(TutorBoard({ "Plains", "Kor Duelist" }, { "Magnetic Theft" }, kTutorLib)) == V{ "Colossus Hammer" });
-    // A body and a free attach: the Hammer alone, whatever else is in hand (USER: "There is no reason to include it if
-    // we have both a body and a source to free-equip").
+    // A body and a free attach: the Hammer alone (USER: "There is no reason to include it if we have both a body and
+    // a source to free-equip") -- Raubahn is already on the battlefield, so the Lizard cannot land first.
     CHECK(Picks(TutorBoard({ "Plains", "Raubahn, Bull of Ala Mhigo" }, {}, kTutorLib)) == V{ "Colossus Hammer" });
     CHECK(Picks(TutorBoard({ "Plains", "Raubahn, Bull of Ala Mhigo" }, { "Open the Armory" }, kTutorLib))
           == V{ "Colossus Hammer" });
-    {
-        ArmCo alt(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 1);   // the declined alternative: a second tutor -> the Lizard joins
-        CHECK(Picks(TutorBoard({ "Plains", "Raubahn, Bull of Ala Mhigo" }, { "Open the Armory" }, kTutorLib))
-              == V{ "Colossus Hammer", "Lizard Blades" });
-    }
     // ...and Open the Armory follows the same rule.
     const GameState s = TutorBoard({ "Plains", "Sigarda's Aid" }, { "Kor Duelist" }, kTutorLib);
     CHECK(ResolveProvider(s).TutorCandidates(s, 0, DefCo("Open the Armory").params) == V{ "Colossus Hammer" });
@@ -227,43 +222,61 @@ TEST_CASE("Colossus tutors: no Hammer left -> every legal target; the rule off -
           == V{ "Loxodon Warhammer", "Colossus Hammer", "Dragonfire Blade", "Lizard Blades" });
 }
 
-TEST_CASE("Colossus tutors: the declined Lizard alternative (=1) -- no double striker, a cheap attach -> Lizard Blades joins")
+TEST_CASE("Colossus tutors: Lizard Blades when it lands before every other creature (USER 2026-10-18)")
 {
     using V = std::vector<std::string>;
-    CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft", "Steelshaper's Gift" },
-                           kTutorLib)) == V{ "Colossus Hammer" });   // the default: a body and a free attach -> the Hammer
-    ArmCo alt(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 1);
-    // s1001 gi118: Ardenn the only creature, Magnetic Theft in hand -- the rule as stated offers the Hammer alone.
-    const GameState s = TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft" }, kTutorLib);
-    {
-        ArmCo stated(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 0);
-        CHECK(Picks(s) == V{ "Colossus Hammer" });
-    }
-    CHECK(Picks(s) == V{ "Colossus Hammer" });   // the alternative, narrowed (its default): no other route to a Hammer
-    {
-        ArmCo broad(heurarm::COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER, 0);
-        CHECK(Picks(s) == V{ "Colossus Hammer", "Lizard Blades" });   // the broad amendment
-        // A double striker already in hand: still the Hammer alone (the Lizard adds nothing it lacks).
-        CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Kor Duelist", "Magnetic Theft" }, kTutorLib))
-              == V{ "Colossus Hammer" });
-        // No creature at all: unchanged (Lizard joins, as before).
-        CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, {}, kTutorLib)) == V{ "Colossus Hammer", "Lizard Blades" });
-    }
-}
-
-TEST_CASE("Colossus tutors: the declined alternative, narrowed -- Lizard Blades only when a Hammer is already reachable")
-{
-    using V = std::vector<std::string>;
-    ArmCo alt(heurarm::COLOSSUS_TUTOR_LIZARD_DS, 1);
-    // s1001 gi118: Ardenn + Theft and a SECOND Gift in hand -> the Lizard joins (the body for the Hammer to come).
-    CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft", "Steelshaper's Gift" },
-                           kTutorLib)) == V{ "Colossus Hammer", "Lizard Blades" });
-    // A Hammer already in hand -> the Lizard joins.
-    CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft", "Colossus Hammer" },
-                           kTutorLib)) == V{ "Colossus Hammer", "Lizard Blades" });
-    // 2HG s1001 gi22: one Gift, no other route to a Hammer -> the Hammer alone ("+10/+10 will beat double strike").
+    // s1001 gi118: Ardenn (3 mana) the only creature, Magnetic Theft and a second Gift in hand -> the Lizard joins.
+    const GameState s = TutorBoard({ "Furycalm Snarl" },
+                                   { "Ardenn, Intrepid Archaeologist", "Magnetic Theft", "Steelshaper's Gift" }, kTutorLib);
+    CHECK(Picks(s) == V{ "Colossus Hammer", "Lizard Blades" });
+    // ...with no second tutor too: landing first is the whole test.
     CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Magnetic Theft" }, kTutorLib))
+          == V{ "Colossus Hammer", "Lizard Blades" });
+    // A 2-drop creature in hand lands no later than the Lizard ({1}{R}); Raubahn is a free attach that comes back
+    // (his attack trigger) -> the Hammer alone.
+    CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Raubahn, Bull of Ala Mhigo", "Magnetic Theft" }, kTutorLib))
           == V{ "Colossus Hammer" });
+    // A 1-drop body (Speaker) beside a free attach -> the Hammer alone.
+    CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, { "Speaker of the Heavens" }, kTutorLib)) == V{ "Colossus Hammer" });
+    // Ardenn plus a 1-drop double striker in hand -> the Hammer alone.
+    CHECK(Picks(TutorBoard({ "Furycalm Snarl" }, { "Ardenn, Intrepid Archaeologist", "Kor Duelist", "Magnetic Theft" },
+                           kTutorLib)) == V{ "Colossus Hammer" });
+    // A creature already on the battlefield (even a dear one) -> the Lizard cannot land first.
+    CHECK(Picks(TutorBoard({ "Plains", "Ardenn, Intrepid Archaeologist" }, { "Magnetic Theft" }, kTutorLib))
+          == V{ "Colossus Hammer" });
+    // =0 (both amendments) -> the rule as first stated: a body and a free attach -> the Hammer alone.
+    ArmCo stated(heurarm::COLOSSUS_TUTOR_LIZARD_FIRST, 0);
+    ArmCo stated2(heurarm::COLOSSUS_TUTOR_LIZARD_EQUIP_COUNT, 0);
+    CHECK(Picks(s) == V{ "Colossus Hammer" });
     // No creature at all: the USER's own clause, unchanged.
     CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, {}, kTutorLib)) == V{ "Colossus Hammer", "Lizard Blades" });
+}
+
+TEST_CASE("Colossus tutors: the Lizard clause needs ENOUGH free equip for every Hammer (USER 2026-10-18)")
+{
+    using V = std::vector<std::string>;
+    // Speaker (no double strike) out, ONE Theft, no Hammer held: the Theft covers the fetched Hammer -> the Hammer alone.
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens" }, { "Magnetic Theft" }, kTutorLib)) == V{ "Colossus Hammer" });
+    // ...a Hammer already in hand: two Hammers, one Theft -> not enough -> the Lizard joins.
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens" }, { "Magnetic Theft", "Colossus Hammer" }, kTutorLib))
+          == V{ "Colossus Hammer", "Lizard Blades" });
+    // ...an unattached Hammer on the battlefield counts the same.
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens", "Colossus Hammer" }, { "Magnetic Theft" }, kTutorLib))
+          == V{ "Colossus Hammer", "Lizard Blades" });
+    // Two Thefts for two Hammers -> enough -> the Hammer alone ("if we do, then the Hammer wins").
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens" }, { "Magnetic Theft", "Magnetic Theft", "Colossus Hammer" },
+                           kTutorLib)) == V{ "Colossus Hammer" });
+    // Sigarda's Aid attaches every Hammer -> the Hammer alone.
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens", "Sigarda's Aid" }, { "Colossus Hammer" }, kTutorLib))
+          == V{ "Colossus Hammer" });
+    // Forge Anew is one free equip a turn -> two Hammers is not enough -> the Lizard joins.
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens", "Forge Anew" }, { "Colossus Hammer" }, kTutorLib))
+          == V{ "Colossus Hammer", "Lizard Blades" });
+    // A double striker -> the Hammer alone, however short the free equip (the Lizard adds nothing it lacks).
+    CHECK(Picks(TutorBoard({ "Plains", "Kor Duelist" }, { "Magnetic Theft", "Colossus Hammer" }, kTutorLib))
+          == V{ "Colossus Hammer" });
+    // =0 -> any free-attach card counts as enough.
+    ArmCo off(heurarm::COLOSSUS_TUTOR_LIZARD_EQUIP_COUNT, 0);
+    CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens" }, { "Magnetic Theft", "Colossus Hammer" }, kTutorLib))
+          == V{ "Colossus Hammer" });
 }
