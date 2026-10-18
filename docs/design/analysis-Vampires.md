@@ -83,9 +83,18 @@ viewer wiring, unit-test plans. Summary of what they established:
 9. **Stromkirk Captain main-1 vs main-2 on a Drana turn** (all Vampires strike first with Captain out, so
    Drana's counters add no damage that combat) — main split is USER-owned. [default: both mains searched]
 10. **Secluded Courtyard paying sac-outlet coloured costs** — mis-model fix; may move other decks that
-    run Courtyard + a sac outlet. [default: fix, explain moves]
+    run Courtyard + a sac outlet. [default: fix, explain moves] -- LANDED (A2, `MTG_SAC_OUTLET_PAY_SCOPE`
+    default ON): smoke play-changed=0; Minotaur's and Soldiers' outlets have no coloured pip, so nothing in
+    the suite moves today.
 11. **VampiresProvider orders** (discard / victim / activation drafts, design_A2 §8) and, later, the
-    Vampires cast order and discard buckets — AGENT-DRAFTED, USER reviews.
+    Vampires cast order and discard buckets — AGENT-DRAFTED, USER reviews. [landed as ordering hooks,
+    `MTG_VAMP_DRAFT_ORDERS` default ON; never narrowing]
+12. **VampiresProvider inherits slivers_vial's CLEANUP-discard buckets** from VialProvider
+    (`MTG_SLIVERS_BUCKET_DISCARD`) -- the rule the deck rode before it had a provider (Aether Vial routed it to
+    Vial). Discard buckets are USER-owned. [default: inherited unchanged (play-neutral vs the old routing);
+    the Vampires buckets are yours to set]
+13. **Searched discard pins grow `sizeof(Action)` 472 -> 480** for every deck (one InternedName; no padding
+    hole holds a pointer). Byte-identical play; a small copy-cost increase everywhere. [default: keep]
 
 ## Track A -- cluster A2 integrated (2026-10-18, integrator; branch `vampires-analysis`, NOT pushed)
 Cards (cards.json, verbatim Scryfall costs): Falkenrath Pit Fighter, Stromkirk Condemned, Voldaren Estate,
@@ -158,3 +167,47 @@ Blood Token (named token def), Bloodghast. Everything in design_A2 is implemente
 Condemned / Blood (and Blood creation) collapsed to the main phases' trailing passes; Bloodghast's "may"
 = YES autonomously; Voldaren "Vampire spell" == "creature spell" (exact for this list); the
 main-2 held-land exemption (open question 1); the VampiresProvider draft orders (open question 11).
+
+**Verification (A2, 2026-10-18):** `mtg-test` 1464/1464 cases pass (new `test_vampires_outlets.cpp`: card
+data, Voldaren mana contexts incl. Courtyard under the creature-ability scope, Blood cost / creation /
+crack, Pit Fighter liveness / apply / self-sac / enumeration folds / same-plan victims, Condemned
+once-per-turn + fold keys + identical-copy symmetry, Bloodghast return / revive decline / conditional
+haste, the -1 land after a Bloodghast discard, the main-2 held-land exemption, a rollout-vs-executor
+lockstep sweep over every main-2 activation plan with `g_activation_discard_unpinned == 0`; the routing
+table pins Vampires -> Vampires and survives cutting any one A2 card). Smoke: 128/128 PASS, searched and
+d0 `play-changed=0` -- byte-identical for every suite deck, including the two other decks that pair a
+Secluded Courtyard with a sac outlet (Minotaur: Slaughter-Priest's {2} is generic, which Courtyard's {C}
+already paid; Soldiers: Ranger-Captain / King Darien / Jirina outlets cost no mana) -- so the pay-scope
+fix moves nothing in the suite today. `provider_audit.py --check` rc 0 (Vampires has no profile yet:
+"NOT AUDITED"; the unit test pins its routing). `audit_card_costs.py` rc 0 (441/441 compared).
+`audit_viewer_decisions.py decks/Vampires/Vampire.cod --no-sweep`: clean. Sanity
+`mtg decks/Vampires/Vampire.cod --games 20 --seed 777 --depth 3 --budget-ms 20 --threads 8`: no crash, avg
+6.55 (4 unwon -- 9 of the 20 cards still unimplemented); one SLOW-GAME (seed 790 gi13, 66 s in the batch,
+2:42 single-threaded, 4.9M units) -- a flat profile (BuildSimKey 5.9%, operator new 4.3%, CollectActions
+2.6%), i.e. broad search over dead hands, not one hot new path. Watch it at the 3x suite-cost gate.
+UN-RUN: a hand-built `--claude-play --choices` walk to a Pit Fighter / Condemned / Blood activation (not
+cheap to steer; the decision surfaces are the existing `discard` / `sacrifice` / `revive` paths, covered
+by the unit tests' revive-decline case) -- owed to Stage 5h.
+
+**Seams for the madness integrator (cluster A1, next):**
+- `DiscardCardFromHand(state, controller, hand_idx, cause)` (SpellEffects.h) is the hook; add the
+  `std::vector<MadnessPending>* mq` parameter and the `MadnessCostsFor` exile there. Its three callers are
+  exactly the `[MADNESS SEAM]` markers: `ApplyDiscardSacOutlet` (after `SacrificePermanentAt`, before
+  `TrickDraw` -- the discard is BEFORE the sacrifice, so a Gorger sacrificed to Pit Fighter must not revoke
+  the snapshotted grant), `ApplyActivatePump` mode 4 (after the discard, before the pump), and
+  `ApplyPermAbility` BloodDraw (after the token sacrifice, before the draw). ApplyPermAbility has no payer
+  parameter: thread the `MadnessPayer` the way `ActivationDiscardPinScope` threads the pin (both trailing
+  passes install it around the call).
+- The madness pin rides the SAME action as `Action::discard_name` (TurnSolver.h, beside it); fold it at
+  every site `discard_name` is folded (grep `discard_name`: plan_signature's SAC / APUMP / PABIL keys,
+  ActionFoldSig, BpCandFingerprint, PlanDomKey, the action diff printer).
+- The discard fan is built in ONE place per outlet: `ActivationDiscardClasses` (TurnSolver.cpp) feeds the
+  Pit Fighter block ("FALKENRATH PIT FIGHTER" in the value-outlet loop), the Condemned mode-4 block and the
+  Blood-crack block; cross each madness-capable discard class with decline + payable options there.
+  Human play emits ONE unpinned action per outlet (the card -- and A1's madness answer -- is asked at
+  resolution).
+- `TurnSolver::PutsGyLandfallFeeder` must NOT count a discard whose madness pin CASTS the card (it does not
+  reach the graveyard). `SubsetVampOutletInvalid` rule 1 counts pinned discards per name -- unchanged by
+  madness. A madness-cast Vampire lowers Voldaren's Blood cost only if Blood creation runs after it
+  (provider ActivationOrderRank puts Blood creation FIRST in the trailing pass today).
+- My outlet sites already increment `cards_cycled_or_discarded_this_turn` themselves (the hook does not).
