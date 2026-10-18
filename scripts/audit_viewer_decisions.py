@@ -1337,6 +1337,20 @@ INERT_PARAMS = {
     #      (recorded in docs/design/analysis-soldiers.md -- surfaced, not blocking).
     "etb_each_other_own_creature_counters": "Thalia's Lieutenant ETB: a +1/+1 counter on EACH other Human you control -- mandatory, untargeted, exhaustive; no choice",
     "etb_counters_subtypes": "recipient subtype filter on the Lieutenant ETB above -- narrows WHO, adds no choice",
+    # ---- Vampires cluster C (2026-10-18). Classified inert by the integrator; PENDING USER OK per the
+    #      self-guard (surfaced in docs/design/vampires/integration_C_notes.md -- not blocking).
+    "grants_first_strike": "static subtype keyword lord (Stromkirk Captain / Field Marshal / Neheb / Striking Sliver) -- continuous, no choice; read only by the CR 510.4 damage-step split",
+    "aura_grants_first_strike": "automatic first-strike grant of an attached Aura, no choice",
+    "combat_damage_counters_each_attacker": "Drana's combat-damage trigger: a +1/+1 counter on EACH attacking creature you control -- mandatory, untargeted, exhaustive; no choice",
+    "attack_one_or_more_tokens": "Mavren Fein's attack trigger: one token per combat in which a matching attacker is declared -- mandatory, untargeted; which creatures attack is the always-wired attackers decision",
+    "attack_one_or_more_subtypes": "Mavren trigger's attacker subtype filter -- a printed constant",
+    "attack_one_or_more_nontoken": "Mavren trigger's 'nontoken' attacker filter -- a printed constant",
+    "attack_one_or_more_token_power": "token spec constant", "attack_one_or_more_token_toughness": "token spec constant",
+    "attack_one_or_more_token_subtypes": "token spec constant", "attack_one_or_more_token_color": "token spec constant",
+    "attack_one_or_more_token_keywords": "token spec constant (lifelink)",
+    "etb_each_other_own_creature_counters_if_opp_lost_life": "Vampire Socialite intervening-if ETB: a +1/+1 counter on EACH other Vampire you control -- mandatory, untargeted, exhaustive; no choice",
+    "opp_lost_life_other_enters_counters": "Vampire Socialite's as-enters +1/+1 counter REPLACEMENT (CR 614) -- mandatory, applies itself, nothing to pick",
+    "opp_lost_life_other_enters_subtype": "replacement spec constant (which entrants get the counter)",
     "noncreature_spell_tax": "Thalia's static symmetric tax ({1} on noncreature spells) -- a continuous cost increase, no choice",
     "etb_untap_control_subtypes": "Fortified Beachhead: untapped while you CONTROL a Soldier -- a forced condition (the reveal half rides etb_untap_reveal_subtypes -> land_entry, and is suppressed when this condition already holds)",
     "team_pump_taps_source": "Fortified Beachhead: the {T} half of its team pump's cost -- a cost detail; the activation count rides the combat `firebreathe` decision",

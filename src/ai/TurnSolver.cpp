@@ -9395,6 +9395,14 @@ static int PendingAttackDamageImpl(const GameState& state)
     std::vector<int>  bc_of;
     std::vector<bool> ds_of;
     int bc_total = 0;
+    // Drana-style first-step team counters (combat_damage_counters_each_attacker), the twin of the
+    // combat core's CR 510.4 split (Combat.cpp ResolveCombatDamageTwoStep). Collected only when such
+    // a source is on the board (bs.cd_counters non-empty); every other deck skips it entirely.
+    std::vector<bool> fsx_of;     // strikes in the FIRST step (first strike, or double strike)
+    std::vector<bool> regx_of;    // deals damage in the REGULAR step (no first strike, or double strike)
+    std::vector<int>  drx_of;     // its own counters-per-trigger (0 = not a Drana)
+    std::vector<int>  pwx_of;     // its first-step power (a 0-power source does not connect)
+    int drana_tok_regular = 0;    // attack-trigger tokens that will deal regular-step damage
     // Board-source prefilter, gathered once (SpellEffects.h) -- this loop tests every creature and
     // the solver re-runs it per scored subset, so the unfiltered scans are quadratic in board size.
     // It used to gather the HASTE pair only; the lord / anthem / double-strike / attachment scans
@@ -9402,6 +9410,7 @@ static int PendingAttackDamageImpl(const GameState& state)
     // token board. This is the lockstep twin of ResolveCombatDamage's prefilter (Combat.cpp), which
     // had the lord and ds halves already -- this projection had neither.
     const BoardSources bs = GatherBoardSources(state.battlefield, active);
+    const bool drana_board = !bs.cd_counters.empty();
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active) { continue; }
@@ -9421,10 +9430,12 @@ static int PendingAttackDamageImpl(const GameState& state)
         }
         base_pw += AuraBonusFor(p, state, &bs.attached).first;   // Bogles: attached auras + Kor self-buff
         base_pw += EquipBonusFor(p, state, &bs.attached).first;  // attached equipment
+        bool jitte_bearer = false;
         {   // Umezawa's Jitte projection -- same shared closed form as the combat core
             const int jbf = FindAttachedChargeEquip(state, p, &bs.attached);
             if (jbf >= 0)
             {
+                jitte_bearer = true;
                 const Permanent& je = state.battlefield[jbf];
                 const CardDefinition* jd = CardDatabase::Instance().LookupCached(je.card);
                 dmg += JitteDamageMath(base_pw, ds, je.charge_counters,
@@ -9433,6 +9444,16 @@ static int PendingAttackDamageImpl(const GameState& state)
                                            state, je.charge_counters)).first;
             }
             else { dmg += base_pw * (ds ? 2 : 1); }
+        }
+        if (drana_board)
+        {
+            const bool fs = CreatureHasFirstStrike(p, state, &bs.fs);
+            fsx_of.push_back(fs || ds);
+            // A Jitte bearer's closed form is dealt whole in its first step by the combat core, so a
+            // double-striking bearer takes no regular-step counter damage there -- mirrored here.
+            regx_of.push_back((!fs || ds) && !(jitte_bearer && (fs || ds)));
+            drx_of.push_back(adef ? adef->params.combat_damage_counters_each_attacker : 0);
+            pwx_of.push_back(base_pw);
         }
         attackers.push_back(&p);
         const int bc = adef ? adef->params.battle_cry_power : 0;
@@ -9496,6 +9517,16 @@ static int PendingAttackDamageImpl(const GameState& state)
                         * (d->params.attack_tokens_per_opponent ? gamesetup::OpponentHeads() : 1);
             tok_count += n;
             dmg += n * (d->params.attack_token_power + tpb);
+            if (drana_board)
+            {
+                // Does the token strike first (a first-strike lord reaching its subtypes)? Scored on a
+                // scratch body whose m_number matches no attachment (aura_attached_to 0 = unattached).
+                Permanent tp;
+                tp.card             = tok;
+                tp.card.m_number    = -1;
+                tp.controller_index = active;
+                if (!CreatureHasFirstStrike(tp, state, &bs.fs)) { drana_tok_regular += n; }
+            }
         }
     }
 
@@ -9520,6 +9551,30 @@ static int PendingAttackDamageImpl(const GameState& state)
     // Harbin's "attack with five or more Soldiers" team pump -- same final-set / weight reasoning.
     // Mirrors ApplyAttackThresholdTeamPump; 0 for every deck without the stamp.
     dmg += CountAttackThresholdTeamPump(state, active, attackers, ds_of, tok_count);
+
+    // Drana, Liberator of Malakir -- the exact twin of the combat core's CR 510.4 split. A source that
+    // strikes in the FIRST step and connects puts `per` counters (doubler-aware, as PutPlusCounters
+    // does) on every attacker; each attacker that then deals damage in the REGULAR step (no first
+    // strike, or double strike -- and the attack-trigger tokens without a first-strike grant) is `per`
+    // bigger there. Under a Stromkirk Captain every Vampire strikes first, the regular step is empty,
+    // and this adds 0 -- crediting it WITHOUT the first-strike reader would be the dangerous
+    // over-credit (a phantom lethal). 0 for every deck without such a source (drana_board false).
+    if (drana_board)
+    {
+        int per = 0;
+        for (std::size_t i = 0; i < drx_of.size(); ++i)
+        {
+            if (drx_of[i] > 0 && fsx_of[i] && pwx_of[i] + (attackers.size() == 1
+                                                            ? CountExalted(state.battlefield, active) : 0) > 0)
+            { per += drx_of[i] << DoublerShift(state, active, /*for_tokens=*/false); }
+        }
+        if (per > 0)
+        {
+            int regular = drana_tok_regular;
+            for (std::size_t i = 0; i < regx_of.size(); ++i) { if (regx_of[i]) { ++regular; } }
+            dmg += per * regular;
+        }
+    }
     return dmg;
 }
 
@@ -50703,6 +50758,11 @@ static void SimulateCombat(GameState& state)
     FireCombatLandSearchCracks(state, active, atk_idx);   // the in-combat Khalni crack (lockstep)
 
     const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
+    // Mavren Fein, Dusk Apostle: "whenever one or more nontoken Vampires you control attack, create a
+    // 1/1 white Vampire token with lifelink" -- once per combat, over the DECLARED attackers, BEFORE the
+    // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
+    // GameEngine::CombatPhase (lockstep, ONE shared helper). Param-gated inert.
+    FireAttackOneOrMoreTokens(state, active, atk_idx);
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
     {

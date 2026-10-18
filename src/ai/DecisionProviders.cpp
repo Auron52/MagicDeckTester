@@ -5252,7 +5252,11 @@ std::uint8_t DecisionProvider::EtbChosenKeywords(const GameState& /*s*/, int /*c
             if (got >= want) { break; }
             const std::uint8_t bit = ChosenKeywordBit(k);
             if (bit == 0 || (mask & bit) != 0) { continue; }
-            const bool live = bit != kChosenKwFirstStrike;   // first strike has no engine reader
+            // First strike is ranked last: since 2026-10-18 it IS read (CreatureHasFirstStrike, the
+            // CR 510.4 damage-step split), but against a never-blocking opponent it changes damage only
+            // through a between-step effect, and Soldiers (Rick's deck) has none; vigilance and
+            // lifelink have readers that are live every combat. Unchanged ordering.
+            const bool live = bit != kChosenKwFirstStrike;
             if ((pass == 0) != live) { continue; }
             mask = static_cast<std::uint8_t>(mask | bit);
             ++got;
