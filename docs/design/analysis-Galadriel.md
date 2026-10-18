@@ -223,6 +223,12 @@ NEXT: the VALUE LEAF on the new play with the keep table live (`bash scripts/val
 decks/Galadriel`, alone, MTG_RSS_CAP_GB override; the old queue logs/vlq_galadriel is pre-rule,
 pre-table play -- moved aside to logs/vlq_galadriel.prekeep-20261018, never resumed). Then the cross-game
 RSS growth question (13 -> 19 GiB in the old matrix).
+THEN (USER 2026-10-18: "we should resize all of the regression test rows for the deck"): resize every
+galadriel / galadriel2hg row in test/regression_cases.sh -- smoke and regression to the Selesnya/Bruna shape
+(smoke d3 150 b10, d5 75 b20, 2hg d3 75; regression d3 2x150, d5 2x75, 2hg d3 100 + d5 50), overnight sized
+by MEASURED per-game cost with the keep table (+ leaf if adopted) via test/tier_cost.py (between Hinata's
+d3 4x400 b10 / d5 4x300 b20 and the full d3 4x1000 b20 / d5 4x500 b40). Run all three tiers for the deck
+once, AFTER the value leaf (it owns the box, and an adopted leaf moves play again), and accept per tier.
 OPEN USER QUESTIONS: overnight FULL-set resize at adoption; keep-policy sign-off (curve_check none /
 max_lands 6); Saproling Migration (Kicker) / Kili (Storied) keyword mismatches + the rate-limited cost
 audit; the seeds 4/5 T5 scry choices.
