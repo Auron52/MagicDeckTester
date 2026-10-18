@@ -472,6 +472,18 @@ struct ColorFeasibility
     int  burst_mask[kMaxBurst] = {0};
     int  burst_amt[kMaxBurst]  = {0};
 
+    // RAMP FILTERS (Izzet Signet / Ferrous Lake / Skycloud Expanse / Mossfire Valley: "{1}, {T}: Add
+    // {X}{Y}"). Their GROSS output is in cover[] / total exactly as before; the FEED each one eats is
+    // charged per colour set in HallFeasible (FilterFeedDeduction) -- so "Island + Island + Signet" no
+    // longer reads as three blue (its real ceiling is {U}{U}{R}). The charge is a LOWER bound on the
+    // S-units the feeds must consume, so the test stays a necessary condition: it can only reject a
+    // subset no payment can pay. rf_count = filters on the board, rf_units = their output units,
+    // rf_in[S] = their output units inside colour set S. All zero without a ramp filter.
+    int  rf_count = 0;
+    int  rf_units = 0;
+    int  rf_in[32] = {0};
+    int  FilterFeedDeduction(unsigned s, const ManaPool& credit) const;
+
     // False only when NO assignment of the available mana to this subset's coloured pips exists.
     // `credit` is the same-turn mana the caller folded on top of the board pool (PoolCredit below).
     // `noncreature_only` scores just the subset's NONCREATURE casts, to pair with the pool built by

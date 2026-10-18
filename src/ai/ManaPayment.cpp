@@ -12,6 +12,7 @@
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
+#include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
 #include <atomic>
 #include <cstdio>
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
@@ -4426,6 +4427,15 @@ static bool ColorExactScaledEnabled()
     return heurarm::Flag(heurarm::COLOR_EXACT_SCALED, env_on);
 }
 
+// RAMP-FILTER FEED CHARGE in the colour test (see ColorFeasibility::rf_count). DEFAULT ON; =0 restores
+// the gross, feed-free credit (an A/B hatch: on a board with a ramp filter, =0 lets the enumerator offer
+// subsets the payer then drops -- "Island + Island + Izzet Signet" read as three blue).
+static bool RampFeedChargeOn()
+{
+    static const bool v = EnvOn("MTG_RAMP_FEED_CHARGE", true);
+    return v;
+}
+
 ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
                                        const Permanent* skip, bool pending_auras)
 {
@@ -4585,10 +4595,23 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
                 // "{1},{T}: Add {U}{R}" -- one of EACH, not two of either. A fixed bundle, so credit
                 // it as such: exact, and it does not hand the test a second blue that cannot exist.
                 add_one_of_each(cmask);
+                if (def->params.ramp_filter && RampFeedChargeOn())   // ...and charge its feed in HallFeasible (see rf_count)
+                {
+                    ++f.rf_count;
+                    for (int i = 0; i < 5; ++i) { if (cmask & (1 << i)) { ++f.rf_units; } }
+                    for (unsigned s = 1; s < 32; ++s)
+                    { f.rf_in[s] += std::popcount(static_cast<unsigned>(cmask) & s); }
+                }
             }
             else
             {
                 add(cmask, 2);            // "{1},{T}: Add {B}{B}" -- two of the one colour
+                if (def->params.ramp_filter && RampFeedChargeOn())
+                {
+                    ++f.rf_count;
+                    f.rf_units += 2;
+                    for (unsigned s = 1; s < 32; ++s) { if (static_cast<unsigned>(cmask) & s) { f.rf_in[s] += 2; } }
+                }
             }
             continue;
         }
@@ -4752,6 +4775,34 @@ void BuildColorDemandIndex(const std::vector<Action>& cands, ColorDemandIndex& o
 // Payable, so its verdicts are unchanged. FORCED inline (MTG_DB_ALWAYS_INLINE, CardDatabase.h): Payable
 // is a hot path (per enumerated subset) and was one function before the split -- a plain `inline` left
 // an out-of-line call in it. Both callers live in this file.
+// RAMP-FILTER FEED CHARGE (see ColorFeasibility::rf_count). For a colour set S, the filters' outputs in
+// S (rf_in[S], already inside cover[S]) are worth having only if their feeds can be paid; a feed is ONE
+// mana from anywhere, so it eats an S-unit only when no free (non-S) unit is left for it. A lower bound
+// on the S-units the k feeds must take:
+//   * k - free(S), where free(S) = board units outside S (incl. the filters' own outputs outside S -- one
+//     filter may feed another, so a chain is allowed) + the same-turn credit outside S (wild counted
+//     too: permissive);
+//   * and >= 1 when NO unit outside S exists except the filters' own outputs: a filter cannot pay its
+//     own {1} with the mana it is about to make, so the first feed of any chain is external.
+// Not activating the filters is always an option, so the charge never exceeds their S-output: the
+// result is min(rf_in[S], bound). Every relaxation above only LOWERS the charge, so this stays a
+// necessary condition -- it cannot reject a subset the real payer (the oracle) can pay. Zero without a
+// ramp filter -> every other board byte-identical.
+int ColorFeasibility::FilterFeedDeduction(unsigned s, const ManaPool& credit) const
+{
+    if (rf_count <= 0) { return 0; }
+    const int in_s = rf_in[s];
+    if (in_s <= 0) { return 0; }
+    const int cred[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
+    int cred_in_s = 0;
+    for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { cred_in_s += cred[i]; } }
+    const int cred_free  = std::max(0, credit.Total() - cred_in_s);
+    const int free_units = std::max(0, total - cover[s]) + cred_free;
+    const int base_free  = free_units - (rf_units - in_s);   // free units that are NOT filter outputs
+    const int bound = std::max(rf_count - free_units, base_free <= 0 ? 1 : 0);
+    return std::max(0, std::min(in_s, bound));
+}
+
 MTG_DB_ALWAYS_INLINE bool ColorFeasibility::HallFeasible(const int* masks, const int* counts, int ndm,
                                                          const ManaPool& credit, int prod_cost) const
 {
@@ -4802,6 +4853,7 @@ MTG_DB_ALWAYS_INLINE bool ColorFeasibility::HallFeasible(const int* masks, const
             for (int b = 0; b < nburst; ++b) { if (pick[b] >= 0 && (s & (1u << pick[b]))) { cov += burst_amt[b]; } }
             int have = cov + credit.wild;
             for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred[i]; } }
+            have -= FilterFeedDeduction(s, credit);   // ramp filters' feeds (0 without one)
             // What the producers must draw out of S itself (see the note above).
             if (prod_cost > 0) { have -= std::max(0, prod_cost - (total - cov)); }
             if (need > have) { return false; }
@@ -4872,6 +4924,7 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
         for (int b = 0; b < nburst; ++b) { if (static_cast<unsigned>(burst_mask[b]) & s) { have += burst_amt[b]; } }
         const int cred_u[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
         for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred_u[i]; } }
+        have -= FilterFeedDeduction(s, credit);   // ramp filters' feeds (0 without one)
         if (prod > 0) { have -= std::max(0, prod - (total - cover[s])); }
         return need <= have;
     }

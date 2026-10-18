@@ -7947,6 +7947,35 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
         { return CastOrderLess(state, cands[x], cands[y]); });
     }
     const std::vector<int>& walk_ord = untap_walk ? untap_ord : sel;
+    // SAC-FOR-MANA FLOATS FIRST (MTG_RESCUE_SAC_FLOAT, DEFAULT ON; =0 restores the skip). Both apply
+    // worlds crack every SacForMana of a plan in their PRE-PASS, before any cast (ApplyPlanDirect /
+    // AIEngine::TakeTurn), and the payer spends that float first -- as a cast's mana AND as a filter's
+    // feed. This rescue used to walk a SacForMana as a {0} "cast" (paid trivially, nothing floated), so
+    // the mana it adds was invisible exactly where the rescue is consulted (a filter on the board, the
+    // flat check short): a Generator Servant's {C} fed into Izzet Signet for Niv-Mizzet, Parun's
+    // {U}{U}{U}{R}{R}{R} was a legal line the search could never find. The crack runs here through the
+    // same ApplySacForMana / SacFloatColorFor the apply uses, so the scratch board holds what the real
+    // pre-pass leaves. It only ever ADDS mana to the scratch board, so it can only admit more subsets --
+    // each one a real payment by the executor's own payer.
+    static const bool s_rescue_sac = EnvOn("MTG_RESCUE_SAC_FLOAT", true);
+    if (s_rescue_sac)
+    {
+        bool any_sac = false;
+        for (int j : sel) { if (cands[j].kind == Action::Kind::SacForMana) { any_sac = true; break; } }
+        if (any_sac)
+        {
+            thread_local std::vector<Action> sac_view;   // the selected actions, SacFloatColorFor's input
+            sac_view.clear();
+            for (int j : sel) { sac_view.push_back(cands[j]); }
+            for (int j : sel)
+            {
+                const Action& a = cands[j];
+                if (a.kind != Action::Kind::SacForMana) { continue; }
+                ApplySacForMana(cp, cp.active_player_index, a.sac_source_id,
+                                TurnSolver::SacFloatColorFor(cp, sac_view, a), a.ritual_float, a.sac_victim_id);
+            }
+        }
+    }
     // Pay each selected cast's mana cost with real sources; taps persist across casts in cp, so a
     // filter consumed by one cast is unavailable to the next. Mana producers (rocks) pay first and
     // join the board so their mana is online for later casts in the subset.
@@ -7956,6 +7985,7 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
         for (int j : walk_ord)
         {
             const Action& a = cands[j];
+            if (s_rescue_sac && a.kind == Action::Kind::SacForMana) { continue; }   // cracked above
             // Vial deploys cost no mana. A Vial-PUT ETB Treasure maker (Corsair Captain;
             // MTG_ETB_TREASURE_SPEND) still makes its Treasure, and the producer pass lays it down
             // exactly as it does a CAST maker's (the payable order hoists either one ahead of the

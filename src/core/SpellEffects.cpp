@@ -3347,6 +3347,25 @@ static thread_local int g_bt_restricted = 0;
 // for a QUALIFYING spell whether or not it is a creature, so the fed-filter skip below reads this
 // counter on every payment rather than only on a creature one. 0 on every board without one.
 static thread_local int g_bt_restricted_big = 0;
+// RAMP-FILTER FEED CHOICE (MTG_RAMP_FEED_BRANCH, DEFAULT ON; =0 restores the single fixed pick). A ramp
+// filter (Izzet Signet / Ferrous Lake: "{1},{T}: Add {U}{R}") is fed by ONE unit of the DFS float, and
+// that unit used to be ConsumeFloatingAny's fixed pick ({C}, then W, U, B, R, G) -- never a branch.
+// WHICH unit it eats can decide the payment: Island -> Signet ({U}{R}), then the {R} -- not the {U} --
+// into Ferrous Lake is the only way that board pays {U}{U}{R}, and the fixed pick takes the {U}
+// (NivMizzetCombo's four Signets chain the same way into Niv-Mizzet's {U}{U}{U}{R}{R}{R}). The any-
+// colour filter branch already branches its feed for exactly this reason. FIRST PASS UNCHANGED: the DFS
+// runs as it always did, and only when it FAILS after meeting a fixed pick that had an alternative
+// (g_bt_ramp_feed_alt) does the public entry re-run it with every feed unit tried (g_bt_ramp_feed_branch,
+// a fresh failure memo, its own mana-cache key). So every payment the old search found is found again,
+// byte for byte, and the second pass can only ADD payments the fixed pick made unreachable -- a lossless
+// widening of the oracle. Inert without a ramp filter.
+static thread_local bool g_bt_ramp_feed_branch = false;
+static thread_local bool g_bt_ramp_feed_alt    = false;
+static bool RampFeedBranchOn()
+{
+    static const bool v = EnvOn("MTG_RAMP_FEED_BRANCH", true);   // DEFAULT ON; =0 disables
+    return v;
+}
 
 // Interior feasibility cut state (see MTG_ACF_INTERIOR in the worker): per top-level payment.
 static thread_local int  t_bt_nodes     = 0;
@@ -4460,11 +4479,37 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         {
             if (floating.Total() >= 1 && !produces.empty() && !((for_creature && g_bt_restricted > 0) || g_bt_restricted_big > 0))   // {1},{T}: feed 1, Add one of each colour
             {
-                ManaPool f = floating; Color took;
-                if (ConsumeFloatingAny(f, took))
+                ManaPool f = floating; Color took = Color::Colorless;
+                const bool picked = ConsumeFloatingAny(f, took);
+                if (picked)
                 {
                     for (Color c : produces) { f.Add(c, 1); }
                     if (activate(f)) { return true; }
+                }
+                // Every OTHER feed unit (see g_bt_ramp_feed_branch): the second pass tries them; the
+                // first only notes that one existed, so the public entry knows a retry can differ.
+                static const Color kFeedKinds[] = { Color::Colorless, Color::White, Color::Blue,
+                                                    Color::Black, Color::Red, Color::Green };
+                for (Color fc : kFeedKinds)
+                {
+                    if (picked && fc == took) { continue; }
+                    ManaPool g = floating;
+                    if (!ConsumeFloating(g, fc)) { continue; }
+                    if (!g_bt_ramp_feed_branch) { g_bt_ramp_feed_alt = true; break; }
+                    for (Color c : produces) { g.Add(c, 1); }
+                    if (activate(g)) { return true; }
+                }
+                if (floating.wild > 0)   // a wild unit pays the generic {1} too (the fixed pick never takes one)
+                {
+                    if (!g_bt_ramp_feed_branch) { g_bt_ramp_feed_alt = true; }
+                    else
+                    {
+                        ManaPool g = floating;
+                        --g.wild;
+                        if (g.wild_c > g.wild) { g.wild_c = g.wild; }
+                        for (Color c : produces) { g.Add(c, 1); }
+                        if (activate(g)) { return true; }
+                    }
                 }
             }
         }
@@ -5378,6 +5423,9 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
              | (static_cast<std::uint64_t>(floating.black) << 24) | (static_cast<std::uint64_t>(floating.red) << 36));
         mix(h, static_cast<std::uint64_t>(floating.green) | (static_cast<std::uint64_t>(floating.colorless) << 16)
              | (static_cast<std::uint64_t>(floating.wild) << 32));
+        // The widened ramp-feed pass (g_bt_ramp_feed_branch) can find payments the first cannot, so it
+        // keys apart. Mixed only while it is on -> every first-pass key is exactly as before.
+        if (g_bt_ramp_feed_branch) { mix(h, 0x5A3FEEDull); }
     };
     mixcost(h1); mixcost(h2);
     k1 = h1; k2 = h2;
@@ -5421,7 +5469,58 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                          std::uint64_t reserved_mask,
                          ManaPool* out_full_pool,
                          const std::vector<std::pair<int, const CardDefinition*>>* src_cands);
+static bool TapForCostBacktrackPass(GameState& state, const ManaCost& cost,
+                         bool for_creature, ManaPool floating,
+                         const std::vector<Color>* rp_colors,
+                         TapBacktrackMemo* fail_memo,
+                         ManaPool* out_leftover,
+                         std::uint64_t tapped_mask,
+                         int untapped_max,
+                         std::uint64_t reserved_mask,
+                         ManaPool* out_full_pool,
+                         const std::vector<std::pair<int, const CardDefinition*>>* src_cands);
+// The public entry: the historical search, then -- only when it failed after a ramp filter's fixed feed
+// pick had an alternative -- one more pass with every feed unit branched (see g_bt_ramp_feed_branch).
+// A failed pass leaves the state exactly as it found it (every DFS level restores what it tapped), so
+// the second pass starts from the same board.
 bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
+                         bool for_creature, ManaPool floating,
+                         const std::vector<Color>* rp_colors,
+                         TapBacktrackMemo* fail_memo,
+                         ManaPool* out_leftover,
+                         std::uint64_t tapped_mask,
+                         int untapped_max,
+                         std::uint64_t reserved_mask,
+                         ManaPool* out_full_pool,
+                         const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
+{
+    if (g_bt_ramp_feed_branch)   // already the widened pass (no nesting today) -- just run it
+    {
+        return TapForCostBacktrackPass(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                       out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                       out_full_pool, src_cands);
+    }
+    const bool saved_alt = g_bt_ramp_feed_alt;
+    g_bt_ramp_feed_alt = false;
+    bool ok = TapForCostBacktrackPass(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                      out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                      out_full_pool, src_cands);
+    if (!ok && g_bt_ramp_feed_alt && RampFeedBranchOn())
+    {
+        g_bt_ramp_feed_branch = true;
+        // The first pass's failure memo was proven WITHOUT the branch, so it must not prune this one.
+        TapBacktrackMemo widened_memo;
+        ok = TapForCostBacktrackPass(state, cost, for_creature, floating, rp_colors,
+                                     fail_memo != nullptr ? &widened_memo : nullptr,
+                                     out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                     out_full_pool, src_cands);
+        g_bt_ramp_feed_branch = false;
+    }
+    g_bt_ramp_feed_alt = saved_alt;
+    return ok;
+}
+
+static bool TapForCostBacktrackPass(GameState& state, const ManaCost& cost,
                          bool for_creature, ManaPool floating,
                          const std::vector<Color>* rp_colors,
                          TapBacktrackMemo* fail_memo,
