@@ -1482,6 +1482,10 @@ MAINPHASE_PARAMS = {
     "sacrifice_draw_cost": "Fiery Islet sac-to-draw activation (main_phase play)",
     "stages_cards":        "Light Up the Stage: staged cards become castable (main_phase plays)",
     "tap_token_cost":      "Sliver Hive activated token ability (main_phase play)",
+    # Vampires B: Bloodline Keeper's "{B}: Transform this creature" -- a main_phase board activation
+    # (ActivatePermAbility/TransformSelf, the transform= verb); its in-combat window is the `dig`
+    # "(combat transform)" reuse, keyed on transform_back_name in MANIFEST.
+    "transform_cost":      "Bloodline Keeper's {B} transform = a main_phase board activation (transform= verb); the in-combat window is `dig` (transform_back_name)",
     "alt_cost_requires_subtype": "free-pitch alt cost = a distinct cast plan variant",
     "alt_lifegain_cost":   "free-pitch alt cost (opponent-lifegain half is goldfish-inert)",
     "animate_cost":        "animate = main_phase activation",
@@ -1720,6 +1724,10 @@ def modeled_tokens(card):
     if p.get("etb_choose_keyword_count", 0) > 0:
         t.add("modal")
     if p.get("etb_or_transform_exile_opp_creature_until_leaves"):
+        t.add("target")
+    # Vampires B: Captivating Vampire's "Gain control of target creature" IS the `target` board-click
+    # (then the five bodies of its cost, the same prompt) -- PayTapSubtypeCost / ApplyPermAbility.
+    if p.get("steal_tap_count", 0) > 0:
         t.add("target")
     # Magnetic Theft's "target Equipment ... target creature" IS the two-click `target` decision.
     if p.get("attach_target_equipment"):
