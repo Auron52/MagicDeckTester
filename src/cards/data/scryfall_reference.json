@@ -5825,5 +5825,48 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Drana, Liberator of Malakir": {
+    "cmc": 3.0,
+    "keywords": [
+      "First strike",
+      "Flying"
+    ],
+    "mana_cost": "{1}{B}{B}",
+    "oracle_text": "Flying, first strike\nWhenever Drana deals combat damage to a player, put a +1/+1 counter on each attacking creature you control.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Vampire Ally"
+  },
+  "Mavren Fein, Dusk Apostle": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Whenever one or more nontoken Vampires you control attack, create a 1/1 white Vampire creature token with lifelink.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Vampire Cleric"
+  },
+  "Stromkirk Captain": {
+    "cmc": 3.0,
+    "keywords": [
+      "First strike"
+    ],
+    "mana_cost": "{1}{B}{R}",
+    "oracle_text": "First strike\nOther Vampire creatures you control get +1/+1 and have first strike.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Soldier"
+  },
+  "Vampire Socialite": {
+    "cmc": 2.0,
+    "keywords": [
+      "Menace"
+    ],
+    "mana_cost": "{B}{R}",
+    "oracle_text": "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, if an opponent lost life this turn, put a +1/+1 counter on each other Vampire you control.\nAs long as an opponent lost life this turn, each other Vampire you control enters with an additional +1/+1 counter on it.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Noble"
   }
 }
