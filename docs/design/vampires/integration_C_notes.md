@@ -3,7 +3,7 @@
 Track C of the Vampires onboarding: the CR 510.4 two-step combat damage model, Stromkirk Captain,
 Drana, Liberator of Malakir, Mavren Fein, Dusk Apostle and Vampire Socialite. Branch `vampires-combat`
 (worktree `.claude/worktrees/vampires-c`), on top of `cbbe86a4e`. Designs: `design_C_combat.md`,
-`design_B_lords.md` §2 (Stromkirk Captain). The ledger (`analysis-Vampires.md`) is owned by the other
+`design_B_lords.md` §2 (Stromkirk Captain). The ledger (`analysis-Vampire.md`) is owned by the other
 track; everything Track C has to record is here, to be folded in when the branches are rebased together.
 
 ## What landed

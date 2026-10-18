@@ -4,7 +4,7 @@ Cards: **Falkenrath Pit Fighter**, **Stromkirk Condemned**, **Voldaren Estate** 
 **Bloodghast**. Read-only research against worktree `.claude/worktrees/vampires` @ 2176032dd. Every
 file:line below is a hint into that tree; anchor on the symbol name.
 
-Standing decisions honoured (ledger `docs/design/analysis-Vampires.md`): faithful model of every clause;
+Standing decisions honoured (ledger `docs/design/analysis-Vampire.md`): faithful model of every clause;
 every new decision SEARCHED (no greedy pick at remaining depth > 0; a provider may only order/restrict);
 discard buckets / cast order are USER-owned (proposed here, never adopted); goldfish-inert deferrals are
 PROVISIONAL until the user signs off.
