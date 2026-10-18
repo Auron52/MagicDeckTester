@@ -1114,6 +1114,13 @@ public:
     std::vector<int> SacOutletVictimCandidates(
         const GameState& s, const Permanent& src, const std::vector<int>& reps) const override;
     int ActivationOrderRank(const GameState& s, const CardDefinition& d) const override;
+    // Vampires A1 (AGENT-DRAFTED, same lever): the madness default -- the base dominance rule (cast the
+    // cheapest max-free option) except a graveyard-landfall card (Bloodghast) in a MAIN phase while this
+    // turn's land drop is open and a land is in hand: DECLINE (it returns from the graveyard on that
+    // land, haste permitting, for free -- design_A1 §3.4). Reached only beyond the horizon, at depth 0,
+    // as the human preselect, and as the FRONT of the searched fan (the fan still holds every option).
+    int MadnessCastDefault(const GameState& s, int controller, const CardDefinition& def,
+                           const std::vector<MadnessOption>& opts, MadnessWindow w) const override;
 };
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough

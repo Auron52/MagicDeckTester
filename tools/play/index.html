@@ -2194,7 +2194,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -4013,6 +4013,7 @@ function renderDecisionPanel(d, dec){
                 || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
                 || dec==='attack_mode'   // Tectonic Giant's modal attack trigger -- centred, like demonstrate
                 || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
+                || dec==='madness'   // Vampires A1: the discarded card is in EXILE (no visible zone) -- a card-image modal
                 // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
                 // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
                 // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
@@ -4039,6 +4040,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='demonstrate' ? demonstratePanelHtml(d)
                   : dec==='attack_mode' ? attackModePanelHtml(d)
                   : dec==='lifegain_counters' ? lifegainCountersPanelHtml(d)
+                  : dec==='madness' ? madnessPanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
                   : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
@@ -4866,6 +4868,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-atkmode]').forEach(b=>b.onclick=()=>commitAttackMode(d, +b.dataset.atkmode));
   else if (dec==='lifegain_counters')
     panel.querySelectorAll('[data-lgc]').forEach(b=>b.onclick=()=>commitLifegainCounters(d, +b.dataset.lgc));
+  else if (dec==='madness')
+    panel.querySelectorAll('[data-mad]').forEach(b=>b.onclick=()=>commitMadness(d, +b.dataset.mad));
   else if (dec==='tutor_etb')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
@@ -4973,6 +4977,31 @@ function commitLackey(d, oi){
 function commitFreeCast(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source||'Maelstrom Archangel'}: ${oi<0||!c?'declined the free cast':'cast '+c.name+' for free'}`);
+}
+// MADNESS (Vampires A1; CR 702.35): a discarded card with madness went to EXILE and its trigger offers
+// "cast it for its madness cost or put it into your graveyard". A centred modal with the CARD IMAGE (the
+// card is in no visible zone -- the cascade free_cast precedent); one button per payable cast (its mana
+// after convoke, and how many creatures convoke taps), plus "Put into graveyard". Clicking the card casts
+// the AI's suggested option (or the first). Reply = option index, -1 = graveyard.
+function madnessPanelHtml(d){
+  const opts=d.options||[];
+  const ai=(d.ai_pick===undefined? d.heuristic_default : d.ai_pick);
+  const first=(ai!=null && ai>=0 && ai<opts.length) ? ai : (opts.length?0:-1);
+  let h=`<h3>Madness — ${esc(d.card||'')}</h3>`;
+  h+=`<div class="sub"><b>${esc(d.source||'A discard')}</b> discarded <b>${esc(d.card||'')}</b> into exile. `+
+     `Cast it for its madness cost now, or put it into your graveyard.`+
+     (opts.length?'':' <i>(Nothing can pay its madness cost right now.)</i>')+`</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0"><span data-mad="${first}" style="cursor:pointer" title="${first>=0?'Click to cast '+esc(d.card||''):'Put into graveyard'}">${cardMini(d.card||'', '', 'normal')}</span></div>`;
+  h+=`<div class="pbtns" style="justify-content:center;flex-wrap:wrap">`;
+  opts.forEach(o=>{
+    h+=`<button class="primary" data-mad="${o.index}" title="${esc(o.label||'')}">${esc(o.label||('Cast for '+(o.cost||'')))}${o.index===ai?'  ·  AI':''}</button>`;
+  });
+  h+=`<button class="ghost" data-mad="-1">Put into graveyard${ai===-1?'  ·  AI':''}</button></div>`;
+  return h;
+}
+function commitMadness(d, oi){
+  const o=(d.options||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `${d.source||'discard'}: ${d.card||'card'} ${oi<0||!o?'put into the graveyard (madness declined)':'cast for madness ('+(o.label||o.cost||'')+')'}`);
 }
 // Creative Technique demonstrate (CR 702.145): yes/no central modal, echo's shape. Reply 1 =
 // copy (the copy resolves first, with its own free cast), 0 = decline. Default = copy.

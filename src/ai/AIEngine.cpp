@@ -4591,8 +4591,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             TRACE("retrace", "T%d cands=%zu diff=%d -> %s", state.turn_number, lands.size(),
                   pick != lands.front() ? 1 : 0, ap.hand[pick].m_name.str().c_str());
             if (m_logger) { m_logger->LogDiscard(ap.hand[pick].m_number, ap.hand[pick].m_name); }
-            ap.graveyard.push_back(ap.hand[pick]);
-            ap.hand.erase(ap.hand.begin() + pick);
+            // THE SHARED DISCARD HOOK (Vampires A1). A land never has madness, so the queue stays
+            // empty; routed for uniformity (every real discard goes through the hook).
+            std::vector<MadnessPending> mq;
+            DiscardCardFromHand(state, state.active_player_index, pick, &mq, name);
+            ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, name);
         }
 
         // Remove the source from the graveyard (re-find: push_back above may reallocate).
@@ -4953,7 +4956,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
             { if (a.convoke_green > 0 || a.convoke_other > 0)
-              { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
+              { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(a), a.convoke_green, a.convoke_other); }
               m_cast_riders = CastRiders::Of(a); if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); } resolve_now(); walker_cast_activation(a);
  }
             else if (a.kind == Action::Kind::CastFromGraveyard)
@@ -5423,7 +5426,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::CastFromHand
                      && (a.convoke_green > 0 || a.convoke_other > 0))
-            { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
+            { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(a), a.convoke_green, a.convoke_other); }
         }
         PlanSoulbondDeclineScope _sbd_cont(extra.soulbond_decline);   // Plan::soulbond_decline, continuation twin
         // The continuation's CAST SECTION (CastSectionUnlock) -- the rollout applied this continuation
@@ -5725,8 +5728,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 {
                     CreatureAbilityPayScope sac_pay_scope;
                     ManaPool avail = AvailableManaPool(state);
-                    if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                    if (TapForCost(state, OutletOwnCost(a), avail, /*for_creature=*/false))
                     {
+                        const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));   // A1 (rollout twin)
                         const bool done = ApplyDiscardSacOutlet(state, state.active_player_index,
                                                                 a.sac_source_id, a.sac_victim_id,
                                                                 a.victim_name.str(), a.discard_name.str());
@@ -5988,7 +5992,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         { ApplySuspend(state, state.active_player_index, ca.card_name); }
                         else if (ca.kind == Action::Kind::CastFromHand
                                  && (ca.convoke_green > 0 || ca.convoke_other > 0))
-                        { ApplyConvokeTaps(state, state.active_player_index, ca.convoke_green, ca.convoke_other); }
+                        { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(ca), ca.convoke_green, ca.convoke_other); }
                     }
                     // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
                     std::optional<CastSectionUnlock> pod_unlock;
@@ -6138,8 +6142,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { creature_ability_scope.emplace(); }
                 // Voldaren Estate's TRUE Blood cost at activation (lockstep twin of the rollout's).
                 const ManaCost act_cost = (a.ability_mode == Action::AbilityMode::TapBlood)
-                    ? TapBloodCostNow(state, state.active_player_index, *a.def) : a.cost;
+                    ? TapBloodCostNow(state, state.active_player_index, *a.def) : OutletOwnCost(a);
                 const ActivationDiscardPinScope _discard_pin(&a.discard_name.str());   // BloodDraw
+                const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));       // A1 (rollout twin)
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
                 ManaPool avail = AvailableManaPool(state);
@@ -6280,8 +6285,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 && !DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
                                         a.discard_name.str())) { continue; }
             ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            if (TapForCost(state, OutletOwnCost(a), avail, /*for_creature=*/false))
             {
+                const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));   // A1 (rollout twin)
                 const int n = ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
                                                 a.gy_exile_mode, a.chosen_x, a.discard_name.str());
                 // Label built from the PARAMS, not hardcoded. It used to read "team pump + haste"
@@ -6858,7 +6864,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // both worlds (ApplyConvokeTaps) -> lockstep.
         else if (a.kind == Action::Kind::CastFromHand
                  && (a.convoke_green > 0 || a.convoke_other > 0))
-        { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
+        { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(a), a.convoke_green, a.convoke_other); }
     }
     // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan chosen,
     // nothing paid -- so the executor's payments and the rollout's read the identical hold. Each
@@ -7488,7 +7494,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { ApplySuspend(state, state.active_player_index, ca.card_name); }
                 else if (ca.kind == Action::Kind::CastFromHand
                          && (ca.convoke_green > 0 || ca.convoke_other > 0))
-                { ApplyConvokeTaps(state, state.active_player_index, ca.convoke_green, ca.convoke_other); }
+                { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(ca), ca.convoke_green, ca.convoke_other); }
             }
             // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
             std::optional<CastSectionUnlock> pe_unlock;
@@ -7981,8 +7987,13 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
         if (it == ap.hand.end()) { return false; }
         if (!TapForCost(state, cyc_cost, avail, false)) { return false; }
         if (m_logger) { m_logger->LogDiscard(it->m_number, it->m_name); }
-        ap.graveyard.push_back(*it);
-        ap.hand.erase(it);
+        {   // THE SHARED DISCARD HOOK (Vampires A1): cycling's "discard this" is a COST, so a madness
+            // trigger would resolve before the draw (the pool's cycling cards are lands: uniformity).
+            std::vector<MadnessPending> mq;
+            DiscardCardFromHand(state, state.active_player_index, static_cast<int>(it - ap.hand.begin()),
+                                &mq, source);
+            ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, source);
+        }
         // D1 -- the executor's cycle site: Hollow One's counter + Drannith Stinger's trigger.
         OnCardCycled(state, state.active_player_index);
     }
@@ -8150,6 +8161,19 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
                           bool for_creature)
 {
     return TapForCostShared(state, cost_in, for_creature, &available, /*honor_legacy_cco=*/false);
+}
+
+// THE EXECUTOR'S MADNESS PAYER (Vampires A1): a madness cast pays as a CREATURE SPELL, with a FRESH
+// accounting pool -- the trailing pass's activation idiom (each activation re-derives AvailableManaPool),
+// so no carried `available` can drift. Lockstep twin of the rollout's RolloutMadnessPayer.
+const MadnessPayFn& AIEngine::MadnessPayer()
+{
+    m_madness_payer = [this](GameState& s, const ManaCost& c)
+    {
+        ManaPool avail = AvailableManaPool(s);
+        return TapForCost(s, c, avail, /*for_creature=*/true);
+    };
+    return m_madness_payer;
 }
 
 // ---- Spell selection ----
@@ -8512,7 +8536,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // reduction the enumeration emitted (5d dropped-cast bug: pricing the FULL cost here dropped
     // a mana-legal convoke cast after its bodies were already tapped).
     if (def->params.convoke && (convoke_green > 0 || convoke_other > 0))
-    { ApplyConvokeReduction(effective, convoke_green, convoke_other); }
+    { ApplyConvokeReduction(effective, convoke_green, convoke_other, ConvokePipColor(*def)); }
     // Phyrexian ({G/P} -- Birthing Pod's cast): the variant's life-paid pips come OFF the
     // recomputed cost, the SAME strip the enumeration and rollout applied (lockstep); the life
     // itself is deducted after TapForCost succeeds, below.
@@ -9060,9 +9084,18 @@ Card* AIEngine::ChooseDiscard(GameState& state)
             if (j < 0 || j >= hand_size) { continue; }
             if (win_turn[j] != std::numeric_limits<int>::max()) { continue; }   // duplicate entry
             GameState trial = state;
-            Player& tap = trial.ActivePlayer();
-            tap.graveyard.push_back(tap.hand[j]);
-            tap.hand.erase(tap.hand.begin() + j);
+            {
+                // THE SHARED DISCARD HOOK (Vampires A1). A madness card shed in the trial resolves at
+                // once by the cleanup rule (a throwaway projection: no human is asked, nothing logs).
+                std::vector<MadnessPending> mq;
+                DiscardCardFromHand(trial, trial.active_player_index, j, &mq, "cleanup");
+                if (!mq.empty())
+                {
+                    RevealLogPause _pause;
+                    const MadnessHostScope _mh(&MadnessPayer(), MadnessPin{});
+                    ResolvePendingMadness(trial, mq, MadnessWindow::Cleanup, MadnessPin{}, "cleanup");
+                }
+            }
             // Resume IN the cleanup step: the remaining sheds of this same cleanup run first (on the
             // heuristic, since m_in_rollout gates this searched pass off inside a rollout), so the
             // searched candidate is only the FIRST shed and the label is a state the real game can
@@ -9182,27 +9215,24 @@ void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate, bool l
     const std::vector<int> pitch = LandsEdgePitchOrder(state, &m_profile.required_pieces, count);
     std::vector<char> burn(ap.hand.size(), 0);
     for (int i : pitch) { burn[static_cast<std::size_t>(i)] = 1; }
-    std::vector<Card> keep;
-    int fired = 0, idx = -1;
-    for (Card& c : ap.hand)
+    // The burnt lands in HAND ORDER (the order they reach the graveyard), each discarded through THE
+    // SHARED DISCARD HOOK (Vampires A1; a land never has madness -- uniformity), its index shifted down
+    // by the discards before it. Same graveyard order, same kept-hand order as the old hand rebuild.
+    std::vector<int> burn_idx;
+    for (int i = 0; i < static_cast<int>(burn.size()) && static_cast<int>(burn_idx.size()) < count; ++i)
+    { if (burn[static_cast<std::size_t>(i)] != 0) { burn_idx.push_back(i); } }
+    std::vector<MadnessPending> mq;
+    int fired = 0;
+    for (const int bi : burn_idx)
     {
-        ++idx;
-        bool is_land = burn[static_cast<std::size_t>(idx)] != 0;
-        if (is_land && fired < count)
-        {
-            ap.graveyard.push_back(c);
-            opp.life -= rate;
-            if (rate > 0) { state.opponent_lost_life_this_turn = true; }
-            // `log` is false for the trial copies in ActivateLandsEdge (those are throwaway
-            // win-turn projections, not the realised game) -- logging them leaked phantom
-            // ATTACK entries into the real game log. Only the final fire below logs.
-            if (log && m_logger) { m_logger->LogAttack(rate, opp.life); }
-            ++fired;
-        }
-        else
-        {
-            keep.push_back(std::move(c));
-        }
+        DiscardCardFromHand(state, state.active_player_index, bi - fired, &mq, "Land's Edge");
+        opp.life -= rate;
+        if (rate > 0) { state.opponent_lost_life_this_turn = true; }
+        // `log` is false for the trial copies in ActivateLandsEdge (those are throwaway
+        // win-turn projections, not the realised game) -- logging them leaked phantom
+        // ATTACK entries into the real game log. Only the final fire below logs.
+        if (log && m_logger) { m_logger->LogAttack(rate, opp.life); }
+        ++fired;
     }
-    ap.hand = std::move(keep);
+    ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, "Land's Edge");
 }

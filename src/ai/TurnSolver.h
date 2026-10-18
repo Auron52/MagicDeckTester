@@ -3,7 +3,9 @@
 #include "../cards/CardDatabase.h"
 #include "PlanContext.h"   // PlanTraits (ComputePlanTraits below); header is Action-free on purpose
 #include "SearchBudget.h"
+#include "../core/MadnessTypes.h"   // MadnessPin (Action's madness pin helpers)
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <cstdio>
 #include <cstdlib>
@@ -431,6 +433,18 @@ struct Action
     // least that many (SubsetVampOutletInvalid); the apply pays the TRUE cost at activation
     // (TapBloodCostNow). 0 for every other action. In padding (sizeof(Action) unchanged by it).
     std::int8_t vamp_casts_needed = 0;
+    // VAMPIRES A1 (2026-10-18): the SEARCHED MADNESS answer of a discard-cost activation (rides beside
+    // discard_name -- one discard per activation). madness_choice: -1 unpinned (no madness possible at
+    // emission, or human play: asked at resolution); 0 decline; k >= 1 cast with the discarded card's
+    // (k-1)-th distinct madness cost, using convoke arm `madness_arm` (MadnessPin, core/MadnessTypes.h).
+    // madness_mv: that option's mana (after convoke) folded into `cost` as GENERIC, so the subset walk
+    // reserves it; the three trailing-pass pay sites pay `cost - madness_mv` in the outlet's own context
+    // (OutletOwnCost) and the madness trigger pays the exact coloured cost as a creature spell. Folded
+    // into plan_signature / ActionFoldSig / BpCandFingerprint / PlanDomKey beside discard_name (gated on
+    // madness_choice >= 0, so every other deck keeps its exact keys).
+    std::int8_t madness_choice = -1;
+    std::int8_t madness_arm    = 0;
+    std::int8_t madness_mv     = 0;
     int         gy_exile_mode  = 0;    // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
                                        // loses N (Deathrite {B}); 2 = exile creature -> gain N ({G}).
     int         loyalty_ability = -1;  // ActivateLoyalty: index into the walker's loyalty_abilities.
@@ -756,6 +770,22 @@ struct Action
     bool operator==(const Action&) const = default;
 };
 
+// VAMPIRES A1: the part of a discard-cost activation's `cost` the OUTLET itself pays -- `cost` minus the
+// madness option's mana folded in as generic (Action::madness_mv). Every trailing-pass pay site of the
+// three outlet kinds (both worlds) pays THIS; the madness trigger pays its own exact coloured cost.
+// Identity for every action that carries no madness cast pin (madness_mv == 0).
+inline ManaCost OutletOwnCost(const Action& a)
+{
+    ManaCost c = a.cost;
+    if (a.madness_mv > 0) { c.generic = std::max(0, c.generic - a.madness_mv); }
+    return c;
+}
+inline MadnessPin MadnessPinOf(const Action& a) { return MadnessPin{ a.madness_choice, a.madness_arm }; }
+// The definition an Action casts (its cached def, else the database entry by name) -- the convoke apply
+// sites read the card's convoke rules (pip colour; Chord's legacy rules) off it.
+inline const CardDefinition* ActionCastDef(const Action& a)
+{ return a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name); }
+
 // CAST RIDERS -- the per-cast values a plan action hands to ONE cast that are NOT positional parameters
 // of the executor's cast_by_name / cast_alt or the rollout's apply_one (each already takes ~20): Magnetic
 // Theft's Equipment target, Mycoloth's devour count, Beseech's coloured twobrid pips, Search for
@@ -861,59 +891,7 @@ struct CastRiders
 // in searched-second-main-unconditional.md), or -- with USER APPROVAL, never an agent's call --
 // stop considering that phase at all. Those are the only two sanctioned outcomes, per USER
 // 2026-10-01: "We either do not consider the main at all, or we search it."
-namespace greedywindow
-{
-inline constexpr int kNoSearch = -1;          // no search frame on the stack -> greedy is the play path
-inline thread_local int t_depth = kNoSearch;  // innermost search frame's REMAINING depth
-
-// RAII. Unconditional (not behind a flag): one thread-local int store per search frame, which is a
-// decision-scale write, and a guard that can be configured off is the thing the user asked to end.
-struct Frame
-{
-    int prev;
-    explicit Frame(int d) : prev(t_depth) { t_depth = d; }
-    ~Frame() { t_depth = prev; }
-};
-
-[[noreturn]] inline void Trip(const char* site, int depth)
-{
-    std::fprintf(stderr,
-        "\n*** FATAL: GREEDY PLAN CHOICE INSIDE THE SEARCH WINDOW ***\n"
-        "    site: %s\n"
-        "    the innermost search frame still has depth %d remaining, so this decision had search\n"
-        "    budget available and took a one-shot heuristic instead.\n"
-        "\n"
-        "    This is a DOCTRINE VIOLATION, not a tuning question (USER 2026-09-05 / 2026-10-01):\n"
-        "    greedy is permitted only BEYOND the search horizon, for this-turn combo go-off\n"
-        "    heuristics, mana allocation, and non-dork attack decisions.\n"
-        "\n"
-        "    Fix it by routing this site through the search, or -- WITH USER APPROVAL ONLY -- by not\n"
-        "    considering the phase at all. Do NOT add a flag to bypass this check; it is deliberately\n"
-        "    fatal because this class of regression has been removed three times and returned three\n"
-        "    times. See docs/design/no-greedy-in-search-window.md and\n"
-        "    docs/design/greedy-in-the-searched-window-status.md.\n\n",
-        site, depth);
-    std::fflush(stderr);
-    // abort(), not an exception: a throw can be caught by a worker-thread boundary and demoted to a
-    // per-job error, which is exactly the "invisible until someone looks" failure this replaces.
-    std::abort();
-}
-
-// THE ONE PREDICATE both checks reduce to, kept pure so test_greedy_window.cpp can prove the gate
-// FIRES (a gate nobody has seen trip may be a silent no-op): a greedy pick is inside the window when
-// the CALLER's claimed remaining depth is positive OR the innermost open search frame still holds
-// depth. Either alone has a blind spot -- a claim is only as honest as the call site that makes it,
-// and a frame only exists where a host opened one -- so the permit checks both.
-inline bool InWindow(int claimed_depth)
-{
-    return claimed_depth > 0 || t_depth > 0;
-}
-
-inline void Require(const char* site, int claimed_depth = 0)
-{
-    if (InWindow(claimed_depth)) { Trip(site, claimed_depth > 0 ? claimed_depth : t_depth); }
-}
-}
+#include "../core/GreedyWindow.h"   // namespace greedywindow (moved there verbatim; core resolvers read it)
 
 class TurnSolver
 {
@@ -3148,6 +3126,9 @@ public:
 // unification. Not part of the solver's interface: src/ code outside TurnSolver.cpp must keep
 // paying costs through AIEngine::TapForCost (executor) or plan application (rollout).
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+// Vampires A1: the rollout's madness payer (a creature-SPELL payment through TapForCostDirect) -- what
+// the trailing pass and the rollout cleanup install with MadnessHostScope. Exposed for the unit tests.
+const std::function<bool(GameState&, const ManaCost&)>& RolloutMadnessPayer();
 
 // The rollout's combat simulation (defined in TurnSolver.cpp; the same shared combat core the
 // executor mirrors). External linkage exists ONLY for MirrorwingProvider::LegendKeepIndex, which

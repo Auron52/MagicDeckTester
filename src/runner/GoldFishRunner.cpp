@@ -1343,6 +1343,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool draw_ping = false;
         // Bloodghast's opponent-life conditional haste (GameState::deck_has_cond_haste).
         bool cond_haste = false;
+        // Madness (GameState::deck_has_madness): an own madness cost or Falkenrath Gorger's grant.
+        bool madness = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1377,6 +1379,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 // searched land-after-the-activations position exists (design_A2 §4.2).
                 if (d->params.landfall_return_self_from_gy) { landfall = true; }
                 if (d->params.haste_if_opp_life_at_most > 0) { cond_haste = true; }
+                if (d->params.madness_cost.has_value()
+                    || !d->params.grants_madness_creature_subtype.empty()) { madness = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
@@ -1451,6 +1455,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
         state.deck_has_draw_ping           = garth || draw_ping;
         state.deck_has_cond_haste          = garth || cond_haste;
+        // Same reasoning, no lever: a clear bit proves no discard can be a madness discard (the stamp
+        // tests the very params MadnessCostsFor reads), so the per-discard lookup is dead code.
+        state.deck_has_madness             = garth || madness;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.
@@ -1509,7 +1516,23 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         };
         state.inf_life_possible = inf_arms(deck.mainboard) || inf_arms(deck.sideboard);
         static const bool s_own_death_all = EnvOn("MTG_OWN_DEATH_ALL");   // DEFAULT OFF; measurement only
-        state.own_death_live = state.dmg_events_armed || s_own_death_all;
+        // VAMPIRES (A1, 2026-10-18; ledger open question 6 -- default ON, PROVISIONAL): Asylum Visitor's
+        // MANDATORY upkeep life loss (hellbent_upkeep_life_loss) and Voldaren Estate's pay-1-life
+        // coloured mana (tap_blood_cost marks the Estate; its pain is tap_self_damage) can take our
+        // own life to 0 in a long game, so our own death must be able to end it (CR 704.5a). Both
+        // params are carried by no other card in cards.json, so no other deck arms.
+        auto vamp_life = [](const std::vector<Card>& zone)
+        {
+            for (const Card& c : zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && (d->params.hellbent_upkeep_life_loss > 0 || d->params.tap_blood_cost.has_value()))
+                { return true; }
+            }
+            return false;
+        };
+        state.own_death_live = state.dmg_events_armed || s_own_death_all
+                            || vamp_life(deck.mainboard) || vamp_life(deck.sideboard);
     }
     // SPELL-COST REDUCERS (see GameState::deck_has_cost_reducer): can anything that ever reaches a
     // battlefield in this game reduce the cost of a spell we cast? EffectiveSpellCost walks the

@@ -799,6 +799,29 @@ using FreeCastChooser = std::function<int(const GameState& state, int controller
                                           const std::vector<std::string>& walked)>;
 extern thread_local FreeCastChooser* g_play_free_cast_chooser;
 
+// ---- Human-play MADNESS chooser (Vampires A1, 2026-10-18; CR 702.35) -------------------------
+// "If you discard a card with madness, discard it into exile. When you do, cast it for its madness
+// cost or put it into your graveyard." Asked at EVERY madness trigger in a REAL resolution (an
+// outlet's discard cost -- Falkenrath Pit Fighter, Stromkirk Condemned, the Blood token -- the
+// cleanup discard, or any resolving discard effect), from the shared ResolvePendingMadness
+// (SpellEffects.h). `source` = what discarded the card ("Stromkirk Condemned", "cleanup", ...),
+// `card` = the exiled card, `options` = the payable casts (one per distinct madness cost x convoke
+// arm; label is human-readable, cost_text the mana actually paid after convoke). Returns an index
+// into `options`, or -1 = decline (the card goes to the graveyard). `heuristic_index` = the
+// provider's pick (-1 = its default is to decline). The card is in EXILE, so the GUI asks in a
+// modal with the card image (the cascade free_cast precedent). Nulled by RevealLogPause for every
+// search/rollout scope -> autonomous play keeps the searched pin / provider rule, byte-identical.
+struct MadnessChoice
+{
+    std::string cost_text;       // the mana paid, e.g. "{2}{B}" or "{B}" after convoke
+    int         convoke_taps = 0;   // creatures tapped for convoke
+    std::string label;           // "Cast for {2}{B}, tapping 2 creatures (convoke)"
+};
+using MadnessChooser = std::function<int(const GameState& state, int controller, const std::string& source,
+                                         const Card& card, const std::vector<MadnessChoice>& options,
+                                         int heuristic_index)>;
+extern thread_local MadnessChooser* g_play_madness_chooser;
+
 // ---- Human-play demonstrate chooser (Creative Technique, CR 702.145) ------------------------
 // "You may copy this spell" -- a yes/no asked as the demonstrate trigger resolves. `spell` is
 // the demonstrating spell; `heuristic_default` is the provider's call (true = copy, the
@@ -988,7 +1011,8 @@ inline bool AllPlayHooksNull()
         && g_play_attack_mode_chooser == nullptr
         && g_play_lifegain_counters_chooser == nullptr
         && g_play_fling_chooser == nullptr
-        && g_play_etb_color_chooser == nullptr && g_play_etb_keywords_chooser == nullptr;
+        && g_play_etb_color_chooser == nullptr && g_play_etb_keywords_chooser == nullptr
+        && g_play_madness_chooser == nullptr;
 }
 
 // 0 = flag fast path (DEFAULT). 1 = MTG_PAUSE_HOOK_FLAG=0, the original 26-pointer scan (identical
@@ -1051,6 +1075,7 @@ struct RevealLogPause
     // (USER 2026-10-06: "I hadn't even cast him yet").
     EtbColorChooser*    saved_etbcolchooser = nullptr;
     EtbKeywordsChooser* saved_etbkwchooser = nullptr;
+    MadnessChooser*     saved_madchooser = nullptr;   // Vampires A1 madness (fires from ResolvePendingMadness)
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
     bool noop;   // fast path: nothing installed -> nothing to save/null/restore (see ctor)
@@ -1104,6 +1129,7 @@ struct RevealLogPause
         saved_tpchooser = g_play_tap_pref_chooser;
         saved_loychooser = g_play_loyalty_chooser;
         saved_etbcolchooser = g_play_etb_color_chooser; saved_etbkwchooser = g_play_etb_keywords_chooser;
+        saved_madchooser = g_play_madness_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
         g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
@@ -1126,6 +1152,7 @@ struct RevealLogPause
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
         g_play_loyalty_chooser = nullptr;
         g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
+        g_play_madness_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
                         g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
@@ -1160,7 +1187,8 @@ struct RevealLogPause
                         g_play_tap_pref_chooser = saved_tpchooser;
                         g_play_loyalty_chooser = saved_loychooser;
                         g_play_etb_color_chooser = saved_etbcolchooser;
-                        g_play_etb_keywords_chooser = saved_etbkwchooser; }
+                        g_play_etb_keywords_chooser = saved_etbkwchooser;
+                        g_play_madness_chooser = saved_madchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };
@@ -1201,6 +1229,7 @@ struct ComboOffApplyPause
     AttackModeChooser* c28; BounceChooser* c29; BounceChooser* c30;
     LifegainCountersChooser* c31;
     EtbColorChooser* c32; EtbKeywordsChooser* c33;
+    MadnessChooser* c34;
     ComboOffApplyPause()
     {
         c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
@@ -1222,6 +1251,7 @@ struct ComboOffApplyPause
         c30 = g_play_treasurify_chooser;
         c31 = g_play_lifegain_counters_chooser;
         c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser;
+        c34 = g_play_madness_chooser;
         g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
         g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
@@ -1241,6 +1271,7 @@ struct ComboOffApplyPause
         g_play_treasurify_chooser = nullptr;
         g_play_lifegain_counters_chooser = nullptr;
         g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
+        g_play_madness_chooser = nullptr;
     }
     ~ComboOffApplyPause()
     {
@@ -1263,6 +1294,7 @@ struct ComboOffApplyPause
         g_play_treasurify_chooser = c30;
         g_play_lifegain_counters_chooser = c31;
         g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33;
+        g_play_madness_chooser = c34;
     }
     ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
     ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;
