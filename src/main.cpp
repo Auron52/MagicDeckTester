@@ -8751,6 +8751,25 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
     return 0;
 }
 
+// A missing card database must FAIL, never run. Every card the deck names would load as an empty
+// definition (no cost, no abilities), so the run plays nothing and reports "all games unwon,
+// avg max_turns+1" as though that were a result. The default path is CWD-relative, so launching
+// `mtg` from anywhere but the repo root without --cards-json hit exactly that silently (2026-10-18,
+// AccomplishedAlchemist C1: a 12-game probe from another directory read "all unwon, avg 9.0" and
+// was blamed on --game-log-dir). The scenario runner already refused; batch and single now match.
+static bool LoadCardsJsonOrFail(const std::filesystem::path& cards_json)
+{
+    if (!std::filesystem::exists(cards_json))
+    {
+        std::cerr << "Error: card database not found at '" << cards_json.string()
+                  << "' (resolved against the current directory). Run from the repo root or pass"
+                     " --cards-json <path>.\n";
+        return false;
+    }
+    CardDatabase::Instance().LoadFromJson(cards_json);
+    return true;
+}
+
 int main(int argc, char* argv[])
 {
     // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
@@ -8811,10 +8830,7 @@ int main(int argc, char* argv[])
         }
         try
         {
-            if (std::filesystem::exists(cards_json))
-            {
-                CardDatabase::Instance().LoadFromJson(cards_json);
-            }
+            if (!LoadCardsJsonOrFail(cards_json)) { return 1; }
             std::cout << "=== BATCH (streaming per-job results as each job finishes) ===\n"
                       << std::flush;
             // Stream each job's line the moment it completes (jobs arrive in completion
@@ -8987,6 +9003,13 @@ int main(int argc, char* argv[])
     int         eval_mull    = 0;      // --eval-mull N (London mulligan count so far)
     bool        eval_on_play = true;   // --eval-draw flips to on-the-draw
 
+    // An argument this parser does not consume is IGNORED -- say so. Silently dropping it made a
+    // batch-only flag (`--game-log-dir`, which writes no logs here) look accepted, and a trailing
+    // value flag with its value missing look applied. A warning, not an error: callers that pass a
+    // retired flag keep running exactly as before.
+    auto warn_ignored = [](const std::string& a)
+    { std::cerr << "[cli] WARNING: argument '" << a << "' is not recognised here (or lacks its value)"
+                   " and is IGNORED\n"; };
     for (int i = 2; i < argc; ++i)
     {
         std::string flag = argv[i];
@@ -9132,7 +9155,9 @@ int main(int argc, char* argv[])
                 {
                     cards_json = argv[++i];
                 }
+                else { warn_ignored(flag); }
             }
+            else { warn_ignored(flag); }
         }
         catch (...)
         {
@@ -9149,10 +9174,7 @@ int main(int argc, char* argv[])
 
     try
     {
-        if (std::filesystem::exists(cards_json))
-        {
-            CardDatabase::Instance().LoadFromJson(cards_json);
-        }
+        if (!LoadCardsJsonOrFail(cards_json)) { return 1; }
 
         Decklist deck = DeckLoader::LoadFromFile(deck_path);
         if (cast_order_report) { return RunCastOrderReport(deck, deck_path.string()); }

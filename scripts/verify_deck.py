@@ -294,7 +294,13 @@ def _parse_decisions_registry():
             continue
         # A row may cover SEVERAL types sharing one wiring ("`scry` / `surveil` / `reorder`"):
         # register each token separately (they share emitter + GUI symbols).
-        tkeys = [t.strip("` ") for t in cells[0].split("/")]
+        # The type token(s) are the backticked names BEFORE any parenthesised note: a reuse row
+        # reads "`choose_color` (reuse: **Utopia Sprawl** ...)", and splitting the whole cell on "/"
+        # left the note glued to the token, so the row silently registered nothing and the type
+        # read as unmapped (AccomplishedAlchemist 2026-10-18).
+        # The FIRST row for a type is its canonical wiring; a later reuse row never overrides it.
+        head = cells[0].split("(", 1)[0]
+        tkeys = [t.strip("` ") for t in head.split("/")]
         tkeys = [t for t in tkeys if re.fullmatch(r"[a-z_]+", t)]
         if not tkeys:
             continue
@@ -303,7 +309,7 @@ def _parse_decisions_registry():
             m = re.search(r"`([A-Za-z_][A-Za-z0-9_]*)`", cell)
             return m.group(1) if m else None
         for tkey in tkeys:
-            reg[tkey] = (sym(cells[3]), sym(cells[4]))   # emitter (main.cpp), GUI (index.html)
+            reg.setdefault(tkey, (sym(cells[3]), sym(cells[4])))   # emitter (main.cpp), GUI (index.html)
     return reg
 
 
