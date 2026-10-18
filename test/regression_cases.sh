@@ -477,10 +477,10 @@ SMOKE_CASES=(
   # 2,695 (the costliest deck with both artifacts) -> 2.29x, budget 8,086. Sized like pd (closest per-game
   # cost): at Bruna's counts it was 26% of the regression tier. No value leaf / keep table yet, so GT WILL
   # move when they land; overnight carries the ENTRY set.
-  #HOLD-EDF-MEM "edf2hg 3 1001   15 10"
-  #HOLD-EDF-MEM "edf 0 1001 1000 0"
-  #HOLD-EDF-MEM "edf 3 1001   25 10"
-  #HOLD-EDF-MEM "edf 5 1001   15 20"
+  "edf2hg 3 1001   15 10"
+  "edf 0 1001 1000 0"
+  "edf 3 1001   25 10"
+  "edf 5 1001   15 20"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -754,11 +754,11 @@ REGRESSION_CASES=(
   "bruna 5 2002   75 20"
   "bruna 5 3003   75 20"
   # edf: see the SMOKE block.
-  #HOLD-EDF-MEM "edf 0 2002 1000 0"
-  #HOLD-EDF-MEM "edf 3 2002   40 10"
-  #HOLD-EDF-MEM "edf 3 3003   40 10"
-  #HOLD-EDF-MEM "edf 5 2002   25 20"
-  #HOLD-EDF-MEM "edf 5 3003   25 20"
+  "edf 0 2002 1000 0"
+  "edf 3 2002   40 10"
+  "edf 3 3003   40 10"
+  "edf 5 2002   25 20"
+  "edf 5 3003   25 20"
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
@@ -1250,18 +1250,18 @@ OVERNIGHT_CASES=(
   "bruna 5 6006  300 20"
   "bruna 5 7007  300 20"
   # edf: see the SMOKE block. ENTRY SET (Hinata's shape) until its keep table is adopted.
-  #HOLD-EDF-MEM "edf 0 4004 2000 0"
-  #HOLD-EDF-MEM "edf 0 6006 2000 0"
-  #HOLD-EDF-MEM "edf 0 8008 2000 0"
-  #HOLD-EDF-MEM "edf 0 10010 2000 0"
-  #HOLD-EDF-MEM "edf 3 4004  400 10"
-  #HOLD-EDF-MEM "edf 3 5005  400 10"
-  #HOLD-EDF-MEM "edf 3 6006  400 10"
-  #HOLD-EDF-MEM "edf 3 7007  400 10"
-  #HOLD-EDF-MEM "edf 5 4004  300 20"
-  #HOLD-EDF-MEM "edf 5 5005  300 20"
-  #HOLD-EDF-MEM "edf 5 6006  300 20"
-  #HOLD-EDF-MEM "edf 5 7007  300 20"
+  "edf 0 4004 2000 0"
+  "edf 0 6006 2000 0"
+  "edf 0 8008 2000 0"
+  "edf 0 10010 2000 0"
+  "edf 3 4004  400 10"
+  "edf 3 5005  400 10"
+  "edf 3 6006  400 10"
+  "edf 3 7007  400 10"
+  "edf 5 4004  300 20"
+  "edf 5 5005  300 20"
+  "edf 5 6006  300 20"
+  "edf 5 7007  300 20"
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
   # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.
