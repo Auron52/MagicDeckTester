@@ -1,4 +1,4 @@
-# Regression ground truth -- commit d05536f8  date 2026-10-18
+# Regression ground truth -- commit 8d03de89b  date 2026-10-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
@@ -79,15 +79,15 @@ dragons_smoke_d5_s1001=5.5733/052989f42c90ba12
 breaching_smoke_d0_s1001=4.8460/e6658eb80c19dada
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
-critter_smoke_d0_s1001=4.6190/d0c55b6f46d39155
-critter_smoke_d3_s1001=4.3867/245833e8f5158c9d
-critter_smoke_d5_s1001=4.4000/a1801ec5ba6267ca
+critter_smoke_d0_s1001=4.5540/2b24ae645c9336f8
+critter_smoke_d3_s1001=4.3200/6cbee67c65070623
+critter_smoke_d5_s1001=4.3467/6c2512c9ef482960
 melira_smoke_d0_s1001=6.3380/e848feefa285d850
 melira_smoke_d3_s1001=4.6600/d216d699168a2477
 melira_smoke_d5_s1001=4.7200/0ae9eef65f5bc091
-angels_smoke_d0_s1001=5.2170/00204aa6ee761234
-angels_smoke_d3_s1001=4.6280/05c5860f92aa164f
-angels_smoke_d5_s1001=4.5867/677ca09e8e80251d
+angels_smoke_d0_s1001=5.2170/8e85db517c38302a
+angels_smoke_d3_s1001=4.6280/4da305efe98b0ab4
+angels_smoke_d5_s1001=4.5867/c396e4704f07cd3b
 hinata2hg_smoke_d3_s1001=5.5733/f3710ad4f91339ea
 antilife2hg_smoke_d3_s1001=3.9600/80edfddc8a011b4d
 minotaur2hg_smoke_d3_s1001=5.3500/6864ca4d91aab3f6
@@ -96,7 +96,7 @@ knights2hg_smoke_d3_s1001=5.0933/5add5c5aa084b3e2
 whiteknights2hg_smoke_d3_s1001=4.6400/e4decc28f7034d81
 fivecolour2hg_smoke_d3_s1001=5.4250/5eb45097992ca9f4
 fluctuator2hg_smoke_d3_s1001=3.4933/37076d7beb9a9f32
-angels2hg_smoke_d3_s1001=5.1400/3025941397ce9b1f
+angels2hg_smoke_d3_s1001=5.1300/2ae2ca37dd0aee42
 slivers2hg_smoke_d3_s1001=4.8000/e480c2da4e05e5ea
 burn2hg_smoke_d3_s1001=5.8200/26dbfa14846ce9a2
 th2hg_smoke_d3_s1001=4.4600/e21974e5502c0b5a
@@ -108,7 +108,7 @@ stompy2hg_smoke_d3_s1001=4.3200/c5489373dbb3638c
 kittyv32hg_smoke_d3_s1001=4.3800/f56115cd7d17bdd4
 dragons2hg_smoke_d3_s1001=6.2800/736c7b527ffc7ae5
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
-critter2hg_smoke_d3_s1001=4.7600/a5edfe66f0792867
+critter2hg_smoke_d3_s1001=4.6800/20fae9634df7d762
 melira2hg_smoke_d3_s1001=4.8400/7d182c91725b79a6
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=4.9800/eded3f2b34b85d3a
@@ -149,6 +149,10 @@ galadriel2hg_smoke_d3_s1001=4.8933/d3057555a751735b
 colossus_smoke_d0_s1001=4.7370/2a31be5c5bc074e4
 colossus_smoke_d3_s1001=3.5933/9d160417d1498579
 colossus_smoke_d5_s1001=3.6400/a71c3b3bb9881698
+vampires_smoke_d0_s1001=4.8300/ae7b56dc5ee13e97
+vampires_smoke_d3_s1001=4.4667/baa0fa2c5b0fd897
+vampires_smoke_d5_s1001=4.4267/5c4ab49544185c80
+vampires2hg_smoke_d3_s1001=5.0400/83830e88a6a7aa8e
 
 # --- regression ---
 fungusv2_regression_d0_s2002=5.3740/3a06b8600502945f
