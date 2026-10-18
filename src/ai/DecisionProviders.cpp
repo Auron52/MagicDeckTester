@@ -44852,8 +44852,9 @@ bool ColossusHammerProvider::NeverCast(const CardDefinition& def) const
 // A provider RESTRICTION (the search still branches over what is admitted), Hammer FIRST so it is also
 // the d0 / beyond-horizon pick and the human menu's default:
 //   * Colossus Hammer (equip_power_bonus >= 10) -- ALWAYS, while one is in the library.
-//   * Lizard Blades (the Equipment creature) -- when we have NO creature (battlefield or hand) to carry
-//     the Hammer, or when no creature we have can double strike AND no cheap attach is available.
+//   * Lizard Blades (the Equipment creature) -- when no creature we have (battlefield or hand) can double
+//     strike (the amendment, MTG_COLOSSUS_TUTOR_LIZARD_DS, default ON; =0 -> the rule as stated: no creature at
+//     all, or no double striker AND no cheap attach).
 //   * the other Equipment (Loxodon Warhammer, Dragonfire Blade) -- ONLY when no cheap attach is available
 //     ("unnecessary if we free equip"; MTG_COLOSSUS_TUTOR_OTHERS, default ON). The USER's goldfish call
 //     was "never", conditioned on a test ("I don't know 100% if it will be lossless"): it is NOT lossless
@@ -44877,6 +44878,19 @@ bool ColossusTutorOthersEnabled()
 {
     static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_OTHERS", true);   // DEFAULT ON (the test, 2026-10-18); =0 never
     return heurarm::Flag(heurarm::COLOSSUS_TUTOR_OTHERS, on);
+}
+
+// The AMENDMENT (proposed to the USER 2026-10-18; default ON pending the ruling, =0 -> the rule as stated): Lizard
+// Blades whenever no creature can double strike, cheap attach or not -- the USER's "only consider the others if it
+// falls short", and with no double striker the Hammer is half the damage. Counterexamples to the rule as stated
+// (s1001 gi118, 2HG gi22, s2002 gi25 / gi112, 38 of run6's slower games): Ardenn / Speaker / Raubahn the only
+// creatures, a cheap attach in hand -- "Gift for Lizard Blades, Gift for the Hammer, Theft it onto the Lizard" kills
+// a turn earlier and was unfindable at any budget. Held-out (run7): -0.0057 play / -0.0043 d3 / -0.0040 2HG, 0 slower
+// at play settings, 1.02x work; the Hammer stays first, so d0 and the human default are unchanged.
+bool ColossusTutorLizardDsEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_DS", true);   // DEFAULT ON (pending the USER's ruling)
+    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_DS, on);
 }
 
 bool IsCheapAttachSource(const CardParams& p)
@@ -44933,7 +44947,9 @@ ColossusHammerProvider::TutorCandidates(const GameState& s, int controller, cons
     }
 
     std::vector<std::string> out = { hammer };
-    if (!lizard.empty() && (!creature || (!ds_creature && !cheap_attach))) { out.push_back(lizard); }
+    const bool lizard_ok = ColossusTutorLizardDsEnabled() ? !ds_creature
+                                                          : (!creature || (!ds_creature && !cheap_attach));
+    if (!lizard.empty() && lizard_ok) { out.push_back(lizard); }
     if (ColossusTutorOthersEnabled() && !cheap_attach) { out.insert(out.end(), others.begin(), others.end()); }
     return out;
 }

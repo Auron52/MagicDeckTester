@@ -178,3 +178,55 @@ turn (9 ok, 6 index-repaired by the reordered menus, 0 drift / enum-gap / board-
 search from the USER's exact kept hand) 0/15 short, search 3.200 vs human 3.267 -- seed 7 one turn faster
 (T2 Aid + Kor Duelist instead of Open the Armory, so the Duelist is ready when the Hammer lands on T3; every card
 it used was in hand at the time).
+
+## The final package vs the pushed tree (run6, 2026-10-18, Release binary of `a84047060`)
+
+ONE pooled batch, 84,000 games, fresh held-out seeds (13600001+), paired per game, loss = 9. `off` = every
+10-18 flag off (the play pushed at `7d11c561e`); `full` = the shipped defaults (the USER's full order with the
+equips in it, Path never cast, the tutor rule with the Warhammer / Dragonfire fallback, Sigarda's Aid
+lethal-first); `noaid` = full with `MTG_COLOSSUS_AID_LETHAL=0`. Script `build/scratch/colossus/order_ab/make_ab6.py`.
+
+| cell | n | full - off | faster / slower | search work | wall |
+|---|---|---|---|---|---|
+| play settings | 3000 | **-0.0307 +- 0.0068** | 192 / 70 | 0.71x | 0.69x |
+| d3 b10 | 4000 | **-0.0250 +- 0.0058** | 250 / 113 | 0.71x | 0.69x |
+| d0 | 20000 | **-0.2348 +- 0.0066** | 3710 / 1005 | -- | 0.61x |
+| 2HG play settings | 1000 | **-0.0390 +- 0.0115** | 75 / 29 | 0.69x | 0.67x |
+
+`noaid` has the same win turn as `full` in every searched game and differs by two games at d0 (-0.0001); its
+play differs in 7 of 280 chunks (1 play-settings, 4 2HG, 2 d0) -- the Aid's lethal-first case (a summoning-sick
+double striker vs a ready host the attach makes lethal) is real but rare, and in the searched cells it never
+moved a win turn. Kept ON (the USER's ruling; it costs nothing). The package's slower games go through the two-stage recovery check (below).
+
+**Recovery of every slower game (two-stage, USER 2026-10-05; scripts `recov6.py`, `attr6.py`):** 1,217 run6 games
+are slower under `full`. Stage 1 (`--depth W --budget-ms 100`, W = off's win turn) recovers 961 (budget
+truncation). The other 256 were replayed with ONE restriction lifted at a time, then at `--depth 8 --budget-ms 0`:
+
+| what recovers it | games | verdict |
+|---|---|---|
+| Path allowed | 207 | clairvoyance: the Path shuffle re-rolls a library the search reads (run5: worth 0 honestly) |
+| a tutor target the rule drops, fetched and NEVER cast / the win is the post-shuffle draw | 6 | clairvoyance: the tutor shuffle as a re-roll (run3/run4) |
+| the full package at d8 b0 | 4 | budget truncation |
+| **Lizard Blades with no double striker (the amendment below)** | **38** | **a real loss of the rule as stated** |
+| nothing (the full arm's own tutor shuffle made a physically different game, s13600918) | 1 | variance |
+
+## The Lizard amendment (2026-10-18, proposed to the USER; default ON pending the ruling)
+
+The rule as stated admits Lizard Blades only with no creature, or with no double striker AND no cheap attach. The
+38 games above are the case it misses: the only creatures are Ardenn / Speaker / Raubahn (no double strike), a cheap
+attach is in hand, and the winning line fetches Lizard Blades as the double-strike BODY the Theft / Raubahn / Forge
+Anew puts the Hammer on (s1001 gi118: Gift -> Lizard Blades on T1, Gift -> Hammer and Theft it onto the Lizard on
+T3, 22 damage; the rule's line is T4). With no double striker the Hammer is half the damage -- the USER's "only
+consider the others if it falls short". `MTG_COLOSSUS_TUTOR_LIZARD_DS` (default ON; =0 -> the rule as stated):
+Lizard Blades joins (still after the Hammer, so d0 and the human default are unchanged) whenever no creature on our
+battlefield or in hand can double strike. run7 (56,000 games, seeds 13700001+, paired against the package):
+
+| cell | n | amendment - package | faster / slower | work |
+|---|---|---|---|---|
+| play settings | 3000 | **-0.0057 +- 0.0014** | 17 / 0 | 1.02x |
+| d3 b10 | 4000 | **-0.0043 +- 0.0011** | 18 / 1 | 1.02x |
+| d0 | 20000 | 0 | 0 / 0 | -- |
+| 2HG play settings | 1000 | -0.0040 +- 0.0020 | 4 / 0 | 1.02x |
+
+It recovers all 38 games (37 at stage 1, s13600710 at d8 b0), and the suite's four tutor counterexamples (smoke s1001 gi118 and 2HG gi22, regression
+s2002 gi25 and gi112), at stage 1.
