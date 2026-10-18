@@ -45,8 +45,11 @@ generation later"): the USER's 15 references pushed (`1ec3620be`, `313654130`); 
 the equips, Path never cast, the USER's tutor rule + Warhammer/Dragonfire fallback + the USER's Lizard amendment
 (lands first / free equip counted per Hammer), Aid lethal-first) measured, every slower game
 attributed, smoke + regression GT accepted (full tiers byte-identical on the narrowed engine except the one intended
-colossus2hg game), rebased onto origin `0744b1417` (Galadriel value leaf; Galadriel + Colossus rows re-verified
-there; refs 630 / 0 drift; ref_bench 0/15 short, 3.200 vs human 3.267). NOT pushed (awaiting the USER). Next stage for this deck under the 10-18 pipeline order
+colossus2hg game), then the USER's amendment of the tutor rule (Lizard Blades when it lands first, or when free equip
+cannot cover every Hammer; run9 / run9nc 0 slower anywhere) accepted on the rebase onto origin `42d189e58` (Galadriel
+ScryVerdict + nlfit): smoke 126/128 and regression 176/178 byte-identical, the 4 moved Colossus rows all faster; refs
+630 / 0 drift; ref_bench 0/15 short, 3.200 vs human 3.267. PUSHED 2026-10-18 (USER: "Let's work to push this and
+then park this session"). Next stage for this deck under the 10-18 pipeline order
 (profile -> MULLIGAN -> value leaf): `bash scripts/mullgen.sh run "decks/Colossus Hammer"` (screens its own
 generation setting first; alone on the box) -- the USER launches it.
 Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
