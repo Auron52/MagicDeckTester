@@ -43632,7 +43632,21 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         // Wirewood Lodge's untap -- rather than every IsTrailingActivation kind. ActivateBlink in
         // particular is a LOOP whose cost is per-crank and already has its own {C} hold, and summing
         // a loop's pips here would over-hold on EDF for no reason.
-        if (ActLineHoldEnabled()
+        // CREATURE-ABILITY demand (PlanTraits::act_pips_cab): Falkenrath Pit Fighter's own cost and
+        // Bloodline Keeper's transform -- coloured pips only an ability-legal source can pay. The
+        // transform keeps its {T}-less entry below out of act_pips (it would hold a Territory that
+        // cannot pay it). Only these two Vampires activations, so every other deck's traits are as before.
+        const bool cab_act = ActLineHoldEnabled()
+            && ((a.kind == Action::Kind::SacCreatureOutlet && a.def != nullptr && IsDiscardSacOutlet(a.def->params))
+                || (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TransformSelf));
+        if (cab_act)
+        {
+            const ManaCost oc = OutletOwnCost(a);
+            t.act_pips_cab[0] += oc.white; t.act_pips_cab[1] += oc.blue;
+            t.act_pips_cab[2] += oc.black; t.act_pips_cab[3] += oc.red;
+            t.act_pips_cab[4] += oc.green;
+        }
+        if (ActLineHoldEnabled() && !cab_act
             && (a.kind == Action::Kind::ActivatePermAbility
                 || a.kind == Action::Kind::UntapCreature))
         {
@@ -50008,8 +50022,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // The outlet pays its OWN cost here (OutletOwnCost: a.cost minus the madness
                     // option's folded mana); the madness trigger pays its exact cost as a creature
                     // spell inside the apply, with the searched pin (MadnessHostScope; executor twin).
+                    // Its pips are this payment's own, not hold demand (act_pips_cab; executor twin).
+                    ActLinePayScope _act_line_pay(OutletOwnCost(a));
                     if (TapForCostDirect(state, OutletOwnCost(a), /*for_creature=*/false))
                     {
+                        _act_line_pay.Paid();
                         const MadnessHostScope _mh(&RolloutMadnessPayer(), MadnessPinOf(a));
                         ApplyDiscardSacOutlet(state, state.active_player_index, a.sac_source_id,
                                               a.sac_victim_id, a.victim_name.str(), pin);

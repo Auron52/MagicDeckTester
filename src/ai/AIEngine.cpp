@@ -5670,8 +5670,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 {
                     CreatureAbilityPayScope sac_pay_scope;
                     ManaPool avail = AvailableManaPool(state);
+                    ActLinePayScope _act_line_pay(OutletOwnCost(a));   // its pips are not hold demand (rollout twin)
                     if (TapForCost(state, OutletOwnCost(a), avail, /*for_creature=*/false))
                     {
+                        _act_line_pay.Paid();
                         const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));   // A1 (rollout twin)
                         const bool done = ApplyDiscardSacOutlet(state, state.active_player_index,
                                                                 a.sac_source_id, a.sac_victim_id,
