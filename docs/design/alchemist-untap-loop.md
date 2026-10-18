@@ -76,6 +76,10 @@ SEARCHED (one Action variant per payoff K). Ceiling = safety cap only, never a l
   ETB CHOICE AXIS (CollectActions post-pass, chosen_x pin down the etb_kx channel) is the shape for any
   further searched as-enters choice. Trufflesnout's life is a NEW param (etb_modal_lifegain) that the
   lifegain projections (ProjectPlanWalk, PlanTraits, the loop sizer) do not read yet -- C2 must.
+  **C2a LANDED 2026-10-18** (the four untappers as ActivateUntap + one shared resolver ApplyActivatedUntap,
+  Galvanic's searched partner, the Staff's {1} interleave, the LIFEGAIN breakpoint as a site-9 route
+  (kActLifeYield), viewer verbs untapact= / tapdraw=). The closed-form loop + payoff sizing is C2b; its
+  hand-off list is in the ledger's "Chunk C2a" section.
 * **Chunk D — viewer.** Verbs for untap activations / loop, etb_mode, colour; DECISIONS.md rows;
   audit_viewer_decisions manifest.
 

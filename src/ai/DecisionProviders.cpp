@@ -22341,8 +22341,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool vampires = false;
     // ACCOMPLISHED ALCHEMIST (lifegain -> Alchemist mana -> untap loops -> Stroke of Genius). MUST return
     // ABOVE `selesnya`: Accomplished Alchemist's mana_per_life_gained alone sets that signature.
-    // Signature = Stroke of Genius's draw_target_player OR Weather the Storm's storm -- two cards, each
-    // param carried by no other card in cards.json; chunk C2 adds the untappers. See the provider.
+    // Signature = Stroke of Genius's draw_target_player OR Weather the Storm's storm OR (chunk C2a) the
+    // untappers' params -- Crab Umbra's untap_enchanted_cost, Staff of Domination's untap_target_creature_cost
+    // / self_untap_cost, Seedcradle Witch's untap_pump_cost, Galvanic Alchemist's soulbond grant (a WISH
+    // target, so it counts only if it is ever main-decked) -- each carried by no other card in cards.json,
+    // so no other deck's routing moves and no single swap can lose the provider. See the provider.
     bool alchemist = false;
     for (const Card& c : deck.mainboard)
     {
@@ -22365,7 +22368,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.transform_min_controlled_subtype == "Vampire")
         { vampires = true; }
         if (p.attack_gather_auras) { bruna = true; }
-        if (p.draw_target_player || p.storm) { alchemist = true; }
+        if (p.draw_target_player || p.storm
+            || p.untap_enchanted_cost.has_value() || p.untap_target_creature_cost.has_value()
+            || p.self_untap_cost.has_value() || p.untap_pump_cost.has_value()
+            || p.soulbond_grants_untap_self_cost.has_value()) { alchemist = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
             || p.aura_damage_trigger_draw || p.soulbond_damage_trigger_draw)

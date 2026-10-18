@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "THE LIFEGAIN BREAKPOINT (AccomplishedAlchemist chunk C2a, 2026-10-18): cast Nourish, tap Accomplished",
+    "Alchemist for 6, spend it -- in ONE main phase.",
+    "",
+    "Turn 4: four Forests + the turn's drawn-and-played Forest + an Accomplished Alchemist (not sick, no life",
+    "gained yet). Hand: Nourish ({G}{G}, gain 6) and Stroke of Genius. Opponent library: 6, so the kill is",
+    "Stroke at the opponent with X = 6 = {6}{2}{U} = 9 mana. The plan-START pool is 5 Forests + the Alchemist",
+    "credited 1 = 6 mana: Stroke alone reaches X = 3, and Nourish + Stroke no more. Only the RE-PLAN after",
+    "Nourish resolves sees the Alchemist worth 6: 3 Forests + 6 (blue) = 9 = X 6. That re-plan is site 9's",
+    "LIFEGAIN route (CollectActivationKeys' kActLifeYield key + PlanOpensBreakpoint's lifegain clause); before",
+    "chunk C2a the line was unreachable at any depth or budget and the win was turn 5.",
+    "No other clock: opponent life 20, nothing deals damage that could kill by turn 4."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 6,
+  "battlefield": [
+    { "name": "Forest", "controller": 0 },
+    { "name": "Forest", "controller": 0 },
+    { "name": "Forest", "controller": 0 },
+    { "name": "Forest", "controller": 0 },
+    { "name": "Accomplished Alchemist", "controller": 0, "sick": false }
+  ],
+  "hand": [
+    "Nourish",
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 4
+}

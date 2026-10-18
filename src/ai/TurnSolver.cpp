@@ -25357,7 +25357,11 @@ enum : uint64_t {
     // Out-of-band slot (NOT kActModeBase-relative, so no existing key moves): Arcanum Wings' swap.
     kActAuraSwap = 200,
     // ...and Khalni Heart Expedition's counter-costed land search (QuestSacLandSearch).
-    kActQuestLandSearch = 201
+    kActQuestLandSearch = 201,
+    // AccomplishedAlchemist chunk C2a: the LIFEGAIN breakpoint (a tappable mana_per_life_gained source's
+    // yield, folded into the key's high bits -- see CollectActivationKeys) and the activated untappers.
+    kActLifeYield = 202,
+    kActUntapper  = 203
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -25463,6 +25467,66 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if (pp.land_search_activation_remove_quest > 0 && pp.land_search_count > 0
         && p.quest_counters >= pp.land_search_activation_remove_quest)
     { out.push_back(ActKey(num, kActQuestLandSearch)); }
+
+    // THE LIFEGAIN BREAKPOINT (AccomplishedAlchemist chunk C2a; SITE 9, the Khalni out-of-band shape).
+    // Accomplished Alchemist taps for X = the life gained this turn, so a resolution that gains life
+    // while an untapped, able-to-tap copy is out GROWS a mana ability the plan was priced without --
+    // every action was enumerated against the plan-START pool, where the Alchemist was worth its old X.
+    // Keyed on the YIELD itself (bits 40+), so the delta rule fires exactly when the yield rose (a new
+    // key) and never for a declined tap (same key as the snapshot). Only above the floor (X >= 1 life):
+    // at 0 the Alchemist is an ordinary 1-mana dork and nothing new exists. Both worlds read this one
+    // function, so the continuation the search scores is the one the executor re-derives. An untap
+    // (Crab Umbra / Staff / Galvanic) of a TAPPED Alchemist after life was gained presents the same
+    // key anew too -- also a genuinely new option (X more mana), also correct to re-plan on.
+    if (pp.mana_per_life_gained && !p.tapped && CanTapNow(p, state.battlefield))
+    {
+        const int gained = state.players[static_cast<std::size_t>(ctrl)].life_gained_this_turn;
+        if (gained >= 1)
+        {
+            out.push_back(ActKey(num, kActLifeYield)
+                          | (static_cast<uint64_t>(std::min(gained, 0xFFFF)) << 40));
+        }
+    }
+    // The ACTIVATED UNTAPPERS (Crab Umbra, Staff of Domination's untap-target, Seedcradle Witch, the
+    // Galvanic grant on THIS creature): one key per source that has an affordable activation at a
+    // target it can actually help -- a tapped own creature or a live mana creature (the resolver's own
+    // dominance test), or any own creature for the Witch's pump. A plan that CASTS the untapper (an
+    // Umbra onto the Alchemist) thereby re-plans with it, as every post-entry ability does.
+    {
+        const bool src_untapper = pp.untap_enchanted_cost.has_value() || pp.untap_target_creature_cost.has_value()
+                               || pp.untap_pump_cost.has_value();
+        const bool grant_here = (p.card.IsCreature() || p.is_animated) && SoulbondGrantedUntapCost(state, p).has_value();
+        if (src_untapper || grant_here)
+        {
+            bool any = false;
+            std::vector<UntapAbilityRef> refs;
+            for (const Permanent& t : state.battlefield)
+            {
+                if (any) { break; }
+                if (t.controller_index != ctrl || t.card.m_number == 0) { continue; }
+                if (!t.card.IsCreature() && !t.is_animated) { continue; }
+                refs.clear();
+                CollectCreatureUntapAbilities(state, ctrl, t, refs);
+                for (const UntapAbilityRef& r : refs)
+                {
+                    if (r.source_id != num) { continue; }
+                    if (r.shape != kUntapPumpTarget && !t.tapped && !UntapTargetIsLiveManaCreature(state, t)) { continue; }
+                    // UntapUnitCost is already the EFFECTIVE cost, so price it directly against the
+                    // same lazily-built total ActAffordable uses (re-reducing it would double-count).
+                    const std::optional<ManaCost> c = UntapUnitCost(state, ctrl, r.shape, p, t);
+                    if (!c) { continue; }
+                    if (total_cache < 0)
+                    {
+                        ManaPool have = AvailableManaPool(state);
+                        have.AddPool(state.floating_mana);
+                        total_cache = static_cast<int>(have.Total());
+                    }
+                    if (c->ManaValue() <= total_cache) { any = true; break; }
+                }
+            }
+            if (any) { out.push_back(ActKey(num, kActUntapper)); }
+        }
+    }
 
     if (ActAffordable(state, ctrl, p.card, pp.blink_cost, total_cache))
     { out.push_back(ActKey(num, kActBlink)); }
@@ -29569,7 +29633,44 @@ static bool KaroosHostAdmitted(const GameState& state, const CardParams& pp)
 static bool CastCarriesEtbChoice(const CardDefinition& d)
 {
     return (d.params.is_land_aura && d.params.etb_choose_color)
-        || (d.params.etb_modal_self_counters > 0 && d.params.etb_modal_lifegain > 0);
+        || (d.params.etb_modal_self_counters > 0 && d.params.etb_modal_lifegain > 0)
+        // Galvanic Alchemist: the soulbond PARTNER (an ability-granting pair) -- SoulbondPinForCast.
+        || (d.params.soulbond && d.params.soulbond_grants_untap_self_cost.has_value());
+}
+
+// The ETB CHOICE AXIS values for an ability-granting soulbond cast (Galvanic Alchemist): every
+// creature that could be its Trigger-A partner -- an OWN, numbered, unpaired, unclaimed creature on
+// the battlefield, or a creature card in HAND (the plan may cast it first; one per name, the copies
+// being interchangeable) -- plus kSoulbondDeclinePin ("you MAY pair"; declining also leaves the
+// Galvanic free for Trigger B, i.e. pairing with a creature cast AFTER it). Every legal option, no
+// ranking: the search picks (the no-greedy rule). A pin that turns out illegal at resolution falls
+// back to the provider's pick, so a wasted variant is a duplicate, never a wrong play.
+static std::vector<int> SoulbondPartnerPinCandidates(const GameState& state)
+{
+    std::vector<int> out;
+    const int ctrl = state.active_player_index;
+    for (const Permanent& c : state.battlefield)
+    {
+        if (c.controller_index != ctrl || c.card.m_number == 0) { continue; }
+        if (!c.card.IsCreature() && !c.is_animated) { continue; }
+        if (SoulbondNumberIsClaimed(state, ctrl, c.card.m_number)) { continue; }
+        if (SoulbondPartnerIndex(c, state) >= 0) { continue; }
+        out.push_back(c.card.m_number);
+    }
+    std::vector<std::string> seen;
+    for (const Card& hc : state.players[static_cast<std::size_t>(ctrl)].hand)
+    {
+        if (hc.m_number == 0) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr || !hd->card.IsCreature()) { continue; }
+        if (hd->params.soulbond && hd->params.soulbond_grants_untap_self_cost.has_value()) { continue; }
+        const std::string nm = hc.m_name.str();
+        if (std::find(seen.begin(), seen.end(), nm) != seen.end()) { continue; }
+        seen.push_back(nm);
+        out.push_back(hc.m_number);
+    }
+    out.push_back(kSoulbondDeclinePin);
+    return out;
 }
 
 // MTG_LAND_AURA_HOST_FOLD -- collapse interchangeable "Enchant land" hosts. DEFAULT ON; =0 restores
@@ -36841,6 +36942,108 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!hd->params.transform_back_name.empty()) { EmitTransformAction(state, hc, hd, /*hand_src=*/true, actions); }
             }
         }
+        // ---- ACTIVATED UNTAPPERS (Action::Kind::ActivateUntap; AccomplishedAlchemist chunk C2a) -----
+        // Crab Umbra / Galvanic Alchemist's soulbond grant / Staff of Domination / Seedcradle Witch.
+        // Driven from the TARGET side through the one oracle (CollectCreatureUntapAbilities), so each
+        // (source, target) pair is one family of K variants. Two axes, both real decisions:
+        //   * WHICH creature (Staff, Witch target any creature): one Action variant per legal target --
+        //     never Wirewood Lodge's highest-yield auto-pick. The ONLY removal is DOMINATED targets:
+        //     an untap of a creature that is untapped now and that nothing in this main can tap (no mana
+        //     ability, no {T} ability) is a guaranteed no-op the resolver refuses to pay for, and an
+        //     OPPONENT's creature gains nothing (it never attacks or blocks in the goldfish). The
+        //     Witch's +3/+3 is not a no-op on an untapped OWN creature, so it keeps every own target.
+        //     Human play: only what can apply RIGHT NOW (a tapped target, a live mana creature, or the
+        //     Witch's pump) -- the Lodge rule, a menu never holds a silent no-op.
+        //   * HOW MANY times (chosen_x): DecisionProvider::UntapActivationCounts. Folded to 1 under
+        //     human play / unpruned (the main phase re-prompts, the blink fold (a)).
+        // Param-gated by a cheap pre-scan, so no other deck enumerates anything here.
+        {
+            bool any_untapper = false;
+            for (const Permanent& u : state.battlefield)
+            {
+                if (u.controller_index != state.active_player_index || u.def_absent) { continue; }
+                const CardDefinition* ud = CardDatabase::Instance().LookupCached(u.card);
+                if (ud && (ud->params.untap_enchanted_cost || ud->params.untap_target_creature_cost
+                           || ud->params.untap_pump_cost || ud->params.soulbond_grants_untap_self_cost))
+                { any_untapper = true; break; }
+            }
+            const bool human = HumanPlayActive();
+            const bool fold_fanout = human || DecisionUnpruned(UnprunedGate::BlinkTarget);
+            int total_mana = -1;
+            std::vector<UntapAbilityRef> refs;
+            for (std::size_t ti = 0; any_untapper && ti < state.battlefield.size(); ++ti)
+            {
+                const Permanent& tgt = state.battlefield[ti];
+                if (!tgt.card.IsCreature() && !tgt.is_animated) { continue; }
+                if (tgt.card.m_number == 0) { continue; }   // an action addresses its target by number
+                refs.clear();
+                CollectCreatureUntapAbilities(state, state.active_player_index, tgt, refs);
+                if (refs.empty()) { continue; }
+                const bool own       = tgt.controller_index == state.active_player_index;
+                const bool live_mana = own && UntapTargetIsLiveManaCreature(state, tgt);
+                bool can_get_tapped  = tgt.tapped || live_mana;
+                if (!can_get_tapped && own && !human && !tgt.def_absent)
+                {
+                    // Autonomous: the plan's own casts / {T} activations run BEFORE the trailing pass,
+                    // so a non-sick mana creature or creature with a {T} ability may be tapped by
+                    // then. A superset: the resolver re-checks and refuses a no-op without paying.
+                    const CardDefinition* td = CardDatabase::Instance().LookupCached(tgt.card);
+                    if (td && CanTapNow(tgt, state.battlefield)
+                        && (!td->params.produces.empty() || td->params.tap_damage_cost
+                            || td->params.tap_draw_cost || td->params.tap_lifegain_cost
+                            || td->params.tap_investigate_cost))
+                    { can_get_tapped = true; }
+                }
+                for (const UntapAbilityRef& r : refs)
+                {
+                    if (r.shape != kUntapPumpTarget && (!own || !can_get_tapped)) { continue; }
+                    if (r.shape == kUntapPumpTarget && !own && !fold_fanout) { continue; }
+                    const Permanent* src = nullptr;
+                    for (const Permanent& q : state.battlefield)
+                    { if (q.card.m_number == r.source_id && q.controller_index == state.active_player_index) { src = &q; break; } }
+                    if (src == nullptr) { continue; }
+                    const std::optional<ManaCost> unit =
+                        UntapUnitCost(state, state.active_player_index, r.shape, *src, tgt);
+                    if (!unit) { continue; }
+                    if (total_mana < 0)
+                    {
+                        ManaPool have = AvailableManaPool(state);
+                        have.AddPool(state.floating_mana);
+                        total_mana = static_cast<int>(have.Total());
+                    }
+                    const int per_mv = std::max(1, unit->ManaValue());
+                    const int affordable = total_mana / per_mv;
+                    if (affordable < 1) { continue; }
+                    std::vector<int> counts{ 1 };
+                    if (!fold_fanout)
+                    {
+                        counts = ResolveProvider(state).UntapActivationCounts(state, *src, tgt, r.shape,
+                                                                              affordable);
+                    }
+                    const CardDefinition* sdef = src->def_absent ? nullptr
+                                               : CardDatabase::Instance().LookupCached(src->card);
+                    for (int k : counts)
+                    {
+                        if (k <= 0) { continue; }
+                        Action a;
+                        a.kind           = Action::Kind::ActivateUntap;
+                        a.card_name      = src->card.m_name;
+                        a.def            = sdef;
+                        a.hand_index     = -1;
+                        a.sac_source_id  = r.source_id;
+                        a.sac_victim_id  = tgt.card.m_number;
+                        a.victim_name    = tgt.card.m_name;
+                        a.gy_exile_mode  = r.shape;
+                        a.chosen_x       = k;
+                        a.cost           = *unit;   // ONE activation (self-funding; see the kind)
+                        a.eval           = k;       // the rollout scores the real outcome
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
+                }
+            }
+        }
+
         // Call of the Wild "{2}{G}{G}: reveal top; creature -> battlefield, else graveyard"
         // (repeatable) + Wirewood Lodge "{G}, {T}: Untap target Elf". StompySurprise battlefield
         // abilities; param-gated -> no other deck emits them.
@@ -37292,6 +37495,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                 state, src, m.mode,
                                 static_cast<int>(have.Total()) / per_mv);
                         }
+                    }
+                    // Staff of Domination: a {T} mode on a source with "{1}: Untap this artifact" is
+                    // REPEATABLE too -- each repeat pays the self-untap plus the mode's own cost
+                    // (SpendSelfUntapRepeats, both worlds). Same provider hook and the same human-play
+                    // fold; max_affordable counts the first activation at its own cost and every
+                    // repeat at cost + self-untap. Param-gated (self_untap_cost), so no other source.
+                    else if (taps && sd->params.self_untap_cost.has_value()
+                             && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::BlinkTarget))
+                    {
+                        ManaPool have = AvailableManaPool(state);
+                        have.AddPool(state.floating_mana);
+                        const int total  = static_cast<int>(have.Total());
+                        const int first  = cost.ManaValue();
+                        const int repeat = std::max(1, first + EffectiveActivationCost(
+                            state, state.active_player_index, src.card,
+                            *sd->params.self_untap_cost).ManaValue());
+                        const int afford = total < first ? 0 : 1 + (total - first) / repeat;
+                        if (afford >= 1)
+                        { counts = ResolveProvider(state).ManaSinkActivationCounts(state, src, m.mode, afford); }
                     }
                     // Gated look-at-top (Scrying Sheets / Frost Augur), AUTONOMOUS enumeration
                     // only: the search is clairvoyant, so an activation whose top card is not
@@ -40569,7 +40791,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // never enters and makes no ETB choice: no variants for it (they would be identical).
             if (!actions[i].remand_by.empty() && !actions[i].def->params.cant_be_countered) { continue; }
             const std::vector<int> vals =
-                ResolveProvider(state).EtbChoiceCandidates(state, state.active_player_index, *actions[i].def);
+                (actions[i].def->params.soulbond && actions[i].def->params.soulbond_grants_untap_self_cost)
+                ? SoulbondPartnerPinCandidates(state)
+                : ResolveProvider(state).EtbChoiceCandidates(state, state.active_player_index, *actions[i].def);
             if (vals.empty()) { continue; }
             for (std::size_t k = 1; k < vals.size(); ++k)
             {
@@ -40649,6 +40873,12 @@ static int ActivationFamilyKey(const Action& a)
         // Birthing Pod: every (victim, fetch) variant of one Pod is mutually exclusive -- the {T}
         // bounds it to one activation per Pod per plan.
         case Action::Kind::ActivatePod:
+        // Activated untappers: every (target, K) variant of one source is ONE family, so a plan holds
+        // at most one -- "untap A twice and B once" from one Witch is reached through the site-9
+        // continuation (the untapper's key re-arms when a new target appears), and a Staff shares
+        // its family with its own {T} PermAbility modes (one {T} per plan; the {1} self-untap rides
+        // the K of whichever ability the plan picked).
+        case Action::Kind::ActivateUntap:
             return (a.sac_source_id >= 0) ? -1000 - a.sac_source_id : 0;
         // "Equip all free to <host>": ONE family across EVERY host, not one per host -- which is
         // why it needs its own case instead of riding the source-keyed line above. The variants
@@ -42752,6 +42982,7 @@ namespace shapestats
             case Action::Kind::DigDraw:            return "dig";
             case Action::Kind::AnimateLand:        return "animateLand";
             case Action::Kind::UntapCreature:      return "untap";
+            case Action::Kind::ActivateUntap:      return "untapAct";
             default: return "kind" + std::to_string(static_cast<int>(k));
         }
     }
@@ -48551,9 +48782,13 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             t.act_pips_cab[2] += oc.black; t.act_pips_cab[3] += oc.red;
             t.act_pips_cab[4] += oc.green;
         }
+        // ActivateUntap (chunk C2a) holds its ONE activation's pips the same way; its {T} half is only
+        // the Staff's (shape 3), which is no mana source -- a Galvanic grant's source is the creature
+        // it untaps, which the plan's casts SHOULD be free to tap first.
         if (ActLineHoldEnabled() && !cab_act
             && (a.kind == Action::Kind::ActivatePermAbility
-                || a.kind == Action::Kind::UntapCreature))
+                || a.kind == Action::Kind::UntapCreature
+                || a.kind == Action::Kind::ActivateUntap))
         {
             t.act_pips[0] += a.cost.white; t.act_pips[1] += a.cost.blue;
             t.act_pips[2] += a.cost.black; t.act_pips[3] += a.cost.red;
@@ -48561,7 +48796,8 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             // The {T} half. UntapCreature always taps its source (Wirewood Lodge's "{G}, {T}");
             // a permanent ability asks PermAbilityTaps, the single source of truth for that.
             const bool taps = a.kind == Action::Kind::UntapCreature
-                           || PermAbilityTaps(a.ability_mode);
+                           || (a.kind == Action::Kind::ActivateUntap ? a.gy_exile_mode == kUntapStaffTarget
+                                                                     : PermAbilityTaps(a.ability_mode));
             if (taps && a.sac_source_id > 0 && t.act_src_count < PlanTraits::kMaxActSrcs)
             {
                 bool dup = false;
@@ -50607,6 +50843,7 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
         case Action::Kind::ActivatePermAbility:
         case Action::Kind::ActivatePump:
         case Action::Kind::UntapCreature:
+        case Action::Kind::ActivateUntap:
         case Action::Kind::GraveyardExileAbility:
         case Action::Kind::GraveyardReturnAbility:
         case Action::Kind::GraveyardPlayAbility:
@@ -53570,8 +53807,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // (Scourge ETB ping -> opponent life loss + Lathliss 5/5 token). Mirrors the executor's
             // EffectHandler::EnterBattlefield (lockstep) so the search's win projection counts the
             // ping toward lethal. No-op for every non-Dragon creature -> other decks byte-identical.
-            FireEtbWatchers(state, state.active_player_index,
-                           static_cast<int>(state.battlefield.size()) - 1);
+            {
+                // Galvanic Alchemist's SEARCHED partner rides chosen_x into Trigger A (lockstep with
+                // EffectHandler::EnterBattlefield); 0 = no pin for every other card.
+                SoulbondPartnerPinScope _spp(SoulbondPinForCast(def.params, chosen_x));
+                FireEtbWatchers(state, state.active_player_index,
+                               static_cast<int>(state.battlefield.size()) - 1);
+            }
 
             // Goblins tribal ETB cascade (rollout side, lockstep with EffectHandler): self-tokens,
             // ETB burn, Matron tutor (search target = tutor_target), Muxus reveal. No-op for every
@@ -55766,6 +56008,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                    a.ability_mode, *a.def, a.chosen_x - 1);
                         }
                     }
+                    // Staff of Domination: a {T} mode's K-1 repeats, each after "{1}: Untap this
+                    // artifact" (SpendSelfUntapRepeats). Lockstep twin of AIEngine's branch.
+                    else if (taps && a.chosen_x > 1 && a.def->params.self_untap_cost.has_value())
+                    {
+                        SpendSelfUntapRepeats(state, state.active_player_index, a.sac_source_id,
+                                              a.ability_mode, *a.def, a.chosen_x - 1);
+                    }
                     // BREAKPOINT SITE 8 -- the found snow card must be castable/playable THIS turn
                     // (USER 2026-09-06; the trailing-pass "next turn" collapse is rejected). Site-7
                     // shape: trailing pass, no sink push (the executor twin re-derives the same
@@ -56028,6 +56277,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else if (ActDropAuditOn() && ud != nullptr)
             { NoteActDrop(UntapCreatureDeadReason(state, state.active_player_index, a.sac_source_id),
                           a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
+        }
+        else if (a.kind == Action::Kind::ActivateUntap)
+        {
+            // Activated untappers (Crab Umbra / Galvanic grant / Staff / Seedcradle Witch): the ONE
+            // shared resolver, which re-checks the ability, pays per activation through the unified
+            // TapForCostDirect and stops at the first it cannot pay or that would be a no-op. The
+            // executor calls the identical function (AIEngine), so the worlds are lockstep.
+            const int done = ApplyActivatedUntap(state, state.active_player_index, a.gy_exile_mode,
+                                                 a.sac_source_id, a.sac_victim_id, std::max(1, a.chosen_x));
+            if (ActDropAuditOn())
+            {
+                if (done > 0) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
+                else { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
+            }
         }
         else if (a.kind == Action::Kind::GraveyardExileAbility)
         {
@@ -63102,6 +63365,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Wirewood Lodge untap: which source (one per Lodge).
                 case Action::Kind::UntapCreature:
                     msf.push_back("WWL#" + std::to_string(act.sac_source_id)); break;
+                // Activated untappers: source, target, shape and COUNT are all part of the play.
+                case Action::Kind::ActivateUntap:
+                    msf.push_back("UNTAP#" + std::to_string(act.sac_source_id)
+                                  + ">" + std::to_string(act.sac_victim_id)
+                                  + "m" + std::to_string(act.gy_exile_mode)
+                                  + "x" + std::to_string(act.chosen_x)); break;
                 // Human-play-only sinks: which source, so animating/tapping THIS land is a distinct
                 // plan from animating a different copy and from not doing it at all.
                 case Action::Kind::AnimateLand:
@@ -64456,7 +64725,43 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // carries its counter-gated key. A superset, as this predicate's contract requires.
     if (pp.land_search_activation_cost.has_value() && pp.land_search_activation_remove_quest > 0)
     { return true; }
+    // Activated untappers (chunk C2a): a cast Crab Umbra / Staff / Seedcradle Witch / paired Galvanic
+    // Alchemist carries a kActUntapper key the continuation can activate this main phase.
+    if (pp.untap_enchanted_cost.has_value() || pp.untap_target_creature_cost.has_value()
+        || pp.untap_pump_cost.has_value() || pp.soulbond_grants_untap_self_cost.has_value())
+    { return true; }
     return false;
+}
+
+// THE LIFEGAIN ROUTE's action predicate (site 9, chunk C2a): can this plan action GAIN LIFE for the
+// active player? A SUPERSET by construction (the apply-time gate -- the kActLifeYield key -- is the
+// exact test; this only decides which plans get site-9 variants, so a miss would make the line
+// unreachable while an extra only costs a duplicate variant). `enter_watch` = a "whenever a creature
+// [you control] enters, gain" watcher is out or cast by the plan, so any creature cast gains.
+static bool PlanActionMayGainLife(const Action& a, bool enter_watch)
+{
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return false; }
+    const CardParams& pp = d->params;
+    switch (a.kind)
+    {
+        case Action::Kind::CastFromHand:
+        case Action::Kind::CastFromGraveyard:
+        case Action::Kind::ActivateVial:
+            return pp.cast_lifegain > 0 || pp.cast_lifegain_ferocious > 0 || pp.etb_self_lifegain > 0
+                || pp.etb_modal_lifegain > 0 || pp.etb_lifegain > 0 || EnterLifegainWatcher(pp)
+                || (enter_watch && d->card.IsCreature());
+        case Action::Kind::SacCreatureOutlet:
+            return pp.sac_outlet_lifegain > 0 || pp.own_creature_dies_lifegain > 0;
+        case Action::Kind::ActivatePermAbility:
+            return a.ability_mode == Action::AbilityMode::TapLifegain
+                || a.ability_mode == Action::AbilityMode::SacLifePerCreature
+                || (a.ability_mode == Action::AbilityMode::Drain && DrainGainPerActivation(pp) > 0);
+        case Action::Kind::JitteModeAbility:      return a.gy_exile_mode == 2;
+        case Action::Kind::GraveyardExileAbility: return a.gy_exile_mode == 2;
+        case Action::Kind::GraveyardExileGrow:    return pp.gy_exile_grow_lifegain > 0;
+        default: return false;
+    }
 }
 
 static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p)
@@ -65087,6 +65392,46 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                 const bool puts_land = d->params.land_search_count > 0 || d->params.reveal_x_put_permanents;
                 if (puts_land && (a.kind == Action::Kind::CastFromHand
                                   || a.kind == Action::Kind::ActivatePermAbility))
+                { mask |= 1 << 9; break; }
+            }
+        }
+    }
+    // Site 9, the LIFEGAIN route (AccomplishedAlchemist chunk C2a). A mana_per_life_gained source
+    // (Accomplished Alchemist) able to tap this turn makes a plan that GAINS LIFE -- or UNTAPS it
+    // (Crab Umbra / Staff / Galvanic / Wirewood Lodge) -- present the kActLifeYield key anew, and the
+    // rest of the turn is then re-planned with the grown yield: "cast Nourish, tap the Alchemist for 6,
+    // spend it". State-keyed like the Khalni clause above and conservative in the same direction (a
+    // marked plan whose gain lands with the Alchemist tapped yields variants that collapse onto the
+    // base). SCOPED BY VALIDITY: only a board holding such a source is ever marked, so every deck
+    // without one is byte-identical; a deck WITH one (SelesnyaLifegain too) gets the line in budgeted
+    // and unbudgeted play alike.
+    if ((mask & (1 << 9)) == 0 && TurnSolver::PostEntryBreakpointClassOn())
+    {
+        bool alch = false;
+        bool enter_watch = false;
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index || perm.def_absent) { continue; }
+            const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+            if (w == nullptr) { continue; }
+            if (w->params.mana_per_life_gained && perm.CanTap()) { alch = true; }
+            if (EnterLifegainWatcher(w->params)) { enter_watch = true; }
+        }
+        if (alch)
+        {
+            if (!enter_watch)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    if (d && EnterLifegainWatcher(d->params)) { enter_watch = true; break; }
+                }
+            }
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::ActivateUntap || a.kind == Action::Kind::UntapCreature
+                    || PlanActionMayGainLife(a, enter_watch))
                 { mask |= 1 << 9; break; }
             }
         }
@@ -70197,6 +70542,9 @@ static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<Tu
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
             if (!d || !d->card.IsCreature()) { continue; }
+            // An ability-granting soulbond card (Galvanic Alchemist) already searches its partner AND
+            // its decline on the ETB CHOICE AXIS (SoulbondPartnerPinCandidates) -- no twin here.
+            if (d->params.soulbond && d->params.soulbond_grants_untap_self_cost.has_value()) { continue; }
             casts_creature = true;
             if (d->params.draw_trigger_damage > 0) { casts_ping = true; }
             if (d->params.soulbond)
@@ -89970,6 +90318,17 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
             if (bk > 1) { lbl += " x" + std::to_string(bk); }
             cast_names.push_back(lbl);
         }
+        // Activated untapper (Crab Umbra / Galvanic's grant / Staff / Seedcradle Witch): the blink
+        // label shape, "<source>: untap <target>", so the history says WHAT was untapped.
+        else if (a.kind == Action::Kind::ActivateUntap)
+        {
+            const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : a.victim_name.str();
+            std::string lbl = a.card_name + ": untap" + (tn.empty() ? "" : " " + tn);
+            if (a.gy_exile_mode == 4) { lbl += " (+3/+3)"; }
+            const int uk = std::max(1, a.chosen_x);
+            if (uk > 1) { lbl += " x" + std::to_string(uk); }
+            cast_names.push_back(lbl);
+        }
         // Battlefield tap abilities (Mariposa's draw, Shivan Gorge's damage, investigate): also
         // read as a bare "cast: <land>" in the history. Mirror main.cpp's SummarizePlan label.
         else if (a.kind == Action::Kind::ActivatePermAbility)
@@ -89978,7 +90337,7 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
                 + ((a.def != nullptr && a.ability_mode == Action::AbilityMode::TapDraw
                     && !a.def->params.tap_draw_requires_top_supertype.empty())
                        ? "look at top; put a snow card into hand"
-                       : PermAbilityLabel(a.ability_mode)));
+                       : PermAbilityLabelFor(a.ability_mode, a.def)));
         }
         else { cast_names.push_back(a.card_name); }
     }
@@ -90155,6 +90514,53 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
             { return "'" + b.name + "' blinks ANOTHER creature -- it cannot target itself"; }
             break;
         }
+    }
+
+    // --- untapact= : an activated untapper (Crab Umbra / Galvanic Alchemist's grant / Staff of
+    // Domination / Seedcradle Witch). Source presence, the ability existing (on the source's own card,
+    // or -- Galvanic's grant -- on a Galvanic Alchemist we control, the source being its partner), and a
+    // pinned target that is a creature on the battlefield. Whether the target is TAPPED is not asserted:
+    // the line's own casts / mana taps can tap it first (LegalNotEnumerated is the honest grade).
+    for (const TurnSolver::LineSpec::UntapActSpec& u : spec.untap_acts)
+    {
+        if (!live(u.name))
+        { return "you control no '" + u.name + "' to activate"; }
+        const CardDefinition* d = def_of(u.name);
+        bool has = d == nullptr
+                || d->params.untap_enchanted_cost.has_value()
+                || d->params.untap_target_creature_cost.has_value()
+                || d->params.untap_pump_cost.has_value()
+                || d->params.soulbond_grants_untap_self_cost.has_value();
+        for (const Permanent& p : s.battlefield)
+        {
+            if (has) { break; }
+            if (p.controller_index != active || p.def_absent) { continue; }
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
+            if (gd && gd->params.soulbond_grants_untap_self_cost.has_value()) { has = true; }
+        }
+        for (const std::string& n : spec.casts)   // a Galvanic cast by this very line pairs on ETB
+        {
+            if (has) { break; }
+            const CardDefinition* cd = def_of(n);
+            if (cd && cd->params.soulbond_grants_untap_self_cost.has_value()) { has = true; }
+        }
+        if (!has) { return "'" + u.name + "' has no untap ability"; }
+        if (u.target == 0) { continue; }
+        const Permanent* tgt = nullptr;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == u.target) { tgt = &p; break; } }
+        if (tgt == nullptr || !(tgt->card.IsCreature() || tgt->is_animated))
+        { return "'" + u.name + "' can only untap a creature, and its declared target is not one"; }
+    }
+
+    // --- tapdraw= : a {T}-draw on a source with a second {T} ability (Staff of Domination).
+    for (const std::string& name : spec.tap_draws)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to activate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && !d->params.tap_draw_cost.has_value())
+        { return "'" + name + "' has no tap-to-draw activated ability"; }
     }
 
     // --- animate= : Mutavault's "{1}: becomes a 2/2". Source presence + the ability existing.
@@ -90569,6 +90975,34 @@ static bool BlinksMatch(const std::vector<TurnSolver::LineSpec::BlinkSpec>& want
     return BlinkAssign(want, have, used, 0);
 }
 
+// untapact= (Action::Kind::ActivateUntap): the BlinkAssign backtracking with two wildcard fields
+// (source m_number, target m_number; 0 = any). Unlike BlinksMatch there is NO legacy split -- the
+// kind is new, so an EMPTY declaration means "no untapper activation" and a plan that has one does
+// not match (the auraswap= rule).
+static bool UntapActAssign(const std::vector<TurnSolver::LineSpec::UntapActSpec>& want,
+                           const std::vector<TurnSolver::LineSpec::UntapActSpec>& have,
+                           std::vector<bool>& used, size_t i)
+{
+    if (i == want.size()) { return true; }
+    for (size_t j = 0; j < have.size(); ++j)
+    {
+        if (used[j] || have[j].name != want[i].name) { continue; }
+        if (want[i].source != 0 && want[i].source != have[j].source) { continue; }
+        if (want[i].target != 0 && want[i].target != have[j].target) { continue; }
+        used[j] = true;
+        if (UntapActAssign(want, have, used, i + 1)) { return true; }
+        used[j] = false;
+    }
+    return false;
+}
+static bool UntapActsMatch(const std::vector<TurnSolver::LineSpec::UntapActSpec>& want,
+                           const std::vector<TurnSolver::LineSpec::UntapActSpec>& have)
+{
+    if (want.size() != have.size()) { return false; }
+    std::vector<bool> used(have.size(), false);
+    return UntapActAssign(want, have, used, 0);
+}
+
 // VIEWER MARK OF THE AURA HOST RANKING'S PICK (USER 2026-10-06: "Marking it is fine"). Human play
 // offers every legal creature-Aura host (the menu is never narrowed and never REORDERED -- reference
 // replays index into it); this marks, per plan CLASS (variants identical but for their enchant subs),
@@ -90687,7 +91121,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       // worse than a reject because the human sees no error at all.
                       spec.tap_lifes.empty() && spec.aura_swaps.empty()
                       && spec.land_searches.empty()
-                      && spec.steals.empty() && spec.transforms.empty()))
+                      && spec.steals.empty() && spec.transforms.empty()
+                      && spec.untap_acts.empty() && spec.tap_draws.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -90863,6 +91298,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     std::vector<std::string> sortedTransforms = spec.transforms;
     std::sort(sortedTransforms.begin(), sortedTransforms.end());
     const bool transform_declared = !spec.transforms.empty();
+    // tapdraw= (Staff of Domination's "{5}, {T}: Draw a card"), the taplife= declared-vs-legacy split.
+    std::vector<std::string> sortedTapDraws = spec.tap_draws;
+    std::sort(sortedTapDraws.begin(), sortedTapDraws.end());
+    const bool tapdraw_declared   = !spec.tap_draws.empty();
     // pod= / ooze= (Birthing Pod / Scavenging Ooze activations), the same declared-vs-legacy
     // split every verb above uses -- an undeclared line keeps matching the action's card name in
     // the ordinary cast multiset, so saved references are unaffected.
@@ -90948,6 +91387,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // One entry per blink activation: (outlet name, blinked creature's m_number). Matched
         // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
         std::vector<LineSpec::BlinkSpec> blinkActs;
+        // One entry per ActivateUntap action: (source name, source m_number, target m_number).
+        // ALWAYS its own verb -- matched against spec.untap_acts by UntapActsMatch.
+        std::vector<LineSpec::UntapActSpec> untapActs;
+        std::vector<std::string> tapDrawNames;
         std::vector<int> freeAllHosts;   // one host m_number per AttachAllFreeEquipment action
         std::vector<std::string> boardActNames;   // cast-multiset names that are NOT hand casts
         for (const Action& a : p.actions)
@@ -91022,6 +91465,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             if (taplife_declared && a.kind == Action::Kind::ActivatePermAbility
                 && a.ability_mode == Action::AbilityMode::TapLifegain)
             { tapLifeNames.push_back(a.card_name); continue; }
+            if (tapdraw_declared && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::TapDraw)
+            { tapDrawNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::ActivateUntap)
+            { untapActs.push_back({ a.card_name.str(), a.sac_source_id, a.sac_victim_id }); continue; }
             if (landsearch_declared && a.kind == Action::Kind::ActivatePermAbility
                 && (a.ability_mode == Action::AbilityMode::SacLandSearch
                     || a.ability_mode == Action::AbilityMode::QuestSacLandSearch))
@@ -91139,6 +91587,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         if (!EquipsMatch(spec.equips, equipActs)) { continue; }
         if (!EquipAllFreeMatch(spec.equip_all_free, freeAllHosts)) { continue; }
         if (!BlinksMatch(spec.blinks, blinkActs)) { continue; }
+        if (!UntapActsMatch(spec.untap_acts, untapActs)) { continue; }
+        if (tapdraw_declared)
+        {
+            std::vector<std::string> v2 = tapDrawNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedTapDraws) { continue; }
+        }
         if (gyexile_declared)
         {
             std::vector<int> v2 = gyExileModes;
@@ -91507,6 +91962,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // genuinely ambiguous the label must read "×6" rather than "X=6".
             else if ((a.kind == Action::Kind::ActivateRevealTop || a.kind == Action::Kind::ActivatePump
                       || a.kind == Action::Kind::ActivateBlink    // blink count, not an {X} in a cost
+                      || a.kind == Action::Kind::ActivateUntap    // untapper count, likewise
                       || a.kind == Action::Kind::JitteModeAbility)   // Jitte +N/+N: how many counters
                      && a.chosen_x > 0)
             {
@@ -91725,6 +92181,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                     {
                         addSub("equip all free \xE2\x86\x92 " + hn, "equip all free onto",
                                hn, a.card_name.str(), "equipallfree", a.sac_victim_id);
+                    }
+                }
+                // ACTIVATED UNTAPPER target (Crab Umbra / Galvanic's grant / Staff of Domination /
+                // Seedcradle Witch): one ActivateUntap per legal target, all carrying the SOURCE's
+                // card_name -- the Equip collapse again, so it gets the Equip sub. A viewer line pins
+                // the target (`untapact=<src>#<n>@<target>`), so this surfaces only for a wildcard
+                // line; `card` = the target, the thing being decided.
+                if (a.kind == Action::Kind::ActivateUntap && a.sac_victim_id != 0)
+                {
+                    const std::string hn = SubChoiceHostLabel(state, a.sac_victim_id);
+                    if (!hn.empty())
+                    {
+                        addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " untaps",
+                               hn, a.victim_name.str(), "untapact", a.sac_victim_id);
                     }
                 }
                 // Umezawa's Jitte's non-combat modes: mode 1 shrinks a creature (sac_victim_id names
@@ -93711,7 +94181,7 @@ static const char* PlanDumpKindName(Action::Kind k)
         "ActivateLoyalty", "Equip", "GYReturn", "GYPlay", "GYExile", "AttachAllEquipment",
         "PutFromHand", "JitteMode", "RevealTop", "Pump", "AnimateLand", "TapForTokenPay",
         "UntapCreature", "Blink", "ACTIVATE", "Pod", "GYExileGrow", "ComboRoute", "Eternalize",
-        "AttachAllFree"
+        "AttachAllFree", "AuraSwap", "ActivateUntap"
     };
     const int i = static_cast<int>(k);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

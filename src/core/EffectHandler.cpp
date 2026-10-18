@@ -163,7 +163,12 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // Scourge's ETB ping + Lathliss's 5/5 token. No-op for every non-Dragon permanent (early
     // subtype return) so all other decks are byte-identical. Mirrors the rollout's creature-enter
     // site in TurnSolver::ApplyPlanDirect (lockstep).
-    FireEtbWatchers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1);
+    {
+        // Galvanic Alchemist's SEARCHED soulbond partner (the cast's chosen_x pin) -- lockstep with
+        // TurnSolver's apply_one. 0 = no pin for every other card.
+        SoulbondPartnerPinScope _spp(SoulbondPinForCast(edef->params, entry.chosen_x.value_or(0)));
+        FireEtbWatchers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1);
+    }
     // Goblins tribal ETB cascade (self-tokens / ETB burn / Matron tutor / Muxus reveal). No-op for
     // every non-Goblin permanent (early param return). entry.tutor_target carries a search/human
     // Goblin Matron fetch target (empty -> the provider's pick).

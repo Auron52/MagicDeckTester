@@ -266,6 +266,21 @@ struct Action
                              // exclusive via sac_source_id. WHICH Aura: the provider's damage-max
                              // pick (USER ruling 2026-10-05, proven against MTG_AURA_SWAP_BRANCH);
                              // human play offers every legal Aura. Appended LAST.
+        ActivateUntap,       // ACTIVATED UNTAPPERS (AccomplishedAlchemist chunk C2a): Crab Umbra
+                             // (shape 1, "{2}{U}: Untap enchanted creature"), Galvanic Alchemist's
+                             // soulbond grant (2, "{2}{U}: Untap this creature" on both halves of
+                             // the pair), Staff of Domination (3, "{3}, {T}: Untap target creature",
+                             // its "{1}: Untap this artifact" paid ahead of each repeat while it is
+                             // tapped) and Seedcradle Witch (4, "{2}{G}{W}: target creature gets
+                             // +3/+3 until end of turn. Untap that creature."). gy_exile_mode = the
+                             // shape (ActivatedUntapShape), sac_source_id = the ability's source,
+                             // sac_victim_id = the TARGET (a searched axis: one variant per legal
+                             // creature -- never an auto-pick), chosen_x = how many activations
+                             // (DecisionProvider::UntapActivationCounts). `cost` is ONE activation,
+                             // the ActivateBlink convention: untapping a mana creature refunds its
+                             // yield, so the loop is self-funding and the shared resolver
+                             // (ApplyActivatedUntap, both worlds) pays per activation and stops at
+                             // the first it cannot pay. Applied in the trailing pass. Appended LAST.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
@@ -2990,6 +3005,22 @@ public:
         // hand back the index of whichever came first, which is the exact bug class d1698c5d fixed.
         struct BlinkSpec { std::string name; int target = 0; int count = 0; };
         std::vector<BlinkSpec> blinks;
+        // "untapact=<source name>[#<source m_number>][@<target m_number>]": an activated untapper
+        // (Action::Kind::ActivateUntap -- Crab Umbra, Galvanic Alchemist's soulbond grant, Staff of
+        // Domination, Seedcradle Witch), one entry per activation. The blink shape: the TARGET is the
+        // decision and `cast=<source>` cannot carry it (and `cast=Staff of Domination` collides with
+        // a hand copy). `source` pins WHICH same-named source (two Staffs / two Umbras); 0 = any, as
+        // is `target` 0. ALWAYS its own verb (the kind is new, like auraswap=): a plan with an
+        // untapper activation never matches a line that does not declare it. No count: human play
+        // folds the activation count to 1 and re-prompts after each segment.
+        struct UntapActSpec { std::string name; int source = 0; int target = 0; };
+        std::vector<UntapActSpec> untap_acts;
+        // "tapdraw=<source name>": PermAbilityMode::TapDraw on a source that ALSO carries another
+        // {T} ability family (Staff of Domination: self_untap_cost / tap_lifegain_cost). The taplife=
+        // reason -- verbless, `act=Staff of Domination` matches its TapDraw and its (undeclared)
+        // TapLifegain plan alike. EMPTY keeps the legacy name-in-casts matching, so every other
+        // TapDraw source (Scrying Sheets, Frost Augur, ...) and every saved line is unchanged.
+        std::vector<std::string> tap_draws;
         // "tap=<card name>#<m_number>:<W|U|B|R|G|C>": the MANUAL TAP/PAY fallback -- tap this
         // source for this face into the float before the line's payments run (see
         // TurnSolver::PreTap). NOT part of the plan multiset: a pre-tap changes how the line is

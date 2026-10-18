@@ -6201,7 +6201,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // so every real tap-draw keeps its exact label (digest-stable elsewhere).
                         m_logger->LogAbility(src_id, a.card_name.str(),
                                              snow_look ? "look at top; put a snow card into hand"
-                                                       : PermAbilityLabel(a.ability_mode));
+                                                       : PermAbilityLabelFor(a.ability_mode, a.def));
                     }
                     // LOCKSTEP with the rollout's repeat loop (TurnSolver apply_one). A repeatable
                     // {T}-less sink's plan carries K activations with only the FIRST on the subset's
@@ -6227,7 +6227,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         {
                             for (int i = 0; i < extra; ++i)
                             { m_logger->LogAbility(src_id, a.card_name.str(),
-                                                   PermAbilityLabel(a.ability_mode)); }
+                                                   PermAbilityLabelFor(a.ability_mode, a.def)); }
+                        }
+                    }
+                    // Staff of Domination (self_untap_cost): the {T} mode's K-1 repeats, each paying
+                    // "{1}: Untap this artifact" first. Lockstep twin of the rollout's branch.
+                    else if (taps && a.chosen_x > 1 && a.def->params.self_untap_cost.has_value())
+                    {
+                        const int extra = SpendSelfUntapRepeats(state, state.active_player_index,
+                                                                src_id, a.ability_mode,
+                                                                *a.def, a.chosen_x - 1);
+                        if (m_logger)
+                        {
+                            for (int i = 0; i < extra; ++i)
+                            { m_logger->LogAbility(src_id, a.card_name.str(),
+                                                   std::string("untap; ") + PermAbilityLabelFor(a.ability_mode, a.def)); }
                         }
                     }
                     // BREAKPOINT SITE 8 executor twin (rollout: TurnSolver's ActivatePermAbility
@@ -6367,6 +6381,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (ActDropAuditOn() && ud != nullptr)
             { NoteActDrop(UntapCreatureDeadReason(state, state.active_player_index, a.sac_source_id),
                           a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
+        }
+        else if (a.kind == Action::Kind::ActivateUntap)
+        {
+            // Activated untappers (executor twin of ApplyPlanDirect's trailing branch): the SAME shared
+            // resolver, so the K activations, their payments and their stop conditions are identical.
+            const int done = ApplyActivatedUntap(state, state.active_player_index, a.gy_exile_mode,
+                                                 a.sac_source_id, a.sac_victim_id, std::max(1, a.chosen_x));
+            if (m_logger && done > 0)
+            {
+                m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
+                                     "untap " + a.victim_name.str()
+                                     + (done > 1 ? " x" + std::to_string(done) : std::string()));
+            }
+            if (ActDropAuditOn())
+            {
+                if (done > 0) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
+                else { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
+            }
         }
         else if (a.kind == Action::Kind::AnimateLand)
         {

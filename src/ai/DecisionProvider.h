@@ -1501,6 +1501,26 @@ public:
         return out;
     }
 
+    // UntapActivationCounts -- how many times to activate an ACTIVATED UNTAPPER (Action::Kind::
+    // ActivateUntap: Crab Umbra, Galvanic Alchemist's granted untap, Staff of Domination's untap-target
+    // with its {1} self-untap interleaved, Seedcradle Witch) of shape `shape` from `source` at `target`
+    // this main phase. Exactly the BlinkActivationCounts contract: the candidates the search branches
+    // over; empty declines the activation. Generic = 1..min(3, max_affordable), the bound every K-count
+    // activation carries. `max_affordable` ignores the refund an untapped MANA creature pays back, so it
+    // is a floor on a self-funding loop (Accomplished Alchemist at X >= the untap cost), never a
+    // ceiling -- the hook exists so a provider that recognises such a loop can propose its exact count
+    // (AccomplishedAlchemist chunk C2b), which the resolver then pays activation by activation.
+    virtual std::vector<int> UntapActivationCounts(const GameState& s, const Permanent& source,
+                                                   const Permanent& target, int shape,
+                                                   int max_affordable) const
+    {
+        (void)s; (void)source; (void)target; (void)shape;
+        std::vector<int> out;
+        const int kmax = std::min(3, max_affordable);
+        for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+        return out;
+    }
+
     // BlinkTargetCandidates -- which creatures a blink outlet may target, as m_numbers. Empty means
     // "no narrowing": the enumerator offers EVERY legal target, which is the generic answer and the
     // only correct one absent a measured reason (dropping a target would be the enumerator stealing

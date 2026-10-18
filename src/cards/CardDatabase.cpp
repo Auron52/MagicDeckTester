@@ -1638,6 +1638,21 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("untap_creature_cost"))
         p.untap_creature_cost = ManaCostFromString(params["untap_creature_cost"].get<std::string>());
     p.untap_creature_subtype        = params.value("untap_creature_subtype", std::string{});
+    // Activated untappers (chunk C2a) -- see CardParams.
+    if (params.contains("untap_enchanted_cost"))
+        p.untap_enchanted_cost = ManaCostFromString(params["untap_enchanted_cost"].get<std::string>());
+    if (params.contains("soulbond_grants_untap_self_cost"))
+        p.soulbond_grants_untap_self_cost =
+            ManaCostFromString(params["soulbond_grants_untap_self_cost"].get<std::string>());
+    if (params.contains("untap_target_creature_cost"))
+        p.untap_target_creature_cost =
+            ManaCostFromString(params["untap_target_creature_cost"].get<std::string>());
+    if (params.contains("self_untap_cost"))
+        p.self_untap_cost = ManaCostFromString(params["self_untap_cost"].get<std::string>());
+    if (params.contains("untap_pump_cost"))
+        p.untap_pump_cost = ManaCostFromString(params["untap_pump_cost"].get<std::string>());
+    p.untap_pump_power              = params.value("untap_pump_power", 0);
+    p.untap_pump_tough              = params.value("untap_pump_tough", 0);
     p.etb_destroy_own_noncreature_max = params.value("etb_destroy_own_noncreature_max", 0);
     p.mdfc_back_pay_life            = params.value("mdfc_back_pay_life", 0);
     p.look_top_put_creature_count   = params.value("look_top_put_creature_count", 0);
@@ -1750,7 +1765,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // compiles, loads and silently has no ability. Every other card keeps nullopt (byte-identical).
     p.tap_lifegain_per_subtype = params.value("tap_lifegain_per_subtype", std::string{});
     p.tap_lifegain_count_all   = params.value("tap_lifegain_count_all", false);
-    if (!p.tap_lifegain_per_subtype.empty())
+    p.tap_lifegain_flat        = params.value("tap_lifegain_flat", 0);   // Staff of Domination
+    if (!p.tap_lifegain_per_subtype.empty() || p.tap_lifegain_flat > 0)
     {
         p.tap_lifegain_cost =
             ManaCostFromString(params.value("tap_lifegain_cost", std::string{}));

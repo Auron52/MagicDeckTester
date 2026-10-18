@@ -96,6 +96,9 @@
   //   taplife=    Wellwisher's "{T}: gain 1 life for each Elf" (names the SOURCE) (LineSpec::tap_lifes)
   //   landsearch= Evolving Wilds / Myriad Landscape / Khalni Heart Expedition crack (names the SOURCE;
   //               the lands are picked at resolution)                      (LineSpec::land_searches)
+  //   untapact=   Crab Umbra / Galvanic Alchemist's grant / Staff of Domination / Seedcradle Witch,
+  //               "<source>[#<source m_number>][@<target m_number>]"       (LineSpec::untap_acts)
+  //   tapdraw=    Staff of Domination's "{5},{T}: draw" (names the SOURCE)  (LineSpec::tap_draws)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
   const MODE_VERBS = { jittemode: true, gyexile: true };
@@ -400,6 +403,14 @@
          + (p.blinkCount > 0 ? '*' + p.blinkCount : '');
   }
 
+  // The "#<source m_number>@<target m_number>" suffix an `untapact=` token carries -- equipIds' shape.
+  // The SOURCE number matters here where it does not for a blink: two Staffs of Domination, or two
+  // Crab Umbras on two creatures, share a name, and a tapped Staff costs {1} more to reuse than an
+  // untapped one. The TARGET is the decision (which creature to untap). Either omitted = any.
+  function untapIds(p) {
+    return (p.untapSrc ? '#' + p.untapSrc : '') + (p.untapTarget ? '@' + p.untapTarget : '');
+  }
+
   // ---- MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md) ---------------------------------
   // A 'pretap' entry is a board mana source the human tapped BY HAND for a specific face, so the
   // engine's payment spends that unit instead of allocating one itself. It is not a play: it never
@@ -519,7 +530,8 @@
       parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode)
                             : NUM_VERBS[v] ? String(p.hostNum || 0)
                             : p.name)
-                 + (v === 'equip' ? equipIds(p) : v === 'blink' ? blinkIds(p) : ''));
+                 + (v === 'equip' ? equipIds(p) : v === 'blink' ? blinkIds(p)
+                    : v === 'untapact' ? untapIds(p) : ''));
     }
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);
     return parts.length ? parts.join(';') : 'pass';

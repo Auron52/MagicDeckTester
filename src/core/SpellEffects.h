@@ -4978,6 +4978,29 @@ struct PlanSoulbondDeclineScope
     PlanSoulbondDeclineScope(const PlanSoulbondDeclineScope&)            = delete;
     PlanSoulbondDeclineScope& operator=(const PlanSoulbondDeclineScope&) = delete;
 };
+// SEARCHED SOULBOND PARTNER (Galvanic Alchemist, AccomplishedAlchemist chunk C2a). A soulbond card
+// whose pairing GRANTS AN ABILITY (soulbond_grants_untap_self_cost) has a partner choice that is a
+// real decision -- WHICH creature gets "{2}{U}: Untap this creature" (an Accomplished Alchemist makes
+// it an engine, a vanilla body does not) -- so it rides the ETB CHOICE AXIS: one cast variant per
+// legal partner plus a decline, the pin carried as the cast's chosen_x (= the partner's m_number, or
+// kSoulbondDeclinePin) and handed to the enter cascade's Trigger A by the cast sites through this
+// scope (rollout apply_one and EffectHandler::EnterBattlefield, lockstep). A pin that is no longer
+// legal at resolution (the partner left, or was a hand card the plan did not cast first) falls back
+// to the provider's pick. 0 = no pin (every other soulbond card -- Silverblade Paladin keeps its
+// power-ranked pick and its own Plan::soulbond_decline twin, byte-identical).
+constexpr int kSoulbondDeclinePin = 1000000;
+inline thread_local int g_soulbond_partner_pin = 0;
+struct SoulbondPartnerPinScope
+{
+    int prev;
+    explicit SoulbondPartnerPinScope(int pin) : prev(g_soulbond_partner_pin) { g_soulbond_partner_pin = pin; }
+    ~SoulbondPartnerPinScope() { g_soulbond_partner_pin = prev; }
+    SoulbondPartnerPinScope(const SoulbondPartnerPinScope&)            = delete;
+    SoulbondPartnerPinScope& operator=(const SoulbondPartnerPinScope&) = delete;
+};
+// The pin a CAST of `def` with cast chosen_x `cx` hands the enter cascade (0 = none).
+inline int SoulbondPinForCast(const CardParams& p, int cx)
+{ return (p.soulbond && p.soulbond_grants_untap_self_cost.has_value() && cx > 0) ? cx : 0; }
 inline std::atomic<long long> g_soulbond_decline_applied{0};   // MTG_SOULBOND_DECLINE_AUDIT census
 inline std::atomic<long long> g_soulbond_decline_twins{0};     // twins enumerated (AppendSoulbondDeclineVariants)
 
@@ -8148,6 +8171,17 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                     if (cands.empty()) { return false; }
                     int want = ResolveProvider(state).SoulbondPartner(
                         state, src.controller_index, src, cands);
+                    // SEARCHED PARTNER (g_soulbond_partner_pin): Trigger A of the entering soulbond
+                    // card only (only_idx < 0); the human chooser below still overrides it.
+                    if (g_soulbond_partner_pin != 0 && only_idx < 0 && g_play_attach_host_chooser == nullptr)
+                    {
+                        if (g_soulbond_partner_pin == kSoulbondDeclinePin) { want = 0; }
+                        else
+                        {
+                            for (int ci : cands)
+                            { if (state.battlefield[ci].card.m_number == g_soulbond_partner_pin) { want = g_soulbond_partner_pin; break; } }
+                        }
+                    }
                     // SEARCHED DECLINE (Plan::soulbond_decline): the plan being applied scored "do
                     // not pair"; the human chooser below still overrides it in the viewer.
                     if (g_plan_soulbond_decline && g_play_attach_host_chooser == nullptr)
@@ -24411,6 +24445,8 @@ inline int CountCreaturesWithSubtype(const GameState& state, int controller,
 // Wellwisher's X. Shared by the resolver and the enumerator for the CountOwnCreatures reason above.
 inline int TapLifegainAmount(const GameState& s, int ctrl, const CardDefinition& d)
 {
+    // Staff of Domination's flat "{2}, {T}: You gain 1 life" (no subtype to count).
+    if (d.params.tap_lifegain_per_subtype.empty()) { return std::max(0, d.params.tap_lifegain_flat); }
     return CountCreaturesWithSubtype(s, ctrl, d.params.tap_lifegain_per_subtype,
                                      d.params.tap_lifegain_count_all);
 }
@@ -24551,6 +24587,17 @@ inline bool PayTapSubtypeCost(GameState& state, int controller, const CardDefini
     if (g_play_event_sink && !g_tap_speculating)
     { EmitPlayEvent(state.turn_number, "ability", src_name + ": tapped " + names + " to pay its cost"); }
     return true;
+}
+
+// The def-aware label: Staff of Domination's FLAT "{2}, {T}: You gain 1 life" shares TapLifegain with
+// Wellwisher's per-Elf gain, so the mode alone mislabels it. Every other (mode, card) keeps the exact
+// PermAbilityLabel text (log digests stay put).
+inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinition* d)
+{
+    if (mode == PermAbilityMode::TapLifegain && d != nullptr && d->params.tap_lifegain_per_subtype.empty()
+        && d->params.tap_lifegain_flat > 0)
+    { return "gain " + std::to_string(d->params.tap_lifegain_flat) + " life"; }
+    return PermAbilityLabel(mode);
 }
 
 // Resolve one ActivatePermAbility. The cost is already paid by the caller; this is the effect half
@@ -25327,6 +25374,10 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 {
                     // The subtype is NOT pluralised: it is an arbitrary cards.json string, and
                     // "Elf" + "s" reads as "Elfs". Written as a count of the type instead.
+                    if (d->params.tap_lifegain_per_subtype.empty())   // Staff's flat gain
+                    { EmitPlayEvent(state.turn_number, "lifegain",
+                                    src_name + ": gain " + std::to_string(amt) + " life"); }
+                    else
                     EmitPlayEvent(state.turn_number, "lifegain",
                                   src_name + ": gain " + std::to_string(amt) + " life ("
                                   + std::to_string(amt) + " "
@@ -25608,6 +25659,61 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
         fired += done;
         if (done < k) { break; }
         want  -= k;
+    }
+    return fired;
+}
+
+// Component-wise ManaCost sum (core twin of ai's AddManaCost).
+inline void SumManaCostInto(ManaCost& dst, const ManaCost& add)
+{
+    dst.generic += add.generic; dst.white += add.white; dst.blue += add.blue; dst.black += add.black;
+    dst.red += add.red; dst.green += add.green; dst.colorless += add.colorless;
+    // Flat pips only, like ai's AddManaCost: no untapper cost has a hybrid / phyrexian pip (Seedcradle
+    // Witch's {G/W} is its CAST cost, not its ability).
+}
+
+// Staff of Domination: the K-1 REPEATS of a {T} PermAbility mode on a source with "{1}: Untap this
+// artifact" (CardParams::self_untap_cost). Each repeat is "pay {1}: untap the Staff" then "pay the
+// mode's cost, {T}: <effect>" -- ONE combined payment through the unified TapForCostDirect (so an
+// unpayable repeat spends nothing and ends the loop), the Staff ends tapped, ApplyPermAbility
+// resolves the effect. Called by BOTH worlds right after the plan's first activation (rollout
+// trailing pass and AIEngine's twin), so they stay lockstep. Returns how many repeats resolved.
+// Only the {T} modes a self-untapping source can carry today are priced; anything else fires none.
+inline int SpendSelfUntapRepeats(GameState& state, int controller, int source_id,
+                                 PermAbilityMode mode, const CardDefinition& def, int want)
+{
+    if (want <= 0 || !def.params.self_untap_cost.has_value()) { return 0; }
+    const std::optional<ManaCost>* mc =
+          (mode == PermAbilityMode::TapLifegain)    ? &def.params.tap_lifegain_cost
+        : (mode == PermAbilityMode::TapDraw)        ? &def.params.tap_draw_cost
+        : (mode == PermAbilityMode::TapDamage)      ? &def.params.tap_damage_cost
+        : (mode == PermAbilityMode::TapInvestigate) ? &def.params.tap_investigate_cost
+        : nullptr;
+    if (mc == nullptr || !mc->has_value()) { return 0; }
+    int fired = 0;
+    for (int i = 0; i < want; ++i)
+    {
+        if (OpponentHasLost(state)) { break; }
+        int si = -1;
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(j)];
+            if (q.card.m_number == source_id && q.controller_index == controller) { si = j; break; }
+        }
+        if (si < 0) { break; }
+        const bool was_tapped = state.battlefield[static_cast<std::size_t>(si)].tapped;
+        ManaCost c = EffectiveActivationCost(state, controller, def.card, mc->value());
+        if (was_tapped)
+        { SumManaCostInto(c, EffectiveActivationCost(state, controller, def.card, *def.params.self_untap_cost)); }
+        state.battlefield[static_cast<std::size_t>(si)].tapped = true;   // {T} before the mana half
+        if (!TapForCostDirect(state, c, /*for_creature=*/false))
+        {
+            state.battlefield[static_cast<std::size_t>(si)].tapped = was_tapped;
+            break;
+        }
+        if (was_tapped) { state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index); }
+        ApplyPermAbility(state, controller, source_id, mode);
+        ++fired;
     }
     return fired;
 }
@@ -30164,6 +30270,263 @@ struct CreatureAbilityPayScope
     CreatureAbilityPayScope()  : prev(PayingCreatureAbility()) { PayingCreatureAbility() = true; }
     ~CreatureAbilityPayScope() { PayingCreatureAbility() = prev; }
 };
+// ==== ACTIVATED UNTAPPERS (Action::Kind::ActivateUntap; AccomplishedAlchemist chunk C2a) ==========
+// Crab Umbra ("{2}{U}: Untap enchanted creature"), Galvanic Alchemist's soulbond grant ("each of those
+// creatures has '{2}{U}: Untap this creature'"), Staff of Domination ("{3}, {T}: Untap target creature",
+// with "{1}: Untap this artifact" interleaved) and Seedcradle Witch ("{2}{G}{W}: Target creature gets
+// +3/+3 until end of turn. Untap that creature."). ONE oracle (CollectCreatureUntapAbilities) says which
+// of these a creature can be the object of right now, and ONE resolver (ApplyActivatedUntap) performs
+// K activations -- the rollout's trailing pass and the executor's both call it, so the two worlds are
+// lockstep by construction (the ApplyBlinkLoop / SpendRepeatActivations shape: it pays through the
+// UNIFIED TapForCostDirect itself). Chunk C2b's closed-form loop is meant to drive the same two.
+enum ActivatedUntapShape : int
+{
+    kUntapEnchanted    = 1,   // Crab Umbra: source = the Aura, target = the creature it enchants
+    kUntapSoulbondSelf = 2,   // Galvanic grant: source = target = the paired creature
+    kUntapStaffTarget  = 3,   // Staff: source = the artifact ({T}), target = any creature (searched)
+    kUntapPumpTarget   = 4,   // Seedcradle Witch: source = the Witch, target searched, +P/+T rider
+};
+
+// The Galvanic grant: does creature `c` currently have a soulbond-granted "{cost}: Untap this
+// creature"? Both halves of a LIVE pair carry it (CR 702.46b -- "each of those creatures"), the holder
+// via its own paired_with and the partner via the holder's. Read-time verified (SoulbondPartnerIndex),
+// so a broken pair grants nothing with no bookkeeping.
+inline std::optional<ManaCost> SoulbondGrantedUntapCost(const GameState& state, const Permanent& c)
+{
+    if (!c.card.IsCreature() && !c.is_animated) { return std::nullopt; }
+    if (c.paired_with != 0)
+    {
+        const CardDefinition* d = c.def_absent ? nullptr : CardDatabase::Instance().LookupCached(c.card);
+        if (d && d->params.soulbond_grants_untap_self_cost.has_value() && SoulbondPartnerIndex(c, state) >= 0)
+        { return d->params.soulbond_grants_untap_self_cost; }
+    }
+    if (c.card.m_number == 0) { return std::nullopt; }
+    for (const Permanent& h : state.battlefield)
+    {
+        if (h.paired_with != c.card.m_number || h.controller_index != c.controller_index) { continue; }
+        const CardDefinition* hd = h.def_absent ? nullptr : CardDatabase::Instance().LookupCached(h.card);
+        if (hd && hd->params.soulbond_grants_untap_self_cost.has_value() && SoulbondPartnerIndex(h, state) >= 0)
+        { return hd->params.soulbond_grants_untap_self_cost; }
+    }
+    return std::nullopt;
+}
+
+struct UntapAbilityRef
+{
+    int shape     = 0;   // ActivatedUntapShape
+    int source_id = 0;   // m_number of the permanent whose ability it is
+};
+
+// THE ORACLE: every activated untap ability `ctrl` can aim at creature `t` right now, MANA IGNORED
+// (the caller prices it -- UntapUnitCost). A Staff counts while untapped, or tapped with a
+// self_untap_cost (the {1} re-enables its {T}); Umbra only on the creature it enchants; the Galvanic
+// grant only on a member of a live pair; the Witch on any creature. A shrouded target is not a legal
+// target of the two TARGETED abilities (Staff, Witch); Umbra and the grant do not target.
+// Sources are numbered permanents only (m_number 0 cannot be addressed by an action).
+inline void CollectCreatureUntapAbilities(const GameState& state, int ctrl, const Permanent& t,
+                                          std::vector<UntapAbilityRef>& out)
+{
+    if (!t.card.IsCreature() && !t.is_animated) { return; }
+    const bool targetable = !CreatureHasShroud(t, state);
+    if (t.controller_index == ctrl && SoulbondGrantedUntapCost(state, t).has_value() && t.card.m_number != 0)
+    { out.push_back(UntapAbilityRef{ kUntapSoulbondSelf, t.card.m_number }); }
+    for (const Permanent& s : state.battlefield)
+    {
+        if (s.controller_index != ctrl || s.card.m_number == 0 || s.def_absent) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
+        if (sd == nullptr) { continue; }
+        const CardParams& pp = sd->params;
+        if (pp.untap_enchanted_cost.has_value() && s.aura_attached_to != 0
+            && s.aura_attached_to == t.card.m_number)
+        { out.push_back(UntapAbilityRef{ kUntapEnchanted, s.card.m_number }); }
+        if (pp.untap_target_creature_cost.has_value() && targetable
+            && (!s.tapped || pp.self_untap_cost.has_value()))
+        { out.push_back(UntapAbilityRef{ kUntapStaffTarget, s.card.m_number }); }
+        if (pp.untap_pump_cost.has_value() && targetable)
+        { out.push_back(UntapAbilityRef{ kUntapPumpTarget, s.card.m_number }); }
+    }
+}
+
+// One activation's MANA for (shape, source, target) on THIS state, or nullopt when the ability is not
+// there. For the Staff, the {1} self-untap is included when the Staff is tapped right now (it must be
+// paid to re-enable the {T}). Creature sources go through EffectiveActivationCost (a cost reducer for
+// "abilities of creatures you control" applies to the Witch and to the Galvanic grant).
+inline std::optional<ManaCost> UntapUnitCost(const GameState& state, int ctrl, int shape,
+                                             const Permanent& src, const Permanent& tgt)
+{
+    const CardDefinition* sd = src.def_absent ? nullptr : CardDatabase::Instance().LookupCached(src.card);
+    switch (shape)
+    {
+        case kUntapEnchanted:
+            if (!sd || !sd->params.untap_enchanted_cost) { return std::nullopt; }
+            return EffectiveActivationCost(state, ctrl, src.card, *sd->params.untap_enchanted_cost);
+        case kUntapSoulbondSelf:
+        {
+            const std::optional<ManaCost> c = SoulbondGrantedUntapCost(state, tgt);
+            if (!c) { return std::nullopt; }
+            return EffectiveActivationCost(state, ctrl, tgt.card, *c);
+        }
+        case kUntapStaffTarget:
+        {
+            if (!sd || !sd->params.untap_target_creature_cost) { return std::nullopt; }
+            ManaCost c = EffectiveActivationCost(state, ctrl, src.card, *sd->params.untap_target_creature_cost);
+            if (src.tapped)
+            {
+                if (!sd->params.self_untap_cost) { return std::nullopt; }
+                SumManaCostInto(c, EffectiveActivationCost(state, ctrl, src.card, *sd->params.self_untap_cost));
+            }
+            return c;
+        }
+        case kUntapPumpTarget:
+            if (!sd || !sd->params.untap_pump_cost) { return std::nullopt; }
+            return EffectiveActivationCost(state, ctrl, src.card, *sd->params.untap_pump_cost);
+        default: return std::nullopt;
+    }
+}
+
+// Is `t` a creature whose own mana ability can be used right now (untapped, not summoning-sick, yields
+// something)? The ONE reason an untap aimed at an UNTAPPED creature is not a no-op: tap it for mana
+// first, then untap it.
+inline bool UntapTargetIsLiveManaCreature(const GameState& state, const Permanent& t)
+{
+    if (t.tapped || t.def_absent || !CanTapNow(t, state.battlefield)) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(t.card);
+    if (d == nullptr || d->params.produces.empty()) { return false; }
+    return PermanentManaYield(state, t, *d) > 0;
+}
+
+void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDefinition& def,
+                        Color col, ManaPool& floating, ManaPool* available, bool for_creature,
+                        const std::vector<int>* aura_colors);   // ManaPayment.cpp
+
+// Perform up to K activations of (shape, source, target). Returns how many resolved. Per activation:
+//   1. re-locate source and target (by number) and re-read the ability through the oracle -- a pair
+//      broken, an Aura moved or a Staff gone mid-loop ends the loop (stranded = no payment);
+//   2. if the target is UNTAPPED: an untap of an untapped creature does nothing, so for the three pure
+//      untappers the activation is DOMINATED unless the target is a live mana creature, in which case it
+//      is tapped for mana into the float FIRST (the only way the untap buys anything -- and with no mana
+//      burn and the target untapped again at the end, tapping first is never worse; the same holds for
+//      the Witch, whose pump is not a no-op, so shape 4 always proceeds and pre-taps a live mana
+//      creature for the same reason). Colour of that float: the untap cost's first coloured
+//      pip the creature makes, else green, else its first colour (a mana-payment choice -- the standing
+//      exemption; C2b's loop sizer owns any finer colour plan);
+//   3. the Staff's {T} is paid (after its {1} self-untap when it was tapped), then the mana half through
+//      the unified TapForCostDirect; an unpayable activation restores the {T} and ends the loop;
+//   4. untap the target (+ the Witch's +P/+T until end of turn). One play event per activation.
+inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source_id, int target_id, int K)
+{
+    int done = 0;
+    auto find_num = [&state, ctrl](int num, bool own) -> int
+    {
+        if (num == 0) { return -1; }
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.card.m_number == num && (!own || p.controller_index == ctrl)) { return i; }
+        }
+        return -1;
+    };
+    for (int k = 0; k < std::max(1, K); ++k)
+    {
+        if (OpponentHasLost(state)) { break; }
+        const int si = find_num(source_id, /*own=*/true);
+        int ti = find_num(target_id, /*own=*/false);
+        if (si < 0 || ti < 0) { break; }
+        // The oracle is the legality test: an ability the oracle no longer lists is gone.
+        {
+            std::vector<UntapAbilityRef> abil;
+            CollectCreatureUntapAbilities(state, ctrl, state.battlefield[static_cast<std::size_t>(ti)], abil);
+            bool have = false;
+            for (const UntapAbilityRef& r : abil) { if (r.shape == shape && r.source_id == source_id) { have = true; } }
+            if (!have) { break; }
+        }
+        const std::optional<ManaCost> unit =
+            UntapUnitCost(state, ctrl, shape, state.battlefield[static_cast<std::size_t>(si)],
+                          state.battlefield[static_cast<std::size_t>(ti)]);
+        if (!unit) { break; }
+        if (!state.battlefield[static_cast<std::size_t>(ti)].tapped)
+        {
+            Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+            const bool live = t.controller_index == ctrl && UntapTargetIsLiveManaCreature(state, t);
+            if (!live && shape != kUntapPumpTarget) { break; }   // a pure untap of it is a no-op
+        }
+        if (!state.battlefield[static_cast<std::size_t>(ti)].tapped
+            && state.battlefield[static_cast<std::size_t>(ti)].controller_index == ctrl
+            && UntapTargetIsLiveManaCreature(state, state.battlefield[static_cast<std::size_t>(ti)]))
+        {
+            Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
+            const std::vector<Color>& prod = EffectiveProducesFor(state, ctrl, *td, &t);
+            auto makes = [&prod](Color c) { return std::find(prod.begin(), prod.end(), c) != prod.end(); };
+            Color col = prod.front();
+            if      (unit->white > 0 && makes(Color::White)) { col = Color::White; }
+            else if (unit->blue  > 0 && makes(Color::Blue))  { col = Color::Blue; }
+            else if (unit->black > 0 && makes(Color::Black)) { col = Color::Black; }
+            else if (unit->red   > 0 && makes(Color::Red))   { col = Color::Red; }
+            else if (unit->green > 0 && makes(Color::Green)) { col = Color::Green; }
+            else if (makes(Color::Green))                    { col = Color::Green; }
+            TapSourceIntoFloat(state, ctrl, t, *td, col, state.floating_mana, nullptr,
+                               /*for_creature=*/false, nullptr);
+        }
+        // The Staff's {T} (its {1} self-untap is inside `unit` when it was tapped): pay the tap first
+        // so the source can never be counted toward its own activation (the PermAbility discipline).
+        const bool staff = shape == kUntapStaffTarget;
+        const bool staff_was_tapped = state.battlefield[static_cast<std::size_t>(si)].tapped;
+        if (staff) { state.battlefield[static_cast<std::size_t>(si)].tapped = true; }
+        const bool src_creature = state.battlefield[static_cast<std::size_t>(si)].card.IsCreature();
+        bool paid = false;
+        {
+            std::optional<CreatureAbilityPayScope> cs;   // a creature source may use creature-ability mana (D12)
+            if (src_creature) { cs.emplace(); }
+            paid = TapForCostDirect(state, *unit, /*for_creature=*/false);
+        }
+        if (!paid)
+        {
+            // Restore the Staff's {T} to what it was: nothing was spent (its {1} self-untap was part
+            // of the unpaid unit), so the activation simply did not happen.
+            if (staff)
+            {
+                const int s2 = find_num(source_id, true);
+                if (s2 >= 0) { state.battlefield[static_cast<std::size_t>(s2)].tapped = staff_was_tapped; }
+            }
+            break;
+        }
+        ti = find_num(target_id, false);
+        if (ti < 0) { break; }
+        Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+        state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+        t.tapped = false;
+        if (shape == kUntapPumpTarget)
+        {
+            const int s3 = find_num(source_id, true);
+            const CardDefinition* wd = s3 >= 0
+                ? CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(s3)].card) : nullptr;
+            if (wd)
+            {
+                t.temp_power_bonus += wd->params.untap_pump_power;
+                t.temp_tough_bonus += wd->params.untap_pump_tough;
+            }
+        }
+        ++done;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            const int s4 = find_num(source_id, true);
+            const std::string sn = s4 >= 0 ? state.battlefield[static_cast<std::size_t>(s4)].card.m_name.str()
+                                           : std::string("untapper");
+            std::string pump;
+            if (shape == kUntapPumpTarget && s4 >= 0)
+            {
+                const CardDefinition* wd2 =
+                    CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(s4)].card);
+                if (wd2) { pump = " (+" + std::to_string(wd2->params.untap_pump_power) + "/+"
+                                  + std::to_string(wd2->params.untap_pump_tough) + " until end of turn)"; }
+            }
+            EmitPlayEvent(state.turn_number, "ability", sn + ": untapped " + t.card.m_name.str() + pump);
+        }
+    }
+    return done;
+}
+
 // Is the source of a battlefield ActivatePermAbility a CREATURE (Recruitment Officer's dig, King
 // Darien's token ability, Slimefoot's)? Then its payment runs under CreatureAbilityPayScope, so
 // Secluded Courtyard's coloured mana is legal for it (D12) -- Cavern of Souls / Unclaimed Territory

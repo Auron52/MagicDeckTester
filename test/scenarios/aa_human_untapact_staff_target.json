@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "VIEWER WIRING (2026-10-18): Staff of Domination's '{3}, {T}: Untap target creature' -- the TARGET is a",
+    "real choice. Two tapped creatures (Accomplished Alchemist, Arbor Elf) and four Forests: a wildcard",
+    "`untapact=Staff of Domination` (no @target) must surface BOTH targets as distinct variants through the",
+    "`untapact` CheckLine sub -- not collapse to whichever sorted first. The viewer itself always pins",
+    "`#<source>@<target>` from the board click, which makes the line an accept."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Staff of Domination" },
+    { "name": "Accomplished Alchemist", "tapped": true },
+    { "name": "Arbor Elf", "tapped": true }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "validate_line": "untapact=Staff of Domination",
+  "expect_verdict": "choose",
+  "expect_variants": 2,
+  "expect_variants_all_contain": "Staff of Domination: untap"
+}

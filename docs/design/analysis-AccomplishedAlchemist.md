@@ -6,8 +6,9 @@ forked from `phase-1-2-deck-analyzer` @ 2176032d).
 
 ## RESUME POINT
 
-Chunks A, B, C1 landed (C1: own provider, Utopia Sprawl, Trufflesnout). Next: chunk C2 (untap primitives +
-loop, extending AccomplishedAlchemistProvider), then D (viewer verbs).
+Chunks A, B, C1, C2a landed (C2a: the four untappers as faithful single / K-repeat activations, Galvanic's
+searched partner, the LIFEGAIN breakpoint, viewer verbs). Next: chunk C2b (closed-form untap loop + payoff
+sizing on the C2a primitives -- see "Chunk C2a" below for the hand-off), then Stage 5 verification.
 
 ## The deck
 
@@ -41,18 +42,103 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 |---|---|---|---|---|
 | Nourish | main | implemented (chunk A) | 1 | cast_lifegain 6 (ApplyCastLifegain); no viewer decision; opponent's-turn cast PROVISIONAL inert |
 | Eternal Witness | side | implemented (chunk A) | 1 | etb_return_gy_to_hand (Timeless Witness); viewer: dig (bucket A); PROVISIONAL 'may'->mandatory |
-| Staff of Domination | main | drafted | 2+3 | see logs/aa_drafts; self_untap NEW; untap target not searched (viewer bucket B) |
-| Crab Umbra | main | drafted | 3 | BLUE {U}, untap {2}{U}; NEW untap_enchanted_cost + UntapEnchanted action |
+| Staff of Domination | main | implemented (chunk C2a) | 2+3 | self_untap_cost {1} (never its own action: paid ahead of each repeat of a {T} ability while tapped) + tap_lifegain_flat 1 (TapLifegain, K repeats via SpendSelfUntapRepeats) + untap_target_creature_cost {3} (ActivateUntap shape 3, SEARCHED target, K) + tap_draw_cost {5} (TapDraw, K repeats); {4},{T} tap target = PROVISIONAL inert |
+| Crab Umbra | main | implemented (chunk C2a) | 3 | untap_enchanted_cost {2}{U} (ActivateUntap shape 1, K searched); host = searched enchant_target; umbra armor PROVISIONAL inert |
 | Trufflesnout | side | implemented (chunk C1) | 3 | NEW etb_modal_self_counters 1 + etb_modal_lifegain 4; mode = SEARCHED cast axis (ETB CHOICE AXIS, chosen_x 1 counter / 2 life, etb_kx channel, both worlds); unpinned = EtbModalDefault; viewer: attack_mode generalised (trigger "etb") |
 | Scholar of Athreos | side | implemented (chunk A) | 2 | drain params + NEW drain_each_opponent (x heads on loss AND gain; DrainLossPerActivation / DrainGainPerActivation at every drain site); lethal drain COUNT needs the chunk-C provider (ManaSinkActivationCounts) |
 | Weather the Storm | main | implemented (chunk A) | 2 | cast_lifegain 3 + NEW storm bool (one GainLife per instance); ProjectPlanWalk now counts the plan's casts; cast order = USER decision (generic kept, storm-last only proposed) |
 | Ezuri, Renegade Leader | main | implemented, fair pump (chunk A) | 1 | team_pump_* +3/+3 Elves (combat converter); main-phase lethal-K pump PENDING chunk C; regenerate/trample PROVISIONAL inert |
-| Galvanic Alchemist | side | drafted | 3 | soulbond + NEW granted untap {2}{U}; partner pick greedy today |
+| Galvanic Alchemist | side | implemented (chunk C2a) | 3 | soulbond + soulbond_grants_untap_self_cost {2}{U} on BOTH halves (SoulbondGrantedUntapCost; shape 2); PARTNER SEARCHED on the ETB CHOICE AXIS (one variant per legal partner + decline, SoulbondPartnerPinScope, both worlds); viewer = existing attach_host soulbond chooser |
 | Elvish Harbinger | main | implemented (chunk A) | 1 | Giant Harbinger tutor_to_top Elf + 5c dork; tutor axis AND the 'may' decline are searched variants (tutor_optional) -- no deferral needed |
-| Seedcradle Witch | main | drafted | 3 | NEW untap+pump targeted activation {2}{G}{W} |
+| Seedcradle Witch | main | implemented (chunk C2a) | 3 | untap_pump_cost {2}{G}{W} + 3/3 (shape 4, SEARCHED target incl. untapped own creatures, K); {G}{W} off a single-colour Alchemist needs a second source (exact payer, pinned) |
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk C2a (2026-10-18) -- landed: the four untappers, Galvanic's searched partner, the lifegain breakpoint
+
+* **ONE action kind, ONE resolver.** `Action::Kind::ActivateUntap` (appended last): shape in `gy_exile_mode`
+  (1 Crab Umbra `untap_enchanted_cost`, 2 Galvanic grant `soulbond_grants_untap_self_cost`, 3 Staff
+  `untap_target_creature_cost`, 4 Seedcradle Witch `untap_pump_cost` +3/+3), `sac_source_id` = source,
+  `sac_victim_id` = TARGET (searched: one variant per legal creature -- never the Wirewood Lodge auto-pick),
+  `chosen_x` = K (`DecisionProvider::UntapActivationCounts`, generic 1..min(3, affordable)), `cost` = ONE
+  activation (the ActivateBlink self-funding convention). `ApplyActivatedUntap` (SpellEffects.h) is called by
+  the rollout's trailing pass AND AIEngine's twin; it re-reads the ability through the oracle each activation
+  (`CollectCreatureUntapAbilities` / `UntapUnitCost` / `SoulbondGrantedUntapCost`), pays through the unified
+  `TapForCostDirect`, stops at the first unpayable or no-op activation. An UNTAPPED target is a no-op unless it
+  is a live mana creature, which is tapped for mana into the float first (dominant: no mana burn, untapped
+  again at the end); colour = the cost's first coloured pip it makes, else G (mana-payment exemption).
+  Enumeration drops only DOMINATED targets (untapped + nothing this main can tap it; opponent creatures) --
+  the Witch keeps every own creature (the pump is never a no-op). Human play: only targets helpable now.
+* **Staff of Domination.** `self_untap_cost {1}` is never an action: the resolver pays it ahead of each repeat
+  whenever the Staff is tapped -- shape 3's K is "untap target, {1} untap Staff, untap target again ..." as ONE
+  action (the one-activation-per-source family rule therefore costs nothing), and the Staff's {T}
+  PermAbility modes (`tap_lifegain_flat 1` on TapLifegain, `tap_draw_cost {5}` on TapDraw) get a K axis whose
+  repeats pay {1}+cost (`SpendSelfUntapRepeats`, both worlds; `ManaSinkActivationCounts` with max_affordable =
+  1 + (total - cost)/(cost + 1)). Different Staff abilities in ONE main = the site-9 continuation (the Staff's
+  family is shared). {4},{T} tap target = PROVISIONAL inert.
+* **Galvanic Alchemist's partner is SEARCHED** on the ETB CHOICE AXIS (`CastCarriesEtbChoice` +
+  `SoulbondPartnerPinCandidates`): one variant per own unpaired creature on the battlefield / creature card in
+  hand + `kSoulbondDeclinePin`; the pin rides the cast's chosen_x into soulbond Trigger A in both worlds
+  (`SoulbondPartnerPinScope` at the two cast sites); an illegal pin falls back to the provider pick. Excluded
+  from the Plan::soulbond_decline twin. Silverblade Paladin (no grant) is untouched (unit-pinned; smoke
+  byte-identical for knights/whiteknights).
+* **THE LIFEGAIN BREAKPOINT = site 9, new route (not a new site number).** `CollectActivationKeys` emits
+  `kActLifeYield` for an untapped, able-to-tap `mana_per_life_gained` source once >= 1 life was gained, with the
+  YIELD in the key's bits 40+, so the delta rule fires exactly when a resolution grew it (or an untap re-offers
+  it); `PlanOpensBreakpoint` gets a state-keyed lifegain clause (an Alchemist that can tap + a plan action that
+  may gain life -- `PlanActionMayGainLife`, a superset -- or untaps). Both worlds already share the gate, the
+  snapshot and the continuation list, so lockstep is by construction; the Khalni kActQuestLandSearch precedent.
+  WHY NOT A NEW SITE NUMBER: site 9's gate is exactly "an option exists now that did not at plan start",
+  evaluated after the trailing pass -- where Brindle Boar / Staff gain-life / Scholar drains land -- and a new
+  number would need renumbering BpSiteMask / kBpSites / the executor's counted classes for no behavioural gain.
+  Also `kActUntapper` (a cast untapper re-plans with its ability) + CardHasPostEntryActivation terms.
+  Fixture `aa_nourish_then_alchemist_six` (Nourish -> Alchemist for 6 -> Stroke X=6 decks the opponent T4;
+  FAILS with MTG_POST_ENTRY_BP=0). Scoped by VALIDITY (no tappable Alchemist -> no key, no fan-out), applies to
+  budgeted and unbudgeted play alike.
+* **Alchemist bracket note corrected**: Seedcradle Witch's {2}{G}{W} and blue untap costs + green payoffs DO ask
+  a single-colour burst for two colours; sound because the exact payer refuses (unit-pinned: Alchemist alone
+  cannot pay {2}{G}{W}, + a Forest can). The note also records that the same-main conversion is now reachable.
+* Provider signature OR-s the untappers' params (routing test: any single untapper keeps the provider).
+* Viewer: `untapact=<source>[#num][@target]` (blink shape, target chooser on the board) and `tapdraw=<source>`
+  (the Staff's draw; `taplife=` already covered its gain); Galvanic = existing attach_host soulbond chooser.
+  DECISIONS.md rows; audit manifest BOARD_ACTIVATIONS + INERT_PARAMS (`self_untap_cost`, `untap_pump_power/
+  _tough`, `tap_lifegain_flat` -- sign-off owed). Scenarios aa_human_untapact_crab_umbra /
+  aa_human_untapact_staff_target / aa_human_tapdraw_staff. `PermAbilityLabelFor`: the Staff's gain reads
+  "gain 1 life" (Wellwisher's label unchanged).
+* **Smoke**: everything byte-identical except the known critter_smoke_d0 4-digest move and SelesnyaLifegain
+  (the lifegain breakpoint is a real play change there -- it runs Accomplished Alchemist): selesnya d3
+  5.2000 -> 5.1800, d5 5.2533 -> 5.2267; per game FASTER d3 gi9/gi25/gi130 and d5 gi9/gi25 (T5 -> T4),
+  SLOWER none, same-score play changes d3 gi22/gi98/gi132, d5 gi22. NOT accepted. The reference bench's
+  selesnyalifegain search score moved 5.5 -> 5.4 (human 5.6) in the harness re-stamp (reverted, not accepted).
+* **Probe** (20 games, seed 9100, d3 b20): avg 5.95, 1 unwon (seed 9118); real Alchemist taps 17, 12 for
+  more than 1 mana (6 of them for 6; max 12). Slow games: gi5 30 s, gi9 83 s, gi17 90 s (1.7M units) --
+  repro `--seed 9100+gi --game-index gi --games 1`; a perf question to settle before the suite-cost gate.
+
+### Hand-off to C2b (closed-form loop + payoff sizing)
+
+1. Drive the SAME primitives: `ApplyActivatedUntap` (any K, any shape), `SpendSelfUntapRepeats` (Staff {T}
+   modes), the oracle `CollectCreatureUntapAbilities` + `UntapUnitCost` (one activation's effective cost incl.
+   the Staff's {1} when tapped) + `SoulbondGrantedUntapCost`. Never a second resolver.
+2. The count hooks are where the loop size goes: `UntapActivationCounts` (generic caps at 3) and
+   `ManaSinkActivationCounts` for the Staff's gain/draw K. An `UntapLoop` action that sequences
+   untap -> payoff in ONE action is still needed: today a plan holds one action per SOURCE family, the
+   Staff's gain-life/untap/draw share one family, and the K-loop's float is only spendable by a later
+   site-9 continuation (once per apply) -- so "untap K times THEN Stroke for X" in one main needs either the
+   loop action to size and cast the finisher (the SpendSurplusOnExile shape) or the continuation to see the
+   float (it does: the continuation's pool includes floating mana).
+3. Float COLOUR: the pretap colour rule (cost's first pip, else G) is fixed. A blue-cost untapper (Umbra,
+   Galvanic) floats blue -- right for Stroke, wrong for Ezuri's {G}{G}{G}; the Staff's generic {3} floats
+   green -- wrong for Stroke's {U}. The closed form must choose the colour per payoff (colour of the LAST
+   tap only matters, each tap is one colour).
+4. No ritual_float credit: the enumerator prices one activation and does not credit the mana a K-loop
+   makes (the MTG_EDF_BLINK_CREDIT precedent measured neutral). The lifegain-breakpoint continuation sees the
+   post-loop pool, which is how a payoff gets sized today.
+5. A Staff that is TAPPED at enumeration still cannot offer its gain-life / draw PermAbility modes
+   (PermAbilitySourceLive wants it untapped); only shape 3 handles a tapped Staff. Wire the {1} prefix into
+   the PermAbility enumeration if the loop needs "gain-life from a tapped Staff".
+6. Loop thresholds unchanged from alchemist-untap-loop.md: Umbra / Galvanic net X-3 (X >= 4), Witch X-4
+   needing a second colour source, Staff X-4 per {1}+{3}.
 
 ## Chunk C1 (2026-10-18) -- landed: deck provider, Utopia Sprawl, Trufflesnout
 
@@ -149,6 +235,11 @@ smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLif
   for play-neutrality; this deck's own discard rule is the USER's to settle.
 * critter_smoke_d0_s1001 moves 4 digests (avg unchanged) from the chunk-A self-only sac-outlet victim fix -> accept at landing.
 
+* Chunk C2a INERT_PARAMS classification (`self_untap_cost`, `untap_pump_power`, `untap_pump_tough`,
+  `tap_lifegain_flat` -- each the payload of a verb, never a separate choice): sign-off owed.
+* SelesnyaLifegain play moved by the lifegain breakpoint (5 games faster, 0 slower in smoke) -- GT not
+  accepted; acceptance is the USER's call through the normal flow.
+
 ## Approved deferrals
 
 (none yet)
@@ -159,4 +250,5 @@ smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLif
 * Staff of Domination: {4},{T}: Tap target creature -- inert (opponent creatures never attack/block; nothing reads tapped state; tapping own creature is never better).
 * Ezuri: regenerate inert (nothing destroys our creatures); trample inert (no blockers).
 * Crab Umbra: Umbra armor inert (nothing destroys our creatures).
+* Seedcradle Witch: targeting an opponent's creature not offered autonomously (inert -- nothing reads their P/T or tapped state).
 * Instant-speed activity on the OPPONENT's turn (Crab Umbra untap, Nourish) not modelled -- engine acts in our phases; an end-step kill lands strictly later than the same line in our main.

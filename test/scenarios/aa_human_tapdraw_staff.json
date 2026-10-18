@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "VIEWER WIRING (2026-10-18): Staff of Domination's '{5}, {T}: Draw a card' gets its own `tapdraw=` verb",
+    "because the Staff also has '{2}, {T}: You gain 1 life' (taplife=): a verbless `act=Staff of Domination`",
+    "matches both. Six Forests afford either; `tapdraw=` must pick the draw alone (accept)."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Staff of Domination" }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "validate_line": "tapdraw=Staff of Domination",
+  "expect_verdict": "accept"
+}

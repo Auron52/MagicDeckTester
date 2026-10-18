@@ -852,7 +852,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     + ((a.def != nullptr && a.ability_mode == Action::AbilityMode::TapDraw
                         && !a.def->params.tap_draw_requires_top_supertype.empty())
                            ? "look at top; put a snow card into hand"
-                           : PermAbilityLabel(a.ability_mode));
+                           : PermAbilityLabelFor(a.ability_mode, a.def));
                 // The Blood token's searched discard (Vampires A2); absent in human play.
                 if (a.ability_mode == Action::AbilityMode::BloodDraw && !a.discard_name.empty())
                 { tag += " (discard " + a.discard_name.str() + ")"; }
@@ -956,6 +956,18 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // naming a target the human cannot change would overstate the decision.
             case Action::Kind::UntapCreature:
                 tag = a.card_name + ": untap an Elf"; break;
+            // Activated untappers (Crab Umbra, Galvanic Alchemist's soulbond grant, Staff of
+            // Domination, Seedcradle Witch). Unlike Wirewood Lodge the TARGET is a real, searched
+            // choice (one variant per creature), so it is named -- without it every variant of a
+            // Staff or a Witch would render identically. sac_victim_id = the target's m_number.
+            case Action::Kind::ActivateUntap:
+            {
+                tag = a.card_name + ": untap " + EnchantTargetName(s, a.sac_victim_id);
+                if (a.gy_exile_mode == 4) { tag += " (+3/+3)"; }
+                const int uk = std::max(1, a.chosen_x);
+                if (uk > 1) { tag += " x" + std::to_string(uk); }
+                break;
+            }
             // Channel is a from-HAND ability, so "(other)" was indistinguishable from casting the
             // creature -- the exact ambiguity the `channel=` verb exists to remove.
             case Action::Kind::Channel:
@@ -2127,7 +2139,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 || k == Action::Kind::GraveyardReturnAbility
                 || k == Action::Kind::GraveyardPlayAbility
                 || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay
-                || k == Action::Kind::Eternalize;
+                || k == Action::Kind::Eternalize
+                // An activated untapper names its SOURCE permanent (a Crab Umbra, a Staff, a
+                // Witch, or Galvanic's paired creature) -- never a hand cast.
+                || k == Action::Kind::ActivateUntap;
         };
         {
             bool first = true;
@@ -2303,7 +2318,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::ActivateBlink
              || ac.kind == Action::Kind::ActivatePermAbility
              || ac.kind == Action::Kind::ActivatePod
-             || ac.kind == Action::Kind::GraveyardExileGrow))
+             || ac.kind == Action::Kind::GraveyardExileGrow
+             || ac.kind == Action::Kind::ActivateUntap))
             {
                 os << ", \"activate\": true";
                 // `cost_pips` = this activation's NON-GENERIC pips as the W/U/B/R/G/C letters the
@@ -2367,7 +2383,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (ac.kind == Action::Kind::ActivatePermAbility)
                 {
                     os << ", \"act_label\": ";
-                    JsonStr(os, PermAbilityLabel(ac.ability_mode));
+                    JsonStr(os, PermAbilityLabelFor(ac.ability_mode, ac.def));
                 }
                 // `verb` = the LineSpec token the GUI must write for this activation. Absent means the
                 // ordinary `cast=<card>` (matched inside CheckLine's orderNames multiset), which is
@@ -2431,6 +2447,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && ac.ability_mode == Action::AbilityMode::TapLifegain)
                 { os << ", \"verb\": \"taplife\""; }
+                // Staff of Domination's "{5}, {T}: Draw a card": the taplife= reason again, for a
+                // TapDraw whose SOURCE carries a second {T} ability family (self_untap_cost /
+                // tap_lifegain_cost -- the Staff, and today only the Staff). Verbless, `act=Staff of
+                // Domination` would match BOTH its TapDraw and (taplife= undeclared) its TapLifegain
+                // plan, so the human's pick between draw and lifegain would be decided by sort order.
+                // Every other TapDraw source (Scrying Sheets, Frost Augur, Mariposa Military Base,
+                // Troyan) keeps the verbless `act=`/`cast=` matching, so no saved line changes.
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && ac.ability_mode == Action::AbilityMode::TapDraw
+                         && [&]{ const CardDefinition* td = ac.def ? ac.def
+                                     : CardDatabase::Instance().Lookup(ac.card_name);
+                                 return td && (td->params.self_untap_cost.has_value()
+                                               || td->params.tap_lifegain_cost.has_value()); }())
+                { os << ", \"verb\": \"tapdraw\""; }
                 // Evolving Wilds / Terramorphic Expanse / Myriad Landscape / Khalni Heart Expedition:
                 // an activated land search names its SOURCE (a land is never cast; a Khalni may also
                 // sit in hand). The basics it finds are asked at resolution (`tutor_etb`).
@@ -2465,6 +2495,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // "I should be able to choose just to pay 3 with it and what to target, but no
                 // options are given." `blink_target` / `blink_target_name` are emitted below.
                 else if (ac.kind == Action::Kind::ActivateBlink)  { os << ", \"verb\": \"blink\""; }
+                // Activated untappers (Crab Umbra / Galvanic Alchemist's grant / Staff of Domination /
+                // Seedcradle Witch): the blink shape -- names the SOURCE (card_name; for Galvanic's
+                // grant the paired creature itself), carries a TARGET. `cast=Staff of Domination` /
+                // `cast=Seedcradle Witch` would collide with a hand copy, and every target variant
+                // would write the same token. `untap_target` / `untap_src` are emitted below.
+                else if (ac.kind == Action::Kind::ActivateUntap)  { os << ", \"verb\": \"untapact\""; }
                 // `activate_source` = the permanent the human CLICKS, when that is not `card`.
                 // PutFromHandAbility's card_name is the Equipment being PUT (it is in hand), so
                 // without this the viewer would look for a board thumb that isn't there.
@@ -2653,13 +2689,25 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                    << ", \"blink_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
                 os << ", \"blink_count\": " << std::max(1, ac.chosen_x);
             }
+            // Activated untapper: the target (m_number + name), the SOURCE permanent's m_number (two
+            // Staffs, or two Crab Umbras, share a name) and the shape (4 = Seedcradle Witch's +3/+3).
+            if (ac.kind == Action::Kind::ActivateUntap)
+            {
+                os << ", \"untap_target\": " << ac.sac_victim_id
+                   << ", \"untap_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+                os << ", \"untap_src\": " << ac.sac_source_id
+                   << ", \"untap_shape\": " << ac.gy_exile_mode;
+            }
             // REPEATABLE (no {T} and no sacrifice in the cost, so activation count is bounded only
             // by mana): tells the viewer it may STACK this activation -- clicking it K times queues
             // K activations in one declared line, each past the first committing as its own segment
             // (USER 2026-09-07: "if I click the ability 10 times I should get 10 activations ...
             // rather than needing to commit line between each"). Blink outlets always qualify;
             // of the perm-ability modes only Drain / ExileTop do (the Tap* modes tap their source).
+            // An activated untapper re-activates in a later segment: Umbra / Galvanic / Witch have no
+            // {T}, and the Staff pays its own "{1}: Untap this artifact" ahead of a repeat.
             if (ac.kind == Action::Kind::ActivateBlink
+                || ac.kind == Action::Kind::ActivateUntap
                 || (ac.kind == Action::Kind::ActivatePermAbility
                     && (ac.ability_mode == Action::AbilityMode::Drain
                         || ac.ability_mode == Action::AbilityMode::ExileTop)))
@@ -4488,6 +4536,25 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
             bs.name = val;
             ls.blinks.push_back(std::move(bs));
         }
+        // "untapact=<source>[#<source num>][@<target num>]": an activated untapper (Crab Umbra,
+        // Galvanic Alchemist's soulbond grant, Staff of Domination, Seedcradle Witch). The equip=
+        // '#'/'@' convention: both numbers optional, 0 = wildcard. See LineSpec::UntapActSpec.
+        else if (key == "untapact")
+        {
+            TurnSolver::LineSpec::UntapActSpec us;
+            const size_t at = val.rfind('@');
+            if (at != std::string::npos)
+            { us.target = std::atoi(val.c_str() + at + 1); val = val.substr(0, at); }
+            const size_t hash = val.rfind('#');
+            if (hash != std::string::npos)
+            { us.source = std::atoi(val.c_str() + hash + 1); val = val.substr(0, hash); }
+            us.name = val;
+            ls.untap_acts.push_back(std::move(us));
+        }
+        // "tapdraw=<source>": a {T}-draw board activation (PermAbilityMode::TapDraw) whose SOURCE
+        // is a castable nonland card (Staff of Domination's "{5}, {T}: Draw a card") -- the
+        // taplife= reason. A LAND tap-draw source keeps the verbless cast= matching.
+        else if (key == "tapdraw")   { ls.tap_draws.push_back(val); }
     }
     return ls;
 }

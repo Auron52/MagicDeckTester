@@ -441,7 +441,7 @@ TEST_CASE("Pirates discard: the Vial is a turn-1 keep -- shed at end of turn 2 u
     CHECK(ShedPos(t, r, "Siren Stormtamer") < ShedPos(t, r, "Aether Vial"));
 }
 
-TEST_CASE("AccomplishedAlchemist routing: the signature survives cutting either of its cards")
+TEST_CASE("AccomplishedAlchemist routing: the signature survives cutting any of its cards")
 {
     EnsureCardsPp();
     const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath(
@@ -454,5 +454,20 @@ TEST_CASE("AccomplishedAlchemist routing: the signature survives cutting either 
                                          [&](const Card& c) { return c.m_name.str() == cut; }),
                           d.mainboard.end());
         CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "AccomplishedAlchemist", "cutting ", cut);
+    }
+    // Chunk C2a: the untappers carry the signature too -- cutting BOTH chunk-A/B cards still routes here,
+    // and so does a list keeping only one untapper.
+    for (const char* keep : { "Crab Umbra", "Staff of Domination", "Seedcradle Witch" })
+    {
+        Decklist d = full;
+        d.mainboard.erase(std::remove_if(d.mainboard.begin(), d.mainboard.end(), [&](const Card& c)
+                                         {
+                                             const std::string n = c.m_name.str();
+                                             return n == "Stroke of Genius" || n == "Weather the Storm"
+                                                 || ((n == "Crab Umbra" || n == "Staff of Domination"
+                                                      || n == "Seedcradle Witch") && n != keep);
+                                         }),
+                          d.mainboard.end());
+        CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "AccomplishedAlchemist", "keeping only ", keep);
     }
 }

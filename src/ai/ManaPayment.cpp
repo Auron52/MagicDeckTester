@@ -543,6 +543,11 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
         amt = consumed = ScaledDorkCount(state, active, def);
     }
     else { amt = consumed = ManaProducedPerTap(def); }
+    // MTG_TAPDBG (the TEMP DIAGNOSTIC above): the realised yield of a mana_per_life_gained tap
+    // (Accomplished Alchemist), so a probe can count how often the lifegain engine paid more than 1.
+    { static const bool s_tapdbg_amt = EnvOn("MTG_TAPDBG");
+      if (s_tapdbg_amt && g_real_resolution && def.params.mana_per_life_gained)
+      { std::fprintf(stderr, "[tapdbg] alchemist-yield %d turn=%d\n", amt, state.turn_number); } }
     // Per-PERMANENT: a locked etb_choose_color rock produces its ONE colour here, so it takes
     // the single-colour path below instead of the multi-colour `wild` accounting -- which is
     // what makes the executor's tap match the pool credit AddSourceToPool made for it.

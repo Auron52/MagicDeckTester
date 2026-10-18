@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "VIEWER WIRING (2026-10-18): Crab Umbra's '{2}{U}: Untap enchanted creature' is reachable by a human",
+    "through its own line verb `untapact=` (Action::Kind::ActivateUntap). The Umbra enchants a TAPPED",
+    "Accomplished Alchemist; three Islands pay {2}{U}. Under human play the activation count folds to 1, so",
+    "the line names exactly one plan (accept), and committing it through the viewer's external-chooser path",
+    "plays the untap with the summary naming the target."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Island" },
+    { "name": "Island" },
+    { "name": "Island" },
+    { "name": "Accomplished Alchemist", "tapped": true },
+    { "name": "Crab Umbra", "equips": "Accomplished Alchemist" }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "validate_line": "untapact=Crab Umbra",
+  "expect_verdict": "accept",
+  "human_lines": ["untapact=Crab Umbra"],
+  "expect_human_summary_contains": "Crab Umbra: untap Accomplished Alchemist"
+}

@@ -495,6 +495,16 @@ MANIFEST = {
     # ApplyCombatAuraSwap.
     "attack_gather_auras":       ("dragon",           truthy),
     "aura_swap_cost":            ("main_phase",       truthy),
+    # ---- AccomplishedAlchemist (2026-10-18) ----
+    # The four activated untappers are one Action::Kind::ActivateUntap main_phase plan line each
+    # (`untapact=<source>#<num>@<target>` verb, target = a searched axis / a board click in the viewer).
+    "untap_enchanted_cost":            ("main_phase", truthy),   # Crab Umbra
+    "soulbond_grants_untap_self_cost": ("main_phase", truthy),   # Galvanic Alchemist's grant
+    "untap_target_creature_cost":      ("main_phase", truthy),   # Staff of Domination
+    "untap_pump_cost":                 ("main_phase", truthy),   # Seedcradle Witch
+    # Staff of Domination's "{2}, {T}: You gain 1 life" carries tap_lifegain_cost EXPLICITLY (unlike
+    # Wellwisher, where the loader derives it): the same TapLifegain main_phase line, verb taplife=.
+    "tap_lifegain_cost":               ("main_phase", truthy),
     # ---- Bruna sideboard (2026-10-06) ----
     # Troyan, Gutsy Explorer's loot: the activation is the tap_draw_cost main_phase line; WHICH card
     # is discarded after the draw asks through ChooseNonCleanupDiscardIndex (the `discard` decision,
@@ -602,6 +612,15 @@ BOARD_ACTIVATIONS = {
     "attach_all_equipment_cost":                 ("verb:attachall", truthy,   "attach_all_equipment_cost"),
     "tap_put_from_hand_cost":                    ("verb:sfput",     truthy,   "tap_put_from_hand_cost"),
     "aura_swap_cost":                            ("verb:auraswap",  truthy,   "aura_swap_cost"),
+    # AccomplishedAlchemist (2026-10-18): the activated untappers, `untapact=` (blink-shaped: the TARGET
+    # is the decision; the source number pins one of two same-named Staffs / Umbras). The SOURCE that
+    # carries the param is the activation's source for all but Galvanic, whose grant is activated FROM
+    # its paired creature -- the marker still rides that plan action, so the sweep check holds.
+    "untap_enchanted_cost":                      ("verb:untapact",  truthy,   "untap_enchanted_cost"),
+    "soulbond_grants_untap_self_cost":           ("verb:untapact",  truthy,   "soulbond_grants_untap_self_cost"),
+    "untap_target_creature_cost":                ("verb:untapact",  truthy,   "untap_target_creature_cost"),
+    "untap_pump_cost":                           ("verb:untapact",  truthy,   "untap_pump_cost"),
+    "tap_lifegain_cost":                         ("verb:taplife",   truthy,   "tap_lifegain_cost"),  # Staff {2},{T}
     "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
     # Lizard Blades: reconfigure's ATTACH half rides the Equip kind, so it is offered as verb:equip at
     # the reconfigure cost. (Its UNATTACH half is a verbless `activate` ActivatePermAbility on the
@@ -707,6 +726,11 @@ INERT_PARAMS = {
     "hellbent_upkeep_draw": "Asylum Visitor's upkeep trigger -- MANDATORY (draw a card and lose 1 life), an intervening-if on the hand being empty; no choice",
     "hellbent_upkeep_life_loss": "Asylum Visitor's life-loss magnitude -- a printed constant",
     "hellbent_upkeep_each_player": "Asylum Visitor also watches the opponent's upkeep -- a printed scope, no choice",
+    # ---- AccomplishedAlchemist (2026-10-18) ----
+    "self_untap_cost": "Staff of Domination's '{1}: Untap this artifact' -- paid AUTOMATICALLY ahead of a repeat of one of its {T} abilities while it is tapped (never an action of its own: untapping an untapped Staff does nothing), so never a choice",
+    "untap_pump_power": "Seedcradle Witch's +3/+3 payload (rides untap_pump_cost -> verb:untapact)",
+    "untap_pump_tough": "Seedcradle Witch's +3/+3 payload (rides untap_pump_cost -> verb:untapact)",
+    "tap_lifegain_flat": "Staff of Domination's flat 'gain 1 life' amount -- the payload of the taplife= activation (the loader derives tap_lifegain_cost from it), not a choice",
     # ---- Galadriel (2026-10-17) ----
     "mana_colors_of_graveyard_legends": "The Grey Havens' colour mode -- WHICH colour a tapped mana source makes is a payment question (the standing mana-payment exemption), not a player-facing decision",
     # ---- Landfall triggers (2026-10-15; OnLandEntered, core/SpellEffects.h) ----

@@ -743,3 +743,329 @@ TEST_CASE("Trufflesnout: both modes are searched and resolve identically in exec
         CHECK(ex.players[0].life_gained_this_turn == (mode == 2 ? 4 : 0));
     }
 }
+
+// ==== chunk C2a: the activated untappers + the lifegain breakpoint ================================
+//  * Crab Umbra / Galvanic grant / Staff untap-target / Seedcradle Witch: Action::Kind::ActivateUntap,
+//    ONE resolver (ApplyActivatedUntap) both worlds call; searched TARGET + searched COUNT.
+//  * Staff of Domination: "{1}: Untap this artifact" interleaved by the resolver (untap-creature,
+//    untap-self, untap-creature as ONE action) and ahead of each repeat of a {T} PermAbility mode.
+//  * Galvanic Alchemist: the soulbond PARTNER is a searched ETB-choice axis (+ decline).
+//  * Site 9's lifegain route: a tappable Alchemist's grown yield is a new key.
+#include "mtg_test_seam.h"
+
+namespace
+{
+
+void ResolveStackAa(GameState& st)
+{
+    while (!st.stack.empty())
+    {
+        const StackEntry e = st.stack.back();
+        st.stack.pop_back();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+        if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+    }
+}
+
+Permanent* MutAa(GameState& s, int number)
+{
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == number) { return &p; } }
+    return nullptr;
+}
+
+int AttachAa(GameState& s, const std::string& aura, int host)
+{
+    const int n = PutAa(s, aura);
+    MutAa(s, n)->aura_attached_to = host;
+    return n;
+}
+
+int UntappedNamedAa(const GameState& s, const std::string& name)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == 0 && !p.tapped && p.card.m_name.str() == name) { ++n; } }
+    return n;
+}
+
+const Action* OnlyActionAa(const TurnSolver::Plan& p, Action::Kind k)
+{
+    const Action* hit = nullptr;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::PlayLand) { continue; }
+        if (a.kind != k || hit != nullptr) { return nullptr; }
+        hit = &a;
+    }
+    return hit;
+}
+
+}   // namespace
+
+TEST_CASE("Crab Umbra on an Alchemist with 5 life gained: K activations net mana through the shared resolver")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Island"); }
+    const int umbra = AttachAa(s, "Crab Umbra", alch);
+    MutAa(s, alch)->tapped = true;
+    s.players[0].life_gained_this_turn = 5;
+
+    // Iteration 1 pays {2}{U} off the Islands and untaps it; iterations 2 and 3 tap it for 5 blue
+    // first (the only reason an untap of an untapped creature is not a no-op), pay 3, untap it again.
+    GameState t = s;
+    CHECK(ApplyActivatedUntap(t, 0, kUntapEnchanted, umbra, alch, 3) == 3);
+    CHECK_FALSE(ByNumAa(t, alch)->tapped);
+    CHECK(UntappedNamedAa(t, "Island") == 0);
+    CHECK(t.floating_mana.Total() == 4);          // 3 + 5 + 5 - 9: the loop NETS mana at X >= 4
+    CHECK(t.floating_mana.blue == 4);             // one colour per Alchemist tap
+
+    // At X = 2 an activation costs more than the untap returns: the second cannot be paid, so the
+    // loop stops there -- nothing is paid for an activation that does not happen.
+    GameState u = s;
+    u.players[0].life_gained_this_turn = 2;
+    CHECK(ApplyActivatedUntap(u, 0, kUntapEnchanted, umbra, alch, 3) == 1);
+
+    // An untapped NON-mana target is a no-op: refused without paying.
+    GameState v = s;
+    const int galv = PutAa(v, "Galvanic Alchemist");
+    MutAa(v, umbra)->aura_attached_to = galv;
+    CHECK(ApplyActivatedUntap(v, 0, kUntapEnchanted, umbra, galv, 1) == 0);
+    CHECK(UntappedNamedAa(v, "Island") == 3);
+}
+
+TEST_CASE("Crab Umbra: the search offers the untap with a searched count; executor == rollout")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Island"); }
+    const int umbra = AttachAa(s, "Crab Umbra", alch);
+    s.players[0].life_gained_this_turn = 5;
+    std::set<int> ks;
+    TurnSolver::Plan pick;
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = OnlyActionAa(p, Action::Kind::ActivateUntap);
+        if (a == nullptr) { continue; }
+        CHECK(a->sac_source_id == umbra);
+        CHECK(a->sac_victim_id == alch);
+        CHECK(a->gy_exile_mode == kUntapEnchanted);
+        ks.insert(a->chosen_x);
+        if (a->chosen_x == 2) { pick = p; found = true; }
+    }
+    CHECK(ks == std::set<int>{ 1, 2 });     // affordable = (3 Islands + the Alchemist's 5) / 3
+    REQUIRE(found);
+
+    GameState ro = s;
+    TurnSolver::ApplyPlan(ro, pick, true);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, pick, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, ResolveStackAa);
+    for (const GameState* g : { &ro, &ex })
+    {
+        // The Alchemist started UNTAPPED, so each activation taps it for 5 blue first and pays out of
+        // that: the Islands are never needed, and it ends untapped.
+        CHECK_FALSE(ByNumAa(*g, alch)->tapped);
+        CHECK(UntappedNamedAa(*g, "Island") == 3);
+    }
+    CHECK(ro.floating_mana.Total() == 4);   // 5 + 5 - 2 x 3
+}
+
+TEST_CASE("Staff of Domination: the untap TARGET is searched; dominated and opponent targets are not offered")
+{
+    GameState s = FreshAa();
+    const int staff = PutAa(s, "Staff of Domination");
+    for (int k = 0; k < 6; ++k) { PutAa(s, "Forest"); }
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    MutAa(s, alch)->tapped = true;
+    const int elf   = PutAa(s, "Arbor Elf");                 // untapped, a live mana creature
+    const int galv  = PutAa(s, "Galvanic Alchemist");         // untapped, no mana / {T} ability
+    Permanent opp;
+    opp.card = DefAa("Galvanic Alchemist").card; opp.card.m_number = g_aa_num++;
+    opp.controller_index = 1; opp.owner_index = 1; opp.tapped = true;
+    s.battlefield.push_back(opp);
+    std::set<int> staff_targets;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::ActivateUntap || a.sac_source_id != staff) { continue; }
+            CHECK(a.gy_exile_mode == kUntapStaffTarget);
+            staff_targets.insert(a.sac_victim_id);
+        }
+    }
+    CHECK(staff_targets == std::set<int>{ alch, elf });       // one variant per target, no auto-pick
+    CHECK(staff_targets.count(galv) == 0);
+    CHECK(staff_targets.count(opp.card.m_number) == 0);
+
+    // Seedcradle Witch's pump is never a no-op, so every OWN creature is a target (itself included).
+    GameState w = s;
+    const int witch = PutAa(w, "Seedcradle Witch");
+    for (int k = 0; k < 4; ++k) { PutAa(w, "Plains"); }
+    std::set<int> witch_targets;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(w, true))
+    {
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::ActivateUntap && a.sac_source_id == witch) { witch_targets.insert(a.sac_victim_id); } }
+    }
+    CHECK(witch_targets == std::set<int>{ alch, elf, galv, witch });
+}
+
+TEST_CASE("Staff of Domination: untap-creature, untap-self, untap-creature again is ONE action")
+{
+    GameState s = FreshAa();
+    const int staff = PutAa(s, "Staff of Domination");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    MutAa(s, alch)->tapped = true;
+    s.players[0].life_gained_this_turn = 6;
+
+    // {3},{T} off the Forests; then the Alchemist taps for 6 green, {1} untaps the Staff and {3},{T}
+    // untaps the Alchemist again: 2 left floating, Staff tapped, Alchemist untapped.
+    GameState t = s;
+    CHECK(ApplyActivatedUntap(t, 0, kUntapStaffTarget, staff, alch, 2) == 2);
+    CHECK(ByNumAa(t, staff)->tapped);
+    CHECK_FALSE(ByNumAa(t, alch)->tapped);
+    CHECK(t.floating_mana.Total() == 2);
+
+    // A TAPPED Staff pays its {1} first: {1}+{3} = 4 > 3 Forests -> unpayable, nothing spent, the
+    // Staff stays tapped.
+    GameState u = s;
+    MutAa(u, staff)->tapped = true;
+    CHECK(ApplyActivatedUntap(u, 0, kUntapStaffTarget, staff, alch, 1) == 0);
+    CHECK(ByNumAa(u, staff)->tapped);
+    CHECK(UntappedNamedAa(u, "Forest") == 3);
+    PutAa(u, "Forest");
+    CHECK(ApplyActivatedUntap(u, 0, kUntapStaffTarget, staff, alch, 1) == 1);
+    CHECK(UntappedNamedAa(u, "Forest") == 0);
+}
+
+TEST_CASE("Staff of Domination: {2},{T}: gain 1 life repeats with the {1} self-untap; executor == rollout")
+{
+    GameState s = FreshAa();
+    PutAa(s, "Staff of Domination");
+    for (int k = 0; k < 5; ++k) { PutAa(s, "Forest"); }
+    std::set<int> ks;
+    TurnSolver::Plan pick;
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = OnlyActionAa(p, Action::Kind::ActivatePermAbility);
+        if (a == nullptr || a->ability_mode != Action::AbilityMode::TapLifegain) { continue; }
+        ks.insert(a->chosen_x);
+        if (a->chosen_x == 2) { pick = p; found = true; }
+    }
+    CHECK(ks == std::set<int>{ 1, 2 });     // 5 mana: {2} + ({1}+{2}) -- a third would need 8
+    REQUIRE(found);
+    GameState ro = s;
+    TurnSolver::ApplyPlan(ro, pick, true);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, pick, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, ResolveStackAa);
+    for (const GameState* g : { &ro, &ex })
+    {
+        CHECK(g->players[0].life == 22);
+        CHECK(g->players[0].life_gained_this_turn == 2);   // two separate 1-life events
+        CHECK(UntappedNamedAa(*g, "Forest") == 0);
+        CHECK(UntappedNamedAa(*g, "Staff of Domination") == 0);
+    }
+}
+
+TEST_CASE("Galvanic Alchemist: the soulbond partner is searched (+ decline); executor == rollout")
+{
+    GameState s = FreshAa();
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Island"); }
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    const int elf  = PutAa(s, "Arbor Elf");
+    HandAa(s, "Galvanic Alchemist");
+    std::set<int> pins;
+    TurnSolver::Plan to_alch;
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = CastOfAa(p, "Galvanic Alchemist");
+        if (a == nullptr) { continue; }
+        pins.insert(a->chosen_x);
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        const Permanent* g = nullptr;
+        for (const Permanent& q : t.battlefield) { if (q.card.m_name.str() == "Galvanic Alchemist") { g = &q; } }
+        REQUIRE(g != nullptr);
+        if (a->chosen_x == kSoulbondDeclinePin) { CHECK(g->paired_with == 0); }
+        else                                    { CHECK(g->paired_with == a->chosen_x); }
+        if (a->chosen_x == alch)
+        {
+            to_alch = p; found = true;
+            // Both halves of the pair now carry "{2}{U}: Untap this creature".
+            std::vector<UntapAbilityRef> refs;
+            CollectCreatureUntapAbilities(t, 0, *ByNumAa(t, alch), refs);
+            bool self = false;
+            for (const UntapAbilityRef& r : refs) { if (r.shape == kUntapSoulbondSelf && r.source_id == alch) { self = true; } }
+            CHECK(self);
+            CHECK(SoulbondGrantedUntapCost(t, *g).has_value());
+        }
+    }
+    CHECK(pins == std::set<int>{ alch, elf, kSoulbondDeclinePin });
+    REQUIRE(found);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, to_alch, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, ResolveStackAa);
+    const Permanent* g = nullptr;
+    for (const Permanent& q : ex.battlefield) { if (q.card.m_name.str() == "Galvanic Alchemist") { g = &q; } }
+    REQUIRE(g != nullptr);
+    CHECK(g->paired_with == alch);
+
+    // Silverblade Paladin (soulbond WITHOUT an ability grant) is not fanned: its cast stays unpinned.
+    GameState w = FreshAa();
+    for (int k = 0; k < 3; ++k) { PutAa(w, "Plains"); }
+    PutAa(w, "Arbor Elf");
+    HandAa(w, "Silverblade Paladin");
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(w, true))
+    {
+        const Action* a = CastOfAa(p, "Silverblade Paladin");
+        if (a != nullptr) { CHECK(a->chosen_x == 0); }
+    }
+}
+
+TEST_CASE("Lifegain breakpoint: a tappable Alchemist's grown yield is a NEW site-9 key")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    const std::vector<uint64_t> pre = TurnSolver::SnapshotActivatableAbilities(s);
+    CHECK_FALSE(TurnSolver::PostEntryActivationPending(s, pre));
+    GameState t = s;
+    GainLife(t, 0, 6);
+    CHECK(TurnSolver::PostEntryActivationPending(t, pre));          // yield 1 -> 6: re-plan
+    GameState u = t;
+    MutAa(u, alch)->tapped = true;
+    CHECK_FALSE(TurnSolver::PostEntryActivationPending(u, pre));    // tapped: nothing new to spend
+    // Gained BEFORE the plan started and nothing more since: the same key, no re-plan (a declined
+    // tap is never re-opened).
+    const std::vector<uint64_t> pre6 = TurnSolver::SnapshotActivatableAbilities(t);
+    CHECK_FALSE(TurnSolver::PostEntryActivationPending(t, pre6));
+    // A summoning-sick Alchemist cannot tap: no key.
+    GameState v = FreshAa();
+    PutAa(v, "Accomplished Alchemist", /*sick=*/true);
+    const std::vector<uint64_t> prev = TurnSolver::SnapshotActivatableAbilities(v);
+    GainLife(v, 0, 6);
+    CHECK_FALSE(TurnSolver::PostEntryActivationPending(v, prev));
+}
+
+TEST_CASE("Accomplished Alchemist pays a TWO-colour cost only with a second source (single-colour burst)")
+{
+    // Seedcradle Witch's {2}{G}{W}: X mana of ONE colour cannot supply both {G} and {W}. The pool
+    // credits the burst as wild (enumerate-optimistic); the exact payer refuses (apply-validates).
+    GameState s = FreshAa();
+    PutAa(s, "Accomplished Alchemist");
+    s.players[0].life_gained_this_turn = 6;
+    ManaCost c; c.generic = 2; c.green = 1; c.white = 1;
+    GameState t = s;
+    CHECK_FALSE(TapForCostDirect(t, c, false));
+    PutAa(s, "Forest");
+    GameState u = s;
+    CHECK(TapForCostDirect(u, c, false));
+}

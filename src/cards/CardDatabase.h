@@ -3446,6 +3446,41 @@ struct CardParams
     std::optional<ManaCost> untap_creature_cost;
     std::string             untap_creature_subtype;
 
+    // ---- ACTIVATED UNTAPPERS (AccomplishedAlchemist chunk C2a, 2026-10-18) -----------------------
+    // Four printed shapes, one Action kind (Action::Kind::ActivateUntap, shape in gy_exile_mode) and
+    // ONE shared resolver (ApplyActivatedUntap, SpellEffects.h) used by the rollout AND the executor.
+    // Every field is nullopt / 0 inert, so every deck without one of these cards is byte-identical.
+    //   untap_enchanted_cost        -- Crab Umbra: "{2}{U}: Untap enchanted creature." On an AURA;
+    //                                  no {T}, so repeatable (searched count K). Shape 1.
+    //   soulbond_grants_untap_self_cost
+    //                               -- Galvanic Alchemist: "As long as this creature is paired with
+    //                                  another creature, each of those creatures has '{2}{U}: Untap
+    //                                  this creature.'" On the SOULBOND card; the granted ability
+    //                                  lives on BOTH halves of a live pair (CreatureUntapAbilityCost
+    //                                  is the one oracle). Shape 2.
+    //   untap_target_creature_cost  -- Staff of Domination: "{3}, {T}: Untap target creature." The
+    //                                  TARGET is a searched axis (one variant per legal creature).
+    //                                  Shape 3. Unlike Wirewood Lodge's untap_creature_cost there is
+    //                                  no subtype and no auto-target.
+    //   self_untap_cost             -- Staff of Domination: "{1}: Untap this artifact." Never an
+    //                                  action of its own: untapping an untapped Staff does nothing, so
+    //                                  it is only ever worth paying to re-enable one of the Staff's {T}
+    //                                  abilities, and that is exactly how it is modelled -- the
+    //                                  resolver pays it ahead of each repeat of a {T} ability (shape 3's
+    //                                  K, and the K of the Staff's {T} PermAbility modes) whenever the
+    //                                  Staff is tapped. See ApplyActivatedUntap.
+    //   untap_pump_cost / _power / _tough
+    //                               -- Seedcradle Witch: "{2}{G}{W}: Target creature gets +3/+3 until
+    //                                  end of turn. Untap that creature." Searched target, repeatable
+    //                                  (no {T}). Shape 4.
+    std::optional<ManaCost> untap_enchanted_cost;
+    std::optional<ManaCost> soulbond_grants_untap_self_cost;
+    std::optional<ManaCost> untap_target_creature_cost;
+    std::optional<ManaCost> self_untap_cost;
+    std::optional<ManaCost> untap_pump_cost;
+    int                     untap_pump_power = 0;
+    int                     untap_pump_tough = 0;
+
     // Terastodon ETB: "destroy up to three target noncreature permanents; for each, its
     // controller creates a 3/3 green Elephant token." The passive opponent controls no
     // noncreature permanents, so the live mode is destroying OUR OWN -- candidates narrowed to
@@ -3979,6 +4014,10 @@ struct CardParams
     std::optional<ManaCost> tap_lifegain_cost;
     std::string tap_lifegain_per_subtype;
     bool tap_lifegain_count_all = false;
+    // Staff of Domination: "{2}, {T}: You gain 1 life." A FLAT amount on the same TapLifegain mode
+    // (TapLifegainAmount returns it when no subtype is set). Like the subtype it ARMS the mode, so
+    // the loader derives tap_lifegain_cost (here "{2}") whenever either is present. 0 = inert.
+    int  tap_lifegain_flat = 0;
 
     // ---- Soldiers (2026-10-04) -------------------------------------------------------------------
     // Every field below is new and gated (0 / false / empty / nullopt inert), so every deck that does

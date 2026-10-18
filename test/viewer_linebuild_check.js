@@ -306,6 +306,14 @@ function checkActivationVerbs() {
     // No target (the legacy any-target wildcard) still takes a count tail.
     [{ name: 'Eldrazi Displacer', src: 'Eldrazi Displacer', kind: 'activate', verb: 'blink', blinkCount: 12 },
      'blink=Eldrazi Displacer*12'],
+    // ACTIVATED UNTAPPER (Crab Umbra / Galvanic's grant / Staff / Seedcradle Witch): the equip
+    // '#source@target' shape -- two Staffs share a name, and the target is the decision.
+    [{ name: 'Staff of Domination', src: 'Staff of Domination', kind: 'activate', verb: 'untapact',
+       untapSrc: 7, untapTarget: 42 }, 'untapact=Staff of Domination#7@42'],
+    [{ name: 'Crab Umbra', src: 'Crab Umbra', kind: 'activate', verb: 'untapact', untapTarget: 42 },
+     'untapact=Crab Umbra@42'],
+    [{ name: 'Staff of Domination', src: 'Staff of Domination', kind: 'activate', verb: 'tapdraw' },
+     'tapdraw=Staff of Domination'],
   ];
   cases.forEach(([entry, want]) => {
     const got = enc(entry);

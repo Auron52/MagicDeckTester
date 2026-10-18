@@ -1389,7 +1389,10 @@ function activatableSources(){
       // docs/design/activation-picker-not-multiplicative.md.
       const actKey = (a.act_label || '') + (a.sacout ? '|sac'+(a.sac_count||1) : '');
       const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload+'|'+actKey
-                + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '');
+                + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '')
+                // An activated UNTAPPER (untapact=) is the blink case: the TARGET is the choice, and
+                // the SOURCE copy joins the key too (two Staffs / two Crab Umbras share a name).
+                + (a.verb==='untapact' ? '|'+a.untap_target+'|'+(a.untap_src||0) : '');
       // An Aura swap the engine will apply IN COMBAT (human-play swap timing, `in_combat` on the
       // action) -- OR'd over the plans, since the swap-only line is the one that carries it.
       const inCombat = !!a.in_combat || !!((opts[src]||{})[key] || {}).inCombat;
@@ -1408,7 +1411,11 @@ function activatableSources(){
                                          makesClue:!!a.makes_clue,
                                          blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
                                          blinkCount:(a.verb==='blink' ? (a.blink_count||1) : undefined),
-                                         blinkTargetName:(a.verb==='blink' ? a.blink_target_name : undefined) };
+                                         blinkTargetName:(a.verb==='blink' ? a.blink_target_name : undefined),
+                                         untapTarget:(a.verb==='untapact' ? a.untap_target : undefined),
+                                         untapTargetName:(a.verb==='untapact' ? a.untap_target_name : undefined),
+                                         untapSrc:(a.verb==='untapact' ? (a.untap_src||0) : undefined),
+                                         untapShape:(a.verb==='untapact' ? a.untap_shape : undefined) };
       // FUSED "Investigate & crack" (docs/design/viewer-line-macros.md): a SECOND, synthetic option
       // beside the plain Investigate, so the picker offers both and the human's ordinary click is
       // unchanged. It is synthesised in the viewer rather than enumerated by the engine because
@@ -1445,6 +1452,14 @@ function activatableSources(){
 // The distinct activations this source offers, as {verb, mode, name} (name = what the line verb
 // names, which for Stoneforge's put is the Equipment, not the source).
 function activationOptions(name){ activatableSources(); return (S._actOpts||{})[name] || []; }
+// The board TARGET an option is aimed at (m_number), for the two verbs whose choice is a creature on
+// the board: a blink (blinkTarget) and an activated untapper (untapTarget). Undefined otherwise.
+function optTarget(o){ return o.verb==='blink' ? o.blinkTarget : o.verb==='untapact' ? o.untapTarget : undefined; }
+// What an untapper option does to its target, in words ("untap X", Seedcradle Witch's "+3/+3 and untap X").
+function untapActText(o){
+  const t = o.untapTargetName || 'a creature';
+  return o.untapShape===4 ? `give ${t} +3/+3 and untap it` : `untap ${t}`;
+}
 // Umezawa's Jitte counter-spend modes, in ONE place: three sites labelled them and a fourth mode
 // would have had to be added to each. Mode 3 (+2/+2 on the equipped creature) became a main-phase
 // activation 2026-08-24 -- it used to be reachable only inside combat.
@@ -1587,7 +1602,8 @@ function toggleActivate(name, which){
   hideVerdict();
   // Clicking the armed outlet again disarms it (the Vial's cancel gesture, verbatim).
   if (S.blinkMode && S.blinkMode.src===name) {
-    S.blinkMode=null; flashHint(`${name}: blink cancelled.`); renderBoard(); return;
+    const wasUntap = (S.blinkMode.opts||[]).some(o=>o.verb==='untapact');
+    S.blinkMode=null; flashHint(`${name}: ${wasUntap ? 'untap' : 'blink'} cancelled.`); renderBoard(); return;
   }
   S.blinkMode=null;   // arming a different source drops the old arm
   const split = splitActivationOptions(name);
@@ -1631,6 +1647,17 @@ function toggleActivate(name, which){
     renderBoard();
     return;
   }
+  // An activated UNTAPPER with several targets (Staff of Domination, Seedcradle Witch, two Crab
+  // Umbras) is the blink shape exactly: the choice is a creature on the board, so it is made by
+  // clicking that creature. Same armed mode, same cancel gesture.
+  if (opts.length > 1 && opts.every(o=>o.verb==='untapact')
+      && new Set(opts.map(o=>o.untapTarget)).size > 1) {
+    S.blinkMode = { src:name, opts };
+    S.leMode=false; S.vialMode=null; S.actPick=null;
+    flashHint(`${name} armed — click the creature on the board to ${opts.some(o=>o.untapShape===4)?'pump and untap':'untap'}. Click ${name} again to cancel.`);
+    renderBoard();
+    return;
+  }
   if (opts.length > 1) { S.actPick = { src:name, opts }; renderBoard(); return; }
   queueActivation(name, opts[0]);
 }
@@ -1638,7 +1665,7 @@ function toggleActivate(name, which){
 // that permanent is not a legal target for this outlet, so the caller can fall through.
 function blinkAtTarget(num){
   const bm = S.blinkMode; if (!bm) return false;
-  const opt = (bm.opts||[]).find(o => o.blinkTarget === num);
+  const opt = (bm.opts||[]).find(o => optTarget(o) === num);
   if (!opt) return false;
   // STAY ARMED for a repeatable outlet, so clicking the same creature again stacks another
   // activation -- "click the ability 10 times -> 10 activations" without re-arming between each
@@ -1689,7 +1716,10 @@ function queueActivation(src, opt){
                 // CheckLine can tell two target variants of one outlet apart. blinkCount rides along
                 // for the same reason -- it separates one blink from the go-off FINISH plan.
                 blinkTarget: opt.blinkTarget, blinkTargetName: opt.blinkTargetName,
-                blinkCount: opt.blinkCount });
+                blinkCount: opt.blinkCount,
+                // An activated untapper: `untapact=<source>#<source num>@<target num>` (LB.untapIds).
+                untapTarget: opt.untapTarget, untapTargetName: opt.untapTargetName,
+                untapSrc: opt.untapSrc, untapShape: opt.untapShape });
   flashHint(sac
     ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
     : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
@@ -1702,7 +1732,9 @@ function queueActivation(src, opt){
     : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
     : opt.verb==='animate' ? `${src}: animating it — it becomes a creature and can attack this turn. Commit the phase to resolve it.`
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
-    : opt.verb==='taplife' ? `${src}: tapping it to gain 1 life for each Elf on the battlefield. Commit the phase to resolve it.`
+    : opt.verb==='taplife' ? `${src}: tapping it to gain life. Commit the phase to resolve it.`
+    : opt.verb==='tapdraw' ? `${src}: tapping it to draw a card. Commit the phase to resolve it.`
+    : opt.verb==='untapact' ? `${src}: ${untapActText(opt)}. Click again to repeat it, then commit.`
     : opt.verb==='landsearch' ? `${src}: sacrificing it to search for land(s). Commit the phase to resolve it — you pick WHICH lands as it resolves.`
     : opt.verb==='steal' ? `${src}: tapping five untapped Vampires to gain control of a creature. Commit the phase to resolve it — you pick the creature, then the five Vampires to tap, as it resolves.`
     : opt.verb==='transform' ? `${src}: paying {B} to transform it into Lord of Lineage (other Vampires get +2/+2). Commit the phase to resolve it.`
@@ -2621,7 +2653,9 @@ function renderPlanbar() {
               : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + (p.name==='@random' ? 'a creature at random' : p.name)
               : p.verb==='animate'   ? ' ⟳ animate'
               : p.verb==='taptoken'  ? ' ⟳ make a token'
-              : p.verb==='taplife'   ? ' ⟳ gain life per Elf'
+              : p.verb==='taplife'   ? ' ⟳ gain life'
+              : p.verb==='tapdraw'   ? ' ⟳ draw a card'
+              : p.verb==='untapact'  ? ' ⟳ ' + untapActText(p)
               : p.verb==='landsearch' ? ' ⟳ sac → search for lands'
               : p.verb==='steal'     ? ' ⟳ tap 5 Vampires → steal'
               : p.verb==='transform' ? ' ⟳ transform'
@@ -2954,7 +2988,7 @@ function wireBoard() {
   // be an activatable permanent (blinking your own Essence Depleter is a real play), and while the
   // outlet is armed the click means "blink this", not "activate this".
   if (S.blinkMode) {
-    const legal = new Set((S.blinkMode.opts||[]).map(o=>o.blinkTarget));
+    const legal = new Set((S.blinkMode.opts||[]).map(optTarget));
     $('board').querySelectorAll('#playfield .thumb[data-num]').forEach(t=>{
       const num = +t.dataset.num;
       if (!legal.has(num)) return;
@@ -3344,7 +3378,7 @@ function renderChooseDialog(v, line){
     // Every relation word a dimension key can end with must be listed, or the leftover text is asked
     // of Scryfall as a card name and the header art comes back broken ("Natural Order sacrifices" is
     // not a card). Keep this in sync with the addSub() keys in TurnSolver::CheckLine.
-    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|devours|floats|face|sacrifices|activations|equips to|counter|ability|modes|mode|strive|cost|timing)\s*$/,'').trim();
+    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|devours|floats|face|sacrifices|activations|equips to|untaps|counter|ability|modes|mode|strive|cost|timing)\s*$/,'').trim();
     const crumbs = picks.length
       ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.label||p.choice)}</b></span>`).join('')}</div>`
       : '';
@@ -4087,7 +4121,9 @@ function activationPickerHtml(pick){
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
                    : o.verb==='animate'   ? `Animate ${o.name} — it becomes a creature and can attack`
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
-                   : o.verb==='taplife'   ? `Tap ${o.name} — gain 1 life for each Elf on the battlefield`
+                   : o.verb==='taplife'   ? `Tap ${o.name} — gain life`
+                   : o.verb==='tapdraw'   ? `Tap ${o.name} — draw a card`
+                   : o.verb==='untapact'  ? `${o.name} — ${untapActText(o)}`
                    : o.verb==='landsearch' ? `${o.name} — sacrifice it: search for land(s) (you pick them as it resolves)`
                    : o.verb==='steal'     ? `${o.name} — tap five untapped Vampires: gain control of target creature (you pick it and the five as it resolves)`
                    : o.verb==='transform' ? `${o.name} — {B}: transform it into Lord of Lineage`
@@ -4110,6 +4146,7 @@ function activationPickerHtml(pick){
     // four rows of the same Emiel picture is exactly the undifferentiated menu this fix exists to end.
     const art = o.verb==='jittemode'||o.verb==='attachall' ? pick.src
               : o.verb==='blink' ? (o.blinkTargetName||pick.src)
+              : o.verb==='untapact' ? (o.untapTargetName||pick.src)
               : o.name;
     h+=`<span class="cardmini tdig" data-actopt="${i}" title="${esc(label(o))}">`+
        `<img loading="lazy" src="${scryImg(art,'small')}" onerror="this.style.opacity=.15"/>`+
