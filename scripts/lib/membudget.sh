@@ -12,7 +12,7 @@
 #   budget     = MTG_MEM_BUDGET_MB, else MemTotal / 2
 #   reserve    = workers x 250 MB;  cache = max(2 GB, budget - reserve)
 #   TT cap     = (cache / workers) / 3 / 64 B per table;  FSL pool = 2/5 cache (global KB);
-#   FSL cap    = 2,000,000 entries per decision;  plan cache = workers x 100 MB (global)
+#   FSL cap    = 2,000,000 entries per decision;  plan cache = min(workers x 100 MB, cache / 4) (global)
 #   RSS cap    = MTG_RSS_CAP_GB, else 3/4 of MemTotal -- the engine's watchdog aborts the process
 #                past it (before the host is starved), printing the in-flight jobs and pool usage.
 # The measured history behind those shares is in valueleaf.sh's MEMORY BOUNDS block.

@@ -126,7 +126,16 @@ std::size_t DefaultFslCapEntries()
 
 long long DefaultPlanCacheKb()
 {
-    return CacheMb() <= 0 ? 0LL : static_cast<long long>(Workers()) * 102400LL;
+    // workers x 100 MB, but never more than a quarter of cache_mb: TT (1/3) + FSL (2/5) + plan (<= 1/4)
+    // stay inside budget - reserve. Before the cap the plan cache sat OUTSIDE the budget, which on a
+    // many-core / small-RAM box (23.5 GB, 32 workers: cache 3.7 GB, plan 3.2 GB) let the pools alone
+    // approach the RSS cap -- the 2026-10-17 EDF mullgen abort (docs/design/plan-cache-ignores-mem-budget.md).
+    // Unchanged wherever RAM is ample (47 GB / 32 workers: cache 15.5 GB, plan stays 3.2 GB).
+    const long long c = CacheMb();
+    if (c <= 0) { return 0LL; }
+    const long long by_workers = static_cast<long long>(Workers()) * 102400LL;
+    const long long by_budget  = c * 1024LL / 4;
+    return by_workers < by_budget ? by_workers : by_budget;
 }
 
 long long CurrentRssBytes()

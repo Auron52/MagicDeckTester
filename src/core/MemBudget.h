@@ -24,7 +24,7 @@
 //   TT cap     = (cache_mb / workers) / 3 / 64 B      entries PER TABLE (MTG_TT_CAP)
 //   FSL pool   = 2/5 of cache_mb, in KB, GLOBAL       (MTG_FSL_POOL)
 //   FSL cap    = 2,000,000 entries PER DECISION       (MTG_FSL_CAP)
-//   plan cache = workers x 100 MB, in KB, GLOBAL      (MTG_PLAN_CACHE_KB)
+//   plan cache = min(workers x 100 MB, cache_mb / 4), in KB, GLOBAL   (MTG_PLAN_CACHE_KB)
 //   RSS cap    = MTG_RSS_CAP_GB if set, else 3/4 of MemTotal              (this box: ~35 GB)
 // Result-neutral by the pools' own contract: bounding them moves wall clock on cache-hungry tail
 // games, never a decision. The smoke/regression digests are the check on every change here.

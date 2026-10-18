@@ -40,3 +40,10 @@ Take the plan cache out of `cache_mb` like the other pools (e.g. plan = min(work
 cache_mb / 3), with TT/FSL sharing the rest), so the sum of the bounded caches can never exceed
 `budget - reserve`. Byte-identical where no pool binds; check with smoke/regression digests.
 Not done mid-generation because it changes `HEAD:src` (PGO stamp) under a running freeze.
+
+## Done (2026-10-18)
+
+`DefaultPlanCacheKb()` is now `min(workers x 100 MB, cache_mb / 4)`, so TT (1/3) + FSL (2/5) + plan
+(<= 1/4) of `cache_mb` stay inside `budget - reserve`. This box: plan 3.2 GB -> ~0.93 GB. A 47 GB /
+32-worker box is unchanged (cache 15.5 GB, plan 3.2 GB). An explicit `MTG_PLAN_CACHE_KB` still wins.
+Checked with unit tests and the smoke/regression digests on this box (where the new cap applies).
