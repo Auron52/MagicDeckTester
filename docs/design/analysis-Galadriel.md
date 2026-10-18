@@ -279,6 +279,8 @@ Same 40 seeds (700000+) x 1000, d5, with the scry prune (5c85e812) live; each ar
 - The pre-prune verdict reversed: before the prune the model was -0.0014 t vs nlfit; with the prune, nlfit is
   better AND cheaper. The model was fitted to pre-prune play. Switching = copy
   logs/vlq_galadriel/Galadriel.value.NLFIT.json over decks/Galadriel/Galadriel.value.json -- the USER's call.
+- **ADOPTED (USER 2026-10-18: "Okay, let's switch to it.")** decks/Galadriel/Galadriel.value.json = nlfit. Smoke
+  unchanged (byte-identical digests); regression 3 faster / 1 slower (d3 s2002 gi9 4->5), accepted.
 
 ## RESUME POINT (2026-10-18 ~06:10 UTC, before a context compaction)
 UNCOMMITTED (working tree; build bav16nup0 may still be running):
