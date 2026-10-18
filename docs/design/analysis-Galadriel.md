@@ -197,18 +197,35 @@ Next: measure the chain axis' share (MTG_SCRY_SEARCH=0 diagnostic) and the k-var
   then value-leaf is pretty much always the right order now" -- the value leaf (stopped at phase C, 533/534
   chunks, pool exited early) is to be REGENERATED after the keep table.
 
-## RESUME POINT (2026-10-18 ~03:30 UTC)
-DONE + PUSHED: everything above through the scry rules round 2 + smoke/regression GT.
-NEXT, in order:
-1. Mulligan profile: `bash scripts/mullgen.sh run decks/Galadriel` ALONE on the box, MTG_RSS_CAP_GB
-   override (agent memory machine-memory-cap), src committed first (PGO). No value sidecar: gen inherits the
-   play depth/budget from the profile. K=13 buckets file. Hourly status timer + background waiter.
-2. Then regenerate the value leaf on the new play with the keep table in place (the old queue
-   logs/vlq_galadriel is pre-rule play: move it aside, don't resume).
-3. Investigate the cross-game RSS growth seen in the old value-leaf matrix (13 -> 19 GiB).
-OPEN USER QUESTIONS: keep-policy sign-off (curve_check none / max_lands 6); Saproling Migration (Kicker) /
-Kili (Storied) keyword mismatches + the rate-limited cost audit; whether CLAUDE.md / the skills should
-change the pipeline order to mulligan -> value leaf generally.
+## Mulligan profile (2026-10-18; ORDER: mulligan before the value leaf, USER)
+`bash scripts/mullgen.sh run decks/Galadriel` (recipe complete, PGO, src c26cf134, MTG_RSS_CAP_GB=26.2),
+03:12-04:30 UTC: settings = the deck's PLAY settings d5 b20 (no screen existed for a no-leaf deck yet --
+USER: "I'm not so fond of using play settings ... We should have run the setting test first"; since
+1a0c495b `mullgen.sh run` screens once before the first table; this run was let finish, USER-approved).
+- Buckets: K=9 (USER cap 13). Discovery merged beyond the USER's four pairs: {Malice, Triumph, Grey Havens,
+  Zhalfirin Void} (no G/U), {Deceit, Enlightenment, Epiphany} (blue only), {Abandon, Malady, Plenty} (green
+  only), {Grotto, Arena}; Temple of Mystery, Galadriel, Crackle, Sol Ring, Skerry alone. USER: "not sure how
+  I feel about those extra merges, but maybe it is okay." 8,615 hands (4,566 size-7), R=40, 128k size-7
+  rollouts, ~49 min.
+- Validation (`mullgen.sh`): keep (exhaustive vs static) **-0.187 t**, bottoming (exhaustive vs lookahead,
+  confounded) **-0.076 t** (4/4 seeds, mean/se -10). ACCEPTED, live.
+- GT moved (accepted smoke + regression): smoke d0 7.170 -> 6.958, d3 4.833 -> 4.900 (30 g), d5 4.467 ->
+  4.800 (15 g), 2hg = ; regression d0 7.171 -> 6.964, d3 4.675 -> 4.550 / 4.875 -> 4.850, d5 4.800 -> 4.650 /
+  5.150 -> 5.200, 2hg 4.725 -> 4.625. `keep_adoption_attribution.py`: every changed game explained (0
+  unexplained) once a new class was added -- bottomed-card ORDER reached by play: the reveal chain digs to the
+  library's bottom, so the table's bottom order surfaces (smoke 11, regression 6 games).
+- Overnight rows NOT resized (the skill's FULL-set step) -- surfaced to the USER as a proposal.
+
+## RESUME POINT (2026-10-18 ~04:50 UTC)
+DONE + PUSHED: scry rules round 2; settings screen moved to mullgen.sh (1a0c495b); pipeline order
+profile -> mulligan -> value leaf (f1195e14); keep table + GT (this commit).
+NEXT: the VALUE LEAF on the new play with the keep table live (`bash scripts/valueleaf.sh run
+decks/Galadriel`, alone, MTG_RSS_CAP_GB override; the old queue logs/vlq_galadriel is pre-rule,
+pre-table play -- moved aside to logs/vlq_galadriel.prekeep-20261018, never resumed). Then the cross-game
+RSS growth question (13 -> 19 GiB in the old matrix).
+OPEN USER QUESTIONS: overnight FULL-set resize at adoption; keep-policy sign-off (curve_check none /
+max_lands 6); Saproling Migration (Kicker) / Kili (Storied) keyword mismatches + the rate-limited cost
+audit; the seeds 4/5 T5 scry choices.
 Gotchas: 9p clock lag (delete .o files after edits; header edits via ninja -t deps); never pkill -f; gh CLI
 logged out on this container (query CI via curl + `git credential fill`).
 

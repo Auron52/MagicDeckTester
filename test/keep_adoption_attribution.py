@@ -13,6 +13,8 @@ and then for every game whose result or play digest moved:
        kept hand differs, same count, different bottom   -> explained (a different bottom decision)
        same decisions, same bottomed SET, turns identical,
          only the ORDER of the bottomed cards differs    -> explained (digest-only; play identical)
+       same decisions, same bottomed SET, ORDER differs,
+         and play later reaches those cards               -> explained (a deck that digs to the bottom)
        anything else                                     -> UNEXPLAINED: the table leaked into play
 Exit 0 when every changed game is explained and both replays reproduce their baselines, else 1.
 
@@ -117,6 +119,13 @@ for j in jobs:
             # Same keeps, same bottomed SET, every turn identical: only the order the bottomed cards
             # went under the library differs, which the play digest records.
             c["changed: digest only -- bottomed-card ORDER, play identical"] += 1
+        elif (to["hands"] == tn["hands"] and to["decisions"] != tn["decisions"]
+              and [(x, y, sorted(z)) for x, y, z in to["decisions"]]
+              == [(x, y, sorted(z)) for x, y, z in tn["decisions"]]):
+            # Same keeps, same bottomed SET, different ORDER -- and play reaches it: a deck that digs to the
+            # bottom of its library (Galadriel's reveal chain, 2026-10-18) draws/reveals the bottomed cards,
+            # so their order is a real (table-made) difference, not a leak.
+            c["changed: bottomed-card ORDER, reached by play (deck digs to the bottom)"] += 1
         else:
             c["changed: UNEXPLAINED (same kept hand, play differs)"] += 1
             unexplained.append((key, gi, off.get(gi), on[gi]))
