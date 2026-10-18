@@ -9326,6 +9326,11 @@ int TurnSolver::ProjectedAttackDamageForTest(const GameState& state)
     return PendingAttackDamage(state);
 }
 
+int TurnSolver::ProjectedAttackDamage(const GameState& state)
+{
+    return PendingAttackDamage(state);
+}
+
 static int PendingAttackDamageImpl(const GameState& state)
 {
     int dmg = 0;

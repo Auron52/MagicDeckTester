@@ -44581,6 +44581,15 @@ bool ColossusHammerProvider::OffersRemovalCast(const GameState& s, const CardDef
 //      consolidation doctrine's "stack it on the one strongest double striker" (ConsolidatesEquips),
 //      applied to the free attach: a host already wearing the Hammer outranks a bare twin.
 //   4. lower card number (deterministic -- it feeds the sim key).
+// LETHAL FIRST (USER 2026-10-18: "There are some real questions about what creature should be equipped in
+// the case where one has double strike, but has summoning sickness vs one without doublestrike but able to
+// attack. Certainly the latter should be taken if it is lethal. Otherwise the former is okay."): when the
+// ranking's pick CANNOT attack this turn, the piece goes instead to the best-ranked host that CAN and whose
+// attach makes this turn's projected attack lethal -- unless the pick's own attach is lethal already (an
+// Ardenn re-attaches at begin combat). "Lethal" is the search's own projection (TurnSolver::
+// ProjectedAttackDamage on a scratch board with the piece attached: Ardenn's begin-combat attach, Raubahn's
+// attack attach and every other addend included) against the opponent's life. MTG_COLOSSUS_AID_LETHAL,
+// default ON; =0 -> the ranking alone. Only computed in that conflict, so the common case costs nothing.
 // "JUST DROP IT ON SOMETHING": any Equipment attaches whenever a legal candidate exists -- no decline.
 // THE ONE DECLINE is Lizard Blades itself entering ("a creature replacement as needed"): it is a 1/1
 // double-strike CREATURE, and attaching it costs that body, so it attaches only onto a candidate that
@@ -44588,6 +44597,15 @@ bool ColossusHammerProvider::OffersRemovalCast(const GameState& s, const CardDef
 // stays a creature -- the base rule's reconfigure decline, kept. A loose Lizard Blades is an ordinary
 // candidate: its printed double strike puts it in tier 1 and its sickness counts like any creature's.
 // Human play: the attach_host click still offers the full legal set, -1 = the "may"; this is its default.
+namespace
+{
+bool ColossusAidLethalEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_AID_LETHAL", true);   // DEFAULT ON (USER 2026-10-18); =0 disables
+    return heurarm::Flag(heurarm::COLOSSUS_AID_LETHAL, on);
+}
+}   // namespace
+
 int ColossusHammerProvider::EquipmentEtbAttachHost(
     const GameState& s, int controller, const Card& equip_card,
     const std::vector<int>& candidate_bf_indices) const
@@ -44596,8 +44614,7 @@ int ColossusHammerProvider::EquipmentEtbAttachHost(
     if (ed == nullptr || !ed->params.is_equipment) { return 0; }
     const bool reconfigure = ed->params.reconfigure_cost.has_value();
     struct Key { bool ds; bool ready; int power; int num; };
-    bool have = false;
-    Key best{};
+    std::vector<Key> keys;
     for (int idx : candidate_bf_indices)
     {
         if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
@@ -44620,17 +44637,32 @@ int ColossusHammerProvider::EquipmentEtbAttachHost(
                      EquipGatePowerOf(h, s)
                          + EquipAttachDeltaFor(s, controller, h.card.m_number, ed->params).first,
                      h.card.m_number };
-        bool better = !have;
-        if (!better)
-        {
-            if (k.ds != best.ds)            { better = k.ds; }
-            else if (k.ready != best.ready) { better = k.ready; }
-            else if (k.power != best.power) { better = k.power > best.power; }
-            else                            { better = k.num < best.num; }
-        }
-        if (better) { best = k; have = true; }
+        keys.push_back(k);
     }
-    return have ? best.num : 0;
+    if (keys.empty()) { return 0; }
+    std::sort(keys.begin(), keys.end(), [](const Key& a, const Key& b)
+    {
+        if (a.ds != b.ds)       { return a.ds; }
+        if (a.ready != b.ready) { return a.ready; }
+        if (a.power != b.power) { return a.power > b.power; }
+        return a.num < b.num;
+    });
+    if (keys.front().ready || !ColossusAidLethalEnabled()) { return keys.front().num; }
+    // The ranking's pick cannot attack this turn: a host that can AND makes this turn lethal wins.
+    auto lethal_on = [&](int host_num)
+    {
+        GameState t = s;
+        for (Permanent& p : t.battlefield)
+        { if (p.card.m_number == equip_card.m_number) { p.equipped_to = host_num; break; } }
+        if (reconfigure) { RefreshReconfigureCreatures(t); }
+        return TurnSolver::ProjectedAttackDamage(t) >= t.players[1 - controller].life;
+    };
+    if (lethal_on(keys.front().num)) { return keys.front().num; }
+    for (const Key& k : keys)
+    {
+        if (k.ready && lethal_on(k.num)) { return k.num; }
+    }
+    return keys.front().num;
 }
 
 // ---- Cast order: the USER-ADOPTED full order (MTG_COLOSSUS_ORDER, DEFAULT ON) ---------------------
@@ -44822,9 +44854,12 @@ bool ColossusHammerProvider::NeverCast(const CardDefinition& def) const
 //   * Colossus Hammer (equip_power_bonus >= 10) -- ALWAYS, while one is in the library.
 //   * Lizard Blades (the Equipment creature) -- when we have NO creature (battlefield or hand) to carry
 //     the Hammer, or when no creature we have can double strike AND no cheap attach is available.
-//   * the other Equipment (Loxodon Warhammer, Dragonfire Blade) -- NEVER by default; under
-//     MTG_COLOSSUS_TUTOR_OTHERS=1 (the arm that tests whether dropping them is lossless) only when no
-//     cheap attach is available ("unnecessary if we free equip").
+//   * the other Equipment (Loxodon Warhammer, Dragonfire Blade) -- ONLY when no cheap attach is available
+//     ("unnecessary if we free equip"; MTG_COLOSSUS_TUTOR_OTHERS, default ON). The USER's goldfish call
+//     was "never", conditioned on a test ("I don't know 100% if it will be lossless"): it is NOT lossless
+//     -- held-out, admitting them with no cheap attach is faster under the shipped search (-0.007 play /
+//     -0.009 d3 / -0.013 2HG, run3) AND the honest one (-0.007 / -0.012 / -0.009, run4: no shuffle can
+//     buy it information), and it changes nothing where a free equip exists. =0 -> never.
 // "A cheap attach" = a card in hand or on our battlefield that puts Equipment on a creature without its
 // equip cost: Sigarda's Aid, Forge Anew (its waiver / return), Magnetic Theft, Raubahn, Ardenn.
 // No Hammer left in the library -> the generic list (every legal target). MTG_COLOSSUS_TUTOR_HAMMER=0
@@ -44840,7 +44875,7 @@ bool ColossusTutorRuleEnabled()
 
 bool ColossusTutorOthersEnabled()
 {
-    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_OTHERS");   // DEFAULT OFF (USER: never, pending the test)
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_OTHERS", true);   // DEFAULT ON (the test, 2026-10-18); =0 never
     return heurarm::Flag(heurarm::COLOSSUS_TUTOR_OTHERS, on);
 }
 

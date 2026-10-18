@@ -16,6 +16,7 @@
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
@@ -236,5 +237,44 @@ TEST_CASE("Sigarda's Aid (Colossus): an entering Lizard Blades attaches only ont
         const int lizard  = Put(s, "Lizard Blades", 19);                 // not new: ready
         const int raubahn = Put(s, "Raubahn, Bull of Ala Mhigo", 3);
         CHECK(Pick(Hammer(), s, "Colossus Hammer", 60, { raubahn, lizard }) == lizard);
+    }
+}
+
+TEST_CASE("Sigarda's Aid (Colossus): a READY host that makes this turn LETHAL beats a sick double striker (USER 2026-10-18)")
+{
+    // "Certainly the latter should be taken if it is lethal. Otherwise the former is okay."
+    EnsureCardsLoaded();
+    auto board = [](int opp_life)
+    {
+        GameState s = Fresh();
+        s.players[1].life = opp_life;
+        Put(s, "Swiftblade Vindicator", 5, /*sick=*/true);   // double strike, cannot attack this turn
+        Put(s, "Speaker of the Heavens", 3);                 // 1/1, ready
+        Put(s, "Colossus Hammer", 60);                       // the piece, entered (unattached)
+        return s;
+    };
+    {   // Speaker + the Hammer = 11 this turn: lethal at 11 -> Speaker
+        const GameState s = board(11);
+        CHECK(TurnSolver::ProjectedAttackDamage(s) == 1);
+        CHECK(Pick(Hammer(), s, "Colossus Hammer", 60, { 3, 5 }) == 3);
+    }
+    {   // not lethal at 12 -> the double striker, ready next turn (the ranking)
+        const GameState s = board(12);
+        CHECK(Pick(Hammer(), s, "Colossus Hammer", 60, { 3, 5 }) == 5);
+    }
+    {   // =0: the ranking alone, even when lethal
+        heurarm::t_arm[heurarm::COLOSSUS_AID_LETHAL] = 0;
+        const GameState s = board(11);
+        CHECK(Pick(Hammer(), s, "Colossus Hammer", 60, { 3, 5 }) == 5);
+        heurarm::t_arm[heurarm::COLOSSUS_AID_LETHAL] = -1;
+    }
+    {   // Raubahn's own attack trigger moves the Hammer onto himself, so the double striker's attach is
+        // lethal already (12 at 12) -- the ranking's pick stands
+        GameState s = Fresh();
+        s.players[1].life = 12;
+        Put(s, "Swiftblade Vindicator", 5, /*sick=*/true);
+        Put(s, "Raubahn, Bull of Ala Mhigo", 3);
+        Put(s, "Colossus Hammer", 60);
+        CHECK(Pick(Hammer(), s, "Colossus Hammer", 60, { 3, 5 }) == 5);
     }
 }

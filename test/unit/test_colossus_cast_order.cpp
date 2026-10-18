@@ -189,15 +189,20 @@ TEST_CASE("Colossus tutors: no creature, or no double striker and no cheap attac
     using V = std::vector<std::string>;
     CHECK(Picks(TutorBoard({ "Plains", "Sigarda's Aid" }, {}, kTutorLib)) == V{ "Colossus Hammer", "Lizard Blades" });
     CHECK(Picks(TutorBoard({ "Plains", "Speaker of the Heavens" }, {}, kTutorLib))
-          == V{ "Colossus Hammer", "Lizard Blades" });
-    // A double striker but no cheap attach: the Hammer alone (Lizard adds nothing it lacks).
-    CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, {}, kTutorLib)) == V{ "Colossus Hammer" });
+          == V{ "Colossus Hammer", "Lizard Blades", "Loxodon Warhammer", "Dragonfire Blade" });
+    // A double striker but no cheap attach: no Lizard (it adds nothing the host lacks); the others only
+    // because nothing attaches the Hammer cheaply (TUTOR_OTHERS, default on).
+    CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, {}, kTutorLib))
+          == V{ "Colossus Hammer", "Loxodon Warhammer", "Dragonfire Blade" });
 }
 
-TEST_CASE("Colossus tutors: Warhammer / Dragonfire Blade only under the test lever, and only with no cheap attach")
+TEST_CASE("Colossus tutors: Warhammer / Dragonfire Blade only with no cheap attach (default), never under =0")
 {
     using V = std::vector<std::string>;
-    ArmCo others(heurarm::COLOSSUS_TUTOR_OTHERS, 1);
+    {
+        ArmCo never(heurarm::COLOSSUS_TUTOR_OTHERS, 0);
+        CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, {}, kTutorLib)) == V{ "Colossus Hammer" });
+    }
     CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, {}, kTutorLib))
           == V{ "Colossus Hammer", "Loxodon Warhammer", "Dragonfire Blade" });
     CHECK(Picks(TutorBoard({ "Plains", "Swiftblade Vindicator" }, { "Sigarda's Aid" }, kTutorLib)) == V{ "Colossus Hammer" });

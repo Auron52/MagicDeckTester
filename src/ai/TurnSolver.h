@@ -2144,6 +2144,9 @@ public:
     // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
     // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
     static int ProjectedAttackDamageForTest(const GameState& state);
+    // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
+    // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
+    static int ProjectedAttackDamage(const GameState& state);
     struct WalkerStep { int base; int bp_choice; int bp_at; bool scored; };
     static std::vector<WalkerStep> WaveWalkerTraceForTest(const GameState& state,
                                                           const std::vector<Plan>& plans,

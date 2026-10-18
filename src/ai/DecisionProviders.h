@@ -719,8 +719,8 @@ public:
     bool NeverCast(const CardDefinition& def) const override;
     // EQUIPMENT TUTORS (Steelshaper's Gift, Open the Armory): Colossus Hammer ALWAYS and FIRST; Lizard
     // Blades only with no creature to carry it, or no double striker and no cheap attach; Loxodon
-    // Warhammer / Dragonfire Blade never (MTG_COLOSSUS_TUTOR_OTHERS=1: only with no cheap attach). USER
-    // 2026-10-18; MTG_COLOSSUS_TUTOR_HAMMER (default ON). DecisionProviders.cpp, "Equipment tutors".
+    // Warhammer / Dragonfire Blade only with no cheap attach (MTG_COLOSSUS_TUTOR_OTHERS, default ON; =0
+    // never). USER 2026-10-18; MTG_COLOSSUS_TUTOR_HAMMER (default ON). DecisionProviders.cpp, "Equipment tutors".
     std::vector<std::string>
     TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
     // CLEANUP DISCARD: the AI-DRAFTED 5i buckets (docs/design/colossus-hammer-discard-policy-proposal.md),

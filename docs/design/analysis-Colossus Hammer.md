@@ -237,7 +237,7 @@ game, overnight s7007 gi58 (d3 T3, d5 T4) -- see Stage 5.
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`); flagged seeds RE-CHECKED on the final engine (`51573d7e5`), see below
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
-- flags: 1 unresolved      # only flag 1 = the USER cast-order call; 2-6 FIXED + recheck-confirmed; recheck items (tutor shuffle 3ad79d509, Path order / hand-Lizard fold / no-legal-pair Theft 56937ba8a) FIXED
+- flags: 0 unresolved      # flag 1 (the USER cast-order call) RESOLVED 2026-10-18 by the USER adopting the order; 2-6 FIXED + recheck-confirmed; recheck items (tutor shuffle 3ad79d509, Path order / hand-Lizard fold / no-legal-pair Theft 56937ba8a) FIXED
 
 Results (search d5 b200 vs Claude, win turn): 2100001 4/4, 2100002 2/2, 2100003 5/5, 2100004 3/3, 2100005 4/4,
 2100006 5/5, 2100007 **7/2** (Claude kept a 1-lander seeing 6 draws; the static keep mulliganed to 5 -- a keep-table
@@ -317,7 +317,7 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
   cards offered), flag 4 (no reconfigure-then-equip-onto-Lizard plan; waiver kept), flag 5 (no double-Theft; 2100003
   T5 menu >147 -> 65; genuine one-on-each lines still offered and execute: 24 dmg), flag 6 (Path default = the bare
   creature, by equipped power).
-* Flag 1 STILL OPEN (USER cast-order call): 2100014 -- shipped generic order T3 at d5 b200 AND at d8 b0 (the T2 line
+* Flag 1 RESOLVED by the USER's adoption of the cast order (2026-10-18; it was the USER cast-order call): 2100014 -- shipped generic order T3 at d5 b200 AND at d8 b0 (the T2 line
   is unfindable); `MTG_COLOSSUS_ORDER=1` T2 at both (Aid, then Hammer onto Kor Duelist, 22).
 * NEW, confirmed: human fail-to-find at Steelshaper's Gift / Open the Armory skipped the mandatory shuffle (CR
   701.19b) -> FIXED in this tree (`HumanFailToFindShuffles`, unit test `test_tutor_fail_to_find.cpp`).
@@ -338,6 +338,9 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
 2. **Path to Exile** — opponent-target cast pruned (no effect); self-target ramp searched; NOT
    NeverCast (see Stage 2). PROVISIONAL deferrals: the opponent's "may search" is a no-op, instant timing
    collapsed to main phases, the "may" always taken. Main-1 vs main-2 for a self-target Path: main 1.
+   -> ANSWERED 2026-10-18 (*"Path to Exile can be excluded entirely via a heuristic for goldfishing"*):
+   NeverCast (`MTG_COLOSSUS_NO_PATH`, default ON); human play still offers it. This also retires the d0
+   self-Path valuation question (gi539).
 3. **Forge Anew** clause 2 (instant-speed equip during your turn) — PROVISIONAL deferral (no window in the
    engine adds damage; full argument in the card note).
 4. **Raubahn** — Ward PROVISIONAL deferral (only an opponent's spell triggers it). The attack attach is a
@@ -349,11 +352,23 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
    host for next turn) needs a second main — not enabled.
 6. **Speaker of the Heavens** — narrow restricted post-combat main (only Speaker's token activation)
    `MTG_SPEAKER_M2`, default ON provisionally (main-1 vs main-2 is the USER's call).
+   -> ANSWERED 2026-10-18 (*"Speaker of the Heavens should be possible to activate second main. (though nothing
+   else needs to go there)"*): exactly the shipped shape -- signed off.
 7. **Lizard Blades** — reconfigure stays main 1 (no second main); Sigarda's Aid DECLINES to attach an
    entering Lizard Blades when no host gains (keeps its double-strike body) — a provider heuristic.
    -> ANSWERED 2026-10-17 (*"Lizard Blades is also a creature replacement as needed"*): keep the decline for an
    entering Lizard Blades when no host gains; every other entering Equipment always attaches.
+   -> AMENDED 2026-10-18 (*"There are some real questions about what creature should be equipped in the case
+   where one has double strike, but has summoning sickness vs one without doublestrike but able to attack.
+   Certainly the latter should be taken if it is lethal. Otherwise the former is okay."*): the Aid's pick is
+   now LETHAL FIRST -- when the ranking's pick cannot attack this turn, a host that can and whose attach
+   makes this turn's projected attack lethal wins (`MTG_COLOSSUS_AID_LETHAL`, default ON). Ardenn's
+   begin-combat pick already scores THIS combat's damage; equips, Theft and Raubahn are searched.
 8. **Cast order** — to be AI-drafted and presented (USER 2026-10-14: the generic order is never OK).
+   -> ANSWERED 2026-10-18: the draft adopted with two amendments (*"That seems reasonable, but we should make a
+   full order, also, we should have equip abilities listed in the order"*): one position per card and the
+   activations as positions after every cast, `MTG_COLOSSUS_ORDER` default ON
+   (docs/design/colossus-hammer-cast-order.md). Measured on held-out seeds and the tiers (see the order doc).
 9. **Discard buckets** — to be AI-drafted and presented (analyze-deck 5i).
 
 ## Provisional deferrals (await USER sign-off)

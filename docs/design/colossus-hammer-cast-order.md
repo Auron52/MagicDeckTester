@@ -92,3 +92,71 @@ onto a host" is the deck's cheapest kill (T2 off Kor Duelist + {W} + {1}) and un
 before every Equipment) is the slot that matters; the rest of the draft is tie-break.
 
 The USER adopted it on 2026-10-18 with the amendments above; the adopted order is measured in the next section.
+
+## Measurement of the adopted order and the Path exclusion (2026-10-18, Release binary of `df147efd3`)
+
+ONE pooled batch, four heurarm arms per job, fresh held-out seeds (13200001+), loss = 9, paired per game
+against `off` = the committed tree's play (generic order, self-target Path searched). Script:
+`build/scratch/colossus/order_ab/make_ab2.py` (run2).
+
+| cell | n | full order, Path kept | Path excluded, generic order | both |
+|---|---|---|---|---|
+| play settings (d5 b20) | 3000 | **-0.0557** (170 faster / 4 slower) | +0.0340 (5 / 72) | -0.0210 (167 / 69) |
+| d3 b10 | 4000 | **-0.0525** (209 / 1) | +0.0340 (12 / 101) | -0.0180 (208 / 91) |
+| d0 | 20000 | -0.0433 (487 / 26) | -0.0343 (528 / 181) | -0.0769 (997 / 194) |
+| 2HG play settings | 1000 | **-0.0540** (56 / 2) | +0.0380 (6 / 29) | -0.0180 (61 / 28) |
+
+Search work: the order alone 0.95x units, with the exclusion 0.86x.
+
+**The order is a clean gain everywhere.** **The Path exclusion splits:** the d0 runner misplays Path
+(it is better off without it, -0.034), but the SEARCH loses +0.034 without it. Root cause of the
+search's loss, traced on s13200232 gi231 (T3 with Path, T7 without): the T2 self-target Path's land search
+SHUFFLES the library, and the next draw is Colossus Hammer; without the Path the next draw is a Plains and
+the Hammer does not come for four turns. The search's rollouts read the real library, and the engine's
+shuffle is deterministic, so the search can SEE the post-shuffle draws: a self-Path is a "re-roll the
+library when the known draws are bad" button. That is clairvoyance (USER 2026-10-13: a line that needs
+known draws is not a regression), not ramp. The decoupled-shuffle arms of run3 (`shuffle_salt_search`:
+the search plans against a reshuffle the game will not deal) measure how much of the +0.034 is that.
+
+## Equipment tutors (USER 2026-10-18) and the clairvoyance check (run3, run4)
+
+The USER, after a seed 1 reference where the AI's tutor default (library order) was not the Hammer:
+*"Steelshaper and Open the Armory should always get Colossus Hammer when you have the ability to
+auto-equip and a creature ... Honestly, Colossus Hammer is the pick the vast majority of the time."* /
+*"We should always include it in the search, but the others we could often drop."* / *"in a real game I
+would only search Hammer and Lizard Blades when there is no creatures ... In Goldfish these are not very
+good."* / *"I don't know 100% if it will be lossless to never get Warhammer or Dragonfire Blade, though.
+That is something to test."* / *"Certainly it will be unnecessary if we free equip."*
+
+`ColossusHammerProvider::TutorCandidates` (`MTG_COLOSSUS_TUTOR_HAMMER`, default ON): Colossus Hammer
+always and FIRST (so it is also the d0 pick and the human menu's default); Lizard Blades with no creature
+to carry it, or no double striker and no cheap attach; Loxodon Warhammer / Dragonfire Blade only with no
+cheap attach (`MTG_COLOSSUS_TUTOR_OTHERS`, default ON after the test below; =0 never). A cheap attach =
+Sigarda's Aid, Forge Anew, Magnetic Theft, Raubahn or Ardenn, in hand or on our battlefield.
+
+run3 (shipped search, 156,000 games, seeds 13300001+) and run4 (`MTG_HONEST_PLAY=1`, 32,000 games, seeds
+13400001+: each rollout turn plans against a reshuffled unseen library), paired, negative = faster:
+
+| comparison | play (d5 b20) | d3 b10 | d0 | 2HG |
+|---|---|---|---|---|
+| tutor rule vs every target, shipped search | +0.0093 (28 / 51) | +0.0018 | **-0.1610** | 0.0000 |
+| ... honest search | **-0.0143** (92 / 51) | **-0.0182** | -- | **-0.0270** |
+| + Warhammer / Dragonfire with no cheap attach, shipped | **-0.0070** (27 / 9) | **-0.0090** | 0 | -0.0130 |
+| ... honest | **-0.0067** (33 / 17) | **-0.0123** | -- | -0.0090 |
+| Path excluded vs kept (tutor rule on), shipped | +0.0367 (1 / 66) | +0.0280 | -0.0238 | +0.0240 |
+| ... decoupled search shuffle (`shuffle_salt_search`) | +0.0287 | +0.0170 | -- | +0.0190 |
+| ... honest | +0.0333 (7 / 75) | +0.0293 | -- | +0.0280 |
+
+The tutor rule saves ~25% of search work. Under the shipped search it ties the every-target search; under
+the honest search it WINS, because each tutor target removes a different card before the library is
+shuffled, so N targets give the clairvoyant search N looks at the post-shuffle draws. Never fetching
+Warhammer / Dragonfire is not lossless (both searches agree), so they stay as the no-cheap-attach
+fallback. Search work vs the committed tree: 0.72x (tutor rule), 0.77x (with the fallback).
+
+**Path, the mechanism (six traced games, run3 seeds):** in every one the draws diverge right after the
+self-target Path's land search shuffles, and the faster win comes from the post-shuffle draw (247 and 325:
+a tutor on T3 for a T3 kill, against Forge Anew / a second Path and no kill without it; both kills cost
+three mana, so the fetched land is not what won). Only 84 plausibly used the land. Neither instrument above
+removes ROOT clairvoyance -- both still SCORE each line against the true library -- so the Path question is
+settled by the non-clairvoyant search (`MTG_NC_SEARCH`: each real decision ranked by the 8-reshuffle
+average), run5.
