@@ -80,6 +80,18 @@ viewer wiring, unit-test plans. Summary of what they established:
   first-strike lifelink reach 30+ life before regular damage, so Serra Ascendant connects as a 6/6. Reference
   untouched -- open question 27.
 
+## Status update (orchestrator, 2026-10-18 late)
+- Claude-play sweep 1 (20 seeds, `docs/design/vampires/claude_sweep_1.md`): 20/20 tie the search; 12 defects
+  A-L, all fixed on `vampires-fix` (see "Sweep fixes" above) and cherry-picked here, with the AI-drafted cast
+  order + discard buckets from `vampires-order` (DEFAULT OFF; `docs/design/vampires-cast-order-2026-10-18.md`,
+  which now answers questions 11-12's "agent drafts" half -- the USER review is pending). Unit 1553/1553.
+- The smoke (46b709eeb) and regression (ff401f887) Vampires GT were accepted while defect A (phantom convoke
+  mana) was live -> re-accepted after the fixes; the overnight rows were never run on the defective binary.
+- The payer fix (F + L: MTG_PAY_PAIN_LAST, MTG_PAY_NARROW_RESTRICTED_FIRST, default ON) moves payments in other
+  decks (smoke: 153 non-Vampires games, all digest-only at searched depths; d0: 4 faster, 2 slower soldiers).
+  A payment-ORDER heuristic change across decks earns adoption by a held-out A/B on the decks it moves:
+  `test/tools/payer_pain_ab.py` (8 decks, both levers on vs =0, two held-out blocks, one pooled batch).
+
 ## Open questions for the user (work continues on the stated default)
 1. **Main-2 held-land bar vs Bloodghast** (USER 2026-09-30 "Only newly arrived lands in second main").
    "Pit Fighter sacs Bloodghast post-combat, then play the held land" is unfindable at any budget under the
