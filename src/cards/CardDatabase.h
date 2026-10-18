@@ -3208,6 +3208,15 @@ struct CardParams
     // Human play is offered both, as a `target` decision at resolution (the Path to Exile shape).
     // false = "you gain": no target, nothing to choose, every existing card byte-identical.
     bool cast_lifegain_target_player = false;
+    // STORM on a cast_lifegain spell (Weather the Storm: "You gain 3 life. Storm (When you cast this
+    // spell, copy it for each spell cast before it this turn.)"). ApplyCastLifegain resolves the
+    // original + one copy per earlier spell = max(1, spells_cast_this_turn) INSTANCES -- the counter
+    // is ++'d at this spell's own cast in both worlds before it resolves (the Dragonstorm reading,
+    // GameState::spells_cast_this_turn) -- each its OWN GainLife event (every copy is a separate
+    // spell resolving, CR 702.40a / 707.10), so lifegain watchers fire once per copy. The count is
+    // already folded into the sim key (BuildSimKey's storm fold). Only cast_lifegain consumes it
+    // today; false = no storm (byte-identical).
+    bool storm = false;
     // Fortifying Draught: "+X/+X where X is the amount of life you gained this turn", computed AT
     // RESOLUTION per copy AFTER that copy's own cast_lifegain (gain first, THEN count -- oracle
     // order), off Player::life_gained_this_turn. So a magnet fan-out escalates: each copy gains its
@@ -3648,6 +3657,13 @@ struct CardParams
     // (SelfSacHasDeathPayoff: Daxos's own_creature_dies_lifegain) -- a lossless dominated-action
     // removal; human play always sees it. false = ordinary any-victim outlet (byte-identical).
     bool sac_outlet_self_only          = false;
+    // Brindle Boar: "Sacrifice this creature: You gain 4 life." The outlet's payload is a LIFE GAIN
+    // (one GainLife event, so it bumps life_gained_this_turn -- Accomplished Alchemist's X -- and fires
+    // the lifegain watchers). Applied in ApplySacCreatureOutlet (both worlds). With
+    // sac_outlet_self_only, the enumerator's dominated-no-op gate admits it only while something
+    // READS the gain (SacOutletLifegainRead): against a passive opponent unread life changes nothing.
+    // 0 = no lifegain payload (byte-identical).
+    int  sac_outlet_lifegain           = 0;
 
     // Gnarled Scarhide: "Bestow {3}{B}". An ALTERNATE cast mode (CR 702.103): the same card may be
     // cast for its printed cost as a creature, or for this cost as an AURA that enters attached to
@@ -3820,6 +3836,13 @@ struct CardParams
     std::optional<ManaCost> drain_cost;
     int                     drain_amount    = 0;   // life the opponent loses per activation
     int                     drain_self_gain = 0;   // life we gain per activation
+    // Scholar of Athreos: "{2}{B}: EACH opponent loses 1 life. You gain life equal to the life lost
+    // this way." true = the loss is per opposing HEAD (x gamesetup::OpponentHeads(): 2HG = x2 into
+    // the shared team pool) and so is the gain, since the gain is "equal to the life lost". false =
+    // Essence Depleter's "TARGET opponent" (x1 regardless of heads). Every reader goes through
+    // DrainLossPerActivation / DrainGainPerActivation (SpellEffects.h) -- never drain_amount raw --
+    // so the executor, the rollout's eval and every finisher sizer agree on one number.
+    bool                    drain_each_opponent = false;
 
     // "{cost}: Target opponent exiles the top card of their library." (Dimensional Infiltrator's
     // "{1}{C}: ... If it's a land card, you may return this creature to its owner's hand.")

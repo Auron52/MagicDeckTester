@@ -219,6 +219,11 @@ MANIFEST = {
     "tap_damage_cost":       ("main_phase",           truthy),
     "tap_investigate_cost":  ("main_phase",           truthy),
     "tap_draw_cost":         ("main_phase",           truthy),
+    # Repeatable DRAIN sink (Essence Depleter "{1}{C}: target opponent loses 1", Scholar of Athreos
+    # "{2}{B}: each opponent loses 1"): an ActivatePermAbility whose activation COUNT is a plan
+    # variant (the drain count axis) -- a main_phase pick. No target choice (the single passive
+    # opponent / every opposing head), no X, no mode.
+    "drain_cost":            ("main_phase",           truthy),
     # SelesnyaLifegain (2026-09-30). Two more of the same family, both ActivatePermAbility board
     # activations that ride the main-phase LINE. Neither has a target, an X, a mode or a "may", so
     # there is nothing to choose AT RESOLUTION -- WHETHER (and which copy) is the whole decision.
@@ -1300,6 +1305,18 @@ INERT_PARAMS = {
     "grants_temp_haste": "automatic until-EOT grant to the chosen target (rides solo_target_trick)",
     "counters_on_target": "automatic counter on the chosen target (rides solo_target_trick)",
     "cast_lifegain": "automatic lifegain",
+    # Weather the Storm (AccomplishedAlchemist, 2026-10-18): STORM's copy count is
+    # max(1, spells_cast_this_turn), fixed by the turn's cast history -- no choice (CR 702.40a: the
+    # copies are put on the stack automatically; this spell has no targets to re-choose). The player's
+    # only lever is cast ORDER, which is the always-wired main_phase plan.
+    "storm": "automatic storm copy count (Weather the Storm): one cast_lifegain event per instance, no target / mode / X; cast order is the main_phase plan",
+    # Drain magnitudes / scope riding drain_cost (MANIFEST main_phase): printed constants, no choice.
+    "drain_amount": "drain magnitude (rides drain_cost -> main_phase), a printed constant",
+    "drain_self_gain": "drain's lifegain half (rides drain_cost -> main_phase), automatic, a printed constant",
+    "drain_each_opponent": "Scholar of Athreos 'EACH opponent' scope of the drain (rides drain_cost -> main_phase): x opposing heads, no target -- nothing to choose",
+    # Brindle Boar: "Sacrifice this creature: You gain 4 life" -- the payload is automatic; the
+    # ACTIVATION rides sac_creature_outlet -> activate and the victim is forced (sac_outlet_self_only).
+    "sac_outlet_lifegain": "automatic sac-outlet lifegain (Brindle Boar, 4), no choice in the payload; the activation rides sac_creature_outlet -> activate, the victim is the source itself",
     "cast_lifegain_ferocious": (
         "the FEROCIOUS amount of an automatic untargeted lifegain (Feed the Clan: 'you gain 10 life "
         "instead if you control a creature with power 4 or greater'). No choice anywhere: no target, "

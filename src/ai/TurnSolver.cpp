@@ -11125,6 +11125,11 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         const Action& a = cands[static_cast<std::size_t>(j)];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
+        // The STORM count, in lockstep with both apply worlds (apply_one / CastSpellFromHand ++ it at
+        // each cast, before resolution): without it a walked Weather the Storm saw the PRE-plan count
+        // and projected one instance where the plan's own earlier casts had made copies. Read only by
+        // storm resolvers (ApplyCastLifegain's storm instances); `t` is this walk's private copy.
+        if (!d->card.IsLand()) { ++t.spells_cast_this_turn; }
         if (life) { ApplyCastLifegain(t, active, *d, a.player_target); }   // instants / sorceries only (inside)
         if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
         const bool body = d->card.IsCreature()
@@ -11158,6 +11163,25 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         for (int j : sel)
         {
             const Action& a = cands[static_cast<std::size_t>(j)];
+            // Brindle Boar ("Sacrifice this creature: You gain 4 life"): the gain feeds the per-life
+            // pumps like any other, and the body leaves -- it no longer attacks (self-only outlet,
+            // so the victim IS the source). Param-gated: no other outlet carries sac_outlet_lifegain.
+            if (a.kind == Action::Kind::SacCreatureOutlet)
+            {
+                for (auto it = t.battlefield.begin(); it != t.battlefield.end(); ++it)
+                {
+                    if (it->controller_index != active || it->card.m_number != a.sac_source_id) { continue; }
+                    const CardDefinition* od = CardDatabase::Instance().LookupCached(it->card);
+                    if (od && od->params.sac_outlet_lifegain > 0 && od->params.sac_outlet_self_only)
+                    {
+                        const int gain = od->params.sac_outlet_lifegain;
+                        t.battlefield.erase(it);
+                        GainLife(t, active, gain);
+                    }
+                    break;
+                }
+                continue;
+            }
             if (a.kind != Action::Kind::ActivatePermAbility) { continue; }
             if (a.ability_mode != Action::AbilityMode::TapLifegain
                 && a.ability_mode != Action::AbilityMode::SacLifePerCreature) { continue; }
@@ -25467,7 +25491,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
             // The enumerator's own dominated-action gate: a self-only outlet is only an option
             // while a death payoff is live, so the site never opens for an activation it would
             // not emit.
-            ok = SelfSacHasDeathPayoff(state, ctrl, num);
+            ok = SelfSacOutletUseful(state, ctrl, num);
         }
         else if (TurnSolver::BpAbilityDeltaOn())
         {
@@ -37296,18 +37320,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                          ? sd->params.tap_damage_each_opponent
                                            * gamesetup::OpponentHeads() * 2
                                          : (m.mode == Action::AbilityMode::Drain)
-                                         ? sd->params.drain_amount * 2 * k : k;
+                                         ? DrainLossPerActivation(sd->params) * 2 * k : k;
                         // Life LOSS is indistinguishable from damage to the win projection -- this
                         // is "life the opponent loses this turn", which is what direct_damage means.
                         // TapDamage is "each opponent" (Shivan Gorge) -> once per head (2HG = x2);
-                        // Drain is "target opponent" (Essence Depleter) -> x1 regardless.
+                        // Drain is "target opponent" (Essence Depleter) -> x1 regardless, or
+                        // "each opponent" (Scholar of Athreos) -> per head: DrainLossPerActivation.
                         // ExileTop deliberately contributes 0: its kill is a DECK-OUT, and claiming
                         // damage for it would corrupt every consumer that reads a damage rate.
                         a.direct_damage  = (m.mode == Action::AbilityMode::TapDamage)
                                          ? sd->params.tap_damage_each_opponent
                                            * gamesetup::OpponentHeads()
                                          : (m.mode == Action::AbilityMode::Drain)
-                                         ? sd->params.drain_amount * k
+                                         ? DrainLossPerActivation(sd->params) * k
                                          // Pyrohemia: K pings to each opposing head (face only --
                                          // the Tamanoa / drain payoff is realised by the apply).
                                          : (m.mode == Action::AbilityMode::PingAll)
@@ -38499,8 +38524,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // (Daxos) it removes our own 3/3 and changes nothing else -- a strictly dominated
             // no-op. Dropping it is a lossless dominated-action removal (the TapDraw non-snow-top
             // shape), not a heuristic narrowing; humans keep the full offer.
+            // Brindle Boar's own payload (a life gain someone reads) is the other way it pays:
+            // SelfSacOutletUseful = death payoff OR read lifegain payload.
             if (sd->params.sac_outlet_self_only && !HumanPlayActive()
-                && !SelfSacHasDeathPayoff(state, state.active_player_index, src.card.m_number))
+                && !SelfSacOutletUseful(state, state.active_player_index, src.card.m_number))
             { continue; }
             // ---- POOLED SAC-FOR-MANA OUTLETS (MTG_SAC_OUTLET_POOL) --------------------------
             // Replace the per-source POWERSET with a single COUNT axis. Emits nothing for a
@@ -38736,12 +38763,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // payload does: without a term the search scores the activation as pure loss (a
                 // body given up for nothing) and never takes it. Haste ~ one attacker's worth;
                 // the shrink is priced at the magnitude it removes.
+                // A read LIFE payload (Brindle Boar under an Alchemist) contributes its life, for the
+                // same pure-loss reason; unread it is 0 (and the self-only gate above dropped it).
                 a.eval           = (sd->params.sac_outlet_damage
                                     + sd->params.sac_outlet_creates_tokens
                                     + sd->params.sac_outlet_draw
                                     + (sd->params.sac_outlet_grants_haste ? 1 : 0)
                                     + (-sd->params.sac_outlet_minus_power)
-                                    + (-sd->params.sac_outlet_minus_tough)) * DMG;
+                                    + (-sd->params.sac_outlet_minus_tough)
+                                    + ((sd->params.sac_outlet_lifegain > 0
+                                        && SacOutletLifegainRead(state, state.active_player_index))
+                                       ? sd->params.sac_outlet_lifegain : 0)) * DMG;
                 // Provider gate on the GENERIC fodder sac only (FodderSacUseful -- the Melira
                 // rule: no fodder to a self-payload outlet until the combo is active or the
                 // payload reaches lethal). The persist variants and bursts below are NOT gated,

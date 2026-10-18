@@ -445,6 +445,32 @@ TEST_CASE("F4b plan lifegain: MTG_ATTACK_PLAN_LIFEGAIN=0 reads the pre-plan life
     CHECK(Threshold([](int l) { return ParagonBoard(l, 1); }, TapsForLife) == 5);
 }
 
+// ---- F4c: the walk counts the plan's casts toward STORM (Weather the Storm) ------------------------
+// Bogbeast + Llanowar attack; two spells were already cast this turn, so Weather the Storm resolves as
+// the THIRD spell: 3 instances x 3 = 9 life, then the attack's +2 -> X = 11 on two attackers:
+// 3 + 1 + 11 x 2 = 26. A walk that did not count its own cast saw 2 instances (6 + 2 -> 3 + 1 + 16 = 20).
+namespace
+{
+GameState StormBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Weather the Storm" });
+    s.spells_cast_this_turn = 2;
+    Put(s, "Blossoming Bogbeast", 75);
+    Put(s, "Llanowar Elves", 76);
+    Put(s, "Forest", 77);
+    Put(s, "Forest", 78);
+    return s;
+}
+}
+
+TEST_CASE("F4c plan lifegain: Weather the Storm's storm copies are projected from the plan's own count")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    CHECK(Threshold([](int l) { return StormBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Weather the Storm" }); }) == 26);
+}
+
 // ---- F5.1: Bruna opts into the board-lethal short-circuit (MTG_BRUNA_LETHAL_SHORTCIRCUIT) --------
 TEST_CASE("F5.1 Bruna lethal short-circuit: on by default, =0 restores the generic no-cut")
 {

@@ -1579,6 +1579,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.counters_on_target          = params.value("counters_on_target", 0);
     p.cast_lifegain               = params.value("cast_lifegain", 0);
     p.cast_lifegain_ferocious     = params.value("cast_lifegain_ferocious", 0);
+    p.storm                       = params.value("storm", false);
     p.ferocious_min_power         = params.value("ferocious_min_power", 4);   // see CardParams: 4, not 0
     p.cast_lifegain_landfall      = params.value("cast_lifegain_landfall", 0);
     p.cast_lifegain_target_player = params.value("cast_lifegain_target_player", false);
@@ -1676,6 +1677,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_allows_enchantment = params.value("sac_outlet_allows_enchantment", false);
     p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);
     p.sac_outlet_self_only          = params.value("sac_outlet_self_only", false);
+    p.sac_outlet_lifegain           = params.value("sac_outlet_lifegain", 0);
     if (params.contains("bestow_cost"))
         p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());
 
@@ -1717,6 +1719,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.drain_cost = ManaCostFromString(params["drain_cost"].get<std::string>());
     p.drain_amount                  = params.value("drain_amount", 0);
     p.drain_self_gain               = params.value("drain_self_gain", 0);
+    p.drain_each_opponent           = params.value("drain_each_opponent", false);
     if (params.contains("exile_opponent_top_cost"))
         p.exile_opponent_top_cost = ManaCostFromString(params["exile_opponent_top_cost"].get<std::string>());
     p.exile_opponent_top_may_bounce_on_land =

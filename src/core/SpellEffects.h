@@ -10163,6 +10163,48 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
     return false;
 }
 
+// Does anything READ a life gain by `controller` right now? Against a passive opponent our life total
+// itself is never read, so a gain matters only through a reader: a battlefield reader of
+// life_gained_this_turn (Accomplished Alchemist's X, Bogbeast's attack pump --
+// deck_reads_lifegain_in_play), an end-step threshold (Ocelot Pride), a lifegain replacement/
+// "that much" drain (dmg_events_armed), or a "whenever you gain life" watcher on our board (the
+// FireLifegainWatchers prefilter, verbatim). Conservative in the TRUE direction: a deck stamp says
+// the reader CAN exist, which only keeps an option open, never removes one.
+inline bool SacOutletLifegainRead(const GameState& state, int controller)
+{
+    if (state.deck_reads_lifegain_in_play || state.deck_endstep_lifegain_max_threshold > 0
+        || state.dmg_events_armed) { return true; }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd) { continue; }
+        const CardParams& qp = qd->params;
+        if (qp.lifegain_self_counters > 0 || qp.lifegain_self_counters_that_many
+            || qp.lifegain_each_own_creature_counters > 0
+            || qp.lifegain_each_own_creature_counters_that_many
+            || qp.lifegain_target_own_counter
+            || qp.lifegain_target_opp_loses_that_much || qp.lifegain_each_opp_loses > 0)
+        { return true; }
+    }
+    return false;
+}
+
+// The self-only outlet's dominated-no-op gate (both TurnSolver sites): sacrificing THIS creature is an
+// option iff its death pays (SelfSacHasDeathPayoff) or its own payload does -- Brindle Boar's life
+// gain while something reads it. Lossless: with neither, the activation only removes our own body.
+inline bool SelfSacOutletUseful(const GameState& state, int controller, int source_id)
+{
+    if (SelfSacHasDeathPayoff(state, controller, source_id)) { return true; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        return d && d->params.sac_outlet_lifegain > 0 && SacOutletLifegainRead(state, controller);
+    }
+    return false;
+}
+
 // `dwatch` is an OPTIONAL BoardSources::dwatch for `dead_controller`. It exists for MASS DEATH: a
 // fading Saproling Burst's LTB destroys every token it made, and this function's two board walks
 // then ran once PER DEATH, each doing a LookupCached per permanent. On the 22.97 h candidate-b
@@ -14944,6 +14986,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                        + (pump_from_victim ? victim_lki_power : 0),
               self_pt  = op->sac_outlet_self_pump_toughness;
     const int ndraw = op->sac_outlet_draw;   // Psychotrope Thallid
+    const int sac_gain = op->sac_outlet_lifegain;   // Brindle Boar
     const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
     // History visibility (seed-6 play-test): without this the viewer showed only the persist
     // RETURN and the ETB ping per loop iteration -- returns stacking up with no cause. Emit the
@@ -14957,6 +15000,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             ev += " \xE2\x86\x92 " + std::to_string(dmg) + " to opponent ("
                 + std::to_string(before) + "\xE2\x86\x92" + std::to_string(before - dmg) + ")";
         }
+        if (sac_gain > 0) { ev += " (gain " + std::to_string(sac_gain) + " life)"; }
         if (self_ctr > 0) { ev += " (+" + std::to_string(self_ctr) + "/+"
                                 + std::to_string(self_ctr) + " counter)"; }
         if (pump_from_victim) { ev += " (" + src_name + " +" + std::to_string(victim_lki_power)
@@ -14968,6 +15012,9 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     else if (mana_any && !any_color_float.empty())
     { AddChosenColorFloat(state, any_color_float, std::max(1, mana_amt)); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
+    // LIFE payload (Brindle Boar): ONE gain event through the shared hook -> life_gained_this_turn
+    // (Accomplished Alchemist's X) and the lifegain watchers, identically in both worlds.
+    if (sac_gain > 0) { GainLife(state, controller, sac_gain); }
     CreateTokens(state, controller, ntok, tp, tt, tsub);   // bulk: one DoublerShift, not ntok
     // DRAW payload (Psychotrope Thallid "{1}, Sacrifice a Saproling: Draw a card") -- the same
     // TrickDraw primitive PermAbilityMode::SacDraw uses, so the two draw outlets behave identically.
@@ -19954,7 +20001,19 @@ inline void ApplyCastLifegain(GameState& state, int controller, const CardDefini
     //
     // NOT multiplied by gamesetup::OpponentHeads(): WE gain, on our single player object, so 2HG does
     // not double it -- contrast etb_opponent_lifegain, which really is per head.
+    // STORM (Weather the Storm): the original plus one copy per spell cast before it this turn.
+    // spells_cast_this_turn was ++'d at THIS spell's cast in both worlds (EffectHandler /
+    // apply_one) and ProjectPlanWalk, so it is exactly the instance count. Each copy is its own
+    // spell resolving -> its own life-gain EVENT (watchers fire per copy); the ferocious gate is
+    // read per instance for the same reason (no storm card has one today, so it is constant).
+    const int instances = p.storm ? std::max(1, state.spells_cast_this_turn) : 1;
     GainLife(state, controller, amount);
+    for (int i = 1; i < instances; ++i)
+    {
+        const bool fero_i = p.cast_lifegain_ferocious > 0
+                         && ControlsCreatureWithPower(state, controller, p.ferocious_min_power);
+        GainLife(state, controller, fero_i ? p.cast_lifegain_ferocious : p.cast_lifegain);
+    }
     // Viewer display only (not a decision): a human cannot otherwise see WHICH amount the gate
     // produced, because the board does not say so. Precedent = etb_self_lifegain's event above.
     // Nulled in search/rollout scope and suppressed while tap-speculating, so autonomous play is
@@ -19964,7 +20023,8 @@ inline void ApplyCastLifegain(GameState& state, int controller, const CardDefini
         EmitPlayEvent(state.turn_number, "lifegain",
                       "\xE2\x9D\xA4\xEF\xB8\x8F " + def.card.m_name.str() + " -- gain "
                       + std::to_string(amount) + " life"
-                      + (fero ? " (ferocious)" : landfall ? " (landfall)" : ""));
+                      + (fero ? " (ferocious)" : landfall ? " (landfall)" : "")
+                      + (instances > 1 ? " x" + std::to_string(instances) + " (storm)" : ""));
     }
 }
 
@@ -22456,6 +22516,20 @@ inline bool SinkKeepsLoopPayable(const GameState& state, const ManaCost& c_sink,
 //   * a hard cap as a backstop, so a mis-modelled free activation cannot hang a rollout the way the
 //     draw-breakpoint recursion once did.
 // The keep_payable guard mirrors the damage version: never spend the loop's own entry price.
+// THE drain arithmetic, one place (Essence Depleter / Scholar of Athreos). Life the opposing side
+// loses per activation: drain_amount, x OpponentHeads() when the ability says "EACH opponent"
+// (drain_each_opponent; 2HG = two heads into one shared pool), x1 for "target opponent". The gain is
+// scaled identically because Scholar's gain is "equal to the life lost this way". Every executor,
+// rollout and finisher-sizer site reads these, never drain_amount raw, so no two disagree.
+inline int DrainLossPerActivation(const CardParams& p)
+{
+    return p.drain_amount * (p.drain_each_opponent ? std::max(1, gamesetup::OpponentHeads()) : 1);
+}
+inline int DrainGainPerActivation(const CardParams& p)
+{
+    return p.drain_self_gain * (p.drain_each_opponent ? std::max(1, gamesetup::OpponentHeads()) : 1);
+}
+
 inline int SpendSurplusOnDrain(GameState& state, int controller, const ManaCost& keep_payable,
                                const std::function<bool(const ManaCost&)>& pay,
                                const StateManaPayer* probe_pay = nullptr)
@@ -22498,7 +22572,7 @@ inline int SpendSurplusOnDrain(GameState& state, int controller, const ManaCost&
             if (!SinkKeepsLoopPayable(state, c, keep_payable, probe_pay)) { continue; }
             if (!pay(c)) { continue; }
             ApplyPermAbility(state, controller, id, PermAbilityMode::Drain);
-            drained += d->params.drain_amount;
+            drained += DrainLossPerActivation(d->params);
             any = true;
         }
         if (!any) { break; }
@@ -23565,7 +23639,7 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
                 // and this is core; over-paying is the conservative direction (a reducer we ignore
                 // can only make us DECLINE a castable finisher, never claim an uncastable one).
                 const int cast_mv = d->card.m_mana_cost.ManaValue();
-                const int amt     = is_drain ? d->params.drain_amount : 0;
+                const int amt     = is_drain ? DrainLossPerActivation(d->params) : 0;
                 if (!affordable(cast_mv, act, is_drain, amt))
                 {
                     if (finishstats::On())
@@ -23650,7 +23724,7 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
                     const int act = sink_act_mv(sd, &is_drain);
                     if (act <= 0) { continue; }
                     const int cast_mv = sd->card.m_mana_cost.ManaValue();
-                    const int amt     = is_drain ? sd->params.drain_amount : 0;
+                    const int amt     = is_drain ? DrainLossPerActivation(sd->params) : 0;
                     if (!affordable(wish_mv + cast_mv, act, is_drain, amt))
                     {
                         if (finishstats::On())
@@ -24550,11 +24624,13 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // opponent). Set opponent_lost_life_this_turn like TapDamage so every consumer that
             // watches for progress sees it -- life LOSS is not damage (no damage-prevention or
             // lifelink hooks), which is why this does not route through the damage path.
-            const int amt = d->params.drain_amount;
+            // "Each opponent" (Scholar of Athreos) is per head, and its gain is "equal to the life
+            // lost this way": ONE gain event of the whole amount (CR 119.10), via the helpers.
+            const int amt = DrainLossPerActivation(d->params);
             state.players[1 - controller].life -= amt;
             state.opponent_lost_life_this_turn = true;
-            if (d->params.drain_self_gain > 0)
-            { GainLife(state, controller, d->params.drain_self_gain); }
+            if (DrainGainPerActivation(d->params) > 0)
+            { GainLife(state, controller, DrainGainPerActivation(d->params)); }
             if (g_play_event_sink)
             {
                 EmitPlayEvent(state.turn_number, "damage",
@@ -25354,8 +25430,9 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
         int useful = want;
         if (mode == PermAbilityMode::Drain && def.params.drain_amount > 0)
         {
+            const int per_loss = std::max(1, DrainLossPerActivation(def.params));
             const int need = (std::max(1, state.players[1 - controller].life)
-                              + def.params.drain_amount - 1) / def.params.drain_amount;
+                              + per_loss - 1) / per_loss;
             useful = std::min(useful, need);
         }
         else if (mode == PermAbilityMode::ExileTop)

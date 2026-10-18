@@ -38,20 +38,32 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 
 | card | board | status | tier | notes |
 |---|---|---|---|---|
-| Nourish | main | drafted | 1 | cast_lifegain 6 (ApplyCastLifegain); no viewer decision |
-| Eternal Witness | side | drafted | 1 | etb_return_gy_to_hand (Timeless Witness); viewer: dig (bucket A); PROVISIONAL 'may'->mandatory |
+| Nourish | main | implemented (chunk A) | 1 | cast_lifegain 6 (ApplyCastLifegain); no viewer decision; opponent's-turn cast PROVISIONAL inert |
+| Eternal Witness | side | implemented (chunk A) | 1 | etb_return_gy_to_hand (Timeless Witness); viewer: dig (bucket A); PROVISIONAL 'may'->mandatory |
 | Staff of Domination | main | drafted | 2+3 | see logs/aa_drafts; self_untap NEW; untap target not searched (viewer bucket B) |
 | Crab Umbra | main | drafted | 3 | BLUE {U}, untap {2}{U}; NEW untap_enchanted_cost + UntapEnchanted action |
 | Trufflesnout | side | drafted | 3 | NEW searched ETB mode axis + etb_mode viewer decision |
-| Scholar of Athreos | side | drafted | 2 | drain params + drain_each_opponent (2HG heads) |
-| Weather the Storm | main | drafted | 2 | cast_lifegain 3 + NEW storm bool; cast order = USER decision |
-| Ezuri, Renegade Leader | main | drafted | 1+2 | team_pump; infinite-mana payoff needs main-phase lethal-K pump |
+| Scholar of Athreos | side | implemented (chunk A) | 2 | drain params + NEW drain_each_opponent (x heads on loss AND gain; DrainLossPerActivation / DrainGainPerActivation at every drain site); lethal drain COUNT needs the chunk-C provider (ManaSinkActivationCounts) |
+| Weather the Storm | main | implemented (chunk A) | 2 | cast_lifegain 3 + NEW storm bool (one GainLife per instance); ProjectPlanWalk now counts the plan's casts; cast order = USER decision (generic kept, storm-last only proposed) |
+| Ezuri, Renegade Leader | main | implemented, fair pump (chunk A) | 1 | team_pump_* +3/+3 Elves (combat converter); main-phase lethal-K pump PENDING chunk C; regenerate/trample PROVISIONAL inert |
 | Galvanic Alchemist | side | drafted | 3 | soulbond + NEW granted untap {2}{U}; partner pick greedy today |
-| Elvish Harbinger | main | drafted | 1 | Giant Harbinger tutor_to_top Elf + 5c dork |
+| Elvish Harbinger | main | implemented (chunk A) | 1 | Giant Harbinger tutor_to_top Elf + 5c dork; tutor axis AND the 'may' decline are searched variants (tutor_optional) -- no deferral needed |
 | Seedcradle Witch | main | drafted | 3 | NEW untap+pump targeted activation {2}{G}{W} |
 | Utopia Sprawl | main | drafted | 2/3 | Enchant Forest (NEW host subtype) + locked colour (searched?) |
-| Brindle Boar | side | drafted | 2 | self-sac outlet + NEW sac_outlet_lifegain 4 |
+| Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | drafted (revisit) | 3 | hand-cast {X} DrawX NOT ENUMERATED today; rollout has no DrawX; NEW draw_target_player + ForcedDraw deck-out |
+
+## Chunk A (2026-10-18) -- landed
+
+Nourish, Eternal Witness, Elvish Harbinger, Ezuri (fair pump), Scholar of Athreos, Brindle Boar,
+Weather the Storm. New params: `drain_each_opponent`, `sac_outlet_lifegain`, `storm` (tests:
+test/unit/test_accomplished_alchemist.cpp + F4c in test_attack_projection.cpp). Also:
+`deck_reads_lifegain_in_play` now scans a wish-reachable sideboard; ProjectPlanWalk counts the plan's
+casts (storm); stale "MTG_SL_SECOND_MAIN default ON" notes corrected (Alchemist, Feed the Clan,
+Bogbeast, HeuristicArm.h) -- the default stays OFF. Separate commit: a self-only sac outlet now bakes
+itself as the victim (was a silent no-op) -- moves critter_smoke_d0 4 digests, win turns unchanged;
+smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLifegainProvider today
+(pinned in test_pirates_provider.cpp until chunk C's own provider).
 
 ## Open risks
 

@@ -32769,7 +32769,7 @@ static void ScanBoardSinks(const GameState& s, int controller, FlickerLoop* best
             const int mv = EffectiveActivationCost(s, controller, p.card,
                                                    d->params.drain_cost.value()).ManaValue();
             if (best->drain_amount == 0 || mv < best->drain_cost_mv)
-            { best->drain_cost_mv = mv; best->drain_amount = d->params.drain_amount;
+            { best->drain_cost_mv = mv; best->drain_amount = DrainLossPerActivation(d->params);
               best->drain_c_pips = d->params.drain_cost.value().colorless; }
         }
         if (d->params.exile_opponent_top_cost.has_value())
@@ -33044,7 +33044,7 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
         {
             const int mv = d->params.drain_cost.value().ManaValue();
             if (best->drain_amount == 0 || cast_mv < best->hand_setup_mv)
-            { best->drain_cost_mv = mv; best->drain_amount = d->params.drain_amount;
+            { best->drain_cost_mv = mv; best->drain_amount = DrainLossPerActivation(d->params);
               best->drain_c_pips = d->params.drain_cost.value().colorless;
               best->hand_setup_mv = cast_mv; }
         }
@@ -33519,7 +33519,7 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
             const int mv = EffectiveActivationCost(s, controller, d->card,
                                                    d->params.drain_cost.value()).ManaValue();
             if (best.drain_amount == 0 || mv < best.drain_cost_mv)
-            { best.drain_cost_mv = mv; best.drain_amount = d->params.drain_amount;
+            { best.drain_cost_mv = mv; best.drain_amount = DrainLossPerActivation(d->params);
               best.drain_c_pips = d->params.drain_cost.value().colorless; }
         }
         if (d->params.exile_opponent_top_cost.has_value())
@@ -35564,7 +35564,7 @@ static Fin Decide(const Ctx& cx, const Board& b, const Hand& h)
         f.k = Fin::Drain;
         f.act  = card ? EffectiveActivationCost(cx.s, cx.me, *card, d->params.drain_cost.value())
                       : d->params.drain_cost.value();
-        f.acts = CeilDiv(life, d->params.drain_amount);
+        f.acts = CeilDiv(life, std::max(1, DrainLossPerActivation(d->params)));
     };
     auto set_exile = [&](const CardDefinition* d, const Card* card)
     {
@@ -44019,7 +44019,7 @@ std::vector<int> EldraziFlickerProvider::ManaSinkActivationCounts(const GameStat
     if (mode == PermAbilityMode::Drain)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
-        const int amt = (d && d->params.drain_amount > 0) ? d->params.drain_amount : 0;
+        const int amt = (d && d->params.drain_amount > 0) ? DrainLossPerActivation(d->params) : 0;
         if (amt > 0) { finish = (std::max(1, s.players[1 - me].life) + amt - 1) / amt; }
     }
     else if (mode == PermAbilityMode::ExileTop && s.opponent_library_dealt)
@@ -44855,7 +44855,8 @@ inline long long FinishNeedMana(const GameState& s, int c, const CardDefinition*
     if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
     {
         const int life = std::max(1, s.players[1 - c].life);
-        const long long acts = (life + d->params.drain_amount - 1) / d->params.drain_amount;
+        const int per_loss = std::max(1, DrainLossPerActivation(d->params));
+        const long long acts = (life + per_loss - 1) / per_loss;
         int cp = 0;
         const int mv = act(d->params.drain_cost.value(), &cp);
         if (out_pips) { *out_pips = acts * cp; }

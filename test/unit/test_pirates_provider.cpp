@@ -182,6 +182,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Markov Baron's convoke lands, MeliraPodProvider; before this onboarding it rode Vial, which
         // VampiresProvider derives from. The list file is decks/Vampires/Vampire.cod (the user's name).
         {"Vampires", "Vampires"},
+        // AccomplishedAlchemist (onboarding 2026-10-18, chunk A of docs/design/alchemist-untap-loop.md):
+        // PINNED FROM A MEASUREMENT, not decided -- the Hydras treatment. Its own provider is chunk C's
+        // job (AccomplishedAlchemistProvider, derived from what it routes to here): today Accomplished
+        // Alchemist's mana_per_life_gained captures it into SelesnyaLifegainProvider.
+        {"AccomplishedAlchemist", "SelesnyaLifegain"},
     };
 
     namespace fs = std::filesystem;
@@ -214,7 +219,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         }
         REQUIRE_MESSAGE(!deck.empty(), "no decklist for ", folder);
         const DecisionProvider& p = DetectDecisionProvider(DeckLoader::LoadFromFile(deck));
-        CHECK_MESSAGE(std::string(p.Name()) == want, folder, " routed to ", p.Name(), ", expected ", want);
+        CHECK_MESSAGE(std::string(p.Name()) == want, folder, " routed to ", std::string(p.Name()), ", expected ", want);
         ++checked;
     }
     // A NEW deck folder must be added to the table above (its routing decided, not defaulted).

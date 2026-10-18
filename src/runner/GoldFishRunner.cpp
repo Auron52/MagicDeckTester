@@ -1267,12 +1267,20 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // `||` term here and one in BuildSimKey's fold -- widen BOTH, or the stamp gates a fold that
     // then does not fire. Entry 2 (2026-09-30): Blossoming Bogbeast's attack pump, which reads the
     // counter at declare-attackers to size its team +X/+X.
+    // The SIDEBOARD counts when a mainboard wish reaches it (Living Wish -> the AccomplishedAlchemist
+    // sideboard's fourth Alchemist): a wished-in reader is on the battlefield like any other. Scanned
+    // ONLY under DeckWishesFromSideboard, so a deck whose sideboard is unreachable keeps its exact key.
     state.deck_reads_lifegain_in_play = [&deck]{
-        for (const Card& c : deck.mainboard)
+        const bool wish = GoldFishRunner::DeckWishesFromSideboard(deck);
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
         {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && (d->params.mana_per_life_gained
-                      || d->params.attack_team_pump_per_life_gained)) { return true; }
+            if (zone == &deck.sideboard && !wish) { break; }
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && (d->params.mana_per_life_gained
+                          || d->params.attack_team_pump_per_life_gained)) { return true; }
+            }
         }
         return false;
     }();
