@@ -31,27 +31,48 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
-## RESUME STATE (2026-10-18 ~15:10 UTC)
-**PUSH HOLD (USER, 2026-10-18 ~10:10 UTC): do NOT push until ~16:10 UTC.** Local commits only until then.
-**USER NOTE (~10:50 UTC):** *"We may need to work more on heuristics for this deck next week. Ponder,
-Preordain and Brainstorm are especially troublesome in terms of potential branches."* -> the starting
-point is `docs/design/niv-cantrip-branching.md` (census, folds done, options; Q14-Q16).
+## HAND-OFF (2026-10-18 ~22:00 UTC) -- read this first
+Everything is PUSHED to `origin/phase-1-2-deck-analyzer` (USER 2026-10-18: "Let's get everything pushed and we'll
+sort out the remaining issues during the week"). The session's worktrees are retired; this file and
+`docs/design/niv-cantrip-branching.md` are the whole state. No run is in flight.
 
-- **`niv-aura`** (`.claude/worktrees/niv-aura`) = THE BRANCH TO PUSH: rebased onto origin `2176032dd`,
-  every analysis commit + the payment (P1/P2), search-cost and bottoming-cut fixes, the profile, and the
-  accepted smoke + regression GT (`4c13e2ac6`). T4 tiers green per the attribution below.
-- **Niv is NOT in the suite** (3x rule FAIL, 11,604 vs 8,086 ms/game). Its rows are set aside, not lost:
-  `logs/niv/niv_suite_rows.patch` + `niv_suite_cost.patch` in niv-aura (and `build/scratch/niv-aura/`).
-  Re-apply them when the deck fits (Q15 is the lever that does it today).
-- `niv` (branch `niv-analysis`, Stage 4 done) is SUPERSEDED by niv-aura (pre-rebase history); nothing
-  unique left in it. `niv-aura-prerebase-25fd4d0` = the pre-rebase tip, kept for reference.
-- Agent worktrees, all integrated: `niv-bs`, `niv-pay`, `niv-perf`, `niv-perf-base`, `niv-core`,
-  `niv-remand`, `niv-mana`, `niv-d0`, `niv-base`. Prune only on the user's say-so.
-- AFTER THE HOLD: re-fetch (rebase + re-tier if origin moved again), `git push origin
-  niv-aura:phase-1-2-deck-analyzer`, watch CI (report Windows), fast-forward the primary checkout (the
-  user's untracked `decks/NivMizzetCombo/NivMizzetCombo.cod` differs from the committed copy ONLY by CRLF:
-  set it aside as a backup, never delete), rebuild, `check_references_safe.py`.
-- STILL TO RUN: `verify_deck.py` full (running 15:05), multi-depth d0/3/5 and 5c2 on the final tip.
+**Where the deck stands.** Cards implemented and reviewed (19/19 full), provider `NivMizzetComboProvider`,
+Stage-4 profile committed, verify_deck green except the expected gates below. NOT in the regression suite:
+the 3x cost rule fails, **11,604 ms/game** (worst `niv_regression_d5_s3003`) vs the 8,086 limit (Stage 5j).
+The value leaf and the mulligan profile are BLOCKED on suite membership (`suite_gate.py --require`).
+
+**To re-admit it** once `python3 scripts/suite_gate.py --cost decks/NivMizzetCombo` would pass:
+`git apply docs/design/analysis-NivMizzetCombo.suite-rows.patch` (all three tiers at Landfall's /
+Galadriel's pre-keep-table shape; applies cleanly to `test/regression_cases.sh` as of this push), run
+`suite_gate.py --measure decks/NivMizzetCombo` (NOT `--cost`, which re-measures), then the tiers + accept.
+
+**Open for the week (all the USER's unless marked):**
+1. **Q15 -- Niv's bottom-eval setting**: the one lever that clears the 3x gate now (mulligan bottoming
+   with no keep table is the dominant cost). Measurements in Q15.
+2. **The cantrip heuristics** the user flagged (Ponder / Preordain / Brainstorm):
+   `docs/design/niv-cantrip-branching.md`. Q14 (Preordain's scry is a provider prune via
+   `GenericProvider::ScryKeepOnTop`, which bottoms every land once two are in play -- wrong for a
+   6-drop deck), Q16 (the global 25x overrun ceiling).
+3. Q12 (the two payment levers ship ON), Q13 (s71014 T1 land order), Q10 (Hinata d0 Remand riders),
+   Q1-Q9, Q11, and the claude-play sweep's 3 deferred low/cosmetic items.
+4. **UN-RUN: Stage 5c2** `python3 scripts/leaf_tiebreak_check.py decks/NivMizzetCombo/NivMizzetCombo.cod`
+   (mandatory for a new deck, and Niv is the stored-value combo shape the check warns about). Not run:
+   it takes all 24 cores, and the session closed first. Run it when the deck is next worked on.
+5. **Agent-side: an unbudgeted Niv game explodes.** `./build/Release/mtg decks/NivMizzetCombo/NivMizzetCombo.cod
+   --profile decks/NivMizzetCombo/NivMizzetCombo.profile.json --games 1 --seed 1 --depth 1 --budget-ms 0
+   --ignore-play-profile` ran 7 h without finishing (it stalled `provider_audit --check`, which now
+   budgets its routing game). perf: `AppendSubdecisionAxes` / `BpDeriveContinuationList` /
+   `BpEnumEntryFor` / `AppendSoulbondDeclineVariants` -- breakpoint continuation lists with the
+   put-back / Ponder / soulbond axes, the same family the 10-18 perf pass cut for budgeted play.
+   Unbudgeted completeness is the invariant, so this is a cost to find, not a setting.
+6. Agent-side: `scripts/play_invariants.py` still lacks 14 emitted decision types (attack_mode, echo,
+   jitte, revive, ...); each needs its reply shape checked when a deck reaches it.
+7. The OVERNIGHT GT is stale for the decks this work moved (hinata, goblins, bruna, ...) -- left, by
+   design, for the periodic overnight run.
+
+Commit map (oldest -> newest): cards + integration (Stage 1-2), the breakpoint un-gate `c52ed5c9d`-era,
+Brainstorm cost + nested bail, Aura legality + cantrip-first VALUE, LIFO draw loop, payment P1/P2,
+search-cost cut (canon front-only), bottoming turn cut, GT accept, profile, tooling fixes.
 
 ## Stage 1 — coverage (2026-10-17)
 Missing (8): Niv-Mizzet, the Firemind; Niv-Mizzet, Parun; Curiosity; Tandem Lookout; Generator

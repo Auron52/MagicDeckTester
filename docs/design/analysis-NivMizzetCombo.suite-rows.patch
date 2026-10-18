@@ -1,0 +1,73 @@
+diff --git a/test/regression_cases.sh b/test/regression_cases.sh
+--- a/test/regression_cases.sh
++++ b/test/regression_cases.sh
+@@ -67,6 +67,7 @@
+   [bruna]=decks/Bruna/Bruna.cod
+   [landfall]=decks/Landfall/Landfall.cod
+   [galadriel]=decks/Galadriel/Galadriel.cod
++  [niv]=decks/NivMizzetCombo/NivMizzetCombo.cod
+   [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
+ )
+ declare -A DECK_PROF=(
+@@ -102,6 +103,7 @@
+   [bruna]=decks/Bruna/Bruna.profile.json
+   [landfall]=decks/Landfall/Landfall.profile.json
+   [galadriel]=decks/Galadriel/Galadriel.profile.json
++  [niv]=decks/NivMizzetCombo/NivMizzetCombo.profile.json
+   [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
+ )
+ 
+@@ -515,6 +517,15 @@
+   "galadriel 3 1001  150 10"
+   "galadriel 5 1001   75 20"
+   "galadriel2hg 3 1001 75 10"
++  # niv: ADDED 2026-10-18 (docs/design/analysis-NivMizzetCombo.md), all three tiers at once, at Landfall's /
++  # Galadriel's pre-keep-table admission shape (d3 30/40, d5 15/20; overnight d3 4x250, d5 4x150) -- grow
++  # at the keep-table adoption. No value leaf and no keep table yet, so GT WILL move when they land. 2HG
++  # rows: Niv-Mizzet's "any target" ping is single-target (x1 whatever the heads), so a 30-life team
++  # needs a longer draw/ping loop -- and Tandem Lookout's draws are MANDATORY.
++  "niv 0 1001 1000 0"
++  "niv 3 1001   30 10"
++  "niv 5 1001   15 20"
++  "niv2hg 3 1001 30 10"
+   # colossus: ADDED 2026-10-17 by the analysis (docs/design/analysis-Colossus Hammer.md), all three tiers
+   # at once (the all-or-none rule), at the pirates / soldiers gate shape and the overnight ENTRY set.
+   # Colossus Hammer (+10/+10) on a double striker through five equip cheats; most games end T3-T5. No
+@@ -767,6 +778,13 @@
+   "galadriel 5 3003   75 20"
+   "galadriel2hg 3 2002 100 10"
+   "galadriel2hg 5 2002  50 20"
++  # niv: see the SMOKE block.
++  "niv 0 2002 1000 0"
++  "niv 3 2002   40 10"
++  "niv 3 3003   40 10"
++  "niv 5 2002   20 20"
++  "niv 5 3003   20 20"
++  "niv2hg 3 2002 40 10"
+   # colossus: see the SMOKE block.
+   "colossus 0 2002 1000 0"
+   "colossus 3 2002  150 10"
+@@ -1367,6 +1385,23 @@
+   "galadriel2hg 5 5005 170 40"
+   "galadriel2hg 5 6006 170 40"
+   "galadriel2hg 5 7007 170 40"
++  # niv: see the SMOKE block. Landfall's smaller-than-entry set until the keep table (expand then).
++  "niv 0 4004 2000 0"
++  "niv 0 6006 2000 0"
++  "niv 0 8008 2000 0"
++  "niv 0 10010 2000 0"
++  "niv 3 4004  250 10"
++  "niv 3 5005  250 10"
++  "niv 3 6006  250 10"
++  "niv 3 7007  250 10"
++  "niv 5 4004  150 20"
++  "niv 5 5005  150 20"
++  "niv 5 6006  150 20"
++  "niv 5 7007  150 20"
++  "niv2hg 5 4004  50 20"
++  "niv2hg 5 5005  50 20"
++  "niv2hg 5 6006  50 20"
++  "niv2hg 5 7007  50 20"
+   # colossus: see the SMOKE block. The ENTRY set (regression-testing.md "Sizing a deck's overnight
+   # rows"); it expands to the FULL set just before a keep table is adopted.
+   "colossus 0 4004 2000 0"

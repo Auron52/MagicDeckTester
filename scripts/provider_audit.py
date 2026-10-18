@@ -82,9 +82,12 @@ def main():
 
     # depth 1 + ignore_play_profile: the provider is printed per job at engine construction, and a
     # deck shipping an enabled value_play refuses an explicit --depth without the override. One
-    # game per deck -- this reads a routing decision, not a result.
+    # game per deck -- this reads a routing decision, not a result. A FINITE budget: with none the
+    # job runs unbudgeted, and an unbudgeted search can explode (NivMizzetCombo seed 1 at depth 1:
+    # still running after 7 h on 2026-10-18), stalling the whole audit on a game whose result it
+    # never reads. The provider is chosen at engine construction, so the budget cannot change it.
     jobs = [{"name": stem.replace(" ", "_"), "deck": deck, "profile": prof,
-             "games": 1, "seed": 1, "depth": 1, "ignore_play_profile": True}
+             "games": 1, "seed": 1, "depth": 1, "budget_ms": 10, "ignore_play_profile": True}
             for stem, deck, prof in decks]
     man = os.path.join(ROOT, "logs", "provider_audit.manifest.json")
     os.makedirs(os.path.dirname(man), exist_ok=True)
