@@ -1,0 +1,359 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [34] }, "combat_swap_timing": 1, "karoo_float": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 22, "name": "Magnetic Theft" }, { "num": 50, "name": "Speaker of the Heavens" }, { "num": 36, "name": "Plains" }, { "num": 11, "name": "Furycalm Snarl" }, { "num": 12, "name": "Furycalm Snarl" }, { "num": 46, "name": "Sigarda's Aid" }, { "num": 2, "name": "Clifftop Retreat" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 34, "name": "Path to Exile" }, { "num": 11, "name": "Furycalm Snarl" }, { "num": 33, "name": "Open the Armory" }, { "num": 4, "name": "Clifftop Retreat" }, { "num": 54, "name": "Steelshaper's Gift" }, { "num": 37, "name": "Plains" }, { "num": 14, "name": "Furycalm Snarl" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 34, "name": "Path to Exile", "win_optimal": true }, { "num": 11, "name": "Furycalm Snarl", "win_optimal": true }, { "num": 33, "name": "Open the Armory", "win_optimal": true }, { "num": 4, "name": "Clifftop Retreat", "win_optimal": true }, { "num": 54, "name": "Steelshaper's Gift", "win_optimal": true }, { "num": 37, "name": "Plains", "win_optimal": true }, { "num": 14, "name": "Furycalm Snarl", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 11, "name": "Furycalm Snarl" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Clifftop Retreat", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Steelshaper's Gift", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Furycalm Snarl; cast: Steelshaper's Gift → Lizard Blades", "land": "Furycalm Snarl", "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 4, "summary": "land=Plains; cast: Steelshaper's Gift → Lizard Blades", "land": "Plains", "casts": ["Steelshaper's Gift"], "actions": [{ "card": "Steelshaper's Gift", "tutor_target": "Lizard Blades" }] },
+    { "index": 8, "summary": "land=Furycalm Snarl; cast: (nothing)", "land": "Furycalm Snarl", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Clifftop Retreat; cast: (nothing)", "land": "Clifftop Retreat", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "tutor_etb",
+  "source": "Steelshaper's Gift",
+  "turn": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Clifftop Retreat", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Lizard Blades" }, { "index": 1, "name": "Colossus Hammer" }, { "index": 2, "name": "Loxodon Warhammer" }, { "index": 3, "name": "Dragonfire Blade" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 1, "source": "Steelshaper's Gift (searched)", "cards": [{ "name": "Lizard Blades", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Clifftop Retreat", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Steelshaper's Gift"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Clifftop Retreat", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Steelshaper's Gift"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Swiftblade Vindicator" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 37, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Clifftop Retreat", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Swiftblade Vindicator", "cost": "{W}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Steelshaper's Gift"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Furycalm Snarl; cast: Lizard Blades", "land": "Furycalm Snarl", "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 1, "summary": "land=Furycalm Snarl; cast: Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Swiftblade Vindicator"], "actions": [{ "card": "Swiftblade Vindicator" }] },
+    { "index": 2, "summary": "land=Clifftop Retreat; cast: Lizard Blades", "land": "Clifftop Retreat", "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 3, "summary": "land=Clifftop Retreat; cast: Swiftblade Vindicator", "land": "Clifftop Retreat", "casts": ["Swiftblade Vindicator"], "actions": [{ "card": "Swiftblade Vindicator" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Lizard Blades", "land": "Mountain", "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Swiftblade Vindicator", "land": "Mountain", "casts": ["Swiftblade Vindicator"], "actions": [{ "card": "Swiftblade Vindicator" }] },
+    { "index": 6, "summary": "land=Furycalm Snarl; cast: Open the Armory → Colossus Hammer", "land": "Furycalm Snarl", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Colossus Hammer" }] },
+    { "index": 9, "summary": "land=Clifftop Retreat; cast: Open the Armory → Colossus Hammer", "land": "Clifftop Retreat", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Colossus Hammer" }] },
+    { "index": 12, "summary": "land=Mountain; cast: Open the Armory → Colossus Hammer", "land": "Mountain", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Colossus Hammer" }] },
+    { "index": 15, "summary": "land=Furycalm Snarl; cast: (nothing)", "land": "Furycalm Snarl", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Clifftop Retreat; cast: (nothing)", "land": "Clifftop Retreat", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Steelshaper's Gift"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Steelshaper's Gift"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "is_land": true, "taps": "W" }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Steelshaper's Gift"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Furycalm Snarl; cast: Lizard Blades", "land": "Furycalm Snarl", "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Lizard Blades", "land": "Mountain", "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 2, "summary": "land=none; cast: Lizard Blades", "land": null, "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 3, "summary": "land=Furycalm Snarl; cast: Open the Armory → Colossus Hammer", "land": "Furycalm Snarl", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Colossus Hammer" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Open the Armory → Colossus Hammer", "land": "Mountain", "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Colossus Hammer" }] },
+    { "index": 9, "summary": "land=none; cast: Open the Armory → Colossus Hammer", "land": null, "casts": ["Open the Armory"], "actions": [{ "card": "Open the Armory", "tutor_target": "Colossus Hammer" }] },
+    { "index": 12, "summary": "land=Furycalm Snarl; cast: (nothing)", "land": "Furycalm Snarl", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "land_entry",
+  "source": "Furycalm Snarl",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "is_land": true, "taps": "W" }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Open the Armory", "cost": "{1}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Steelshaper's Gift"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "pay_life": 0,
+  "reveal_types": ["Mountain", "Plains"],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (reveal a Mountain or a Plains card from your hand), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "tutor_etb",
+  "source": "Open the Armory",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "tapped": true, "is_land": true }, { "name": "Furycalm Snarl", "idx": 4, "num": 11, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Steelshaper's Gift"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Colossus Hammer" }, { "index": 1, "name": "Dragonfire Blade" }, { "index": 2, "name": "Loxodon Warhammer" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 3, "source": "Open the Armory (searched)", "cards": [{ "name": "Colossus Hammer", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "tapped": true, "is_land": true }, { "name": "Furycalm Snarl", "idx": 4, "num": 11, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Open the Armory", "Steelshaper's Gift"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Colossus Hammer", "land": null, "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Swiftblade Vindicator (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "tapped": true, "is_land": true }, { "name": "Furycalm Snarl", "idx": 4, "num": 11, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Open the Armory", "Steelshaper's Gift"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Colossus Hammer", "land": null, "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "cast_order": ["*", "Colossus Hammer", "Magnetic Theft"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Magnetic Theft" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "is_land": true, "taps": "RW" }, { "name": "Furycalm Snarl", "idx": 4, "num": 11, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "is_land": true, "taps": "W" }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Magnetic Theft", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Open the Armory", "Steelshaper's Gift"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Furycalm Snarl; cast: Colossus Hammer, Lizard Blades, Magnetic Theft (Colossus Hammer) → Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 1, "summary": "land=Furycalm Snarl; cast: Lizard Blades, Colossus Hammer, Magnetic Theft (Colossus Hammer) → Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Colossus Hammer, Lizard Blades, Magnetic Theft (Colossus Hammer) → Swiftblade Vindicator", "land": "Mountain", "casts": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Lizard Blades, Colossus Hammer, Magnetic Theft (Colossus Hammer) → Swiftblade Vindicator", "land": "Mountain", "casts": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 4, "summary": "land=Furycalm Snarl; cast: Colossus Hammer, Magnetic Theft (Colossus Hammer) → Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Colossus Hammer, Magnetic Theft (Colossus Hammer) → Swiftblade Vindicator", "land": "Mountain", "casts": ["Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 6, "summary": "land=none; cast: Colossus Hammer, Magnetic Theft (Colossus Hammer) → Swiftblade Vindicator", "land": null, "casts": ["Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 7, "summary": "land=Furycalm Snarl; cast: Colossus Hammer, Lizard Blades", "land": "Furycalm Snarl", "casts": ["Colossus Hammer", "Lizard Blades"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }] },
+    { "index": 8, "summary": "land=Furycalm Snarl; cast: Lizard Blades, Colossus Hammer", "land": "Furycalm Snarl", "casts": ["Lizard Blades", "Colossus Hammer"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }] },
+    { "index": 9, "summary": "land=Furycalm Snarl; cast: Colossus Hammer, Lizard Blades, Magnetic Theft (Lizard Blades) → Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 19, "attach_equip_name": "Lizard Blades" }] },
+    { "index": 10, "summary": "land=Furycalm Snarl; cast: Lizard Blades, Colossus Hammer, Magnetic Theft (Lizard Blades) → Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 19, "attach_equip_name": "Lizard Blades" }] },
+    { "index": 11, "summary": "land=Furycalm Snarl; cast: Colossus Hammer, Lizard Blades, Magnetic Theft (Colossus Hammer) → Lizard Blades", "land": "Furycalm Snarl", "casts": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 19, "enchant_target_name": "Lizard Blades", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 12, "summary": "land=Furycalm Snarl; cast: Lizard Blades, Colossus Hammer, Magnetic Theft (Colossus Hammer) → Lizard Blades", "land": "Furycalm Snarl", "casts": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 19, "enchant_target_name": "Lizard Blades", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 13, "summary": "land=Mountain; cast: Colossus Hammer, Lizard Blades", "land": "Mountain", "casts": ["Colossus Hammer", "Lizard Blades"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }] },
+    { "index": 14, "summary": "land=Mountain; cast: Lizard Blades, Colossus Hammer", "land": "Mountain", "casts": ["Lizard Blades", "Colossus Hammer"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }] },
+    { "index": 15, "summary": "land=Mountain; cast: Colossus Hammer, Lizard Blades, Magnetic Theft (Lizard Blades) → Swiftblade Vindicator", "land": "Mountain", "casts": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 19, "attach_equip_name": "Lizard Blades" }] },
+    { "index": 16, "summary": "land=Mountain; cast: Lizard Blades, Colossus Hammer, Magnetic Theft (Lizard Blades) → Swiftblade Vindicator", "land": "Mountain", "casts": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 19, "attach_equip_name": "Lizard Blades" }] },
+    { "index": 17, "summary": "land=Mountain; cast: Colossus Hammer, Lizard Blades, Magnetic Theft (Colossus Hammer) → Lizard Blades", "land": "Mountain", "casts": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 19, "enchant_target_name": "Lizard Blades", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 18, "summary": "land=Mountain; cast: Lizard Blades, Colossus Hammer, Magnetic Theft (Colossus Hammer) → Lizard Blades", "land": "Mountain", "casts": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }, { "card": "Magnetic Theft", "enchant_target": 19, "enchant_target_name": "Lizard Blades", "trick": true, "attach_equip": 5, "attach_equip_name": "Colossus Hammer" }] },
+    { "index": 19, "summary": "land=none; cast: Colossus Hammer, Lizard Blades", "land": null, "casts": ["Colossus Hammer", "Lizard Blades"], "cast_order_canonical": ["Colossus Hammer", "Lizard Blades"], "actions": [{ "card": "Colossus Hammer" }, { "card": "Lizard Blades" }] },
+    { "index": 20, "summary": "land=none; cast: Lizard Blades, Colossus Hammer", "land": null, "casts": ["Lizard Blades", "Colossus Hammer"], "cast_order_canonical": ["Lizard Blades", "Colossus Hammer"], "actions": [{ "card": "Lizard Blades" }, { "card": "Colossus Hammer" }] },
+    { "index": 21, "summary": "land=Furycalm Snarl; cast: Lizard Blades, equip Lizard Blades → Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Lizard Blades"], "activations": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }, { "card": "Lizard Blades", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 59, "equip_host_name": "Swiftblade Vindicator", "equip_src": 19, "equip_cost": 2 }] },
+    { "index": 22, "summary": "land=Mountain; cast: Lizard Blades, equip Lizard Blades → Swiftblade Vindicator", "land": "Mountain", "casts": ["Lizard Blades"], "activations": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }, { "card": "Lizard Blades", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 59, "equip_host_name": "Swiftblade Vindicator", "equip_src": 19, "equip_cost": 2 }] },
+    { "index": 23, "summary": "land=Furycalm Snarl; cast: Lizard Blades", "land": "Furycalm Snarl", "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 24, "summary": "land=Furycalm Snarl; cast: Lizard Blades, Magnetic Theft (Lizard Blades) → Swiftblade Vindicator", "land": "Furycalm Snarl", "casts": ["Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 19, "attach_equip_name": "Lizard Blades" }] },
+    { "index": 25, "summary": "land=Mountain; cast: Lizard Blades", "land": "Mountain", "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 26, "summary": "land=Mountain; cast: Lizard Blades, Magnetic Theft (Lizard Blades) → Swiftblade Vindicator", "land": "Mountain", "casts": ["Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 19, "attach_equip_name": "Lizard Blades" }] },
+    { "index": 27, "summary": "land=none; cast: Lizard Blades", "land": null, "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] },
+    { "index": 28, "summary": "land=none; cast: Lizard Blades, Magnetic Theft (Lizard Blades) → Swiftblade Vindicator", "land": null, "casts": ["Lizard Blades", "Magnetic Theft"], "cast_order_canonical": ["Lizard Blades", "Magnetic Theft"], "actions": [{ "card": "Lizard Blades" }, { "card": "Magnetic Theft", "enchant_target": 59, "enchant_target_name": "Swiftblade Vindicator", "trick": true, "attach_equip": 19, "attach_equip_name": "Lizard Blades" }] },
+    { "index": 29, "summary": "land=Furycalm Snarl; cast: Colossus Hammer", "land": "Furycalm Snarl", "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 30, "summary": "land=Mountain; cast: Colossus Hammer", "land": "Mountain", "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 31, "summary": "land=none; cast: Colossus Hammer", "land": null, "casts": ["Colossus Hammer"], "actions": [{ "card": "Colossus Hammer" }] },
+    { "index": 32, "summary": "land=Furycalm Snarl; cast: (nothing)", "land": "Furycalm Snarl", "casts": [], "actions": [] },
+    { "index": 33, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 34, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "type": "land_entry",
+  "source": "Furycalm Snarl",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "is_land": true, "taps": "RW" }, { "name": "Furycalm Snarl", "idx": 4, "num": 11, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "is_land": true, "taps": "W" }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Colossus Hammer", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 14, "name": "Furycalm Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Magnetic Theft", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Open the Armory", "Steelshaper's Gift"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "pay_life": 0,
+  "reveal_types": ["Mountain", "Plains"],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (reveal a Mountain or a Plains card from your hand), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "ability", "text": "Magnetic Theft: attach Colossus Hammer -> Swiftblade Vindicator" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Clifftop Retreat", "idx": 2, "num": 4, "is_land": true, "taps": "RW" }, { "name": "Colossus Hammer", "idx": 6, "num": 5, "is_equip": true, "attached_to": 59, "is_land": false }, { "name": "Furycalm Snarl", "idx": 4, "num": 11, "tapped": true, "is_land": true }, { "name": "Furycalm Snarl", "idx": 5, "num": 14, "is_land": true, "taps": "RW" }, { "name": "Plains", "idx": 1, "num": 37, "tapped": true, "is_land": true }, { "name": "Swiftblade Vindicator", "idx": 3, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Lizard Blades", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Magnetic Theft", "Open the Armory", "Steelshaper's Gift"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lizard Blades", "land": null, "casts": ["Lizard Blades"], "actions": [{ "card": "Lizard Blades" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Swiftblade Vindicator (22) — 22 to opponent (18→-4)" }
+  ]
+}
