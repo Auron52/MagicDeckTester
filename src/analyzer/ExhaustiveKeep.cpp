@@ -3127,9 +3127,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::mutex out_mtx;
         double total_ms = 0; long long total_logged = 0;
         const auto t_all = std::chrono::steady_clock::now();
+        // MTG_KEEP_BENCH_DEPTH / _BUDGET apply here too, as for MTG_KEEP_REPLAY (diagnostic-only): re-run a
+        // list of rollouts at a LARGER budget, the completeness check a play-changing lever owes
+        // (docs/design/edf-slow-rollout-tail-2026-10-17.md).
+        const int rl_depth  = EnvInt("MTG_KEEP_BENCH_DEPTH", cfg.depth);
+        const int rl_budget = EnvInt("MTG_KEEP_BENCH_BUDGET", cfg.budget_ms);
         auto worker = [&]()
         {
-            AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            AIEngine ai(rollout_profile, rl_depth, rl_budget);
             ai.SetSearchPostCombat(second_main);
             for (;;)
             {
