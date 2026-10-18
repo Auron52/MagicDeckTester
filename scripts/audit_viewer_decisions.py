@@ -680,7 +680,7 @@ INERT_PARAMS = {
     "tap_blood_cost_less_per_subtype": "Voldaren Estate's Blood cost reduction (per Vampire we control, counted at activation) -- a cost detail, not a choice",
     "haste_if_opp_life_at_most": "Bloodghast's conditional haste (opponent at 10 or less life) -- a static, no choice",
     # ---- Vampires A1 (2026-10-18). Classified inert by the integrator; PENDING USER OK per the self-guard
-    #      (recorded in docs/design/analysis-Vampires.md -- surfaced, not blocking).
+    #      (recorded in docs/design/analysis-Vampire.md -- surfaced, not blocking).
     "hellbent_upkeep_draw": "Asylum Visitor's upkeep trigger -- MANDATORY (draw a card and lose 1 life), an intervening-if on the hand being empty; no choice",
     "hellbent_upkeep_life_loss": "Asylum Visitor's life-loss magnitude -- a printed constant",
     "hellbent_upkeep_each_player": "Asylum Visitor also watches the opponent's upkeep -- a printed scope, no choice",
@@ -1580,11 +1580,11 @@ STATE_GATED_TYPES = {
         "at declare-attackers -- in this list only via Mavren Fein's attack token -- with {B} still open; a "
         "forward sweep rarely builds that board. Pinned by test/unit/test_vampires_lords.cpp 'Combat window: "
         "Mavren Fein's token makes the fifth Vampire ...' and the hand-built --claude-play repro in "
-        "docs/design/analysis-Vampires.md (cluster B).",
+        "docs/design/analysis-Vampire.md (cluster B).",
     ("steal_tap_count", "target"):
         "Captivating Vampire's steal needs five untapped Vampires AND an opponent creature at once (a "
         "late-game, spawn-pattern-dependent board); its target + five-body prompts are pinned by the "
-        "hand-built --claude-play repro in docs/design/analysis-Vampires.md (cluster B) and "
+        "hand-built --claude-play repro in docs/design/analysis-Vampire.md (cluster B) and "
         "test/unit/test_vampires_lords.cpp 'Steal effect ...'.",
     ("etb_return_equipment_from_gy", "dig"):
         "Forge Anew asks only with TWO OR MORE Equipment in the graveyard (one is a forced pick, none has no "
