@@ -551,6 +551,7 @@ enum Slot : int
     EQUIP_UNLANDED_COPY_FOLD, // MTG_EQUIP_UNLANDED_COPY_FOLD  SOUND dominance fold: an Equip of the k-th hand copy of a name (hand order) in a subset that casts <= k copies of it never lands -- the k-th cast takes the first copy still in hand, both worlds -- so it pays its equip cost and does nothing; the same subset without it is enumerated, cheaper, same board. Only where nothing else in the subset can move a hand copy or re-solve the turn (Equip / unattach / Equipment-or-Theft casts only); autonomous only. Default ON; =0 keeps every such plan
     LA_NESTED_BAIL,           // MTG_LA_NESTED_BAIL  a NESTED SolveWithLookahead (enforce_budget=false: a rollout's per-turn solve, a searched second main) stops its candidate loop once the enclosing pass's OVERRUN ceiling has tripped -- FSLineWin/FSLineTail's entry bail, which this host never had. After the trip every rollout returns a no-win at its first step, so the rest of the loop only re-pays applies (Niv-Mizzet d3 b10: 7.9M of 8.1M main-2 applies ran past the ceiling, one decision 10.27M units against a 225k ceiling). Re-prices only: inert at an unlimited budget (no ceiling is armed). DEFAULT ON (2026-10-18; held-out 450/450 games byte-identical, units 0.93-0.96x); =0 restores the unbailed loop
     PUTBACK_PRICE,            // MTG_PUTBACK_PRICE  charge MTG_PUTBACK_PRICE_UNITS extra work units per Brainstorm put-back VARIANT applied (Plan::putback_choice >= 1, i.e. beyond the provider's first candidate) at the three plan-apply loops, so a finite budget spends on the default put-backs first and a larger budget reaches the rest. Re-prices only: never read at an unlimited budget. DEFAULT OFF (2026-10-18; held-out d3 +0.0267 / d5 +0.0133 avg turns for 0.91x net units)
+    PREPAY_FLOAT_POOL,        // MTG_PREPAY_FLOAT_POOL  the whole-turn prepay (TurnSolver::BatchPrepayMainCasts) COUNTS a plain floating pool (WUBRG/{C}, no wild, no snow provenance) as the joint solve's starting mana instead of declining on it (PP_FLOAT_NZ). The decline existed only because the pre-load OVERWROTE floating_mana; the solve now starts from the float and the pre-load is built from what it returns, so nothing is clobbered. Generator Servant's haste-tagged {C} stays {C} in the pre-load, so a creature spell still takes one first (TakeHasteFloatForCreatureSpell). NivMizzetCombo s71009 T4: the Servant's {C}{C} floated by the apply pre-pass disabled the prepay, and the per-cast payer spent Spirebluff Canal on Niv-Mizzet, the Firemind's {R} and stranded Curiosity's {U}. Executor + rollout (one shared function). DEFAULT ON; =0 -> the decline
     COUNT
 };
 
@@ -1052,6 +1053,7 @@ inline const char* Name(int slot)
         "MTG_EQUIP_UNLANDED_COPY_FOLD",
         "MTG_LA_NESTED_BAIL",
         "MTG_PUTBACK_PRICE",
+        "MTG_PREPAY_FLOAT_POOL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

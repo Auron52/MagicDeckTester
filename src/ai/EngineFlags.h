@@ -463,6 +463,15 @@ inline bool RestrictedManaRankOn()
     return heurarm::Flag(heurarm::RESTRICTED_MANA_RANK, env_on);
 }
 
+// MTG_PREPAY_FLOAT_POOL -- DEFAULT ON; =0 restores the PP_FLOAT_NZ decline. The whole-turn prepay
+// (TurnSolver::BatchPrepayMainCasts, the one function both apply worlds call) starts its joint solve
+// from a PLAIN floating pool instead of declining on it. See the block at the decline site.
+inline bool PrepayFloatPoolOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_FLOAT_POOL", true);
+    return heurarm::Flag(heurarm::PREPAY_FLOAT_POOL, env_on);
+}
+
 // MTG_PAY_ROLLBACK -- DEFAULT OFF until measured. The same-turn mana-payment rollback: see
 // src/ai/PayRollback.h. Read in the shared payment entry and both dig-gate twins (lockstep).
 inline bool PayRollbackOn()

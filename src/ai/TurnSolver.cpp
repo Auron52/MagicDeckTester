@@ -43068,7 +43068,28 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     // A non-empty float (e.g. a ritual's output) would be clobbered by the pre-load; producer turns
     // are declined below regardless, but guard here too so the reserve stays byte-identical there.
-    if (state.floating_mana.Total() != 0) { return Pp(PP_FLOAT_NZ); }
+    //
+    // COUNT THE FLOAT INSTEAD (MTG_PREPAY_FLOAT_POOL, DEFAULT ON; =0 restores the decline). The
+    // clobbering was the decline's only reason (f154d64b1: "would be clobbered by the pre-load"), and
+    // it is a property of the pre-load, not of joint payment: the joint solve takes a starting pool
+    // (TapForCostBacktrack's `floating`), spends it first and feeds filters from it, and its
+    // out_full_pool is that pool PLUS what the taps made -- so building the pre-load from it, as
+    // below, replaces the float with a pool that already contains it. Nothing is lost or invented.
+    // What the decline cost: a plan's SacForMana is cracked by both apply worlds' pre-pass BEFORE this
+    // call, so every line that sacrifices a Generator Servant (or a Lotus Bloom, a Treasure action)
+    // fell to the per-cast greedy. NivMizzetCombo s71009 T4, {Niv-Mizzet, the Firemind; Curiosity}
+    // off Spirebluff Canal + Island + Saprazzan Skerry + a fresh Cascade Bluffs + Sol Ring with the
+    // Servant's {C}{C} floating: Niv took the Canal's {R} and the Bluffs' {R}{R}, so Curiosity's {U}
+    // had no source -- while Niv off the {C}{C}, the Skerry's {U}{U} and the Bluffs fed by the Island
+    // leaves the Canal for Curiosity. The same casts without the Servant prepaid and paid both.
+    // Only a PLAIN float is counted: no `wild` (its pinning is the ambiguity PP_WILD declines on) and
+    // no snow provenance (the solve cannot carry it); anything else keeps the decline.
+    const bool float_in = state.floating_mana.Total() != 0;
+    if (float_in)
+    {
+        const ManaPool& f = state.floating_mana;
+        if (!PrepayFloatPoolOn() || f.wild != 0 || f.snow_units != 0) { return Pp(PP_FLOAT_NZ); }
+    }
 
     const int active = state.active_player_index;
     ManaCost combined;
@@ -43287,6 +43308,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
     const ManaPool               fm_snap = state.floating_mana;
+    // The joint solve's STARTING pool: the counted float (MTG_PREPAY_FLOAT_POOL), else empty -- the
+    // literal empty pool, so every float-free call is byte-identical to the pre-lever solve.
+    const ManaPool               bt_start = float_in ? fm_snap : ManaPool{};
     const int  la  = state.players[active].life;
     const int  lo  = state.players[1 - active].life;
     const bool oll = state.opponent_lost_life_this_turn;
@@ -43626,7 +43650,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     auto held_attempt = [&](std::uint64_t hold, int r) -> bool
     {
         if (tapstats::Enabled()) { tapstats::g_site_prepay_held.fetch_add(1, std::memory_order_relaxed); }
-        const bool paid = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
+        const bool paid = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, bt_start,
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/hold,
                                  /*out_full_pool=*/&produced)
@@ -43694,7 +43718,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (!ok)   // nothing reservable, or every hold failed: the original unrestricted solve
     {
         if (tapstats::Enabled()) { tapstats::g_site_prepay_plain.fetch_add(1, std::memory_order_relaxed); }
-        ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
+        ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, bt_start,
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
                                  /*out_full_pool=*/&produced);
@@ -43707,7 +43731,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // pips. Either order is tried, under the same hold ladder. A stage that taps a creature-only
     // source (Somberwald Sage) would need the creature-float routing this path does not do, so such
     // a solve is rejected and the turn declines to the per-cast payer (exact, by identity).
-    if (!ok && big_mixed)
+    // Not with a counted float (MTG_PREPAY_FLOAT_POOL): the stages split the bill between two solves, and
+    // which of them may spend the float is a question this fallback was never built to answer.
+    if (!ok && big_mixed && !float_in)
     {
         ManaCost c_small = combined;
         c_small.generic -= c_bigq.generic; c_small.white -= c_bigq.white; c_small.blue -= c_bigq.blue;
@@ -43782,7 +43808,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // docs/design/slivers-restricted-mana-tap-order-bug.md, now measurably motivated.
     bool mixed_ok = false;
     ManaPool mixed_p_crea, mixed_p_nonc;   // each stage's own production (creature-only routing below)
-    if (!ok && !all_creatures && g_prepay_mixed_on && c_crea.ManaValue() > 0)
+    if (!ok && !all_creatures && g_prepay_mixed_on && c_crea.ManaValue() > 0 && !float_in)   // see big_mixed
     {
         auto restore = [&]()
         {
@@ -43890,7 +43916,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (state.battlefield[i].tapped && !bf_snap[i].tapped)
             { newly |= (1ull << i); ++newly_n; }
         }
-        if (newly_n > combined.ManaValue())
+        // A counted float covers part of the bill, so fewer taps were ever needed (0 without one).
+        if (newly_n > combined.ManaValue() - bt_start.Total())
         {
             // Flexibility = how many distinct colours the source can add. A source we cannot price
             // sorts last (released only if nothing better works).
@@ -43949,7 +43976,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (energy_restore) { state.players[active].energy_counters = ea; }
                 ManaPool p2;
                 const bool o2 = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures,
-                                                    ManaPool{}, /*rp_colors=*/nullptr,
+                                                    bt_start, /*rp_colors=*/nullptr,
                                                     /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                                     /*tapped_mask=*/0, /*untapped_max=*/-1,
                                                     /*reserved_mask=*/trial, /*out_full_pool=*/&p2)
@@ -44055,7 +44082,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         for (int i = 0; i < 6; ++i) { if (free_[i] < 0) { free_[i] = 0; } }   // guard; the solve covers the pips
         // Fund the generic requirement out of `free`, colourless first, then the largest surplus.
         int need = combined.generic;
-        while (need > 0 && free_[5] > 0) { --free_[5]; --need; }
+        int c_funded = 0;   // free {C} units laundered into the generic `wild` (the haste note below)
+        while (need > 0 && free_[5] > 0) { --free_[5]; --need; ++c_funded; }
         while (need > 0)
         {
             int best = -1;
@@ -44071,6 +44099,24 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // arithmetic above drifted; give it back to `wild` so the pool total is preserved either way.
         pool.wild -= need;
         pool.wild += produced.Total() - pool.Total();
+        // GENERATOR SERVANT'S HASTE TAG survives a counted float (MTG_PREPAY_FLOAT_POOL). The tag is a
+        // subset count of floating {C} (GameState::floating_haste_c), and a creature spell takes ONE
+        // tagged {C} on its own bill first (TakeHasteFloatForCreatureSpell) -- so the units must still
+        // BE {C} in the pre-load, not `wild`. Funding the generic colourless-first above laundered them,
+        // so give back as many as were laundered, up to the tagged units the solve left (a feed spends
+        // untagged {C} first -- HasteFloatUnits' rule -- so min(tag, produced {C}) survived). Sound for
+        // the pinning: the generic is still funded by `wild` + these {C}, and SpendFloatingTowardCost
+        // pays a generic pip wild-first, colourless next, so no pinned colour is reached while either
+        // lasts. Not when a {C} PIP is in play (this batch's own, or one the line still owes): that pip
+        // makes the drain hold {C} back, and a generic would then take a pinned colour.
+        if (float_in && combined.colorless == 0 && g_line_unpaid_cost.colorless == 0)
+        {
+            const int tag_left = std::min(state.floating_haste_c, produced.colorless);
+            int keep = std::min(c_funded, std::max(0, tag_left - pool.colorless));
+            keep = std::min(keep, pool.wild);
+            pool.colorless += keep;
+            pool.wild      -= keep;
+        }
         // AUDIT (MTG_WILD_PIP_AUDIT): the invariant this fix establishes is that prepaid `wild`
         // covers the batch's GENERIC requirement and nothing else -- generic pips are colour-blind,
         // so that wild can never launder a colour. Anything beyond it is production whose colour
@@ -44114,6 +44160,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
     }
     state.floating_mana = pool;
+    // The haste tag never outgrows the {C} it marks (see the retention above; a no-op without a tag).
+    if (float_in) { ClampHasteFloat(state); }
     if (big_pp != nullptr && FloatLeftoverManaEnabled()) { AddBigSpellFloat(state, big_moved, *big_pp); }
     // CREATURE-ONLY PROVENANCE (see GameState::floating_creature_mana). An all-creature batch may tap
     // a creature_mana_only source (Somberwald Sage), and its output must not survive the batch as

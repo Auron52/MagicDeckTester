@@ -417,6 +417,7 @@ add_executable(mtg-test
     test/unit/test_niv_draw_trigger.cpp
     test/unit/test_sulfur_falls_probe.cpp
     test/unit/test_generator_servant.cpp
+    test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp
     test/unit/test_izzet_mana_fidelity.cpp
 )
