@@ -96,6 +96,10 @@ void ApplyColoredPipReduction(ManaCost& cost, const ManaCost& reduction);
 // that ordering). Was a byte-identical twin pair (TurnSolver statics / AIEngine's CastOrderLessAI
 // and OrderingOpaqueAI kept in lockstep by comment); both now share these definitions.
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
+// The per-action key CastOrderLess ranks by: CastOrderLess(s, a, b) ==
+// CastOrderLessRanked(s, a, CastOrderKeyOf(s, a), b, CastOrderKeyOf(s, b)), so a caller sorting many
+// casts can compute each key once.
+int  CastOrderKeyOf(const GameState& state, const Action& a);
 bool OrderingOpaque(const std::string& name);
 
 // The deck's SET-level arrangement of a comparator-sorted cast order (DecisionProvider::

@@ -57146,10 +57146,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         for (const Action& c : cands) { if (IsCreatureAuraCast(c)) { ds_on = false; break; } }
     }
-    std::vector<std::string> ds_keys;   // compaction key of plans[i], for i < ds_keys.size()
-    std::vector<Action>      ds_reps;   // range_hosts: one representative per copy-equivalence token
-    Action                   ds_scratch;   // reused by ds_equiv: assignment keeps its capacity
-    std::size_t              ds_next = s_ds_at;
+    // Per-plan compaction key. `s` is the key; its first `siglen` chars are the plan's fast signature,
+    // which the final dedup reuses (see ds_cache below) instead of building it a second time. `never`:
+    // a plan with a non-canonical cast under range_hosts -- never merged, `s` holds the signature alone.
+    struct DsKey { std::string s; std::size_t h = 0; std::uint32_t siglen = 0; bool never = false; };
+    std::vector<DsKey> ds_keys;          // key of plans[i], for i < ds_keys.size()
+    // range_hosts tokens. Every DISTINCT cast action (exact Action ==, hand_index included) is interned
+    // once with its copy-equivalence token and its CastOrderKeyOf; a cast is then a hash probe plus one
+    // exact compare instead of a rank computation and a scan of copy-compares over the representatives.
+    struct DsAct { Action a; int token; int rank; };
+    std::vector<DsAct> ds_acts;
+    std::unordered_map<std::size_t, std::vector<int>> ds_act_idx;   // cheap field hash -> ds_acts indices
+    std::vector<int>   ds_reps;          // ds_acts index of each token's representative
+    Action             ds_scratch;       // reused by ds_equiv: assignment keeps its capacity
+    // Compaction: key hash -> index of the class's current best plan, carried across compactions. A
+    // hash collision between DIFFERENT keys only keeps both plans (never a drop on unequal keys).
+    std::unordered_map<std::size_t, std::size_t> ds_best;
+    std::size_t        ds_scanned = 0;   // plans[0..ds_scanned) are already in ds_best
+    std::size_t        ds_next = s_ds_at;
     // paymemo::WalkEquivalent without its per-call Action copy (same predicate: equal in every member but
     // hand_index / equiv_ord).
     auto ds_equiv = [&](const Action& r, const Action& a) -> bool
@@ -57161,62 +57175,105 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         ds_scratch.equiv_ord  = r.equiv_ord;
         return r == ds_scratch;
     };
-    auto ds_key = [&](const TurnSolver::Plan& p) -> std::string
+    auto ds_intern = [&](const Action& a) -> const DsAct&
     {
-        std::string k = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
-        if (!range_hosts) { return k; }
-        // The casts' tokens in RANK order, exactly the sequence rh_moved keys its memo on (a stable sort by
-        // CastOrderLess, ties in plan order). Plan order would be finer but far too fine: the same subset
-        // built from other copies interleaves its casts differently, and almost nothing merges.
-        thread_local std::vector<int> rk;
-        rk.clear();
-        for (int i = 0; i < static_cast<int>(p.actions.size()); ++i)
+        std::size_t h = std::hash<const void*>{}(a.def);
+        auto mix = [&h](std::size_t v) { h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); };
+        mix(static_cast<std::size_t>(a.hand_index) * 131u + static_cast<std::size_t>(a.equiv_ord));
+        mix(static_cast<std::size_t>(a.enchant_target));
+        mix(static_cast<std::size_t>(a.chosen_x) * 7u + static_cast<std::size_t>(a.kind));
+        mix(static_cast<std::size_t>(a.cost.ManaValue()));
+        std::vector<int>& bucket = ds_act_idx[h];
+        for (int i : bucket) { if (ds_acts[static_cast<std::size_t>(i)].a == a) { return ds_acts[static_cast<std::size_t>(i)]; } }
+        int token = -1;
+        for (std::size_t t = 0; t < ds_reps.size(); ++t)
         {
-            const Action& a = p.actions[static_cast<std::size_t>(i)];
-            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { rk.push_back(i); }
+            if (ds_equiv(ds_acts[static_cast<std::size_t>(ds_reps[t])].a, a)) { token = static_cast<int>(t); break; }
         }
-        std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
-        { return CastOrderLess(state, p.actions[static_cast<std::size_t>(x)], p.actions[static_cast<std::size_t>(y)]); });
-        k.push_back('\x1f');
-        for (int i : rk)
+        const int idx = static_cast<int>(ds_acts.size());
+        if (token < 0) { token = static_cast<int>(ds_reps.size()); ds_reps.push_back(idx); }
+        ds_acts.push_back(DsAct{ a, token, CastOrderKeyOf(state, a) });
+        bucket.push_back(idx);
+        return ds_acts.back();
+    };
+    auto ds_key = [&](const TurnSolver::Plan& p) -> DsKey
+    {
+        DsKey k;
+        k.s = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
+        k.siglen = static_cast<std::uint32_t>(k.s.size());
+        if (range_hosts)
         {
-            const Action& a = p.actions[static_cast<std::size_t>(i)];
-            if (!paymemo::WalkCanonical(a)) { return std::string(); }   // never merged
-            std::size_t t = 0;
-            while (t < ds_reps.size() && !ds_equiv(ds_reps[t], a)) { ++t; }
-            if (t == ds_reps.size()) { ds_reps.push_back(a); }
-            k += std::to_string(t);
-            k.push_back(',');
+            // The casts' tokens in RANK order, exactly the sequence rh_moved keys its memo on (a stable
+            // sort by CastOrderLess -- here CastOrderLessRanked on the interned keys, the same comparator
+            // -- ties in plan order). Plan order would be finer but far too fine: the same subset built
+            // from other copies interleaves its casts differently, and almost nothing merges.
+            thread_local std::vector<int> rk;
+            thread_local std::vector<std::pair<int, int>> tr;   // per action index: (token, rank)
+            rk.clear();
+            tr.assign(p.actions.size(), { -1, 0 });
+            for (int i = 0; i < static_cast<int>(p.actions.size()); ++i)
+            {
+                const Action& a = p.actions[static_cast<std::size_t>(i)];
+                if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+                if (!paymemo::WalkCanonical(a)) { k.never = true; return k; }   // never merged
+                const DsAct& d = ds_intern(a);
+                tr[static_cast<std::size_t>(i)] = { d.token, d.rank };
+                rk.push_back(i);
+            }
+            std::stable_sort(rk.begin(), rk.end(), [&](int x, int y)
+            {
+                return CastOrderLessRanked(state, p.actions[static_cast<std::size_t>(x)], tr[static_cast<std::size_t>(x)].second,
+                                           p.actions[static_cast<std::size_t>(y)], tr[static_cast<std::size_t>(y)].second);
+            });
+            // Each token as three raw bytes (fixed width, so the sequence needs no separator and stays
+            // injective; a token is an index into this call's distinct casts, far below 2^24).
+            k.s.push_back('\x1f');
+            for (int i : rk)
+            {
+                const unsigned t = static_cast<unsigned>(tr[static_cast<std::size_t>(i)].first);
+                k.s.push_back(static_cast<char>(t & 0xFFu));
+                k.s.push_back(static_cast<char>((t >> 8) & 0xFFu));
+                k.s.push_back(static_cast<char>((t >> 16) & 0xFFu));
+            }
         }
+        k.h = std::hash<std::string>{}(k.s);
         return k;
+    };
+    auto ds_better = [&](std::size_t i, std::size_t j) -> bool   // the sort's comparator, strictly
+    {
+        const TurnSolver::Plan& c = plans[i];
+        const TurnSolver::Plan& b = plans[j];
+        return c.wins_this_turn != b.wins_this_turn ? c.wins_this_turn : c.value > b.value;
     };
     auto ds_compact = [&]()
     {
         for (std::size_t i = ds_keys.size(); i < plans.size(); ++i) { ds_keys.push_back(ds_key(plans[i])); }
-        std::unordered_map<std::string, std::size_t> best;
-        best.reserve(plans.size());
-        std::vector<char> keep(plans.size(), 0);
-        for (std::size_t i = 0; i < plans.size(); ++i)
+        std::vector<char> drop(plans.size(), 0);
+        for (std::size_t i = ds_scanned; i < plans.size(); ++i)
         {
-            if (ds_keys[i].empty()) { keep[i] = 1; continue; }
-            auto ins = best.try_emplace(ds_keys[i], i);
+            const DsKey& k = ds_keys[i];
+            if (k.never) { continue; }
+            auto ins = ds_best.try_emplace(k.h, i);
             if (ins.second) { continue; }
-            const TurnSolver::Plan& b = plans[ins.first->second];
-            const TurnSolver::Plan& c = plans[i];
-            // The sort's comparator, strictly: an equal later member loses the stable tie.
-            if (c.wins_this_turn != b.wins_this_turn ? c.wins_this_turn : c.value > b.value)
-            { ins.first->second = i; }
+            const std::size_t j = ins.first->second;
+            if (ds_keys[j].s != k.s) { continue; }   // hash collision: keep both
+            // An equal later member loses the stable tie.
+            if (ds_better(i, j)) { drop[j] = 1; ins.first->second = i; }
+            else                 { drop[i] = 1; }
         }
-        for (const auto& kv : best) { keep[kv.second] = 1; }
+        std::vector<std::size_t> newpos(plans.size(), 0);
         std::size_t w = 0;
         for (std::size_t i = 0; i < plans.size(); ++i)
         {
-            if (!keep[i]) { continue; }
+            if (drop[i]) { continue; }
+            newpos[i] = w;
             if (w != i) { plans[w] = std::move(plans[i]); ds_keys[w] = std::move(ds_keys[i]); }
             ++w;
         }
         plans.erase(plans.begin() + static_cast<std::ptrdiff_t>(w), plans.end());
         ds_keys.resize(w);
+        for (auto& kv : ds_best) { kv.second = newpos[kv.second]; }   // every entry names a kept plan
+        ds_scanned = w;
         ds_next = std::max(s_ds_at, 2 * w);
     };
     // MTG_ENUM_DEDUP_STREAM_VERIFY=1: compact NOTHING; instead tag every plan with its emission index
@@ -57230,19 +57287,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (std::size_t i = ds_keys.size(); i < plans.size(); ++i) { ds_keys.push_back(ds_key(plans[i])); }
         ds_marked.resize(plans.size(), 0);
         std::unordered_map<std::string, std::size_t> best;
-        std::size_t live = 0;
         for (std::size_t i = 0; i < plans.size(); ++i)
         {
-            if (ds_keys[i].empty()) { ++live; continue; }
-            auto ins = best.try_emplace(ds_keys[i], i);
+            if (ds_keys[i].never) { continue; }
+            auto ins = best.try_emplace(ds_keys[i].s, i);
             if (ins.second) { continue; }
-            const TurnSolver::Plan& b = plans[ins.first->second];
-            const TurnSolver::Plan& c = plans[i];
-            if (c.wins_this_turn != b.wins_this_turn ? c.wins_this_turn : c.value > b.value)
-            { ds_marked[ins.first->second] = 1; ins.first->second = i; }
-            else { ds_marked[i] = 1; }
+            if (ds_better(i, ins.first->second)) { ds_marked[ins.first->second] = 1; ins.first->second = i; }
+            else                                 { ds_marked[i] = 1; }
         }
-        (void)live;
         // Nothing is removed here, so the trigger doubles over the FULL list (marks are cumulative and
         // order-free; the final mark at the end of the walk judges every plan anyway).
         ds_next = std::max(s_ds_at, 2 * plans.size());
@@ -57673,12 +57725,57 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Sort so the highest-value plans are simulated first.  When a timeout fires
     // the search returns the best plan found so far, so we want the most promising
     // candidates evaluated before cheaper ones.
-    StableSortPlans(plans,
-        [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+    auto plan_rank_less = [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+    {
+        if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
+        return a.value > b.value;
+    };
+    // MTG_ENUM_DEDUP_STREAM's SIGNATURE CACHE: the stream already built every walk plan's fast signature
+    // (the prefix of its key), so finish it for the plans it has not seen (pushed after the last
+    // compaction, Plan B) and carry the keys through the sort; the dedup below reads them by position
+    // instead of building each signature again. The order is the identical one: a stable sort's output is
+    // determined by its comparator and its input order, so stable-sorting an index permutation with the
+    // same comparator and applying it to plans and keys together reproduces StableSortPlans exactly. Off
+    // under the stream's verify (which keys nothing for the dedup) and under MTG_PLAN_SORT_BY_INDEX_VERIFY
+    // (whose instrument lives in StableSortPlans).
+    const bool ds_cache = ds_on && !s_ds_verify && !PlanSortByIndexVerifyOn();
+    if (ds_cache)
+    {
+        for (std::size_t i = ds_keys.size(); i < plans.size(); ++i)
         {
-            if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
-            return a.value > b.value;
-        });
+            DsKey k;
+            k.s = PlanSignatureFast(plans[i], s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
+            k.siglen = static_cast<std::uint32_t>(k.s.size());
+            ds_keys.push_back(std::move(k));
+        }
+        std::vector<std::uint32_t> ord(plans.size());
+        for (std::size_t i = 0; i < ord.size(); ++i) { ord[i] = static_cast<std::uint32_t>(i); }
+        std::stable_sort(ord.begin(), ord.end(), [&](std::uint32_t a, std::uint32_t b)
+                         { return plan_rank_less(plans[a], plans[b]); });
+        // Apply plans'[i] = plans[ord[i]] (and the keys alike) in place, one cycle at a time -- the same
+        // move pattern StableSortPlans uses, so a list already in order moves nothing.
+        std::vector<char> done(ord.size(), 0);
+        for (std::size_t i = 0; i < ord.size(); ++i)
+        {
+            if (done[i] || ord[i] == i) { done[i] = 1; continue; }
+            TurnSolver::Plan tp = std::move(plans[i]);
+            DsKey            tk = std::move(ds_keys[i]);
+            std::size_t j = i;
+            for (;;)
+            {
+                const std::size_t k = ord[j];
+                done[j] = 1;
+                if (k == i) { plans[j] = std::move(tp); ds_keys[j] = std::move(tk); break; }
+                plans[j]   = std::move(plans[k]);
+                ds_keys[j] = std::move(ds_keys[k]);
+                j = k;
+            }
+        }
+    }
+    else
+    {
+        StableSortPlans(plans, plan_rank_less);
+    }
 
     // Dedup by EFFECT signature. The powerset enumeration treats each copy of a
     // 4-of as a distinct candidate, so subsets that differ only in WHICH copy they
@@ -58131,6 +58228,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (f != old) { plansigfast::g_mismatch.fetch_add(1, std::memory_order_relaxed); }
         return old;
     };
+    // The cached fast signature of plans[pi] (MTG_ENUM_DEDUP_STREAM, see ds_cache above): exactly what
+    // plan_signature returns on this path -- it IS PlanSignatureFast with the same flags, and under
+    // MTG_PLAN_SIG_FAST_VERIFY it is checked against the legacy builder and the legacy string returned,
+    // as plan_signature does. Each position is read once, so the string is moved out.
+    auto ds_cached_sig = [&](const TurnSolver::Plan& p, std::size_t pi) -> std::string
+    {
+        DsKey& k = ds_keys[pi];
+        std::string f = (k.siglen == k.s.size()) ? std::move(k.s) : k.s.substr(0, k.siglen);
+        if (!PlanSigFastVerifyOn()) { return f; }
+        std::string old = plan_signature_legacy(p);
+        plansigfast::g_checked.fetch_add(1, std::memory_order_relaxed);
+        if (f != old) { plansigfast::g_mismatch.fetch_add(1, std::memory_order_relaxed); }
+        return old;
+    };
     std::unordered_set<std::string> seen;
     seen.reserve(plans.size() * 2);
     std::vector<TurnSolver::Plan> deduped;
@@ -58308,7 +58419,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     for (std::size_t pi = 0; pi < plans.size(); ++pi)
     {
         TurnSolver::Plan& p = plans[pi];
-        const std::string sig = sigs.empty() ? plan_signature(p) : sigs[pi];
+        const std::string sig = !sigs.empty() ? sigs[pi]
+                              : ds_cache      ? ds_cached_sig(p, pi)
+                                              : plan_signature(p);
         if (seen.insert(sig).second)
         {
             if (s_sig_x_audit) { sig_first[sig] = deduped.size(); }

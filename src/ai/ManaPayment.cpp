@@ -2883,16 +2883,18 @@ static const CardDefinition* OrderDefOf(const Action& a)
     return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
 }
 
-bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
+int CastOrderKeyOf(const GameState& state, const Action& a)
 {
     const CardDefinition* da = OrderDefOf(a);
-    const CardDefinition* db = OrderDefOf(b);
-    const DecisionProvider& prov = ResolveProvider(state);
     // CastOrderActionRank: the provider may move a concrete cast off its card's rank (a SPLICED
     // Desperate Ritual after Seething Song -- the USER's Dragonstorm order). Identity by default.
-    const int ra = CastOrderKey(state, da, da ? prov.CastOrderActionRank(state, a, prov.CastOrderRank(state, *da)) : 20);
-    const int rb = CastOrderKey(state, db, db ? prov.CastOrderActionRank(state, b, prov.CastOrderRank(state, *db)) : 20);
-    return CastOrderLessRanked(state, a, ra, b, rb);
+    return CastOrderKey(state, da, da ? ResolveProvider(state).CastOrderActionRank(
+                                            state, a, ResolveProvider(state).CastOrderRank(state, *da)) : 20);
+}
+
+bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
+{
+    return CastOrderLessRanked(state, a, CastOrderKeyOf(state, a), b, CastOrderKeyOf(state, b));
 }
 
 void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)

@@ -308,3 +308,45 @@ signature computed once more for each survivor, plus the range-hosts tokens; wal
 
 What is left of the single game's peak (~165 MB against a ~20 MB floor) is elsewhere -- lowering the trigger
 to 1,024 plans did not move the slice -- so the next memory target is not this list.
+
+### 6a. What the stream costs, and the cost removed (2026-10-18)
+
+The first cut (c936f3cba) cost +3.6% instructions on the identity batch and +10.6% on the EDF d0 slice:
+each surviving plan's fast signature was built twice (compaction key, then the dedup), every range-hosts
+cast paid a `CastOrderLess` rank computation and a copy-compare scan over the token representatives, and
+the compaction re-hashed every survivor's key on every pass. Now:
+
+* **The dedup reuses the stream's signatures.** A key's first `siglen` chars are the plan's
+  `PlanSignatureFast`; the keys are finished for the plans the stream has not seen (pushed after the last
+  compaction, Plan B), carried through the sort -- an index permutation stable-sorted with the same
+  comparator and applied in place to plans and keys together, i.e. the identical order StableSortPlans
+  produces -- and read by position. Under `MTG_PLAN_SIG_FAST_VERIFY` the cached string is checked against
+  the legacy builder and the legacy string returned, as `plan_signature` does. Off under the stream's own
+  verify and under `MTG_PLAN_SORT_BY_INDEX_VERIFY`. Human play and the legacy builder never reach it.
+* **Interned range-hosts tokens.** Every distinct cast action (exact `Action ==`) is interned once per
+  enumeration with its copy-equivalence token and its `CastOrderKeyOf` (new in ManaPayment:
+  `CastOrderLess(a, b) == CastOrderLessRanked(a, key(a), b, key(b))`, CastOrderLess now calls it); a cast
+  is a hash probe plus one exact compare, the rank sort uses the interned keys, tokens go in as 3 raw bytes.
+* **Compaction carries its class map** (key hash -> best plan) across passes and remaps the survivors'
+  positions instead of re-hashing them; a hash collision between unequal keys only keeps both plans.
+
+Idle box, Release, 32 threads, two alternating rounds each; off = c936f3cba with the stream `=0`, on =
+c936f3cba, fix = this change:
+
+| | off | on (c936f3cba) | on + fix |
+|---|---|---|---|
+| identity batch: instructions | 5.551e12 | 5.753e12 (+3.6%) | **5.564e12 (+0.2%)** |
+| ... cycles | 4.092e12 | 4.150e12 (+1.4%) | 4.064e12 (-0.7%) |
+| ... user CPU / wall | 1,045 s / 50.2 s | 1,078 s / 50.3 s | 1,062 s / 50.1 s |
+| ... peak RSS | 11.0-11.2 GB | 6.35-6.37 GB | 6.39-6.56 GB |
+| EDF d0 slice: instructions | 456.5e9 | 504.8e9 (+10.6%) | **468.4e9 (+2.6%)** |
+| ... cycles | 319.0e9 | 348.1e9 (+9.1%) | 338.6e9 (+6.1%) |
+| ... user CPU / wall | 72.5 s / 9.24 s | 78.8 s / 8.98 s | 76.4 s / **8.32 s** |
+| ... peak RSS | 6.07-6.16 GB | 3.17-3.18 GB | 3.18-3.27 GB |
+| slice, 1 thread: instructions / cycles | 455.7e9 / 179.7e9 | 504.1e9 / 192.6e9 | 467.8e9 / 187.0e9 |
+
+What is left on the slice (+2.6% instructions) is the exact `Action ==` of the token interning (~1% of
+instructions), key strings/allocation, and the compaction itself; the identity batch is at parity. All arms
+byte-identical (identity batch, slice); `MTG_ENUM_DEDUP_STREAM_VERIFY` 0 of 5,183,531 kept plans marked;
+`MTG_PLAN_SIG_FAST_VERIFY` 14,435,736 signatures, 0 mismatches; smoke 132/132, scenarios 217/217, unit
+1,428/1,428.
