@@ -364,6 +364,17 @@
     "toughness": "3",
     "type_line": "Creature — Cat Knight"
   },
+  "Asylum Visitor": {
+    "cmc": 2.0,
+    "keywords": [
+      "Madness"
+    ],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "At the beginning of each player's upkeep, if that player has no cards in hand, you draw a card and you lose 1 life.\nMadness {1}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Wizard"
+  },
   "Atsushi, the Blazing Sky": {
     "cmc": 4.0,
     "keywords": [
@@ -1661,6 +1672,15 @@
     "power": "0",
     "toughness": "0",
     "type_line": "Creature — Treefolk Druid"
+  },
+  "Falkenrath Gorger": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Each Vampire creature card you own that isn't on the battlefield has madness. The madness cost is equal to its mana cost. (If you discard a card with madness, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Berserker"
   },
   "Falkenrath Pit Fighter": {
     "cmc": 1.0,
@@ -3147,6 +3167,19 @@
     "power": null,
     "toughness": null,
     "type_line": "Legendary Snow Enchantment"
+  },
+  "Markov Baron": {
+    "cmc": 3.0,
+    "keywords": [
+      "Convoke",
+      "Lifelink",
+      "Madness"
+    ],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)\nLifelink\nOther Vampires you control get +1/+1.\nMadness {2}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Noble"
   },
   "Marsh Flats": {
     "cmc": 0.0,

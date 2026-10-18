@@ -1627,6 +1627,11 @@ def modeled_tokens(card):
     if p.get("sac_outlet_discard_cost", 0) > 0 or p.get("discard_team_pump_power", 0) > 0 \
             or p.get("blood_draw_cost") or p.get("tap_blood_cost"):
         t.add("discard")
+    # Vampires A1: Falkenrath Gorger's reminder text ("If you discard a card with madness ...") quotes
+    # the madness trigger; the discard itself is whichever outlet / cleanup `discard` decision makes it,
+    # and the madness answer is the `madness` decision.
+    if p.get("grants_madness_creature_subtype"):
+        t.add("discard")
     if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
             or p.get("look_top_put_creature_count", 0) > 0:
