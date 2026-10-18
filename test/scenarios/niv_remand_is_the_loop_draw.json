@@ -1,0 +1,14 @@
+{
+  "_comment": "INTEGRATION (niv-core x niv-remand): a self-Remand is the draw that starts the Niv loop. Mid-turn frame (resume_at main1, land drop spent): a SUMMONING-SICK Niv-Mizzet, the Firemind (no {T} draw, no attack) and four Islands; hand Curiosity, Curiosity, Remand; opponent at 20. The only same-turn kill: Curiosity on the Firemind ({U}), then the second Curiosity ({U}) answered by Remand ({1}{U}) -- the Remand's draw pings, the first Curiosity draws, the loop runs to 0 (the second Curiosity returns to hand). Fails if Remand stops riding an Aura cast, if Remand's draw stops flushing the draw triggers, or if the search stops seeing the rider as a draw source.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Niv-Mizzet, the Firemind", "sick": true }
+  ],
+  "hand": [ "Curiosity", "Curiosity", "Remand" ],
+  "library_filler": "Island", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 4,
+  "expect_win_turn": 4
+}

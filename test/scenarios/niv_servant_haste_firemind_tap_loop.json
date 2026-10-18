@@ -1,0 +1,15 @@
+{
+  "_comment": "INTEGRATION (niv-core x niv-mana): Generator Servant's haste rider reaches Niv-Mizzet, the Firemind's {T}. Mid-turn frame (resume_at main1, land drop spent): an unsick Generator Servant, three Islands and two Mountains; hand Firemind + Curiosity; opponent at 20. The only same-turn kill: crack the Servant ({C}{C}) into the Firemind (it gains haste), Curiosity on the Firemind, then {T}: draw a card (or attack) -- the draw pings, Curiosity draws, the loop runs to 0. Without haste the Firemind can neither tap nor attack and nothing draws this turn. Fails if the haste tag stops reaching the creature that spent it, if CanTapNow stops reading temp_haste, or if the {T} draw stops flushing the draw triggers.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Mountain" }, { "name": "Mountain" },
+    { "name": "Generator Servant" }
+  ],
+  "hand": [ "Niv-Mizzet, the Firemind", "Curiosity" ],
+  "library_filler": "Island", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 4,
+  "expect_win_turn": 4
+}
