@@ -30115,6 +30115,8 @@ inline bool PutBackEligible(const Card& c) { return !c.m_is_staged && !c.m_impul
 // Every distinct ordered selection of min(n, eligible) classes, PROVIDER-ORDERED. Each candidate is a
 // list of HAND indices, element 0 = the card that ends on TOP. Index 0 is the default: the classes the
 // provider ranks most expendable, the less expendable of them on top (drawn first). Deterministic.
+// THE REFERENCE ENUMERATION: the resolver reads the same list rank-for-rank through PutBackPickAt
+// (below), which never builds it; this materialised form serves n > 2 and the tests that pin the two.
 inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, int controller, int n)
 {
     std::vector<std::vector<int>> out;
@@ -30192,37 +30194,185 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
     return out;
 }
 
-// HOW MANY candidates PutBackCandidates would produce over an arbitrary multiset of cards -- the
-// search fan's WIDTH, computed on the post-draw hand the clairvoyant search can predict (see the
-// Brainstorm axis in TurnSolver.cpp). Same class key, so it counts exactly what resolution offers.
-inline int PutBackCandidateCount(const GameState& state, const std::vector<Card>& cards, int n)
+// ---- THE PUT-BACK FAST PATH (n <= 2: Brainstorm) -- PutBackCandidates' order, read off DIRECTLY ----
+// Every autonomous resolution (executor, rollout, every searched variant's apply and every playout
+// Brainstorm) needs ONE candidate -- the pinned rank or the default -- plus the list's LENGTH (the
+// put-back fold's width). Materialising the whole provider-ordered list for that (a std::function
+// recursion, a vector per selection, a merge sort) was ~20% of a stuck Niv-Mizzet d5 game's profile.
+// With the classes numbered 0..C-1 in RANK order (the same stable sort PutBackCandidates does) and
+// multiplicities m[c], the reference order is closed-form:
+//   * take 1: candidate r is class r; the count is C.
+//   * take 2: a candidate is an ordered pair (a, b), a = the class that ends on TOP, legal iff a != b
+//     or m[a] >= 2. PutBackCandidates sorts by score = a + b ascending, then lexicographically with
+//     the LARGER class first -- and within one score the first element decides (the score fixes b),
+//     so the order is (a + b ascending, a DESCENDING). Walking s = 0, 1, ... and, within s, a from
+//     min(s, C-1) down to max(0, s-C+1) visits the candidates in exactly that order. The count is
+//     C(C-1) + #{c : m[c] >= 2}.
+// The hand indices are the members PutBackCandidates hands out: a class's FIRST member on its first
+// use, its SECOND on a same-class pair. EXACT -- same list, same order, same members -- pinned
+// rank-for-rank against the reference enumeration over random hands in test_brainstorm.cpp. Any n > 2
+// (no card has one) takes the reference list.
+struct PutBackClassScratch   // per-thread, reused: no allocation once warm
 {
-    std::vector<std::pair<std::uint64_t, int>> counts;
+    std::vector<std::uint64_t> key;
+    std::vector<int> cnt, m0, m1, rank, ord, hand_cls;
+};
+inline PutBackClassScratch& PutBackScratch() { static thread_local PutBackClassScratch s; return s; }
+
+// The hand's identity classes (creation order = first hand index), into `sc`. Returns the eligible count.
+inline int PutBackBuildClasses(const GameState& state, const Player& pl, PutBackClassScratch& sc)
+{
+    sc.key.clear(); sc.cnt.clear(); sc.m0.clear(); sc.m1.clear();
+    const int hn = static_cast<int>(pl.hand.size());
+    sc.hand_cls.assign(static_cast<std::size_t>(hn), -1);
     int eligible = 0;
-    for (const Card& c : cards)
+    for (int i = 0; i < hn; ++i)
     {
+        const Card& c = pl.hand[static_cast<std::size_t>(i)];
         if (!PutBackEligible(c)) { continue; }
         ++eligible;
         const std::uint64_t k = PutBackClassKey(state, c);
-        auto it = std::find_if(counts.begin(), counts.end(), [&](const auto& x) { return x.first == k; });
-        if (it == counts.end()) { counts.push_back({ k, 1 }); } else { ++it->second; }
-    }
-    const int take = std::min(n, eligible);
-    if (take <= 0) { return 0; }
-    // Count ordered selections with per-class multiplicity limits (tiny: n <= 2 in every card).
-    std::vector<int> used(counts.size(), 0);
-    std::function<int(int)> rec = [&](int depth) -> int
-    {
-        if (depth == take) { return 1; }
-        int total = 0;
-        for (std::size_t ci = 0; ci < counts.size(); ++ci)
+        int ci = -1;
+        for (int j = 0; j < static_cast<int>(sc.key.size()); ++j) { if (sc.key[static_cast<std::size_t>(j)] == k) { ci = j; break; } }
+        if (ci < 0)
         {
-            if (used[ci] >= counts[ci].second) { continue; }
-            ++used[ci]; total += rec(depth + 1); --used[ci];
+            ci = static_cast<int>(sc.key.size());
+            sc.key.push_back(k); sc.cnt.push_back(1); sc.m0.push_back(i); sc.m1.push_back(-1);
         }
-        return total;
+        else
+        {
+            if (sc.cnt[static_cast<std::size_t>(ci)] == 1) { sc.m1[static_cast<std::size_t>(ci)] = i; }
+            ++sc.cnt[static_cast<std::size_t>(ci)];
+        }
+        sc.hand_cls[static_cast<std::size_t>(i)] = ci;
+    }
+    return eligible;
+}
+
+// Ordered selections of `take` classes with per-class multiplicity limits (the general count; n <= 2
+// never reaches the recursion).
+inline int PutBackSeqCount(const int* mult, int classes, int take)
+{
+    if (take <= 0) { return 1; }
+    if (take == 1) { return classes; }
+    if (take == 2)
+    {
+        int dups = 0;
+        for (int c = 0; c < classes; ++c) { if (mult[c] >= 2) { ++dups; } }
+        return classes * (classes - 1) + dups;
+    }
+    std::vector<int> m(mult, mult + classes);
+    struct Rec
+    {
+        static int Go(std::vector<int>& mm, int left)
+        {
+            if (left == 0) { return 1; }
+            int total = 0;
+            for (int& x : mm) { if (x > 0) { --x; total += Go(mm, left - 1); ++x; } }
+            return total;
+        }
     };
-    return rec(0);
+    return Rec::Go(m, take);
+}
+
+struct PutBackPick { int count = 0; int take = 0; int idx[2] = { -1, -1 }; };
+
+// The candidate PutBackCandidates(state, controller, n) would hold at rank min(max(k, 0), count - 1),
+// and that list's length -- without building it. n <= 2 only (see above).
+inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, int k)
+{
+    PutBackPick out;
+    const Player& pl = state.players[controller];
+    PutBackClassScratch& sc = PutBackScratch();
+    const int eligible = PutBackBuildClasses(state, pl, sc);
+    const int take = std::min(n, eligible);
+    if (take <= 0) { return out; }
+    const int C = static_cast<int>(sc.key.size());
+    out.take  = take;
+    out.count = PutBackSeqCount(sc.cnt.data(), C, take);
+    const int r = std::max(0, std::min(k, out.count - 1));
+    // Rank order: the provider ranking, a class at its best member, unranked classes last in
+    // creation order -- PutBackCandidates' stable sort, as an (allocation-free) insertion sort.
+    // A one-candidate list has no order to read, so the provider is not consulted for it.
+    sc.rank.assign(static_cast<std::size_t>(C), 1 << 20);
+    if (out.count > 1)
+    {
+        const std::vector<int> ranking = ResolveProvider(state).PutBackRanking(state, controller);
+        const int hn = static_cast<int>(sc.hand_cls.size());
+        for (std::size_t q = 0; q < ranking.size(); ++q)
+        {
+            const int hi = ranking[q];
+            if (hi < 0 || hi >= hn) { continue; }
+            const int ci = sc.hand_cls[static_cast<std::size_t>(hi)];
+            if (ci >= 0 && sc.rank[static_cast<std::size_t>(ci)] > static_cast<int>(q)) { sc.rank[static_cast<std::size_t>(ci)] = static_cast<int>(q); }
+        }
+    }
+    sc.ord.resize(static_cast<std::size_t>(C));
+    for (int c = 0; c < C; ++c)
+    {
+        int j = c;
+        while (j > 0 && sc.rank[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(j - 1)])] > sc.rank[static_cast<std::size_t>(c)])
+        { sc.ord[static_cast<std::size_t>(j)] = sc.ord[static_cast<std::size_t>(j - 1)]; --j; }
+        sc.ord[static_cast<std::size_t>(j)] = c;
+    }
+    if (take == 1) { out.idx[0] = sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(r)])]; return out; }
+    int seen = 0;
+    for (int s = 0; s <= 2 * (C - 1); ++s)
+    {
+        for (int a = std::min(s, C - 1); a >= std::max(0, s - (C - 1)); --a)
+        {
+            const int b  = s - a;
+            const int ca = sc.ord[static_cast<std::size_t>(a)];
+            if (a == b && sc.cnt[static_cast<std::size_t>(ca)] < 2) { continue; }
+            if (seen++ != r) { continue; }
+            out.idx[0] = sc.m0[static_cast<std::size_t>(ca)];
+            out.idx[1] = a == b ? sc.m1[static_cast<std::size_t>(ca)] : sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(b)])];
+            return out;
+        }
+    }
+    return out;   // unreachable: r < count
+}
+
+// HOW MANY candidates PutBackCandidates would produce over an arbitrary multiset of cards -- the
+// search fan's WIDTH, computed on the post-draw hand the clairvoyant search can predict (see the
+// Brainstorm axis in TurnSolver.cpp). Same class key, so it counts exactly what resolution offers.
+// Incremental, over card REFERENCES (the fan sizes a hand + library multiset per base plan; copying
+// the Cards for it was pure allocation).
+struct PutBackClassCounter
+{
+    std::vector<std::pair<std::uint64_t, int>> counts;
+    int eligible = 0;
+    void Clear() { counts.clear(); eligible = 0; }
+    void Add(const GameState& state, const Card& c)
+    {
+        if (!PutBackEligible(c)) { return; }
+        ++eligible;
+        const std::uint64_t k = PutBackClassKey(state, c);
+        for (auto& x : counts) { if (x.first == k) { ++x.second; return; } }
+        counts.push_back({ k, 1 });
+    }
+    int Count(int n) const
+    {
+        const int take = std::min(n, eligible);
+        if (take <= 0) { return 0; }
+        if (take <= 2)
+        {
+            int dups = 0;
+            for (const auto& x : counts) { if (x.second >= 2) { ++dups; } }
+            const int classes = static_cast<int>(counts.size());
+            return take == 1 ? classes : classes * (classes - 1) + dups;
+        }
+        std::vector<int> m;
+        m.reserve(counts.size());
+        for (const auto& x : counts) { m.push_back(x.second); }
+        return PutBackSeqCount(m.data(), static_cast<int>(m.size()), take);
+    }
+};
+inline int PutBackCandidateCount(const GameState& state, const std::vector<Card>& cards, int n)
+{
+    PutBackClassCounter cc;
+    for (const Card& c : cards) { cc.Add(state, c); }
+    return cc.Count(n);
 }
 
 // Resolve the put-back: choose (pin / human / default), then move the cards from hand to the library
@@ -30231,17 +30381,37 @@ inline int PutBackCandidateCount(const GameState& state, const std::vector<Card>
 inline void ResolvePutBackFromHand(GameState& state, int controller, int n, const std::string& source)
 {
     if (n <= 0) { return; }
-    const std::vector<std::vector<int>> cands = PutBackCandidates(state, controller, n);
-    if (cands.empty()) { return; }
-    std::vector<int> pick = cands.front();
-    g_putback_resolved_w = static_cast<int>(cands.size());
+    // The candidate at the pinned rank (clamped) or the default (rank 0), and the list's length --
+    // PutBackPickAt for n <= 2, the reference list otherwise. Identical to indexing the full list.
+    const int want = g_scripted_putback_choice >= 0 ? g_scripted_putback_choice : 0;
+    int count = 0, take = 0;
+    const int* pick = nullptr;
+    PutBackPick fast;
+    std::vector<std::vector<int>> ref;
+    if (n <= 2)
+    {
+        fast  = PutBackPickAt(state, controller, n, want);
+        count = fast.count; take = fast.take; pick = fast.idx;
+    }
+    else
+    {
+        ref   = PutBackCandidates(state, controller, n);
+        count = static_cast<int>(ref.size());
+        if (count > 0)
+        {
+            take = static_cast<int>(ref.front().size());
+            pick = ref[static_cast<std::size_t>(std::min(want, count - 1))].data();
+        }
+    }
+    if (count <= 0) { return; }
+    g_putback_resolved_w = count;
     g_putback_resolved_i = 0;
+    std::vector<int> chosen;   // human play's pick (one card at a time)
     if (g_scripted_putback_choice >= 0)
     {
         const int k = g_scripted_putback_choice;
         g_scripted_putback_choice = -1;   // consumed by this put-back (a second Brainstorm takes the default)
-        pick = cands[static_cast<std::size_t>(k) < cands.size() ? static_cast<std::size_t>(k) : cands.size() - 1];
-        g_putback_resolved_i = std::min(k, static_cast<int>(cands.size()) - 1);
+        g_putback_resolved_i = std::min(k, count - 1);
         // MTG_PUTBACK_TRACE (diagnostic, default off): how often a fanned rank lands past the real list
         // (a clamped duplicate -- one apply, skipped before a rollout), printed at exit.
         static const bool s_pb_clamp_trace = EnvOn("MTG_PUTBACK_TRACE");
@@ -30252,17 +30422,16 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
                 ~Report() { std::fprintf(stderr, "[putback] pinned resolutions=%lld clamped=%lld\n", p->load(), c->load()); } };
             static Report s_report{ &s_pinned, &s_clamped };
             s_pinned.fetch_add(1, std::memory_order_relaxed);
-            if (static_cast<std::size_t>(k) >= cands.size()) { s_clamped.fetch_add(1, std::memory_order_relaxed); }
+            if (k >= count) { s_clamped.fetch_add(1, std::memory_order_relaxed); }
         }
     }
     else if (g_play_dig_chooser != nullptr)
     {
         g_putback_resolved_w = -1;   // a human's pick is no fold's business
         // Human play: one card at a time, top first, over the hand as it stands (every eligible card
-        // is legal; a pick out of range / -1 takes the default's card for that slot).
+        // is legal; a pick out of range / -1 takes the default's card for that slot). `pick` is the
+        // default candidate here (no pin => rank 0).
         Player& hp = state.players[controller];
-        std::vector<int> chosen;
-        const int take = static_cast<int>(cands.front().size());
         for (int slot = 0; slot < take; ++slot)
         {
             std::vector<Card> examined;
@@ -30276,10 +30445,10 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
             }
             if (examined.empty()) { break; }
             // Default for this slot: the default candidate's card if still unchosen, else the first
-            // remaining member of its class, else the first examined card.
+            // examined card.
             int def_ex = 0;
-            const int want = cands.front()[static_cast<std::size_t>(slot)];
-            for (std::size_t e = 0; e < hand_of.size(); ++e) { if (hand_of[e] == want) { def_ex = static_cast<int>(e); break; } }
+            const int dw = pick[slot];
+            for (std::size_t e = 0; e < hand_of.size(); ++e) { if (hand_of[e] == dw) { def_ex = static_cast<int>(e); break; } }
             std::vector<int> legal(examined.size());
             for (std::size_t e = 0; e < legal.size(); ++e) { legal[e] = static_cast<int>(e); }
             const std::string src = source + (slot == 0 ? " (put back: top)" : " (put back: second)");
@@ -30287,16 +30456,25 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
             if (r < 0 || r >= static_cast<int>(examined.size())) { r = def_ex; }
             chosen.push_back(hand_of[static_cast<std::size_t>(r)]);
         }
-        if (static_cast<int>(chosen.size()) == take) { pick = chosen; }
+        if (static_cast<int>(chosen.size()) == take) { pick = chosen.data(); }
     }
     Player& pl = state.players[controller];
     // Copy the cards out first (indices refer to the current hand), then erase highest index first.
     std::vector<Card> moved;
-    moved.reserve(pick.size());
-    for (int hi : pick) { moved.push_back(pl.hand[static_cast<std::size_t>(hi)]); }
-    std::vector<int> erase_order = pick;
-    std::sort(erase_order.begin(), erase_order.end(), std::greater<int>());
-    for (int hi : erase_order) { pl.hand.erase(pl.hand.begin() + hi); }
+    moved.reserve(static_cast<std::size_t>(take));
+    for (int j = 0; j < take; ++j) { moved.push_back(pl.hand[static_cast<std::size_t>(pick[j])]); }
+    if (take == 2)
+    {
+        const int hi = std::max(pick[0], pick[1]), lo = std::min(pick[0], pick[1]);
+        pl.hand.erase(pl.hand.begin() + hi);
+        pl.hand.erase(pl.hand.begin() + lo);
+    }
+    else
+    {
+        std::vector<int> erase_order(pick, pick + take);
+        std::sort(erase_order.begin(), erase_order.end(), std::greater<int>());
+        for (int hi : erase_order) { pl.hand.erase(pl.hand.begin() + hi); }
+    }
     // pick[0] must end on TOP: insert the last first.
     for (std::size_t i = moved.size(); i-- > 0; ) { pl.library.insert(pl.library.begin(), moved[i]); }
     if (g_play_event_sink)   // nulled during search/rollout -> byte-identical

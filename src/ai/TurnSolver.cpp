@@ -19679,8 +19679,10 @@ static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, s
         if (PutBackPredictionUnsafe(*d)) { unsafe = true; }
     }
     const int k = bd.params.put_back_from_hand;
-    std::vector<Card> cards;
-    cards.reserve(ap.hand.size() + static_cast<std::size_t>(window));
+    // The multisets below are counted incrementally over card references (PutBackClassCounter: the
+    // same class key and the same count PutBackCandidateCount gives over a copied vector).
+    static thread_local PutBackClassCounter cc;
+    cc.Clear();
     bool skipped_self = false;
     for (std::size_t i = 0; i < ap.hand.size(); ++i)
     {
@@ -19688,16 +19690,15 @@ static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, s
         if (!skipped_self && (static_cast<int>(i) == cast.hand_index
                               || (cast.hand_index < 0 && c.m_name == cast.card_name)))
         { skipped_self = true; continue; }
-        cards.push_back(c);
+        cc.Add(state, c);
     }
     const int lib_take = std::min(window, static_cast<int>(ap.library.size()));
     if (!unsafe)
     {
-        for (int i = 0; i < lib_take; ++i) { cards.push_back(ap.library[static_cast<std::size_t>(i)]); }
-        return PutBackCandidateCount(state, cards, k);
+        for (int i = 0; i < lib_take; ++i) { cc.Add(state, ap.library[static_cast<std::size_t>(i)]); }
+        return cc.Count(k);
     }
-    int n = 0;
-    for (const Card& c : cards) { if (PutBackEligible(c)) { ++n; } }
+    int n = cc.eligible;
     n += lib_take;
     const int take = std::min(k, n);
     int w = take > 0 ? 1 : 0;
@@ -19705,9 +19706,8 @@ static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, s
     // ...and the class-aware bound over EVERYTHING the hand could hold: the hand (minus this card) plus
     // the WHOLE library. Whatever a shuffle brings up, the resolution hand is a sub-multiset of that,
     // so its candidate count is bounded too; the smaller of the two bounds is the width.
-    std::vector<Card> all = cards;
-    for (std::size_t i = 0; i < ap.library.size(); ++i) { all.push_back(ap.library[i]); }
-    return std::min(w, PutBackCandidateCount(state, all, k));
+    for (std::size_t i = 0; i < ap.library.size(); ++i) { cc.Add(state, ap.library[i]); }
+    return std::min(w, cc.Count(k));
 }
 
 // How many legal dig matches the top `pp.etb_dig_count` of the library holds RIGHT NOW. Used only to

@@ -338,3 +338,72 @@ TEST_CASE("Brainstorm: fewer than two eligible hand cards puts back what there i
     REQUIRE(s.players[0].library.size() == 1u);
     CHECK(s.players[0].library[0].m_number == 100);
 }
+
+// THE FAST PATH IS THE REFERENCE, rank for rank. ResolvePutBackFromHand and the fan's width read the
+// put-back list through PutBackPickAt / PutBackClassCounter, which never build it. This pins them to
+// the materialised PutBackCandidates over random hands -- duplicates, staged/impulse cards (ineligible),
+// a live m1_hand snapshot splitting a class, n = 1 and 2 -- and fails if a single rank, member or count
+// differs (e.g. a closed-form order that merged or swapped two candidates).
+TEST_CASE("Brainstorm: PutBackPickAt == PutBackCandidates rank for rank (random hands)")
+{
+    EnsureCardsBs();
+    const std::vector<std::string> pool = {
+        "Island", "Island", "Island", "Lightning Bolt", "Lightning Bolt", "Birds of Paradise", "Sol Ring",
+        "Llanowar Elves", "Izzet Signet", "Ponder", "Ponder", "Preordain", "Goblin Guide", "Brainstorm" };
+    std::uint64_t rng = 0x5eed1234abcdull;
+    auto next = [&rng](int mod) { rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17; return static_cast<int>(rng % static_cast<std::uint64_t>(mod)); };
+    int checked = 0;
+    for (int trial = 0; trial < 400; ++trial)
+    {
+        GameState s = BoardBs({}, {});
+        s.players[0].hand.clear();
+        const int hn = next(12);   // 0..11 cards
+        for (int i = 0; i < hn; ++i)
+        {
+            Card c = CardBs(pool[static_cast<std::size_t>(next(static_cast<int>(pool.size())))], 300 + i);
+            const int odd = next(10);
+            if (odd == 0) { c.m_is_staged = true; }
+            else if (odd == 1) { c.m_impulse_no_land = true; }
+            s.players[0].hand.push_back(c);
+        }
+        if (next(3) == 0)   // a live m1_hand snapshot naming some of the hand by number
+        {
+            s.m1_hand_turn = s.turn_number;
+            s.m1_hand_n = 0;
+            for (int i = 0; i < hn && s.m1_hand_n < 4; ++i) { if (next(2) == 0) { s.m1_hand[s.m1_hand_n++] = 300 + i; } }
+        }
+        for (int n = 1; n <= 2; ++n)
+        {
+            const std::vector<std::vector<int>> ref = PutBackCandidates(s, 0, n);
+            const PutBackPick first = PutBackPickAt(s, 0, n, 0);
+            INFO("trial=" << trial << " n=" << n << " hand=" << hn);
+            REQUIRE(first.count == static_cast<int>(ref.size()));
+            CHECK(PutBackCandidateCount(s, s.players[0].hand, n) == static_cast<int>(ref.size()));
+            if (ref.empty()) { CHECK(first.take == 0); continue; }
+            for (int k = 0; k < static_cast<int>(ref.size()) + 3; ++k)   // past the end: clamps like the resolver
+            {
+                const PutBackPick p = PutBackPickAt(s, 0, n, k);
+                const std::vector<int>& want = ref[static_cast<std::size_t>(std::min(k, static_cast<int>(ref.size()) - 1))];
+                REQUIRE(p.take == static_cast<int>(want.size()));
+                for (int j = 0; j < p.take; ++j) { CHECK(p.idx[j] == want[static_cast<std::size_t>(j)]); }
+                ++checked;
+            }
+            // ...and the resolver itself, pinned at a few ranks, moves exactly the reference's cards.
+            {
+                for (int k : { 0, static_cast<int>(ref.size()) / 2, static_cast<int>(ref.size()) - 1 })
+                {
+                    GameState t = s;
+                    const std::vector<int>& want = ref[static_cast<std::size_t>(k)];
+                    std::vector<int> nums;
+                    for (int hi : want) { nums.push_back(t.players[0].hand[static_cast<std::size_t>(hi)].m_number); }
+                    { ScriptedPutBack pin(k); ResolvePutBackFromHand(t, 0, n, kBs); }
+                    CHECK(g_putback_resolved_w == static_cast<int>(ref.size()));
+                    CHECK(g_putback_resolved_i == k);
+                    for (std::size_t j = 0; j < nums.size(); ++j) { CHECK(t.players[0].library[j].m_number == nums[j]); }
+                    CHECK(t.players[0].hand.size() == s.players[0].hand.size() - want.size());
+                }
+            }
+        }
+    }
+    CHECK(checked > 2000);
+}
