@@ -4342,6 +4342,35 @@ namespace bpcache
 using Map = std::unordered_map<TranspositionTable::Key, BpEnumEntry, TranspositionTable::KeyHash>;
 inline thread_local Map t_plans;
 }
+// THE CANON FRONT memo (see BpCanonFront): the FRONT entry of the continuation list at a key, derived
+// without the put-back clones the canon never reads. Same key, same epoch rule and the same per-game
+// clear as bpcache above (ClearPerGameCaches), so its history cannot carry between games either. One
+// Plan per entry, so it is count-capped only.
+namespace bpcanon
+{
+struct Entry
+{
+    bool             has = false;   // false = the list was EMPTY
+    TurnSolver::Plan front;
+    std::uint64_t    epoch = 0;
+};
+using Map = std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash>;
+inline thread_local Map t_fronts;
+inline std::atomic<long long> g_full_hits{0}, g_hits{0}, g_derives{0}, g_clears{0};
+inline std::atomic<long long> g_verify_ok{0}, g_verify_bad{0};
+struct Reporter
+{
+    ~Reporter()
+    {
+        if (!s_rollout_stats && g_verify_ok.load() + g_verify_bad.load() == 0) { return; }
+        std::fprintf(stderr, "[rollout-stats] bp_canon_front full_hits=%lld front_hits=%lld derives=%lld "
+                             "clears=%lld verify ok=%lld BAD=%lld\n",
+                     g_full_hits.load(), g_hits.load(), g_derives.load(), g_clears.load(),
+                     g_verify_ok.load(), g_verify_bad.load());
+    }
+};
+inline Reporter g_reporter;
+}
 // Build the enum-memo key (all folds included). Returns false when the cache is disabled
 // (MTG_NO_BP_ENUM_CACHE) -- callers then skip every memo layer.
 static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
@@ -22210,6 +22239,11 @@ static bool BpUniformDevEnabled()
     return heurarm::Flag(heurarm::BP_UNIFORM_DEV, on);   // per-job overridable: one pooled A/B queue
 }
 static thread_local int g_bp_enum_depth = 0;
+// THE CANON FRONT DERIVATION's marker (see BpCanonFront): the g_bp_enum_depth at which the ONE
+// derivation that only needs its list's front() runs its axes, or -1. Set by BpDeriveContinuationList
+// for its own enumeration only and reset to -1 by every nested derivation (save/restore), so no list
+// stored anywhere is ever built under it. Read by the put-back axis alone.
+static thread_local int t_bp_front_only_depth = -1;
 
 // Breakpoint-continuation marker for MTG_CONDEMN_M1_BP -- see TurnSolver::BpContinuationScope in the
 // header for why g_bp_enum_depth cannot serve this purpose (it misses every GREEDY continuation).
@@ -60567,6 +60601,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         std::vector<TurnSolver::Plan> extra;
         std::size_t fanned = 0, widest = 0;
         const std::size_t n_now = all.size();
+        // THE CANON FRONT DERIVATION (BpCanonFront) reads only its list's front(), which is never a
+        // put-back clone: each clone is a copy of its base differing only in putback_choice, appended
+        // AFTER every base plan, so the new-only filter and the condemnation marking give it its base's
+        // verdict and the stable value sort (MoveOrderPlans) keeps it behind its base. So the clones are
+        // not materialised there -- everything else (the width, the base's putback_group stamp, the
+        // group counter) runs exactly as in a full derivation, so the base plans are bit-for-bit the
+        // same objects. Full lists (every list that is stored or indexed) are never built this way.
+        const bool pb_materialize = t_bp_front_only_depth != g_bp_enum_depth;
         for (std::size_t pi = 0; pi < n_now; ++pi)
         {
             const TurnSolver::Plan& p = all[pi];
@@ -60587,7 +60629,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (++s_putback_group <= 0) { s_putback_group = 1; }
                     putback_based.emplace_back(pi, s_putback_group);
                 }
-                for (int k = 1; k < w; ++k)
+                for (int k = 1; pb_materialize && k < w; ++k)
                 {
                     TurnSolver::Plan v = p;
                     v.putback_choice = k;
@@ -64458,6 +64500,7 @@ void TurnSolver::ClearPerGameCaches()
     // from the same empty cache whatever ran before it. Within-game reuse across decisions is kept.
     bpcache::t_plans.clear();
     plancache::Release(plancache::t_bp_bytes);
+    bpcanon::t_fronts.clear();   // the canon-front memo (BpCanonFront): same channel, same clear
     ++bplibcheck::t_game;   // MTG_BP_ENUM_LIBCHECK's game ordinal (diagnostic stamp only)
     // The EDF combo route's board-keyed trial memo -- same channel, see EdfComboRouteClearMemo.
     EdfComboRouteClearMemo();
@@ -79510,7 +79553,8 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
 static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& state,
                                                               bool is_pre_combat,
                                                               bool count_stats,
-                                                              std::vector<TurnSolver::Plan>* demoted_out = nullptr)
+                                                              std::vector<TurnSolver::Plan>* demoted_out = nullptr,
+                                                              bool front_only = false)
 {
     const int  mode   = BpCondemnDropMode();
     const bool demote = (mode == 2);   // condemned lines ranked LAST (list keeps every entry)
@@ -79520,9 +79564,15 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     // nested derivation must not consume the outer one's set.
     std::vector<std::uint64_t> outer_condemned;
     if (mark) { outer_condemned.swap(t_bp_condemned_names); }
+    // FRONT-ONLY (BpCanonFront): marks THIS derivation's own enumeration depth, and only it. A nested
+    // derivation re-enters here with front_only = false and resets the marker for its own frame, so
+    // every list it builds (and the cache it stores into) is complete; restored on the way out.
+    const int outer_front_only = t_bp_front_only_depth;
+    t_bp_front_only_depth = front_only ? g_bp_enum_depth + 1 : -1;
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
     --g_bp_enum_depth;
+    t_bp_front_only_depth = outer_front_only;
     // MTG_BP_NEW_ONLY (see BpNewOnlyEnabled): keep only the continuations that USE a card that
     // arrived at this breakpoint. Applied HERE, inside the shared derivation, for the same lockstep
     // reason the condemnation marking below gives: the executor's replay indexes this same list by
@@ -80172,6 +80222,103 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     scratch.plans   = std::move(plans);
     scratch.demoted = std::move(demoted);
     return &scratch;
+}
+
+// ---- THE CANON FRONT (MTG_BP_CANON_FRONT, DEFAULT ON; =0 restores the full-list canon) ---------
+// TurnSolver::BpUnbranchedCanon reads exactly ONE entry of the continuation list -- its front() -- yet
+// it derived (and cached) the WHOLE list to read it, Brainstorm put-back clones included. Measured on
+// NivMizzetCombo d3 b10 s2018 gi16 (2026-10-18): one T6 decision, 151 s for 225k units; 88% of the
+// wall in BpEnumEntryFor called from the canon, 46M put-back clones built by 101k derivations (a
+// single list ran to 18,015 clones of 555 plans), and the giant entries thrashed the cache (32 clears)
+// and the shared plan pool (29 refused stores).
+//
+// WHY THE FRONT IS UNCHANGED (an identity, not a narrowing). Every put-back clone is a copy of a base
+// plan that differs ONLY in putback_choice (and the group mark), and the axis appends them after every
+// base plan. Downstream of the enumeration nothing can separate a clone from its base: the new-only
+// filter's verdict and the condemnation marking read the actions and the land only, and the ranking
+// (MoveOrderPlans) is a STABLE sort on fields the clone copies, so each clone stays behind its base.
+// Hence front() is never a clone, and the relative order of everything else is the same with or
+// without them: the front-only list's front() is the full list's front(), field for field (the base's
+// putback_group stamp and the group counter are still computed -- see the put-back axis).
+//
+// The lookup order keeps the old behaviour wherever it is defined: a FULL list already cached at this
+// key is read exactly as before; otherwise a front memoised at the same key (bpcanon); otherwise one
+// front-only derivation. Full lists are never built front-only, so nothing that indexes a list (the
+// node, wave 0, the walker, the executor's replay of a committed rank) can see a shortened one.
+// MTG_BP_CANON_FRONT_VERIFY=1 re-derives the full list on every front-only derivation and compares
+// the fronts (solvememo::SamePlan; bad > 0 refutes the identity).
+static bool BpCanonFrontOn()
+{
+    static const bool v = EnvOn("MTG_BP_CANON_FRONT", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver::Plan& out)
+{
+    if (!BpCanonFrontOn())
+    {
+        const std::vector<TurnSolver::Plan>& c = TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
+        if (c.empty()) { return false; }
+        out = c.front();
+        return true;
+    }
+    TranspositionTable::Key key;
+    const bool keyed = BpEnumBuildKey(state, is_pre_combat, &key);
+    if (keyed)
+    {
+        const auto it = bpcache::t_plans.find(key);
+        if (it != bpcache::t_plans.end()
+            && !(BpEnumEpochScoped() && it->second.epoch != g_decision_epoch))
+        {
+            if (s_rollout_stats) { bpcanon::g_full_hits.fetch_add(1, std::memory_order_relaxed); }
+            if (it->second.plans.empty()) { return false; }
+            out = it->second.plans.front();
+            return true;
+        }
+        const auto jt = bpcanon::t_fronts.find(key);
+        if (jt != bpcanon::t_fronts.end()
+            && !(BpEnumEpochScoped() && jt->second.epoch != g_decision_epoch))
+        {
+            if (s_rollout_stats) { bpcanon::g_hits.fetch_add(1, std::memory_order_relaxed); }
+            if (!jt->second.has) { return false; }
+            out = jt->second.front;
+            return true;
+        }
+    }
+    std::vector<TurnSolver::Plan> plans =
+        BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/true, /*demoted_out=*/nullptr,
+                                 /*front_only=*/true);
+    if (s_rollout_stats) { bpcanon::g_derives.fetch_add(1, std::memory_order_relaxed); }
+    static const bool s_verify = EnvOn("MTG_BP_CANON_FRONT_VERIFY");
+    if (s_verify)
+    {
+        const std::vector<TurnSolver::Plan> full =
+            BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false);
+        const bool same = (full.empty() == plans.empty())
+                       && (full.empty() || solvememo::SamePlan(full.front(), plans.front()));
+        (same ? bpcanon::g_verify_ok : bpcanon::g_verify_bad).fetch_add(1, std::memory_order_relaxed);
+        if (!same && bpcanon::g_verify_bad.load() <= 5)
+        {
+            std::fprintf(stderr, "[bp-canon-front] VERIFY MISMATCH T%d %s full=%zu front_only=%zu\n",
+                         state.turn_number, is_pre_combat ? "m1" : "m2", full.size(), plans.size());
+        }
+    }
+    if (keyed)
+    {
+        static const std::size_t s_cap = static_cast<std::size_t>(
+            std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
+        if (bpcanon::t_fronts.size() >= s_cap)
+        {
+            bpcanon::t_fronts.clear();
+            if (s_rollout_stats) { bpcanon::g_clears.fetch_add(1, std::memory_order_relaxed); }
+        }
+        bpcanon::Entry& e = bpcanon::t_fronts[key];
+        e.has   = !plans.empty();
+        e.front = e.has ? plans.front() : TurnSolver::Plan{};
+        e.epoch = g_decision_epoch;
+    }
+    if (plans.empty()) { return false; }
+    out = std::move(plans.front());
+    return true;
 }
 
 // One-line "land=...; cast: a, b" summary of a plan (for the human-play accept verdict).
@@ -84219,10 +84366,9 @@ bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, c
         && (g_rollout_nest == 0 || BpNestedCanonPlayout())
         && plan.bp_choice >= 0 && !plan.bp_all && seen_before >= 0 && seen_before != plan.bp_at)
     {
-        // By reference: read immediately, one Plan copied out, no re-entry between.
-        const std::vector<TurnSolver::Plan>& ncands =
-            TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-        if (!ncands.empty()) { out = ncands.front(); out.cont_canon = CanonContNoActsOn(); return true; }
+        // The list's front() only -- BpCanonFront (the full list's front, without building the
+        // put-back clones it can never be).
+        if (BpCanonFront(state, is_pre_combat, out)) { out.cont_canon = CanonContNoActsOn(); return true; }
     }
     if (class_on && g_rollout_nest == 0)
     {
@@ -84234,9 +84380,7 @@ bool TurnSolver::BpUnbranchedCanon(const GameState& state, bool is_pre_combat, c
                                     && state.turn_number > g_condemn_root_turn + 1));
         if (enum_slot || base_slot)
         {
-            const std::vector<TurnSolver::Plan>& ncands =
-                TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-            if (!ncands.empty()) { out = ncands.front(); out.cont_canon = CanonContNoActsOn(); return true; }
+            if (BpCanonFront(state, is_pre_combat, out)) { out.cont_canon = CanonContNoActsOn(); return true; }
         }
     }
     return false;
