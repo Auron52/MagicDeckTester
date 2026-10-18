@@ -259,6 +259,52 @@ TEST_CASE("Blood token: no card in hand -> not live (the discard is part of the 
     CHECK_FALSE(PermAbilitySourceLive(s, 0, blood, PermAbilityMode::BloodDraw));
 }
 
+TEST_CASE("Voldaren Estate (search): 'cast the 5th Vampire, THEN make Blood for {0}' is enumerated and realised")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Voldaren Estate", 1);
+    Put(s, "Swamp", 2);
+    Put(s, "Vampire of the Dire Moon", 3);
+    Put(s, "Vampire of the Dire Moon", 4);
+    Put(s, "Legion Lieutenant", 5);
+    Put(s, "Stromkirk Condemned", 6);
+    Hand(s, "Vampire of the Dire Moon", 10);
+    // Four Vampires: the Blood costs {1} before the cast and {0} after it. Two lands: the Swamp pays the
+    // Dire Moon and the Estate must keep its {T} for the Blood -- only the k=1 cost variant prices this
+    // line within the board's mana, and only the {T} hold keeps the payment off the Estate.
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool cast = false, blood = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Vampire of the Dire Moon") { cast = true; }
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapBlood)
+            { blood = true; }
+        }
+        if (cast && blood) { line = &p; break; }
+    }
+    REQUIRE(line != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *line, /*is_pre_combat=*/true);
+    CHECK(CountOnBf(roll, "Blood Token") == 1);
+    CHECK(CountOnBf(roll, "Vampire of the Dire Moon") == 3);
+    // Exactly one priced variant survives per subset: no plan pairs the cast with the over-priced k=0 one.
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool cast = false;
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Vampire of the Dire Moon") { cast = true; } }
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TapBlood) { continue; }
+            CHECK(a.cost.ManaValue() == (cast ? 0 : 1));
+        }
+    }
+}
+
 // ---- 4. Falkenrath Pit Fighter ----------------------------------------------------------------------
 
 TEST_CASE("Pit Fighter: not live before an opponent lost life; live after; pinned discard + baked victim + draw two")
