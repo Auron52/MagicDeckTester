@@ -245,6 +245,30 @@ vs human 3.267**, seed 7 faster (T3 vs T4: Aid + Kor Duelist on T2, every card i
 Bottoming: the USER's bottoms differ from the static default in most mulligans (seeds 4, 5, 6, 8, 9, 10, 11, 13,
 14, 15) -- input for the mulligan stage (the keep table bottoms exhaustively), not a play defect.
 
+## The 10-18 package, final validation (2026-10-18)
+
+Package = the USER's full cast order with the equips in it, Path never cast, the tutor rule (+ Warhammer /
+Dragonfire with no cheap attach, + the Lizard amendment), Sigarda's Aid lethal-first. Held-out vs the pushed play
+(run6, 84,000 games, colossus-hammer-cast-order.md): play settings **-0.0307 +- 0.0068**, d3 -0.0250, d0 **-0.2348**,
+2HG -0.0390; search work 0.69-0.71x, wall 0.61-0.69x. Aid lethal-first alone: identical win turns in every searched
+game, -0.0001 at d0 (rare; kept, the USER's ruling). Every slower game accounted for (two-stage recovery + one
+restriction lifted at a time): 961 budget truncation, 207 Path clairvoyance, 6 tutor-shuffle clairvoyance, 4 recover
+at d8 b0, 1 variance, and 38 a REAL loss of the tutor rule as stated -> the Lizard amendment (run7: -0.0057 play /
+-0.0043 d3 / -0.0040 2HG, 0 slower at play settings; recovers all 38 and its own one slower game at stage 1).
+Suite (first pass, before the amendment): smoke + regression move ONLY the Colossus rows, every one faster
+(regression d0 5.159 -> 4.874, d3 3.853 -> 3.813 / 3.687 -> 3.633, d5 3.733 -> 3.720 / 3.587 -> 3.493); refs 630 /
+0 drift. The 13 distinct searched slower suite games: 5 Path clairvoyance, 4 the Lizard case (all recover with the
+amendment), 3 budget truncation, 1 tutor-shuffle variance (2HG s1001 gi34: draws diverge right after a tutor).
+ACCEPTED on the amended engine (`b3ce59cc7`, smoke + regression re-run, `--deck=colossus[,colossus2hg]`, scoped
+notes): smoke d0 4.963 -> 4.737, d3 3.647 -> 3.593, d5 3.693 -> 3.640, 2HG d3 4.48 -> 4.44; regression d0 5.159 ->
+4.874, d3 3.853 -> 3.800 / 3.687 -> 3.633, d5 3.733 -> 3.707 / 3.587 -> 3.493. Every other deck byte-identical; refs
+630 / 0 drift; `check_gt_logs` 734 / 0 stale. Searched slower after the amendment: smoke 4 (3 Path clairvoyance + 2HG
+gi34), regression 7 (4 Path clairvoyance + gi79 / gi129 / gi136, which recover at depth W b100 on the amended binary).
+2HG s1001 gi34 is the one genuine residual: at 30 life the old line's T7 Gift for Dragonfire Blade added the +1
+(x2, double strike) that made exactly 30; the rule drops Warhammer / Dragonfire beside a free attach (USER: "unnecessary
+if we free equip") -- raised to the USER, not changed. Overnight GT for the Colossus rows is left to the periodic
+overnight run.
+
 ## Claude-play sweep
 - commit: `8c1de4465` (engine identical through `ac2095d02`); flagged seeds RE-CHECKED on the final engine (`51573d7e5`), see below
 - seeds: 2100001..2100018 (one game each; the seed varies the game, `--game-index` does not) games: 18, Opus agents
@@ -384,6 +408,11 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
    activations as positions after every cast, `MTG_COLOSSUS_ORDER` default ON
    (docs/design/colossus-hammer-cast-order.md). Measured on held-out seeds and the tiers (see the order doc).
 9. **Discard buckets** — to be AI-drafted and presented (analyze-deck 5i).
+10. **Tutor amendment (Lizard Blades with no double striker)** — the rule as stated drops Lizard Blades when a
+   non-double-striking creature and a cheap attach are both present; 38 held-out games lose a turn to that,
+   unfindable at any budget. PROVISIONAL default ON (`MTG_COLOSSUS_TUTOR_LIZARD_DS`, =0 -> the rule as stated),
+   read as the USER's *"only consider the others if it falls short"* (with no double striker the Hammer is half
+   the damage). Awaiting the USER's ruling.
 
 ## Provisional deferrals (await USER sign-off)
 
