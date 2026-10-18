@@ -1415,6 +1415,11 @@ public:
         // width costs a duplicate variant, skipped post-apply). Pinned via ScriptedPutBack; a
         // DURING-CAST pin, so a breakpoint continuation carries its own (ContPins::putback).
         int putback_choice = -1;
+        // ...and which BASE plan a put-back variant was cloned from (0 = not part of a put-back fan) --
+        // the bounce_group / dig_group shape: METADATA for the put-back fold (PutBackFoldMemo), never
+        // read by an apply, in no dedup key. Stamped on the variants by the fan and on the base after
+        // every axis has cloned, so no later clone inherits it.
+        int putback_group = 0;
 
         // OPTIONAL ETB COUNTER PAYMENT (Emiel the Blessed's "you may pay {G/W}"): -1 (default) ==
         // the provider's answer (DecisionProvider::PaysOptionalEtbCounter); 0 = decline at every

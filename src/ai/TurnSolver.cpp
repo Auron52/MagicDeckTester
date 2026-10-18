@@ -19109,6 +19109,10 @@ static thread_local SlotPrefixProbe g_slot_prefix_probe;
 // right after the call: a nested apply writes its value on its own exit, before the outer one's. Read
 // only by the dig fold (DigFoldMemo); never by play.
 static thread_local bool g_apd_last_dug = false;
+// The put-back fold's channel (PutBackFoldMemo): the candidate count and resolved rank of the FIRST
+// put-back THIS apply resolved (-1 = none), published on every exit like g_apd_last_dug.
+static thread_local int g_apd_last_putback_w = -1;
+static thread_local int g_apd_last_putback_i = -1;
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr,
                             BpPrefixSnap* bp_capture = nullptr,
@@ -19602,7 +19606,12 @@ static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, s
     const int take = std::min(k, n);
     int w = take > 0 ? 1 : 0;
     for (int t = 0; t < take; ++t) { w *= (n - t); }
-    return w;
+    // ...and the class-aware bound over EVERYTHING the hand could hold: the hand (minus this card) plus
+    // the WHOLE library. Whatever a shuffle brings up, the resolution hand is a sub-multiset of that,
+    // so its candidate count is bounded too; the smaller of the two bounds is the width.
+    std::vector<Card> all = cards;
+    for (std::size_t i = 0; i < ap.library.size(); ++i) { all.push_back(ap.library[i]); }
+    return std::min(w, PutBackCandidateCount(state, all, k));
 }
 
 // How many legal dig matches the top `pp.etb_dig_count` of the library holds RIGHT NOW. Used only to
@@ -21086,6 +21095,48 @@ struct PutBounceFold
 // keys), and a base that was itself declined, hosted as a pending node, or never reached records
 // nothing -- its twin then applies as before. Only the twin (0) folds: an opt-in's 1 bypasses the gate
 // and may dig where the base did not.
+// THE PUT-BACK FOLD (Brainstorm; Plan::putback_group) -- the dig and bounce folds' shape. Every variant
+// of one put-back fan is a clone of its base differing ONLY in putback_choice, so everything up to the
+// put-back that consumes the pin is identical in all of them: that put-back sees the same hand and offers
+// the same candidate list. The first member applied (the base, rank 0) MEASURES the list's length; a
+// later variant whose rank RESOLVES -- min(k, width - 1), the resolver's own clamp -- to a rank an
+// earlier sibling already applied IS that sibling's apply, so the loop declines it before the unit
+// charge and the apply, leaving what the post-apply dedup's skip would have left. EXACT, like the
+// bounce fold: it only pre-empts a duplicate the dedup would have discarded. The fan is sized by an
+// UPPER bound (PutBackAxisWidth), so without this the clamped ranks cost an apply each -- measured
+// 58% of the pinned put-backs on a 4-Brainstorm U/R list. MTG_PUTBACK_FOLD=0 restores the apply.
+static bool PutBackFoldOn()
+{
+    static const bool v = EnvOn("MTG_PUTBACK_FOLD", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+struct PutBackFoldMemo
+{
+    struct Group { int width = -1; std::unordered_map<int, int> first; };   // resolved rank -> cand index
+    std::unordered_map<int, Group> groups;
+    bool on = false;
+    // The sibling whose apply this variant would repeat (its cand index), or -1.
+    int Declines(const TurnSolver::Plan& p) const
+    {
+        if (!on || p.putback_group == 0 || p.putback_choice < 1 || p.bp_choice >= 0) { return -1; }
+        const auto it = groups.find(p.putback_group);
+        if (it == groups.end() || it->second.width <= 0) { return -1; }
+        const int r = std::min(p.putback_choice, it->second.width - 1);
+        const auto f = it->second.first.find(r);
+        return f == it->second.first.end() ? -1 : f->second;
+    }
+    // After an apply that ran to the end: the width (first member) and this candidate's resolved rank.
+    void Record(const TurnSolver::Plan& p, bool complete, int cand)
+    {
+        if (!on || p.putback_group == 0 || !complete || p.bp_choice >= 0) { return; }
+        if (g_apd_last_putback_w <= 0 || g_apd_last_putback_i < 0) { return; }
+        Group& g = groups[p.putback_group];
+        if (g.width < 0) { g.width = g_apd_last_putback_w; }
+        if (g.width != g_apd_last_putback_w) { return; }   // defensive: siblings must agree
+        g.first.emplace(g_apd_last_putback_i, cand);
+    }
+};
+
 struct DigFoldMemo
 {
     std::unordered_map<int, std::pair<bool, int>> base;   // dig_group -> (base dug?, base cand index)
@@ -44287,6 +44338,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // state (a successful cost payment), published on every exit.
     bool apd_dug = false;
     struct ApdDugOut { bool& v; ~ApdDugOut() { g_apd_last_dug = v; } } _apd_dug_out{apd_dug};
+    // ...and the put-back fold's (see PutBackFoldMemo): the first put-back this apply resolves.
+    int apd_pb_w = -1, apd_pb_i = -1;
+    struct ApdPbOut
+    {
+        int& w; int& i;
+        ~ApdPbOut() { g_apd_last_putback_w = w; g_apd_last_putback_i = i; }
+    } _apd_pb_out{ apd_pb_w, apd_pb_i };
     // Prevent Damage backstop: no tap-trigger may be pending when a plan starts applying (armed only;
     // MTG_DMG_EVENT_VERIFY aborts if one is -- a missed flush site).
     dmgev::BackstopFlush(state, "ApplyPlanDirect");
@@ -47150,7 +47208,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // Brainstorm's put-back, inside the resolution and before the draw breakpoint below
                 // (lockstep twin: EffectHandler::ResolveDrawSpell). Pinned by Plan::putback_choice.
                 if (def.params.put_back_from_hand > 0)
-                { ResolvePutBackFromHand(state, state.active_player_index, def.params.put_back_from_hand, def.card.m_name.str()); }
+                {
+                    g_putback_resolved_w = -1;
+                    ResolvePutBackFromHand(state, state.active_player_index, def.params.put_back_from_hand, def.card.m_name.str());
+                    if (apd_pb_w < 0 && g_putback_resolved_w >= 0)
+                    { apd_pb_w = g_putback_resolved_w; apd_pb_i = g_putback_resolved_i; }
+                }
             }
 
             // Draw breakpoint: play a revealed land (the real engine's second pass
@@ -59242,6 +59305,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // already in the list, and the loop at the end of this function un-stamps the one field a clone
     // must not inherit. See the note there.
     const std::size_t n_before_axes = all.size();
+    // Put-back fan bases (index into `all`, group) -- stamped with Plan::putback_group at the very end,
+    // after every axis has cloned, so no later clone inherits the mark (the dig twin's rule).
+    std::vector<std::pair<std::size_t, int>> putback_based;
     const Player& ap = state.ActivePlayer();
     // SEARCHED land-ETB scry/surveil (MTG_SCRY_SEARCH, opt-in). The disposition resolves inline
     // inside the land's ETB, so it cannot be an Action -- instead emit one plan variant per
@@ -60208,8 +60274,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     {
         std::vector<TurnSolver::Plan> extra;
         std::size_t fanned = 0, widest = 0;
-        for (const TurnSolver::Plan& p : all)
+        const std::size_t n_now = all.size();
+        for (std::size_t pi = 0; pi < n_now; ++pi)
         {
+            const TurnSolver::Plan& p = all[pi];
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
                 || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0) { continue; }
             for (std::size_t ai = 0; ai < p.actions.size(); ++ai)
@@ -60219,10 +60287,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || d->params.put_back_from_hand <= 0) { continue; }
                 const int w = PutBackAxisWidth(state, p, ai, *d);
+                // The fan's sibling identity for the put-back fold (PutBackFoldMemo): on the variants
+                // now, on the base after every axis has cloned (putback_based, below).
+                static thread_local int s_putback_group = 0;
+                if (w > 1)
+                {
+                    if (++s_putback_group <= 0) { s_putback_group = 1; }
+                    putback_based.emplace_back(pi, s_putback_group);
+                }
                 for (int k = 1; k < w; ++k)
                 {
                     TurnSolver::Plan v = p;
                     v.putback_choice = k;
+                    v.putback_group  = s_putback_group;
                     extra.push_back(std::move(v));
                 }
                 ++fanned;
@@ -61921,6 +61998,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // Marked HERE, after every axis has cloned, so no later clone inherits a mark it did not earn: a
     // clone has no twin, keeps -1, and stays the heuristic default (the residual MTG_DIG_CENSUS counts).
     // 2 runs exactly the gate the base ran at -1; with the twin in the list the no-dig world is SEARCHED.
+    for (const std::pair<std::size_t, int>& t : putback_based) { all[t.first].putback_group = t.second; }
     for (const std::pair<std::size_t, int>& t : dig_twinned)
     {
         all[t.first].dig_choice = 2;
@@ -62115,7 +62193,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 464;   // pinned; see the static_assert below (+0: Plan::putback_choice (Brainstorm's put-back pin), 2026-10-17, lands in existing padding -- measured, the assert compiles at 464 -- folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
+static constexpr std::size_t kPlanDomAssertedSize = 472;   // pinned; see the static_assert below (+8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -62260,7 +62338,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
             add(pl.bruna_gather_choice); add(pl.combat_aura_swap_choice); add(pl.attack_attach_choice);
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
-            add(pl.putback_choice);
+            add(pl.putback_choice); add(pl.putback_group);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
             add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
@@ -68373,6 +68451,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // repeated state, so a no-dig twin whose base did not dig is always a skip-to-be.
         DigFoldMemo m2_dig_fold;
         m2_dig_fold.on = DigSearchedChoiceOn();
+        PutBackFoldMemo m2_pb_fold;   // ...and the put-back fold, on the same argument
+        m2_pb_fold.on = PutBackFoldOn();
         // ---- THE M2 FIXPOINT STEP (MTG_M2_FIXPOINT; EngineFlags.h / M2FixModeFor) -----------------
         // ONE body for the two places a main-2 line can need it: this loop's own plans, and the wave
         // walker's variants below (MTG_BP_M2_WAVE_FIXPOINT) -- the walker used to send its lines
@@ -68487,6 +68567,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
                 continue;
             }
+            if (m2_pb_fold.Declines(q) >= 0)   // THE PUT-BACK FOLD (see PutBackFoldMemo)
+            {
+                if (beam_here) { --_beam_i; }
+                continue;
+            }
             const bool m2_plain_rank = q.bp_choice >= 0 && q.bp_choice < kBpEmptyChoice && !q.bp_all
                                        && q.bp_base >= 0;
             const std::uint64_t m2_nkey = m2_plain_rank
@@ -68549,6 +68634,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             const std::uint64_t truncasym_before = g_bp_truncasym_last;
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
             m2_dig_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
+            m2_pb_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
             if (m2_plain_rank) { m2_known_n.emplace(m2_nkey, g_bp_cands_last); }
             {
                 const std::size_t pos = static_cast<std::size_t>(&q - post.data());
@@ -69892,6 +69978,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // ...and the dig fold (see DigFoldMemo), on the same condition.
     DigFoldMemo dig_fold;
     dig_fold.on = bp_variants_here && DigSearchedChoiceOn();
+    // ...and the put-back fold (see PutBackFoldMemo), on the same condition.
+    PutBackFoldMemo pb_fold;
+    pb_fold.on = bp_variants_here && PutBackFoldOn();
     // MTG_BP_WAVE_PROBE only: which wave SLOT first reached each key, for the dup_self/dup_cross
     // split. Left empty (never inserted into) when the probe is off.
     std::unordered_map<TranspositionTable::Key, uint64_t, TranspositionTable::KeyHash> wave_key_slot;
@@ -70279,6 +70368,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             FswDeclinedTrace(state, depth, p, "dig-fold", {}, state, -1, best.win_turn);
             continue;
         }
+        // THE PUT-BACK FOLD (see PutBackFoldMemo): the dig fold's bookkeeping exactly.
+        if (pb_fold.Declines(p) >= 0)
+        {
+            if (rec_vals) { node_vals.push_back(max_turns + 1); }
+            if (beam_here) { --_beam_i; }
+            FswDeclinedTrace(state, depth, p, "putback-fold", {}, state, -1, best.win_turn);
+            continue;
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
@@ -70353,6 +70450,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
         }
         dig_fold.Record(p, !node_snap.pending, static_cast<int>(&p - pre.data()));
+        pb_fold.Record(p, !node_snap.pending, static_cast<int>(&p - pre.data()));
         bounce_fold.Record(p, static_cast<int>(&p - pre.data()), !node_snap.pending,
                            [&] { return BuildDedupKey(s); });
         if (bounce_expect != nullptr) { BounceFoldMemo::CountVerify(BuildDedupKey(s) == *bounce_expect); }
@@ -75920,6 +76018,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // ...and the dig fold (see DigFoldMemo), on the same condition.
         DigFoldMemo dig_fold;
         dig_fold.on = bp_variants_here && DigSearchedChoiceOn();
+        // ...and the put-back fold (see PutBackFoldMemo), on the same condition.
+        PutBackFoldMemo pb_fold;
+        pb_fold.on = bp_variants_here && PutBackFoldOn();
         // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
         // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
         // runs every rollout turn and is where the doc says the searched-breakpoint gain actually
@@ -76144,6 +76245,17 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     continue;
                 }
             }
+            // THE PUT-BACK FOLD (see PutBackFoldMemo) -- the dig fold's bookkeeping exactly.
+            {
+                const int pbs = pb_fold.Declines(plan);
+                if (pbs >= 0)
+                {
+                    if (bp_nobp.count(static_cast<std::size_t>(pbs)) != 0)
+                    { bp_nobp.insert(static_cast<std::size_t>(&plan - candidates.data())); }
+                    ++candidates_done;
+                    continue;
+                }
+            }
 
             // THE PUT-BOUNCE FOLD (see PutBounceFold): an attack bounce variant whose resolution a sibling
             // already ran from the same shared state is that sibling's combat, which the combat-pin fold
@@ -76293,6 +76405,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     }
                 }
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
+                pb_fold.Record(plan, true, static_cast<int>(cand_index));
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
                                    [&] { return BuildDedupKey(copy); });
                 if (bounce_expect != nullptr)
@@ -76546,6 +76659,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 bounce_fold.Arm(plan);
                 ApplyPlanDirect(copy, plan, false);
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
+                pb_fold.Record(plan, true, static_cast<int>(cand_index));
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
                                    [&] { return BuildDedupKey(copy); });
                 if (bounce_expect != nullptr)

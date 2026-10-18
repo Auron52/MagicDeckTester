@@ -30076,6 +30076,11 @@ inline void ReorderTopNoShuffle(GameState& state, int n, const std::string& sour
 // second)"): the hand is `examined`, every card is legal, the reply is the card to place; the put-back
 // is mandatory, so -1 takes the default.
 inline thread_local int g_scripted_putback_choice = -1;   // -1 = the provider's default (ordinal 0)
+// What the LAST autonomous put-back resolved: its candidate count and the rank it took (the pin's,
+// clamped, or 0 for the default). Read by ApplyPlanDirect for the put-back fold (PutBackFoldMemo in
+// TurnSolver.cpp); -1 when nothing (or a human) resolved one.
+inline thread_local int g_putback_resolved_w = -1;
+inline thread_local int g_putback_resolved_i = -1;
 struct ScriptedPutBack
 {
     explicit ScriptedPutBack(int k) : saved(g_scripted_putback_choice) { g_scripted_putback_choice = k; }
@@ -30229,14 +30234,30 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
     const std::vector<std::vector<int>> cands = PutBackCandidates(state, controller, n);
     if (cands.empty()) { return; }
     std::vector<int> pick = cands.front();
+    g_putback_resolved_w = static_cast<int>(cands.size());
+    g_putback_resolved_i = 0;
     if (g_scripted_putback_choice >= 0)
     {
         const int k = g_scripted_putback_choice;
         g_scripted_putback_choice = -1;   // consumed by this put-back (a second Brainstorm takes the default)
         pick = cands[static_cast<std::size_t>(k) < cands.size() ? static_cast<std::size_t>(k) : cands.size() - 1];
+        g_putback_resolved_i = std::min(k, static_cast<int>(cands.size()) - 1);
+        // MTG_PUTBACK_TRACE (diagnostic, default off): how often a fanned rank lands past the real list
+        // (a clamped duplicate -- one apply, skipped before a rollout), printed at exit.
+        static const bool s_pb_clamp_trace = EnvOn("MTG_PUTBACK_TRACE");
+        if (s_pb_clamp_trace)
+        {
+            static std::atomic<long long> s_pinned{0}, s_clamped{0};
+            struct Report { std::atomic<long long>* p; std::atomic<long long>* c;
+                ~Report() { std::fprintf(stderr, "[putback] pinned resolutions=%lld clamped=%lld\n", p->load(), c->load()); } };
+            static Report s_report{ &s_pinned, &s_clamped };
+            s_pinned.fetch_add(1, std::memory_order_relaxed);
+            if (static_cast<std::size_t>(k) >= cands.size()) { s_clamped.fetch_add(1, std::memory_order_relaxed); }
+        }
     }
     else if (g_play_dig_chooser != nullptr)
     {
+        g_putback_resolved_w = -1;   // a human's pick is no fold's business
         // Human play: one card at a time, top first, over the hand as it stands (every eligible card
         // is legal; a pick out of range / -1 takes the default's card for that slot).
         Player& hp = state.players[controller];
