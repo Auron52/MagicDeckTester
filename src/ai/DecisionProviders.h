@@ -1114,6 +1114,17 @@ public:
     std::vector<int> SacOutletVictimCandidates(
         const GameState& s, const Permanent& src, const std::vector<int>& reps) const override;
     int ActivationOrderRank(const GameState& s, const CardDefinition& d) const override;
+    // The post-combat discard-pump dominance fold (Vampires perf 2026-10-18, docs/design/
+    // vampires-search-cost.md): the deck's half of the proof, checked card by card against the list
+    // (Vampire.cod, 2026-10-18). (a) No post-combat power/toughness reader: the only power readers are
+    // combat ones (Drana's first-strike counters, the lords, Captain's first strike) and Pit Fighter /
+    // Blood / steal / transform / Voldaren Estate read counts and creature types, never power. (b) No
+    // graveyard or discard reader but Bloodghast's own graveyard landfall (engine-exempt) and madness
+    // (Falkenrath Gorger's grant, Markov Baron / Asylum Visitor's own; a madness CAST is never folded,
+    // the decline is a plain discard). The hand-size readers (Asylum Visitor's hellbent upkeep draw, the
+    // cleanup's seven) are the engine's half. A card added to the list that reads the graveyard,
+    // power after combat, or a discard must revisit this.
+    bool PostCombatPumpDiscardFoldOptIn() const override { return true; }
     // Vampires A1 (AGENT-DRAFTED, same lever): the madness default -- the base dominance rule (cast the
     // cheapest max-free option) except a graveyard-landfall card (Bloodghast) in a MAIN phase while this
     // turn's land drop is open and a land is in hand: DECLINE (it returns from the graveyard on that
