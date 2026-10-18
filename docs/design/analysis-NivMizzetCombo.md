@@ -39,7 +39,7 @@ Worktrees (all under `/workspaces/MagicDeckTester2/.claude/worktrees/`):
   / `DrawPingStackLease`, replacing ResolveDamageDraws; ResolveDrawTriggers + OnCreatureDealtDamageToOpponent
   rewritten), the put-back chooser guard (`&& !OpponentHasLost(state)`), main.cpp dig-note text, tests
   in test_niv_draw_trigger.cpp ("...the stack draws ONE per ping", "Two Nivs, Curiosity on ONE...").
-  Units passed 1491/1491 on the LIFO build; a rebuild + units + scenarios with the chooser guard was
+  COMMITTED as the "rules(niv): the draw/ping loop resolves LIFO" commit (1491 unit, 229 scenarios).
   running (task output only). NEXT: confirm units + scenarios -> commit "rules(niv): the draw loop
   resolves LIFO ..." -> re-run `TAG=ab2 bash logs/arms/aura_ab.sh` in worktree niv (A/B vs niv-bs; compare
   with `python3 logs/arms/aura_ab_cmp.py ab2`). Also uncommitted (keep uncommitted): the suite rows in
