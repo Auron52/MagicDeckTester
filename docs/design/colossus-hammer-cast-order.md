@@ -230,3 +230,25 @@ battlefield or in hand can double strike. run7 (56,000 games, seeds 13700001+, p
 
 It recovers all 38 games (37 at stage 1, s13600710 at d8 b0), and the suite's four tutor counterexamples (smoke s1001 gi118 and 2HG gi22, regression
 s2002 gi25 and gi112), at stage 1.
+
+### Narrowed (2026-10-18, after the USER: *"Wait, if we have a creature and free attach hammer should always win in actual play?"* / *"+10/+10 will beat double strike."*)
+
+Right for the trade it names: on the same creature the Hammer (+10/+10) beats Lizard Blades' double strike every
+time. The amendment's wins are not that trade -- they get BOTH pieces and the Lizard is the double-strike BODY the
+Hammer goes on (gi118: two Gifts in hand). But the broad amendment also offered the Lizard with no other route to a
+Hammer, which only pays if a Hammer shows up later -- a bet the clairvoyant search can see the answer to.
+`MTG_COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER` (default ON): beside a non-double-striker and a cheap attach, Lizard Blades
+only when a Hammer is already reachable (in hand, on our battlefield, or a second Equipment tutor in hand);
+otherwise the Hammer alone. run8 (24,000 games, seeds 13800001+) and run8nc (`MTG_NC_SEARCH=1`, 3,000), paired
+against the rule as stated:
+
+| cell | broad amendment | narrowed | work / wall (broad, narrowed) |
+|---|---|---|---|
+| play settings, shipped search | -0.0027 (9 / 1) | -0.0017 (6 / 1) | 1.018x, 1.012x |
+| d3 b10 | -0.0060 (25 / 1) | -0.0045 (19 / 1) | 1.015x, 1.009x |
+| 2HG play settings | -0.0010 (1 / 0) | -0.0010 (1 / 0) | 1.019x, 1.013x |
+| **play settings, NON-clairvoyant search** | **-0.0040 (4 / 0)** | **-0.0040 (4 / 0), the same 4 games** | wall 1.024x, 1.006x |
+
+Under honest play the broad form's extra is worth nothing (its shipped-search edge was the search knowing a
+Hammer would come); the narrowed rule keeps all of the real gain. Its two slower games (s13800066, s13820383)
+recover at depth W b100.

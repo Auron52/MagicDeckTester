@@ -421,6 +421,11 @@ Results (search d5 b200 / Claude): 2100003 5/5, 2100005 4/4, 2100011 4/4, 210001
    unfindable at any budget. PROVISIONAL default ON (`MTG_COLOSSUS_TUTOR_LIZARD_DS`, =0 -> the rule as stated),
    read as the USER's *"only consider the others if it falls short"* (with no double striker the Hammer is half
    the damage). Awaiting the USER's ruling.
+   -> USER 2026-10-18: *"Wait, if we have a creature and free attach hammer should always win in actual play?"* /
+   *"+10/+10 will beat double strike."* NARROWED (`MTG_COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER`, default ON): the Lizard
+   only when a Hammer is already reachable (hand / battlefield / a second tutor), i.e. as the double-strike body
+   for it; otherwise the Hammer alone. Non-clairvoyant search: identical to the broad form (-0.0040, same 4 games)
+   at 1.006x wall -- the broad form's extra was clairvoyance. Still awaiting the USER's ruling on the narrowed form.
 
 ## Provisional deferrals (await USER sign-off)
 

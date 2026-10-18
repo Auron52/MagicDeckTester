@@ -44893,6 +44893,17 @@ bool ColossusTutorLizardDsEnabled()
     return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_DS, on);
 }
 
+// The amendment only where a Hammer is already reachable -- in hand, on our battlefield, or through a second
+// Equipment tutor in hand (default ON; =0 -> the broad amendment). Non-clairvoyant search (run8nc, 1,000 paired):
+// identical to the broad form (-0.0040, the same 4 faster games) at 1.006x wall vs 1.024x. USER: "+10/+10 will beat double strike": fetching the
+// Lizard is right only when it becomes the double-strike body FOR a Hammer we will have anyway; with no other route
+// to a Hammer, the Hammer itself is the pick.
+bool ColossusTutorLizardNeedsHammerEnabled()
+{
+    static const bool on = EnvOn("MTG_COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER", true);   // DEFAULT ON (run8nc)
+    return heurarm::Flag(heurarm::COLOSSUS_TUTOR_LIZARD_NEEDS_HAMMER, on);
+}
+
 bool IsCheapAttachSource(const CardParams& p)
 {
     return p.attach_equipment_on_etb || p.first_equip_free || p.etb_return_equipment_from_gy
@@ -44924,7 +44935,7 @@ ColossusHammerProvider::TutorCandidates(const GameState& s, int controller, cons
     if (hammer.empty()) { return all; }
 
     // What we have to carry it and to attach it cheaply: our battlefield and our hand.
-    bool creature = false, ds_creature = false, cheap_attach = false;
+    bool creature = false, ds_creature = false, cheap_attach = false, hammer_reachable = false;
     auto note = [&](const CardDefinition& d, bool is_creature_now)
     {
         if (is_creature_now)
@@ -44933,6 +44944,7 @@ ColossusHammerProvider::TutorCandidates(const GameState& s, int controller, cons
             if (CanDoubleStrikeWithEquipment(d)) { ds_creature = true; }
         }
         if (IsCheapAttachSource(d.params)) { cheap_attach = true; }
+        if (d.params.is_equipment && d.params.equip_power_bonus >= 10) { hammer_reachable = true; }
     };
     for (const Permanent& p : s.battlefield)
     {
@@ -44943,12 +44955,18 @@ ColossusHammerProvider::TutorCandidates(const GameState& s, int controller, cons
     for (const Card& c : s.players[controller].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr) { note(*d, d->card.IsCreature()); }
+        if (d != nullptr)
+        {
+            note(*d, d->card.IsCreature());
+            if (IsEquipmentTutor(d->params)) { hammer_reachable = true; }   // the resolving tutor is on the stack, not here
+        }
     }
 
     std::vector<std::string> out = { hammer };
-    const bool lizard_ok = ColossusTutorLizardDsEnabled() ? !ds_creature
-                                                          : (!creature || (!ds_creature && !cheap_attach));
+    const bool stated = !creature || (!ds_creature && !cheap_attach);
+    const bool amend  = ColossusTutorLizardDsEnabled() && !ds_creature
+                     && (!ColossusTutorLizardNeedsHammerEnabled() || hammer_reachable);
+    const bool lizard_ok = stated || amend;
     if (!lizard.empty() && lizard_ok) { out.push_back(lizard); }
     if (ColossusTutorOthersEnabled() && !cheap_attach) { out.insert(out.end(), others.begin(), others.end()); }
     return out;
