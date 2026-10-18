@@ -2991,6 +2991,26 @@ public:
 // ran two Waves. SelesnyaLifegainProvider is an EMPTY DeckProvider derivation, so this one is too --
 // play-neutral by construction (every judgement hook is the Generic one); what it adds is a place
 // for a certificate and a name in scripts/provider_audit.py.
+// NivMizzetCombo (Niv-Mizzet draw/ping loop: Curiosity / Tandem Lookout on a Niv + any draw;
+// onboarded 2026-10-17). Its OWN provider from day one (Stage 4a): before this the deck rode
+// GenericProvider (the NivMizzetCombo pin in test_pirates_provider.cpp). An EMPTY DeckProvider
+// derivation (== Generic behaviour) -- play-neutral by construction; no judgement is added here until
+// one is measured (cast order / discard buckets are the USER's to author).
+class NivMizzetComboProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage reaches the opponent through combat (the "
+               "4/4 and 5/5 flying Nivs, 2/1 Lookouts and Generator Servants) AND off every draw: each "
+               "card drawn with a Niv out deals 1 per Niv, and a Niv carrying Curiosity or paired with a "
+               "Tandem Lookout turns ANY draw into a loop bounded only by the library. A winless-this-turn "
+               "bound must price combat plus every draw source this turn (the draw step, cantrips, "
+               "Brainstorm's 3, Firemind's {T}, Parun's cast triggers incl. a self-Remand) times the "
+               "Nivs out, and must call a live loop lethal whenever the library holds at least the "
+               "opponent's remaining life." }; }
+    const char* Name() const override { return "NivMizzetCombo"; }
+};
+
 // Galadriel (Galadriel of Lothlorien + 52 scry lands + Sol Ring, Crackle with Power as the finisher;
 // onboarded 2026-10-17). Its OWN provider from day one (Stage 4a): before this branch the deck rode
 // GenericProvider. An EMPTY DeckProvider derivation (== Generic behaviour) -- play-neutral by

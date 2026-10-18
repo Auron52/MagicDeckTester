@@ -19159,6 +19159,7 @@ namespace
     const SelesnyaLifegainProvider g_selesnya_lifegain;
     const LandfallProvider       g_landfall;
     const GaladrielProvider      g_galadriel;
+    const NivMizzetComboProvider g_niv_mizzet_combo;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -21147,6 +21148,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // no other card in cards.json. Deliberately EXCLUDES etb_scry (every Temple: Treasure Hunt runs
     // Temple of Epiphany) and Crackle's params (Hinata).
     bool galadriel = false;
+    // NIV-MIZZET COMBO (draw/ping loop). Signature = four params OR'd across FOUR different cards
+    // (Niv-Mizzet, the Firemind / Parun's draw_trigger_damage, Parun's
+    // cast_trigger_instant_sorcery_draw, Curiosity's aura_damage_trigger_draw, Tandem Lookout's
+    // soulbond_damage_trigger_draw), all new in the 2026-10-17 onboarding and carried by no other card
+    // in cards.json. Deliberately EXCLUDES the cantrips (Ponder / Preordain / Brainstorm: Hinata,
+    // Unpredictable Cyclone), Remand's counters_target_spell_to_hand (Hinata) and the bare `soulbond`
+    // keyword (Silverblade Paladin: WhiteKnights).
+    bool niv = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -21154,6 +21163,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardParams& p = def->params;
         if (p.attack_gather_auras) { bruna = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
+        if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
+            || p.aura_damage_trigger_draw || p.soulbond_damage_trigger_draw)
+        { niv = true; }
         if (p.attack_attach_equipment || p.attach_target_equipment || p.reconfigure_cost.has_value())
         { colossus = true; }
 
@@ -21611,6 +21623,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Bruna: at the very top -- its signature is carried by no other card, so the position is free,
     // and it must beat `anti` (Open the Armory / Glittering Wish tutor_to_hand).
     // Galadriel: its signature is carried by no other card, so the position is free.
+    // NivMizzetCombo: likewise (four params no other card carries), and it must beat `white_knights`
+    // (Tandem Lookout's soulbond once tripped it -- see the flag).
+    if (niv)         { return g_niv_mizzet_combo; }
     if (galadriel)   { return g_galadriel; }
     if (bruna)       { return g_bruna; }
     // Colossus Hammer: above `equipment` and `anti` (see the flag). Its signature is carried by no
