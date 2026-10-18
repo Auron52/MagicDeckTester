@@ -1735,6 +1735,18 @@ public:
     // SacExpendabilityRank (most expendable first), every class kept.
     virtual std::vector<int> SacOutletVictimCandidates(
         const GameState& s, const Permanent& src, const std::vector<int>& reps) const;
+    // PostCombatPumpDiscardFoldOptIn -- opt IN to the post-combat DISCARD-PUMP dominance fold
+    // (MTG_VAMP_M2_PUMP_DISCARD_FOLD; SubsetPostCombatPumpDiscardDominated in TurnSolver.cpp). In the
+    // second main a "Discard a card: <team> get +N/+N until end of turn" activation (Stromkirk Condemned)
+    // whose discard is NOT cast for madness only moves a card from hand to graveyard -- combat is over, so
+    // the pump reaches nothing -- and the same plan without it keeps the card. The ENGINE proves the
+    // hand-size half (hellbent upkeep readers, the cleanup's maximum hand size, draws); the DECK must vouch
+    // for the rest, which is why this is an opt-in and not a default: (a) nothing in the list reads a
+    // creature's power or toughness after combat, and (b) nothing reads the graveyard or the act of
+    // discarding except the cards the engine exempts by itself (a graveyard-landfall watcher -- Bloodghast
+    // -- and a madness CAST). A deck holding flashback / delve / threshold / a "whenever you discard"
+    // trigger must not opt in. Default false -> the fold never engages (byte-identical).
+    virtual bool PostCombatPumpDiscardFoldOptIn() const { return false; }
 
     // ---- Vampires A1 (2026-10-18): MADNESS -------------------------------------------------------
     // MadnessCastDefault -- the madness cast-or-decline taken WITHOUT a searched pin. Reached only

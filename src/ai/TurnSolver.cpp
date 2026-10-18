@@ -12158,9 +12158,89 @@ static bool SubsetDiscardOutletsUnpayable(const GameState& state, const std::vec
     return false;
 }
 
+// Rule 9 -- THE POST-COMBAT DISCARD-PUMP DOMINANCE FOLD (Vampires perf 2026-10-18,
+// MTG_VAMP_M2_PUMP_DISCARD_FOLD, DEFAULT ON; =0 -> every pin searched; docs/design/vampires-search-cost.md).
+//
+// WHAT IT REMOVES. In the SECOND main, Stromkirk Condemned's "Discard a card: Vampires you control get
+// +1/+1 until end of turn" pumps nothing (the combat damage step is over and the goldfish never blocks),
+// so an activation whose discard is NOT cast for madness does exactly one thing: it moves card X from the
+// hand to the graveyard. Measured on the slowest Vampires game (seed 13180132 gi131 d3 b10, every charged
+// candidate classified at the la_cand charge): 24.8% of all units were such second-main plans -- one per
+// distinct hand name, crossed with every other choice of the plan.
+//
+// THE PROOF (weak dominance; P = the selection without the pump, P' = with it). P' and P reach the same
+// state except: X in the graveyard instead of the hand, the pump's until-end-of-turn bonus, and
+// Condemned's once-each-turn flag (reset at our next untap). From P, every continuation of P' is still
+// playable -- hold X and never use it -- so P is worth at least P' unless one of those three differences is
+// READ by something. The bonus and the flag are read by nothing after combat (the deck's half, vouched by
+// DecisionProvider::PostCombatPumpDiscardFoldOptIn, which also vouches that nothing reads the graveyard or
+// the act of discarding but a graveyard-landfall watcher -- Bloodghast, exempt below -- and madness, whose
+// CAST answer is never folded). X in hand is read by the HAND-SIZE rules, which this rule checks exactly:
+//   * a hellbent upkeep reader (Asylum Visitor: "if that player has no cards in hand, you draw") on our
+//     battlefield or in our hand, when the plan can leave the hand EMPTY -- the discard then buys a card;
+//   * the cleanup's maximum hand size, when the plan can leave MORE than seven -- the discard then picks
+//     which card goes instead of the cleanup's own ranking;
+//   * a DRAW in the selection (Falkenrath Pit Fighter, the Blood crack) -- its hand-entry breakpoint
+//     re-solves the phase, so the end-of-turn hand is not this selection's to count: no fold.
+// Every exemption keeps the plan, so the rule can only remove a selection whose twin without the pump is
+// enumerated too (dropping one action never violates another subset rule: rules 1 / 8 count discards and
+// only relax). A DOMINANCE fold, not an identity: the two plans reach different states, so the measured
+// claim is per game at large budget, never byte-identity of the run.
+static bool PostCombatPumpDiscardFoldOn()
+{
+    static const bool env = EnvOn("MTG_VAMP_M2_PUMP_DISCARD_FOLD", true);
+    return heurarm::Flag(heurarm::VAMP_M2_PUMP_DISCARD_FOLD, env);
+}
+static bool SubsetPostCombatPumpDiscardDominated(const GameState& state, const std::vector<Action>& cands,
+                                                 const std::vector<int>& sel, bool is_pre_combat)
+{
+    if (is_pre_combat) { return false; }
+    bool candidate = false;
+    for (int idx : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(idx)];
+        if (c.kind != Action::Kind::ActivatePump || c.gy_exile_mode != 4) { continue; }
+        if (c.discard_name.empty() || c.madness_choice > 0) { continue; }   // unpinned (human) / a madness CAST
+        if (c.def != nullptr && c.def->params.discard_team_pump_power <= 0
+            && c.def->params.discard_team_pump_toughness <= 0) { continue; }
+        const CardDefinition* xd = CardDatabase::Instance().Lookup(c.discard_name.str());
+        if (xd == nullptr || xd->gy_landfall_watcher) { continue; }        // Bloodghast comes back
+        candidate = true;
+        break;
+    }
+    if (!candidate) { return false; }
+    if (!PostCombatPumpDiscardFoldOn() || HumanPlayActive() || DecisionUnpruned()) { return false; }
+    if (!ResolveProvider(state).PostCombatPumpDiscardFoldOptIn()) { return false; }
+    const Player& ap = state.ActivePlayer();
+    int h = 0;
+    for (const Card& hc : ap.hand) { if (!hc.m_is_staged) { ++h; } }
+    for (int idx : sel)
+    {
+        const Action& d = cands[static_cast<std::size_t>(idx)];
+        if (d.kind == Action::Kind::CastFromHand || d.kind == Action::Kind::ActivateVial) { --h; continue; }
+        if (d.kind == Action::Kind::ActivatePump && d.gy_exile_mode == 4) { --h; continue; }
+        if ((d.kind == Action::Kind::ActivatePermAbility && d.ability_mode == Action::AbilityMode::BloodDraw)
+            || (d.kind == Action::Kind::SacCreatureOutlet && d.def != nullptr && d.def->params.sac_outlet_draw > 0))
+        { return false; }   // a draw: the hand-entry breakpoint re-solves the phase
+    }
+    if (h > 7) { return false; }   // the cleanup would discard: the pump's pick is a real choice there
+    if (h <= 0)
+    {
+        auto reads_hellbent = [](const CardDefinition* d) { return d != nullptr && d->params.hellbent_upkeep_draw > 0; };
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index == state.active_player_index && reads_hellbent(CardDatabase::Instance().LookupCached(q.card)))
+            { return false; }
+        }
+        for (const Card& hc : ap.hand) { if (reads_hellbent(CardDatabase::Instance().LookupCached(hc))) { return false; } }
+    }
+    return true;
+}
+
 bool TurnSolver::VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
                                             const std::vector<int>& sel, int rule)
 {
+    if (rule == 9) { return SubsetPostCombatPumpDiscardDominated(state, cands, sel, /*is_pre_combat=*/false); }
     if (rule == 7) { return SubsetConvokeBodiesInvalid(state, cands, sel); }
     if (rule == 8) { return SubsetDiscardOutletsUnpayable(state, cands, sel); }
     return false;
@@ -41867,6 +41947,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Vampires A2 duplicates (over-pinned discards, a same-plan victim without its cast, the wrong
         // Blood cost variant, a non-canonical identical-Condemned pair). Lockstep twin in eval_and_push.
         if (pre.vamp_outlet    && SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer)) { return; }
+        // Rule 9 (Vampires perf): a post-combat discard pump that only discards is dominated by its twin.
+        if (pre.vamp_outlet    && SubsetPostCombatPumpDiscardDominated(state, cands, sel, is_pre_combat)) { return; }
         if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
         if (pre.persist_loop   && SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
@@ -55904,6 +55986,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // odometer position: a constructed `sat_bypass` line has no enumerated twin).
         if (pre.vamp_outlet    && SubsetVampOutletInvalid(state, cands, sel,
                                                           fold_from_odometer || !sat_bypass)) { return; }
+        // Rule 9 (Vampires perf): lockstep twin of Solve::consider's call.
+        if (pre.vamp_outlet    && SubsetPostCombatPumpDiscardDominated(state, cands, sel, is_pre_combat)) { return; }
         if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
         if (pre.persist_loop   && SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,

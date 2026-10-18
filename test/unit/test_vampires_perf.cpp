@@ -3,6 +3,8 @@
 //     colour is not emitted (it would resolve as the decline it duplicates);
 //   * MTG_VAMP_OUTLET_NOT_GROWTH -- a DISCARD-cost sac outlet (Falkenrath Pit Fighter) no longer disarms
 //     OptimisticTurnMana's ceiling;
+//   * MTG_VAMP_M2_PUMP_DISCARD_FOLD -- subset rule 9, the post-combat discard-pump dominance fold, and its
+//     exemptions (madness cast, Bloodghast, hellbent, the cleanup's seven, a draw in the selection).
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
@@ -187,5 +189,83 @@ TEST_CASE("Outlet not growth: Falkenrath Pit Fighter no longer disarms the mana 
         // twin: the subset walk's total-mana check passes on {R}-as-generic) is back.
         ArmScope off(heurarm::VAMP_OUTLET_NOT_GROWTH, 0);
         CHECK(PumpChoices(s, "Falkenrath Gorger").count(1) == 1);
+    }
+}
+
+TEST_CASE("Rule 9: a post-combat discard pump that only discards is dominated -- and its exemptions")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.phase = Phase::PostCombatMain;
+    Put(s, "Stromkirk Condemned", 1);
+    Put(s, "Swamp", 50); Put(s, "Swamp", 51);
+    Hand(s, "Swamp", 10);
+    Hand(s, "Legion Lieutenant", 11);
+    Hand(s, "Vampire of the Dire Moon", 12);
+    Hand(s, "Bloodghast", 13);
+    const std::vector<Action> cands = {
+        PinnedPump(1, "Swamp"),                      // 0: a plain discard
+        PinnedPump(1, "Markov Baron", 0),            // 1: a madness DECLINE (still only a discard)
+        PinnedPump(1, "Vampire of the Dire Moon", 1),// 2: a madness CAST -- never folded
+        PinnedPump(1, "Bloodghast"),                 // 3: comes back on landfall -- never folded
+        Cast("Legion Lieutenant", 1),                // 4
+        Crack(2),                                    // 5: a draw in the selection
+    };
+    CHECK(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 0 }, 9));
+    CHECK(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 1 }, 9));
+    CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 2 }, 9));
+    CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 3 }, 9));
+    CHECK(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 4, 0 }, 9));
+    CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 0, 5 }, 9));   // the crack draws
+    CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 4 }, 9));      // no pump at all
+    {
+        ArmScope off(heurarm::VAMP_M2_PUMP_DISCARD_FOLD, 0);
+        CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 0 }, 9));
+    }
+}
+
+TEST_CASE("Rule 9: hellbent and the cleanup's seven keep the discard a real choice")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.phase = Phase::PostCombatMain;
+    Put(s, "Stromkirk Condemned", 1);
+    Put(s, "Swamp", 50);
+    Hand(s, "Swamp", 10);                            // the last card
+    const std::vector<Action> cands = { PinnedPump(1, "Swamp") };
+    // No hellbent reader: an empty hand buys nothing -- dominated.
+    CHECK(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 0 }, 9));
+    // Asylum Visitor on the battlefield: emptying the hand draws a card at our upkeep -- kept.
+    Put(s, "Asylum Visitor", 2);
+    CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 0 }, 9));
+    // Nine cards: the cleanup would discard down to seven, so WHICH card goes is a decision -- kept.
+    GameState big = Fresh();
+    big.phase = Phase::PostCombatMain;
+    Put(big, "Stromkirk Condemned", 1);
+    for (int k = 0; k < 9; ++k) { Hand(big, "Swamp", 20 + k); }
+    CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(big, cands, { 0 }, 9));
+}
+
+TEST_CASE("Rule 9 in the walk: second-main discard-only pumps are not enumerated; main 1 keeps them all")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Stromkirk Condemned", 1);
+    Put(s, "Legion Lieutenant", 2);
+    Put(s, "Swamp", 50); Put(s, "Swamp", 51);
+    Hand(s, "Swamp", 10);
+    Hand(s, "Captivating Vampire", 11);
+    Hand(s, "Bloodghast", 12);
+    // Main 1: the pump reaches combat -- every discard pin is a searched variant.
+    const std::set<int> pre_swamp = PumpChoices(s, "Swamp", /*pre=*/true);
+    CHECK(!pre_swamp.empty());
+    // Main 2: the plain discards are dominated by holding the card; Bloodghast's survives.
+    s.phase = Phase::PostCombatMain;
+    CHECK(PumpChoices(s, "Swamp", /*pre=*/false).empty());
+    CHECK(PumpChoices(s, "Captivating Vampire", /*pre=*/false).empty());
+    CHECK(!PumpChoices(s, "Bloodghast", /*pre=*/false).empty());
+    {
+        ArmScope off(heurarm::VAMP_M2_PUMP_DISCARD_FOLD, 0);
+        CHECK(!PumpChoices(s, "Swamp", /*pre=*/false).empty());
     }
 }
