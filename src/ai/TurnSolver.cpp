@@ -38411,10 +38411,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // shared expendability heuristic (tokens/Mogg first, lords/scaling deferred, source last --
             // see CanonicalSacVictim). This emits ONE action per outlet -- linear, not exponential, and
             // keeps the single-sac pick in lockstep with the Skirk multi-sac burst's apply-time picks.
+            // self_only passed through: "Sacrifice THIS creature" has exactly one legal victim, and
+            // without it the canonical pick ranks the source LAST and bakes another body, which the
+            // apply's self-only filter then refuses -- a silent no-op activation.
             int victim_id = CanonicalSacVictim(state, state.active_player_index,
                                                src.card.m_number, need_sub,
                                                sd->params.sac_outlet_allows_enchantment,
-                                               sd->params.sac_outlet_excludes_self);
+                                               sd->params.sac_outlet_excludes_self,
+                                               sd->params.sac_outlet_self_only);
             // SAME-LINE FODDER (MTG_SAC_FODDER_SAME_LINE, default OFF -> byte-identical). The board
             // has no victim, but this deck can MAKE one for free right now -- three idle spore
             // counters become a Saproling and that Saproling becomes a mana. Bailing here is what
