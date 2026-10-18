@@ -196,6 +196,15 @@ struct CardParams
     // in a different phase) must NOT reuse this pattern blindly. Also flips DeckUsesSecondMain.
     bool combat_damage_free_cast = false;
 
+    // Drana, Liberator of Malakir (Vampires, 2026-10-18): "Whenever Drana deals combat damage to a
+    // player, put a +1/+1 counter on each attacking creature you control." N counters (through the
+    // doubler-aware PutPlusCounters) on every creature still attacking, once per damage STEP in which
+    // this source connects (FireCombatDamageTeamCounters, inside ResolveCombatDamage). It is the card
+    // the CR 510.4 two-step split exists for: Drana strikes first, so her counters are on every
+    // regular-step attacker before it deals damage. One trigger per damage event, never scaled by
+    // opponent heads. 0 = no such trigger -> byte-identical.
+    int combat_damage_counters_each_attacker = 0;
+
     // Landfall: if > 0 and a land entered the battlefield under the caster's control
     // this turn, use this value instead of `damage` (e.g. Searing Blaze). NOT a trigger: a
     // condition read at resolution (LandEnteredUnderControlThisTurn, SpellEffects.h), and NOT one of
@@ -296,6 +305,16 @@ struct CardParams
     // waves from each Archangel of Thune, and the fuel for Righteous Valkyrie's life-threshold
     // anthem and Resplendent Angel's gained-5-life end step.
     bool grants_lifelink     = false;  // Lyra Dawnbringer
+    // FIRST STRIKE subtype lord (Vampires, 2026-10-18): "<subtypes_affected> [you control] have first
+    // strike" -- Stromkirk Captain, Field Marshal, Neheb, the Worthy, Striking Sliver. The sibling of
+    // grants_double_strike / grants_lifelink; honours lord_excludes_self by per-copy m_number (the
+    // Lyra precedent). Read ONLY by CreatureHasFirstStrike (SpellEffects.h), whose sole consumers are
+    // the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamage, shared by executor
+    // and rollout) and the attack projection's step-sensitive addend (TurnSolver.cpp). First strike
+    // changes a goldfish outcome only through something that happens BETWEEN the two damage steps
+    // (Drana's counters, a first-step lifelink gain feeding Archangel of Thune / a life anthem, a
+    // first-step combat-damage trigger), which is exactly when the split is observable.
+    bool grants_first_strike = false;
 
     // Affinity for subtype: reduce this card's generic mana cost by 1 per matching
     // permanent you control (e.g. Thrumming Hivepool — Affinity for Slivers).
@@ -971,6 +990,25 @@ struct CardParams
     // token half. DEFAULT false = the historical player-scoped behaviour, so Adeline is
     // byte-identical; Hero sets it true.
     bool                     attack_tokens_require_self_attacking = false;
+
+    // "Whenever ONE OR MORE <matching> creatures you control attack, create <token>" (Mavren Fein,
+    // Dusk Apostle; Vampires 2026-10-18). A PLAYER-scoped trigger that fires ONCE per combat (CR
+    // 603.2c) in which at least one DECLARED attacker matches attack_one_or_more_subtypes (OR; empty =
+    // any creature) and, with attack_one_or_more_nontoken, is not a token. The token is created
+    // UNTAPPED and NOT attacking (it arrives after attackers are declared), through CreateToken, so
+    // the enter cascade (lords, Vampire Socialite's static) reaches it. Fired by
+    // FireAttackOneOrMoreTokens at declare-attackers in BOTH combat worlds, before the Adeline block.
+    // Deliberately not Adeline's attack_creates_tokens (tapped-and-attacking, scales per opponent by
+    // default) nor Utvara's attack_per_matching_creates_tokens (per attacker, after damage, a Dragons
+    // routing signature). Never scaled by opponent heads. 0 = none -> byte-identical.
+    int                      attack_one_or_more_tokens = 0;
+    std::vector<std::string> attack_one_or_more_subtypes;
+    bool                     attack_one_or_more_nontoken = false;
+    int                      attack_one_or_more_token_power = 0;
+    int                      attack_one_or_more_token_toughness = 0;
+    std::vector<std::string> attack_one_or_more_token_subtypes;
+    std::string              attack_one_or_more_token_color;
+    std::vector<std::string> attack_one_or_more_token_keywords;
 
     // BATTLE CRY (CR 702.92) -- Accorder Paladin, Hero of Bladehold. "Whenever this creature
     // attacks, each OTHER attacking creature gets +1/+0 until end of turn." Applied at
@@ -2434,9 +2472,15 @@ struct CardParams
     // Lifelink grant (MODELED, per user 2026-07-22: life-total decks are coming). When true the enchanted
     // creature has lifelink -- combat damage it deals also gains its controller that much life (applied at
     // the combat sites). Daybreak Coronet, Armadillo Cloak ("deals damage -> gain that much life"), Spirit
-    // Link. Every OTHER aura keyword (trample/flying/first strike/vigilance/reach/hexproof/protection/umbra
-    // armor) is provably INERT vs the passive opponent and is NOT modeled (disclosed Stage 6a).
+    // Link. Every OTHER aura keyword (trample/flying/vigilance/reach/hexproof/protection/umbra armor) is
+    // provably INERT vs the passive opponent and is NOT modeled (disclosed Stage 6a). First strike IS
+    // modelled since 2026-10-18 (aura_grants_first_strike below; the CR 510.4 damage-step split).
     bool aura_grants_lifelink = false;
+    // First-strike grant (Vampires 2026-10-18, with the CR 510.4 two-step combat damage model): the
+    // enchanted creature has first strike (Hyena Umbra, Indrik Umbra, Ethereal Armor, Daybreak
+    // Coronet). Read only by CreatureHasFirstStrike, i.e. by the damage-step split -- see
+    // grants_first_strike above for when that is observable.
+    bool aura_grants_first_strike = false;
     // Dynamic P/T scaling: the aura's grant grows with a board count. aura_scale_kind selects WHICH count
     // multiplies aura_scale_power/tough:
     //   "enchantments"            +N per enchantment you control, INCLUDING this aura (Ethereal Armor: 1/1)
@@ -3876,6 +3920,21 @@ struct CardParams
     // enters_watch_subtypes, which filters the ENTERING creature of a watcher.
     int                      etb_each_other_own_creature_counters = 0;
     std::vector<std::string> etb_counters_subtypes;
+    // Vampire Socialite (Vampires, 2026-10-18). Clause 2, an INTERVENING-IF ETB (CR 603.4): "When this
+    // creature enters, if an opponent lost life this turn, put a +1/+1 counter on each other Vampire
+    // you control" -- the Lieutenant block above, with its count added only while
+    // GameState::opponent_lost_life_this_turn holds (recipients filtered by etb_counters_subtypes).
+    // The flag only ever goes false at the turn-start reset, so one check at entry is exact for both
+    // the trigger and the resolution test. A SEPARATE param on purpose: etb_each_other_own_creature
+    // _counters is in the Soldiers provider-routing signature.
+    int                      etb_each_other_own_creature_counters_if_opp_lost_life = 0;
+    // Clause 3, a CR 614 as-enters replacement: "As long as an opponent lost life this turn, each
+    // other <subtype> you control enters with an additional +1/+1 counter on it." Resolved in
+    // FireEtbWatchers' as-enters counter block (the Giada / Metallic Mimic slot), so every enter route
+    // -- casts, tokens, Aether Vial puts, madness casts, graveyard returns -- gets it. Not Giada's
+    // other_subtype_enters_counters_* (an Angels routing signature). 0 = none -> byte-identical.
+    int                      opp_lost_life_other_enters_counters = 0;
+    std::string              opp_lost_life_other_enters_subtype;
     // Thalia, Guardian of Thraben: "Noncreature spells cost {1} more to cast." SYMMETRIC static: each
     // permanent carrying it, controlled by ANY player, adds {N} generic to every noncreature spell's
     // cost. Applied to the RAW cost in EffectiveSpellCost before every reduction (CR 601.2f).
