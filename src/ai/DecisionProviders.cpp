@@ -19950,6 +19950,14 @@ static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_
     for (int i : kept_lands) { kept_drops.push_back(discard_dist::LandDropOf(defs[static_cast<std::size_t>(i)])); }
     std::vector<double> ev(static_cast<std::size_t>(n), 0.0);
     std::vector<int> threats, free_madness, free_ghast, dead, vials;
+    // A HELD Vial puts a 1-drop the turn after it lands with no mana and no COLOUR (it ignores the
+    // {R} that a two-Swamp board cannot make) -- credited only while the Vial itself is kept (early at
+    // cleanup; at an outlet the plan may still cast it). d0 probe 2026-10-18, seed 1242: without it the
+    // pump shed a Pit Fighter that the same turn's Vial would have put for free.
+    bool hand_vial = false;
+    for (int i = 0; i < n; ++i) { if (cls[static_cast<std::size_t>(i)] == C_VIAL) { hand_vial = true; break; } }
+    const bool vial_early = s.turn_number <= 2 && board_vials == 0;
+    const bool hand_vial_live = hand_vial && (activation_mode || vial_early);
     for (int i = 0; i < n; ++i)
     {
         const char k = cls[static_cast<std::size_t>(i)];
@@ -19969,6 +19977,7 @@ static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_
         { factor = discard_dist::CastFactorFor(census, *d, kept_drops, std::max(1, mv - board_creatures)); }
         else
         { factor = discard_dist::CastFactorFor(census, *d, kept_drops); }
+        if (hand_vial_live && d->card.IsCreature() && mv == 1) { factor = std::max(factor, discard_dist::kGamma); }
         ev[static_cast<std::size_t>(i)] = factor * static_cast<double>(value_of(i));
     }
     // Most expendable first: lower EV, then the dearer card, then by NAME (never hand order).
@@ -19990,7 +19999,6 @@ static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_
     });
     constexpr int kThreatFloor = 2;
     const int threat_over = std::max(0, static_cast<int>(threats.size()) - kThreatFloor);
-    const bool vial_early = s.turn_number <= 2 && board_vials == 0;
 
     std::vector<int> shed;
     shed.reserve(static_cast<std::size_t>(n));
