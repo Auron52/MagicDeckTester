@@ -77,6 +77,71 @@ Work split (2026-10-17 ~22:40 UTC), one worktree + branch each, integrated seria
 ### Card table
 | Card | Tier | Summary | Deferrals (status) |
 |---|---|---|---|
+| Niv-Mizzet, the Firemind | 3 | `draw_trigger_damage 1` via the new shared iterative loop `ResolveDrawTriggers` (watermark on `cards_drawn_this_turn`, flushed after every drawing resolution in both worlds, stops at the kill); `tap_draw_cost "{0}"` (shared TapDraw, sickness via CanTapNow). | "any target" → opponent's face, human not asked — PROVISIONAL (Q2) |
+| Niv-Mizzet, Parun | 3 | same draw trigger + `cast_trigger_instant_sorcery_draw 1` in `FireOnCastTriggers` (copies don't count); `cant_be_countered` (read by Remand). | as above (Q2) |
+| Curiosity | 3 | `is_aura` (host searched; Aura host ranking gains a `combo` term so Curiosity goes on a pinging host — Q5) + `aura_damage_trigger_draw` from the new `OnCreatureDealtDamageToOpponent` (Niv ping + combat damage). | "may draw" → draw iff library non-empty — PROVISIONAL (Q3). Non-combat damage by a NON-Niv host not modelled (no such host in any deck) — PROVISIONAL |
+| Tandem Lookout | 3 | soulbond (Silverblade machinery) + `soulbond_damage_trigger_draw` (both halves, mandatory, stops at the kill; empty-library draw loses). `SoulbondPartner` ranks a Niv first; the decline ("wait") twin also when no Niv can take the pairing (Q6). | — |
+| Generator Servant | 3 | `sac_for_mana_amount 2` / `C` + `sac_for_mana_requires_tap` (sickness binds) + `sac_for_mana_grants_haste` (tagged floating {C}, a creature spell spends one first → `temp_haste`). | payer spends floating before lands, so a noncreature cast after the crack can eat the tagged {C} (the search can order the crack later) — disclosed |
+| Brainstorm | 3 | `draw 3` + `put_back_from_hand 2`, put-back inside the resolution (draw triggers wait, CR 603.3); WHICH two + order SEARCHED (`Plan::putback_choice`, every distinct ordered pick, identical copies folded, provider-ordered by the cleanup shed order, NOT capped). Median fan ~76/plan. | instant windows → main phase — PROVISIONAL; a 2nd Brainstorm in ONE plan takes the default (Ponder-axis precedent; a breakpoint re-solve gives it its own fan) — disclosed |
+| Gitaxian Probe | 2 | `draw_spell draw 1`; Phyrexian twin (Birthing Pod machinery), never to 0 life. | "look at target player's hand" not modelled (information only) — PROVISIONAL |
+| Sulfur Falls | 1 | `checkland_subtypes [Island, Mountain]`. | — |
+| Remand (reclassified) | 3 | self-targeted: rides X's cast as `Action::remand_by`, both costs, both cast-time blocks, X back to hand (resolves if `cant_be_countered`), Remand draws (flushes draw triggers before X resolves); every target its own variant, identity folds only. | instant windows → main — PROVISIONAL; Remand-on-Remand, free/alt-cost targets, cascade targets not modelled (in no Remand deck) — PROVISIONAL |
+| Izzet Signet / Ferrous Lake (fidelity) | 2 | payer exact; colour test charges the feed (`MTG_RAMP_FEED_CHARGE`), branched feed pick on failure (`MTG_RAMP_FEED_BRANCH`), sac floats feed the filter rescue (`MTG_RESCUE_SAC_FLOAT`); all default ON, `=0` hatch, unit test fails with each hatch off. | — |
+
+Integration (2026-10-18 ~00:55 UTC), `niv-analysis`:
+- `61394bfa2..1ca848678` niv-core; `0af351c29`, `2165ed830` niv-remand; `43b4582d6` integration (Remand's
+  draw flushes the Niv triggers before an uncounterable X resolves -- Parun pinged for a draw made
+  before it entered; the unit test fails without the flush, verified); `067b3a1db` the deck's provider
+  (Stage 4a, below); `15b0f9069..4f800e59d` niv-mana; `3b9c54d5e` two cross-branch fixtures (Servant
+  haste → Firemind {T} loop; a self-Remand as the loop's draw), both negative-controlled.
+- `c52ed5c9d` UN-GATES niv-core's three breakpoint fixes (SectionHandGainedACard's empty snapshot, the
+  plain-TapDraw PlanOpensBreakpoint route, the executor's fallback re-solve). The agent had gated them
+  on `deck_has_draw_ping` to keep other decks byte-identical; the holes are general (Troyan, Mariposa,
+  Frost Augur / Scrying Sheets, any fallback main), so they are measured as a play change.
+- Tests on the integrated tree: unit 1482/1482, scenarios 229/229.
+- Stage 3: coverage 19/19 `full`, missing none. Cost audit on the deck's 12 costed cards: rc 0, 12
+  compared, all match. Field audit: every hard field matches; rc 1 only from three Temples already
+  absent from the snapshot at HEAD.
+
+### Isolation tiers on the integrated + un-gated tree (T2 = `c52ed5c9d`, 2026-10-18 ~01:10-01:36)
+Arms for attribution, each run from its OWN worktree (cards.json is read at runtime):
+base = `niv-base` (origin src), T1 = `niv-mana` (integrated, still gated), T2 = `niv`.
+`logs/arms/arm_compare.py` / `arm_lines.py` (d5 cases reproduced WITHOUT --depth, as the suite runs
+them: value_play owns the depth).
+
+- unit 1482/1482, scenarios 229/229; viewer reference replay 600 refs: 196 ok, 404 repaired,
+  0 play-drift / shuffle-dead / board-diverged / enum-gap / mull-drift / contract-fail.
+- **smoke** rc 1: hinata d0 6.723->6.783, d3 5.640->5.653, d5 5.827->5.787, hinata2hg d3
+  5.573->5.587; same-avg digest moves in auras d3/d5/2hg, goblins d0, kittyv3 2hg, bruna d0/2hg,
+  snow d3. Searched slower 4 / faster 6.
+- **regression** rc 1: hinata d0 6.791->6.849, d3 s2002 5.570->5.560, d3 s3003 5.645->5.615, d5
+  s2002 5.690->5.660, d5 s3003 =, 2hg d3 5.500->5.460, 2hg d5 5.520->5.540; breaching d0
+  4.832->4.826; same-avg digest moves in goblins d3/d5 (all four) + 2hg, bruna d0/d3, fungusv2 d0.
+  Searched slower 15 / faster 28.
+- **Attribution:**
+  - Every searched SLOWER game (4 smoke + 15 regression) is HINATA, from T1 (the Remand rider),
+    not the un-gate (T1 == T2 on all of them). All 19 reproduce at the case budget; at UNLIMITED
+    budget (d3 pinned, d5 via value_play) new <= base on EVERY one: smoke gi11/88/135 7/7/5 both;
+    regression 13 tie, d5 s3003 gi64 new T5 vs base T7, d5 s3003 gi27 loss in BOTH (base's b20 T8
+    was itself budget luck) -> budget churn from the wider plan set, no line lost
+    (`logs/arms/hinata_reg_b0.txt`, `hinata_smoke_b0.txt`). Example gi135: the line
+    diverges on T1 (Preordain vs Gamble) in a game that never casts Remand -- dilution.
+  - goblins / bruna / snow / auras / kittyv3 moves are the UN-GATE (T1 != T2): a card put into
+    hand mid-turn is now cast that phase (goblins gi213: + Muxus on T3; snow gi68: Boreal Druid a
+    turn earlier; auras gi8: the drawn land is played; kittyv3 2hg gi16: four more pieces on T7).
+  - breaching d0 gi21 (loss -> T4: Sakashima's Protege paid off Ferrous Lake) and fungusv2 d0 are
+    the MANA-FIDELITY fixes (both revert to base with the three hatches off).
+  - Hinata d0 got WORSE (+0.058): the d0 runner (a permitted greedy) is offered Remand riders and
+    e.g. gi15 T5 picks "Soulfire + Remand" over an available lethal line. Investigation agent on
+    `niv-d0` (is it a valuation defect that also reaches the search?).
+
+### Stage 4a — provider
+`NivMizzetComboProvider` (`067b3a1db`): an empty `DeckProvider` derivation (the deck rode Generic),
+routed at the top of `SelectDecisionProvider` by four params OR'd across four cards no other deck
+carries (`draw_trigger_damage`, `cast_trigger_instant_sorcery_draw`, `aura_damage_trigger_draw`,
+`soulbond_damage_trigger_draw`). Certificate `NotAssessed` (with what a bound must price). Before this,
+Tandem Lookout's bare `soulbond` misrouted the deck to WhiteKnightsProvider; niv-core re-keyed the
+WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
 
 ## Open questions for the user (collected, never blocking)
 - **Q1 (stack).** The AI skill asks that a stack-order-dependent card raise "does the stack need
@@ -88,6 +153,44 @@ Work split (2026-10-17 ~22:40 UTC), one worktree + branch each, integrated seria
   prompts). PROVISIONAL.
 - **Q3 (Curiosity "you may draw").** Always drawn while the library is non-empty. PROVISIONAL.
 - **Q4 (Remand is a play change for Hinata2).** Remand was never cast; self-Remand is legal, so
-  Hinata2's play (and GT) will move. Tested as a play change (held-out A/B), not gated.
+  Hinata2's play (and GT) will move. Tested as a play change (held-out A/B), not gated. niv-remand's
+  probes: Hinata2 avg 5.775 vs 5.8125 (s7001 x80) and 5.65 vs 5.70 (s9001 x120); every slower game
+  ties at budget 100; ~8% of games cast Remand; search units +12-16% at b10, one unbudgeted game 5.2x.
+  Hinata2's keep table still LOADS (it carries its own name->bucket map; Remand stays in the inert
+  bucket) and its value leaf predates the change -- both are now stale for the ~8% of Remand games.
+- **Q5 (Aura host ranking -- a USER rule, extended).** The 2026-10-06 USER Aura host ranking (used by
+  the plan dedup to keep ONE host per Aura cast) got a `combo` term after `lethal`: a damage->draw
+  Aura on a pinging host ranks first. Without it the dedup kept Curiosity on a Goblin Guide and the
+  kill was not in the plan list. 0 for every other Aura, so no other deck moves. Extension taken;
+  the user owns the rule.
+- **Q6 (soulbond pair-or-wait -- a USER rule, extended).** The 2026-10-06 USER rule ("pair-or-wait
+  is searched when the only partners are below 2 power") now also emits the wait twin for a Tandem
+  Lookout when no Niv can take the pairing (pairing a 2/1 Servant locks the Lookout away from a later
+  Niv). `SoulbondPartner` ranks a Niv first (order only). Taken; the user owns the rule.
+- **Q7 (second main ON).** `DeckUsesSecondMain` now fires for Curiosity / Lookout (combat damage
+  draws a card, so a post-combat main has new resources -- analyze-deck 2c-bis). Main-1-vs-main-2 is
+  the user's per-deck call; ON per the skill, hatch `MTG_NIV_SECOND_MAIN=0`. Cost to be measured.
+- **Q8 (Brainstorm search cost).** Every distinct put-back is searched (median ~76 per plan, p90
+  ~306), no width cap: a 4-Brainstorm test list searched ~4.5x slower at d3 b10 (avg win turn
+  unchanged). This deck runs 2. The completeness rule forbids a lossy cap; if the suite cost gate
+  (3x) binds, the options are a further SOUND fold or a budget-staged admission order -- to be
+  proposed with numbers, not taken unilaterally.
+- **Q10 (Remand at depth 0 -- a POLICY choice).** Hinata d0 got worse (6.791 -> 6.849 at s2002,
+  71 slower / 16 faster): the depth-0 runner (a permitted greedy) is offered Remand riders, and its
+  EvalCard prices Soulfire Eruption's dig and a turn-6+ creature at 0, so Remand's draw (100) outbids
+  them (67 of 71 slower games have a Remand at the first divergence). Withholding riders from d0 is
+  byte-identical to base. Options: (a) no riders at d0 (as the rollout leaf already does; gives up 16
+  Irencrag-cycling wins, 5 of them unwon->won); (b) a per-deck provider rule (e.g. Hinata2 never
+  Remands Soulfire / Hinata); (c) fix the greedy's valuation of Soulfire / late creatures (a
+  heuristic change -- heuristic-optimization A/B); (d) keep. TAKEN: (d) pending the user (the
+  rules-complete option set; d0 is not shipped play). The agent recommends (b) or (a).
+  Its investigation also fixed three REAL defects where a countered X was still credited
+  (`a21854b5f`): the leftover-mana FILL scaled a remanded Magma Opus (557x / 1000 d0 games; reached
+  the search's no-rollout projected-win commit), Irencrag Feat counted X + Remand as one spell, and
+  KillTriggerComboCredit counted a remanded burn spell. Hinata d0 2 faster / 1 slower, d3 identical.
+- **Q9 (breakpoint holes un-gated).** Three general search-completeness holes (a card drawn by an
+  activation / trigger, esp. into an empty hand or in a fallback main, could not be cast that
+  phase) are fixed for EVERY deck (`c52ed5c9d`), not just Niv. Expected to move Bruna, Snow and
+  EldraziDisplacerFlicker play; measured as a play change.
 
 ## Approved deferrals
