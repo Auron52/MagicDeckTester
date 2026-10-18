@@ -142,6 +142,13 @@ struct PlanTraits
     // mask, which only holds untapped ones, then covers exactly the activations still to come.
     static constexpr int kMaxActSrcs = 8;
     int  act_pips[5]           = {};
+    // ...and the coloured pips of the plan's CREATURE-ABILITY activations whose mana must be legal for
+    // a creature ability (Vampires sweep F/L follow-up: Falkenrath Pit Fighter's {1}{R}, Bloodline
+    // Keeper's {B} transform). Kept apart from act_pips because a colored_creature_only source without
+    // colored_creature_ability_ok (Unclaimed Territory, Voldaren Estate) cannot pay them, so holding one
+    // back protects nothing: ActLineHoldMask serves this demand from ability-legal providers only. Zero
+    // on every plan without those two activations (every other deck).
+    int  act_pips_cab[5]       = {};
     int  act_src_nums[kMaxActSrcs] = {};
     int  act_src_count         = 0;
     // The plan casts something that can INTRODUCE a new cast mid-turn -- a Treasure mint

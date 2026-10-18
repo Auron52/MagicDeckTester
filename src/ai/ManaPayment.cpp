@@ -6060,7 +6060,9 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     if (!ActLineHoldEnabled()) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
     if (!pt) { return 0; }
-    if (pt->act_src_count == 0
+    const int cab_total = pt->act_pips_cab[0] + pt->act_pips_cab[1] + pt->act_pips_cab[2]
+                        + pt->act_pips_cab[3] + pt->act_pips_cab[4];
+    if (pt->act_src_count == 0 && cab_total == 0
         && pt->act_pips[0] + pt->act_pips[1] + pt->act_pips[2]
          + pt->act_pips[3] + pt->act_pips[4] == 0) { return 0; }
     const int n = static_cast<int>(state.battlefield.size());
@@ -6101,12 +6103,18 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
                           g_act_line_paid.red   + g_act_line_current.red,
                           g_act_line_paid.green + g_act_line_current.green };
     int need[5]; bool any_pip = false;
+    // CREATURE-ABILITY demand (PlanTraits::act_pips_cab, Vampires F/L follow-up): served below from
+    // ability-legal providers only. The paid / float credit is taken off the total, the creature-ability
+    // share first kept whole (an over-hold at worst -- the held-first attempt is retried unrestricted).
+    int need_cab[5] = { 0, 0, 0, 0, 0 };
     for (int c = 0; c < 5; ++c)
     {
         const int float_left = fl[c] > cur[c] ? fl[c] - cur[c] : 0;
-        need[c] = pt->act_pips[c] - paid[c] - float_left;
-        if (need[c] < 0) { need[c] = 0; }
-        if (need[c] > 0) { any_pip = true; }
+        int all = pt->act_pips[c] + pt->act_pips_cab[c] - paid[c] - float_left;
+        if (all < 0) { all = 0; }
+        need_cab[c] = std::min(all, pt->act_pips_cab[c]);
+        need[c] = all - need_cab[c];
+        if (need[c] > 0 || need_cab[c] > 0) { any_pip = true; }
     }
 
     std::uint64_t mask = 0;
@@ -6125,7 +6133,7 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     // (b) the coloured pips. Build the untapped provider list once with each source's breadth, then
     // let each colour take its `need` narrowest. A source already held by (a) is skipped rather than
     // counted: its {T} is owed to an activation, so it is not supply for a pip either.
-    struct Prov { int idx; int breadth; int colors; };
+    struct Prov { int idx; int breadth; int colors; bool cab_ok; };
     Prov prov[64]; int np = 0;
     for (int i = 0; i < n; ++i)
     {
@@ -6144,11 +6152,25 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
             seen |= (1 << ci); ++breadth;
         }
         if (seen == 0) { continue; }
-        prov[np++] = { i, breadth, seen };
+        // Can its COLOURED mana pay a creature ability? Not a creature-SPELL-only colour (Territory,
+        // Voldaren Estate); Secluded Courtyard's can (colored_creature_ability_ok).
+        const bool cab_ok = !d->params.colored_creature_only || d->params.colored_creature_ability_ok;
+        prov[np++] = { i, breadth, seen, cab_ok };
     }
     if (np == 0) { return mask; }
     std::sort(prov, prov + np, [](const Prov& a, const Prov& b)
     { return a.breadth != b.breadth ? a.breadth < b.breadth : a.idx < b.idx; });
+    for (int c = 0; c < 5; ++c)
+    {
+        int left = need_cab[c];
+        for (int k = 0; k < np && left > 0; ++k)
+        {
+            if (!prov[k].cab_ok || !(prov[k].colors & (1 << c))) { continue; }
+            const std::uint64_t bit = 1ull << prov[k].idx;
+            if (mask & bit) { continue; }
+            mask |= bit; --left;
+        }
+    }
     for (int c = 0; c < 5; ++c)
     {
         int left = need[c];
