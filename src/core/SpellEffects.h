@@ -18289,8 +18289,16 @@ inline void TrickDraw(GameState& state, int controller, int n)
 // idempotent: each flush resolves exactly the draws since the last one, so nesting cannot double-ping
 // and a missed site only delays a trigger to the next flush, never drops it.
 //
-// ITERATIVE, NOT RECURSIVE. A ping that draws appends to cards_drawn_this_turn; the watermark loop
-// simply keeps consuming until it catches up. No recursion, no depth limit to hit.
+// THE STACK (CR 405.5, 603.3). The triggers resolve LAST-IN-FIRST-OUT, and that order is forced: a
+// resolved ping's draw triggers go on the stack ABOVE every older pending ping, and a resolved draw's
+// pings above everything again. So once a Curiosity / Lookout grant is live the loop runs draw, ping,
+// draw, ping -- ONE draw per ping until the kill, the older triggers waiting underneath (the game ends
+// at the state-based check, so they never resolve). Until 2026-10-18 this loop resolved them
+// BREADTH-FIRST (every draw a ping owed, at once, before the next ping), which with Curiosity AND a
+// Lookout pair on one Niv drew 1 + 2 x 17 = 35 cards for an 18-ping kill: a 33-card library LOST to
+// Lookout's mandatory draw where the real game wins with 18 (claude-play sweep, seed 71009). The model
+// is an explicit stack of identical trigger tokens (RunDrawPingStack): iterative, no recursion, and it
+// stays small (each resolution pushes at most one ping per draw-trigger permanent or one draw per grant).
 //
 // TERMINATION / THE KILL. The loop stops the instant OpponentHasLost() -- the game is over at that
 // state-based-action check, so no later trigger resolves -- which is what keeps Lookout's MANDATORY
@@ -18303,10 +18311,12 @@ inline void TrickDraw(GameState& state, int controller, int n)
 //     face is exactly what lets a Curiosity / Lookout on the pinging Niv fire (damage TO AN OPPONENT).
 //     Precedent: etb_damage_any, Pashalik Mons, Mana Cannons. NOT asked of a human (disclosed).
 //     Single-target, so x1 regardless of gamesetup::OpponentHeads() (the etb_damage_any rule).
-//   * Simultaneous-trigger ORDER: the controller orders them, and every order deals the same damage
-//     and draws the same cards until the kill or the library runs out; MANDATORY draws are resolved
-//     before optional ones within one event, the order that never makes a "may" draw take the card a
-//     "must" draw then misses.
+//   * Simultaneous-trigger ORDER (the controller's choice, CR 603.3b). Two rules, both weakly dominant:
+//     pings from a permanent that grants NO draw go ON TOP of the ones that do (free damage first: it
+//     never adds a draw before the kill, and with no kill every trigger resolves anyway, so the totals
+//     are the same); and a ping's MANDATORY draws go on top of its optional ones (a "may" draw never
+//     takes the card a "must" draw then misses). What is NOT a choice is the LIFO order itself -- see
+//     THE STACK below.
 //   * Curiosity's "you MAY draw" -> draw iff the library is non-empty. PROVISIONAL (user sign-off
 //     owed). Drawing is weakly dominant whenever it cannot deck us: it adds a card and, on a Niv,
 //     another ping. Declining only ever matters near library exhaustion with a live loop that cannot
@@ -18386,105 +18396,185 @@ inline DamageDrawsOwed DamageDrawsOwedBy(const GameState& state, int src)
     return out;
 }
 
-// Resolve the draws ONE damage event owes (see DamageDrawsOwedBy). Mandatory first (the fold above).
-// Each draw goes through TrickDraw -- a real CR-121 draw: counts cards_drawn_this_turn (so the
-// watermark loop picks it up), feeds the viewer draw sink and the saved log, and flags a draw from an
-// empty library. Returns false once the game is over for us (decked).
-inline bool ResolveDamageDraws(GameState& state, int src)
+// One pending trigger of the loop on the modelled stack (see THE STACK above).
+struct DrawPingItem
 {
-    const DamageDrawsOwed owed = DamageDrawsOwedBy(state, src);
-    for (int k = 0; k < owed.must; ++k)
+    std::int8_t kind;   // kPing: draw-trigger permanent `slot` pings; kMustDraw / kMayDraw: a granted draw
+    std::int8_t slot;   // ping: index into the flush's ping table; draw: unused
+    std::int8_t ctrl;   // draw: who draws (the grant's controller)
+    static constexpr std::int8_t kPing = 0, kMustDraw = 1, kMayDraw = 2;
+};
+
+// The active player's draw-trigger permanents (battlefield order, the house CR 603.3b convention) and the
+// draws each one's ping owes. Drawing never adds or removes a permanent, so both stay valid for a whole
+// flush. A fixed array: both Nivs are legendary, so the legend rule keeps at most one per NAME -- 8 is far
+// above any count a board can reach, and no allocation per flush.
+struct DrawPingTable
+{
+    int             idx[8];
+    DamageDrawsOwed owed[8];
+    int             n = 0;
+};
+inline DrawPingTable BuildDrawPingTable(const GameState& state)
+{
+    DrawPingTable t;
+    const int me = state.active_player_index;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()) && t.n < 8; ++i)
     {
-        TrickDraw(state, owed.must_ctrl, 1);
-        if (state.player_lost_on_draw) { return false; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.draw_trigger_damage > 0)
+        {
+            t.idx[t.n]  = i;
+            t.owed[t.n] = DamageDrawsOwedBy(state, i);
+            ++t.n;
+        }
     }
-    for (int k = 0; k < owed.may; ++k)
-    {
-        if (state.players[owed.may_ctrl].library.empty()) { break; }   // "may": decline, never deck
-        TrickDraw(state, owed.may_ctrl, 1);
-    }
-    return true;
+    return t;
 }
 
-// THE FLUSH. Resolves every draw trigger owed for the active player's draws since the watermark,
-// including the draws the pings themselves cause, until the watermark catches up, the opponent has
-// lost, or we have. Only the ACTIVE player's draws are tracked: the passive opponent never controls a
+// The pings `draws` cards drawn by the active player trigger, pushed in the controller's order: pings
+// that grant a draw first (BOTTOM), free ones last (TOP), so the free damage resolves first (the fold).
+inline void PushDrawPings(std::vector<DrawPingItem>& st, const DrawPingTable& t, int draws)
+{
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (int k = 0; k < t.n; ++k)
+        {
+            const bool grants = t.owed[k].must + t.owed[k].may > 0;
+            if (grants != (pass == 0)) { continue; }
+            for (int c = 0; c < draws; ++c) { st.push_back({ DrawPingItem::kPing, static_cast<std::int8_t>(k), 0 }); }
+        }
+    }
+}
+
+// Resolve the stack until it is empty, the opponent has lost (the SBA check ends the game: the triggers
+// still below never resolve) or we have (a mandatory draw from an empty library, CR 704.5b). Each draw
+// goes through TrickDraw -- a real CR-121 draw: counts cards_drawn_this_turn, feeds the viewer draw sink
+// and the saved log -- and the watermark is kept level with it, so the flush that called us never sees
+// these draws again. Curiosity's "may": drawn iff the library is non-empty (the PROVISIONAL fold).
+inline void RunDrawPingStack(GameState& state, std::vector<DrawPingItem>& st, const DrawPingTable& t,
+                             int& pings)
+{
+    const int me = state.active_player_index;
+    const int opp = 1 - me;
+    Player& pl = state.players[me];
+    while (!st.empty())
+    {
+        const DrawPingItem it = st.back();
+        st.pop_back();
+        if (it.kind == DrawPingItem::kPing)
+        {
+            const int idx = t.idx[it.slot];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(idx)].card);
+            state.players[opp].life -= d->params.draw_trigger_damage;   // "any target" -> face (fold)
+            state.opponent_lost_life_this_turn = true;
+            ++pings;
+            if (OpponentHasLost(state)) { return; }
+            // Damage dealt TO AN OPPONENT by this creature: its Curiosity / Lookout draws trigger, mandatory
+            // ones on top (the fold).
+            const DamageDrawsOwed& o = t.owed[it.slot];
+            for (int j = 0; j < o.may; ++j)  { st.push_back({ DrawPingItem::kMayDraw, 0, static_cast<std::int8_t>(o.may_ctrl) }); }
+            for (int j = 0; j < o.must; ++j) { st.push_back({ DrawPingItem::kMustDraw, 0, static_cast<std::int8_t>(o.must_ctrl) }); }
+            continue;
+        }
+        Player& drawer = state.players[it.ctrl];
+        if (it.kind == DrawPingItem::kMayDraw && drawer.library.empty()) { continue; }   // "may": decline
+        TrickDraw(state, it.ctrl, 1);
+        if (it.ctrl == me)
+        { state.draw_trigger_mark = static_cast<std::int16_t>(std::min(pl.cards_drawn_this_turn, 32767)); }
+        if (state.player_lost_on_draw) { return; }
+        if (it.ctrl == me) { PushDrawPings(st, t, 1); }   // "whenever YOU draw"
+    }
+}
+
+// The stack's scratch, one per thread, reused across flushes (this runs inside every rollout). A
+// re-entrant call (none exists today: TrickDraw never flushes) falls back to a local vector.
+inline thread_local std::vector<DrawPingItem> g_draw_ping_stack;
+inline thread_local int g_draw_ping_depth = 0;
+struct DrawPingStackLease
+{
+    std::vector<DrawPingItem>  local;
+    std::vector<DrawPingItem>* v;
+    DrawPingStackLease() : v(g_draw_ping_depth++ == 0 ? &g_draw_ping_stack : &local) { v->clear(); }
+    ~DrawPingStackLease() { v->clear(); --g_draw_ping_depth; }
+    DrawPingStackLease(const DrawPingStackLease&) = delete;
+    DrawPingStackLease& operator=(const DrawPingStackLease&) = delete;
+};
+
+// Play-viewer history: one line per flush (a 20-ping loop would otherwise be 20 lines of the same text).
+// The draws themselves reach the viewer through TrickDraw's draw sink. Nulled in every search / rollout
+// scope (RevealLogPause) -> autonomous play is byte-identical.
+inline void EmitDrawPingEvent(const GameState& state, const DrawPingTable& t, int pings, int life_before)
+{
+    if (pings <= 0 || g_play_event_sink == nullptr || g_tap_speculating) { return; }
+    const int opp = 1 - state.active_player_index;
+    std::string who;
+    for (int k = 0; k < t.n; ++k)
+    {
+        if (k > 0) { who += " + "; }
+        who += state.battlefield[static_cast<std::size_t>(t.idx[k])].card.m_name.str();
+    }
+    EmitPlayEvent(state.turn_number, "damage",
+                  "\xF0\x9F\x94\xA5 " + who + " (whenever you draw): " + std::to_string(pings)
+                  + " ping" + (pings == 1 ? "" : "s") + " to opponent ("
+                  + std::to_string(life_before) + "\xE2\x86\x92"
+                  + std::to_string(state.players[opp].life) + ")"
+                  + (OpponentHasLost(state) ? " -- lethal" : ""));
+}
+
+// THE FLUSH. Resolves every trigger owed for the active player's draws since the watermark -- and the
+// draws the pings cause, and theirs -- on the modelled stack, until it is empty, the opponent has lost,
+// or we have. Only the ACTIVE player's draws are tracked: the passive opponent never controls a
 // draw-trigger permanent (its permanents are scheduled spawns and gifted tokens), so its draws can
 // trigger nothing of ours ("whenever YOU draw") -- a phase-2 opponent would need a per-player mark.
 inline void ResolveDrawTriggers(GameState& state)
 {
     if (!state.deck_has_draw_ping) { return; }
-    const int me = state.active_player_index;
-    Player&   pl = state.players[me];
+    Player& pl = state.players[state.active_player_index];
     auto catch_up = [&state, &pl]()
     { state.draw_trigger_mark = static_cast<std::int16_t>(std::min(pl.cards_drawn_this_turn, 32767)); };
     if (pl.cards_drawn_this_turn <= state.draw_trigger_mark) { catch_up(); return; }
-    // The draw-trigger permanents, battlefield order (the house CR 603.3b convention). Drawing never
-    // adds or removes a permanent, so these indices stay valid for the whole loop. A fixed array: both
-    // Nivs are legendary, so the legend rule keeps at most one per NAME -- 8 is far above any count a
-    // board can reach, and no allocation per flush.
-    int ping_idx[8];
-    int n_ping = 0;
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()) && n_ping < 8; ++i)
-    {
-        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
-        if (p.controller_index != me || p.def_absent) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && d->params.draw_trigger_damage > 0) { ping_idx[n_ping++] = i; }
-    }
-    if (n_ping == 0) { catch_up(); return; }
-    const int opp = 1 - me;
-    const int life_before = state.players[opp].life;
-    int pings = 0;
-    bool over = OpponentHasLost(state) || state.player_lost_on_draw;
-    while (!over && state.draw_trigger_mark < pl.cards_drawn_this_turn)
-    {
-        ++state.draw_trigger_mark;   // this draw's triggers resolve now
-        for (int k = 0; k < n_ping && !over; ++k)
-        {
-            const int idx = ping_idx[k];
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
-            state.players[opp].life -= d->params.draw_trigger_damage;   // "any target" -> face (fold)
-            state.opponent_lost_life_this_turn = true;
-            ++pings;
-            if (OpponentHasLost(state)) { over = true; break; }
-            // The ping is damage dealt TO AN OPPONENT by this creature: Curiosity / Lookout on it draw.
-            if (!ResolveDamageDraws(state, idx)) { over = true; }
-        }
-    }
+    const DrawPingTable t = BuildDrawPingTable(state);
+    if (t.n == 0 || OpponentHasLost(state) || state.player_lost_on_draw) { catch_up(); return; }
+    // The draws since the mark were made during one resolution (or one step), so their triggers go on
+    // the stack together, in the controller's order (PushDrawPings).
+    const int fresh = pl.cards_drawn_this_turn - state.draw_trigger_mark;
     catch_up();
-    // Play-viewer history: one line per flush (a 20-ping loop would otherwise be 20 lines of the same
-    // text). The draws themselves reach the viewer through TrickDraw's draw sink. Nulled in every
-    // search / rollout scope (RevealLogPause) -> autonomous play is byte-identical.
-    if (pings > 0 && g_play_event_sink != nullptr && !g_tap_speculating)
-    {
-        std::string who;
-        for (int k = 0; k < n_ping; ++k)
-        {
-            if (k > 0) { who += " + "; }
-            who += state.battlefield[static_cast<std::size_t>(ping_idx[k])].card.m_name.str();
-        }
-        EmitPlayEvent(state.turn_number, "damage",
-                      "\xF0\x9F\x94\xA5 " + who + " (whenever you draw): " + std::to_string(pings)
-                      + " ping" + (pings == 1 ? "" : "s") + " to opponent ("
-                      + std::to_string(life_before) + "\xE2\x86\x92"
-                      + std::to_string(state.players[opp].life) + ")"
-                      + (OpponentHasLost(state) ? " -- lethal" : ""));
-    }
+    const int life_before = state.players[1 - state.active_player_index].life;
+    int pings = 0;
+    DrawPingStackLease lease;
+    PushDrawPings(*lease.v, t, fresh);
+    RunDrawPingStack(state, *lease.v, t, pings);
+    catch_up();
+    EmitDrawPingEvent(state, t, pings, life_before);
 }
 
 // THE DAMAGE HOOK for a damage event that is not a draw-trigger ping (combat damage today): the
 // creature at battlefield index `src` dealt damage to an opponent `events` times (2 for a double
-// striker's two damage steps). Resolves the Curiosity / Lookout draws it owes, each followed by the
-// ping loop those draws start. Shared by both worlds through ResolveCombatDamage.
+// striker's two damage steps). Each event's Curiosity / Lookout draws go on the stack (mandatory on
+// top) and resolve with the pings they start before the next event. Shared by both worlds through
+// ResolveCombatDamage.
 inline void OnCreatureDealtDamageToOpponent(GameState& state, int src, int events)
 {
     if (!state.deck_has_draw_ping) { return; }
     for (int e = 0; e < events; ++e)
     {
+        ResolveDrawTriggers(state);   // nothing should be pending; the watermark makes it free
         if (OpponentHasLost(state) || state.player_lost_on_draw) { return; }
-        if (!ResolveDamageDraws(state, src)) { return; }
-        ResolveDrawTriggers(state);
+        const DamageDrawsOwed o = DamageDrawsOwedBy(state, src);
+        if (o.must + o.may == 0) { continue; }
+        const DrawPingTable t = BuildDrawPingTable(state);
+        const int life_before = state.players[1 - state.active_player_index].life;
+        int pings = 0;
+        DrawPingStackLease lease;
+        for (int j = 0; j < o.may; ++j)  { lease.v->push_back({ DrawPingItem::kMayDraw, 0, static_cast<std::int8_t>(o.may_ctrl) }); }
+        for (int j = 0; j < o.must; ++j) { lease.v->push_back({ DrawPingItem::kMustDraw, 0, static_cast<std::int8_t>(o.must_ctrl) }); }
+        RunDrawPingStack(state, *lease.v, t, pings);
+        state.draw_trigger_mark = static_cast<std::int16_t>(
+            std::min(state.players[state.active_player_index].cards_drawn_this_turn, 32767));
+        EmitDrawPingEvent(state, t, pings, life_before);
     }
 }
 
@@ -30447,7 +30537,9 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
             if (k >= count) { s_clamped.fetch_add(1, std::memory_order_relaxed); }
         }
     }
-    else if (g_play_dig_chooser != nullptr)
+    // ...a human is not asked once the game is already over (a Parun cast-trigger loop can kill ABOVE the
+    // Brainstorm, which still resolves: claude-play sweep s71003) -- the default takes it silently.
+    else if (g_play_dig_chooser != nullptr && !OpponentHasLost(state))
     {
         g_putback_resolved_w = -1;   // a human's pick is no fold's business
         // Human play: one card at a time, top first, over the hand as it stands (every eligible card

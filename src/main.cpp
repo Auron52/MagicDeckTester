@@ -3293,12 +3293,14 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         // three draws, every card is legal, asked twice -- "(put back: top)" first, then "(put back:
         // second)" over the cards left. Mandatory, so -1 takes the AI's pick for that slot.
         const bool top = source.find("(put back: top)") != std::string::npos;
-        d.Note(top ? "reply a hand index to put that card on TOP of your library (it is the next card you "
-                     "draw); you then choose the card to go beneath it. The put-back is mandatory, so -1 "
-                     "takes the AI's pick. Default = the AI's pick."
-                   : "reply a hand index to put that card on top of your library BENEATH the one you just "
-                     "chose (it is the second card you draw). Mandatory: -1 takes the AI's pick. Default = "
-                     "the AI's pick.");
+        // The reply indexes `examined` (ResolvePutBackFromHand maps it back to the hand), NOT the hand:
+        // the second ask omits the card already chosen, so the two differ (claude-play sweep, s71010).
+        d.Note(top ? "reply an index into `examined` (your hand's eligible cards) to put that card on TOP of "
+                     "your library (it is the next card you draw); you then choose the card to go beneath "
+                     "it. The put-back is mandatory, so -1 takes the AI's pick. Default = the AI's pick."
+                   : "reply an index into `examined` (the cards left -- the one you put on top is no longer "
+                     "listed) to put that card on top of your library BENEATH the one you just chose (it is "
+                     "the second card you draw). Mandatory: -1 takes the AI's pick. Default = the AI's pick.");
     }
     else if (source.find("(combat crack)") != std::string::npos)
     {

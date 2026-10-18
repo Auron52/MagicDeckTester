@@ -350,19 +350,61 @@ TEST_CASE("Tandem Lookout's grant is on BOTH halves, and only while the pair is 
     CHECK(Hand(u) == 0);
 }
 
-TEST_CASE("Curiosity AND a paired Lookout on one Niv: two draws per ping")
+TEST_CASE("Curiosity AND a paired Lookout on one Niv: two draw TRIGGERS per ping, but the stack draws ONE per ping")
+{
+    EnsureCardsLoadedNiv();
+    // CR 405.5 / 603.3: a resolved ping's two draw triggers go ABOVE every older pending trigger, and the
+    // draw's ping above them again -- draw, ping, draw, ping. The kill takes one draw per ping; the extra
+    // triggers wait underneath and never resolve. Until 2026-10-18 the loop resolved breadth-first and drew
+    // 1 + 2 x 19 = 39 cards here (claude-play sweep, seed 71009: 35 for an 18-ping kill).
+    auto board = [](int library)
+    {
+        GameState s = FreshNiv(library);
+        PutNiv(s, "Niv-Mizzet, the Firemind", 1);
+        const int cur = PutNiv(s, "Curiosity", 2);
+        AttachNiv(s, cur, 1);
+        const int lk = PutNiv(s, "Tandem Lookout", 3);
+        PairNiv(s, lk, 1);
+        return s;
+    };
+    {
+        GameState s = board(40);
+        DrawThenFlush(s, 0, 1);
+        CHECK(OpponentHasLost(s));
+        CHECK(s.players[0].cards_drawn_this_turn == 20);   // the opening draw + one per ping 1..19
+        CHECK(Lib(s) == 20);
+        CHECK_FALSE(s.player_lost_on_draw);
+    }
+    {
+        // Exactly enough: 20 cards, 20 draws -> the kill, never the empty-library loss. The breadth-first
+        // loop LOST this (Lookout's mandatory draw from an empty library) at any library below 39.
+        GameState s = board(20);
+        DrawThenFlush(s, 0, 1);
+        CHECK(OpponentHasLost(s));
+        CHECK_FALSE(s.player_lost_on_draw);
+        CHECK(Lib(s) == 0);
+    }
+    {
+        // One card short: the 20th draw (Lookout's, mandatory) finds an empty library -> we lose first.
+        GameState s = board(19);
+        DrawThenFlush(s, 0, 1);
+        CHECK(s.player_lost_on_draw);
+        CHECK(s.players[1].life == 1);
+    }
+}
+
+TEST_CASE("Two Nivs, Curiosity on ONE: each draw pings twice, the free ping first (the controller's order)")
 {
     EnsureCardsLoadedNiv();
     GameState s = FreshNiv(40);
     PutNiv(s, "Niv-Mizzet, the Firemind", 1);
+    PutNiv(s, "Niv-Mizzet, Parun", 4);
     const int cur = PutNiv(s, "Curiosity", 2);
     AttachNiv(s, cur, 1);
-    const int lk = PutNiv(s, "Tandem Lookout", 3);
-    PairNiv(s, lk, 1);
     DrawThenFlush(s, 0, 1);
     CHECK(OpponentHasLost(s));
-    CHECK(s.players[0].cards_drawn_this_turn == 1 + 2 * 19);   // pings 1..19 draw two each
-    CHECK(Lib(s) == 1);
+    CHECK(s.players[0].cards_drawn_this_turn == 10);   // 2 damage per draw: 20 life in 10 draws
+    CHECK(Lib(s) == 30);
 }
 
 TEST_CASE("Tandem Lookout pairs with a Niv over a BIGGER non-Niv creature (provider order)")
