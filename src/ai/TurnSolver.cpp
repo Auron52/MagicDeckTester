@@ -57029,10 +57029,10 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             // cands.front(): the card the activation (and the pings' Curiosity/Lookout draws) put in
             // hand could not be cast that phase at any budget (test/scenarios/
             // niv_firemind_tap_draw_cast_same_turn.json). Marked here so the fan-out reaches it.
-            // DECK-GATED (deck_has_draw_ping) to keep every other deck byte-identical; the same gap
-            // exists for the other plain tap-draw sources (Troyan's loot, Mariposa Military Base) and
-            // is reported, not fixed here.
-            else if (td && state.deck_has_draw_ping && BpPutInHandEnabled() && BpHandEntryEnabled())
+            // GENERAL, not deck-gated: every plain tap-draw source (Troyan's loot, Mariposa Military
+            // Base, Frost Augur, Scrying Sheets) had the same unchallengeable continuation. Measured
+            // as a play change.
+            else if (td && BpPutInHandEnabled() && BpHandEntryEnabled())
             { mask |= 1 << 10; }
         }
         // Site 3, the acquisition family's NON-CAST route: Garth's conjure-and-cast reaches

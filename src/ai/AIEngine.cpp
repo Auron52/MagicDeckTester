@@ -7447,9 +7447,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Niv-Mizzet, the Firemind tapped to draw a Lightning Bolt in a fallback main 2 never cast it
     // (test/scenarios/niv_firemind_tap_draw_cast_same_turn.json). Re-solve here instead, exactly as
     // the cast-armed classes' fallback (acq_pending, below) does: resolve_draw_breakpoint honours the
-    // plan's searched continuation or re-solves with the searched engine. DECK-GATED
-    // (deck_has_draw_ping) so every other deck is byte-identical; the gap is general (any activation
-    // or trigger draw in a fallback main) and is reported.
+    // plan's searched continuation or re-solves with the searched engine. GENERAL (any activation or
+    // trigger draw in a fallback main), not deck-gated -- measured as a play change.
     bool section_fallback = false;
     if (BpHandEntryEnabled() && !HumanPlayActive() && !cast_draw_engine
         && ((g_hand_entry_seq != exec_seq_at_section
@@ -7460,7 +7459,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             || TurnSolver::EquipmentReturnedFromGraveyard(exec_gyeq_at_section, state)))
     {
         cast_draw_engine = true;
-        section_fallback = state.deck_has_draw_ping && s_full_depth && m_lookahead_depth > 0
+        section_fallback = s_full_depth && m_lookahead_depth > 0
                         && !fd_plan_committed && !acq_pending && !staged_break;
     }
     if (section_fallback)

@@ -1780,14 +1780,13 @@ public:
     // cards left (the combo deck's ordinary hellbent turn) could not cast what it drew -- or what the
     // pings' Curiosity draws brought -- in that phase at any budget
     // (test/scenarios/niv_firemind_tap_draw_cast_same_turn.json).
-    // DECK-GATED (deck_has_draw_ping) so every other deck is byte-identical. The hole itself is
-    // GENERAL -- any activation / trigger that draws into an empty hand (Psychotrope Thallid's sac
-    // draw, Troyan's loot) never arms -- and is reported for a separate, measured change.
+    // GENERAL, not deck-gated (USER rule: scope a change by where it is VALID, never by what keeps the
+    // GT still): any activation / trigger that draws into an empty hand (Psychotrope Thallid's sac
+    // draw, Troyan's loot, Frost Augur's look) had the same hole. Measured as a play change.
     static bool SectionHandGainedACard(const std::vector<int>& before, const GameState& state)
     {
         if (HandGainedACard(before, state)) { return true; }
-        return state.deck_has_draw_ping && before.empty()
-            && !state.players[state.active_player_index].hand.empty();
+        return before.empty() && !state.players[state.active_player_index].hand.empty();
     }
     // THE LIBRARY-TOP TWIN of HandGainedACard (Courser of Kruphix, 2026-10-15): a playable top land
     // exists NOW that was not the playable top at the snapshot (`top_snapshot` = PlayableTopLandNumber

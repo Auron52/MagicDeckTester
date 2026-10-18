@@ -573,15 +573,15 @@ TEST_CASE("Firemind {T} draw into an EMPTY hand: the drawn card is castable the 
         CHECK(OpponentHasLost(r));
         CHECK(r.players[0].hand.empty());          // the Bolt was cast, not held
     }
-    // The helper's contract: an empty snapshot is a real empty hand for a loop deck only.
+    // The helper's contract: an empty SECTION snapshot is a real empty hand -- for EVERY deck (the hole
+    // is general; it was deck-gated at first and un-gated as a measured play change).
     GameState g = board(true);
     g.players[0].hand.push_back(CardNiv("Lightning Bolt", 31));
     CHECK(TurnSolver::SectionHandGainedACard({}, g));
     CHECK_FALSE(TurnSolver::HandGainedACard({}, g));
-    g.deck_has_draw_ping = false;                   // every other deck: unchanged (the general gap)
-    CHECK_FALSE(TurnSolver::SectionHandGainedACard({}, g));
+    g.deck_has_draw_ping = false;                   // a deck without the loop: the same answer
+    CHECK(TurnSolver::SectionHandGainedACard({}, g));
     g.players[0].hand.clear();
-    g.deck_has_draw_ping = true;
     CHECK_FALSE(TurnSolver::SectionHandGainedACard({}, g));   // still empty: nothing entered
 }
 
