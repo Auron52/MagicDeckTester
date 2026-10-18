@@ -29078,7 +29078,7 @@ inline void ApplyTopDisposition(GameState& state, std::vector<Card>& looked,
     {
         if (on_top[i]) { continue; }
         if (kind == LookKind::Surveil) { ap.graveyard.push_back(std::move(looked[i])); }
-        else                           { ap.library.push_back(std::move(looked[i])); }
+        else                           { ap.library.push_back(std::move(looked[i])); ap.library.NoteBottomed(); }
     }
 }
 

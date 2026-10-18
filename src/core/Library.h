@@ -36,7 +36,8 @@ public:
     // Copy drops the drawn prefix: a deep-copied state only needs the live library, and
     // dropping keeps the per-node copy cost equal to the old (erase-shrunk) vector form.
     Library(const Library& o)
-        : m_cards(o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top), o.m_cards.end())
+        : m_cards(o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top), o.m_cards.end()),
+          m_bottom_known(o.m_bottom_known)
     {
     }
     Library& operator=(const Library& o)
@@ -45,6 +46,7 @@ public:
         {
             m_cards.assign(o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top), o.m_cards.end());
             m_top = 0;
+            m_bottom_known = o.m_bottom_known;
         }
         return *this;
     }
@@ -53,6 +55,14 @@ public:
 
     // --- size / access over the live window [m_top, end) ---
     bool        empty() const { return m_top >= m_cards.size(); }
+
+    // THE KNOWN BOTTOM PILE: how many of the library's LAST cards this player put there himself (a
+    // scry's bottom, a London mulligan's bottom) since the last shuffle -- public information, so a
+    // provider may read those cards (RawAt(size() - KnownBottom() + i)). Drawing into the pile
+    // shrinks it with the library (the min). Sites that bottom without noting (a dig's "rest to the
+    // bottom") only make the count conservative. Read by GaladrielProvider's Crackle rule.
+    void        NoteBottomed()      { ++m_bottom_known; }
+    std::size_t KnownBottom() const { return std::min<std::size_t>(m_bottom_known, size()); }
     std::size_t size()  const { return m_cards.size() - m_top; }
 
     // --- INDEX-CARRY (src/core/IndexCarry.h): every PUBLIC read of a card's identity records that
@@ -105,6 +115,7 @@ public:
     {
         m_cards.assign(first, last);
         m_top = 0;
+        m_bottom_known = 0;
     }
 
     // --- draws ---
@@ -162,6 +173,7 @@ public:
     // the same algorithm over n cards yields the same permutation.
     void Shuffle(uint64_t seed)
     {
+        m_bottom_known = 0;   // a shuffle forgets the known bottom pile
         std::mt19937_64   rng(seed);
         const std::size_t n = size();
         if (n < 2) { return; }
@@ -207,6 +219,7 @@ public:
     // live card, so the key is a total order (tie-break on m_number for hash collisions).
     void ShuffleByKey(uint64_t seed)
     {
+        m_bottom_known = 0;   // a shuffle forgets the known bottom pile
         const std::size_t n = size();
         if (n < 2) { return; }
         auto key = [seed](std::int32_t number) -> std::uint64_t
@@ -267,5 +280,8 @@ public:
 
 private:
     std::vector<Card> m_cards;
-    std::size_t       m_top = 0;   // index of the current top; live library is [m_top, size())
+    // 32-bit so the KNOWN-BOTTOM count below shares its 8 bytes: sizeof(Library) stays 32, and the
+    // search deep-copies two of them at every node.
+    std::uint32_t     m_top = 0;   // index of the current top; live library is [m_top, size())
+    std::uint32_t     m_bottom_known = 0;   // see NoteBottomed
 };

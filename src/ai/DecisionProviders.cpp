@@ -5435,7 +5435,10 @@ int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
 // A scry-land never reaches this hook inside a chain (ScryChainLand keeps it first); a scry-land seen
 // by any other look is kept by the same rule. Everything else is BOTTOMED -- Saprazzan Skerry, an extra
 // Galadriel, Sol Ring, a Crackle we already hold -- except a first Crackle when next turn's mana pays
-// a lethal X (GaladrielCrackleLethalNextTurn).
+// a lethal X (GaladrielCrackleLethalNextTurn), or when it is the LAST reachable Crackle and a
+// non-Crackle stop card already heads the KNOWN bottom pile (USER 2026-10-18: bottomed cards return
+// one per turn -- "if both Crackles were condemned into a notable pile at the bottom it would be very
+// difficult to extract either"; MTG_GALADRIEL_CRACKLE_PILE).
 // BEFORE GALADRIEL -- the USER's rule (2026-10-17): "Without Galadriel, you want to look for colors,
 // Crackle and acceleration. Anything else is thrown unless you are short on lands and when you are
 // really in bad shape for colours you might even throw Crackle or acceleration if they don't help
@@ -5456,6 +5459,9 @@ int SnowProvider::ScryVerdict(const GameState& s, const Card& card) const
 //                    but ONLY once G and U are covered (USER: "you still need to prioritize
 //                    getting the colours even if short on lands. It is only beyond that that you
 //                    would accept anything").
+//   * no scry land in hand (colours covered): keep a scry land, throw everything else -- Crackle,
+//                    acceleration, Saprazzan Skerry included (USER 2026-10-18, seed 14: she needs a
+//                    land to follow her, and a scry land is the one that feeds the chain).
 //   * anything else (an extra Galadriel, an off-colour or colourless land) is thrown.
 // NO GALADRIEL ANYWHERE (USER 2026-10-17): keep only a Galadriel; everything else -- lands, Crackle,
 //   acceleration -- goes to the bottom ("You will get plenty of land just as a matter of course").
@@ -5511,6 +5517,31 @@ static bool GaladrielCrackleLethalNextTurn(const GameState& s)
 // would read every card as a Crackle).
 static bool IsCrackle(const CardDefinition& d) { return d.params.x_damage_multiplier > 1; }
 
+static bool GaladrielCrackleRuleOn()
+{
+    static const bool on = EnvOn("MTG_GALADRIEL_CRACKLE_PILE", true);
+    return heurarm::Flag(heurarm::GALADRIEL_CRACKLE_PILE, on);
+}
+
+// Would a Crackle bottomed now come back LATE? The KNOWN bottom pile (Library::KnownBottom: cards we
+// bottomed ourselves) returns in order; its scry-lands chain in for free under Galadriel, and each
+// STOP card (anything else) costs a draw, i.e. a turn. So the first stop card in the pile decides:
+// none -> a Crackle bottomed now is the pile's first stop ("probably okay as long as Crackle is the
+// first card bottomed", USER); a Crackle -> one is already first in line, bottoming this one costs
+// nothing (the seed-50085 d0 game: the chain ran through the whole library into the pile and stopped
+// on the first Crackle); anything else -> this Crackle waits behind it: keep.
+static bool GaladrielPileStopsAheadOfCrackle(const Player& pl)
+{
+    const std::size_t n = pl.library.size(), pile = pl.library.KnownBottom();
+    for (std::size_t i = n - pile; i < n; ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.library.RawAt(i));
+        if (d != nullptr && d->card.IsLand() && d->params.etb_scry > 0) { continue; }
+        return d == nullptr || !IsCrackle(*d);
+    }
+    return false;
+}
+
 bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
     if (!GaladrielScryOn()) { return GenericProvider::ScryKeepOnTop(s, top_card); }
@@ -5529,7 +5560,7 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         if (d->card.IsLand())                          { ++lands_bf; }
         else if (d->params.mana_rock)                  { ++rocks_bf; }
     }
-    int gal_hand = 0, crackle_hand = 0, lands_hand = 0;
+    int gal_hand = 0, crackle_hand = 0, lands_hand = 0, scry_lands_hand = 0;
     for (const Card& c : pl.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -5537,13 +5568,39 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         if (d->params.scry_reveal_land_to_battlefield) { ++gal_hand; }
         if (IsCrackle(*d))         { ++crackle_hand; }
         if (d->card.IsLand())                          { ++lands_hand; }
+        if (d->card.IsLand() && d->params.etb_scry > 0) { ++scry_lands_hand; }
     }
     const CardParams& tp = td->params;
 
     if (gal_bf > 0)   // the USER's rule
     {
         if (td->card.IsLand() && tp.etb_scry > 0) { return true; }
-        if (IsCrackle(*td)) { return crackle_hand == 0 && GaladrielCrackleLethalNextTurn(s); }
+        if (IsCrackle(*td))
+        {
+            if (crackle_hand > 0) { return false; }
+            if (GaladrielCrackleLethalNextTurn(s)) { return true; }
+            // BEHIND THE PILE (USER 2026-10-18, seed 10 reference): "it is probably okay as long as
+            // Crackle is the first card bottomed. You can kind of manage to get through the deck, but
+            // if there are other cards you have to wait a turn for each... That is really expensive
+            // and would generally mean you want to keep the second crackle." Once the chain has taken
+            // the library's lands, the bottom pile comes back one draw per turn, and its scry-lands
+            // chain in for free -- so a non-Crackle STOP card first in the known pile delays it.
+            if (!GaladrielCrackleRuleOn() || !GaladrielPileStopsAheadOfCrackle(pl)) { return false; }
+            // ...and only the LAST reachable one -- "you want to keep the second crackle" (USER). With
+            // another Crackle still in the unknown library above the pile, bottoming this one lets the
+            // chain run on and meet it (measured 2026-10-18: keeping the FIRST Crackle behind a stop
+            // card cost +0.055 turns at d0, +0.017 at d3, +0.020 at d5; this form is neutral). A COUNT
+            // (deck minus everything seen), never a position.
+            const std::size_t n = pl.library.size(), pile = pl.library.KnownBottom();
+            for (std::size_t i = 0; i + pile < n; ++i)
+            {
+                const Card& lc = pl.library.RawAt(i);
+                if (lc.m_number == top_card.m_number) { continue; }   // the card being looked at
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+                if (d != nullptr && IsCrackle(*d)) { return false; }
+            }
+            return true;
+        }
         return false;
     }
     // NO GALADRIEL AT ALL (neither out nor in hand) -- USER 2026-10-17: "If you don't have Galadriel you
@@ -5599,6 +5656,12 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
     // that that you would accept anything" (USER): a non-fixing land is kept only once G and U are
     // covered.
     if (td->card.IsLand() && short_lands && missing == 0) { return true; }
+    // A SCRY LAND TO FOLLOW HER (USER 2026-10-18, seed 14 reference): "if we need a scry land in hand
+    // ... and have no other needs we should not bottom any scry land. Drawing something else like a
+    // Galadriel, Crackle, Skerry or Sol Ring in that situation would be really bad." The chain starts
+    // only from a land played AFTER she lands, so with the colours covered and no scry land in hand,
+    // a scry land is kept and everything else is thrown.
+    if (missing == 0 && scry_lands_hand == 0) { return td->card.IsLand() && tp.etb_scry > 0; }
     if (tp.scry_reveal_land_to_battlefield) { return false; }   // a second copy (one is in hand)
     if (IsCrackle(*td) || accel) { return !bad_colours; }
     return false;

@@ -1735,6 +1735,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 if (pick < 0) { break; }   // already at target (shouldn't happen for a tabled hand)
                 if (m_logger) { m_logger->LogBottomed(ap.hand[pick].m_number, ap.hand[pick].m_name); }
                 ap.library.push_back(ap.hand[pick]);
+                ap.library.NoteBottomed();
                 ap.hand.erase(ap.hand.begin() + pick);
             }
             return;
@@ -2106,6 +2107,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             m_logger->LogBottomed(ap.hand[pick].m_number, ap.hand[pick].m_name);
         }
         ap.library.push_back(ap.hand[pick]);
+        ap.library.NoteBottomed();
         ap.hand.erase(ap.hand.begin() + pick);
     }
 

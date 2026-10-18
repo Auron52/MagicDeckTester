@@ -161,42 +161,56 @@ into range is now the FIRST goal (ahead of value leaf / mulligan). Post-payment-
 (BuildSimKey ~7%, CollectActions ~4%, the chain's ScryTop/FireScryWatchers/ScryKeepOnTop ~6%).
 Next: measure the chain axis' share (MTG_SCRY_SEARCH=0 diagnostic) and the k-variant census.
 
-## RESUME POINT (2026-10-18 ~00:45 UTC, before a context compaction)
-DONE + PUSHED (HEAD b43384fb, rebased onto the Colossus agent's 20 commits; GT logs consistent):
-cards/engine/viewer (48bf0607); USER scry + turn-order rules (a4d183e9, 9c9be490, 314fa393);
-ManaPool::wild_conv fed-filter fix (5ab13d2b); suite rows all 3 tiers + GT, keep policy curve_check none /
-max_lands 6, K=13 buckets (4b57bf72); 5c2 tie-break keep (f371aa8d); per-thread byte caps for the rollout
-m1 memo + mana cache (1943bccc); the USER's first 3 Galadriel references (8a1070bb). CI green through 1943bccc.
+## Scry rules, round 2 (USER 2026-10-18, from the hand-played references)
+- **No Galadriel anywhere** (7e55a090): keep ONLY Galadriel ("you must scry away everything that is not
+  Galadriel until you find her. You will get plenty of land just as a matter of course").
+- **Galadriel in hand, colours covered, no scry land in hand** (seed 14 reference, T3): keep a SCRY LAND,
+  throw everything else -- Crackle, Sol Ring, Skerry included ("if we need a scry land in hand ... and have
+  no other needs we should not bottom any scry land. Drawing something else like a Galadriel, Crackle,
+  Skerry or Sol Ring in that situation would be really bad"). Every land but Saprazzan Skerry scries.
+- **Galadriel out: the last reachable Crackle behind the pile** (seed 10 reference, both Crackles bottomed;
+  `MTG_GALADRIEL_CRACKLE_PILE`, default ON). USER: "it is probably okay as long as Crackle is the first card
+  bottomed ... if there are other cards you have to wait a turn for each... That is really expensive and
+  would generally mean you want to keep the second crackle"; "if both Crackles were condemned into a
+  notable pile at the bottom it would be very difficult to extract either". New engine state:
+  `Library::KnownBottom()` (cards we bottomed ourselves since the last shuffle -- public information;
+  `m_top` went 32-bit so sizeof(Library) stays 32). Rule: no Crackle in hand, the first stop card in the
+  known pile is not a Crackle, and no other Crackle in the unknown library above the pile -> keep.
+  Measured (paired, seeds 50001/60001, d0 4000 / d3 b10 600 / d5 b20 300):
+  | form | d0 | d3 | d5 |
+  |---|---|---|---|
+  | any stop card in the pile (first reading) | +0.040 +/- 0.007 | -0.010 +/- 0.011 | -0.013 +/- 0.016 |
+  | first pile stop not a Crackle | +0.055 +/- 0.005 | +0.017 +/- 0.007 | +0.020 +/- 0.011 |
+  | ...and the LAST reachable Crackle (SHIPPED) | +0.001 +/- 0.002 | -0.002 +/- 0.002 | 0 |
+  Root cause of the losses (d0 seed 50085, d3 seed 60052): keeping a Crackle ENDS the chain, so the turn's
+  remaining ~30-40 lands never enter; with the other Crackle still above the pile, the chain would have met
+  it with lethal mana that turn or the next. The shipped form fires only in the USER's own case.
+- **Searched keep-a-Crackle chain variants: DELETED.** USER: "I don't think we should generically give that
+  option unless it pays off in the numbers." Measured: d3 2/300 games changed (1 better, 1 worse), d0/d5
+  identical, +2-12% cost.
+- **References**: 15 USER games (seeds 1-15). `ref_bench --deck galadriel`: 0/15 short; search 5.267 vs
+  human 5.667 (faster on seeds 5, 7, 10, 15). Seeds 4 and 5 hold two USER scry choices the rules do not
+  follow (a second Crackle / a Skerry kept on T5 with 28-40 lands out, game already won): read as
+  indifferent, surfaced.
+- **Bottoming cost** (pre-keep-table): lookahead bottoming is ~96% of CPU at d3 b10 (60 games: 245 s user
+  vs 10 s with MTG_BOTTOM_EVAL_DEPTH=0, avg 5.267 vs 5.283). USER 2026-10-18: "mulligan profile first and
+  then value-leaf is pretty much always the right order now" -- the value leaf (stopped at phase C, 533/534
+  chunks, pool exited early) is to be REGENERATED after the keep table.
 
-IN FLIGHT:
-- VALUE LEAF `bash scripts/valueleaf.sh run decks/Galadriel` (nohup, log logs/valueleaf_galadriel/run.log,
-  queue logs/vlq_galadriel) -- phase C matrix ~69% (14,454/20,800), deepest cells (H5, V6-V8) left, ~55
-  core-h + a long-game tail. Batch RSS ~19 GiB vs the 22.65 GiB cap (3/4 of 30 GB). If it aborts on
-  rss-cap, resume with this machine's override (agent memory machine-memory-cap: MTG_RSS_CAP_GB =
-  MemTotal - 4 GB). It was resumed once after a Windows-update host restart (21:21) -- resume is safe.
-- PLAY VIEWER running from the primary checkout (MDT_REFERENCE_BACKUP_DIR=~/.claude/mdt-reference-backups),
-  port 8080. Commit+push any new references/Galadriel/* at once. Restart it after the Release rebuild if
-  server.js changed in the rebase.
-UNCOMMITTED (built into Release only, NOT into the value-leaf run):
-- USER rule: no Galadriel in hand or on the battlefield -> scry keeps ONLY Galadriel ("you must scry away
-  everything that is not Galadriel until you find her"; "without Galadriel the deck does essentially
-  nothing"). GaladrielProvider::ScryKeepOnTop + unit test. PLAY CHANGE -> needs smoke/regression GT accept
-  for galadriel + a held-out A/B (seeds disjoint) once the box is free.
-- Viewer: Galadriel reveal prompt OFF by default (USER: "too click intensive") -- `galadriel_reveal` in
-  AUTO_RESOLVABLE / SURFACE_OFF_BY_DEFAULT, autoResolveDecision special-case on the dig source; DECISIONS.md.
+## RESUME POINT (2026-10-18 ~03:30 UTC)
+DONE + PUSHED: everything above through the scry rules round 2 + smoke/regression GT.
 NEXT, in order:
-1. Rebuild Release on the rebased tree (delete touched objects -- 9p clock lag), unit tests, commit the
-   viewer change + scry rule; smoke (expect only galadriel keys to move), accept galadriel GT per tier.
-2. When the value leaf finishes: read logs/vlq_galadriel/DECISIONS.txt, report. PROPOSED to the USER (no
-   answer yet): finish this run, A/B the no-Galadriel rule, then REGENERATE the value leaf on the new play
-   (resume re-queues incomplete cells; rows/model are old play) before the mulligan profile.
-3. Mulligan profile: `bash scripts/mullgen.sh run decks/Galadriel` ALONE, with the MTG_RSS_CAP_GB
-   override; read .claude/skills/mulligan-profile.md recipe/journal rules first (K=13 buckets file exists).
-4. After the value leaf: investigate the slow cross-game RSS growth (13 -> 19 GiB over the matrix).
-OPEN USER QUESTIONS: keep-policy sign-off (curve_check none / max_lands 6: -0.45..-0.50 turns, <1/2 cost);
-the two other-deck keyword mismatches (Saproling Migration: Kicker; Kili: Storied) and the rate-limited
-cost audit (verify_deck's only failing gates); the value-leaf regenerate-vs-restart choice above.
-Gotchas: 9p clock lag (delete .o files after edits; header edits via ninja -t deps); never pkill -f.
+1. Mulligan profile: `bash scripts/mullgen.sh run decks/Galadriel` ALONE on the box, MTG_RSS_CAP_GB
+   override (agent memory machine-memory-cap), src committed first (PGO). No value sidecar: gen inherits the
+   play depth/budget from the profile. K=13 buckets file. Hourly status timer + background waiter.
+2. Then regenerate the value leaf on the new play with the keep table in place (the old queue
+   logs/vlq_galadriel is pre-rule play: move it aside, don't resume).
+3. Investigate the cross-game RSS growth seen in the old value-leaf matrix (13 -> 19 GiB).
+OPEN USER QUESTIONS: keep-policy sign-off (curve_check none / max_lands 6); Saproling Migration (Kicker) /
+Kili (Storied) keyword mismatches + the rate-limited cost audit; whether CLAUDE.md / the skills should
+change the pipeline order to mulligan -> value leaf generally.
+Gotchas: 9p clock lag (delete .o files after edits; header edits via ninja -t deps); never pkill -f; gh CLI
+logged out on this container (query CI via curl + `git credential fill`).
 
 ## Claude-play sweep
 - commit: `314fa393` (the sweep's play; fixes below land after it -- re-sweep owed if they move more than the flagged plans)

@@ -336,7 +336,7 @@ TEST_CASE("Galadriel scry before Galadriel: missing G/U -> only colour fixers ar
     CHECK_FALSE(KeepsGal(s, kGaladriel));   // a second one
 }
 
-TEST_CASE("Galadriel scry before Galadriel: colours in hand -> Crackle and acceleration kept, the rest thrown")
+TEST_CASE("Galadriel scry before Galadriel: colours in, a scry land in hand -> Crackle and acceleration kept, the rest thrown")
 {
     EnsureCardsLoadedGal();
     GameState s = FreshGal();
@@ -344,11 +344,32 @@ TEST_CASE("Galadriel scry before Galadriel: colours in hand -> Crackle and accel
     PutGal(s, "Temple of Malice", 2);       // B/R
     PutGal(s, "Zhalfirin Void", 3);
     HandGal(s, kGaladriel, 4);
+    HandGal(s, "Temple of Triumph", 5);     // the land that follows her
     CHECK(KeepsGal(s, kCrackle));
     CHECK(KeepsGal(s, "Sol Ring"));
     CHECK(KeepsGal(s, kSkerry));
     CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));
     CHECK_FALSE(KeepsGal(s, kHavens));
+    CHECK_FALSE(KeepsGal(s, kGaladriel));
+}
+
+TEST_CASE("Galadriel scry before Galadriel: colours in, no scry land in hand -> keep a scry land only (USER, seed 14)")
+{
+    EnsureCardsLoadedGal();
+    // The seed 14 reference, turn 3: Epiphany + Mystery + Void out, Galadriel + Crackle in hand.
+    GameState s = FreshGal();
+    s.turn_number = 3;
+    PutGal(s, "Temple of Epiphany", 1);
+    PutGal(s, kTemple, 2);                  // G/U
+    PutGal(s, "Zhalfirin Void", 3);
+    HandGal(s, kGaladriel, 4);
+    HandGal(s, kCrackle, 5);
+    CHECK(KeepsGal(s, "Temple of Plenty"));
+    CHECK(KeepsGal(s, "Temple of Triumph"));
+    CHECK_FALSE(KeepsGal(s, kCrackle));
+    CHECK_FALSE(KeepsGal(s, "Sol Ring"));
+    CHECK_FALSE(KeepsGal(s, kSkerry));
+    CHECK(KeepsGal(s, kHavens));            // a scry land too (every land but the Skerry is)
     CHECK_FALSE(KeepsGal(s, kGaladriel));
 }
 
@@ -410,6 +431,45 @@ TEST_CASE("Mana pool: a fed filter's colour costs a feed -- {3}{R}{R} off two fi
     CHECK_FALSE(pool.CanPay(crackle1));
     CHECK(pool.CanPay(gal));
     CHECK(pool.CanPay(three));
+}
+
+TEST_CASE("Galadriel scry with Galadriel out: the last reachable Crackle is kept behind a stop card in the known pile (USER)")
+{
+    EnsureCardsLoadedGal();
+    GameState s = FreshGal();
+    PutGal(s, kGaladriel, 1);
+    PutGal(s, kTemple, 2);
+    auto lib_card = [](const std::string& n, int num) { Card c = DefGal(n).card; c.m_number = num; return c; };
+    Library& lib = s.players[0].library;
+    lib.push_back(lib_card("Temple of Plenty", 10));      // unknown upper library, no other Crackle
+    CHECK_FALSE(KeepsGal(s, kCrackle));                   // nothing bottomed: it may go
+    lib.push_back(lib_card("Temple of Deceit", 12)); lib.NoteBottomed();
+    CHECK_FALSE(KeepsGal(s, kCrackle));                   // only a scry-land ahead: it chains in for free
+    lib.push_back(lib_card("Sol Ring", 13)); lib.NoteBottomed();
+    CHECK(KeepsGal(s, kCrackle));                         // a stop card ahead: a turn's wait per card
+    HandGal(s, kCrackle, 14);
+    CHECK_FALSE(KeepsGal(s, kCrackle));                   // one in hand already: still thrown
+    s.players[0].hand.clear();
+    {
+        GameState s2 = s;                                 // the other Crackle still above the pile:
+        Library& l2 = s2.players[0].library;              // the chain can run on and meet it
+        l2 = Library{};
+        l2.push_back(lib_card(kCrackle, 11));
+        l2.push_back(lib_card("Sol Ring", 13)); l2.NoteBottomed();
+        CHECK_FALSE(KeepsGal(s2, kCrackle));
+    }
+    {
+        GameState s2 = s;                                 // a Crackle FIRST in the pile: this one may go
+        Library& l2 = s2.players[0].library;
+        l2 = Library{};
+        l2.push_back(lib_card("Temple of Plenty", 10));
+        l2.push_back(lib_card(kCrackle, 11)); l2.NoteBottomed();
+        l2.push_back(lib_card("Sol Ring", 13)); l2.NoteBottomed();
+        CHECK_FALSE(KeepsGal(s2, kCrackle));
+    }
+    lib.ShuffleByKey(7);
+    CHECK(lib.KnownBottom() == 0);                        // a shuffle forgets the pile
+    CHECK_FALSE(KeepsGal(s, kCrackle));
 }
 
 TEST_CASE("Galadriel scry with no Galadriel anywhere: keep only Galadriel (USER)")
