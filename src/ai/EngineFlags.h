@@ -66,6 +66,38 @@ inline bool LethalCutVerifyEnabled()
     return on;
 }
 
+// MTG_SAC_OUTLET_PAY_SCOPE (Vampires A2 0.4, 2026-10-18; DEFAULT ON, =0 restores the mis-modelled
+// payment) -- a creature-sac outlet's mana cost is an ACTIVATED ABILITY OF A CREATURE SOURCE, so both
+// trailing passes pay it under CreatureAbilityPayScope, exactly as ActivatePump / a creature-source
+// ActivatePermAbility already do (D12). Before this the scope was missing at both sac-outlet payments,
+// so Secluded Courtyard's coloured mana ("an ability of a creature source of the chosen type") could
+// not pay Falkenrath Pit Fighter's {R} -- or Siege-Gang's / Pashalik's {R} in any list that pairs them
+// with a Courtyard. A RULES fix, not a heuristic; the =0 hatch exists to attribute a moved game.
+// Read by BOTH trailing passes (TurnSolver's ApplyPlanDirect and AIEngine's executor twin).
+inline bool SacOutletPayScopeOn()
+{
+    static const bool v = EnvOn("MTG_SAC_OUTLET_PAY_SCOPE", true);
+    return v;
+}
+
+// MTG_VAMP_GY_LANDFALL_HELD_LAND (Vampires A2 0.5, 2026-10-18; DEFAULT ON, =0 = the USER rule
+// unexempted) -- the NARROW exemption from the main-2 held-land bar (USER 2026-09-30: "Only newly
+// arrived lands in second main would be okay") for a GRAVEYARD-LANDFALL deck. THE BAR'S PREMISE
+// FAILS HERE: "main 2: Falkenrath Pit Fighter sacrifices Bloodghast (legal only after combat damage),
+// THEN play the held land -> Bloodghast returns" ends the turn with Bloodghast on the battlefield,
+// while every main-1-land line ends with it in the graveyard -- main 1 cannot express it, so under the
+// bar the line is unfindable at ANY budget. The exemption applies ONLY when a graveyard-landfall card
+// (CardDefinition::gy_landfall_watcher) is in our graveyard at the main-2 state, or can be put there
+// by a main-2 activation (one is on the battlefield / in hand with a live discard or sacrifice outlet).
+// Everything else keeps the USER rule. USER QUESTION OPEN (ledger open question 1): this is the
+// default the integrator took; the user decides whether it stays. Read by the enumerator only (the
+// land options a main-2 plan may carry), and the executor plays whatever plan was chosen.
+inline bool VampGyLandfallHeldLandOn()
+{
+    static const bool v = EnvOn("MTG_VAMP_GY_LANDFALL_HELD_LAND", true);
+    return v;
+}
+
 // MTG_FUNGUS_SPORE_POOL (ADOPTED 2026-09-22, DEFAULT ON; =0 reverts, heurarm slot so one pooled
 // batch carries both arms) -- treat every interchangeable spore outlet as ONE POOL, spent
 // oldest-first, so the only enumerated axis is HOW MANY Saprolings to make and never WHICH body pays.

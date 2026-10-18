@@ -3932,6 +3932,51 @@ struct CardParams
     std::string              daybound_back_name;
     std::string              nightbound_front_name;
     bool                     etb_or_transform_exile_opp_creature_until_leaves = false;
+
+    // ---- Vampires A2 (2026-10-18): discard / sacrifice outlets + graveyard recursion ------------
+    // Every field below is new and gated (0 / false / empty / nullopt inert), so every deck that does
+    // not carry one is byte-identical. Design: docs/design/vampires/design_A2_outlets.md.
+    //
+    // Falkenrath Pit Fighter: "{1}{R}, Discard a card, Sacrifice a Vampire: Draw two cards. Activate
+    // only if an opponent lost life this turn." Rides the creature-sac VALUE outlet
+    // (sac_creature_outlet / sac_creature_cost / sac_creature_requires_subtype / sac_outlet_draw):
+    //   sac_outlet_discard_cost        -- N cards discarded as an ADDITIONAL COST (CR 601.2h/602.2b).
+    //                                     Arms the searched shape: one variant per distinct hand-card
+    //                                     name x per identity-folded victim class (ApplyDiscardSacOutlet).
+    //   activate_only_if_opp_lost_life -- the activation restriction (CR 602.5b), read off
+    //                                     GameState::opponent_lost_life_this_turn (the spectacle flag;
+    //                                     any loss counts, even with a gain -- the 2021 ruling).
+    int                      sac_outlet_discard_cost        = 0;
+    bool                     activate_only_if_opp_lost_life = false;
+    // Stromkirk Condemned: "Discard a card: Vampires you control get +1/+1 until end of turn. Activate
+    // only once each turn." Action::Kind::ActivatePump MODE 4 (ApplyActivatePump): no mana, no {T}.
+    // The +P/+T lands on every creature we control with one of discard_team_pump_subtypes (empty =
+    // every creature) AS THE ABILITY RESOLVES. Deliberately NOT team_pump_cost, so the combat
+    // firebreathing converter (keyed on team_pump_cost) can never spend it.
+    int                      discard_team_pump_power     = 0;
+    int                      discard_team_pump_toughness = 0;
+    std::vector<std::string> discard_team_pump_subtypes;
+    // "Activate only once each turn" (CR 602.5b), PER OBJECT -- Permanent::once_per_turn_used, reset at
+    // our untap in both worlds. Read by the activations that carry it (Stromkirk Condemned's mode 4).
+    bool                     activate_once_each_turn = false;
+    // Voldaren Estate: "{5}, {T}: Create a Blood token. This ability costs {1} less to activate for
+    // each Vampire you control." PermAbilityMode::TapBlood. The reduction is GENERIC only, floor {0},
+    // counted AT ACTIVATION (TapBloodCostNow); the {T} remains. Empty subtype = no reduction.
+    std::optional<ManaCost>  tap_blood_cost;
+    std::string              tap_blood_cost_less_per_subtype;
+    // The Blood token (named token def "Blood Token"): "{1}, {T}, Discard a card, Sacrifice this
+    // token: Draw a card." PermAbilityMode::BloodDraw -- a {T} mode (artifacts are never summoning
+    // sick, so a Blood made this turn cracks now); the discard is a searched pin (Action::discard_name).
+    std::optional<ManaCost>  blood_draw_cost;
+    // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." A DERIVED
+    // Permanent::cond_haste bit, refreshed at entry and at the beginning of combat in both worlds
+    // (RefreshOppLifeHaste). 0 = no such clause.
+    int                      haste_if_opp_life_at_most = 0;
+    // Bloodghast: "Landfall -- Whenever a land you control enters, you may return this card from your
+    // graveyard to the battlefield." A GRAVEYARD watcher (CardDefinition::gy_landfall_watcher), fired by
+    // the one landfall chokepoint (FireLandfallTriggers) for every copy ALREADY in the graveyard when
+    // the land enters (the 2009 ruling; CR 113.6k: the ability functions only there).
+    bool                     landfall_return_self_from_gy = false;
 };
 
 // Rick's chosen-keyword bits (Permanent::chosen_keyword_mask).
@@ -3999,6 +4044,12 @@ struct CardDefinition
     // beside `enter_watcher` instead of six scattered CardParams probes per permanent walked. Same
     // derivation contract -- computed by RebuildInternedIndex for every reachable definition.
     bool landfall_watcher = false;
+    // "This definition returns ITSELF FROM THE GRAVEYARD on a landfall" (Bloodghast;
+    // CardParams::landfall_return_self_from_gy). Deliberately NOT part of DefHasLandfallTrigger /
+    // landfall_watcher: a Bloodghast ON THE BATTLEFIELD watches nothing (CR 113.6k), and folding it in
+    // would make every Bloodghast CAST a landfall-watcher cast (PutsLandfallWatcher) and spawn useless
+    // land-position clones. FireLandfallTriggers walks the GRAVEYARD for this byte instead.
+    bool gy_landfall_watcher = false;
     // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
     // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
     // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).

@@ -335,6 +335,7 @@ add_executable(mtg-test
     test/unit/test_begin_combat_attach.cpp
     test/unit/test_reconfigure.cpp
     test/unit/test_magnetic_theft.cpp
+    test/unit/test_vampires_outlets.cpp
     test/unit/test_sigardas_aid.cpp
     test/unit/test_cast_riders.cpp
     test/unit/test_remand_self_target.cpp

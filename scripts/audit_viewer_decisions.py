@@ -323,6 +323,22 @@ MANIFEST = {
     # shared `dig` chooser at resolution, with ONLY the graveyard's Equipment cards legal (mandatory;
     # a single legal card is not prompted). No named plan variants under human play.
     "etb_return_equipment_from_gy":  ("dig",         truthy),
+    # ---- Vampires A2 (2026-10-18; tools/play/DECISIONS.md "Vampires A2 outlets") ----
+    # Falkenrath Pit Fighter "{1}{R}, Discard a card, Sacrifice a Vampire: Draw two cards": human play
+    # gets ONE activation entry (no fan) and is asked WHICH card at resolution -- the existing
+    # `discard` decision (ChooseActivationDiscardIndex -> ChooseNonCleanupDiscardIndex), then WHICH
+    # Vampire through `sacrifice` (sac_creature_outlet's row). Stromkirk Condemned's "Discard a card:"
+    # pump and the Blood token's crack ask the same `discard` decision.
+    "sac_outlet_discard_cost":       ("discard",     positive),
+    "discard_team_pump_power":       ("discard",     positive),
+    "blood_draw_cost":               ("discard",     truthy),
+    # Voldaren Estate "{5}, {T}: Create a Blood token": whether / when is a main_phase plan variant
+    # (verbless `cast=Voldaren Estate`, the Conservatory precedent -- a land is never a hand cast).
+    "tap_blood_cost":                ("main_phase",  truthy),
+    # Bloodghast "you MAY return this card from your graveyard to the battlefield" (landfall): the
+    # existing `revive` decision from the landfall chokepoint, one 0/1 flag per graveyard copy, all
+    # preselected (autonomous play resolves YES by a PROVISIONAL dominance).
+    "landfall_return_self_from_gy":  ("revive",      truthy),
     # Slaughter-Priest's "Sacrifice another creature or an enchantment" widens the sac-outlet
     # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
     "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
@@ -560,6 +576,13 @@ BOARD_ACTIVATIONS = {
     "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
     "gy_play_cost":                              ("verb:gyplay",    truthy,   None),  # Kaldring {T}
     "ice_counter_cost":                          ("activate",       truthy,   "ice_counter_cost"),
+    # Vampires A2: Stromkirk Condemned's "Discard a card:" pump -- FREE (no mana, no {T}), so cost None;
+    # `cast=Stromkirk Condemned` is ambiguous when a copy is in hand, so a human names the board
+    # activation with the generic act=<name> token (LineSpec::board_acts). Voldaren Estate's Blood
+    # creation keeps the verbless land convention above (cost: its printed {5}, an upper bound -- the
+    # real cost is {5} minus the Vampires we control).
+    "discard_team_pump_power":                   ("activate",       positive, None),
+    "tap_blood_cost":                            ("activate",       truthy,   "tap_blood_cost"),
     # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every
     # other land-borne PermAbilityMode uses (Shivan Gorge, Botanical Conservatory, Mariposa) -- a land
     # is never in the cast multiset for a real hand cast, so the name is unambiguous. VERIFIABLE
@@ -629,6 +652,13 @@ INERT_PARAMS = {
     # ---- NivMizzetCombo (2026-10-17) -- PROVISIONAL, pending the user's OK ----
     "sac_for_mana_requires_tap": "Generator Servant's {T}-in-cost: a LEGALITY restriction (summoning sickness, CR 302.6) on an already-mapped sac-for-mana activation; it removes an option, creates none",
     "sac_for_mana_grants_haste": "Generator Servant's haste rider: which {C} pays a creature spell is a payment attribution folded SOUNDLY (one tagged {C} first, identical mana -- TakeHasteFloatForCreatureSpell), not a player decision; whether to crack rides main_phase like sac_for_mana_amount",
+    # ---- Vampires A2 (2026-10-18) ----
+    "activate_only_if_opp_lost_life": "Falkenrath Pit Fighter's activation RESTRICTION (any opponent life loss this turn) -- a legality gate on the activation, not a choice",
+    "discard_team_pump_toughness": "Stromkirk Condemned pump detail (rides discard_team_pump_power -> discard / activate)",
+    "discard_team_pump_subtypes": "Stromkirk Condemned pump recipient filter ('Vampires you control' -- exhaustive, no target)",
+    "activate_once_each_turn": "'Activate only once each turn' RESTRICTION (per object) -- a legality gate, not a choice",
+    "tap_blood_cost_less_per_subtype": "Voldaren Estate's Blood cost reduction (per Vampire we control, counted at activation) -- a cost detail, not a choice",
+    "haste_if_opp_life_at_most": "Bloodghast's conditional haste (opponent at 10 or less life) -- a static, no choice",
     # ---- Galadriel (2026-10-17) ----
     "mana_colors_of_graveyard_legends": "The Grey Havens' colour mode -- WHICH colour a tapped mana source makes is a payment question (the standing mana-payment exemption), not a player-facing decision",
     # ---- Landfall triggers (2026-10-15; OnLandEntered, core/SpellEffects.h) ----
@@ -1591,6 +1621,11 @@ def modeled_tokens(card):
     if p.get("etb_bounce_land"):                                          t.add("bounce")
     if p.get("retrace") or p.get("discard_land_damage"):                  t.add("discard")
     if p.get("tap_draw_then_discard"):                                    t.add("discard")   # Troyan's loot
+    # Vampires A2: Pit Fighter / Condemned / the Blood token (Voldaren Estate's reminder text quotes the
+    # Blood's "Discard a card", whose crack is the token's own `discard` decision).
+    if p.get("sac_outlet_discard_cost", 0) > 0 or p.get("discard_team_pump_power", 0) > 0 \
+            or p.get("blood_draw_cost") or p.get("tap_blood_cost"):
+        t.add("discard")
     if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
             or p.get("look_top_put_creature_count", 0) > 0:

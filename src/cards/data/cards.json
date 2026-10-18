@@ -12583,6 +12583,117 @@
      "B"
     ]
    }
+  },
+  {
+   "name": "Falkenrath Pit Fighter",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Vampire",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "{1}{R}, Discard a card, Sacrifice a Vampire: Draw two cards. Activate only if an opponent lost life this turn. [Repeatable creature-sac VALUE outlet with a DISCARD additional cost (sac_creature_outlet + sac_creature_requires_subtype Vampire -- itself legal -- + sac_outlet_discard_cost 1 + sac_outlet_draw 2), applied by its own shared resolver ApplyDiscardSacOutlet in both worlds. WHICH card is discarded and WHICH Vampire dies are both SEARCHED: one variant per distinct hand-card name x per identity-folded victim class on the board, plus a victim the SAME plan casts or Vial-puts first (one per Vampire creature name in hand); every variant shares the pooled source's activation family, so one activation per plan, and a further activation is a fresh searched decision reached through the two-card draw's hand-entry breakpoint. Human play gets one entry and is asked both at resolution (the `discard`, then the `sacrifice` decision). COST ORDER: mana -> discard -> sacrifice -> [madness seam] -> draw, so a madness card discarded to it is in exile while the victim is chosen and can never be this activation's victim. Liveness (the restriction, the discard, the victim) is decided BEFORE any cost is paid; a plan whose baked victim or pinned card is gone does nothing. activate_only_if_opp_lost_life reads opponent_lost_life_this_turn (any loss counts, per the 2021 ruling), so in a goldfish it is live after combat damage -- the deck uses the searched second main (DeckUsesSecondMain). The {1}{R} is paid as a creature-source ability, so Secluded Courtyard's coloured mana may pay {R}; Unclaimed Territory's and Voldaren Estate's may not. PROVISIONAL deferral: instant-speed timing collapsed to the main phases' trailing passes (inert vs the passive opponent -- a post-damage combat activation reaches the same state as one at the start of main 2; see design_A2 §6).]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_creature_cost": "{1}{R}",
+    "sac_creature_requires_subtype": "Vampire",
+    "sac_outlet_draw": 2,
+    "sac_outlet_discard_cost": 1,
+    "activate_only_if_opp_lost_life": true
+   }
+  },
+  {
+   "name": "Stromkirk Condemned",
+   "mana_cost": "{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Vampire",
+    "Horror"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Discard a card: Vampires you control get +1/+1 until end of turn. Activate only once each turn. [Searched main-phase Action::Kind::ActivatePump mode 4 (discard-cost team pump): no mana and no {T}, so it is legal the turn Condemned is cast (reached in the same main through breakpoint site 9). WHICH card is discarded is SEARCHED (one variant per distinct hand-card name; human play: the `discard` decision at resolution), through the shared discard hook, so a madness Vampire discarded to it is cast and is on the battlefield before the pump resolves (2016 ruling) and gets +1/+1. The +1/+1 lands on every Vampire we control AS THE ABILITY RESOLVES (temp P/T, cleared at cleanup); later arrivals get nothing. Once-per-turn is per copy (Permanent::once_per_turn_used, reset at our untap in both worlds); two identical copies are folded to their canonical discard assignment. Deliberately NOT team_pump_cost, so the combat firebreathing converter can never spend it. PROVISIONAL deferral: instant-speed timing collapsed to the main phases' trailing passes (a combat activation buys nothing a main-1 one does not vs the passive opponent).]",
+   "template": "custom",
+   "parameters": {
+    "discard_team_pump_power": 1,
+    "discard_team_pump_toughness": 1,
+    "discard_team_pump_subtypes": [
+     "Vampire"
+    ],
+    "activate_once_each_turn": true
+   }
+  },
+  {
+   "name": "Voldaren Estate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}, Pay 1 life: Add one mana of any color. Spend this mana only to cast a Vampire spell.\n{5}, {T}: Create a Blood token. This ability costs {1} less to activate for each Vampire you control. (It's an artifact with \"{1}, {T}, Discard a card, Sacrifice this token: Draw a card.\") [MANA: produces all five colours plus {C}; tap_self_damage 1 with a {C} mode = the painland reading, so the {C} tap is free and each coloured tap costs 1 life (raw life loss -- 'pay', not damage). colored_creature_only restricts the coloured half to creature SPELLS (madness and convoke casts included), never an activated ability. 'Vampire spell' is simplified to 'creature spell': EXACT for the Vampires list (every creature is a Vampire -- type lines verified; the only noncreature spell, Aether Vial, costs generic {1} which the {C} pays identically). BLOOD: PermAbilityMode::TapBlood, cost {5} minus one generic per Vampire we control AT ACTIVATION (floor {0}; the {T} stays) -- the search prices one cost variant per number of Vampires the plan casts first, and both worlds pay the true cost when the trailing pass activates it -- creating the 'Blood Token' named token def; the Estate taps itself for the {T}, so it can never pay its own {5}. A searched activation (when/whether); a Blood made this turn is crackable this turn and its crack is offered through breakpoint site 9.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G",
+     "C"
+    ],
+    "colored_creature_only": true,
+    "tap_self_damage": 1,
+    "tap_blood_cost": "{5}",
+    "tap_blood_cost_less_per_subtype": "Vampire"
+   }
+  },
+  {
+   "name": "Blood Token",
+   "mana_cost": "",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Blood"
+   ],
+   "keywords": [],
+   "oracle_text": "{1}, {T}, Discard a card, Sacrifice this token: Draw a card. [Token definition (created by Voldaren Estate; never in a decklist) -- the Clue Token / Treasure Token named-def precedent, skipped by audit_card_fields as a ' Token'. PermAbilityMode::BloodDraw: a {T} mode (an artifact is never summoning-sick, so a Blood made this turn is crackable now), cost {1} plus the discard and the self-sacrifice (all costs, CR 602.2b; paid discard -> sacrifice -> [madness seam] -> draw). WHICH card is discarded is SEARCHED (one variant per distinct hand-card name; human play: the `discard` decision at resolution), through the shared discard hook. Identical untapped Bloods are one source (one crack per plan; the next is reached through the draw's hand-entry breakpoint). NOT fused into its creation the way a Clue is: the fusion would have to pick the discard, which is a decision.]",
+   "template": "custom",
+   "parameters": {
+    "blood_draw_cost": "{1}"
+   }
+  },
+  {
+   "name": "Bloodghast",
+   "mana_cost": "{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Vampire",
+    "Spirit"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "This creature can't block.\nThis creature has haste as long as an opponent has 10 or less life.\nLandfall — Whenever a land you control enters, you may return this card from your graveyard to the battlefield. [LANDFALL FROM THE GRAVEYARD (landfall_return_self_from_gy): a GRAVEYARD watcher (CardDefinition::gy_landfall_watcher) dispatched by the one landfall chokepoint (FireLandfallTriggers) after the battlefield watchers; it functions only in the graveyard (CR 113.6k) and only for a copy already there when the land enters (2009 ruling); the return goes through PutCardOntoBattlefield (untapped, a new object, both enter cascades). The 'may' is resolved YES by a dominance argument (PROVISIONAL, see the A2 design: an extra untapped 2/1 Vampire against a passive opponent is never worse -- nothing in the list reads our graveyard except this card); human play is asked (the `revive` decision). The deck stamps deck_has_landfall and a graveyard-reader bit (GyR_GyLandfallNames, folded into the state keys), so the searched land position is live: a plan whose discard / sacrifice puts Bloodghast in the graveyard is offered 'land after the activations' (it returns), and in the second main a held land is exempt from the newly-arrived-lands-only rule while a Bloodghast is (or can be put) in the graveyard (MTG_VAMP_GY_LANDFALL_HELD_LAND, a USER question). CONDITIONAL HASTE (haste_if_opp_life_at_most 10): a derived Permanent::cond_haste bit, read against the opponent's life (team life in 2HG) at its entry and at the beginning of combat in both worlds. [PARTIAL: can't block is inert -- the passive opponent never attacks, so we never block. PROVISIONAL deferral pending user sign-off.]]",
+   "template": "custom",
+   "parameters": {
+    "haste_if_opp_life_at_most": 10,
+    "landfall_return_self_from_gy": true
+   }
   }
  ]
 }

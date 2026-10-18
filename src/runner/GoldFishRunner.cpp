@@ -70,6 +70,10 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         if (def->params.spectacle_cost.has_value()) { return true; }
+        // FALKENRATH PIT FIGHTER (Vampires A2, 2026-10-18): "Activate only if an opponent lost life this
+        // turn" -- the spectacle bucket: combat damage is what unlocks the activation, so its whole line
+        // ("attack, then discard + sacrifice a Vampire: draw two") lives in the post-combat main.
+        if (def->params.activate_only_if_opp_lost_life) { return true; }
         // ARCANUM WINGS (2026-10-05, Bruna). An IN-COMBAT aura swap returns the Wings to HAND during
         // combat; recasting it ({1}{U}, a sorcery-speed Aura) is a play combat itself enables (the
         // 2c-bis "resources generated during combat" bucket), and a main-2 swap can use mana combat
@@ -703,6 +707,9 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         if (p.gy_return_cost.has_value())    { m |= GyR_CreatureNames; }
         // Forge Anew: the ETB returns a graveyard EQUIPMENT card (see GyR_EquipmentNames).
         if (p.etb_return_equipment_from_gy)  { m |= GyR_EquipmentNames; }
+        // Bloodghast: a GRAVEYARD landfall watcher -- whether a copy sits in our graveyard decides
+        // whether the next land returns it (see GyR_GyLandfallNames).
+        if (p.landfall_return_self_from_gy)  { m |= GyR_GyLandfallNames; }
     }
     // Timeless Witness (Prevent Damage, 2026-09-27): its ETB returns ANY card from the graveyard and
     // Eternalize reads its own copy there. It is a SIDEBOARD card (reached by Living Wish), and the
@@ -1323,6 +1330,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
         // shared hooks (ResolveDrawTriggers, OnCreatureDealtDamageToOpponent) test.
         bool draw_ping = false;
+        // Bloodghast's opponent-life conditional haste (GameState::deck_has_cond_haste).
+        bool cond_haste = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1350,6 +1359,11 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (DefHasLandfallTrigger(d->params))      { landfall = true; }
+                // Bloodghast's GRAVEYARD landfall (CardDefinition::gy_landfall_watcher): the same
+                // chokepoint must run its graveyard walk, and LandOrderMatters must be live so the
+                // searched land-after-the-activations position exists (design_A2 §4.2).
+                if (d->params.landfall_return_self_from_gy) { landfall = true; }
+                if (d->params.haste_if_opp_life_at_most > 0) { cond_haste = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
@@ -1423,6 +1437,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no permanent can carry a draw trigger or a
         // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
         state.deck_has_draw_ping           = garth || draw_ping;
+        state.deck_has_cond_haste          = garth || cond_haste;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

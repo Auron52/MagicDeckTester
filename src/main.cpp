@@ -654,6 +654,19 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 if (a.kind == Action::Kind::SacForMana && !a.chosen_float_color.empty())
                 { tag += " for {" + a.chosen_float_color + "}\xC3\x97" + std::to_string(std::max(1, a.ritual_float)); }
                 else if (a.direct_damage > 0) { tag += " \xE2\x86\x92 " + std::to_string(a.direct_damage) + " damage"; }
+                // Falkenrath Pit Fighter (Vampires A2): the searched victim and discard are the whole
+                // decision. Human play carries neither (both are asked at resolution), so the menu
+                // entry says so instead of naming a pick the human has not made.
+                if (a.kind == Action::Kind::SacCreatureOutlet && od && IsDiscardSacOutlet(od->params))
+                {
+                    tag = a.card_name + ": discard "
+                        + (a.discard_name.empty() ? std::string("a card") : a.discard_name.str())
+                        + ", sac "
+                        + (!a.victim_name.empty() ? a.victim_name.str() + " (cast this line)"
+                           : a.sac_victim_id != 0 ? EnchantTargetName(s, a.sac_victim_id)
+                                                  : "a " + victim)
+                        + " \xE2\x86\x92 draw " + std::to_string(od->params.sac_outlet_draw);
+                }
                 break;
             }
             // Main-phase activated pumps (Minotaur). Without a case here these fell to the
@@ -711,6 +724,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                         && !a.def->params.tap_draw_requires_top_supertype.empty())
                            ? "look at top; put a snow card into hand"
                            : PermAbilityLabel(a.ability_mode));
+                // The Blood token's searched discard (Vampires A2); absent in human play.
+                if (a.ability_mode == Action::AbilityMode::BloodDraw && !a.discard_name.empty())
+                { tag += " (discard " + a.discard_name.str() + ")"; }
                 break;
             // Birthing Pod: the VICTIM and the FETCH are the whole decision (the blink lesson
             // above) -- without both, every Pod variant renders identically.
@@ -735,6 +751,20 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     tag = a.card_name + ": pump +" + std::to_string(per * k) + "/+0"
                         + " (discard " + std::to_string(k)
                         + (k == 1 ? " card)" : " cards)");
+                }
+                else if (a.gy_exile_mode == 4)
+                {
+                    // Stromkirk Condemned (Vampires A2): "Discard a card: Vampires you control get
+                    // +1/+1 until end of turn." The discarded card is the decision (named when the
+                    // search pinned it; asked at resolution in human play).
+                    const CardDefinition* pd = CardDatabase::Instance().Lookup(a.card_name);
+                    const int pp = pd ? pd->params.discard_team_pump_power : 0;
+                    const int pt = pd ? pd->params.discard_team_pump_toughness : 0;
+                    const std::string who = (pd && !pd->params.discard_team_pump_subtypes.empty())
+                        ? pd->params.discard_team_pump_subtypes.front() + "s" : std::string("team");
+                    tag = a.card_name + ": " + who + " +" + std::to_string(pp) + "/+" + std::to_string(pt)
+                        + " (discard " + (a.discard_name.empty() ? std::string("a card")
+                                                                 : a.discard_name.str()) + ")";
                 }
                 else if (a.gy_exile_mode == 3)
                 {
@@ -2112,6 +2142,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (ac.kind == Action::Kind::ActivatePermAbility
                  && ac.ability_mode == Action::AbilityMode::TapInvestigate)
                 { os << ", \"makes_clue\": true"; }
+                // `makes_blood` = this activation creates a Blood token (Voldaren Estate; Vampires A2) --
+                // the makes_clue affordance's twin, so a viewer gesture can key on the effect.
+                if (ac.kind == Action::Kind::ActivatePermAbility
+                 && ac.ability_mode == Action::AbilityMode::TapBlood)
+                { os << ", \"makes_blood\": true"; }
                 // `sacout` tells the GUI to encode this as the sacout= line verb rather than cast=,
                 // and sac_count is how many creatures ONE activation eats (the burst). ONLY the two
                 // kinds that really eat a creature get it: ActivatePump used to be swept in by a

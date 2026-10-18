@@ -387,6 +387,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         // payment path can set it, so this is a completeness fix to a CHECKER and not a behaviour
         // change: it can only turn a silent divergence into a loud one.
         if (a.lifegain_counters_used_this_turn != b.lifegain_counters_used_this_turn) { fail(i, "lifegain_counters_used"); }
+        if (a.once_per_turn_used != b.once_per_turn_used) { fail(i, "once_per_turn_used"); }
         if (a.storied_draw_used_this_turn != b.storied_draw_used_this_turn) { fail(i, "storied_draw_used"); }
         if (a.ice_counters != b.ice_counters)         { fail(i, "ice_counters"); }
         if (a.age_counters != b.age_counters)         { fail(i, "age_counters"); }
