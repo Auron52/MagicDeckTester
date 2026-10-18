@@ -70,6 +70,12 @@ SEARCHED (one Action variant per payoff K). Ceiling = safety cap only, never a l
   (derived from what the deck routes to today) with `UntapLoopActivationCounts` (exact K per reachable
   payoff), TutorSearchWidth ≥ 5, certificate answered. Trufflesnout searched ETB mode; Utopia Sprawl
   Enchant-Forest + locked colour as a SEARCHED axis.
+  **C1 LANDED 2026-10-18** (provider + Utopia Sprawl + Trufflesnout; see the ledger's "Chunk C1"). The
+  provider exists (`AccomplishedAlchemistProvider : SelesnyaLifegainProvider`, signature
+  draw_target_player | storm) -- C2 adds the untappers' params to its signature and the loop hooks. The
+  ETB CHOICE AXIS (CollectActions post-pass, chosen_x pin down the etb_kx channel) is the shape for any
+  further searched as-enters choice. Trufflesnout's life is a NEW param (etb_modal_lifegain) that the
+  lifegain projections (ProjectPlanWalk, PlanTraits, the loop sizer) do not read yet -- C2 must.
 * **Chunk D — viewer.** Verbs for untap activations / loop, etb_mode, colour; DECISIONS.md rows;
   audit_viewer_decisions manifest.
 

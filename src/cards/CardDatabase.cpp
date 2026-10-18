@@ -1686,6 +1686,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.is_land_aura                  = params.value("is_land_aura", false);
     p.land_aura_extra_mana          = params.value("land_aura_extra_mana", 0);
     p.land_aura_grants_shroud       = params.value("land_aura_grants_shroud", false);
+    p.land_aura_host_subtype        = params.value("land_aura_host_subtype", std::string());
+    p.etb_modal_self_counters       = params.value("etb_modal_self_counters", 0);
+    p.etb_modal_lifegain            = params.value("etb_modal_lifegain", 0);
     for (const std::string& c : params.value("land_aura_produces", json::array()))
     {
         p.land_aura_produces.push_back(ColorFromString(c));

@@ -2482,6 +2482,42 @@ public:
     virtual int EtbChosenColor(const GameState& s, int controller,
                                const CardDefinition& def) const = 0;
 
+    // EtbChoiceCandidates -- the ETB CHOICE AXIS (CollectActions' decision-space post-pass): which
+    // values a cast of `def` is FANNED over, as etb_kx pins (chosen_x >= 1). Two shapes today:
+    //   * a colour-choosing LAND Aura (Utopia Sprawl: etb_choose_color + is_land_aura) -> colour + 1
+    //     for each colour of its menu (land_aura_produces);
+    //   * a modal ETB (Trufflesnout: etb_modal_self_counters + etb_modal_lifegain) -> 1 (the counter)
+    //     and 2 (the life).
+    // Empty = not an ETB-choice card (no fan; the cast stays unpinned). A provider may RESTRICT the
+    // set (drop a colour the deck can never spend -- the permitted prune) and ORDER it; it may not
+    // collapse it to one option it did not search (the no-greedy rule). The search, not this hook,
+    // picks among what is returned. Never consulted in human play (the viewer asks at resolution).
+    virtual std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
+                                                 const CardDefinition& def) const
+    {
+        (void)s; (void)controller;
+        std::vector<int> out;
+        const CardParams& p = def.params;
+        if (p.is_land_aura && p.etb_choose_color)
+        {
+            for (Color c : p.land_aura_produces)
+            {
+                const int ci = static_cast<int>(c);
+                if (ci >= 0 && ci < 5 && std::find(out.begin(), out.end(), ci + 1) == out.end())
+                { out.push_back(ci + 1); }
+            }
+        }
+        else if (p.etb_modal_self_counters > 0 && p.etb_modal_lifegain > 0) { out = { 1, 2 }; }
+        return out;
+    }
+
+    // EtbModalDefault -- the modal ETB's mode when NO searched pin rode the entry (a rollout leaf, a
+    // put): 0 = the +1/+1 counter(s), 1 = the life. Only the beyond-horizon / non-cast fallback; a
+    // searched cast always carries its own pin. Default: the life when the deck reads lifegain on the
+    // battlefield (Accomplished Alchemist's X, a lifegain watcher), else the counter.
+    virtual int EtbModalDefault(const GameState& s, int controller, const CardDefinition& def) const
+    { (void)controller; (void)def; return s.deck_reads_lifegain_in_play ? 1 : 0; }
+
     // EtbChosenKeywords -- "As this enters, choose two abilities from among first strike, vigilance,
     // and lifelink" (Rick, Steadfast Leader / Greymond, Avacyn's Stalwart; CardParams::
     // etb_choose_keyword_count / _menu). Returns the kChosenKw* bitmask to LOCK into

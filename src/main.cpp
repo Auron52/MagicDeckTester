@@ -3833,6 +3833,26 @@ static void WriteAttackModeDecisionJson(std::ostream& os, const GameState& s,
     // DOUBLE comma before the array and NO separator after it -- invalid JSON, so
     // tools/play/server.js's JSON.parse threw on every Tectonic Giant attack and the deck could
     // not be hand-played past one. Caught by two independent Stage 5d sweep agents.
+    // GENERALISED (AccomplishedAlchemist 2026-10-18) to a modal ENTER trigger -- Trufflesnout's "When
+    // this creature enters, choose one -- +1/+1 counter; or you gain 4 life" (etb_modal_self_counters +
+    // etb_modal_lifegain), asked from FireOwnEtbTriggers. Recognised off the SOURCE card's params; that
+    // branch adds a "trigger":"etb" field and its own option texts. Tectonic Giant's payload is
+    // byte-identical (the attack branch below is the original text, unchanged).
+    const CardDefinition* src_def = CardDatabase::Instance().Lookup(source);
+    if (src_def != nullptr && src_def->params.etb_modal_self_counters > 0
+        && src_def->params.etb_modal_lifegain > 0)
+    {
+        const int n = src_def->params.etb_modal_self_counters;
+        os << "  \"trigger\":\"etb\",\n";
+        os << "  \"options\":[";
+        os << "{\"index\":0,\"text\":\"Put " << (n == 1 ? std::string("a") : std::to_string(n))
+           << " +1/+1 counter" << (n == 1 ? "" : "s") << " on this creature\"},";
+        os << "{\"index\":1,\"text\":\"You gain " << src_def->params.etb_modal_lifegain << " life\"}";
+        os << "],\n";
+        EmitRevealsField(os, reveals);
+        d.Note("reply 0 for the +1/+1 counter mode or 1 for the life-gain mode.");
+        return;
+    }
     os << "  \"options\":[";
     os << "{\"index\":0,\"text\":\"Deal 3 damage to each opponent\"},";
     os << "{\"index\":1,\"text\":\"Exile the top two cards; play one until end of your next turn\"}";

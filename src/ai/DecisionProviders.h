@@ -3097,6 +3097,49 @@ public:
     bool CleanupDiscardShedStable() const override;
 };
 
+// AccomplishedAlchemist (mono-green lifegain -> Accomplished Alchemist mana -> untappers -> Stroke of
+// Genius at the opponent; Living Wish sideboard; onboarded 2026-10-18). Its OWN provider (Stage 4a).
+// Before this branch the deck rode SelesnyaLifegainProvider: Accomplished Alchemist's
+// mana_per_life_gained is a term of the `selesnya` signature (measured: test_pirates_provider pinned
+// AccomplishedAlchemist -> SelesnyaLifegain at chunk A). So it DERIVES FROM SelesnyaLifegainProvider
+// -- what it routes to today -- and is play-neutral by construction: every judgement hook, INCLUDING
+// SelesnyaLifegain's USER-settled cleanup-discard buckets (CleanupDiscardCandidates /
+// CleanupDiscardShedStable, MTG_SELESNYA_BUCKET_DISCARD), is inherited byte-for-byte. Those buckets
+// were settled for ANOTHER deck's cards (Paragon / Ageless / Bogbeast / Genesis Wave roles keyed on
+// params); for this list most cards fall into no role and shed by the keep-ladder tail. That is the
+// one inherited narrowing the USER must see (disclosed in analysis-AccomplishedAlchemist.md) -- it
+// is kept, not changed, until this deck's own discard rule is measured/settled.
+//
+// Signature = OR-ed params from different cards of THIS deck, each carried by no other card in
+// cards.json (checked 2026-10-18): Stroke of Genius's draw_target_player (x4), Weather the Storm's
+// storm. Chunk C2 adds the untappers' params (Crab Umbra, Staff of Domination, Galvanic Alchemist,
+// Seedcradle Witch). Deliberately EXCLUDES mana_per_life_gained (shared with SelesnyaLifegain -- the
+// term that captured it), Utopia Sprawl's land_aura_host_subtype (a green ramp staple), Elvish
+// Harbinger's tutor_optional (Giant Harbinger / Forerunner carry it), Arbor Elf's
+// mana_requires_land_subtype, and the sideboard (the scan is mainboard only).
+//
+// TutorSearchWidth: inherited from DeckProvider = 6 >= Elvish Harbinger's five Elf names (Alchemist,
+// Harbinger, Ezuri, Seedcradle Witch, Arbor Elf); pinned by a unit test.
+class AccomplishedAlchemistProvider : public SelesnyaLifegainProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage reaches the opponent through combat, "
+               "Ezuri's +3/+3 Elf pump, Scholar of Athreos' drain and -- the deck's kill -- Stroke of "
+               "Genius at the opponent (a deck-out, opponentdeck::ForcedDraw). A winless-this-turn bound "
+               "must price the Alchemist's mana as life gained THIS turn (it rises mid-turn with every "
+               "Nourish / Feed the Clan / Weather the Storm / Trufflesnout gain), the untap loops (Crab "
+               "Umbra / Staff / Galvanic Alchemist / Seedcradle Witch -- unbounded at X >= 4 or 5), and "
+               "Living Wish's sideboard reach." }; }
+    const char* Name() const override { return "AccomplishedAlchemist"; }
+    // Utopia Sprawl's colour: the SEARCHED axis is restricted to the colours this list can spend --
+    // G (the deck), U (Stroke of Genius, Crab Umbra's untap, Galvanic Alchemist), W (Seedcradle Witch,
+    // Scholar of Athreos' cast), B (Scholar's drain). Red has no consumer in the 75. A restriction,
+    // never a pick: the search still branches over all four.
+    std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
+                                         const CardDefinition& def) const override;
+};
+
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval
 // Titan, Rampaging Baloths, Omnath, Phylath, Khalni Heart Expedition, Courser of Kruphix, Genesis
 // Wave; onboarded 2026-10-15). Its OWN provider from day one (Stage 4a). Without it the deck is the

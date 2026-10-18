@@ -6,7 +6,8 @@ forked from `phase-1-2-deck-analyzer` @ 2176032d).
 
 ## RESUME POINT
 
-Stage 2 (card research fan-out) in progress.
+Chunks A, B, C1 landed (C1: own provider, Utopia Sprawl, Trufflesnout). Next: chunk C2 (untap primitives +
+loop, extending AccomplishedAlchemistProvider), then D (viewer verbs).
 
 ## The deck
 
@@ -42,16 +43,46 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Eternal Witness | side | implemented (chunk A) | 1 | etb_return_gy_to_hand (Timeless Witness); viewer: dig (bucket A); PROVISIONAL 'may'->mandatory |
 | Staff of Domination | main | drafted | 2+3 | see logs/aa_drafts; self_untap NEW; untap target not searched (viewer bucket B) |
 | Crab Umbra | main | drafted | 3 | BLUE {U}, untap {2}{U}; NEW untap_enchanted_cost + UntapEnchanted action |
-| Trufflesnout | side | drafted | 3 | NEW searched ETB mode axis + etb_mode viewer decision |
+| Trufflesnout | side | implemented (chunk C1) | 3 | NEW etb_modal_self_counters 1 + etb_modal_lifegain 4; mode = SEARCHED cast axis (ETB CHOICE AXIS, chosen_x 1 counter / 2 life, etb_kx channel, both worlds); unpinned = EtbModalDefault; viewer: attack_mode generalised (trigger "etb") |
 | Scholar of Athreos | side | implemented (chunk A) | 2 | drain params + NEW drain_each_opponent (x heads on loss AND gain; DrainLossPerActivation / DrainGainPerActivation at every drain site); lethal drain COUNT needs the chunk-C provider (ManaSinkActivationCounts) |
 | Weather the Storm | main | implemented (chunk A) | 2 | cast_lifegain 3 + NEW storm bool (one GainLife per instance); ProjectPlanWalk now counts the plan's casts; cast order = USER decision (generic kept, storm-last only proposed) |
 | Ezuri, Renegade Leader | main | implemented, fair pump (chunk A) | 1 | team_pump_* +3/+3 Elves (combat converter); main-phase lethal-K pump PENDING chunk C; regenerate/trample PROVISIONAL inert |
 | Galvanic Alchemist | side | drafted | 3 | soulbond + NEW granted untap {2}{U}; partner pick greedy today |
 | Elvish Harbinger | main | implemented (chunk A) | 1 | Giant Harbinger tutor_to_top Elf + 5c dork; tutor axis AND the 'may' decline are searched variants (tutor_optional) -- no deferral needed |
 | Seedcradle Witch | main | drafted | 3 | NEW untap+pump targeted activation {2}{G}{W} |
-| Utopia Sprawl | main | drafted | 2/3 | Enchant Forest (NEW host subtype) + locked colour (searched?) |
+| Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk C1 (2026-10-18) -- landed: deck provider, Utopia Sprawl, Trufflesnout
+
+* **Provider (Stage 4a).** Before: `SelesnyaLifegain` (Accomplished Alchemist's `mana_per_life_gained`).
+  After: `AccomplishedAlchemistProvider : SelesnyaLifegainProvider` (derived from what it routed to, so
+  play-neutral by construction), signature `draw_target_player` (Stroke of Genius) OR `storm` (Weather the
+  Storm), routed ABOVE `selesnya`. Certificate NotAssessed (what a bound must price is in the class).
+  **INHERITED judgement hooks the USER must see:** SelesnyaLifegain's USER-settled cleanup-discard buckets
+  (`CleanupDiscardCandidates` + `CleanupDiscardShedStable`, `MTG_SELESNYA_BUCKET_DISCARD` default ON) --
+  settled for ANOTHER deck's cards; this list mostly falls into no role. Kept (not changed) until this
+  deck's own discard rule is decided. Everything else is DeckProvider/Generic. `TutorSearchWidth` = 6
+  (inherited) >= the five Elf names. ONE override: `EtbChoiceCandidates` restricts Sprawl's colour to
+  G/U/W/B (a restriction; still searched).
+* **ETB CHOICE AXIS** (CollectActions post-pass, decision space only, never human play): a cast whose
+  as-enters/ETB choice is searched is replaced by one variant per `DecisionProvider::EtbChoiceCandidates`
+  value, carried as `chosen_x >= 1` down the existing etb_kx channel (the Felidar Guardian vehicle):
+  rollout apply_one -> FireOwnEtbTriggers; executor CastSpellFromHand records the positive chosen_x on the
+  stack entry -> EnterBattlefield -> FireOwnEtbTriggers. chosen_x already rides every plan signature;
+  the autonomous name dedup keys it as `#EC`. Rollout leaves keep the unpinned base (provider default).
+* **Utopia Sprawl.** `land_aura_host_subtype` enforced by `LandAuraHostOk` in LegalEnchantTargets,
+  ResolveEnchantTarget (target + fallback, `land_pp`), AuraCouldEnchant, the in-loop land-aura deploy, the
+  same-turn karoo host (`KaroosHostAdmitted`), and a provider-narrowed host list is intersected with the
+  legal set. Colour: `etb_choose_color` on a land aura reads `land_aura_produces` as its menu; credited via
+  `LandAuraProducesFor` (pool credit, LandAuraColorMask, BoardCanProduceColor, the payability-cache key);
+  `EffectiveProducesFor` ignores land auras (not a source of their own).
+* **Trufflesnout.** Modal ETB in FireOwnEtbTriggers (PutPlusCounters / one GainLife event).
+* Viewer: Sprawl = existing `choose_color` (full five-colour menu); Trufflesnout = `attack_mode` generalised
+  (emitter adds `"trigger":"etb"` + the card's option texts; Tectonic Giant byte-identical; GUI sub-heading).
+  DECISIONS.md rows; audit manifest: `etb_modal_self_counters` -> attack_mode, `etb_modal_lifegain` /
+  `land_aura_host_subtype` -> INERT_PARAMS (sign-off owed).
 
 ## Chunk B (2026-10-18) -- landed: Stroke of Genius
 
@@ -113,7 +144,9 @@ smoke GT for that NOT accepted yet. ROUTING measured: the deck rides SelesnyaLif
 * Stroke at opponent offered only at minimal lethal X (chunk B). Lossy vs completeness (a 2-turn split deck-out). Default taken: chunk C2 adds a max-affordable opponent variant too; MTG_UNPRUNED=xspell is the full arm.
 * Second main for this deck: global default OFF kept; m2 arm to be measured.
 * Weather the Storm cast order: generic kept; storm-last proposed.
-* Utopia Sprawl colour / Galvanic partner: made SEARCHED (not provider picks).
+* Utopia Sprawl colour: made SEARCHED (chunk C1), provider-restricted to G/U/W/B. Galvanic partner: C2.
+* Inherited SelesnyaLifegain cleanup-discard buckets on AccomplishedAlchemistProvider (chunk C1): kept
+  for play-neutrality; this deck's own discard rule is the USER's to settle.
 * critter_smoke_d0_s1001 moves 4 digests (avg unchanged) from the chunk-A self-only sac-outlet victim fix -> accept at landing.
 
 ## Approved deferrals

@@ -10681,6 +10681,54 @@
    }
   },
   {
+   "name": "Utopia Sprawl",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant Forest\nAs this Aura enters, choose a color.\nWhenever enchanted Forest is tapped for mana, its controller adds an additional one mana of the chosen color. [Land Aura (the Wild Growth shape) with TWO additions. (1) ENCHANT FOREST (land_aura_host_subtype \"Forest\"): only a land with the Forest subtype is a host -- enforced at every host-selection site (LegalEnchantTargets, so the searched host variants; a provider's narrowed host list is intersected with it; ResolveEnchantTarget's searched target AND fallback; the non-targeting attach; the in-loop land-Aura deploy; a same-turn karoo host). The Living Wish sideboard Island is never a host. (2) THE COLOUR IS LOCKED PER OBJECT as it enters (an as-enters REPLACEMENT, CR 614.12 -- etb_choose_color with land_aura_produces as the five-colour MENU) and afterwards the host's tap adds exactly ONE mana of THAT colour (LandAuraProducesFor), never a wild unit. The colour is a SEARCHED choice, not a provider pick: every cast is fanned into one plan variant per colour the provider admits (the ETB CHOICE AXIS; AccomplishedAlchemistProvider restricts it to G/U/W/B, the colours this list can spend -- red has no consumer), the pin rides the cast to resolution in both the executor and the rollout. In HUMAN PLAY the viewer asks (choose_color, the full five-colour list). A re-entering Sprawl is a new object and chooses afresh.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "is_land_aura": true,
+    "land_aura_extra_mana": 1,
+    "land_aura_produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "etb_choose_color": true,
+    "land_aura_host_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Trufflesnout",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, choose one —\n• Put a +1/+1 counter on this creature.\n• You gain 4 life. [SIDEBOARD card (AccomplishedAlchemist), reached by Living Wish. Modal ETB (etb_modal_self_counters 1 + etb_modal_lifegain 4, both set = the modal trigger). The MODE is a SEARCHED cast axis: every cast is fanned into two plan variants (the ETB CHOICE AXIS; chosen_x 1 = the counter, 2 = the life) whose pin rides the cast to FireOwnEtbTriggers in both the executor and the rollout. The life is ONE GainLife event (lifegain watchers fire once; Accomplished Alchemist's X rises by 4); the counter goes through PutPlusCounters (a counter doubler doubles it). An entry with no searched pin (a rollout leaf beyond the horizon) takes the provider's EtbModalDefault (the life when the deck reads lifegain in play, else the counter). In HUMAN PLAY the viewer asks (the attack_mode decision, generalised with trigger \"etb\").]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_modal_self_counters": 1,
+    "etb_modal_lifegain": 4
+   }
+  },
+  {
    "name": "Heroes' Reunion",
    "mana_cost": "{G}{W}",
    "types": [

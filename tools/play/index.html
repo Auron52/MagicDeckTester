@@ -5060,7 +5060,11 @@ function attackModePanelHtml(d){
     {index:1, text:'Exile the top two cards; play one until end of your next turn'}
   ];
   let h=`<h3>Choose one — ${esc(d.source||'')}</h3>`;
-  h+=`<div class="sub">${esc(d.source||'This creature')} attacked. Pick a mode; it resolves <b>before</b> combat damage.</div>`;
+  // trigger "etb": a modal ENTER trigger (Trufflesnout) rides the same decision type.
+  if (d.trigger==='etb')
+    h+=`<div class="sub">${esc(d.source||'This creature')} entered the battlefield. Pick a mode.</div>`;
+  else
+    h+=`<div class="sub">${esc(d.source||'This creature')} attacked. Pick a mode; it resolves <b>before</b> combat damage.</div>`;
   h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
   h+=`<div class="pbtns" style="justify-content:center;flex-direction:column;align-items:center;gap:6px">`;
   opts.forEach(o=>{
@@ -5103,7 +5107,7 @@ function commitLifegainCounters(d, v){
 function commitAttackMode(d, v){
   const opts = d.options || [];
   const o = opts.find(x=>x.index===v);
-  pushChoice(d, v, `${d.source||'Attack trigger'}: ${o?o.text:(v===1?'impulse mode':'damage mode')}`);
+  pushChoice(d, v, `${d.source||(d.trigger==='etb'?'Enter trigger':'Attack trigger')}: ${o?o.text:(v===1?'impulse mode':'damage mode')}`);
 }
 function commitDemonstrate(d, v){
   pushChoice(d, v, `${d.source||'Demonstrate'}: ${v?'copied the spell':'declined the copy'}`);

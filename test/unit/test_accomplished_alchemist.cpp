@@ -17,6 +17,8 @@
 //                       (target, X) variants, executor == rollout, and the opponent-library trait.
 #include <doctest/doctest.h>
 
+#include "ai/DecisionProviders.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
@@ -552,4 +554,192 @@ TEST_CASE("Stroke of Genius: draw_target_player deals the opponent a library; Br
     Decklist aa = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath(
         "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod"));
     CHECK(GoldFishRunner::DeckTouchesOpponentZones(aa));
+}
+
+// ---- chunk C1 (2026-10-18): Utopia Sprawl, Trufflesnout, the ETB CHOICE AXIS ----------------------
+
+namespace
+{
+const Permanent* SprawlAa(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == "Utopia Sprawl") { return &p; } }
+    return nullptr;
+}
+const Permanent* SnoutAa(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == "Trufflesnout") { return &p; } }
+    return nullptr;
+}
+const Action* CastOfAa(const TurnSolver::Plan& p, const std::string& name)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { return &a; } }
+    return nullptr;
+}
+bool IsForestAa(const GameState& s, int num)
+{
+    const Permanent* p = ByNumAa(s, num);
+    return p != nullptr && p->card.m_name.str() == "Forest";
+}
+}   // namespace
+
+TEST_CASE("Utopia Sprawl: Enchant Forest -- the (sideboard) Island is never a host")
+{
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    const int island = PutAa(s, "Island");
+    const int forest = PutAa(s, "Forest");
+    const CardParams& sp = DefAa("Utopia Sprawl").params;
+    CHECK(sp.is_land_aura);
+    CHECK(sp.etb_choose_color);
+    CHECK(sp.land_aura_host_subtype == "Forest");
+    // The enumerator's legal set.
+    CHECK(LegalEnchantTargets(s, 0, sp) == std::vector<int>{ forest });
+    // Resolution: a stale/illegal Island target falls back to the Forest; the fallback never picks it.
+    CHECK(ResolveEnchantTarget(s, 0, island, /*land_aura=*/true, -1, &sp) == forest);
+    CHECK(ResolveEnchantTarget(s, 0, 0, /*land_aura=*/true, -1, &sp) == forest);
+    // The non-targeting attach (Bruna-style) honours it too.
+    CHECK_FALSE(AuraCouldEnchant(s, sp, *ByNumAa(s, island)));
+    CHECK(AuraCouldEnchant(s, sp, *ByNumAa(s, forest)));
+    // Wild Growth ("Enchant land") is unaffected: both lands.
+    CHECK(LegalEnchantTargets(s, 0, DefAa("Wild Growth").params).size() == 2);
+    // With ONLY an Island out the card is uncastable (no plan casts it).
+    GameState u = FreshAa();
+    PutAa(u, "Island"); PutAa(u, "Island");
+    HandAa(u, "Utopia Sprawl");
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(u, true))
+    { CHECK(CastOfAa(p, "Utopia Sprawl") == nullptr); }
+}
+
+TEST_CASE("Utopia Sprawl: every colour variant is searched, only Forest hosts, executor == rollout")
+{
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    PutAa(s, "Island");
+    PutAa(s, "Forest"); PutAa(s, "Forest");
+    HandAa(s, "Utopia Sprawl");
+    std::set<int> colours;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = CastOfAa(p, "Utopia Sprawl");
+        if (a == nullptr) { continue; }
+        CHECK(IsForestAa(s, a->enchant_target));
+        colours.insert(a->chosen_x);
+        // The rollout resolves the pinned colour onto the Forest.
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        const Permanent* sp = SprawlAa(t);
+        REQUIRE(sp != nullptr);
+        CHECK(sp->chosen_color == a->chosen_x - 1);
+        CHECK(IsForestAa(t, sp->aura_attached_to));
+    }
+    // Generic provider: the whole five-colour menu (W U B R G -> 1..5), each its own plan.
+    CHECK(colours == std::set<int>{ 1, 2, 3, 4, 5 });
+
+    // The executor's stack entry (positive chosen_x recorded by CastSpellFromHand) locks the same colour.
+    const CardDefinition& def = DefAa("Utopia Sprawl");
+    for (int col : { static_cast<int>(Color::Blue), static_cast<int>(Color::Green) })
+    {
+        GameState ex = s;
+        StackEntry e;
+        e.type = StackEntry::EntryType::Spell;
+        e.source = def.card; e.source.m_number = 4343;
+        e.controller_index = 0;
+        e.chosen_x = col + 1;
+        int forest = 0;
+        for (const Permanent& p : ex.battlefield) { if (p.card.m_name.str() == "Forest") { forest = p.card.m_number; break; } }
+        e.enchant_target = forest;
+        EffectHandler::Resolve(ex, e, def);
+        const Permanent* sp = SprawlAa(ex);
+        REQUIRE(sp != nullptr);
+        CHECK(sp->chosen_color == col);
+        CHECK(sp->aura_attached_to == forest);
+    }
+}
+
+TEST_CASE("Utopia Sprawl: the locked colour is the ONLY colour credited (U pays {U}, G does not)")
+{
+    for (int col : { static_cast<int>(Color::Blue), static_cast<int>(Color::Green) })
+    {
+        GameState s = FreshAa();
+        s.deck_has_land_aura = true;
+        const int forest = PutAa(s, "Forest");
+        const int sprawl = PutAa(s, "Utopia Sprawl");
+        for (Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number != sprawl) { continue; }
+            p.aura_attached_to = forest;
+            p.chosen_color = static_cast<int8_t>(col);
+        }
+        const Permanent& host = *ByNumAa(s, forest);
+        ManaPool pool;
+        LandAuraAddToPool(pool, s, host);
+        CHECK(pool.Total() == 1);
+        CHECK(pool.wild == 0);                               // typed, never wild
+        CHECK(LandAuraColorMask(s, host) == (1 << col));
+        ManaCost u; u.blue = 1;
+        GameState t = s;
+        CHECK(TapForCostShared(t, u, /*for_creature=*/false, nullptr, true) == (col == static_cast<int>(Color::Blue)));
+        // {G}{U} off ONE Forest: only the U-locked Sprawl does it.
+        ManaCost gu; gu.green = 1; gu.blue = 1;
+        GameState w = s;
+        CHECK(TapForCostShared(w, gu, false, nullptr, true) == (col == static_cast<int>(Color::Blue)));
+    }
+}
+
+TEST_CASE("AccomplishedAlchemistProvider: Sprawl's colours restricted to G/U/W/B (searched, not picked)")
+{
+    EnsureCardsAa();
+    GameState s = FreshAa();
+    const std::vector<int> c = AccomplishedAlchemistProvider().EtbChoiceCandidates(s, 0, DefAa("Utopia Sprawl"));
+    CHECK(std::set<int>(c.begin(), c.end())
+          == std::set<int>{ static_cast<int>(Color::Green) + 1, static_cast<int>(Color::Blue) + 1,
+                            static_cast<int>(Color::White) + 1, static_cast<int>(Color::Black) + 1 });
+    // Trufflesnout's two modes are untouched by the restriction.
+    CHECK(AccomplishedAlchemistProvider().EtbChoiceCandidates(s, 0, DefAa("Trufflesnout")) == std::vector<int>{ 1, 2 });
+    // Elvish Harbinger's five Elf names fit the inherited tutor width.
+    CHECK(AccomplishedAlchemistProvider().TutorSearchWidth() >= 5);
+}
+
+TEST_CASE("Trufflesnout: both modes are searched and resolve identically in executor and rollout")
+{
+    GameState s = FreshAa();
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    HandAa(s, "Trufflesnout");
+    std::set<int> modes;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = CastOfAa(p, "Trufflesnout");
+        if (a == nullptr) { continue; }
+        modes.insert(a->chosen_x);
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        const Permanent* sn = SnoutAa(t);
+        REQUIRE(sn != nullptr);
+        if (a->chosen_x == 1) { CHECK(PlusCountersAa(*sn) == 1); CHECK(t.players[0].life == 20); }
+        if (a->chosen_x == 2)
+        {
+            CHECK(PlusCountersAa(*sn) == 0);
+            CHECK(t.players[0].life == 24);
+            CHECK(t.players[0].life_gained_this_turn == 4);
+        }
+    }
+    CHECK(modes == std::set<int>{ 1, 2 });
+
+    const CardDefinition& def = DefAa("Trufflesnout");
+    for (int mode : { 1, 2 })
+    {
+        GameState ex = s;
+        StackEntry e;
+        e.type = StackEntry::EntryType::Spell;
+        e.source = def.card; e.source.m_number = 4444;
+        e.controller_index = 0;
+        e.chosen_x = mode;
+        EffectHandler::Resolve(ex, e, def);
+        const Permanent* sn = SnoutAa(ex);
+        REQUIRE(sn != nullptr);
+        CHECK(PlusCountersAa(*sn) == (mode == 1 ? 1 : 0));
+        CHECK(ex.players[0].life == (mode == 2 ? 24 : 20));
+        CHECK(ex.players[0].life_gained_this_turn == (mode == 2 ? 4 : 0));
+    }
 }

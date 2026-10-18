@@ -3776,6 +3776,21 @@ inline bool CreatureTargetableByAuraSpell(const Permanent& creature, const GameS
     return true;
 }
 
+// "Enchant Forest" (CardParams::land_aura_host_subtype, Utopia Sprawl): is `land` a host this land
+// Aura's ENCHANT RESTRICTION admits (CR 303.4a)? The subtype is read off the land's DEFINITION (a zone
+// Card's own m_subtypes is a light handle -- the ControlsSubtype rule). Empty restriction = "Enchant
+// land" -> every land, so every existing land Aura is byte-identical. Targeting (shroud) is the
+// caller's business: a non-targeting attach (AuraCouldEnchant) ignores it, a cast does not.
+inline bool LandAuraHostOk(const Permanent& land, const CardParams& pp)
+{
+    if (!land.card.IsLand()) { return false; }
+    if (pp.land_aura_host_subtype.empty()) { return true; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(land.card);
+    const SubtypeSet& subs = d ? d->card.m_subtypes : land.card.m_subtypes;
+    for (const std::string& st : subs) { if (st == pp.land_aura_host_subtype) { return true; } }
+    return false;
+}
+
 // "An Aura card that COULD enchant it" (Bruna, Light of Alabaster) / the swapped-in half of an Aura
 // swap (Arcanum Wings): the NON-TARGETING legality of attaching an Aura with params `pp` to `host`
 // (CR 303.4f: an Aura put onto the battlefield without being cast does not target, so shroud and
@@ -3786,7 +3801,7 @@ inline bool CreatureTargetableByAuraSpell(const Permanent& creature, const GameS
 inline bool AuraCouldEnchant(const GameState& state, const CardParams& pp, const Permanent& host)
 {
     if (!pp.is_aura) { return false; }
-    if (pp.is_land_aura) { return host.card.IsLand(); }
+    if (pp.is_land_aura) { return LandAuraHostOk(host, pp); }
     if (!host.card.IsCreature()) { return false; }
     if (pp.aura_enchant_requires == "another_aura" && !CreatureHasAura(host, state)) { return false; }
     if (pp.aura_enchant_requires == "modified"     && !CreatureIsModified(host, state)) { return false; }
@@ -3950,6 +3965,8 @@ inline std::vector<int> LegalEnchantTargets(const GameState& state, int controll
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            // "Enchant Forest" (Utopia Sprawl): the enchant restriction narrows the host type.
+            if (!LandAuraHostOk(p, pp)) { continue; }
             // An Aura spell TARGETS its host (CR 303.4a), so a shrouded land is not a legal one.
             if (LandHasShroud(p, state)) { continue; }
             out.push_back(p.card.m_number);
@@ -4004,23 +4021,32 @@ inline EnchantRetargetDumper g_enchant_retarget_dumper;
 // Aura permanent at `aura_slot`, or 0 when no host is legal. ResolveEnchantTarget's fallback.
 inline int AuraCastHostByRank(const GameState& state, int controller, int aura_slot);
 
+// `land_pp` (optional, land Auras only): the Aura's params, so its ENCHANT RESTRICTION ("Enchant
+// Forest", land_aura_host_subtype) holds on both arms. Null = "Enchant land" -- every caller that
+// predates the restriction, byte-identical.
 inline int ResolveEnchantTarget(const GameState& state, int controller, int enchant_target,
-                                bool land_aura = false, int aura_slot = -1)
+                                bool land_aura = false, int aura_slot = -1,
+                                const CardParams* land_pp = nullptr)
 {
     if (land_aura)
     {
+        static const CardParams kAnyLand = [] { CardParams q; q.is_land_aura = true; return q; }();
+        const CardParams& lpp = land_pp != nullptr ? *land_pp : kAnyLand;
         // Shroud is checked on BOTH arms: the searched target must still be legal (a board can change
         // between enumeration and resolution -- another aura may have landed on that host in the
-        // meantime), and the heuristic fallback must not pick an illegal host either.
+        // meantime), and the heuristic fallback must not pick an illegal host either. Likewise the
+        // enchant restriction (an Island is never a Utopia Sprawl host, searched or fallback).
         for (const Permanent& p : state.battlefield)
             if (p.controller_index == controller && p.card.IsLand()
-                && p.card.m_number == enchant_target && !LandHasShroud(p, state))
+                && p.card.m_number == enchant_target && !LandHasShroud(p, state)
+                && LandAuraHostOk(p, lpp))
             { return enchant_target; }
         int lbest = 0, lbest_yield = -1;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != controller || !p.card.IsLand()) { continue; }
             if (LandHasShroud(p, state)) { continue; }
+            if (!LandAuraHostOk(p, lpp)) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d) { continue; }
             const int y = PermanentManaYield(state, p, *d);
@@ -9113,18 +9139,32 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // COMPLETE revert to the pre-2026-09-08 behaviour. It has to be: the human-play chooser consumes
     // a `--choices` slot, so a reader-only hatch still shifts every recorded decision stream after
     // it, and an A/B arm that changes the protocol is not a control.
+    // UTOPIA SPRAWL ("As this Aura enters, choose a color" on a LAND AURA): the same replacement, with
+    // the colour MENU in land_aura_produces (the aura makes no mana of its own; its colour rides the
+    // host's tap, LandAuraProducesFor) -- and, unlike Coldsteel Heart, a SEARCHED choice: the cast
+    // carries the colour as etb_kx = colour + 1 (CollectActions' ETB CHOICE AXIS emits one variant per
+    // provider-admitted colour, both worlds hand it in here: the rollout's apply_one and the
+    // executor's stack entry chosen_x). A pin outside the menu, or none (a rollout leaf, a staged
+    // permanent), takes the provider's EtbChosenColor -- the Heart route, unchanged for the Heart.
     if (p.etb_choose_color && EtbColorLockEnabled()
         && state.battlefield[entered_index].chosen_color < 0)
     {
-        int pick = ResolveProvider(state).EtbChosenColor(state, controller, *def);
+        const std::vector<Color>& menu_cols = p.is_land_aura ? p.land_aura_produces : p.produces;
+        int pick = -1;
+        if (p.is_land_aura && etb_kx >= 1 && etb_kx <= 5)
+        {
+            for (Color c : menu_cols)
+            { if (static_cast<int>(c) == etb_kx - 1) { pick = etb_kx - 1; break; } }
+        }
+        if (pick < 0) { pick = ResolveProvider(state).EtbChosenColor(state, controller, *def); }
         if (g_play_etb_color_chooser && !g_tap_speculating)
         {
             std::vector<int> menu;
-            for (Color c : def->params.produces) { menu.push_back(static_cast<int>(c)); }
+            for (Color c : menu_cols) { menu.push_back(static_cast<int>(c)); }
             const int human = (*g_play_etb_color_chooser)(state, controller, def->card.m_name.str(),
                                                           menu, pick);
             // Only a colour the card can actually make; anything else keeps the provider's pick.
-            for (Color c : def->params.produces)
+            for (Color c : menu_cols)
             { if (static_cast<int>(c) == human) { pick = human; break; } }
         }
         if (pick >= 0)
@@ -9186,6 +9226,36 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             if (pick & kChosenKwLifelink)    { add("lifelink"); }
             EmitPlayEvent(state.turn_number, "choose_abilities",
                           def->card.m_name.str() + " -- chose " + what);
+        }
+    }
+
+    // TRUFFLESNOUT: "When this creature enters, choose one -- * Put a +1/+1 counter on this creature.
+    // * You gain 4 life." (etb_modal_self_counters + etb_modal_lifegain, both set = modal). The MODE is
+    // a SEARCHED cast axis (CollectActions' ETB CHOICE AXIS): etb_kx 1 = the counter, 2 = the life,
+    // handed in by both worlds (the rollout's apply_one passes chosen_x, the executor's stack entry
+    // records a positive chosen_x). Unpinned (a rollout leaf, a put) = the provider's EtbModalDefault.
+    // The HUMAN picks in the viewer through the generalised attack_mode chooser (trigger "etb";
+    // 0 = counter, 1 = life) -- human play gets no mode variants, so the unpinned cast asks here.
+    // The life goes through GainLife (one event: the lifegain watchers, Accomplished Alchemist's X).
+    // Param-gated -> byte-identical for every other card.
+    if (p.etb_modal_self_counters > 0 && p.etb_modal_lifegain > 0)
+    {
+        int mode = (etb_kx == 1) ? 0 : (etb_kx == 2) ? 1
+                 : ResolveProvider(state).EtbModalDefault(state, controller, *def);
+        if (g_play_attack_mode_chooser != nullptr && !g_tap_speculating)   // real human resolution only
+        {
+            const int human = (*g_play_attack_mode_chooser)(state, controller, def->card.m_name.str(), mode);
+            if (human == 0 || human == 1) { mode = human; }
+        }
+        if (mode == 0) { PutPlusCounters(state, state.battlefield[entered_index], p.etb_modal_self_counters); }
+        else           { GainLife(state, controller, p.etb_modal_lifegain); }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "etb_mode",
+                          def->card.m_name.str() + (mode == 0
+                              ? " -- chose: +" + std::to_string(p.etb_modal_self_counters) + "/+"
+                                + std::to_string(p.etb_modal_self_counters) + " counter"
+                              : " -- chose: gain " + std::to_string(p.etb_modal_lifegain) + " life"));
         }
     }
 
@@ -21209,6 +21279,25 @@ inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& de
 // LandAuraBonus returns the extra mana COUNT; LandAuraAddToPool credits it with the right colour.
 // Both are no-ops (an early `return` on the m_number scan) for every deck with no land aura in
 // play, so the whole mechanic is inert elsewhere.
+// The colour(s) THIS land Aura permanent adds when its host is tapped. A colour-choosing land Aura
+// (Utopia Sprawl: etb_choose_color + land_aura_produces as the MENU) credits ONLY the colour it
+// LOCKED as it entered (Permanent::chosen_color, CR 614.12 -- "As this Aura enters, choose a color"),
+// never the menu; an unlocked one (staged without a pick) falls back to the definition, which a
+// multi-colour list credits as wild. Every other land Aura returns its definition's list, so
+// Wild Growth / Overgrowth / Fertile Ground / Trace of Abundance are byte-identical. The ONE reader
+// for every per-permanent site (the pool credit, the colour gates, the payability-cache key, the
+// producibility test) -- a site reading the raw list would hand a U-locked Sprawl's host green.
+inline const std::vector<Color>& LandAuraProducesFor(const CardDefinition& ad, const Permanent& a)
+{
+    if (ad.params.etb_choose_color && a.chosen_color >= 0 && a.chosen_color < 5 && EtbColorLockEnabled())
+    {
+        static const std::vector<Color> k1[5] = { { Color::White }, { Color::Blue }, { Color::Black },
+                                                  { Color::Red },   { Color::Green } };
+        return k1[a.chosen_color];
+    }
+    return ad.params.land_aura_produces;
+}
+
 inline int LandAuraBonus(const GameState& state, const Permanent& land)
 {
     if (!land.card.IsLand()) { return 0; }
@@ -21281,7 +21370,7 @@ inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Perm
         if (a.controller_index != land.controller_index) { continue; }
         const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
         if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
-        const std::vector<Color>& prod = ad->params.land_aura_produces;
+        const std::vector<Color>& prod = LandAuraProducesFor(*ad, a);
         if (prod.empty())
         {
             // The human's pick, if they made one for THIS aura. `next_choice` advances per
@@ -21324,8 +21413,8 @@ inline int LandAuraColorMask(const GameState& state, const Permanent& land)
         if (a.controller_index != land.controller_index) { continue; }
         const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
         if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
-        const std::vector<Color>& prod = ad->params.land_aura_produces;
-        if (prod.empty()) { mask |= 0x1F; continue; }          // "one mana of any colour"
+        const std::vector<Color>& prod = LandAuraProducesFor(*ad, a);
+        if (prod.empty()) { mask |= 0x1F; continue; }          // "one mana of any colour""
         for (Color c : prod)
         {
             const int ci = static_cast<int>(c);
@@ -23094,7 +23183,8 @@ inline bool BoardCanProduceColor(const GameState& state, int controller, Color w
         { return true; }
         if (want != Color::Colorless && d->params.is_land_aura)
         {
-            for (Color c : d->params.land_aura_produces) { if (c == want) { return true; } }
+            // Per PERMANENT: a colour-locked land Aura (Utopia Sprawl) makes only its chosen colour.
+            for (Color c : LandAuraProducesFor(*d, p)) { if (c == want) { return true; } }
         }
     }
     return false;
@@ -25754,6 +25844,7 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
     Color want = Color::Colorless;
     if (!ComboFinishMissingColor(state, controller, &want)) { return 0; }
     // A host must EXIST before anything is paid for -- an aura with nowhere to go is a dead cast.
+    // (An "Enchant Forest" aura's restriction is checked per candidate below, once the aura is known.)
     bool any_host = false;
     for (const Permanent& p : state.battlefield)
     {
@@ -25776,6 +25867,17 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
         if (d == nullptr || !LandAuraSuppliesColor(*d, want)) { continue; }
         if (!BoardCanPayColors(state, controller, d->card.m_mana_cost)) { continue; }
+        // The aura's ENCHANT RESTRICTION ("Enchant Forest"): it needs a legal host of its own.
+        if (!d->params.land_aura_host_subtype.empty())
+        {
+            bool host_ok = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != controller || LandHasShroud(p, state)) { continue; }
+                if (LandAuraHostOk(p, d->params)) { host_ok = true; break; }
+            }
+            if (!host_ok) { continue; }
+        }
         if (best_d != nullptr)
         {
             const int s_new = (d->params.land_aura_grants_shroud ? 1 : 0);
@@ -25815,6 +25917,7 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
             {
                 if (p.card.m_number != n || p.controller_index != controller) { continue; }
                 if (!p.card.IsLand() || p.tapped || LandHasShroud(p, state)) { break; }
+                if (!LandAuraHostOk(p, best_d->params)) { break; }   // "Enchant Forest"
                 host = n;
                 break;
             }
@@ -25822,7 +25925,8 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
         }
         // Nothing untapped among the narrowed set (or no narrowing at all): the shared heuristic
         // fallback, which ranks by the host's per-tap yield and re-checks shroud on both arms.
-        if (host == 0) { host = ResolveEnchantTarget(state, controller, 0, /*land_aura=*/true); }
+        if (host == 0)
+        { host = ResolveEnchantTarget(state, controller, 0, /*land_aura=*/true, -1, &best_d->params); }
     }
     if (host == 0) { return 0; }           // paid and nowhere legal to go: cannot happen (any_host)
     const int num = ap.hand[best_i].m_number;
@@ -25841,7 +25945,10 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
     state.battlefield[slot].aura_attached_to = host;
     PerformLightPawsAttach(state, controller, best_d->card.m_mana_cost.ManaValue(), "COMBO-OFF");
     FireEtbWatchers(state, controller, slot);
-    FireOwnEtbTriggers(state, controller, slot);
+    // A colour-choosing land Aura (Utopia Sprawl) was picked FOR the missing colour `want`, so that
+    // is the colour it locks (etb_kx = colour + 1, the ETB CHOICE channel); every other aura -1.
+    FireOwnEtbTriggers(state, controller, slot, std::string(),
+                       best_d->params.etb_choose_color ? static_cast<int>(want) + 1 : -1);
     if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
     { EnforceLegendRule(state, controller); }
     if (g_play_event_sink)
@@ -30352,8 +30459,10 @@ inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, in
                                                       const CardDefinition& def,
                                                       const Permanent* perm, bool in_hand)
 {
+    // (A colour-choosing LAND AURA -- Utopia Sprawl -- is not a mana source of its own: its colour rides
+    // the host's tap through LandAuraProducesFor, so it never resolves here.)
     if (perm != nullptr && def.params.etb_choose_color && perm->chosen_color >= 0
-        && EtbColorLockEnabled())
+        && !def.params.is_land_aura && EtbColorLockEnabled())
     {
         static const std::vector<Color> kW{ Color::White }, kU{ Color::Blue }, kB{ Color::Black },
                                         kR{ Color::Red },   kG{ Color::Green },

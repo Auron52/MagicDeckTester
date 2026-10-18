@@ -29544,6 +29544,34 @@ static bool EnumKarooDropActive() { return g_enum_karoo_drop; }
 // host (Bruna sweep D -- Wild Growth on a same-turn Azorius Chancery), cast after the karoo lands.
 static thread_local int  g_enum_karoo_num  = 0;
 
+// May a land Aura with params `pp` name that deferred karoo (a HAND card, m_number g_enum_karoo_num)
+// as its host? "Enchant land" -> always; an enchant restriction ("Enchant Forest", Utopia Sprawl) ->
+// only when the karoo's definition carries the subtype (read off the def, the LandAuraHostOk rule).
+static bool KaroosHostAdmitted(const GameState& state, const CardParams& pp)
+{
+    if (pp.land_aura_host_subtype.empty()) { return true; }
+    for (const Card& hc : state.ActivePlayer().hand)
+    {
+        if (hc.m_number != g_enum_karoo_num) { continue; }
+        const CardDefinition* kd = CardDatabase::Instance().LookupCached(hc);
+        if (kd == nullptr) { return false; }
+        for (const std::string& st : kd->card.m_subtypes)
+        { if (st == pp.land_aura_host_subtype) { return true; } }
+        return false;
+    }
+    return false;
+}
+
+// The ETB CHOICE AXIS predicate (CollectActions' post-pass and the autonomous dedup key): a cast whose
+// as-enters / enter-trigger choice is a searched chosen_x pin -- Utopia Sprawl's colour (a
+// colour-choosing LAND Aura; Coldsteel Heart is NOT fanned, its colour stays the USER's provider pick)
+// and Trufflesnout's mode.
+static bool CastCarriesEtbChoice(const CardDefinition& d)
+{
+    return (d.params.is_land_aura && d.params.etb_choose_color)
+        || (d.params.etb_modal_self_counters > 0 && d.params.etb_modal_lifegain > 0);
+}
+
 // MTG_LAND_AURA_HOST_FOLD -- collapse interchangeable "Enchant land" hosts. DEFAULT ON; =0 restores
 // one variant per legal land.
 //
@@ -32906,8 +32934,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (def.params.is_land_aura && !HumanPlayActive()
                 && !DecisionUnpruned(UnprunedGate::LandAuraHost))
             {
-                const std::vector<int> narrowed =
+                std::vector<int> narrowed =
                     ResolveProvider(state).LandAuraHostCandidates(state, state.active_player_index);
+                // The provider's list does not see the AURA, so it cannot know an enchant
+                // restriction ("Enchant Forest", Utopia Sprawl): intersect it with the legal set. An
+                // empty intersection is "no narrowing" (every legal host), never "no host". Gated on
+                // the restriction, so every "Enchant land" aura keeps the provider's list verbatim.
+                if (!def.params.land_aura_host_subtype.empty() && !narrowed.empty())
+                {
+                    narrowed.erase(std::remove_if(narrowed.begin(), narrowed.end(), [&](int n)
+                                   { return std::find(aura_hosts.begin(), aura_hosts.end(), n)
+                                            == aura_hosts.end(); }),
+                                   narrowed.end());
+                }
                 if (!narrowed.empty()) { aura_hosts = narrowed; }
                 // THE PROVIDER WINS. A deck that supplies its own host ranking has justified it and
                 // may have it pinned by a fixture -- EldraziFlickerProvider ranks by mana yield and
@@ -32949,7 +32988,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // (three mana from one land next turn vs the land it might otherwise bounce), so it is
             // its own variant; the karoo-branch host signature keeps it distinct.
             if (def.params.is_land_aura && g_enum_karoo_num > 0
-                && std::find(aura_hosts.begin(), aura_hosts.end(), g_enum_karoo_num) == aura_hosts.end())
+                && std::find(aura_hosts.begin(), aura_hosts.end(), g_enum_karoo_num) == aura_hosts.end()
+                && KaroosHostAdmitted(state, def.params))
             { aura_hosts.push_back(g_enum_karoo_num); }
             for (int tgt_num : aura_hosts)
             {
@@ -40502,6 +40542,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     actions.push_back(std::move(v));
                 }
             }
+        }
+    }
+
+    // ETB CHOICE AXIS post-pass (AccomplishedAlchemist, 2026-10-18). A choice the card makes AS IT
+    // ENTERS is part of the play, so the SEARCH owns it: Utopia Sprawl's "As this Aura enters, choose a
+    // color" (the colour is LOCKED for the object's life -- a U Sprawl pays Stroke of Genius / Crab
+    // Umbra, a G one does not) and Trufflesnout's "choose one -- +1/+1 counter; or gain 4 life". Each
+    // such cast is REPLACED by one variant per value the provider admits (EtbChoiceCandidates -- a
+    // restriction, never a pick), carried as chosen_x >= 1 down the etb_kx channel to
+    // FireOwnEtbTriggers in both worlds (the Felidar Guardian vehicle). chosen_x already rides every
+    // plan signature (ActionFoldSig, BpCandFingerprint, PlanActionKeys, the memo's equality, the
+    // human key); the autonomous name dedup keys it as #EC. Same decision-space gate and human-play
+    // rule as the Witness post-pass above: rollout leaves keep the unpinned base (the provider's
+    // default at resolution), and human play gets NO variants -- the viewer asks at resolution
+    // (choose_color / attack_mode). Gated on the params, so no other deck's actions move.
+    {
+        const bool ec_decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                    && !HumanPlayActive();
+        const std::size_t ec_n = actions.size();
+        for (std::size_t i = 0; ec_decision_space && i < ec_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || actions[i].chosen_x != 0 || !CastCarriesEtbChoice(*actions[i].def)) { continue; }
+            // A REMAND variant (the post-pass above) of a counterable spell never resolves, so it
+            // never enters and makes no ETB choice: no variants for it (they would be identical).
+            if (!actions[i].remand_by.empty() && !actions[i].def->params.cant_be_countered) { continue; }
+            const std::vector<int> vals =
+                ResolveProvider(state).EtbChoiceCandidates(state, state.active_player_index, *actions[i].def);
+            if (vals.empty()) { continue; }
+            for (std::size_t k = 1; k < vals.size(); ++k)
+            {
+                Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                v.chosen_x = vals[k];
+                actions.push_back(std::move(v));
+            }
+            actions[i].chosen_x = vals[0];
         }
     }
 
@@ -54360,7 +54436,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 state.battlefield.back().aura_attached_to =
                     ResolveEnchantTarget(state, state.active_player_index, enchant_target,
                                          def.params.is_land_aura,
-                                         static_cast<int>(state.battlefield.size()) - 1);
+                                         static_cast<int>(state.battlefield.size()) - 1,
+                                         &def.params);
                 // Colossification's ETB tap -- lockstep with EffectHandler's executor attach.
                 ResolveAuraEnterTapHost(state, static_cast<int>(state.battlefield.size()) - 1,
                                         /*respond_window=*/true);
@@ -54428,7 +54505,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         // / tutor_to_top, the Witness return, the Forge Anew return), no NONCREATURE
                         // permanent in cards.json carries the first two (counted 2026-10-17), so this
                         // is byte-identical for every card that reached the line before.
-                        FireOwnEtbTriggers(state, state.active_player_index, bi, tutor_target, -1);
+                        // ...and the ETB CHOICE pin of a colour-choosing land Aura (Utopia Sprawl),
+                        // which the executor's EnterBattlefield hands in as the stack entry's
+                        // positive chosen_x. Gated on the param: every other noncreature keeps -1.
+                        FireOwnEtbTriggers(state, state.active_player_index, bi, tutor_target,
+                                           (def.params.etb_choose_color && chosen_x > 0) ? chosen_x : -1);
                         break;
                     }
                 }
@@ -62767,6 +62848,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // DISTINCT plans (core invariant); gated on the param.
                         + ((act.def && act.def->params.etb_blink_permanent)
                            ? ("#F" + std::to_string(act.chosen_x)) : "")
+                        // The ETB CHOICE AXIS (Utopia Sprawl's colour, Trufflesnout's mode):
+                        // distinct pins are DISTINCT plays sharing one name -- the devour lesson;
+                        // without the key the dedup keeps one and the rest are unfindable. Gated on
+                        // the params (CastCarriesEtbChoice), so no other deck's signature moves.
+                        + ((act.def && CastCarriesEtbChoice(*act.def))
+                           ? ("#EC" + std::to_string(act.chosen_x)) : "")
                         // Kitesail Larcenist: distinct Treasure targets (and "none", and the
                         // human-only choose-on-resolution variant) are DISTINCT plans; gated.
                         + ((act.def && act.def->params.etb_treasurify_each_player)

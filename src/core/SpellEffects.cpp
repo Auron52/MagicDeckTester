@@ -5263,10 +5263,13 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
         std::uint64_t ah = 0xA02A'11ull
                          + static_cast<std::uint64_t>(ad->params.land_aura_extra_mana) * 131ull;
-        if (ad->params.land_aura_produces.empty()) { ah ^= 0x3F00ull; }   // "any colour" (wild)
+        // Per PERMANENT (LandAuraProducesFor): a U-locked and a G-locked Utopia Sprawl pay different
+        // costs, so they must not share a cached verdict. Identical to the raw list for every other aura.
+        const std::vector<Color>& aprod = LandAuraProducesFor(*ad, ap);
+        if (aprod.empty()) { ah ^= 0x3F00ull; }   // "any colour" (wild)
         else
         {
-            for (Color c : ad->params.land_aura_produces)
+            for (Color c : aprod)
             { ah ^= (0x100ull << (static_cast<int>(c) & 15)); }
         }
         ah *= 0x9E3779B97F4A7C15ull;

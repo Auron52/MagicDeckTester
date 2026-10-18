@@ -3254,6 +3254,14 @@ struct CardParams
 
     // Kazandu Refuge: "When this land enters, you gain 1 life." (land ETB, controller gains.)
     int  etb_lifegain = 0;
+    // MODAL ETB "choose one -- put a +1/+1 counter on this creature; or you gain N life" (Trufflesnout).
+    // BOTH set = the modal trigger; either alone is inert. The MODE is a SEARCHED cast axis: the
+    // decision-space post-pass in CollectActions (the ETB CHOICE AXIS) emits one cast variant per mode,
+    // chosen_x 1 = the counter(s), 2 = the life, riding the etb_kx channel to FireOwnEtbTriggers in
+    // both worlds (the Felidar Guardian vehicle). Unpinned (a put, a rollout leaf) = the provider's
+    // EtbModalDefault; human play = the attack_mode chooser (generalised: "trigger":"etb").
+    int  etb_modal_self_counters = 0;
+    int  etb_modal_lifegain      = 0;
     // Check land (Rootbound Crag): "enters tapped UNLESS you control a [subtype] or a [subtype]".
     // Non-empty => LandWouldEnterTapped returns tapped iff NO controlled land carries any of these
     // subtypes (the fastland precedent: the shared predicate keeps enumeration pricing and the real
@@ -3725,6 +3733,15 @@ struct CardParams
     // concentrating auras on one host is a real line (it raises the top-N yield the blink loop
     // untaps), so the host ranking actively steers INTO the illegal play unless this is enforced.
     bool               land_aura_grants_shroud = false;
+    // "Enchant Forest" (Utopia Sprawl): the host must be a land with THIS subtype (read off the land's
+    // DEFINITION -- a zone Card is a light handle). Empty = "Enchant land" (every land). Enforced at
+    // every host-selection site through LandAuraHostOk (SpellEffects.h): LegalEnchantTargets (the
+    // enumerator's legal set, which a provider's narrowed host list is intersected with),
+    // ResolveEnchantTarget (searched target AND fallback), AuraCouldEnchant (non-targeting attach),
+    // and the in-loop land-Aura deploy. A land Aura with etb_choose_color (Utopia Sprawl's "As this
+    // Aura enters, choose a color") reads land_aura_produces as its colour MENU and credits ONLY the
+    // locked Permanent::chosen_color afterwards (LandAuraProducesFor).
+    std::string        land_aura_host_subtype;
 
     // Eldrazi Displacer "{2}{C}: Exile another target creature, then return it to the battlefield
     // tapped under its owner's control" / Emiel the Blessed "{3}: Exile another target creature you

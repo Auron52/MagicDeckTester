@@ -182,11 +182,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Markov Baron's convoke lands, MeliraPodProvider; before this onboarding it rode Vial, which
         // VampiresProvider derives from. The list file is decks/Vampires/Vampire.cod (the user's name).
         {"Vampires", "Vampires"},
-        // AccomplishedAlchemist (onboarding 2026-10-18, chunk A of docs/design/alchemist-untap-loop.md):
-        // PINNED FROM A MEASUREMENT, not decided -- the Hydras treatment. Its own provider is chunk C's
-        // job (AccomplishedAlchemistProvider, derived from what it routes to here): today Accomplished
-        // Alchemist's mana_per_life_gained captures it into SelesnyaLifegainProvider.
-        {"AccomplishedAlchemist", "SelesnyaLifegain"},
+        // AccomplishedAlchemist (onboarding 2026-10-18): its OWN provider (Stage 4a, chunk C1), routed
+        // ABOVE `selesnya` by Stroke of Genius's draw_target_player OR Weather the Storm's storm. This
+        // pin read "SelesnyaLifegain" until then -- a MEASURED capture (Accomplished Alchemist's
+        // mana_per_life_gained) -- and AccomplishedAlchemistProvider DERIVES from SelesnyaLifegainProvider,
+        // so the move is play-neutral by construction (it inherits the Selesnya discard buckets).
+        {"AccomplishedAlchemist", "AccomplishedAlchemist"},
     };
 
     namespace fs = std::filesystem;
@@ -438,4 +439,20 @@ TEST_CASE("Pirates discard: the Vial is a turn-1 keep -- shed at end of turn 2 u
     t.turn_number = 2;
     r = Rank(t);
     CHECK(ShedPos(t, r, "Siren Stormtamer") < ShedPos(t, r, "Aether Vial"));
+}
+
+TEST_CASE("AccomplishedAlchemist routing: the signature survives cutting either of its cards")
+{
+    EnsureCardsPp();
+    const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath(
+        "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod"));
+    CHECK(std::string(DetectDecisionProvider(full).Name()) == "AccomplishedAlchemist");
+    for (const char* cut : { "Stroke of Genius", "Weather the Storm" })
+    {
+        Decklist d = full;
+        d.mainboard.erase(std::remove_if(d.mainboard.begin(), d.mainboard.end(),
+                                         [&](const Card& c) { return c.m_name.str() == cut; }),
+                          d.mainboard.end());
+        CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "AccomplishedAlchemist", "cutting ", cut);
+    }
 }

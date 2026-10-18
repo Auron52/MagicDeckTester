@@ -5412,7 +5412,9 @@ static int EtbChosenColorFrom(const GameState& s, int controller, const CardDefi
 int GenericProvider::EtbChosenColor(const GameState& s, int controller,
                                     const CardDefinition& def) const
 {
-    return EtbChosenColorFrom(s, controller, def, def.params.produces);
+    // A colour-choosing LAND Aura (Utopia Sprawl) carries its menu in land_aura_produces.
+    return EtbChosenColorFrom(s, controller, def,
+                              def.params.is_land_aura ? def.params.land_aura_produces : def.params.produces);
 }
 
 // Rick's as-enters keyword pair (see the declaration). Live-reader keywords first, then menu order;
@@ -20329,6 +20331,7 @@ namespace
     const FungusProvider         g_fungus;
     const CritterLifegainProvider g_critter;
     const SelesnyaLifegainProvider g_selesnya_lifegain;
+    const AccomplishedAlchemistProvider g_accomplished_alchemist;
     const LandfallProvider       g_landfall;
     const GaladrielProvider      g_galadriel;
     const NivMizzetComboProvider g_niv_mizzet_combo;
@@ -22336,6 +22339,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // carried by no other card in cards.json. Later integrators OR in the madness / combat / transform
     // params (grants_madness_creature_subtype, madness_cost, ...) so a list that cuts the A2 cards keeps it.
     bool vampires = false;
+    // ACCOMPLISHED ALCHEMIST (lifegain -> Alchemist mana -> untap loops -> Stroke of Genius). MUST return
+    // ABOVE `selesnya`: Accomplished Alchemist's mana_per_life_gained alone sets that signature.
+    // Signature = Stroke of Genius's draw_target_player OR Weather the Storm's storm -- two cards, each
+    // param carried by no other card in cards.json; chunk C2 adds the untappers. See the provider.
+    bool alchemist = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -22357,6 +22365,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.transform_min_controlled_subtype == "Vampire")
         { vampires = true; }
         if (p.attack_gather_auras) { bruna = true; }
+        if (p.draw_target_player || p.storm) { alchemist = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
             || p.aura_damage_trigger_draw || p.soulbond_damage_trigger_draw)
@@ -22837,6 +22846,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Landfall ABOVE selesnya (Genesis Wave capture -- see the flag). Its signature is carried by no
     // other deck, so the position is free.
     if (landfall)    { return g_landfall; }
+    // AccomplishedAlchemist ABOVE selesnya (the Alchemist's mana_per_life_gained capture -- see the
+    // flag). Its signature is carried by no other deck, so the position is free.
+    if (alchemist)   { return g_accomplished_alchemist; }
     if (selesnya)    { return g_selesnya_lifegain; }
     if (angels)      { return g_angels; }
     // Soldiers: ABOVE goblin and anti -- see the flag. SoldiersProvider (Stage 4a, 2026-10-04) is an
@@ -42904,6 +42916,21 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
         return out;
     }
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+// ---- AccomplishedAlchemistProvider::EtbChoiceCandidates -------------------------------------------
+// Utopia Sprawl's colour axis restricted to the colours the 75 can spend (G, U, W, B -- see the
+// declaration); every other ETB-choice card (Trufflesnout's mode) is the base fan unchanged.
+std::vector<int> AccomplishedAlchemistProvider::EtbChoiceCandidates(const GameState& s, int controller,
+                                                                    const CardDefinition& def) const
+{
+    std::vector<int> out = DecisionProvider::EtbChoiceCandidates(s, controller, def);
+    if (!(def.params.is_land_aura && def.params.etb_choose_color)) { return out; }
+    static const int kOrder[] = { static_cast<int>(Color::Green) + 1, static_cast<int>(Color::Blue) + 1,
+                                  static_cast<int>(Color::White) + 1, static_cast<int>(Color::Black) + 1 };
+    std::vector<int> kept;
+    for (int v : kOrder) { if (std::find(out.begin(), out.end(), v) != out.end()) { kept.push_back(v); } }
+    return kept.empty() ? out : kept;
 }
 
 // ---- SelesnyaLifegainProvider::CleanupDiscardCandidates ----------------------

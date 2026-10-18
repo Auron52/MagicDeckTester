@@ -91,6 +91,13 @@ MANIFEST = {
     # WriteAttackModeDecisionJson, GUI attackModePanelHtml). The MODE is also a searched plan
     # axis (Plan::tectonic_mode_choice) for the autonomous engine.
     "attack_trigger_modal":  ("attack_mode",          truthy),
+    # ---- AccomplishedAlchemist (2026-10-18) ----
+    # Trufflesnout's modal ENTER trigger ("choose one -- +1/+1 counter; or gain 4 life") REUSES the
+    # attack_mode type (generalised: the emitter adds "trigger":"etb" and the card's own option texts;
+    # Tectonic Giant's payload is byte-identical). Chooser g_play_attack_mode_chooser, called from
+    # FireOwnEtbTriggers (shared). The mode is ALSO a searched cast axis (the ETB CHOICE AXIS) for the
+    # autonomous engine; human play gets no mode variants, so the unpinned cast asks.
+    "etb_modal_self_counters": ("attack_mode",        positive),
     # ---- SelesnyaLifegain (2026-09-30) ----
     # Nykthos Paragon's "you MAY put that many +1/+1 counters on each creature you control. Do this
     # only once each turn" -> the NEW `lifegain_counters` decision type (chooser
@@ -972,6 +979,10 @@ INERT_PARAMS = {
     # cast order ranks a shroud-granting land aura LAST among land auras. That ordering is a
     # heuristic in the provider, not a surfaced choice.
     "land_aura_grants_shroud": "static targeting restriction; the host pick it filters rides is_land_aura -> main_phase",
+    # Utopia Sprawl's "Enchant Forest": a static enchant RESTRICTION, the same class as shroud above --
+    # it narrows the legal host set before the host variants are offered (is_land_aura -> main_phase).
+    "land_aura_host_subtype": "static enchant restriction (Enchant Forest); the host pick it filters rides is_land_aura -> main_phase",
+    "etb_modal_lifegain": "Trufflesnout's life-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides etb_modal_self_counters -> attack_mode",
     # Living Wish. `wish_from_sideboard` REDIRECTS the search zone of an already-mapped tutor
     # (library -> sideboard) rather than adding a decision -- the pick itself is the same
     # tutor_choice axis, chooser and viewer branch, which is the whole reason the wish was built
