@@ -296,6 +296,32 @@ Paired per game against `off`; net in turns, negative = the arm is faster:
 - `both` = `buckets` game for game: the two levers do not interact.
 - The bar's other halves: no slower searched game, so the d8 b0 recovery check has nothing to run; every cell net <= 0.
 
+### 5.1 The 16 slower d0 games, root-caused (scratch `build/scratch/vampires/buckets_d0/`)
+
+Every repro (`--seed base+gi --game-index gi --depth 0`) reproduces the A/B's win turns, and a re-run of both full
+blocks reproduces 30 faster / 16 slower, net -7 per block. The d0 runner (seen with `MTG_SOLVE_PROJ_TRACE`): its
+lethal check counts only damage already on the board -- it ignores a lord cast this turn, Condemned's pump and
+Keeper's transform -- and otherwise ranks plans by a flat score (a sick Keeper ~600 beats Legion Lieutenant ~400);
+every pump discard scores the same, so the outlet ORDER silently decides which spells get cast; Baron's convoke may
+tap would-be attackers at no counted cost.
+
+| class | games | what happens |
+|---|---|---|
+| **(a) the bucket rule** | 4134, 782, 1445, 3178 (A/B), 954 | Keeper (value 12) kept over Captain / Captivating (11) or Lieutenant, then cast sick for 0 damage the next turn; 954: the SECOND Keeper kept (duplicates unpriced). |
+| (b) d0-runner blind spot | 1926, 1937, 1986, 2343, 4021, 4226, 1686, 2916, 3209, 3432, 4766 (and 3178 / 954 too) | the buckets' keep was sound or a tie, and the buckets arm still had the off arm's kill that turn; the runner missed it (anthem / pump / transform lethal unseen, convoke-tapped attackers, the Blood's +1 tie-break). |
+| (c) clairvoyance | none pure (4021, 1686 partly: no land came for a discarded Bloodghast) | |
+
+The 30 faster games (8 sampled) are mostly the same mechanism in the buckets' favour: a cheap body (Dire Moon,
+Mavren, a late Vial) shed and Keeper kept leaves a card for next turn's pump; Bloodghast first in the outlet order
+lets the tie-break cast the lord; madness fodder kept.
+
+**Candidate amendments (not made -- yours):** (1) discount the parts of a card's value that need it to survive a
+turn (Keeper's token +4, transform +2) by the model's 0.75-per-turn factor -> Keeper 10.5, below the 11-lords and
+above Mavren / Dire Moon; fixes the first divergence of 4134, 782, 1445, 3178, moves none of the sampled faster
+games; the minimal form of question 7's kill-turn cut. (2) price second and later copies of a name at their
+cumulative mana cost (the shared castability model's documented convention); fixes 954. Not recommended: dropping
+Bloodghast's -3 with no land in hand (2 slower, but 4 of the 8 sampled faster games rely on it).
+
 
 `test/tools/vampires_order_ab.py` writes ONE pooled manifest. Every arm is a per-job `flags` block, so all
 arms share one queue and one tail (CLAUDE.md "WAVES ARE A LOOP").
