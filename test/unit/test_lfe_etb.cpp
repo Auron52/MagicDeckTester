@@ -688,3 +688,33 @@ TEST_CASE("Human play: Fulminator's 'destroy target nonbasic land' is the board-
     CHECK(CountNamed(s, "Gruul Turf") == 0);
     CHECK(CountNamed(s, "Secluded Courtyard") == 1);
 }
+
+TEST_CASE("Self-only sac outlet: with a death payoff the search's activation sacrifices the SOURCE (Fulminator Mage)")
+{
+    // "Sacrifice THIS creature": the enumerator must bake the source as the victim. It used to rank the
+    // source last and bake another creature, which the apply then refused -- a silent no-op.
+    EnsureCardsLfe();
+    GameState s = FreshLfe();
+    PutLfe(s, "Daxos, Blessed by the Sun", 1);   // own_creature_dies_lifegain: the death payoff
+    PutLfe(s, kFulm, 2);
+    PutLfe(s, "Monastery Swiftspear", 3);        // another creature the old pick would have baked
+    PutLfe(s, "Secluded Courtyard", 20);
+    PutLfe(s, "Mountain", 21);
+    LibLfe(s, { "Mountain", "Mountain" }, 10);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* sac = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() == 1 && p.actions[0].kind == Action::Kind::SacCreatureOutlet
+            && p.actions[0].sac_source_id == 2) { sac = &p; break; }
+    }
+    REQUIRE(sac != nullptr);
+    CHECK(sac->actions[0].sac_victim_id == 2);
+    const int life = s.players[0].life;
+    GameState t = s;
+    TurnSolver::ApplyPlan(t, *sac, true);
+    CHECK(CountNamed(t, kFulm) == 0);
+    CHECK(CountNamed(t, "Monastery Swiftspear") == 1);
+    CHECK(CountNamed(t, "Secluded Courtyard") == 0);   // the payload: our only nonbasic land
+    CHECK(t.players[0].life > life);                   // Daxos saw the death
+}
