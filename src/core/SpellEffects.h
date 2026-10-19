@@ -21587,6 +21587,7 @@ inline int UntapLandHostCount(const GameState& state, const Permanent& src)
 // Credit class `k`'s bonus (the PAYER's choice of Forest) into `pool`. No-op for k out of range.
 inline void UntapLandHostAddToPool(ManaPool& pool, const GameState& state, const Permanent& src, int k)
 {
+    if (UntapLandSourceDef(state, src) == nullptr) { return; }   // see LandAuraBonus (P3)
     UntapLandHosts h;
     if (k < 0 || k >= UntapLandHostsOf(state, src, h)) { return; }
     LandAuraAddToPoolOfLand(pool, state, *h.host[k]);
@@ -21598,6 +21599,11 @@ inline int LandAuraBonus(const GameState& state, const Permanent& land)
 {
     if (land.card.IsLand()) { return LandAuraBonusOfLand(state, land); }
     if (!state.deck_has_land_aura) { return 0; }
+    // Every nonland permanent of a land-Aura game reaches here from the mana-pool walks; only an
+    // untap-target-land source has classes. Ask that first, BEFORE building the 424-byte zeroed
+    // UntapLandHosts (P3: the zeroing was ~1.5% of an Alchemist game). UntapLandHostsOf makes the
+    // same test and returns 0 when it fails, so the answer is unchanged.
+    if (UntapLandSourceDef(state, land) == nullptr) { return 0; }
     UntapLandHosts h;
     if (UntapLandHostsOf(state, land, h) == 0) { return 0; }
     return h.bonus[0].Total();   // the largest class (an over-count when classes are incomparable)
@@ -21607,6 +21613,7 @@ inline int LandAuraColorMask(const GameState& state, const Permanent& land)
 {
     if (land.card.IsLand()) { return LandAuraColorMaskOfLand(state, land); }
     if (!state.deck_has_land_aura) { return 0; }
+    if (UntapLandSourceDef(state, land) == nullptr) { return 0; }   // see LandAuraBonus (P3)
     UntapLandHosts h;
     int mask = 0;
     for (int k = 0, n = UntapLandHostsOf(state, land, h); k < n; ++k)
@@ -21622,6 +21629,7 @@ inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Perm
 {
     if (land.card.IsLand()) { LandAuraAddToPoolOfLand(pool, state, land, chosen); return; }
     if (!state.deck_has_land_aura) { return; }
+    if (UntapLandSourceDef(state, land) == nullptr) { return; }   // see LandAuraBonus (P3)
     UntapLandHosts h;
     if (UntapLandHostsOf(state, land, h) == 0) { return; }
     LandAuraAddToPoolOfLand(pool, state, *h.host[0], chosen);
@@ -21631,6 +21639,7 @@ inline std::vector<const Permanent*> AnyColorLandAuras(const GameState& state, c
 {
     if (land.card.IsLand()) { return AnyColorLandAurasOfLand(state, land); }
     if (!state.deck_has_land_aura) { return {}; }
+    if (UntapLandSourceDef(state, land) == nullptr) { return {}; }   // see LandAuraBonus (P3)
     UntapLandHosts h;
     if (UntapLandHostsOf(state, land, h) == 0) { return {}; }
     return AnyColorLandAurasOfLand(state, *h.host[0]);
