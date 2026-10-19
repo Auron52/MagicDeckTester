@@ -134,6 +134,37 @@ viewer wiring, unit-test plans. Summary of what they established:
   Vampires games moved; KittyEquipment / Colossus byte-identical. Question 43.
 - Static checks: verify_deck --no-sweep GATE PASS; whole-repo audit_card_costs 450/450.
 
+## Stage 5 measurements + the 3x COST GATE (orchestrator, 2026-10-19)
+One pooled batch on 89eddb1f6 (117,000 games; `build/scratch/vampires/stage5/combined.py`, report `report.txt`):
+- **5c2 horizon tie-break: NO SIGN** -- 0 win turns changed of 12,000 paired games at play settings (d5 b20); the
+  lever FIRES (play diverged in 3 of 12 blocks), it never binds a win turn (the deck wins T4-5, inside the horizon).
+  The default (ON) costs nothing. The script's 48-block re-run was not run (question 44).
+- **5i discard-ranking bound:** rollout cleanup best-vs-worst (`MTG_SHED_WORST`) d3 -1 / 3,000 (WORST faster by
+  one), d5 0 / 1,500: the ranking is worth nothing at play settings. Non-cleanup discards: `MTG_NONCLEANUP_SHED_WORST`
+  inert (0 digests) BY DESIGN -- every Vampires outlet discard (Condemned, Pit Fighter, Blood crack) is a searched
+  pin per distinct name, so no ranking decides one.
+- **Cast order / buckets A/B** (`docs/design/vampires-cast-order-2026-10-18.md` section 5): the drafted order is
+  win-turn NEUTRAL (0 of 16,000 paired games moved); the drafted buckets net -14 (d0) / -2 (d3) / 0 (d5) / -2 / -3
+  (2HG d3 / d5), 0 slower searched games, 16 slower d0 games (being root-caused). USER-owned: both stay OFF.
+
+**COST GATE FAILS: `suite_gate.py --cost decks/Vampires` = 7.90x the reference (Galadriel), limit 3x.** Read with
+three corrections, none of which changes the verdict:
+- That run was CONTENDED (an agent build alongside): its worst row, vampires2hg d5 s2002, cost 23.4 s/game; the
+  full regression run on the same binary had it at 10.6 s/game (std d5 3.1-4.6 s, d3 2.1-2.6 s) -- still ~3.6x the
+  cached reference. Vampires is 25.8% of the regression tier's core time (18.0% of smoke).
+- The cached REFERENCE is stale: `test/suite_cost.json` holds Galadriel at 2,969 ms/game, measured before its keep
+  table; the same regression run had Galadriel at 60-94 ms/game. Refreshed, the reference would be the next deck
+  with both artifacts (Snow, 1,319 ms/game cached), and Vampires would be ~8x. (Every deck's gate reads that stale
+  number; a `--measure-all` refill from one pooled full-tier run fixes it.)
+- **The excess is the pre-keep-table mulligan bottoming** (CLAUDE.md: "before the keep table every mulligan game
+  plays out each candidate bottom as a full game"). Measured, `MTG_BOTTOM_ROLLOUTS=1` vs `=0`, units/game
+  (deterministic): 2HG d5 s2002 248,662 -> 78,570 (3.2x), std d5 s3003 122,925 -> 30,197 (4.1x), d3 s3003 71,502
+  -> 17,365 (4.1x); without them the worst row is ~2.1 s/game, ~1.6x Snow -- INSIDE 3x. A keep table replaces exactly
+  those rollouts.
+The rows stay on this branch (they carry the GT every check above used); nothing is landed. Whether Vampires enters
+the suite over 3x so the mulligan profile can be generated (which brings it into range), or stays out until a perf
+route gets it there, is the USER's call (question 45; `MTG_ALLOW_UNTESTED_DECK` is a USER override).
+
 ## Open questions for the user (work continues on the stated default)
 1. **Main-2 held-land bar vs Bloodghast** (USER 2026-09-30 "Only newly arrived lands in second main").
    "Pit Fighter sacs Bloodghast post-combat, then play the held land" is unfindable at any budget under the
@@ -802,3 +833,14 @@ rules; gi1565's least-flexible pick).
     within one main phase (only the main-2 Blood substitutes). Candidate amendment: token taps -> pump -> crack ->
     steal -> Blood -> transform -> sacrifices (risk: a madness cast paying first could tap the Estate for mana;
     the activation hold reserves it first). [default: unchanged -- the order is yours; not measured]
+44. **The 5c2 48-block re-run** (the script's own suggestion after NO SIGN; ~96k d5 games, ~4-5 h). Not run: at
+    0 / 12,000 the larger sample could only confirm the lever does not bind. [default: keep ON, not re-run]
+45. **COST GATE: Vampires is over 3x** (see "Stage 5 measurements + the 3x COST GATE"). Options: (a) land the rows
+    (an over-3x entry, USER override) and generate the mulligan profile, whose keep table removes the 68-76% of units
+    that are bottoming rollouts (measured: then ~1.6x Snow); (b) keep the deck out of the suite until a perf route
+    gets it under 3x first (no keep table is allowed before suite membership, so (b) needs a non-mulligan route --
+    the remaining folds are questions 40-42, each a few %). [default: neither -- rows stay on the branch, nothing
+    landed, no generator started; I would recommend (a)]
+46. **The cost cache's Galadriel reference is stale** (2,969 vs ~94 ms/game today), so the 3x gate is mis-calibrated
+    for every deck. [default: refill with `suite_gate.py --measure-all --no-run` off the next full regression run
+    and commit `test/suite_cost.json` with this branch]
