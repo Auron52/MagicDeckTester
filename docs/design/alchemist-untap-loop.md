@@ -1,6 +1,6 @@
 # Accomplished Alchemist untap loop — design (AccomplishedAlchemist deck)
 
-Status: IMPLEMENTATION IN PROGRESS (2026-10-18) -- chunks A, B, C1, C2a, C2b landed; Stage 5 verification next. Per-deck ledger: `analysis-AccomplishedAlchemist.md`.
+Status: IMPLEMENTATION IN PROGRESS (2026-10-19) -- chunks A, B, C1, C2a, C2b, P, E1 landed; Stage 5 verification run (E1 = its engine fixes). Per-deck ledger: `analysis-AccomplishedAlchemist.md`.
 Card drafts (research fan-out, gitignored): `logs/aa_drafts/*.md|json` in the worktree.
 
 ## What the engine could not do (verified 2026-10-18, file:line at fork 2176032d)
@@ -121,6 +121,9 @@ SEARCHED (one Action variant per payoff K). Ceiling = safety cap only, never a l
   Athreos from hand or via Living Wish, Ezuri from hand. Each needs a SECOND post-entry re-plan after its own
   cast, and site 9 opens once per apply (the first-occurrence rule). Wishing / casting it this turn and
   looping next turn is still searched.
+  **SUPERSEDED by chunk E1 (2026-10-19):** site 9 RE-OPENS after an applied continuation (MTG_SITE9_REOPEN),
+  and ComputeUntapLoopNeed funds the CHAINED payoffs (kLoopPayCastDrain / kLoopPayWishDrain /
+  kLoopPayCastPump) behind the one-step ones -- see the ledger's "Chunk E1".
 * **The kill fold** (`MTG_UNTAP_LOOP_KILL_FOLD`, default ON): when the float pays the need, the continuation
   list is the proven kill alone. Without it a post-loop continuation (~50 floating mana, every hand subset
   affordable) enumerated 9k-360k plans; one d5 game went 9 s / 148 MB -> 175 s / 4.7 GB and the pooled

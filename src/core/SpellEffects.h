@@ -30840,11 +30840,10 @@ inline int TeamPumpLethalCount(const GameState& s, int ctrl, const CardDefinitio
     return (deficit + per - 1) / per;
 }
 
-// Is library card `d` something an unbounded loop can turn into a kill THIS main once drawn? Only a card
-// the loop's continuation can CAST and that kills on resolution: Stroke of Genius at the opponent. A drawn
-// Scholar of Athreos / Ezuri / Living Wish would need a further post-entry re-plan after its own cast
-// (site 9 opens once per apply -- the first-occurrence rule), so drawing for one this turn buys nothing
-// this turn; the loop does not dig for them (recorded in docs/design/alchemist-untap-loop.md).
+// Is library card `d` something an unbounded loop can turn into a kill THIS main once drawn? First pass
+// (`chained` false): only a card the loop's continuation can CAST and that kills on resolution -- Stroke of
+// Genius at the opponent. Second pass (chunk E1, taken only when the library holds no Stroke): a drawn
+// Scholar of Athreos / Ezuri / Living Wish, whose own ability the RE-OPENED site 9 then activates.
 inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefinition& d, bool chained = false)
 {
     if (d.params.draw_target_player && d.tmpl == CardTemplate::DrawX && s.opponent_library_dealt
@@ -30878,11 +30877,11 @@ inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefiniti
 // funding the cheapest one is the dominance fold -- the continuation still searches every payoff the float
 // affords); failing any, the Staff's draws to the first Stroke in the library (the EDF "draw only to find"
 // precedent; the search is clairvoyant about library order, as the gated look-at-top already is), never the
-// last card. Only payoffs the loop's ONE continuation can complete count: Stroke from hand, a drain source
-// or team pump already on the battlefield. Scholar of Athreos from hand / via Living Wish would need a
-// second post-entry re-plan after its own cast (site 9 opens once per apply), so it is not a this-turn
-// kill and is not funded. payoff == kLoopPayNone -> nothing to buy, so no loop (unbounded mana a goldfish
-// cannot spend is pure cost -- the EldraziFlicker no-sink clause).
+// last card. One-step payoffs first (Stroke from hand, a drain source or team pump already on the
+// battlefield), then that draw; only then the CHAINED payoffs of chunk E1 (Scholar of Athreos from hand or
+// via Living Wish, Ezuri from hand -- a setup cast whose own ability the re-opened site 9 activates), then a
+// draw to a chained payoff card. payoff == kLoopPayNone -> nothing to buy, so no loop (unbounded mana a
+// goldfish cannot spend is pure cost -- the EldraziFlicker no-sink clause).
 inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
 {
     UntapLoopNeed best;

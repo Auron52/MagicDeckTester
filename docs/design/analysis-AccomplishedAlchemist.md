@@ -6,10 +6,11 @@ forked from `phase-1-2-deck-analyzer` @ 2176032d).
 
 ## RESUME POINT
 
-Chunks A, B, C1, C2a, C2b, P landed (P: the performance chunk -- three sound identity folds + two lossless
-payer deferrals; the deck's per-game cost is now ~4.1 s (d3 b20) / ~7.1 s (d5 b40) contended, under the 3x
-line's 8,907 ms). Next: Stage 5 verification (claude-play sweep, mismatch harnesses), the suite entry
-(regression_cases.sh + suite_gate --cost), then profile -> mulligan -> value leaf. Open USER items are listed
+Chunks A, B, C1, C2a, C2b, P, E1 landed (E1 = the Stage-5 / claude-play engine fixes: fd-diverge lockstep,
+Arbor Elf's aura yield, site-9 re-open + chained loop payoffs, loop colour, wish singletons). Next: the suite
+entry (regression_cases.sh + suite_gate --cost -- NOTE the per-game cost at seed 70001 d5 b40 is ~20 s
+contended, over the 8,907 ms line, and is dominated by mulligan bottom-trial games; see Chunk E1 "Budget"),
+then profile -> mulligan -> value leaf. Viewer flags are the viewer worktree's. Open USER items are listed
 under "Open questions surfaced to USER".
 
 ## The deck
@@ -56,6 +57,81 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk E1 (2026-10-19) -- landed: the Stage-5 / claude-play engine fixes
+
+Commits (branch `accomplished-alchemist`): c05eed09 (fd lockstep), bb2ab20c (Arbor Elf), 700c5041 (site-9
+re-open + chained payoffs), b13de112 (loop colour, Stroke+loop drop, wish singletons). Scratch:
+`/workspaces/MagicDeckTester/build/scratch/aa/e1/`.
+
+* **fd-diverge lockstep (c05eed09).** (1) AIEngine's clean-set cast loop replayed the recorded segment AT the
+  cast for every cast `equip_bp_truncates` answers true -- but only the inline site-6 class is armed at the
+  cast by ApplyPlanDirect; the plain-cantrip partition (a self-targeted Stroke) and the BP_NODE_D56 deferred
+  5/6 classes run their continuation after the trailing pass, after site 9 and after the Karoo drop.
+  Replaying early also set `bp_replayed` and stood the site-9 twin down (gi54). Now those classes defer to the
+  end-of-main catch-all (committed) / `acq_pending` (no-commit), exactly as `acq_deferred`; d0 keeps the
+  inline re-solve. (2) The site-9 twin's `pe_cast` loop now truncates after a partitioning cast like the
+  rollout's `bp_truncate` (gi120). Scenario `aa_site9_cont_partition_truncates` (gi120's board: old binary T6,
+  new T5). gi54's board could not be staged (the fixture names an Aura host only by card name); covered by the
+  seed repro and the FD sweep.
+* **Arbor Elf (bb2ab20c, sub-agent).** "Untap target Forest" = one more tap of the best Forest, every land
+  Aura included, in every projection and payer (the four land-Aura readers route an Arbor Elf to the Forest it
+  re-taps, `UntapLandHostsOf`); a Forest whose bonus is a sub-multiset of another's is dropped as weakly
+  dominated, incomparable ones (Sprawl-U vs Wild Growth) stay separate payer choices. 4 unit cases + scenario
+  `aa_arbor_sprawl_retap_stroke` (old T3, new T2). Card note rewritten. Known residue: the greedy payer takes
+  the highest-yield Forest without colour look-ahead (the backtracker covers a failure); no human Forest picker.
+* **Site-9 re-open + chained payoffs (700c5041).** `MTG_SITE9_REOPEN` (default ON, EngineFlags.h): after an
+  applied site-9 continuation, an ability it made activatable opens the next counted occurrence in BOTH worlds,
+  only when the plan's choice targets it (bp_all / bp_at), safety ceiling 32 (never a lever). New need kinds
+  kLoopPayCastDrain / kLoopPayWishDrain / kLoopPayCastPump (setup casts priced in front, kill fold admits the
+  setup cast), ranked SHORTEST CHAIN FIRST: one-step kill > Staff draw to a Stroke > chained > draw to a
+  chained card. (The first build ranked purely by cost and made 80005 T4 -> T5: Ezuri-from-hand undercut the
+  Staff's dig to Stroke; and an UNTARGETED re-open's section-window reset erased the hand entry the drawn
+  Stroke's site-10 continuation arms on -- both fixed before landing.)
+* **Loop colour, Stroke+loop, wish singletons (b13de112).** `BurstPendingActColour`: an Alchemist tapped for a
+  generic pip floats the colour the plan's pending trailing activations still owe (PlanTraits::act_pips), at
+  both greedy generic-pip tap points. "Non-lethal opponent Stroke + loop" plans are dropped (dominated world by
+  world by loop-only / Stroke-only, argument in the code). A 0-iteration loop is pinned to do nothing (sound:
+  scores identical to no-loop). Wishes: autonomous play resolves targets at resolution (MTG_TUTOR_AXIS_RESOLVE,
+  default ON -- the TurnSolver comment calling it default-off is stale), so two wishes already fetch distinct
+  cards (pinned); the human menu drops a plan naming one sideboard copy twice.
+* **Staff {5},{T} draw standalone (80005):** VERIFIED offered (unit test); no change.
+* **Budget (sub-agent; NO code change).** No leak: every heavy decision stops at the designed pass ceiling
+  (`FullSearchLine`, used + `kOverrunBudgetMult` 25 x the decision budget = 900,000 units at a 36,000 budget;
+  overshoot <= 0.2%). Passes reach the ceiling because the start gate extrapolates earlier passes' growth and
+  the next ply lands on a very wide turn (true next-pass costs 1.4-2.4 M units, ~1,000-1,900x). The wall is
+  mostly MULLIGAN BOTTOM-TRIAL games (no keep table yet, so every candidate bottom is a full d5 game):
+  gi40 98% (4.98 M of 5.1 M units), 80012 214 s of 241 s, 80019 1,068 s of 1,094 s. Options, all USER calls:
+  the mulligan stage (keep table) or `bottom_eval_depth/_budget_ms` in the profile; a lower
+  `kOverrunBudgetMult` (calibration notes warn it lost Melira games at 11x); `MTG_SOLVE_CHARGE_W=16` (chunk P);
+  a start-gate estimate aware of a wide next ply (engine-wide design work). Raw: `build/scratch/aa/budget/`.
+* **Validation.** mtg-test 1499/1499; scenarios 227/227. FD oracle d5 b40 x200 seed 70001: **0 [fd-diverge]**
+  (was 2); MTG_FLAG_NONCONV d3 x200: **0** -- both on the FINAL binary (b13de112; d5 b40 avg 5.6850, d3 b20
+  5.7550 vs 5.8200 before; after c05eed09 alone: 0 / 0 as well). Smoke (not
+  accepted): 124/128, the four known moves with their KNOWN digests (selesnya d3 a1937cded0ab6f58, d5
+  9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11) -- no other case moved, searched
+  slower 0.
+* **Deck measurement** (one pooled batch per arm, run concurrently at 15 threads each, seed 70001, 200 games):
+
+  | cell | avg before | avg after | faster | slower | unwon b/a |
+  |---|---|---|---|---|---|
+  | d5 b20 (play) | 5.8100 | 5.7450 | 22 | 8 | 12 / 13 |
+  | d5 b40 (suite) | 5.8050 | 5.6850 | 27 | 6 | 13 / 13 |
+
+  Every slower game re-run at 10x budget, both arms (d5 b200 / b400): ALL recover -- after <= before at 10x in
+  all 14 (b20: gi4 4->6 [10x 4/4], 18 5->6 [5/5], 21 5->6 [before 5, after 4], 83 4->5 [5/5: before's T4 was
+  budget luck], 152 5->6 [before 6, after 5], 155 5->7 [4/4], 168 8->unwon [8/8], 188 5->6 [5/5]; b40: gi18,
+  101, 140, 188 5->6 [5/5], 86 6->7 [6/6], 168 8->unwon [8/8]). Budget churn, not a regression.
+  Claude-play seeds (d5 b20, gi 0): 80017 6 -> 5, 80020 5 -> 4, 80005 4 -> 4, 80010/80012/80013/80018 unchanged.
+
+  | cost (contended, per game) | mean | p90 | max | mean units |
+  |---|---|---|---|---|
+  | d5 b20 before / after | 11,850 / 11,875 ms | 37.7 / 34.4 s | 100.6 / 109.1 s | 312 k / 319 k |
+  | d5 b40 before / after | 20,385 / 21,754 ms | 64.0 / 62.6 s | 286.0 / 250.0 s | 513 k / 512 k |
+
+  E1 leaves the cost flat (units within 2%). The absolute mean at this seed is ~2.4x suite_gate's 8,907 ms
+  line (chunk P measured 7.1 s at seed 9100 / 60 games): the bottom-trial games above, which the mulligan stage
+  removes. Flagged for the suite entry.
 
 ## Chunk P (2026-10-18) -- landed: performance (the 3x cost rule)
 
@@ -399,8 +475,9 @@ Run 2026-10-18 on c96b7f46 (play-identical to 251c426e), profile = the freshly g
     truncation at all (gi120). Engine-wide (any deck whose committed plan holds a self-partitioning
     cantrip AND opens site 9), so a fix moves other decks' play -- convergence loop, USER-visible.
   * Folds ruled out: both reproduce with `MTG_HAND_COPY_CLASS_FOLD=0` and/or `MTG_LAND_AURA_HOST_CLASS_FOLD=0`.
-  * STATUS: OPEN -- not a local fix (the site-9 twin needs the rollout's partition truncation and the
-    site-9-before-deferred-cantrip ordering). Back to the convergence loop (engine).
+  * STATUS: RESOLVED c05eed09 (chunk E1) -- the executor's clean-set loop now defers every deferred-class
+    partition cast to the end-of-main catch-all (acq_pending for the no-commit fallback), and the site-9 twin
+    truncates its continuation after a partitioning cast. FD oracle d5 b40 x200 seed 70001: 0 [fd-diverge].
 * Note: `MTG_FULL_DEPTH` is no longer read by this binary (startup warning); `MTG_FD_ORACLE` alone arms the
   oracle. The skill's 5a recipe is stale on that point.
 
@@ -501,21 +578,31 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   land-Aura fold was NOT built (a dominance that fails across a phase boundary -- lossy); C2b's 3.7x pricing of
   it was unsound. (5) `MTG_SOLVE_CHARGE_W=16` measured (0.55x, d5 +0.067 turns), not adopted -- not needed.
 
+* Chunk E1: (1) `MTG_SITE9_REOPEN` is DEFAULT ON engine-wide (site 9 re-opens after an applied continuation,
+  targeted occurrences only); smoke moved no case. (2) `BurstPendingActColour` changes which colour a burst
+  source floats when a plan's trailing activation owes a pip (a payment choice; AA-only in practice).
+  (3) "non-lethal Stroke + loop" plans dropped as dominated. (4) Budget: no leak -- the deck's cost is
+  bottom-trial games + the 25x pass ceiling; which lever (mulligan stage first, profile bottom_eval_*,
+  kOverrunBudgetMult, MTG_SOLVE_CHARGE_W, a start-gate estimate) is the USER's. (5) Per-game cost at seed
+  70001 d5 b40 is ~2.4x the 3x line before the mulligan stage -- the suite entry needs a decision on that.
+
 ## Claude-play sweep
 - commit: `251c426e`
 - seeds: 80001-80020 (claude-play deals by seed only) games: 20
 - flags: 9 unresolved
 - Result: Claude faster than the search in 3 (80017 T4 vs T6, 80019 T6 vs T8, 80020 T4 vs T5), slower in 5 (deal mismatch / Claude tempo), tied 10, both unwon 2. Raw: build/scratch/aa/sweep_results.jsonl.
-- UNRESOLVED (fix chunk E):
-  - Arbor Elf credited a flat +1 G; untapping an aura-enchanted Forest (Wild Growth / Utopia Sprawl) yields 2-3 (4 independent reports; hid a T2 Alchemist on 80020). The card note's "which Forest is outcome-identical" is false with land auras.
-  - One mid-turn re-plan per plan application: after a loop, Living Wish -> Scholar -> drain (80017) or a second loop once a Staff draw finds Stroke (80018) is unreachable this turn.
-  - Loop colour axis can make a plan's own untap unpayable (W floated, Umbra needs U; 80019) -- silently dropped.
-  - Loop offers that run 0 iterations (80010) and combined "Stroke small X + LOOP" plans that cast Stroke first (80013, 80018).
-  - Living Wish -> the single sideboard Alchemist listed twice in one plan (80012).
-  - Staff {5},{T} draw never offered standalone (80005) -- verify.
-  - VIEWER: after a loop the human menu (16000-position cap) drops Stroke of Genius entirely (80016) -- human cannot win; X needs to be a follow-up decision under large float.
-  - VIEWER: life_gained_this_turn, opponent library size, floating pool, current P/T, Alchemist yield not exposed; Crab Umbra untap cost label shows U; Ezuri combat pump resolves without a decision (80006, 80008, 80003).
-  - Budget overrun: single benchmark games at d5 b200 took 402 s (80012) and 33 min / 75M units (80019).
+- ENGINE flags -- RESOLVED in fix chunk E1 (see "Chunk E1" below for mechanisms and measurements):
+  - RESOLVED bb2ab20c -- Arbor Elf credited a flat +1 G; untapping an aura-enchanted Forest yields 2-3 (80020 now T4, was T5; the T2 Alchemist is offered and payable, the search prefers Wild Growth + Feed + Wish there). Card note rewritten.
+  - RESOLVED 700c5041 -- one mid-turn re-plan per plan application: site 9 now RE-OPENS after an applied continuation (MTG_SITE9_REOPEN); chained loop payoffs Scholar-from-hand / Living Wish -> Scholar / Ezuri-from-hand (80017 now T5, was T6; Claude T4). 80018 ("second loop after a Staff draw finds Stroke"): autonomous play already draws INSIDE the loop and re-funds for the drawn Stroke (C2b); the re-open now also covers a draw made by a continuation. The game stays T8 at d5 b20 (search T8 vs Claude T10 in the sweep; not re-diagnosed).
+  - RESOLVED b13de112 -- loop colour: a burst tap for a generic pip now floats the colour the plan's pending activation needs (80019's Staff + Umbra untap).
+  - RESOLVED b13de112 -- zero-iteration loop offers (80010): sound option kept -- an unreachable loop does nothing (test-pinned), so it scores identical to no-loop; "Stroke small X + LOOP" plans (80013, 80018) dropped as dominated.
+  - RESOLVED b13de112 -- Living Wish singleton (80012): autonomous resolution already ranks the live sideboard; the human menu drops a plan naming one sideboard copy twice.
+  - VERIFIED 700c5041 (test) -- Staff {5},{T} draw IS offered standalone whenever 5 mana is available (80005); not a defect.
+  - DIAGNOSED, not a leak (see Chunk E1 "Budget") -- budget overrun at d5 b200 (80012 402 s, 80019 33 min).
+- VIEWER (not chunk E1 -- the viewer worktree):
+  - after a loop the human menu (16000-position cap) drops Stroke of Genius entirely (80016) -- human cannot win; X needs to be a follow-up decision under large float.
+  - life_gained_this_turn, opponent library size, floating pool, current P/T, Alchemist yield not exposed; Crab Umbra untap cost label shows U; Ezuri combat pump resolves without a decision (80006, 80008, 80003).
+  - (E1 note) human-play: no Forest picker for Arbor Elf's untap (the default re-taps the best Forest); a human after a loop who draws a Stroke with the Staff gets the loop re-offered only if UntapLoopWorthOffering's need test passes against the live float (80018's human report).
 - DISMISSED: Harbinger decline leaves library unshuffled (declining = not searching; correct). Trufflesnout via attack_mode (deliberate reuse). dropped_casts on unpayable cast orders (existing enumerate-optimistic pattern, disclosed).
 
 ## Approved deferrals
