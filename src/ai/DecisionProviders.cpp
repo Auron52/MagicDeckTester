@@ -22668,13 +22668,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // target, so it counts only if it is ever main-decked) -- each carried by no other card in cards.json,
     // so no other deck's routing moves and no single swap can lose the provider. See the provider.
     bool alchemist = false;
-    // LANDFALL ELEMENTALS (Elemental landfall tribal). Signature = Risen Reef's
-    // enters_look_top_land_or_hand (new in the 2026-10-18 onboarding, carried by no other card in
-    // cards.json; the list runs four). Deliberately EXCLUDES Flamekin Harbinger's tutor_to_top (Giant
-    // Harbinger, Enlightened Tutor), Aether Vial, the creature-type lands (Pirates, Soldiers), the +2/+2
-    // landfall self-pump (Steppe Lynx-style bodies any landfall aggro list may run) and Mossborn Hydra's
-    // landfall_double_self_counters (2026-10-22: a Landfall screening candidate, so it would pull a
-    // Landfall list that adopts it onto this provider).
+    // LANDFALL ELEMENTALS (Elemental landfall tribal). Signature = new params OR'd across two different
+    // cards, both new in the 2026-10-18 onboarding and carried by no other card in cards.json: Risen
+    // Reef's enters_look_top_land_or_hand and Smokebraider's mana_only_subtype_abilities. Deliberately
+    // EXCLUDES Flamekin Harbinger's tutor_to_top (Giant Harbinger, Enlightened Tutor), Aether Vial, the
+    // creature-type lands (Pirates, Soldiers), the +2/+2 landfall self-pump (Steppe Lynx-style bodies any
+    // landfall aggro list may run) and Mossborn Hydra's landfall_double_self_counters (2026-10-22: a
+    // Landfall screening candidate, so it would pull a Landfall list that adopts it onto this provider).
     bool lfe = false;
     for (const Card& c : deck.mainboard)
     {
@@ -22702,7 +22702,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.self_untap_cost.has_value() || p.untap_pump_cost.has_value()
             || p.soulbond_grants_untap_self_cost.has_value()) { alchemist = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
-        if (p.enters_look_top_land_or_hand) { lfe = true; }
+        if (p.enters_look_top_land_or_hand || p.mana_only_subtype_abilities) { lfe = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
             || p.aura_damage_trigger_draw || p.soulbond_damage_trigger_draw)
         { niv = true; }

@@ -66,9 +66,9 @@ generic).
 | Flamekin Harbinger | lfe-etb | 1 (+3 order) | DONE tutor_to_top Elemental; Harbinger/Reef trigger ORDER searched (generic ETB tutor-to-top x look-at-top watcher); viewer `dig` (trigger order) + `tutor_etb` |
 | Foundation Breaker | lfe-etb | 2 | DONE `etb_destroy_artifact_enchantment_optional` + evoke_cost; decline own Vial/Mimic dominates; viewer `dig` (may destroy) |
 | Fulminator Mage | lfe-etb | 2 | DONE hybrid; `sac_outlet_destroy_nonbasic_land` (search offers it only when a death pays); viewer `target` |
-| Smokebraider | lfe-fury | | |
-| Incandescent Soulstoke | lfe-fury | | |
-| Fury | lfe-fury | | |
+| Smokebraider | lfe-fury | 2/3 | DONE `produces_any_combination` + `mana_only_subtype_abilities` (+ mana_only_subtype Elemental, creature_mana_only); payer/backtracker/flow oracle; `PayingAbilitySource` scope |
+| Incandescent Soulstoke | lfe-fury | 2/3 | DONE lord + `tap_put_from_hand_*` riders (haste, `sac_at_end_step`); viewer `sfput` variant; opp-end-step timing PROVISIONAL (design doc) |
+| Fury | lfe-fury | 3 | DONE double strike, `etb_damage_divided_creatures` (default no targets, fold), PITCH evoke `evoke_exile_color` searched per distinct red card; viewer `divide` (+allow_none) |
 
 ### lfe-land report (2026-10-19, commits d200ac87a d23951908 39eac6b4b)
 Unit 1521/1522 (the 1 = the deck-folder count routing test, fixed by the Stage 4a routing row),
@@ -102,6 +102,35 @@ payoff). Trigger order reuses the `dig` modal rather than a new decision type (u
 Integration notes: Soulstoke's put needs `LookTopEntrantDef` + `put_tutor` if it is a new Action kind;
 Fury's evoke will touch the same `CollectActions` evoke branch; slow probe games are multi-mulligan
 bottoming (no keep table yet); Reef widens search by design (an exact-count optimisation is possible).
+
+### lfe-fury report (2026-10-19, commits 91bf1268c 90dcd75ca)
+Unit 1527/1528 (routing pin), scenarios 231/231 (+2 `lfe_soulstoke_put_fury_lethal`,
+`lfe_smokebraider_pays_soulstoke`); 18 smoke rows on nine other decks byte-identical to GT.
+Smokebraider: spell half = Elemental CREATURE spells only (Mimic in hand refused); ability half via a new
+`PayingAbilitySource` scope set by `CreatureAbilityPayScope` at the put / ActivatePermAbility /
+ActivatePump sites; surplus floats in the restricted reserve (`RestrictedFloatUsableNow`, generalising
+`floating_bigspell_mana`); whole-turn prepay declines while such a source is live (`PP_SUBTYPE_MANA`).
+Soulstoke: reuses Stoneforge's `PutFromHandAbility`; `Permanent::sac_at_end_step` swept by
+`PerformEndStepDelayedSacrifices` (dies triggers fire); put stamps this-turn attack power (put Fury = 8);
+`DetectDecisionProvider`'s Equipment signal now requires the put to name Equipment.
+Fury: `ResolveEtbDividedCreatureDamage` from `FireOwnEtbTriggers`; provider hook
+`DecisionProvider::EtbDividedDamageAlloc` (default: no targets unless an opponent-death payoff is out);
+pitch evoke one variant per distinct red card (`Action::pitch_name/pitch_slot`, subset guard
+kDupPitch); pitch evoke and a post-combat put rank strictly below passing (probe: wasted evokes 21 -> 0).
+`sizeof(Permanent)` 304 -> 312.
+PROVISIONAL (user sign-off): Smokebraider refuses a noncreature Elemental (Kindred) spell -- none in
+cards.json; Soulstoke's instant-speed timing (`docs/design/opponent-end-step-window.md`: a between-turns
+decision node, ~2-3 days, needs USER rulings on fan-out reach -- the deck is UNDER-rated where that line
+is better); Fury -- planeswalkers not in the target set (none exist), ETB-before-evoke-sacrifice order
+fixed (no card here cares). Inert-param classifications added to audit_viewer_decisions.py.
+Side observations (not this deck): Shriekmaw / Reveillark evoke variants still carry full creature
+value (the overvaluation fixed for Fury); possible Angels hole -- whole-turn prepay has no paying-spell
+identity, so Giada's mana MAY pay a non-Angel in a batch (UNVERIFIED).
+Integration (orchestrator, 2026-10-19): 5 conflict hunks, all independent additions (both evoke branches
+in CollectActions split into two `else if`s; EtbOptionalDestroyTargetPick + EtbDividedDamageAlloc; the
+two SpellEffects resolvers; INERT_PARAMS). `lfe` signature += Smokebraider's mana_only_subtype_abilities.
+`LookTopEntrantDef` already covers `PutFromHandAbility` (card_name = the put card), so a Soulstoke put is
+an entrant for Reef's look axis and the site-10 breakpoint clause.
 
 ## Prep notes (orchestrator, while the clusters run)
 - **Routing hazards for Stage 4a** (`DetectDecisionProvider`, src/ai/DecisionProviders.cpp): Flamekin
