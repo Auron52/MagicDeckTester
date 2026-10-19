@@ -8106,7 +8106,9 @@ static bool IsEtbUntapCast(const Action& a)
 //     refunds at most etb_untap_lands lands, each worth at most the best land's per-tap yield plus
 //     every subset Aura's bonus (they could all ride that land).
 // The walk adds supply in no other way EXCEPT a rock / ETB-Treasure maker / land-put credit / Vial
-// Treasure, so a subset holding one of those is not gated at all; neither is a cost with a Phyrexian
+// Treasure / SacForMana (MTG_RESCUE_SAC_FLOAT cracks the subset's sacs into the scratch pool before any
+// cast, and UntappedManaUpperBound need not count a sac source's full yield -- a Generator Servant's {C}{C}
+// feeding an Izzet Signet), so a subset holding one of those is not gated at all; neither is a cost with a Phyrexian
 // or twobrid pip (payable with less than its mana value in mana). Activation taps and the Aura host
 // reservation only REMOVE supply. So "demand > bound" proves the walk returns false.
 // MTG_SPWF_SUPPLY_VERIFY=1 runs the walk anyway on every gated subset and counts a payable one (must
@@ -8153,6 +8155,7 @@ static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Ac
             if (a.rock_mana.Total() > 0 && def && def->params.etb_creates_treasures > 0) { return false; }
             continue;
         }
+        if (a.kind == Action::Kind::SacForMana) { return false; }
         if (a.cost.phyrexian_count > 0 || a.cost.twobrid_count > 0) { return false; }
         demand += a.cost.ManaValue();
         if (def == nullptr) { continue; }
