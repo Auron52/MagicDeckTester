@@ -274,7 +274,28 @@ MTG_SEARCH_ORDER=1`, seed 61000, 100 games, d5 b3000, every turn, pre-fix binary
   drop-order fact rather than a keep fact. Cliffs is last per copy (it enters tapped once 3 lands are
   out), matching its place in the MANA bucket.
 
-## 5. The A/B (NOT RUN: it waits for the convoke / payer fixes)
+## 5. The A/B (RUN 2026-10-19 on 89eddb1f6: sweep-1 fixes, payer re-fix and the Stage 5f folds merged)
+
+**Result** (one pooled batch with the 5c2 / 5i measurements, `build/scratch/vampires/stage5/`, generator
+`combined.py` = this file's arms / cells / blocks + `--with-d0`; `off` is the committed tree by construction).
+Paired per game against `off`; net in turns, negative = the arm is faster:
+
+| cell | games / arm | `order` net (faster / slower, changed digests) | `buckets` net | `both` net |
+|---|---|---|---|---|
+| std d0 | 10,000 | 0 (0 / 0, 3,653) | **-14** (30 / 16, 786), t -2.06 | -14 (30 / 16) |
+| std d3 b10 | 3,000 | 0 (0 / 0, 1,062) | -2 (2 / 0, 277) | -2 (2 / 0) |
+| std d5 b20 | 1,500 | 0 (0 / 0, 518) | 0 (0 / 0, 118) | 0 (0 / 0) |
+| 2HG d3 b10 | 1,000 | 0 (0 / 0, 409) | -2 (2 / 0, 68) | -2 (2 / 0) |
+| 2HG d5 b20 | 500 | 0 (0 / 0, 196) | -3 (3 / 0, 38), t -1.74 | -3 (3 / 0) |
+
+- **The drafted cast order is win-turn NEUTRAL everywhere** (0 of 16,000 paired games moved, though it re-sequences
+  a third of them). With defect B fixed, the search's own plan enumeration already reaches "Baron after the bodies"
+  whatever the rank, so the one load-bearing slot does not bind.
+- **The buckets are a small improvement**, the sign the same in both blocks of every cell that moved, and ZERO slower
+  searched games. All 16 slower games are d0 (the greedy runner); they are being root-caused (section 5.1).
+- `both` = `buckets` game for game: the two levers do not interact.
+- The bar's other halves: no slower searched game, so the d8 b0 recovery check has nothing to run; every cell net <= 0.
+
 
 `test/tools/vampires_order_ab.py` writes ONE pooled manifest. Every arm is a per-job `flags` block, so all
 arms share one queue and one tail (CLAUDE.md "WAVES ARE A LOOP").
