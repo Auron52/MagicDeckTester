@@ -47,7 +47,7 @@ cd "$(dirname "$0")/.."
 
 CMD=${1:?usage: mullgen.sh run|validate|status decks/<Deck> [recipe]}
 DECKDIR=${2:?usage: mullgen.sh run|validate|status decks/<Deck> [recipe]}
-RECIPE=${3:-complete}
+RECIPE=${3:-fast}   # USER 2026-10-19: fast unless told otherwise or clearly cheap at complete
 DECKDIR=${DECKDIR%/}
 STEM=$(basename "$DECKDIR")
 
@@ -597,11 +597,14 @@ except Exception as e:
     print(f"[preflight] journal header unreadable ({e}) -- the in-engine gate will judge it; "
           f"it is backed up either way", flush=True)
     sys.exit(0)
-# R is a pure function of the recipe. Anything else -> do not guess, let the engine decide.
+# R is a pure function of the recipe, and it is NOT checked: since 2026-10-19 the generator resumes a journal
+# across a recipe change and CARRIES every banked rollout (USER: "We should not start from scratch" / "just
+# keep any extra rollouts"). Cells at/above the new cap are done; the rest continue on the same seed stream.
 recipe_R = {"fast": 30, "complete": 40}.get(recipe)
 want = {}
-if recipe_R is not None:
-    want["R"] = recipe_R
+if recipe_R is not None and meta.get("R") not in (None, recipe_R):
+    print(f"[preflight] journal R={meta.get('R')}, recipe `{recipe}` is R={recipe_R}: the generator CARRIES the "
+          f"banked rollouts (cells keep their counts)", flush=True)
 try:
     import os
     if not os.path.exists(vpath):   # no sidecar: the contract lives in the deck profile
