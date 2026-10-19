@@ -12887,6 +12887,9 @@ static bool SubsetHasComboRouteWithOthers(const std::vector<Action>& cands, cons
 //      permanent up to their number, so "#1 discards A, #2 discards B" and "#1 discards B, #2 discards
 //      A" are one line; keep only the selection whose copies are a PREFIX of the class (battlefield
 //      order) carrying NON-DECREASING discard indices (the shared pin order) -- the multiset form.
+//  10. (Stage 6a defects D1 / D2, 2026-10-19) A MADNESS CONVOKE COVER the trigger's bodies cannot pay, or
+//      that a free body arriving ahead of the trigger dominates: SubsetMadnessCoverInvalid, defined with
+//      the madness fan (MadnessFanFor) whose covers it books.
 // Rule 7 (Vampires sweep items A / B, 2026-10-18): CREATURE-SPELL CONVOKE BODIES. A body taps once, so
 // the selection's convoke casts (Markov Baron; Action::convoke_green / convoke_other, which INCLUDE the
 // plan bodies convoke_plan_pip / convoke_plan_other) cannot together count more bodies than exist: the
@@ -13114,6 +13117,8 @@ static bool SubsetPostCombatPumpDiscardDominated(const GameState& state, const s
 
 static bool BloodVariantMismatch(const GameState& state, const std::vector<Action>& cands,
                                  const std::vector<int>& sel, std::size_t pi);   // rule 3, below
+static bool SubsetMadnessCoverInvalid(const GameState& state, const std::vector<Action>& cands,
+                                      const std::vector<int>& sel);   // rule 10, with the madness fan
 bool TurnSolver::VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
                                             const std::vector<int>& sel, int rule)
 {
@@ -13125,6 +13130,7 @@ bool TurnSolver::VampSweepSubsetRuleRejects(const GameState& state, const std::v
     }
     if (rule == 9) { return SubsetPostCombatPumpDiscardDominated(state, cands, sel, /*is_pre_combat=*/false); }
     if (rule == 7) { return SubsetConvokeBodiesInvalid(state, cands, sel); }
+    if (rule == 10) { return SubsetMadnessCoverInvalid(state, cands, sel); }
     if (rule == 8) { return SubsetDiscardOutletsUnpayable(state, cands, sel); }
     return false;
 }
@@ -13239,6 +13245,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
 {
     if (SubsetConvokeBodiesInvalid(state, cands, sel)) { return true; }   // rule 7
     if (SubsetDiscardOutletsUnpayable(state, cands, sel)) { return true; }   // rule 8
+    if (SubsetMadnessCoverInvalid(state, cands, sel)) { return true; }   // rule 10
     const Player& ap = state.ActivePlayer();
     auto def_of = [](const Action& c) -> const CardDefinition*
     { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
@@ -28899,7 +28906,7 @@ static void EmitTransformAction(const GameState& state, const Card& src_card, co
 // ---- VAMPIRES A1: THE MADNESS FAN of one pinned discard (design_A1 §3.2) ---------------------------
 // A discard-cost activation whose pinned card would have MADNESS at the discard is crossed with the
 // madness answer: DECLINE (madness_choice 0) and one CAST variant per (distinct madness cost x convoke
-// arm) -- every emitted variant carries an EXPLICIT pin, so inside the search window the search, never
+// COVER) -- every emitted variant carries an EXPLICIT pin, so inside the search window the search, never
 // a default, decides (ResolvePendingMadness counts any unpinned in-window event; it must read 0). The
 // provider's MadnessCastDefault pick goes FIRST (move ordering / the beyond-horizon front: it fronts the
 // DECLINE when it would decline -- VampiresProvider's Bloodghast rule); the order never removes one.
@@ -28907,32 +28914,44 @@ static void EmitTransformAction(const GameState& state, const Card& src_card, co
 //     granter in hand that the SAME plan can cast / Vial-put before the trailing pass (rule 5 of
 //     SubsetVampOutletInvalid then requires that cast for a cast variant). A card that can have no
 //     madness this plan gets NO fan (madness_choice stays -1 and is never consulted).
-//   * The gate is the turn's OPTIMISTIC mana (the outlet's own cost + the arm's reduced cost <=
+//   * The gate is the turn's OPTIMISTIC mana (the outlet's own cost + the cover's reduced cost <=
 //     OptimisticTurnMana), not an exact probe of the pre-plan board: the plan may play a land or add
 //     mana before its trailing pass, and an exact pre-plan probe would make "land, then Condemned
 //     discarding Baron, cast it" unfindable at any budget. A cast that cannot be paid at the trigger
 //     resolves as a decline (legal; that variant then scores as the duplicate it is).
-//   * madness_mv = the arm's reduced mana value, folded into the action's cost as generic so the
+//   * madness_mv = the cover's reduced mana value, folded into the action's cost as generic so the
 //     subset walk reserves it (OutletOwnCost subtracts it again at the outlet's own payment).
+//   * CONVOKE (Markov Baron) -- STAGE 6a DEFECTS D1 / D2 (2026-10-19). A cast variant is pinned by its
+//     COVER (what the convoke bodies pay -- MadnessCoverPack), which the resolver realises on the board AT
+//     THE TRIGGER (MadnessPinnedOptionNow), so the reduced cost, and with it madness_mv, the mana gate and
+//     the colour fold, belong to the pin and not to a board. It used to be an INDEX into the PRE-PLAN arm
+//     list, priced there: a body the plan adds before the trigger (a Bloodline Keeper token tapped at
+//     trailing rank 0, a same-plan cast or Vial put, an earlier madness cast) was invisible -- "Keeper
+//     token, then Condemned discards Baron, convoked by the token, for two lands" was booked at {2}{B}
+//     and gated out, while the index pinned on the pre-plan board ("tap the lowest-power costly body")
+//     meant another arm ("the token AND Condemned"), or none (a decline), on the board the trigger saw;
+//     a same-plan cast's free body made "pay {2}, Condemned keeps attacking" unreachable the same way
+//     (Stage 6a section 5; test_vampires_madness_arms.cpp). The fan is now every cover the trigger's board MAY
+//     pay (MadnessFanBooks' upper bounds: the board's untapped bodies plus every body the plan can add
+//     ahead of the trigger), less the covers question 16's dominance drops on every plan (a free board
+//     body left unused -- never under CONTENTION, defect D2: a second convoke card or a steal source may
+//     want that body untapped, so "pay with lands, keep the body for the steal" is a real line). Each
+//     selection's own books (subset rule 10, SubsetMadnessCoverInvalid) then keep exactly the covers its
+//     trigger can pay and that its own free arrivals do not dominate -- one variant per distinct line.
 struct MadnessVariant { std::int8_t choice = 0; std::int8_t arm = 0; std::int8_t mv = 0; };
-static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const std::string& pin,
-                                                 const ManaCost& outlet_cost, const std::string& src_name)
+
+// The distinct madness costs of hand card `c` for an outlet of THIS plan (cheapest first): its own and
+// a battlefield granter's (MadnessCostsFor), plus the printed cost when a granter in hand the plan can cast
+// first would grant it (the pinned copy excluded). Shared by the fan and subset rule 10 (which must read
+// the same costs[k-1] a pin names).
+static std::vector<ManaCost> MadnessFanCosts(const GameState& state, int me, const Card& c)
 {
-    std::vector<MadnessVariant> fan;
-    if (!state.deck_has_madness || pin.empty() || HumanPlayActive()) { return fan; }
-    const int me = state.active_player_index;
-    const int hi = PinnedDiscardIndex(state, me, pin);
-    if (hi < 0) { return fan; }
-    const Player& ap = state.players[me];
-    const Card c = ap.hand[static_cast<std::size_t>(hi)];
     const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-    if (d == nullptr) { return fan; }
     std::vector<ManaCost> costs = MadnessCostsFor(state, me, c);
-    if (d->card.IsCreature())
+    if (d != nullptr && d->card.IsCreature())
     {
-        // A granter the plan itself can put onto the battlefield first (the pinned copy excluded).
         bool own_copy_skipped = false;
-        for (const Card& h : ap.hand)
+        for (const Card& h : state.players[static_cast<std::size_t>(me)].hand)
         {
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
             if (hd == nullptr || hd->params.grants_madness_creature_subtype.empty()) { continue; }
@@ -28944,24 +28963,203 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
         std::stable_sort(costs.begin(), costs.end(),
                          [](const ManaCost& x, const ManaCost& y) { return x.ManaValue() < y.ManaValue(); });
     }
+    return costs;
+}
+
+// ---- THE MADNESS CONVOKE BOOKS (Stage 6a defects D1 / D2, 2026-10-19) ----------------------------------
+// How many bodies a creature-convoke madness cast can find untapped at its trigger, per colour class of the
+// spell's convoke pip `r.pip` (the classifier's eligibility: an untapped creature we control that is not a
+// live mana dork). UPPER bounds (ub_*: every body that MAY be there -- a pin above them cannot be realised
+// and resolves as the decline it duplicates) and LOWER bounds on the FREE ones (lb_*: bodies that certainly
+// are there and certainly cannot attack and have no live {T} ability -- question 16's dominance reads them,
+// and only a lower bound keeps that prune sound). `contention` = a claimant for the bodies this turn
+// (MadnessConvokeContention): the dominance is then not applied at all.
+struct MadnessBodyBooks
+{
+    int  ub_p = 0, ub_o = 0, ub_t = 0;
+    int  lb_p = 0, lb_o = 0;
+    bool contention = false;
+};
+static bool TokenColourIs(const std::string& col, Color c)
+{
+    const char k = c == Color::White ? 'W' : c == Color::Blue ? 'U' : c == Color::Black ? 'B'
+                 : c == Color::Red ? 'R' : 'G';
+    return col.find(k) != std::string::npos;
+}
+// A card of definition `d` entering this turn is certainly a FREE body at a trigger under `r`: after combat
+// every body is free; before it, a summoning-sick body is free unless something gives it haste (its own
+// keyword, Bloodghast's opponent-life clause, a conditional self-haste, a haste lord already on the
+// battlefield -- CanAttackFull on the board as it stands). `haste_in_reach` (a haste granter the plan could
+// still cast) voids every pre-combat certainty.
+static bool ArrivalCertainlyFree(const GameState& state, int me, const CardDefinition* d, const ConvokeRules& r,
+                                 bool haste_in_reach)
+{
+    if (r.all_free) { return true; }
+    if (haste_in_reach || d == nullptr) { return false; }
+    Permanent p;
+    p.card              = d->card;
+    p.controller_index  = me;
+    p.owner_index       = me;
+    p.entered_this_turn = true;
+    const int n = d->params.haste_if_opp_life_at_most;
+    p.cond_haste = n > 0 && state.players[static_cast<std::size_t>(1 - me)].life <= n;
+    return !CanAttackFull(p, state.battlefield, me);
+}
+static bool HasteGranterInHand(const GameState& state, int me)
+{
+    for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd != nullptr && (hd->params.grants_haste || hd->params.equip_grants_haste)) { return true; }
+    }
+    return false;
+}
+// The board's part of the books: every eligible untapped body counts toward ub; a free one (cannot attack
+// -- or, after combat, any -- and no live {T} ability) toward lb.
+static void MadnessBooksBoard(const GameState& state, int me, const ConvokeRules& r, bool haste_in_reach,
+                              MadnessBodyBooks& b)
+{
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || !q.card.IsCreature() || q.tapped) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield, nullptr)) { continue; }
+        const bool pip = q.card.HasColor(r.pip);
+        (pip ? b.ub_p : b.ub_o) += 1;
+        const bool tapc = ConvokeBodyTapAbilityLive(state, q, qd);
+        const bool free = !tapc && (r.all_free || (!haste_in_reach && !CanAttackFull(q, state.battlefield, me)));
+        if (free) { (pip ? b.lb_p : b.lb_o) += 1; }
+    }
+}
+// THE FAN'S books (pre-plan; `probe` is the board with the pinned card already out of the hand): the board,
+// plus every body the plan could add before the trigger -- a creature card in hand (cast, Vial-put or
+// madness-cast by another outlet), a live creature-token tap (Bloodline Keeper / Lord of Lineage), a steal
+// (the stolen creature) -- into the upper bounds only. The free lower bound is the board's: with no
+// contention nothing taps a free body before the trigger, but a sacrifice OUTLET's own victim (chosen per
+// variant, after this fan) may be one, so it is taken off both classes.
+static MadnessBodyBooks MadnessFanBooks(const GameState& probe, int me, const ConvokeRules& r, bool outlet_sacrifices)
+{
+    MadnessBodyBooks b;
+    const bool haste_in_reach = !r.all_free && HasteGranterInHand(probe, me);
+    MadnessBooksBoard(probe, me, r, haste_in_reach, b);
+    for (const Card& hc : probe.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr || !hd->card.IsCreature()) { continue; }
+        (hd->card.HasColor(r.pip) ? b.ub_p : b.ub_o) += 1;
+    }
+    bool steal_src = false, opp_creature = false;
+    for (const Permanent& q : probe.battlefield)
+    {
+        if (q.controller_index != me) { opp_creature = opp_creature || q.card.IsCreature(); continue; }
+        if (q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        if (qd->params.steal_tap_count > 0) { steal_src = true; }
+        if (qd->params.tap_token_cost.has_value() && TapTokenSourceLive(probe, q, *qd))
+        { (TokenColourIs(qd->params.tap_token_color, r.pip) ? b.ub_p : b.ub_o) += 1; }
+    }
+    for (const Card& hc : probe.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd != nullptr && hd->params.steal_tap_count > 0) { steal_src = true; }
+    }
+    if (steal_src && opp_creature) { b.ub_p += 1; b.ub_o += 1; }
+    b.ub_t = b.ub_p + b.ub_o;
+    if (outlet_sacrifices) { b.lb_p = std::max(0, b.lb_p - 1); b.lb_o = std::max(0, b.lb_o - 1); }
+    b.contention = MadnessConvokeContention(probe, me);
+    return b;
+}
+
+static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const std::string& pin,
+                                                 const ManaCost& outlet_cost, const std::string& src_name,
+                                                 bool outlet_sacrifices = false)
+{
+    std::vector<MadnessVariant> fan;
+    if (!state.deck_has_madness || pin.empty() || HumanPlayActive()) { return fan; }
+    const int me = state.active_player_index;
+    const int hi = PinnedDiscardIndex(state, me, pin);
+    if (hi < 0) { return fan; }
+    const Player& ap = state.players[me];
+    const Card c = ap.hand[static_cast<std::size_t>(hi)];
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr) { return fan; }
+    const std::vector<ManaCost> costs = MadnessFanCosts(state, me, c);
     if (costs.empty()) { return fan; }
-    // The options on the post-discard board (no payability probe -- see the block note).
+    // The post-discard board (no payability probe -- see the block note).
     GameState probe = state;
     probe.players[me].hand.erase(probe.players[me].hand.begin() + hi);
     const MadnessPending pend{ c, me, costs, src_name };
     const MadnessWindow w = MadnessWindowNow(state);
-    const std::vector<MadnessOption> all = MadnessOptionsNow(probe, pend, w, nullptr);
     const int budget = OptimisticTurnMana(state);
+    auto over_budget = [&](const MadnessOption& o)
+    { return budget != kNoManaCeiling && outlet_cost.ManaValue() + o.reduced.ManaValue() > budget; };
+    // The provider's default is read off the PRE-PLAN options (this board's arms -- what it has always been
+    // shown), filtered by the mana gate, and located among the covers by (cost, cover).
+    std::vector<MadnessOption> pre;
+    for (const MadnessOption& o : MadnessOptionsNow(probe, pend, w, nullptr)) { if (!over_budget(o)) { pre.push_back(o); } }
+    // THE CANDIDATE COVERS, one option each (conv_* unset: the trigger's board picks the bodies).
     std::vector<MadnessOption> opts;
-    for (const MadnessOption& o : all)
+    const bool creature_convoke = d->params.convoke && d->card.IsCreature();
+    if (creature_convoke)
     {
-        if (budget != kNoManaCeiling && outlet_cost.ManaValue() + o.reduced.ManaValue() > budget) { continue; }
-        opts.push_back(o);
+        const bool late = w == MadnessWindow::PostCombatMain || state.phase == Phase::PostCombatMain;
+        const ConvokeRules r = ConvokeRulesFor(*d, late);
+        const MadnessBodyBooks bk = MadnessFanBooks(probe, me, r, outlet_sacrifices);
+        for (std::size_t ci = 0; ci < costs.size(); ++ci)
+        {
+            ManaCost base = costs[ci];
+            const int pn  = *ConvokePipField(base, r.pip);
+            const int gen = base.generic;
+            for (int cp = 0; cp <= pn; ++cp)
+            {
+                for (int cg = 0; cg <= gen; ++cg)
+                {
+                    if (!ConvokeCoverPayable(cp, cg, pn, bk.ub_p, bk.ub_o, bk.ub_t)) { continue; }
+                    if (!bk.contention && ConvokeCoverDominated(cp, cg, pn, gen, bk.lb_p, bk.lb_o)) { continue; }
+                    MadnessOption o;
+                    o.cost_idx = static_cast<std::int8_t>(ci);
+                    o.arm      = MadnessCoverPack(cp, cg);
+                    o.reduced  = ConvokeCoveredCost(base, r.pip, cp, cg);
+                    if (over_budget(o)) { continue; }
+                    opts.push_back(o);
+                }
+            }
+        }
+        // Move ordering (never removes one): the covers this board's arms already pay, in their arm order
+        // (board-only first, fewest costly bodies, least power given up), then the covers that need the
+        // plan's own arrivals, most covered first.
+        auto rank_of = [&](const MadnessOption& o) -> int
+        {
+            for (std::size_t k = 0; k < pre.size(); ++k)
+            { if (pre[k].cost_idx == o.cost_idx && pre[k].arm == o.arm) { return static_cast<int>(k); } }
+            return static_cast<int>(pre.size()) + 64 - (MadnessCoverPip(o.arm) + MadnessCoverGeneric(o.arm));
+        };
+        std::stable_sort(opts.begin(), opts.end(), [&](const MadnessOption& x, const MadnessOption& y)
+        {
+            if (x.cost_idx != y.cost_idx) { return x.cost_idx < y.cost_idx; }
+            return rank_of(x) < rank_of(y);
+        });
+    }
+    else
+    {
+        for (const MadnessOption& o : pre) { opts.push_back(o); }   // no convoke: one cover per cost
     }
     int dflt = -1;
-    if (!opts.empty()) { dflt = ResolveProvider(state).MadnessCastDefault(state, me, *d, opts, w); }
+    if (!pre.empty())
+    {
+        const int pd = ResolveProvider(state).MadnessCastDefault(state, me, *d, pre, w);
+        if (pd >= 0 && pd < static_cast<int>(pre.size()))
+        {
+            for (std::size_t k = 0; k < opts.size(); ++k)
+            {
+                if (opts[k].cost_idx == pre[static_cast<std::size_t>(pd)].cost_idx
+                    && opts[k].arm == pre[static_cast<std::size_t>(pd)].arm) { dflt = static_cast<int>(k); break; }
+            }
+        }
+    }
     // THE MADNESS COLOUR FOLD (MTG_VAMP_MADNESS_COLOR_FOLD, DEFAULT ON; =0 -> the total-mana gate above
-    // only). IDENTITY FOLD: a cast option is pinned by (cost index, arm) and ResolvePendingMadness resolves
+    // only). IDENTITY FOLD: a cast option is pinned by (cost index, cover) and ResolvePendingMadness resolves
     // a pin whose option the trigger cannot pay as the DECLINE -- so a cast variant no line this turn can
     // fund in COLOUR is the decline variant twice. The gate above is mana VALUE only (madness_mv rides
     // a.cost as generic, so the subset walk's colour check never sees the madness pips either): with a
@@ -28970,10 +29168,9 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
     // (every untapped source, Unclaimed Territory / Voldaren Estate as any colour for a creature spell)
     // plus whatever the ceiling credits beyond it (the land drop, Treasures, Lotus) as WILD -- against the
     // outlet's own cost plus the option's reduced cost, so it can only drop an option that is unpayable on
-    // every plan. Skipped with no ceiling (a growth source: the bound is unknown). The provider's default
-    // is still computed over the UNFILTERED list, and an unpayable default is replaced by the decline in
-    // the front slot: the rollout leaf's front variant then resolves exactly as before (that pick was a
-    // decline either way). docs/design/vampires-search-cost.md.
+    // every plan. Skipped with no ceiling (a growth source: the bound is unknown). An unpayable default is
+    // replaced by the decline in the front slot: the rollout leaf's front variant then resolves exactly as
+    // before (that pick was a decline either way). docs/design/vampires-search-cost.md.
     std::vector<char> colour_dead(opts.size(), 0);
     {
         static const bool s_env = EnvOn("MTG_VAMP_MADNESS_COLOR_FOLD", true);
@@ -28993,7 +29190,7 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
         return MadnessVariant{ static_cast<std::int8_t>(o.cost_idx + 1), o.arm,
                                static_cast<std::int8_t>(std::min(127, o.reduced.ManaValue())) };
     };
-    if (dflt >= 0 && dflt < static_cast<int>(opts.size()) && !colour_dead[static_cast<std::size_t>(dflt)])
+    if (dflt >= 0 && !colour_dead[static_cast<std::size_t>(dflt)])
     { fan.push_back(var_of(opts[static_cast<std::size_t>(dflt)])); }
     fan.push_back(MadnessVariant{});   // decline
     // A ROLLOUT LEAF is estimating, not deciding (the phyrexian / creature-convoke precedent): beyond the
@@ -29005,6 +29202,188 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
     g_axis_madness_vars.fetch_add(static_cast<long long>(fan.size()), std::memory_order_relaxed);
     return fan;
 }
+// RULE 10 -- THE MADNESS CONVOKE COVER BOOKS (Stage 6a defects D1 / D2, 2026-10-19). A madness CAST pin of a
+// creature-convoke card (Markov Baron; Action::madness_arm = its COVER, MadnessCoverPack) is realised on the
+// board at its trigger, so each selection's own books decide which of the fan's covers are distinct lines:
+//   10a. A cover the trigger's bodies cannot pay (ConvokeCoverPayable against the UPPER bounds below) would
+//        resolve as the DECLINE -- the same selection with the decline variant, which the fan always
+//        carries. Rejected: a duplicate, never a line.
+//   10b. Without CONTENTION (no second convoke card, no steal source -- MadnessConvokeContention), a cover
+//        that leaves a FREE body unused while it would still pay a pip or {1} (question 16's dominance,
+//        ConvokeCoverDominated, against the LOWER bounds) is dominated by the cover with that body added,
+//        which is in the fan (its fan books are looser than these) and passes every other rule (one more
+//        body, one less mana). Rejected. This is what the pinned arm INDEX used to do implicitly -- arm 0
+//        was "every free body" on whatever board the trigger saw -- at the price of booking the wrong mana.
+// The books walk the selection in the EXECUTED order (both worlds run the cast section first, then the
+// trailing pass sorted by TurnSolver::TrailingRunsBefore's keys):
+//   + every creature the cast section puts onto the battlefield (hand casts, Vial puts), - the bodies a
+//     hand-cast convoke creature taps (rule 7 guarantees it can);
+//   + a creature token tapped for AHEAD of the outlet (Bloodline Keeper / Lord of Lineage: rank 0), - its
+//     source; + a madness-cast creature of an outlet ahead (- its own convoke cover); + a stolen creature;
+//   - the outlet's OWN victim when it is a sacrifice outlet (Falkenrath Pit Fighter pays mana -> discard ->
+//     sacrifice before its madness seam), and the victim of any sacrifice ahead.
+// The upper bounds only ever ADD what may arrive and subtract only what is certainly gone (a cost already
+// paid), so 10a can only reject a selection whose pin really cannot be paid; the lower bounds count a body
+// as free only when it certainly is (ArrivalCertainlyFree; a haste granter in hand voids them before
+// combat) and take off anything a cost may tap first, so 10b can only reject a dominated line. Skipped in a
+// ROLLOUT LEAF: there the fan is the provider's front alone (the permitted playout policy), and refusing it
+// would remove the outlet's line instead of choosing between its variants.
+static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::vector<Action>& cands,
+                                            const std::vector<int>& sel, std::size_t po, const ConvokeRules& r,
+                                            int skip_number)
+{
+    MadnessBodyBooks b;
+    const int me = state.active_player_index;
+    const bool haste_in_reach = !r.all_free && HasteGranterInHand(state, me);
+    MadnessBooksBoard(state, me, r, haste_in_reach, b);
+    b.ub_t = b.ub_p + b.ub_o;
+    auto def_of = [](const Action& c) -> const CardDefinition*
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    auto add = [&](bool pip, bool free)
+    {
+        (pip ? b.ub_p : b.ub_o) += 1; b.ub_t += 1;
+        if (free) { (pip ? b.lb_p : b.lb_o) += 1; }
+    };
+    auto take_lb = [&](int n) { b.lb_p = std::max(0, b.lb_p - n); b.lb_o = std::max(0, b.lb_o - n); };
+    auto eligible = [&](const Permanent& q)
+    {
+        if (q.controller_index != me || !q.card.IsCreature() || q.tapped) { return false; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        return !(qd != nullptr && qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield, nullptr));
+    };
+    auto drop_body = [&](const Permanent& q)
+    {
+        if (!eligible(q)) { return; }
+        const bool pip = q.card.HasColor(r.pip);
+        (pip ? b.ub_p : b.ub_o) -= 1; b.ub_t -= 1;
+        int& lb = pip ? b.lb_p : b.lb_o;
+        lb = std::max(0, lb - 1);
+    };
+    auto drop_victim = [&](const Action& sac)
+    {
+        if (sac.sac_victim_id > 0 && sac.sac_victim_id != kSameLineSacVictim)
+        {
+            for (const Permanent& q : state.battlefield)
+            { if (q.card.m_number == sac.sac_victim_id && q.controller_index == me) { drop_body(q); break; } }
+            return;
+        }
+        if (!sac.victim_name.empty())
+        {
+            const CardDefinition* vd = CardDatabase::Instance().Lookup(sac.victim_name.str());
+            const bool pip = vd != nullptr && vd->card.HasColor(r.pip);
+            (pip ? b.ub_p : b.ub_o) -= 1; b.ub_t -= 1;
+            int& lb = pip ? b.lb_p : b.lb_o;
+            lb = std::max(0, lb - 1);
+            return;
+        }
+        take_lb(1);   // a victim chosen at resolution: any free body may go
+    };
+    bool bands = false;
+    for (int idx : sel)
+    {
+        const Action& d = cands[static_cast<std::size_t>(idx)];
+        if (d.kind == Action::Kind::ActivatePermAbility
+            && (d.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                || d.ability_mode == Action::AbilityMode::TransformSelf)) { bands = true; break; }
+    }
+    const Action& outlet = cands[static_cast<std::size_t>(sel[po])];
+    for (std::size_t pj = 0; pj < sel.size(); ++pj)
+    {
+        if (pj == po) { continue; }
+        const Action& d = cands[static_cast<std::size_t>(sel[pj])];
+        const CardDefinition* dd = def_of(d);
+        const bool cast = d.kind == Action::Kind::CastFromHand && !d.bestow && !d.adventure && !d.sacrifice_land;
+        if (cast || d.kind == Action::Kind::ActivateVial)
+        {
+            if (dd == nullptr || !dd->card.IsCreature()) { continue; }
+            add(dd->card.HasColor(r.pip), ArrivalCertainlyFree(state, me, dd, r, haste_in_reach));
+            if (cast && (d.convoke_green > 0 || d.convoke_other > 0) && ConvokeTapsAtCast(dd))
+            {
+                if (ConvokePipColor(*dd) == r.pip) { b.ub_p -= d.convoke_green; b.ub_o -= d.convoke_other; }
+                b.ub_t -= d.convoke_green + d.convoke_other;
+                take_lb(d.convoke_green + d.convoke_other);
+            }
+            continue;
+        }
+        if (!TurnSolver::IsTrailingActivation(d.kind)) { continue; }
+        if (!TurnSolver::TrailingRunsBefore(state, d, pj, outlet, po, bands)) { continue; }
+        if (d.kind == Action::Kind::TapForTokenPay && dd != nullptr)
+        {
+            const auto& kw = dd->params.tap_token_keywords;
+            const bool tok_haste = std::find(kw.begin(), kw.end(), std::string("Haste")) != kw.end();
+            const bool free = r.all_free
+                || (!haste_in_reach && !tok_haste && GatherHasteSources(state.battlefield, me).lords.empty());
+            add(TokenColourIs(dd->params.tap_token_color, r.pip), free);
+            for (const Permanent& q : state.battlefield)
+            { if (q.card.m_number == d.sac_source_id && q.controller_index == me) { drop_body(q); break; } }
+            continue;
+        }
+        if (!d.discard_name.empty() && d.madness_choice > 0)
+        {
+            const CardDefinition* md = CardDatabase::Instance().Lookup(d.discard_name.str());
+            if (md != nullptr && md->card.IsCreature())
+            {
+                add(md->card.HasColor(r.pip), ArrivalCertainlyFree(state, me, md, r, haste_in_reach));
+                if (md->params.convoke)
+                {
+                    const int cp = MadnessCoverPip(d.madness_arm), cg = MadnessCoverGeneric(d.madness_arm);
+                    if (ConvokePipColor(*md) == r.pip) { b.ub_p -= cp; }
+                    b.ub_t -= cp + cg;
+                    take_lb(cp + cg);
+                }
+            }
+        }
+        if (d.kind == Action::Kind::ActivatePermAbility && d.ability_mode == Action::AbilityMode::TapSubtypeSteal)
+        {
+            // The stolen creature arrives (control gained this turn: it cannot attack). The five bodies it
+            // taps are NOT taken off the upper bounds (a steal that cannot pay taps nothing); the lower
+            // bounds are void (a steal source is contention anyway).
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != d.enchant_target || q.controller_index == me || !q.card.IsCreature()) { continue; }
+                add(q.card.HasColor(r.pip), false);
+                break;
+            }
+            b.lb_p = 0; b.lb_o = 0;
+        }
+        if (d.kind == Action::Kind::SacCreatureOutlet) { drop_victim(d); }
+    }
+    if (outlet.kind == Action::Kind::SacCreatureOutlet) { drop_victim(outlet); }
+    b.ub_p = std::max(0, b.ub_p); b.ub_o = std::max(0, b.ub_o);
+    b.ub_t = std::max(0, std::min(b.ub_t, b.ub_p + b.ub_o));
+    b.contention = MadnessConvokeContention(state, me, skip_number);
+    return b;
+}
+
+static bool SubsetMadnessCoverInvalid(const GameState& state, const std::vector<Action>& cands,
+                                      const std::vector<int>& sel)
+{
+    if (!state.deck_has_madness || !(g_search_candidate_enum || g_condemn_root_turn < 0)) { return false; }
+    const int me = state.active_player_index;
+    for (std::size_t po = 0; po < sel.size(); ++po)
+    {
+        const Action& c = cands[static_cast<std::size_t>(sel[po])];
+        if (c.madness_choice <= 0 || c.discard_name.empty()) { continue; }
+        const CardDefinition* md = CardDatabase::Instance().Lookup(c.discard_name.str());
+        if (md == nullptr || !md->params.convoke || !md->card.IsCreature()) { continue; }
+        const int hi = PinnedDiscardIndex(state, me, c.discard_name.str());
+        if (hi < 0) { continue; }
+        const Card& card = state.players[static_cast<std::size_t>(me)].hand[static_cast<std::size_t>(hi)];
+        const std::vector<ManaCost> costs = MadnessFanCosts(state, me, card);
+        const int k = c.madness_choice - 1;
+        if (k < 0 || k >= static_cast<int>(costs.size())) { continue; }
+        ManaCost base = costs[static_cast<std::size_t>(k)];
+        const ConvokeRules r = ConvokeRulesFor(*md, state.phase == Phase::PostCombatMain);
+        const int pn  = *ConvokePipField(base, r.pip);
+        const int gen = base.generic;
+        const int cp  = MadnessCoverPip(c.madness_arm), cg = MadnessCoverGeneric(c.madness_arm);
+        const MadnessBodyBooks bk = MadnessTriggerBooks(state, cands, sel, po, r, card.m_number);
+        if (!ConvokeCoverPayable(cp, cg, pn, bk.ub_p, bk.ub_o, bk.ub_t)) { return true; }                // 10a
+        if (!bk.contention && ConvokeCoverDominated(cp, cg, pn, gen, bk.lb_p, bk.lb_o)) { return true; } // 10b
+    }
+    return false;
+}
+
 // Push `a` once per madness variant of `fan` (or once, unchanged, when the fan is empty).
 static void PushWithMadnessFan(std::vector<Action>& actions, const Action& a,
                                const std::vector<MadnessVariant>& fan)
@@ -36209,12 +36588,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (hd != nullptr && hd->card.IsLand()) { land_in_hand = true; break; }
                 }
                 const std::vector<std::string> pins = ActivationDiscardClasses(state, *sd);
-                // Vampires A1: each pin's madness fan, computed ONCE per pin (it does not depend on the
-                // victim: the madness trigger resolves after both costs are paid).
+                // Vampires A1: each pin's madness fan, computed ONCE per pin (its covers do not depend on
+                // the victim: the madness trigger resolves after both costs are paid, and the victim's body
+                // is booked per selection by subset rule 10).
                 std::vector<std::vector<MadnessVariant>> fans;
                 fans.reserve(pins.size());
                 for (const std::string& pin : pins)
-                { fans.push_back(MadnessFanFor(state, pin, base.cost, src.card.m_name.str())); }
+                { fans.push_back(MadnessFanFor(state, pin, base.cost, src.card.m_name.str(), /*outlet_sacrifices=*/true)); }
                 // Board victims.
                 for (const int vi : DiscardSacVictimClasses(state, src, op))
                 {

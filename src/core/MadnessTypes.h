@@ -27,11 +27,23 @@ struct MadnessPending
 // attacks, so it has no other use) and which provider rule applies at depth 0.
 enum class MadnessWindow : std::uint8_t { PreCombatMain, PostCombatMain, Cleanup, Resolution };
 
-// One payable way to cast a pending card (MadnessOptionsNow). `cost_idx` indexes
-// MadnessPending::costs; `arm` is the convoke arm (0 = every FREE body that helps, or no convoke for a
-// card without it; a >= 1 = the free bodies plus `a` COSTLY ones, lowest power first); `conv_pip` /
-// `conv_other` are the bodies that arm taps (of the spell's coloured pip / any other colour);
-// `reduced` is the mana actually paid after convoke.
+// THE CONVOKE COVER of a madness cast (Vampires Stage 6a defect D1, 2026-10-19): WHAT the convoke bodies
+// pay of the madness cost -- `pip` of its coloured pips of the spell's convoke colour (ConvokePipColor:
+// Markov Baron's {B}) and `gen` of its generic -- packed into one byte (pip 0..7, gen 0..15). The reduced
+// cost is the madness cost minus the cover, so it is a property of the PIN, never of the board: the search
+// books exactly what the cast will pay. A card without creature convoke has the one cover (0, 0) == 0.
+inline std::int8_t MadnessCoverPack(int pip, int gen)
+{
+    return static_cast<std::int8_t>((pip & 7) | ((gen & 15) << 3));
+}
+inline int MadnessCoverPip(std::int8_t arm) { return static_cast<int>(arm) & 7; }
+inline int MadnessCoverGeneric(std::int8_t arm) { return (static_cast<int>(arm) >> 3) & 15; }
+
+// One payable way to cast a pending card (MadnessOptionsNow / MadnessPinnedOptionNow). `cost_idx` indexes
+// MadnessPending::costs; `arm` is the option's CONVOKE COVER (MadnessCoverPack -- 0 = no convoke, which is
+// also the only cover of a card without it); `conv_pip` / `conv_other` are the bodies the cast taps on THIS
+// board to pay that cover (of the spell's coloured pip / any other colour -- the least attacking power
+// given up, free bodies first; CreatureConvokeArms); `reduced` is the mana actually paid after convoke.
 struct MadnessOption
 {
     std::int8_t cost_idx   = 0;
@@ -45,10 +57,15 @@ struct MadnessOption
 //   choice -1 = unpinned (the provider's MadnessCastDefault: beyond the horizon, the depth-0 runner,
 //              cleanup, or the human chooser's preselect),
 //   choice  0 = decline (the card goes to the graveyard),
-//   choice  k = cast with costs[k-1] using convoke arm `arm`.
-// The pin names the arm, not raw tap counts, so a plan whose earlier casts ADD free bodies still
-// realises "every free body"; a pinned option that no longer exists (or is no longer payable) at the
-// trigger resolves as a DECLINE -- the stranded-premise rule (legal, never phantom mana).
+//   choice  k = cast with costs[k-1], its convoke bodies paying the COVER `arm` (MadnessCoverPack).
+// The pin names the cover -- what the bodies pay -- never an index into an arm list, and it is realised on
+// the board AT THE TRIGGER by the cheapest body set that pays it there (MadnessPinnedOptionNow), so a body
+// the plan adds before the trigger (a cast, a Vial put, a Bloodline Keeper token, an earlier madness cast)
+// is used, and the mana the search reserved is exactly the mana the cast pays. (Defect D1, 2026-10-19:
+// the pin used to name an arm INDEX into the PRE-PLAN arm list, which priced the arm on the pre-plan
+// board and meant another arm -- or none, a decline -- on the board the trigger really saw.) A pinned
+// cover that the trigger's board cannot pay (too few bodies, or the mana is not there) resolves as a
+// DECLINE -- the stranded-premise rule (legal, never phantom mana).
 struct MadnessPin
 {
     std::int8_t choice = -1;
