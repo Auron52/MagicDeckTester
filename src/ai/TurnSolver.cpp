@@ -75656,10 +75656,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     //     itself has a landfall trigger, or it is a mass put (Genesis Wave) that can put one. When no
     //     cast does, every landfall watcher this land could trigger was already on the battlefield
     //     before the casts, and for every payload in the pool (tokens, counters on each <subtype>,
-    //     life, quest counters) firing before or after an unrelated cast reaches the same end state,
-    //     so the order folds away. (Disclosed boundary: a future NON-watcher cast that MAKES a
-    //     payload's target subtype -- a non-landfall Plant maker -- or a "whenever you gain life"
-    //     watcher cast beside Courser would need adding to PutsLandfallWatcher.)
+    //     life, quest counters, the until-end-of-turn self pump, the self counter doubling) firing
+    //     before or after an unrelated cast reaches the same end state, so the order folds away.
+    //     (Disclosed boundary: a future NON-watcher cast that MAKES a payload's target subtype -- a
+    //     non-landfall Plant maker -- or a "whenever you gain life" watcher cast beside Courser would
+    //     need adding to PutsLandfallWatcher; so would a non-watcher cast that puts +1/+1 counters on
+    //     an EXISTING creature beside a Mossborn Hydra on the battlefield (+1 then double differs
+    //     from double then +1). No card in the LandfallElementals list is such a cast: Metallic
+    //     Mimic counts only ENTERING creatures.)
     // A -1 variant carries nothing else of the base plan's land (face / fetch / source come from the
     // option); a k variant keeps its base plan's whole land choice. The scry / rad / bounce sub-axes
     // fan over both later exactly as over a land-first plan. Human play gets the same variants (the
