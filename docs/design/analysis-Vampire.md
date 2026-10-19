@@ -180,6 +180,19 @@ pre-fix engine (every new test failed there), then fixed:
 - Aether Vial's stale bracket note now describes `WantVialCharge`. Melira Pod / Knights byte-identical; Vampires
   60 d3 + 30 d5 paired games: 0 moved. Units 1578/1578.
 
+## Claude-play sweep
+Two sweeps (analyze-deck 5d), one Opus player per game, every flag verified against cards.json and the code.
+- Sweep 1 (`docs/design/vampires/claude_sweep_1.md`): commit `1c4484e7e`, seeds 91000-91019 (game-index 0), 20
+  games, 20/20 tie the search; 12 defects A-L, all fixed (section "Sweep fixes").
+- Sweep 2, CONFIRMATION (`docs/design/vampires/claude_sweep_2.md`):
+- commit: `2ed53cf74`
+- seeds: 92000-92007 (game-index 2-9: opponent creatures, Captivating Vampire's steal exercised in three games)
+- games: 8 (8/8 tie the search: T4 x5, T5 x3)
+- flags: 0 unresolved (one confirmed defect, M, two independent repros -- fixed 4493e2158; one observation
+  dismissed as the documented HumanPlayActive steal design)
+- Play changed after the sweep binary only through the M and D1-D3 fixes (each with unit tests that failed before
+  the fix and the sweep repros re-run on the fixed binary); every suite row was re-accepted on the final binary.
+
 ## Open questions for the user (work continues on the stated default)
 1. **Main-2 held-land bar vs Bloodghast** (USER 2026-09-30 "Only newly arrived lands in second main").
    "Pit Fighter sacs Bloodghast post-combat, then play the held land" is unfindable at any budget under the
