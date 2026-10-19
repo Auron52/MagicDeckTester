@@ -56852,6 +56852,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // ...and the REMAND rider: replay_recorded hands it back through m_cast_riders, so a
             // continuation's "cast X, Remand it" replays as that and not as a plain X.
             rec.remand_by          = cast_remand;
+            // ...and the PITCH EVOKE's exiled card (CastRiders::pitch_name -- Fury "Evoke--Exile a red
+            // card from your hand"): replay_recorded hands it back through m_cast_riders, and without
+            // it the executor's pitch guard finds NO pinned card and declines the cast (nothing paid,
+            // Fury stays in hand) while the rollout had evoked it -- its entry is two more Risen Reef
+            // looks. LandfallElementals s4004 gi28: the T3 search committed "Expanse, crack, Reef,
+            // Brushfire | bp Fury (evoke, exile Flamekin Harbinger)" as a T4 kill (opp -3), the
+            // replay cast nothing at the breakpoint and realised opp 5, T5 ([fd-diverge]
+            // realized_win=5 predicted_win=4). pitch_slot is enumeration-only (the subset guard).
+            rec.pitch_name         = riders.pitch_name;
             // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
             // the executor's replay traits (ComputePlanTraits over the records) count the same mana
             // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0

@@ -667,6 +667,24 @@ children, waves) passes a sink. The null-sink callers are `Solve` / `SolveWithLo
 `[fd-pred]`). Each mode therefore matches the executor route that consumes its plans. Fixed the one
 that did not: `[fd-pred]` now replays with a scratch sink, as the search applied the line.
 
+## #16 — a continuation's PITCH EVOKE was recorded without its exiled card (FIXED 2026-10-19)
+
+The breakpoint record (`apply_one`'s `Action rec`, the copy `AIEngine::replay_recorded` feeds back
+into `cast_by_name` through `m_cast_riders`) copies every cast rider field by field -- the #6 float
+colour, bestow, adventure, evoke, remand -- but not `CastRiders::pitch_name`, the hand card Fury's
+"Evoke--Exile a red card from your hand" exiles. Both worlds guard a pitch evoke on that pin (no
+pinned card in hand -> not cast, nothing paid), so a continuation's evoked Fury was cast by the
+rollout and declined by the replay.
+
+LandfallElementals d3 s4004 gi28, T4: the T3 search committed "Terramorphic Expanse, crack it,
+Risen Reef, Vial Brushfire Elemental | bp Fury (evoke, exile Flamekin Harbinger)" as a T4 kill
+(opp -3: the evoked Fury's entry is two more Reef looks, two Mountains, two more landfalls on
+Akoum Hellhound and Brushfire). The replay reached the same hand and board and cast nothing
+(`pitch=` empty against the rollout's `pitch=Flamekin Harbinger`), realising opp 5 -- T5
+(`[fd-diverge] realized_win=5 predicted_win=4`). Latent since Fury's pitch evoke landed; the
+crack-before-reader positions (lfe-fix-enum item 1) made a continuation that evokes Fury reach a
+committed line. Fix: `rec.pitch_name = riders.pitch_name`. `pitch_slot` is enumeration-only (the
+subset guard) and needs no record.
 ## #17 -- a breakpoint-node resume re-bound the line's unpaid-cost hold (found + fixed 2026-10-20)
 
 `ApplyPlanDirect` binds `g_line_unpaid_cost` from the WHOLE plan's bill at entry (`LineUnpaidCostScope`)

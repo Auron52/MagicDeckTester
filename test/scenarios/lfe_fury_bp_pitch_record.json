@@ -1,0 +1,34 @@
+{
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "seed": 7,
+  "active_life": 20,
+  "opponent_life": 2,
+  "library_filler": "Forest",
+  "library_size": 20,
+  "depth": 2,
+  "budget_ms": 20,
+  "max_turns": 5,
+  "_comment": "Rollout/executor lockstep #16 (docs/design/rollout-executor-lockstep.md; LandfallElementals d3 s4004 gi28, 2026-10-19): a PITCH EVOKE cast inside a breakpoint continuation must replay with its exiled card. Board: Risen Reef + a 0/1 Akoum Hellhound (the attacker), one Mountain; hand Akoum Hellhound + Brushfire Elemental; Fury on top, Forests below; opponent at 2. The only T4 kill: cast the second Hellhound, Reef looks Fury into hand (site-10 breakpoint), the continuation EVOKES Fury exiling Brushfire, Fury's entry is another Reef look (a Forest, landfall: the attacker is 2/3). The search commits it either way; before the fix the breakpoint record carried no pitch_name, the replay's pitch guard declined the cast and the game realised T5.",
+  "battlefield": [
+    {
+      "name": "Risen Reef"
+    },
+    {
+      "name": "Akoum Hellhound"
+    },
+    {
+      "name": "Mountain"
+    }
+  ],
+  "hand": [
+    "Akoum Hellhound",
+    "Brushfire Elemental"
+  ],
+  "library_top": [
+    "Fury"
+  ],
+  "expect_win_turn": 4
+}
