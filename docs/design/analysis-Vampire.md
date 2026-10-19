@@ -844,3 +844,12 @@ rules; gi1565's least-flexible pick).
 46. **The cost cache's Galadriel reference is stale** (2,969 vs ~94 ms/game today), so the 3x gate is mis-calibrated
     for every deck. [default: refill with `suite_gate.py --measure-all --no-run` off the next full regression run
     and commit `test/suite_cost.json` with this branch]
+47. **Bucket amendments from the d0 root-cause** (cast-order doc 5.1): (1) Keeper's delayed value x0.75 (Keeper 12 ->
+    10.5); (2) duplicate copies priced at cumulative cost. Each changes searched play too, so each needs the same A/B.
+    [default: buckets as drafted, OFF; amendments not tried]
+48. **Depth-0 runner blind spots** (hit both arms equally; they make d0 a noisy test for any discard / order rule):
+    the lethal check ignores a lord cast this turn, Condemned's pump and Keeper's transform; convoke tapping attackers
+    is not counted as lost attack; the Blood's +1 breaks ties against casting a lord; a colour-infeasible madness
+    cast scored as payable (2343, no effect). The d0 runner is the permitted greedy, so this is a quality work item,
+    not a no-greedy defect. [default: not taken up]
+
