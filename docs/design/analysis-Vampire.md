@@ -165,6 +165,21 @@ The rows stay on this branch (they carry the GT every check above used); nothing
 the suite over 3x so the mulligan profile can be generated (which brings it into range), or stays out until a perf
 route gets it there, is the USER's call (question 45; `MTG_ALLOW_UNTESTED_DECK` is a USER override).
 
+## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
+A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
+pre-fix engine (every new test failed there), then fixed:
+- **D1 (completeness):** madness convoke arms were priced on the PRE-PLAN board and pinned by INDEX, so bodies the
+  plan adds first (a Keeper token, a same-plan cast) were invisible and an index could resolve as a different arm or
+  a decline. A madness convoke cast is now pinned by its COVER (pips / generic its bodies pay), realised at the
+  trigger by the cheapest bodies that pay it there; `MadnessFanFor` offers every cover the trigger's board can pay;
+  new subset rule 10 (`SubsetMadnessCoverInvalid`) checks each plan's trigger in executed order (exact partition).
+- **D2 (completeness):** the madness path never applied convoke contention, so Q16's free-body dominance dropped the
+  land-paid arm even when a later steal needed the untapped Vampires; mirrors the hand-cast exception now.
+- **D3 (fold soundness):** rule 9's hand-size exemption was off by one (`h > 7` -> `h + 1 > 7`, the twin's hand), and
+  a land-after clone counted the held land (hid an emptied hand under Asylum Visitor).
+- Aether Vial's stale bracket note now describes `WantVialCharge`. Melira Pod / Knights byte-identical; Vampires
+  60 d3 + 30 d5 paired games: 0 moved. Units 1578/1578.
+
 ## Open questions for the user (work continues on the stated default)
 1. **Main-2 held-land bar vs Bloodghast** (USER 2026-09-30 "Only newly arrived lands in second main").
    "Pit Fighter sacs Bloodghast post-combat, then play the held land" is unfindable at any budget under the
@@ -852,4 +867,19 @@ rules; gi1565's least-flexible pick).
     is not counted as lost attack; the Blood's +1 breaks ties against casting a lord; a colour-infeasible madness
     cast scored as payable (2343, no effect). The d0 runner is the permitted greedy, so this is a quality work item,
     not a no-greedy defect. [default: not taken up]
+49. **The trailing order is a fixed sequence per plan, not ordering-only** (the Stage 6a audit; the provider class
+    header calls it ordering). Beyond questions 34 / 43, three more lines are inexpressible within one main: Keeper
+    token -> a hand-cast Baron convoking it (casts run before activations), steal -> Baron convoking the stolen body,
+    steal -> Pit Fighter sacrificing the stolen creature. Main 2 or a breakpoint recovers some. [default: disclosed]
+50. **Question 4's cleanup-madness "always cast" argument misses Asylum Visitor**: casting the last card at cleanup
+    empties the hand, and the Visitor's upkeep draw costs 1 life, lethal at 1 life under own-death checks.
+    Theoretical. [default: unchanged]
+51. **Rollout madness pin** (D1 fix): beyond the horizon the single madness variant is now the default cover chosen
+    on the pre-plan board and realised with the cheapest bodies at the trigger (it no longer uses free bodies the
+    plan adds first). Alternative: compute the rollout's pin on a board including those arrivals. [default: as built]
+52. **GUI: Markov Baron's hard-cast convoke arm cannot be picked** (`CheckLine` has no convoke dimension, so arms with
+    the same casts collapse to the first payable one; claude-play lists every arm). [default: viewer follow-up]
+53. **Viewer auditor coverage**: `sacrifice` is never an expected decision type (Pit Fighter's `sac_creature_outlet`
+    is classed INERT), so the dynamic sweep never checks that prompt (the claude-play sweeps did, by hand); and the
+    INERT rows for Asylum Visitor and cluster C's combat params await your OK (question 31). [default: as classified]
 
