@@ -13023,15 +13023,18 @@ static bool SubsetDiscardOutletsUnpayable(const GameState& state, const std::vec
 // the act of discarding but a graveyard-landfall watcher -- Bloodghast, exempt below -- and madness, whose
 // CAST answer is never folded). X in hand is read by the HAND-SIZE rules, which this rule checks exactly:
 //   * a hellbent upkeep reader (Asylum Visitor: "if that player has no cards in hand, you draw") on our
-//     battlefield or in our hand, when the plan can leave the hand EMPTY -- the discard then buys a card;
-//   * the cleanup's maximum hand size, when the plan can leave MORE than seven -- the discard then picks
-//     which card goes instead of the cleanup's own ranking;
+//     battlefield or in our hand, when the plan -- or its land-AFTER clone, which plays a land still in
+//     hand -- can leave the hand EMPTY: the discard then buys a card;
+//   * the cleanup's maximum hand size, when the TWIN (one card more) would leave MORE than seven: the
+//     discard then picks which card goes instead of the cleanup's own ranking (Stage 6a defect D3: the
+//     test was the plan's own hand, off by one);
 //   * a DRAW in the selection (Falkenrath Pit Fighter, the Blood crack) -- its hand-entry breakpoint
 //     re-solves the phase, so the end-of-turn hand is not this selection's to count: no fold.
 // Every exemption keeps the plan, so the rule can only remove a selection whose twin without the pump is
 // enumerated too (dropping one action never violates another subset rule: rules 1 / 8 count discards and
 // only relax). A DOMINANCE fold, not an identity: the two plans reach different states, so the measured
 // claim is per game at large budget, never byte-identity of the run.
+static bool EnumKarooDropActive();   // KarooDropEnumScope's flag (defined with g_enum_karoo_drop, below)
 static bool PostCombatPumpDiscardFoldOn()
 {
     static const bool env = EnvOn("MTG_VAMP_M2_PUMP_DISCARD_FOLD", true);
@@ -13069,8 +13072,34 @@ static bool SubsetPostCombatPumpDiscardDominated(const GameState& state, const s
             || (d.kind == Action::Kind::SacCreatureOutlet && d.def != nullptr && d.def->params.sac_outlet_draw > 0))
         { return false; }   // a draw: the hand-entry breakpoint re-solves the phase
     }
-    if (h > 7) { return false; }   // the cleanup would discard: the pump's pick is a real choice there
-    if (h <= 0)
+    // THE END-OF-TURN HAND, exact for every shape this enumeration's plans take (Stage 6a defect D3,
+    // 2026-10-19). `h` is the hand AFTER the pump on the board this selection is enumerated on, and the
+    // fold's twin -- the same plan without the pump -- holds ONE MORE card, so:
+    //   * the cleanup's maximum hand size makes the pump's pick a real choice as soon as the TWIN would
+    //     discard (h + 1 > 7): at h == 7 the twin's cleanup sheds the provider's front pick (cleanup width
+    //     1, unbranched) where the pump sheds the searched card, so the two plans end in different hands
+    //     and the dominance fails. The test used to be `h > 7`.
+    //   * the land drop: a plan enumerated with its drop still OPEN and a land in hand (the "defer" family,
+    //     land not yet played) is also cloned "land AFTER the activations" (land_slot -1; the Bloodghast
+    //     return) -- the clone plays that land out of the hand, so ITS hand is h - 1, and an empty hand
+    //     under Asylum Visitor hid at h == 1. A Karoo plan (enumerated with the bounce land out of the
+    //     hand, KarooDropEnumScope) gets a land BACK at the deferred drop: h + 1. A land-first plan (and
+    //     its position-k clones) is enumerated after its drop, so its `h` is already exact.
+    // Every widening keeps the plan, so a bound in the cautious direction costs only search.
+    bool land_after = false;
+    if (LandOrderMatters(state) && ap.lands_played_this_turn < ap.LandDropsAvailable())
+    {
+        for (const Card& hc : ap.hand)
+        {
+            if (hc.m_is_staged) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (hd != nullptr && hd->card.IsLand()) { land_after = true; break; }
+        }
+    }
+    const int h_max = h + (EnumKarooDropActive() ? 1 : 0);
+    const int h_min = h - (land_after ? 1 : 0);
+    if (h_max + 1 > 7) { return false; }   // the twin's cleanup would discard: the pump's pick is a real choice
+    if (h_min <= 0)
     {
         auto reads_hellbent = [](const CardDefinition* d) { return d != nullptr && d->params.hellbent_upkeep_draw > 0; };
         for (const Permanent& q : state.battlefield)
@@ -27942,6 +27971,7 @@ static std::vector<int> FadeKLandmarks(const FadeBoardRead& r, int C, int cost, 
 // signature to keep land-Aura host variants distinct exactly there (MTG_EDF_AURA_HOST_SIG_KAROO),
 // and by FoldInterchangeableAuraHosts below for the same reason.
 static thread_local bool g_enum_karoo_drop = false;
+static bool EnumKarooDropActive() { return g_enum_karoo_drop; }
 // ...and WHICH card that deferred karoo is (its m_number, 0 = none): a land Aura may name it as its
 // host (Bruna sweep D -- Wild Growth on a same-turn Azorius Chancery), cast after the karoo lands.
 static thread_local int  g_enum_karoo_num  = 0;
