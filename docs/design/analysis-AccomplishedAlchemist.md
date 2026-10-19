@@ -7,11 +7,13 @@ forked from `phase-1-2-deck-analyzer` @ 2176032d).
 ## RESUME POINT
 
 Chunks A, B, C1, C2a, C2b, P, E1 landed (E1 = the Stage-5 / claude-play engine fixes: fd-diverge lockstep,
-Arbor Elf's aura yield, site-9 re-open + chained loop payoffs, loop colour, wish singletons). Next: the suite
-entry (regression_cases.sh + suite_gate --cost -- NOTE the per-game cost at seed 70001 d5 b40 is ~20 s
-contended, over the 8,907 ms line, and is dominated by mulligan bottom-trial games; see Chunk E1 "Budget"),
-then profile -> mulligan -> value leaf. Viewer flags are the viewer worktree's. Open USER items are listed
-under "Open questions surfaced to USER".
+Arbor Elf's aura yield, site-9 re-open + chained loop payoffs, loop colour, wish singletons). The SUITE ENTRY
+was attempted 2026-10-19 and STOPPED before adding rows (see "Suite entry attempt (2026-10-19)"): the
+status-quo deck is over the 8,907 ms/game line, no `bottom_eval_*` arm met the adoption rule, and NOTHING was
+adopted or added. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
+`MTG_ALLOW_UNTESTED_DECK=1`), and/or the per-node enumeration cost found in the same attempt; then the suite
+rows, then profile -> mulligan -> value leaf. Viewer flags are the viewer worktree's. Open USER items are
+listed under "Open questions surfaced to USER".
 
 ## The deck
 
@@ -57,6 +59,52 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Suite entry attempt (2026-10-19) -- bottom_eval A/B; NOTHING adopted, NO rows added
+
+Binary 814d8954 (Release; mtg-test 1499/1499). Arms are per-job profile variants in ONE pooled `mtg --batch`
+per round (32 threads, heartbeat 32/32), `MTG_SLOW_GAME_MS=1` for per-game ms + units. Raw:
+`build/scratch/aa/beval{,2,3}/` (an.py there). Arms: a = unset (status quo); b = depth 0 + topk 5 (Melira);
+c = depth 0 + topk 3; d = depth 0, no refine (floor); e = budget_ms 2 + topk 3 (stage 1 SEARCHED at the
+real depth, cheap); f = b2 k5; g = b5 k3; h = b2 k2. Rationale for e-h: Melira's depth-0 stage 1 is a
+greedy rollout, which cannot rank this deck's hands (b/c/d lose 0.05-0.15 turns everywhere).
+
+Seed 70001, 200 games (avg win turn, unwon = 9; faster/slower vs a; mean ms/game, 32-way contended):
+
+| arm | d3 b10 | d3 b20 | d5 b20 | d5 b40 | ms/game d3b10 / d5b20 |
+|---|---|---|---|---|---|
+| a | 5.8150 | 5.7550 | 5.7450 | 5.6850 | 7,509 / 13,414 |
+| b d0 k5 | 5.8850 (0/11) | 5.8100 (0/8) | 5.8000 (0/8) | 5.7300 (0/8) | 5,645 / 10,317 |
+| c d0 k3 | 5.8850 (1/13) | 5.8150 (0/9) | 5.8050 (0/9) | 5.7350 (2/11) | 4,182 / 7,170 |
+| d d0 | 5.9650 (1/20) | 5.9100 (0/19) | 5.9000 (0/19) | 5.8350 (1/19) | 1,967 / 3,398 |
+| e b2 k3 | 5.8100 (3/2) | 5.7600 (1/1) | 5.7600 (0/2) | 5.7000 (2/4) | 5,462 / 7,977 |
+| f b2 k5 | 5.8200 (2/2) | 5.7600 (1/1) | 5.7600 (0/2) | 5.7100 (2/5) | 7,440 / 10,343 |
+| g b5 k3 | 5.8200 (2/3) | 5.7600 (1/1) | 5.7600 (0/2) | 5.6950 (2/3) | 6,987 / 9,474 |
+| h b2 k2 | 5.8050 (4/2) | 5.7650 (2/2) | 5.7600 (2/3) | 5.6950 (4/5) | 4,727 / 7,092 |
+
+10x budget re-runs of e's / h's slower games (both arms): RECOVER gi72 (3/3 in every cell), gi93 (7/7), gi164
+(6/6), gi34 (5/5); PERSIST gi21 (a 4, e/h 6 at d5 b400), gi48 (a 5, e/h 6), gi173 (a 5, h 6 at every 10x cell).
+
+Held-out seed 90001, 600 games, suite cells (paired over 599; gi286 of arm a ran > 45 min at both cells and
+was not waited for): d5 b20 a 5.6344, e 5.6144 (-0.020, 13 faster / 6 slower), h 5.6077 (-0.027, 16 / 7);
+d3 b10 a 5.6861, e 5.6795 (-0.007, 10 / 5), h 5.6728 (-0.013, 13 / 6). Held-out slower games NOT re-run at 10x.
+Mean ms/game at d5 b20: a 14,841, e 10,532, h 9,269 -- ALL OVER the 8,907 line on this sample.
+
+**Verdict (decision rule; mulligan policy is the USER's): no arm qualifies, nothing adopted, no rows added.**
+No arm is win-turn-identical; e/h are net better on the 600-game held-out sample but net +0.015 at d5 on the
+200-game set, and three slower games persist at 10x (gi21, gi48, gi173). And no arm is reliably under the
+line: h at d5 b20 is 7,092 ms on seed 70001 but 9,269 on seed 90001.
+
+**Why bottoming is not the whole story -- per-node cost the work meter does not see.** The held-out tail is
+games whose ms/unit ratio is ~5x the norm, IDENTICAL across arms (so not bottoming): 90061 (gi60) d5 b20 is
+494,867 units in every arm and ~450 s contended / 94 s single-thread (5.2 k units/s vs ~25 k typical); gi286,
+gi408 likewise. perf on gi60 (Release, single thread): plan enumeration dominates --
+`EnumeratePlansWithLandUncached` 13%, `BpDeriveContinuationList` 14% (`AppendSubdecisionAxes`), string
+construction from `char*` + `operator+` 9%, `CardDefinition` hashtable `find` by string 2%, `vector<Action>`
+push/destroy 6.5%, allocator ~20%. This unmetered work is ALSO why the contended wall is ~4.8x single-thread
+on these games (allocator-bound). Per the collapse rule, this is the per-node stage: a candidate engine chunk
+(cache the enumeration per state / remove per-node string building) ahead of, or alongside, the bottom_eval
+decision.
 
 ## Chunk E1 (2026-10-19) -- landed: the Stage-5 / claude-play engine fixes
 
@@ -578,6 +626,12 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   land-Aura fold was NOT built (a dominance that fails across a phase boundary -- lossy); C2b's 3.7x pricing of
   it was unsound. (5) `MTG_SOLVE_CHARGE_W=16` measured (0.55x, d5 +0.067 turns), not adopted -- not needed.
 
+* **Suite entry (2026-10-19) -- USER decision owed, nothing adopted.** Recommendation: `bottom_eval_budget_ms 2 +
+  bottom_eval_topk 2` (arm h) as the pre-keep-table cost setting -- net -0.027 / -0.013 turns on 600 held-out
+  games at d5 b20 / d3 b10, ~35% cheaper, but +0.015 at d5 on the 200-game set with 3 games that persist at
+  10x, and still over the 8,907 ms line on the held-out sample (9.3 s/game) because of unmetered per-node
+  enumeration cost (see "Suite entry attempt"). So the deck needs BOTH (or the mulligan stage first, which
+  needs `MTG_ALLOW_UNTESTED_DECK=1`, a USER call) before it can enter the suite.
 * Chunk E1: (1) `MTG_SITE9_REOPEN` is DEFAULT ON engine-wide (site 9 re-opens after an applied continuation,
   targeted occurrences only); smoke moved no case. (2) `BurstPendingActColour` changes which colour a burst
   source floats when a plan's trailing activation owes a pip (a payment choice; AA-only in practice).
