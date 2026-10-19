@@ -106,6 +106,14 @@
    "total_core_ms": 218800,
    "worst_case": "edf_regression_d5_s3003"
   },
+  "elementals": {
+   "cost_per_game_ms": 2179.2667,
+   "jobs": 5,
+   "key": "elementals",
+   "tier": "regression",
+   "total_core_ms": 593027,
+   "worst_case": "elementals_regression_d5_s2002"
+  },
   "fivecolour": {
    "cost_per_game_ms": 631.06,
    "jobs": 6,

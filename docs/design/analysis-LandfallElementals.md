@@ -156,6 +156,18 @@ periodic overnight run (CLAUDE.md overnight rule).
 `audit_card_fields.py`: snapshot refreshed (the bulk --update hit 429s; Risen Reef, Waterlogged Grove
 and 3 Temples re-fetched individually), rc=0, all 593 cards' hard fields match.
 
+## Stage 4-bis / 5j — IN THE SUITE, all three tiers (2026-10-19)
+Key `elementals` (+ smoke canary `elementals2hg`). Probe at Landfall's shape measured ~1.6 s/game worst,
+so the rows were sized to the colossus gate shape + the overnight ENTRY set: smoke d0 1000 / d3 150 b10 /
+d5 75 b20 / 2hg d3 25; regression d0 1000, d3 2x150, d5 2x75; overnight d0 4x2000, d3 4x400 b10, d5
+4x300 b20. 21 NEW keys accepted with matching `--deck=` filters (only those keys + the header moved;
+`check_gt_logs` 756 consistent). `suite_gate.py --measure`: **2,179 ms/game** (worst
+`elementals_regression_d5_s2002`), 593 core-s, **0.73x galadriel (limit 3x) -> PASS**; `--require` ok.
+The measurement re-ran the regression rows: all 5 byte-identical to the accepted GT (determinism).
+Multi-depth (5b first read): d0 5.77-5.82, d3 4.59-4.67, d5 4.58-4.67 -- monotonic within noise
+(d5 <= d3 on the overnight mean, 4.611 vs 4.635), and T4-T5 is the deck's realistic clock.
+One SLOW-GAME: overnight d5 s4004 gi89 30.5 s (won T5) -- to inspect at 5c.
+
 ## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
 Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
 STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout

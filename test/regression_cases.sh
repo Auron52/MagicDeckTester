@@ -77,6 +77,7 @@ declare -A DECK_FILE=(
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
   [vampires]=decks/Vampires/Vampire.cod
   [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.cod
+  [elementals]=decks/LandfallElementals/LandfallElementals.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -116,6 +117,7 @@ declare -A DECK_PROF=(
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
   [vampires]=decks/Vampires/Vampire.profile.json
   [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.profile.json
+  [elementals]=decks/LandfallElementals/LandfallElementals.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -400,6 +402,8 @@ SMOKE_CASES=(
   # colossus2hg: a canary for Speaker of the Heavens' "at least 7 life more than your STARTING life
   # total" gate, which reads the 2HG starting life (30), and for a 30-life opponent the Hammer must reach.
   "colossus2hg        3 1001 50 10"
+  # elementals2hg: a small searched canary (no per-opponent card in the list).
+  "elementals2hg      3 1001 25 10"
   # pd2hg: a RELEVANT deck, not a canary -- Dina ("each opponent loses 1"), Rolling Earthquake /
   # Pyrohemia ("each player") and Vito ("target opponent") all read heads / life. See the pd rows.
   "pd2hg              3 1001 15 10"
@@ -572,6 +576,15 @@ SMOKE_CASES=(
   "alchemist 3 1001  150 10"
   "alchemist 5 1001   75 20"
   "alchemist2hg 3 1001 50 10"
+  # elementals (LandfallElementals): ADDED 2026-10-19 by the analysis (docs/design/analysis-LandfallElementals.md),
+  # all three tiers at once (the all-or-none rule), at the colossus gate shape and the overnight ENTRY set:
+  # its worst searched case measured ~1.6 s/game (0.55x galadriel) before a keep table -- most of it
+  # mulligan-bottoming trial games, which the keep table replaces; the overnight rows grow to the FULL set
+  # at the keep-table adoption. Key `elementals`, not `landfall_elementals`, so no `landfall_` prefix match can capture it.
+  # No value leaf and no keep table yet, so GT WILL move when they land.
+  "elementals 0 1001 1000 0"
+  "elementals 3 1001  150 10"
+  "elementals 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -944,6 +957,12 @@ REGRESSION_CASES=(
   "alchemist 3 3003  150 10"
   "alchemist 5 2002   75 20"
   "alchemist 5 3003   75 20"
+  # elementals: see the SMOKE block.
+  "elementals 0 2002 1000 0"
+  "elementals 3 2002  150 10"
+  "elementals 3 3003  150 10"
+  "elementals 5 2002   75 20"
+  "elementals 5 3003   75 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -1722,4 +1741,17 @@ OVERNIGHT_CASES=(
   "alchemist 5 5005  300 20"
   "alchemist 5 6006  300 20"
   "alchemist 5 7007  300 20"
+  # elementals: see the SMOKE block. Overnight ENTRY set until the keep table (expand then).
+  "elementals 0 4004 2000 0"
+  "elementals 0 6006 2000 0"
+  "elementals 0 8008 2000 0"
+  "elementals 0 10010 2000 0"
+  "elementals 3 4004  400 10"
+  "elementals 3 5005  400 10"
+  "elementals 3 6006  400 10"
+  "elementals 3 7007  400 10"
+  "elementals 5 4004  300 20"
+  "elementals 5 5005  300 20"
+  "elementals 5 6006  300 20"
+  "elementals 5 7007  300 20"
 )
