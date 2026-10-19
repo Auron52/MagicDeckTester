@@ -501,6 +501,23 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   land-Aura fold was NOT built (a dominance that fails across a phase boundary -- lossy); C2b's 3.7x pricing of
   it was unsound. (5) `MTG_SOLVE_CHARGE_W=16` measured (0.55x, d5 +0.067 turns), not adopted -- not needed.
 
+## Claude-play sweep
+- commit: `251c426e`
+- seeds: 80001-80020 (claude-play deals by seed only) games: 20
+- flags: 9 unresolved
+- Result: Claude faster than the search in 3 (80017 T4 vs T6, 80019 T6 vs T8, 80020 T4 vs T5), slower in 5 (deal mismatch / Claude tempo), tied 10, both unwon 2. Raw: build/scratch/aa/sweep_results.jsonl.
+- UNRESOLVED (fix chunk E):
+  - Arbor Elf credited a flat +1 G; untapping an aura-enchanted Forest (Wild Growth / Utopia Sprawl) yields 2-3 (4 independent reports; hid a T2 Alchemist on 80020). The card note's "which Forest is outcome-identical" is false with land auras.
+  - One mid-turn re-plan per plan application: after a loop, Living Wish -> Scholar -> drain (80017) or a second loop once a Staff draw finds Stroke (80018) is unreachable this turn.
+  - Loop colour axis can make a plan's own untap unpayable (W floated, Umbra needs U; 80019) -- silently dropped.
+  - Loop offers that run 0 iterations (80010) and combined "Stroke small X + LOOP" plans that cast Stroke first (80013, 80018).
+  - Living Wish -> the single sideboard Alchemist listed twice in one plan (80012).
+  - Staff {5},{T} draw never offered standalone (80005) -- verify.
+  - VIEWER: after a loop the human menu (16000-position cap) drops Stroke of Genius entirely (80016) -- human cannot win; X needs to be a follow-up decision under large float.
+  - VIEWER: life_gained_this_turn, opponent library size, floating pool, current P/T, Alchemist yield not exposed; Crab Umbra untap cost label shows U; Ezuri combat pump resolves without a decision (80006, 80008, 80003).
+  - Budget overrun: single benchmark games at d5 b200 took 402 s (80012) and 33 min / 75M units (80019).
+- DISMISSED: Harbinger decline leaves library unshuffled (declining = not searching; correct). Trufflesnout via attack_mode (deliberate reuse). dropped_casts on unpayable cast orders (existing enumerate-optimistic pattern, disclosed).
+
 ## Approved deferrals
 
 (none yet)
