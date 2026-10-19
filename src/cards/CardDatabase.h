@@ -248,6 +248,14 @@ struct CardParams
     // PutQuestCounters (Doubling Season doubles it). The "may" is resolved as YES by dominance (see
     // FireLandfallTriggers).
     int                      landfall_quest_counters       = 0;
+    // "This creature gets +P/+T until end of turn" (Akoum Hellhound, Brushfire Elemental: +2/+2). A
+    // SELF pump: no target, no choice, MANDATORY. Through Permanent::temp_power_bonus /
+    // temp_tough_bonus, which BOTH cleanup sites clear (GameEngine::CleanupStep and the rollout's
+    // twin in TurnSolver) -- so a pump from a land played in main 1 is on the attacker at combat
+    // damage and gone next turn, in the executor and the search alike. Power and toughness are
+    // separate fields so a +1/+0 landfall body (a later card) reuses them.
+    int                      landfall_self_pump_power      = 0;
+    int                      landfall_self_pump_toughness  = 0;
     // "double the number of +1/+1 counters on this creature" (Mossborn Hydra, 2026-10-22). The
     // keyword action DOUBLE (CR 701.10e): put on it as many +1/+1 counters as it has AT RESOLUTION,
     // through DoublePlusCounters (SpellEffects.h) -- the shared routine a later "double the counters"
@@ -4377,7 +4385,8 @@ inline bool DefHasLandfallTrigger(const CardParams& p)
         || (p.landfall_target_counters > 0 && !p.landfall_target_subtype.empty())
         || p.landfall_lifegain > 0
         || p.landfall_quest_counters > 0
-        || p.landfall_double_self_counters;   // Mossborn Hydra (2026-10-22)
+        || p.landfall_self_pump_power > 0 || p.landfall_self_pump_toughness > 0
+        || p.landfall_double_self_counters;
 }
 
 // Codegen hints for CardDatabase::LookupCached (the hottest call in the search; see its comment).

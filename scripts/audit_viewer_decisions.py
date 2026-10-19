@@ -727,6 +727,9 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # ---- LandfallElementals (2026-10-18) -- PROVISIONAL, pending the user's OK ----
+    "landfall_self_pump_power": "Akoum Hellhound / Brushfire Elemental: 'this creature gets +2/+2 until end of turn' on each landfall -- MANDATORY, untargeted SELF pump, no choice (the land drop's timing is the decision and rides main_phase via Plan::land_slot)",
+    "landfall_self_pump_toughness": "toughness half of the landfall self pump (rides landfall_self_pump_power) -- no choice",
     # ---- NivMizzetCombo (2026-10-17) -- PROVISIONAL, pending the user's OK ----
     "sac_for_mana_requires_tap": "Generator Servant's {T}-in-cost: a LEGALITY restriction (summoning sickness, CR 302.6) on an already-mapped sac-for-mana activation; it removes an option, creates none",
     "sac_for_mana_grants_haste": "Generator Servant's haste rider: which {C} pays a creature spell is a payment attribution folded SOUNDLY (one tagged {C} first, identical mana -- TakeHasteFloatForCreatureSpell), not a player decision; whether to crack rides main_phase like sac_for_mana_amount",

@@ -7469,11 +7469,13 @@ inline void FireSnowEnterWatchers(GameState& state, int entered_index)
 //   one for every payload in the pool: Avenger's "each Plant" counters land on the Plants its own ETB
 //   just made.) A put of SEVERAL LANDS AND NOTHING ELSE (Primeval Titan, Khalni Heart Expedition's
 //   sacrifice) may simply call EnterLand once per land: every landfall payload in the pool commutes
-//   with every other (tokens, counters on each <subtype>, life, quest counters, a creature doubling its
-//   OWN counters -- Mossborn Hydra is no Plant, so no other payload puts a counter on it) and no
-//   payload makes a permanent another landfall trigger could target, so sequential and simultaneous
-//   resolution are identical. A future payload that DOES create a target-subtype permanent breaks
-//   that argument and must take the snapshot shape instead.
+//   with every other (tokens, counters on each <subtype>, life, quest counters, the until-end-of-turn
+//   SELF pump, and the SELF counter doubling -- the doubling touches only its own body, which no
+//   other payload in the pool puts counters on: Mossborn Hydra is not a Plant) and no payload makes a
+//   permanent another landfall trigger could target, so sequential and simultaneous resolution are
+//   identical. A future payload that DOES create a target-subtype permanent breaks that argument and
+//   must take the snapshot shape instead; so does one that puts +1/+1 counters on a body that also
+//   doubles its own (+1 then double != double then +1).
 //
 //   PER-GAME GATE: GameState::deck_has_landfall (stamped from DefHasLandfallTrigger, the same
 //   disjunction as the per-definition CardDefinition::landfall_watcher byte). A deck with no landfall
@@ -7857,6 +7859,33 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
                     EmitPlayEvent(state.turn_number, "trigger",
                                   "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name
                                   + "): quest counter (" + std::to_string(w.quest_counters) + ")");
+                }
+                break;
+            }
+        }
+
+        // "This creature gets +P/+T until end of turn" (Akoum Hellhound, Brushfire Elemental: +2/+2).
+        // MANDATORY, untargeted, no choice. One pump per land entry, so two lands this turn (a drop
+        // and a Terramorphic crack) is +4/+4. Until end of turn through temp_power_bonus /
+        // temp_tough_bonus, which BOTH cleanup sites clear (GameEngine::CleanupStep and its rollout
+        // twin) -- the executor and the search see the same pump at this turn's combat damage and
+        // neither carries it into the next turn. Re-found by number (the token payloads above may
+        // have reallocated the battlefield).
+        if (wp.landfall_self_pump_power > 0 || wp.landfall_self_pump_toughness > 0)
+        {
+            for (Permanent& w : state.battlefield)
+            {
+                if (w.card.m_number != num || w.controller_index != controller) { continue; }
+                w.temp_power_bonus += wp.landfall_self_pump_power;
+                w.temp_tough_bonus += wp.landfall_self_pump_toughness;
+                if (log)
+                {
+                    EmitPlayEvent(state.turn_number, "trigger",
+                                  "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name + "): +"
+                                  + std::to_string(wp.landfall_self_pump_power) + "/+"
+                                  + std::to_string(wp.landfall_self_pump_toughness)
+                                  + " until end of turn (now " + std::to_string(w.EffectivePower())
+                                  + "/" + std::to_string(w.EffectiveToughness()) + ")");
                 }
                 break;
             }

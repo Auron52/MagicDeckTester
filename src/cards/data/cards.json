@@ -11384,6 +11384,25 @@
    }
   },
   {
+   "name": "Waterlogged Grove",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}, Pay 1 life: Add {G} or {U}.\n{1}, {T}, Sacrifice this land: Draw a card. [Exact sibling of Fiery Islet / Horizon Canopy / Silent Clearing (the Horizon land cycle), the same two params, nothing deferred. Clause 1: produces (G,U) + tap_self_damage 1 -- the land has NO {C} mode, so every tap (coloured or generic) costs 1 life (PainForTap: has_c_mode false). WHICH colour a tap makes is the mana payment's (the standing payment exemption), as for every multi-colour land. The life payment is a COST (CR 119.4 / 602.2), taken through the shared pain path; on a dmg_events-armed board it is recorded via ArmedManaTap like every pain land, so the cost-vs-damage distinction is observable only beside damage prevention / redirection (Purity), which no deck running this land plays. Clause 2: sacrifice_draw_cost {1} -- pay {1}, tap and sacrifice the land, draw one (the land cannot tap for mana toward its own activation: {T} is part of the cost). Whether a line digs is offered by the provider's dig gate (GenericProvider::HasAnyDigSource / ShouldConsiderDig), as for every sac-to-draw land; the human gets the dig as a main-phase line. Leaving the battlefield by sacrifice is not a land entering, so it fires no landfall.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "tap_self_damage": 1,
+    "sacrifice_draw_cost": "{1}"
+   }
+  },
+  {
    "name": "Adelbert Steiner",
    "mana_cost": "{1}{W}",
    "types": [
@@ -12146,6 +12165,50 @@
     "land_search_count": 2,
     "land_search_basic_only": true,
     "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Akoum Hellhound",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Dog"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn. [LANDFALL SELF-PUMP: landfall_self_pump_power 2 + landfall_self_pump_toughness 2 -- +2/+2 until end of turn on THIS creature: mandatory, untargeted, no choice. Once per land that enters under our control, PLAYED or PUT alike, through the one landfall chokepoint OnLandEntered (the land drop, a Terramorphic Expanse / Myriad Landscape crack, a fetch, Gruul Turf, a land put by an effect), so a drop plus a crack is +4/+4. Applied as temp_power_bonus / temp_tough_bonus, which BOTH cleanup sites clear (GameEngine::CleanupStep and the rollout's twin), so the pump is on the attacker at this turn's combat damage and gone next turn -- in the real game and in the search alike. A summoning-sick Hellhound cannot attack, so a pump matters only on a turn it can; the land drop's position relative to a watcher cast is searched anyway (Plan::land_slot keys on the landfall_watcher byte). Nothing deferred.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_self_pump_power": 2,
+    "landfall_self_pump_toughness": 2
+   }
+  },
+  {
+   "name": "Brushfire Elemental",
+   "mana_cost": "{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Haste",
+    "Landfall"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Haste\nThis creature can't be blocked by creatures with power 2 or less.\nLandfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn. [HASTE: the keyword, read by every attack-eligibility site -- it attacks the turn it is cast, which is what makes 'cast Brushfire, THEN play the land' worth +2/+2 of damage THIS turn; that position is searched (Plan::land_slot -- Brushfire is a landfall watcher). LANDFALL SELF-PUMP: landfall_self_pump_power 2 + landfall_self_pump_toughness 2, exactly as Akoum Hellhound: once per land played or put (OnLandEntered), until end of turn through temp_power_bonus / temp_tough_bonus, cleared at both cleanup sites. [PARTIAL: 'can't be blocked by creatures with power 2 or less' is not modelled; WHY inert: the passive goldfish opponent never blocks, so a restriction on its blockers changes no game (the Goblin King mountainwalk / Hunted Phantasm precedent). PROVISIONAL, user sign-off pending.]]",
+   "template": "custom",
+   "parameters": {
+    "landfall_self_pump_power": 2,
+    "landfall_self_pump_toughness": 2
    }
   },
   {

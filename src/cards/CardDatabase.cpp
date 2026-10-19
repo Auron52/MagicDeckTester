@@ -865,6 +865,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.landfall_lifegain              = params.value("landfall_lifegain", 0);
     p.landfall_quest_counters        = params.value("landfall_quest_counters", 0);
     p.landfall_double_self_counters  = params.value("landfall_double_self_counters", false);   // Mossborn Hydra
+    p.landfall_self_pump_power       = params.value("landfall_self_pump_power", 0);
+    p.landfall_self_pump_toughness   = params.value("landfall_self_pump_toughness", 0);
     p.etb_tokens_per_land            = params.value("etb_tokens_per_land", 0);
     p.etb_tokens_per_land_basic_only = params.value("etb_tokens_per_land_basic_only", false);
     // Courser of Kruphix's two static clauses (CardParams' LIBRARY TOP block).
