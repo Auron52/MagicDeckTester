@@ -3608,7 +3608,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             try { hm = nlohmann::json::parse(firstline); } catch (...) { hm = nlohmann::json(); }
             const PoolFp jfp = ComputePoolFp(deck, eq, K);
             const auto& m = hm.contains("meta") ? hm["meta"] : hm;
-            // NAME THE FIELD THAT MISMATCHED (2026-10-02). These seven are a short-circuit && chain,
+            // NAME THE FIELD THAT MISMATCHED (2026-10-02). These were seven (R was dropped 2026-10-19, below) in a short-circuit && chain,
             // so the first failure decided the verdict and the only thing printed was the generic
             // "fingerprint MISMATCH" -- which cost a 350 MB / 5.58M-record banked journal. The
             // operator had set MTG_KEEP_RETAIN_FOREIGN (correctly) and reasonably concluded the
@@ -3628,11 +3628,24 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                + static_cast<int>(jchk(m.value("K", -1) == K, "K (bucket count)"))
                + static_cast<int>(jchk(m.value("max_mull", -1) == cfg.max_mull, "max_mull"))
                + static_cast<int>(jchk(m.value("equiv_seed", 0ULL) == cfg.equiv_seed, "equiv_seed"))
-               + static_cast<int>(jchk(m.value("R", -1LL) == static_cast<long long>(cfg.rollouts),
-                     "R (rollouts/hand: journal " + std::to_string(m.value("R", -1LL)) + " vs this run "
-                     + std::to_string(cfg.rollouts) + " -- RECIPE MISMATCH, `fast` is R=30 and `complete` "
-                     "is R=40; relaunch with the recipe the journal was rolled at to resume it)"))
-               == 7;
+               == 6;
+            // THE CAP R IS NOT AN IDENTITY FIELD -- A RECIPE CHANGE CARRIES EVERY ROLLOUT (USER 2026-10-19:
+            // "We should not start from scratch", "we should just keep any extra rollouts. Throwing them away
+            // is a waste."). A cell's value is the mean of its kept hand's rollouts at this depth/budget/play
+            // digest (all still gated), which no recipe changes; the recipe only sets how many rollouts a cell
+            // gets and how bottoming reads the sub-tables. Rollout r of a cell is seeded by (seed_base, r, w,
+            // pd) alone, so continuing a cell from its journalled count is byte-identical to rolling it here
+            // from zero. Records therefore replay with their own n: a cell at/above this run's cap is done
+            // (every refine path skips cnt >= r_max), a cell below it continues on the same seed stream.
+            // Landfall 2026-10-19: 14 h of a `complete` (R=40) run relaunched as `fast` (R=30) kept its
+            // 473,160 size-7 floor cells and 158,792 sub-table cells at n=40, instead of a fresh start.
+            if (const long long jR = m.value("R", -1LL); fp_ok && jR != static_cast<long long>(cfg.rollouts))
+            {
+                std::cerr << "[keepgen] RESUME(journal): cap R differs (journal " << jR << ", this run "
+                          << cfg.rollouts << ") -- CARRYING every banked rollout: cells keep their own"
+                             " counts; those at/above R=" << cfg.rollouts << " are done, the rest continue"
+                             " on the same seed stream.\n" << std::flush;
+            }
             if (!jmiss.empty())
             {
                 std::cerr << "[keepgen] RESUME(journal): " << journal_path
