@@ -190,6 +190,14 @@ Three constraints carry over unchanged:
 
 ## 3b. THE USER'S RULING, 2026-10-11 — `flip_eps = 0.10` for the v3 run, default still OPEN
 
+> **SUPERSEDED 2026-10-18 — the default IS now 0.10.** USER: *"It should be applied to everything"*,
+> after the more-tests step below was done (*"It was simulated for a number of different decks with
+> overall very positive results ... surprisingly with little to no quality costs and decent performance
+> improvements"*). `cfg.flip_eps` / `ExhaustiveKeepConfig::flip_eps` and both simulators default to
+> 0.10; `MTG_KEEP_FLIP_EPS=0.02` restores the old value. flip_eps is NOT in the journal's resume
+> identity, so a journal rolled at 0.02 resumes silently under 0.10 (see the note in
+> `src/analyzer/ExhaustiveKeep.cpp`). The rest of this section is the 2026-10-11 record.
+
 > **USER, 2026-10-11 ~09:35:** *"Okay, well, I guess we'll try 0.1 then once we have accepted it.
 > After this run I may want to do more tests to confirm what the default should be."*
 
