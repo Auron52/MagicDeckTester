@@ -3,91 +3,91 @@
  "_note": "Per-deck suite cost, written by scripts/suite_gate.py. cost_per_game_ms = max per-game core-ms over the deck's searched (depth>0) regression cases; total_core_ms = the whole tier for that deck.",
  "decks": {
   "angels": {
-   "cost_per_game_ms": 102.94,
+   "cost_per_game_ms": 89.74,
    "jobs": 6,
    "key": "angels",
    "tier": "regression",
-   "total_core_ms": 65325,
+   "total_core_ms": 58751,
    "worst_case": "angels2hg_regression_d3_s2002"
   },
   "antilife": {
-   "cost_per_game_ms": 121.66,
+   "cost_per_game_ms": 108.9067,
    "jobs": 6,
    "key": "antilife",
    "tier": "regression",
-   "total_core_ms": 140094,
+   "total_core_ms": 116952,
    "worst_case": "antilife2hg_regression_d3_s2002"
   },
   "auras": {
-   "cost_per_game_ms": 99.882,
+   "cost_per_game_ms": 86.118,
    "jobs": 5,
    "key": "auras",
    "tier": "regression",
-   "total_core_ms": 167515,
+   "total_core_ms": 134911,
    "worst_case": "auras_regression_d3_s3003"
   },
   "breaching": {
-   "cost_per_game_ms": 3.2567,
+   "cost_per_game_ms": 2.2733,
    "jobs": 5,
    "key": "breaching",
    "tier": "regression",
-   "total_core_ms": 5112,
-   "worst_case": "breaching_regression_d3_s2002"
+   "total_core_ms": 3487,
+   "worst_case": "breaching_regression_d3_s3003"
   },
   "bruna": {
-   "cost_per_game_ms": 6949.4667,
+   "cost_per_game_ms": 3650.5067,
    "jobs": 5,
    "key": "bruna",
    "tier": "regression",
-   "total_core_ms": 1774060,
-   "worst_case": "bruna_regression_d5_s2002"
+   "total_core_ms": 1171350,
+   "worst_case": "bruna_regression_d5_s3003"
   },
   "burn": {
-   "cost_per_game_ms": 89.15,
+   "cost_per_game_ms": 85.194,
    "jobs": 5,
    "key": "burn",
    "tier": "regression",
-   "total_core_ms": 142231,
+   "total_core_ms": 122790,
    "worst_case": "burn_regression_d3_s2002"
   },
   "colossus": {
-   "cost_per_game_ms": 1160.7467,
+   "cost_per_game_ms": 535.6,
    "jobs": 5,
    "key": "colossus",
    "tier": "regression",
-   "total_core_ms": 311751,
+   "total_core_ms": 156639,
    "worst_case": "colossus_regression_d5_s2002"
   },
   "creature_giving": {
-   "cost_per_game_ms": 347.912,
+   "cost_per_game_ms": 317.528,
    "jobs": 5,
    "key": "creature_giving",
    "tier": "regression",
-   "total_core_ms": 327852,
+   "total_core_ms": 291546,
    "worst_case": "creature_giving_regression_d5_s2002"
   },
   "critter": {
-   "cost_per_game_ms": 94.0567,
+   "cost_per_game_ms": 79.2633,
    "jobs": 5,
    "key": "critter",
    "tier": "regression",
-   "total_core_ms": 73256,
+   "total_core_ms": 62126,
    "worst_case": "critter_regression_d3_s2002"
   },
   "dragons": {
-   "cost_per_game_ms": 74.5767,
+   "cost_per_game_ms": 65.0033,
    "jobs": 5,
    "key": "dragons",
    "tier": "regression",
-   "total_core_ms": 81196,
+   "total_core_ms": 69293,
    "worst_case": "dragons_regression_d3_s2002"
   },
   "dragonstorm": {
-   "cost_per_game_ms": 111.636,
+   "cost_per_game_ms": 104.264,
    "jobs": 5,
    "key": "dragonstorm",
    "tier": "regression",
-   "total_core_ms": 99915,
+   "total_core_ms": 90652,
    "worst_case": "dragonstorm_regression_d5_s2002"
   },
   "edf": {
@@ -99,20 +99,20 @@
    "worst_case": "edf_regression_d5_s3003"
   },
   "fivecolour": {
-   "cost_per_game_ms": 1479.76,
+   "cost_per_game_ms": 1065.54,
    "jobs": 6,
    "key": "fivecolour",
    "tier": "regression",
-   "total_core_ms": 566947,
+   "total_core_ms": 374147,
    "worst_case": "fivecolour2hg_regression_d3_s2002"
   },
   "fluctuator": {
-   "cost_per_game_ms": 104.2133,
+   "cost_per_game_ms": 91.0533,
    "jobs": 6,
    "key": "fluctuator",
    "tier": "regression",
-   "total_core_ms": 50178,
-   "worst_case": "fluctuator_regression_d3_s2002"
+   "total_core_ms": 43990,
+   "worst_case": "fluctuator_regression_d3_s3003"
   },
   "fungusv3": {
    "cost_per_game_ms": 89.76,
@@ -122,156 +122,172 @@
    "total_core_ms": 59724,
    "worst_case": "fungusv3_regression_d5_s2002"
   },
+  "fungusv2": {
+   "cost_per_game_ms": 129.735,
+   "jobs": 5,
+   "key": "fungusv2",
+   "tier": "regression",
+   "total_core_ms": 68903,
+   "worst_case": "fungusv2_regression_d3_s3003"
+  },
   "galadriel": {
-   "cost_per_game_ms": 2969.1,
-   "jobs": 6,
+   "cost_per_game_ms": 75.0533,
+   "jobs": 7,
    "key": "galadriel",
    "tier": "regression",
-   "total_core_ms": 243473,
+   "total_core_ms": 41935,
    "worst_case": "galadriel_regression_d5_s3003"
   },
   "giants": {
-   "cost_per_game_ms": 359.2667,
+   "cost_per_game_ms": 233.02,
    "jobs": 5,
    "key": "giants",
    "tier": "regression",
-   "total_core_ms": 127493,
-   "worst_case": "giants_regression_d5_s3003"
+   "total_core_ms": 87018,
+   "worst_case": "giants_regression_d3_s3003"
   },
   "goblins": {
-   "cost_per_game_ms": 146.19,
+   "cost_per_game_ms": 108.49,
    "jobs": 6,
    "key": "goblins",
    "tier": "regression",
-   "total_core_ms": 112068,
+   "total_core_ms": 90399,
    "worst_case": "goblins2hg_regression_d3_s2002"
   },
   "hinata": {
-   "cost_per_game_ms": 1723.04,
+   "cost_per_game_ms": 1468.19,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 1166113,
-   "worst_case": "hinata_regression_d5_s2002"
+   "total_core_ms": 915146,
+   "worst_case": "hinata_regression_d5_s3003"
   },
   "kittyv3": {
-   "cost_per_game_ms": 389.52,
+   "cost_per_game_ms": 283.12,
    "jobs": 5,
    "key": "kittyv3",
    "tier": "regression",
-   "total_core_ms": 85428,
-   "worst_case": "kittyv3_regression_d3_s2002"
+   "total_core_ms": 63669,
+   "worst_case": "kittyv3_regression_d5_s2002"
   },
   "knights": {
-   "cost_per_game_ms": 153.27,
+   "cost_per_game_ms": 137.88,
    "jobs": 6,
    "key": "knights",
    "tier": "regression",
-   "total_core_ms": 75247,
+   "total_core_ms": 68112,
    "worst_case": "knights2hg_regression_d3_s2002"
   },
   "landfall": {
-   "cost_per_game_ms": 2881.25,
+   "cost_per_game_ms": 2444.2,
    "jobs": 5,
    "key": "landfall",
    "tier": "regression",
-   "total_core_ms": 219843,
+   "total_core_ms": 195783,
    "worst_case": "landfall_regression_d5_s3003"
   },
   "melira": {
-   "cost_per_game_ms": 1993.4,
+   "cost_per_game_ms": 948.7,
    "jobs": 5,
    "key": "melira",
    "tier": "regression",
-   "total_core_ms": 252934,
+   "total_core_ms": 142079,
    "worst_case": "melira_regression_d5_s3003"
   },
   "minotaur": {
-   "cost_per_game_ms": 156.7067,
+   "cost_per_game_ms": 141.28,
    "jobs": 6,
    "key": "minotaur",
    "tier": "regression",
-   "total_core_ms": 134246,
+   "total_core_ms": 113615,
    "worst_case": "minotaur2hg_regression_d3_s2002"
   },
   "mirrorwing": {
-   "cost_per_game_ms": 191.95,
+   "cost_per_game_ms": 170.33,
    "jobs": 5,
    "key": "mirrorwing",
    "tier": "regression",
-   "total_core_ms": 101185,
-   "worst_case": "mirrorwing_regression_d5_s2002"
+   "total_core_ms": 91538,
+   "worst_case": "mirrorwing_regression_d3_s2002"
   },
   "pd": {
-   "cost_per_game_ms": 2695.2,
+   "cost_per_game_ms": 1312.16,
    "jobs": 6,
    "key": "pd",
    "tier": "regression",
-   "total_core_ms": 178813,
+   "total_core_ms": 111939,
    "worst_case": "pd_regression_d5_s2002"
   },
   "pirates": {
-   "cost_per_game_ms": 201.8333,
+   "cost_per_game_ms": 185.3667,
    "jobs": 5,
    "key": "pirates",
    "tier": "regression",
-   "total_core_ms": 92959,
+   "total_core_ms": 79722,
    "worst_case": "pirates_regression_d3_s3003"
   },
   "selesnya": {
-   "cost_per_game_ms": 350.1467,
+   "cost_per_game_ms": 222.1467,
    "jobs": 5,
    "key": "selesnya",
    "tier": "regression",
-   "total_core_ms": 126021,
-   "worst_case": "selesnya_regression_d5_s3003"
+   "total_core_ms": 94095,
+   "worst_case": "selesnya_regression_d3_s2002"
   },
   "slivers": {
-   "cost_per_game_ms": 100.4425,
+   "cost_per_game_ms": 92.5025,
    "jobs": 5,
    "key": "slivers",
    "tier": "regression",
-   "total_core_ms": 120004,
+   "total_core_ms": 96046,
    "worst_case": "slivers_regression_d3_s3003"
   },
   "snow": {
-   "cost_per_game_ms": 1319.1333,
+   "cost_per_game_ms": 1222.1667,
    "jobs": 5,
    "key": "snow",
    "tier": "regression",
-   "total_core_ms": 191102,
+   "total_core_ms": 165590,
    "worst_case": "snow_regression_d5_s2002"
   },
   "soldiers": {
-   "cost_per_game_ms": 96.9667,
+   "cost_per_game_ms": 90.2667,
    "jobs": 5,
    "key": "soldiers",
    "tier": "regression",
-   "total_core_ms": 43145,
+   "total_core_ms": 35316,
    "worst_case": "soldiers_regression_d3_s2002"
   },
   "stompy": {
-   "cost_per_game_ms": 135.56,
+   "cost_per_game_ms": 117.5767,
    "jobs": 5,
    "key": "stompy",
    "tier": "regression",
-   "total_core_ms": 141610,
+   "total_core_ms": 120204,
    "worst_case": "stompy_regression_d3_s2002"
   },
   "th": {
-   "cost_per_game_ms": 155.9033,
+   "cost_per_game_ms": 152.57,
    "jobs": 5,
    "key": "th",
    "tier": "regression",
-   "total_core_ms": 218135,
+   "total_core_ms": 207966,
    "worst_case": "th_regression_d5_s2002"
   },
+  "vampires": {
+   "cost_per_game_ms": 8517.18,
+   "jobs": 7,
+   "key": "vampires",
+   "tier": "regression",
+   "total_core_ms": 1933612,
+   "worst_case": "vampires2hg_regression_d5_s2002"
+  },
   "whiteknights": {
-   "cost_per_game_ms": 79.46,
+   "cost_per_game_ms": 72.78,
    "jobs": 6,
    "key": "whiteknights",
    "tier": "regression",
-   "total_core_ms": 34028,
+   "total_core_ms": 32678,
    "worst_case": "whiteknights2hg_regression_d3_s2002"
   }
  }
