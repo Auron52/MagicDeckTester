@@ -444,7 +444,8 @@ struct Action
     // VAMPIRES A1 (2026-10-18): the SEARCHED MADNESS answer of a discard-cost activation (rides beside
     // discard_name -- one discard per activation). madness_choice: -1 unpinned (no madness possible at
     // emission, or human play: asked at resolution); 0 decline; k >= 1 cast with the discarded card's
-    // (k-1)-th distinct madness cost, using convoke arm `madness_arm` (MadnessPin, core/MadnessTypes.h).
+    // (k-1)-th distinct madness cost, its convoke bodies paying the COVER `madness_arm` (MadnessCoverPack:
+    // what the bodies pay, realised on the board at the trigger -- defect D1; MadnessPin, core/MadnessTypes.h).
     // madness_mv: that option's mana (after convoke) folded into `cost` as GENERIC, so the subset walk
     // reserves it; the three trailing-pass pay sites pay `cost - madness_mv` in the outlet's own context
     // (OutletOwnCost) and the madness trigger pays the exact coloured cost as a creature spell. Folded
@@ -2575,7 +2576,9 @@ public:
     // cost-variant books (defect M: the arrivals counted in the executed order), rule 7 =
     // SubsetConvokeBodiesInvalid (the convoke body books, items A / B), rule 8 =
     // SubsetDiscardOutletsUnpayable (every discard outlet can discard in the executed order, items E /
-    // J). True = the selection is rejected.
+    // J), rule 9 = the post-combat discard-pump fold, rule 10 = SubsetMadnessCoverInvalid (a madness
+    // convoke cover the trigger's bodies cannot pay, or that a free arrival dominates -- Stage 6a D1 / D2).
+    // True = the selection is rejected.
     static bool VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
                                            const std::vector<int>& sel, int rule);
     // VAMPIRES B: does the pass hold a count-READING activation (Captivating Vampire's steal, Bloodline
