@@ -269,3 +269,108 @@ TEST_CASE("Rule 9 in the walk: second-main discard-only pumps are not enumerated
         CHECK(!PumpChoices(s, "Swamp", /*pre=*/false).empty());
     }
 }
+
+// ---- Stage 6a defect D3 (2026-10-19): rule 9's hand-size boundaries --------------------------------------
+// `h` is the hand AFTER the pump. The fold's twin -- the same plan without the pump -- holds h + 1, so the
+// cleanup's maximum hand size makes the pump's pick a real choice as soon as h + 1 > 7: at h == 7 the twin's
+// cleanup sheds the PROVIDER's front pick (cleanup width 1) while the pump sheds the searched card, and the
+// two plans end in different hands. The old test was `h > 7`.
+
+TEST_CASE("D3: at seven cards after the pump the twin holds eight -- the cleanup sheds another card, so the pin is kept")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.phase = Phase::PostCombatMain;
+    Put(s, "Stromkirk Condemned", 1);
+    Put(s, "Swamp", 50);
+    for (int k = 0; k < 4; ++k) { Hand(s, "Swamp", 10 + k); }
+    Hand(s, "Legion Lieutenant", 14);
+    Hand(s, "Vampire of the Dire Moon", 15);
+    Hand(s, "Falkenrath Gorger", 16);
+    Hand(s, "Stromkirk Captain", 17);            // eight cards: the twin's cleanup sheds one
+    // Which card the twin's cleanup sheds (the provider's front pick, unbranched).
+    std::string shed;
+    {
+        GameState t = s;
+        std::vector<MadnessPending> mq;
+        CleanupDiscardShed(t, nullptr, 1, -1, false, false, nullptr, &mq);
+        std::multiset<std::string> before, after;
+        for (const Card& c : s.players[0].hand) { before.insert(c.m_name.str()); }
+        for (const Card& c : t.players[0].hand) { after.insert(c.m_name.str()); }
+        for (const std::string& n : before)
+        {
+            if (before.count(n) != after.count(n)) { shed = n; break; }
+        }
+    }
+    REQUIRE(!shed.empty());
+    const std::string pin = shed == "Stromkirk Captain" ? "Legion Lieutenant" : "Stromkirk Captain";
+    INFO("cleanup sheds " << shed << "; the pump discards " << pin);
+    const std::vector<Action> cands = { PinnedPump(1, pin) };
+    // h == 7: pumping away `pin` ends with a hand the twin (8 -> cleanup sheds `shed`) never holds.
+    CHECK_FALSE(TurnSolver::VampSweepSubsetRuleRejects(s, cands, { 0 }, 9));
+    // h == 6 (seven cards): the twin holds seven, no cleanup discard -- still dominated.
+    GameState seven = s;
+    seven.players[0].hand.pop_back();
+    const std::vector<Action> cands7 = { PinnedPump(1, "Legion Lieutenant") };
+    CHECK(TurnSolver::VampSweepSubsetRuleRejects(seven, cands7, { 0 }, 9));
+}
+
+TEST_CASE("D3: a land-AFTER clone empties the hand under Asylum Visitor -- the pump discarding the last spell is kept")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.phase = Phase::PostCombatMain;
+    s.deck_has_landfall = true;
+    s.players[0].lands_played_this_turn = 0;     // the drop is open
+    Put(s, "Asylum Visitor", 2);
+    Put(s, "Stromkirk Condemned", 3);
+    Put(s, "Stromkirk Condemned", 4);
+    Put(s, "Swamp", 50);
+    Hand(s, "Bloodghast", 10);
+    Hand(s, "Vampire of the Dire Moon", 11);
+    Hand(s, "Swamp", 12);
+    s.StampMain1Hand();                          // a HELD land: main 2 offers it only for Bloodghast's return
+    // "Condemned discards Bloodghast, Condemned discards the Dire Moon, THEN play the Swamp": Bloodghast
+    // returns and the hand is EMPTY, so the Visitor draws at our upkeep. The plan is enumerated on the
+    // pre-land board (the land still in hand, h == 1) and cloned land-after; the twin without the second
+    // pump keeps the Dire Moon and draws nothing. The rule used to count the held land and fold it.
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false);
+    bool found = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.land_slot != TurnSolver::kLandSlotAfterCasts || p.land_to_play != "Swamp") { continue; }
+        bool bg = false, dm = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::ActivatePump || a.gy_exile_mode != 4) { continue; }
+            if (a.discard_name.str() == "Bloodghast") { bg = true; }
+            if (a.discard_name.str() == "Vampire of the Dire Moon") { dm = true; }
+        }
+        if (!bg || !dm) { continue; }
+        found = true;
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, p, /*is_pre_combat=*/false);
+        int bgs = 0;
+        for (const Permanent& q : r.battlefield) { if (q.card.m_name.str() == "Bloodghast") { ++bgs; } }
+        CHECK(bgs == 1);                                   // the deferred land returned it
+        int nonstaged = 0;
+        for (const Card& c : r.players[0].hand) { if (!c.m_is_staged) { ++nonstaged; } }
+        CHECK(nonstaged == 0);                             // hellbent: the Visitor's draw
+        break;
+    }
+    CHECK(found);
+    // Without the Visitor the same clone is dominated again (an empty hand buys nothing).
+    GameState nov = s;
+    nov.battlefield.erase(nov.battlefield.begin());     // the Visitor (Put first)
+    bool found_nov = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(nov, /*is_pre_combat=*/false))
+    {
+        if (p.land_slot != TurnSolver::kLandSlotAfterCasts) { continue; }
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::ActivatePump && a.discard_name.str() == "Vampire of the Dire Moon")
+            { found_nov = true; }
+        }
+    }
+    CHECK_FALSE(found_nov);
+}
