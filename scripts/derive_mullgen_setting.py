@@ -177,7 +177,8 @@ def write_mull_gen(vpath, depth, budget):
 
 
 def score(binary, deck, cards, depth, budget, hands, R, seed):
-    """-> (labels, units_per_rollout). Labels are the play/draw mean per opener."""
+    """-> (labels, units_per_rollout, ses). Labels are the play/draw mean per opener; ses their standard errors
+    (the scorer prints mean and se per side), which give the reference's noise ceiling (see reliability())."""
     env = dict(os.environ,
                MTG_SCORE_COMPS="1", MTG_SCORE_HANDS=str(hands), MTG_SCORE_R=str(R),
                MTG_EQUIV_DEPTH=str(depth), MTG_SCORE_BUDGET_MS=str(budget),
@@ -186,7 +187,7 @@ def score(binary, deck, cards, depth, budget, hands, R, seed):
                        capture_output=True, text=True, env=env)
     if p.returncode != 0:
         raise SystemExit("scorer failed (d%s b%s):\n%s" % (depth, budget, p.stderr[-2000:]))
-    labels = []
+    labels, ses = [], []
     for line in p.stdout.splitlines():
         parts = line.split("\t")
         if len(parts) < 3:
@@ -197,8 +198,32 @@ def score(binary, deck, cards, depth, budget, hands, R, seed):
         except (ValueError, IndexError):
             continue
         labels.append((dm + pm) / 2.0)
+        try:
+            dse, pse = float(parts[1].split()[1]), float(parts[2].split()[1])
+            ses.append(math.sqrt(dse * dse + pse * pse) / 2.0)
+        except (ValueError, IndexError):
+            pass
     m = re.search(r"units_per_rollout=([0-9.]+)", p.stderr)
-    return labels, (float(m.group(1)) if m else 0.0)
+    return labels, (float(m.group(1)) if m else 0.0), (ses if len(ses) == len(labels) else [])
+
+
+def reliability(labels, ses):
+    """Share of the reference labels' spread across openers that is NOT rollout noise: 1 - mean(se^2) / var.
+
+    This is the NOISE CEILING of the rank-fidelity test. The reference arm scores rho 1.0 only because it is
+    compared with ITSELF (same openers, same rollout seeds); a re-seeded copy of the very same setting does not.
+    Landfall 2026-10-19 (48 openers, R=24): d5 b20 against a re-seeded d5 b20 scored rho 0.9714, and this
+    estimate gave 0.975 from the reference's own standard errors -- so a fixed 0.99 floor was unreachable for
+    EVERY arm but the reference, and the screen fell back to play settings (1.0x) by construction. A
+    fetch/shuffle-heavy deck decorrelates two settings' rollouts at the first difference in play, so the shared
+    seeds cancel little noise there; on decks like burn they cancel most of it and this barely matters."""
+    n = len(labels)
+    if n < 3 or len(ses) != n:
+        return None
+    mean = sum(labels) / n
+    var = sum((x - mean) ** 2 for x in labels) / (n - 1)
+    noise = sum(s * s for s in ses) / n
+    return (1.0 - noise / var) if var > 0 else None
 
 
 def main():
@@ -303,29 +328,36 @@ def main():
 
     print("\nscoring %d openers at R=%d against the play reference d%d b%d ...\n"
           % (args.hands, args.R, play_d, play_b))
-    ref, ref_cost = score(binary, deck, args.cards_json, play_d, play_b, args.hands, args.R, args.seed)
+    ref, ref_cost, ref_se = score(binary, deck, args.cards_json, play_d, play_b, args.hands, args.R, args.seed)
+    # FIDELITY = rho / the reference's noise ceiling (capped at 1), and the floor applies to THAT. A labeller
+    # cannot be asked to agree with play better than play agrees with itself re-seeded.
+    rel = reliability(ref, ref_se)
+    ceiling = rel if rel is not None and 0.0 < rel < 1.0 else 1.0
+    print("noise ceiling of the reference (1 - rollout noise / label spread): %s"
+          % ("%.4f" % ceiling if rel is not None else "unavailable (no se in the scorer output) -- raw rho"))
 
-    print("%-10s %8s %12s %10s" % ("arm", "rho", "units/roll", "cost_x"))
+    print("%-10s %8s %8s %12s %10s" % ("arm", "rho", "fidel", "units/roll", "cost_x"))
     rows = []
     for (d, b) in ordered:
         if (d, b) == (play_d, play_b):
             lab, cost = ref, ref_cost
             rho = 1.0
         else:
-            lab, cost = score(binary, deck, args.cards_json, d, b, args.hands, args.R, args.seed)
+            lab, cost, _ = score(binary, deck, args.cards_json, d, b, args.hands, args.R, args.seed)
             if len(lab) != len(ref):
                 print("  d%-2d b%-3d SKIPPED (label count mismatch)" % (d, b))
                 continue
             rho = spearman(lab, ref)
-        rows.append(dict(d=d, b=b, rho=rho, cost=cost))
-        print("d%-2d b%-4d %8.4f %12.0f %10.3f"
-              % (d, b, rho, cost, cost / ref_cost if ref_cost else float("nan")))
+        fid = min(1.0, rho / ceiling)
+        rows.append(dict(d=d, b=b, rho=rho, fid=fid, cost=cost))
+        print("d%-2d b%-4d %8.4f %8.4f %12.0f %10.3f"
+              % (d, b, rho, fid, cost, cost / ref_cost if ref_cost else float("nan")))
 
-    ok = [r for r in rows if r["rho"] >= args.floor_rho]
+    ok = [r for r in rows if r["fid"] >= args.floor_rho]
     if not ok:
-        best = max(rows, key=lambda r: r["rho"])
-        print("\nNO candidate clears the rho floor %.3f. Best is d%d b%d at %.4f."
-              % (args.floor_rho, best["d"], best["b"], best["rho"]))
+        best = max(rows, key=lambda r: r["fid"])
+        print("\nNO candidate clears the fidelity floor %.3f. Best is d%d b%d at %.4f."
+              % (args.floor_rho, best["d"], best["b"], best["fid"]))
         print("Falling back to PLAY SETTINGS -- generating under a labeller that "
               "measurably\nreorders hands is not a saving, it is a different policy.")
         if args.write:
@@ -372,8 +404,8 @@ def main():
                   "past the %.0f%% cap)"
                   % (best_exact["d"], best_exact["b"],
                      100.0 * (best_exact["cost"] / cheap["cost"] - 1.0), 100.0 * (PREMIUM_CAP - 1.0)))
-        print("\nPICK: d%d b%d  (rho %.4f >= floor %.3f, cheapest clearing it; %.2fx the play cost)"
-              % (pick["d"], pick["b"], pick["rho"], args.floor_rho,
+        print("\nPICK: d%d b%d  (rho %.4f, fidelity %.4f >= floor %.3f, cheapest clearing it; %.2fx the play cost)"
+              % (pick["d"], pick["b"], pick["rho"], pick["fid"], args.floor_rho,
                  pick["cost"] / ref_cost if ref_cost else float("nan")))
     if args.write:
         # Written even when it equals play settings: the pair's presence is the "screened" marker
