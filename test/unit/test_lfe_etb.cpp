@@ -545,3 +545,117 @@ TEST_CASE("Risen Reef: the SEARCH finds 'land to hand, play it, cast more' -- an
         CHECK(CountNamed(t, "Mountain") == 3);
     }
 }
+
+namespace
+{
+struct DigChooserScope
+{
+    DigChooser fn; DigChooser* saved;
+    explicit DigChooserScope(DigChooser f) : fn(std::move(f)), saved(g_play_dig_chooser) { g_play_dig_chooser = &fn; }
+    ~DigChooserScope() { g_play_dig_chooser = saved; }
+};
+struct LoyaltyChooserScope
+{
+    LoyaltyTargetChooser fn; LoyaltyTargetChooser* saved;
+    explicit LoyaltyChooserScope(LoyaltyTargetChooser f) : fn(std::move(f)), saved(g_play_loyalty_chooser) { g_play_loyalty_chooser = &fn; }
+    ~LoyaltyChooserScope() { g_play_loyalty_chooser = saved; }
+};
+}   // namespace
+
+TEST_CASE("Human play: the '(look-top land)' dig asks only for a LAND top, and -1 puts it into the hand")
+{
+    EnsureCardsLfe();
+    std::vector<std::string> asked;
+    DigChooserScope scope([&](const GameState&, int, const std::string& src, const std::vector<Card>& ex,
+                              const std::vector<int>& legal, int dflt) -> int
+    {
+        asked.push_back(src);
+        CHECK(ex.size() == 1);
+        CHECK(legal == std::vector<int>{ 0 });
+        CHECK(dflt == 0);   // drop spent -> the default is the battlefield
+        return -1;
+    });
+    GameState s = FreshLfe();
+    LibLfe(s, { "Forest", kFulm }, 10);
+    EnterLfe(s, kReef, 1);
+    REQUIRE(asked.size() == 1);
+    CHECK(asked[0].find("(look-top land)") != std::string::npos);
+    CHECK(InHand(s, "Forest"));
+    // A nonland top: no question at all.
+    EnterLfe(s, kFulm, 2);
+    CHECK(asked.size() == 1);
+    CHECK(InHand(s, kFulm));
+}
+
+TEST_CASE("Human play: the '(trigger order)' dig is asked UP FRONT and places the search")
+{
+    EnsureCardsLfe();
+    std::vector<int> answers{ 1, 0 };   // a Reef look first, then the search (k = 1 of 2)
+    int orders = 0;
+    DigChooserScope scope([&](const GameState&, int, const std::string& src, const std::vector<Card>& ex,
+                              const std::vector<int>&, int) -> int
+    {
+        if (src.find("(trigger order)") == std::string::npos) { return 0; }   // land looks: battlefield
+        CHECK(ex.size() == 2);
+        CHECK(ex[0].m_name.str() == kHarbinger);
+        CHECK(ex[1].m_name.str() == kReef);
+        return answers[static_cast<std::size_t>(orders++)];
+    });
+    GameState s = FreshLfe();
+    PutLfe(s, kReef, 1);
+    PutLfe(s, kReef, 2);
+    LibLfe(s, { "Forest", "Island", kFulm, "Mountain" }, 10);
+    EnterLfe(s, kHarbinger, 3, kFulm);
+    CHECK(orders == 2);
+    CHECK(CountNamed(s, "Forest") == 1);   // the first Reef took today's top (a land -> battlefield)
+    CHECK(InHand(s, kFulm));               // the search, then the second Reef took the found card
+}
+
+TEST_CASE("Human play: '(may destroy)' offers our own artifacts and honours the pick")
+{
+    EnsureCardsLfe();
+    int asked = 0;
+    DigChooserScope scope([&](const GameState&, int, const std::string& src, const std::vector<Card>& ex,
+                              const std::vector<int>& legal, int dflt) -> int
+    {
+        if (src.find("(may destroy)") == std::string::npos) { return -1; }
+        ++asked;
+        CHECK(ex.size() == 2);          // Aether Vial + Metallic Mimic (an artifact creature)
+        CHECK(legal.size() == 2);
+        CHECK(dflt == -1);              // the default declines our own
+        for (std::size_t i = 0; i < ex.size(); ++i) { if (ex[i].m_name.str() == kVial) { return static_cast<int>(i); } }
+        return -1;
+    });
+    GameState s = FreshLfe();
+    PutLfe(s, kVial, 1);
+    PutLfe(s, kMimic, 2);
+    EnterLfe(s, kBreaker, 3);
+    CHECK(asked == 1);
+    CHECK(CountNamed(s, kVial) == 0);
+    CHECK(CountNamed(s, kMimic) == 1);
+}
+
+TEST_CASE("Human play: Fulminator's 'destroy target nonbasic land' is the board-click target over every nonbasic")
+{
+    EnsureCardsLfe();
+    int asked = 0;
+    LoyaltyChooserScope scope([&](const GameState& st, int, const std::string& src, const std::string& prompt,
+                                  const std::vector<int>& legal, int) -> int
+    {
+        ++asked;
+        CHECK(src == kFulm);
+        CHECK(prompt.find("nonbasic land") != std::string::npos);
+        CHECK(legal.size() == 2);       // Secluded Courtyard + Gruul Turf; the Mountain is basic
+        for (std::size_t i = 0; i < legal.size(); ++i)
+        { if (st.battlefield[static_cast<std::size_t>(legal[i])].card.m_name.str() == "Gruul Turf") { return static_cast<int>(i); } }
+        return -1;
+    });
+    GameState s = FreshLfe();
+    PutLfe(s, "Mountain", 20);
+    PutLfe(s, "Secluded Courtyard", 21);
+    PutLfe(s, "Gruul Turf", 22);
+    ResolveDestroyTargetNonbasicLand(s, 0, kFulm);
+    CHECK(asked == 1);
+    CHECK(CountNamed(s, "Gruul Turf") == 0);
+    CHECK(CountNamed(s, "Secluded Courtyard") == 1);
+}
