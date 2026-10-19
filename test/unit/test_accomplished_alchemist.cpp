@@ -1619,3 +1619,155 @@ TEST_CASE("Activation-source copy classes: two identical Staffs of Domination --
     { CopyFoldArmsAa a(false); goff = TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0)); }
     CHECK(CanonPlanAa(gon, cls) == CanonPlanAa(goff, cls));
 }
+
+// ---- Arbor Elf: "{T}: Untap target Forest" re-taps the BEST Forest, land-Aura bonuses included ---------
+namespace
+{
+// Attach land Aura `aura` to `host`; `col` >= 0 locks a Utopia Sprawl's colour.
+void AttachAa(GameState& s, int aura, int host, int col = -1)
+{
+    for (Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number != aura) { continue; }
+        p.aura_attached_to = host;
+        if (col >= 0) { p.chosen_color = static_cast<int8_t>(col); }
+    }
+}
+void TapAa(GameState& s, int num) { for (Permanent& p : s.battlefield) { if (p.card.m_number == num) { p.tapped = true; } } }
+}   // namespace
+
+TEST_CASE("Arbor Elf: a plain Forest -- the re-tap is {G}, exactly as before")
+{
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    const int f = PutAa(s, "Forest");
+    TapAa(s, f);
+    const int arbor = PutAa(s, "Arbor Elf");
+    const Permanent& a = *ByNumAa(s, arbor);
+    CHECK(LandAuraBonus(s, a) == 0);
+    CHECK(PermanentManaYield(s, a, DefAa("Arbor Elf")) == 1);
+    CHECK(AvailableManaPool(s).Total() == 1);
+    ManaCost gg; gg.green = 2;
+    GameState t = s;
+    CHECK_FALSE(TapForCostShared(t, gg, false, nullptr, true));
+    ManaCost g; g.green = 1;
+    GameState w = s;
+    CHECK(TapForCostShared(w, g, false, nullptr, true));
+    // No Forest at all: still a dead source.
+    GameState n = FreshAa();
+    n.deck_has_land_aura = true;
+    const int arb2 = PutAa(n, "Arbor Elf");
+    CHECK(PermanentManaYield(n, *ByNumAa(n, arb2), DefAa("Arbor Elf")) == 0);
+}
+
+TEST_CASE("Arbor Elf + Wild Growth Forest: 4 mana on the T2 board; the Alchemist is enumerated and paid in both worlds")
+{
+    // T2 of seed 80020: Forest A enchanted with Wild Growth (cast off Forest B, now tapped), Arbor Elf
+    // from T1. Forest A {G}{G} + Arbor re-tapping A {G}{G} = 4 -> Accomplished Alchemist {3}{G}.
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    const int fa = PutAa(s, "Forest");
+    const int fb = PutAa(s, "Forest");
+    TapAa(s, fb);
+    const int wg = PutAa(s, "Wild Growth");
+    AttachAa(s, wg, fa);
+    const int arbor = PutAa(s, "Arbor Elf");
+    HandAa(s, "Accomplished Alchemist");
+    s.m_provider = &AaProv();
+    const Permanent& a = *ByNumAa(s, arbor);
+    CHECK(LandAuraBonus(s, a) == 1);
+    CHECK(PermanentManaYield(s, a, DefAa("Arbor Elf")) == 2);
+    const ManaPool pool = AvailableManaPool(s);
+    CHECK(pool.Total() == 4);
+    CHECK(pool.green == 4);
+    ManaCost c; c.generic = 3; c.green = 1;   // Accomplished Alchemist {3}{G}
+    { GameState t = s; CHECK(TapForCostShared(t, c, true, nullptr, true)); }
+    { GameState t = s; CHECK(TapForCostDirect(t, c, true)); }
+    { GameState t = s; CHECK(TapForCostBacktrack(t, c, true, ManaPool{})); }
+    // Five is one too many.
+    ManaCost c5; c5.generic = 4; c5.green = 1;
+    { GameState t = s; CHECK_FALSE(TapForCostShared(t, c5, true, nullptr, true)); }
+    // The search offers the cast, and both worlds resolve it.
+    bool offered = false, both = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        if (CastOfAa(p, "Accomplished Alchemist") == nullptr) { continue; }
+        offered = true;
+        const auto w = BothWorldsAa(s, p);
+        auto has = [](const GameState& g)
+        { for (const Permanent& q : g.battlefield) { if (q.card.m_name.str() == "Accomplished Alchemist") { return true; } } return false; };
+        if (has(w.first) && has(w.second)) { both = true; break; }
+    }
+    CHECK(offered);
+    CHECK(both);
+    // TWO Arbor Elves may both re-tap the same Wild Growth Forest: +{G}{G} each.
+    GameState d = s;
+    const int arbor2 = PutAa(d, "Arbor Elf");
+    CHECK(PermanentManaYield(d, *ByNumAa(d, arbor2), DefAa("Arbor Elf")) == 2);
+    CHECK(AvailableManaPool(d).Total() == 6);
+    ManaCost c6; c6.generic = 5; c6.green = 1;
+    { GameState t = d; CHECK(TapForCostShared(t, c6, true, nullptr, true)); }
+}
+
+TEST_CASE("Arbor Elf + Utopia Sprawl (blue) Forest: the re-tap is {G}{U} and pays a {U} pip")
+{
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    const int f = PutAa(s, "Forest");
+    TapAa(s, f);                                   // the Forest already tapped once
+    const int sp = PutAa(s, "Utopia Sprawl");
+    AttachAa(s, sp, f, static_cast<int>(Color::Blue));
+    const int arbor = PutAa(s, "Arbor Elf");
+    const Permanent& a = *ByNumAa(s, arbor);
+    CHECK(LandAuraColorMask(s, a) == (1 << static_cast<int>(Color::Blue)));
+    ManaPool bonus;
+    LandAuraAddToPool(bonus, s, a);
+    CHECK(bonus.blue == 1);
+    CHECK(bonus.Total() == 1);
+    const ManaPool pool = AvailableManaPool(s);
+    CHECK(pool.green == 1);
+    CHECK(pool.blue == 1);
+    ManaCost gu; gu.green = 1; gu.blue = 1;
+    { GameState t = s; CHECK(TapForCostShared(t, gu, false, nullptr, true)); }
+    { GameState t = s; CHECK(TapForCostBacktrack(t, gu, false, ManaPool{})); }
+    ManaCost uu; uu.blue = 2;
+    { GameState t = s; CHECK_FALSE(TapForCostShared(t, uu, false, nullptr, true)); }
+}
+
+TEST_CASE("Arbor Elf facing incomparable Forests ({U} Sprawl vs {G} Wild Growth): the payer picks the Forest")
+{
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    const int fu = PutAa(s, "Forest");
+    const int fg = PutAa(s, "Forest");
+    const int fp = PutAa(s, "Forest");            // plain: dominated by both, never a class
+    TapAa(s, fu); TapAa(s, fg); TapAa(s, fp);
+    const int sp = PutAa(s, "Utopia Sprawl");
+    AttachAa(s, sp, fu, static_cast<int>(Color::Blue));
+    const int wg = PutAa(s, "Wild Growth");
+    AttachAa(s, wg, fg);
+    const int arbor = PutAa(s, "Arbor Elf");
+    const Permanent& a = *ByNumAa(s, arbor);
+    CHECK(UntapLandHostCount(s, a) == 2);
+    CHECK(LandAuraBonus(s, a) == 1);
+    CHECK(LandAuraColorMask(s, a)
+          == ((1 << static_cast<int>(Color::Blue)) | (1 << static_cast<int>(Color::Green))));
+    // Projection: the over-approximation (one wild beside the {G}).
+    const ManaPool pool = AvailableManaPool(s);
+    CHECK(pool.Total() == 2);
+    // Either class pays its own cost (the greedy's class 0 is the Sprawl Forest; {G}{G} needs class 1,
+    // reached by the backtracker's per-class branch).
+    ManaCost gu; gu.green = 1; gu.blue = 1;
+    ManaCost gg; gg.green = 2;
+    ManaCost uu; uu.blue = 2;
+    { GameState t = s; CHECK(TapForCostShared(t, gu, false, nullptr, true)); }
+    { GameState t = s; CHECK(TapForCostShared(t, gg, false, nullptr, true)); }
+    { GameState t = s; CHECK(TapForCostBacktrack(t, gg, false, ManaPool{})); }
+    { GameState t = s; CHECK_FALSE(TapForCostShared(t, uu, false, nullptr, true)); }
+    // A Forest whose bonus is a superset ({U} + {G}) dominates both: one class again.
+    GameState d = s;
+    const int wg2 = PutAa(d, "Wild Growth");
+    AttachAa(d, wg2, fu);
+    CHECK(UntapLandHostCount(d, *ByNumAa(d, arbor)) == 1);
+    CHECK(LandAuraBonus(d, *ByNumAa(d, arbor)) == 2);
+}

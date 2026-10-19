@@ -21336,7 +21336,7 @@ inline const std::vector<Color>& LandAuraProducesFor(const CardDefinition& ad, c
     return ad.params.land_aura_produces;
 }
 
-inline int LandAuraBonus(const GameState& state, const Permanent& land)
+inline int LandAuraBonusOfLand(const GameState& state, const Permanent& land)
 {
     if (!land.card.IsLand()) { return 0; }
     if (!state.deck_has_land_aura) { return 0; }   // no land Aura in this game (StampDeckTraits)
@@ -21369,7 +21369,7 @@ inline bool IsAnyColorLandAura(const CardDefinition& d)
 // POSITIONAL list of chosen colours (one per any-colour aura), so "the second +X is the second
 // aura" has to mean the same thing at the legality test, at the credit, and in the decision JSON
 // the viewer builds its dialog from. One walk, three readers.
-inline std::vector<const Permanent*> AnyColorLandAuras(const GameState& state, const Permanent& land)
+inline std::vector<const Permanent*> AnyColorLandAurasOfLand(const GameState& state, const Permanent& land)
 {
     std::vector<const Permanent*> out;
     if (!land.card.IsLand()) { return out; }
@@ -21396,8 +21396,8 @@ inline std::vector<const Permanent*> AnyColorLandAuras(const GameState& state, c
 // (CR 106.1b: the mana's colour is chosen as the ability resolves), so the unit lands TYPED. A short
 // or absent list falls back to `wild` for the auras it does not cover, which is what keeps every
 // saved reference's colourless `tap=` token replaying exactly as it did before.
-inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Permanent& land,
-                              const std::vector<int>* chosen = nullptr)
+inline void LandAuraAddToPoolOfLand(ManaPool& pool, const GameState& state, const Permanent& land,
+                                    const std::vector<int>* chosen = nullptr)
 {
     if (!land.card.IsLand()) { return; }
     if (!state.deck_has_land_aura) { return; }   // no land Aura in this game (StampDeckTraits)
@@ -21440,7 +21440,7 @@ inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Perm
 // An EMPTY land_aura_produces is "one mana of any colour" -> all five colour bits, and deliberately
 // NOT colourless: a colour cannot pay a {C} pip, exactly as LandAuraAddToPool credits `wild` and
 // never `wild_c`.
-inline int LandAuraColorMask(const GameState& state, const Permanent& land)
+inline int LandAuraColorMaskOfLand(const GameState& state, const Permanent& land)
 {
     if (!land.card.IsLand()) { return 0; }
     if (!state.deck_has_land_aura) { return 0; }   // no land Aura in this game (StampDeckTraits)
@@ -21460,6 +21460,180 @@ inline int LandAuraColorMask(const GameState& state, const Permanent& land)
         }
     }
     return mask;
+}
+
+// ---- UNTAP-TARGET-LAND SOURCES (Arbor Elf: "{T}: Untap target Forest") ------------------------------
+// Modelled as a mana source (mana_requires_land_subtype, live only while a Forest is controlled --
+// ManaSubtypeGateLive) whose one "tap" is the mana of ONE MORE TAP of a controlled Forest: tap the
+// Forest, untap it with the Arbor, tap it again. The Forest ends in the state it started in and no
+// other permanent changes, so the Arbor's whole effect is "+ one Forest tap". That tap is the
+// Forest's FULL yield, land-Aura bonuses included ("whenever enchanted land is tapped for mana" fires
+// on the re-tap too): a Wild Growth Forest re-taps for {G}{G}, a Utopia Sprawl (blue) Forest for
+// {G}{U}. The pre-2026-10-19 model credited a flat {G} and so hid every Arbor + land-Aura line (the
+// AccomplishedAlchemist claude-play sweep, 4 independent reports; seed 80020 never saw its T2
+// Alchemist: Forest + Wild Growth Forest + Arbor = {G} + {G}{G} + {G}{G} after the Aura is paid).
+//
+// N Arbor Elves each re-tap a Forest, and nothing stops two of them targeting the SAME one (tap,
+// untap, tap, untap, tap -- "untap target Forest" names no limit), so every Arbor independently yields
+// the best Forest's re-tap. Its own {G} (`produces`) is that Forest's own mana (only basic Forests are
+// hosts in any list that runs Arbor); the BONUS rides the land-Aura helpers below, which is why every
+// site that credits an enchanted land's tap (the pool, the colour gates, the flow oracle, the
+// backtracker, the real tap) credits the Arbor too with no second model.
+//
+// WHICH FOREST. Only the Aura bonus differs between Forests, so the choice is between their bonus
+// POOLS. A Forest whose bonus is a sub-multiset of another's is weakly dominated (the dominating one
+// adds every unit it adds and more; a goldfish has no mana burn and the surplus floats) and is
+// dropped; identical pools are one class. What remains -- e.g. a blue-Sprawl Forest beside a Wild
+// Growth Forest ({U} vs {G}) -- are genuinely different choices, and the PAYER picks: the backtracker
+// branches over every class (TapForCostBacktrackWorker), the greedy payer takes class 0 (highest
+// yield, then battlefield order) and falls back to the backtracker when that strands a pip, and the
+// projection sites credit the over-approximation (LandAuraBonus = the largest class total,
+// LandAuraColorMask = the union of the classes' colours; AddSourceToPool credits `wild` when more
+// than one class survives). With zero or one class every site is exact. No Aura on any Forest ->
+// no class -> the Arbor yields {G} exactly as before; every deck without a land Aura never gets past
+// the deck_has_land_aura gate, and no deck but AccomplishedAlchemist runs a source with the param.
+struct UntapLandHosts
+{
+    static constexpr int kMax = 8;
+    int n = 0;
+    const Permanent* host[kMax] = {};
+    ManaPool bonus[kMax];
+};
+
+// The source's definition when `p` is an untap-target-land source in a game that can have land Auras,
+// else nullptr (the cheap early-outs every other permanent takes).
+inline const CardDefinition* UntapLandSourceDef(const GameState& state, const Permanent& p)
+{
+    if (!state.deck_has_land_aura || p.card.IsLand() || p.def_absent) { return nullptr; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || d->params.mana_requires_land_subtype.empty()) { return nullptr; }
+    return d;
+}
+
+// `a` adds at least every unit `b` adds (componentwise; `wild` is compared only against `wild`, a
+// conservative reading that can keep a dominated class but never drop a needed one).
+inline bool UntapLandBonusCovers(const ManaPool& a, const ManaPool& b)
+{
+    return a.white >= b.white && a.blue >= b.blue && a.black >= b.black && a.red >= b.red
+        && a.green >= b.green && a.colorless >= b.colorless && a.wild >= b.wild;
+}
+
+// The non-dominated Forest bonus classes `src` can re-tap, class 0 first (largest total, then
+// battlefield order). Returns the class count; 0 when `src` is not such a source or no controlled
+// Forest carries a land Aura (the Arbor then yields its plain {G}). Walks the land Auras first, so
+// only ENCHANTED Forests are ever examined.
+inline int UntapLandHostsOf(const GameState& state, const Permanent& src, UntapLandHosts& out)
+{
+    out.n = 0;
+    const CardDefinition* sd = UntapLandSourceDef(state, src);
+    if (sd == nullptr) { return 0; }
+    const std::string& sub = sd->params.mana_requires_land_subtype;
+    const int ctrl = src.controller_index;
+    constexpr int kHostScan = 16;
+    int hosts[kHostScan];
+    int nh = 0;
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to == 0 || a.controller_index != ctrl) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
+        bool dup = false;
+        for (int k = 0; k < nh; ++k) { if (hosts[k] == a.aura_attached_to) { dup = true; break; } }
+        if (!dup && nh < kHostScan) { hosts[nh++] = a.aura_attached_to; }
+    }
+    if (nh == 0) { return 0; }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != ctrl || !q.card.IsLand()) { continue; }
+        bool hosted = false;
+        for (int k = 0; k < nh; ++k) { if (hosts[k] == q.card.m_number) { hosted = true; break; } }
+        if (!hosted) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        const SubtypeSet& subs = qd ? qd->card.m_subtypes : q.card.m_subtypes;
+        bool is_sub = false;
+        for (const std::string& st : subs) { if (st == sub) { is_sub = true; break; } }
+        if (!is_sub) { continue; }
+        ManaPool b;
+        LandAuraAddToPoolOfLand(b, state, q);
+        if (b.Total() <= 0) { continue; }
+        bool dominated = false;
+        for (int k = 0; k < out.n; ++k) { if (UntapLandBonusCovers(out.bonus[k], b)) { dominated = true; break; } }
+        if (dominated) { continue; }
+        int w = 0;   // drop every kept class the newcomer dominates
+        for (int k = 0; k < out.n; ++k)
+        {
+            if (UntapLandBonusCovers(b, out.bonus[k])) { continue; }
+            out.host[w] = out.host[k]; out.bonus[w] = out.bonus[k]; ++w;
+        }
+        out.n = w;
+        if (out.n >= UntapLandHosts::kMax) { continue; }   // beyond the cap: unreachable in practice
+        int pos = out.n;   // stable insert by descending total
+        while (pos > 0 && out.bonus[pos - 1].Total() < b.Total())
+        { out.host[pos] = out.host[pos - 1]; out.bonus[pos] = out.bonus[pos - 1]; --pos; }
+        out.host[pos] = &q; out.bonus[pos] = b;
+        ++out.n;
+    }
+    return out.n;
+}
+
+// Class count only (0 for every permanent that is not an untap-target-land source).
+inline int UntapLandHostCount(const GameState& state, const Permanent& src)
+{
+    if (UntapLandSourceDef(state, src) == nullptr) { return 0; }
+    UntapLandHosts h;
+    return UntapLandHostsOf(state, src, h);
+}
+
+// Credit class `k`'s bonus (the PAYER's choice of Forest) into `pool`. No-op for k out of range.
+inline void UntapLandHostAddToPool(ManaPool& pool, const GameState& state, const Permanent& src, int k)
+{
+    UntapLandHosts h;
+    if (k < 0 || k >= UntapLandHostsOf(state, src, h)) { return; }
+    LandAuraAddToPoolOfLand(pool, state, *h.host[k]);
+}
+
+// ---- The public land-Aura readers: a land reads its own Auras; an untap-target-land source reads the
+// Forest it re-taps (see above). Every caller goes through these four.
+inline int LandAuraBonus(const GameState& state, const Permanent& land)
+{
+    if (land.card.IsLand()) { return LandAuraBonusOfLand(state, land); }
+    if (!state.deck_has_land_aura) { return 0; }
+    UntapLandHosts h;
+    if (UntapLandHostsOf(state, land, h) == 0) { return 0; }
+    return h.bonus[0].Total();   // the largest class (an over-count when classes are incomparable)
+}
+
+inline int LandAuraColorMask(const GameState& state, const Permanent& land)
+{
+    if (land.card.IsLand()) { return LandAuraColorMaskOfLand(state, land); }
+    if (!state.deck_has_land_aura) { return 0; }
+    UntapLandHosts h;
+    int mask = 0;
+    for (int k = 0, n = UntapLandHostsOf(state, land, h); k < n; ++k)
+    { mask |= LandAuraColorMaskOfLand(state, *h.host[k]); }
+    return mask;
+}
+
+// Credits class 0 for an untap-target-land source (the default re-tap target; a payer that must
+// choose calls UntapLandHostAddToPool). `chosen` maps onto that Forest's any-colour Auras, in the
+// order AnyColorLandAuras reports them for the same source.
+inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Permanent& land,
+                              const std::vector<int>* chosen = nullptr)
+{
+    if (land.card.IsLand()) { LandAuraAddToPoolOfLand(pool, state, land, chosen); return; }
+    if (!state.deck_has_land_aura) { return; }
+    UntapLandHosts h;
+    if (UntapLandHostsOf(state, land, h) == 0) { return; }
+    LandAuraAddToPoolOfLand(pool, state, *h.host[0], chosen);
+}
+
+inline std::vector<const Permanent*> AnyColorLandAuras(const GameState& state, const Permanent& land)
+{
+    if (land.card.IsLand()) { return AnyColorLandAurasOfLand(state, land); }
+    if (!state.deck_has_land_aura) { return {}; }
+    UntapLandHosts h;
+    if (UntapLandHostsOf(state, land, h) == 0) { return {}; }
+    return AnyColorLandAurasOfLand(state, *h.host[0]);
 }
 
 // The colours a land Aura still IN HAND would add to the board's producible set once it resolves --
@@ -32270,7 +32444,15 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     const bool ramp_unfed = aura_bonus > 0 && def.params.ramp_filter
         && !HasUntappedRampFeeder(state)
         && !(FloatFeedsRampFilterEnabled() && FloatLeftoverManaEnabled() && state.floating_mana.Total() > 0);
-    if (aura_bonus > 0 && !ramp_unfed) { LandAuraAddToPool(pool, state, *perm); }
+    if (aura_bonus > 0 && !ramp_unfed)
+    {
+        // An Arbor Elf facing two incomparable enchanted Forests (a blue Sprawl's {U} vs a Wild
+        // Growth's {G}) yields whichever the PAYER picks, so this projection credits the largest
+        // class as `wild` -- the over-approximation of every class, never an under-count (see
+        // UntapLandHostsOf). One class (or a land) credits its exact typed bonus as before.
+        if (!perm->card.IsLand() && UntapLandHostCount(state, *perm) > 1) { pool.wild += aura_bonus; }
+        else { LandAuraAddToPool(pool, state, *perm); }
+    }
     if (def.params.is_filter)
     {
         if (HasUntappedNonFilterSourceProducing(state, def.params.produces)) { ++pool.wild; }
@@ -36057,7 +36239,11 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
     if (dd.params.domain_mana)
     { b = std::max(b, static_cast<int>(EffectiveProduces(state, state.active_player_index, dd).size())); }
     // Land aura (Wild Growth / Overgrowth): additive, the bonus rides on whatever the host yields.
-    b += aura_fold ? LandAuraBonusFolded(*aura_fold, pp) : LandAuraBonus(state, pp);
+    // The fold is keyed by HOST land, so an untap-target-land source (Arbor Elf, whose bonus is the
+    // Forest it re-taps) reads the exact rescan whenever the fold is live; an EMPTY fold still means
+    // "credit no aura" (PaymentManaCovers' cheap arm), for it as for a land.
+    b += (aura_fold && (pp.card.IsLand() || aura_fold->empty()))
+             ? LandAuraBonusFolded(*aura_fold, pp) : LandAuraBonus(state, pp);
     return b;
 }
 

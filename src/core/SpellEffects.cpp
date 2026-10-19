@@ -4454,6 +4454,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             ManaPool next_with_aura = next;
             if (LandAuraBonus(state, state.battlefield[i]) > 0)
             { LandAuraAddToPool(next_with_aura, state, state.battlefield[i]); }
+            // ARBOR ELF re-tapping one of several INCOMPARABLE enchanted Forests (a blue Sprawl's {U}
+            // vs a Wild Growth's {G}): which Forest is the payer's choice, so the child is tried once
+            // per class (UntapLandHostsOf; class 0 is the default credited above). 0 for every other
+            // source, and 1 whenever the Forests' bonuses are nested -- the loop below then runs once.
+            const int host_classes = state.battlefield[i].card.IsLand()
+                ? 0 : UntapLandHostCount(state, state.battlefield[i]);
             // Per-colour capacity for the child: this source is now tapped, so drop its whole share
             // from every colour it could have made. Mirrors the `untapped_max - src_max_net` subtract
             // on the line below, and stays an over-count for the same reason (one tap makes one
@@ -4481,6 +4487,13 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 ~DmgRestore() { dmgev::t_bt_dmg = v; }
             } dmg_restore;
             dmgev::t_bt_dmg += dmg_delta;
+            for (int hk = 0; hk < std::max(1, host_classes); ++hk)
+            {
+            if (hk > 0)
+            {
+                next_with_aura = next;
+                UntapLandHostAddToPool(next_with_aura, state, state.battlefield[i], hk);
+            }
             if (!(dmgev::t_pay_cap.live && dmgev::t_pay_cap.cap < dmgev::kNoCap
                   && dmgev::t_bt_dmg > dmgev::t_pay_cap.cap)
                 && TapForCostBacktrackWorker(state, cost, for_creature, next_with_aura, rp_colors, fail_memo, out_leftover,
@@ -4492,6 +4505,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                                              ? static_cast<std::size_t>(i) : ci) & 63)),
                                     untapped_max < 0 ? -1 : untapped_max - src_max_net,
                                     reserved_mask, out_full_pool, src_cands, child_cap)) { return true; }
+            }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.battlefield[i].storage_counters = storage_snap;

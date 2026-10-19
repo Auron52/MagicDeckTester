@@ -603,7 +603,11 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
         // what keeps the allocator's credit -- and therefore GT -- byte-identical.
         LandAuraAddToPool(bonus, state, p, aura_colors);
         floating.AddPool(bonus);
-        if (available)
+        // An Arbor Elf with several incomparable Forest classes was projected as `wild`
+        // (AddSourceToPool), so its re-tap retires wild units, not the class's typed colours.
+        if (available && !p.card.IsLand() && UntapLandHostCount(state, p) > 1)
+        { available->wild -= bonus.Total(); }
+        else if (available)
         {
             available->white -= bonus.white; available->blue      -= bonus.blue;
             available->black -= bonus.black; available->red       -= bonus.red;

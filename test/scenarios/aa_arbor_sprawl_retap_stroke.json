@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "ARBOR ELF RE-TAPS THE WHOLE FOREST, LAND AURA INCLUDED (AccomplishedAlchemist fix chunk E1, 2026-10-19).",
+    "",
+    "Turn 2, mid-turn: Forest A enchanted with a BLUE Utopia Sprawl (untapped), Forest B tapped, Arbor Elf",
+    "from turn 1, Stroke of Genius in hand, opponent library 1. Arbor's '{T}: Untap target Forest' is one",
+    "more tap of Forest A, and the Sprawl's 'whenever enchanted Forest is tapped for mana' fires on that",
+    "re-tap too: Forest A {G}{U} + Arbor {G}{U} = 4 mana = Stroke at the opponent for X = 1, which decks a",
+    "1-card library -> win on turn 2.",
+    "",
+    "Verified DISCRIMINATING: the pre-fix model credited Arbor a flat {G} (3 mana, X = 0), so the game ran",
+    "on to turn 3 (claude-play sweep: 4 independent reports of the Arbor + land-Aura undercount, e.g. seed",
+    "80020's hidden T2 Accomplished Alchemist). The unit tests in test_accomplished_alchemist.cpp cover",
+    "the Wild Growth count, the {U} pip paid off the re-tap alone, and the payer's choice between",
+    "incomparable Forests."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 1,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Utopia Sprawl", "controller": 0, "equips": "Forest", "color": "U" },
+    { "name": "Forest", "controller": 0, "tapped": true },
+    { "name": "Arbor Elf", "controller": 0, "sick": false }
+  ],
+  "hand": [
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 3,
+  "expect_win_turn": 2
+}
