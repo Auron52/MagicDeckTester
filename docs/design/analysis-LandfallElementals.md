@@ -168,6 +168,33 @@ Multi-depth (5b first read): d0 5.77-5.82, d3 4.59-4.67, d5 4.58-4.67 -- monoton
 (d5 <= d3 on the overnight mean, 4.611 vs 4.635), and T4-T5 is the deck's realistic clock.
 One SLOW-GAME: overnight d5 s4004 gi89 30.5 s (won T5) -- to inspect at 5c.
 
+## Stage 4a / 5 progress (2026-10-19)
+- `provider_audit.py --check`: rc=0, LandfallElementals -> LandfallElementalsProvider (cert NotAssessed).
+- SLOW-GAME overnight d5 s4004 gi89 (30.5 s in the pool, 15.8 s single-thread, won T5): TWO mulligans to
+  five -> every candidate bottom played out as a full game (the known pre-keep-table cost). Observation
+  (Q6): the baseline STATIC keep rule mulliganed a 5-land hand with Mossborn Hydra + Foundation Breaker
+  (no 2-drop: `curve_check two_drop`), then a 1-land 7 -- mulligan policy is the USER's / the keep-table
+  stage's.
+- 5d claude-play sweep LAUNCHED: 20 Opus agents, seeds 61000-61019 (brief `logs/lfe/sweep_prompt.md`).
+- 5e first pass RUNNING: overnight d3 rows (4x400 b10) with MTG_UNPRUNED=1 vs the accepted GT wins.
+
+## Stage 5e — narrowing vs the unpruned oracle (2026-10-19)
+- `MTG_UNPRUNED=1` (every gate) on the overnight d3 rows: RSS passed the 35 GB cap and the engine aborted
+  itself (the guard held). Single-game bisect (seed 6083 gi77 d3 b10): pruned 1.3 s / 340 MB, all-gates
+  29 s / 4.2 GB; one gate alone reproduces it -- **`searchorder`** (the cast-order permutation ORACLE,
+  analysis-only, never shipped): this deck's many cheap Elementals x land slots x Reef look pins explode
+  the permutation set, and the work is not charged to the budget's units (29 s at --budget-ms 10).
+  Engine-cost finding for the oracle tool, not a shipped-play defect.
+- Every gate EXCEPT searchorder, overnight d3 (1,600 games): 15 faster / 17 slower, net +0.0006/game.
+  At b200 (20x): 14 of the 17 unpruned-slower games recover (budget dilution); 7 of the 15
+  unpruned-faster games are found by SHIPPED play at b200; the other 8 are explained by ONE gate,
+  **`dig`** (each of the 8 reproduces its faster win with MTG_UNPRUNE=dig alone).
+- `MTG_UNPRUNE=dig` alone, overnight d3 + d5 (2,800 games): d3 13 faster / 12 slower (-0.0013/game),
+  d5 11 / 11 (-0.0008), ~+5% units. Aggregate-NEUTRAL at the shipped budget, but the generic dig gate
+  (`GenericProvider::ShouldConsiderDig` / `HasAnyDigSource`: when a line may crack Waterlogged Grove /
+  Fiery Islet to draw) makes some lines unfindable even at 20x budget. -> Q7 (USER: a shared provider
+  prune; the completeness rule vs the provider-prune licence).
+
 ## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
 Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
 STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout
@@ -231,6 +258,12 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
 - Q4. Sign off the PROVISIONAL deferrals listed in the three cluster reports above (Brushfire evasion,
   Hydra trample, Reef fixed orders / defaults, Breaker own-target narrowing, Fulminator ranking,
   Smokebraider Kindred refusal, Fury planeswalkers / trigger order) and the INERT_PARAMS rows.
+- Q6. The baseline static keep rule mulligans e.g. 5 lands + Mossborn Hydra + Foundation Breaker (no
+  2-drop). Fine to leave until the keep table (your mulligan stage), or do you want a static tweak first?
+- Q7. The generic DIG gate is aggregate-neutral here (d3 -0.0013, d5 -0.0008 per game opened, ~+5%
+  units) but hides 8/1,600 d3 lines even at 20x budget. Recommendation: open it for LandfallElementals
+  (a deck-scoped provider override: more complete, measured neutral-to-better), and decide separately
+  whether the GenericProvider gate should become budget-staged for every deck. Default: unchanged.
 - Q5. Harbinger/Reef trigger order reuses the `dig` modal (two card tiles, asked up front) rather than a
   new decision type -- OK?
 
