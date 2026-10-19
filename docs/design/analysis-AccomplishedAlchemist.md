@@ -12,7 +12,9 @@ was attempted 2026-10-19 and STOPPED before adding rows (see "Suite entry attemp
 status-quo deck is over the 8,907 ms/game line, no `bottom_eval_*` arm met the adoption rule, and NOTHING was
 adopted or added. Chunk P2 (lossless per-node cuts, 2026-10-19) made the per-node tail class 1.51x cheaper
 per unit but the deck is still 1.55x over the line at d5 b20, and its `MTG_ENUM_CHARGE` lever (OFF) measured a
-quality loss. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
+quality loss. Chunk P3 (2026-10-19) landed three more byte-identical cuts (the gi286 tail game 1.13x, the
+cells ~2%) and found nothing lossless left that reaches the line; it surfaced the continuation-cache
+eviction (g60 -17% with an unbounded cache) as a USER call. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
 `MTG_ALLOW_UNTESTED_DECK=1`), and/or the per-node enumeration cost found in the same attempt; then the suite
 rows, then profile -> mulligan -> value leaf. Viewer flags are the viewer worktree's. Open USER items are
 listed under "Open questions surfaced to USER".
@@ -61,6 +63,69 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
+
+Commits (branch `accomplished-alchemist`): 86ba02b3 (AppendSubdecisionAxes), 22d15f95 (UntapLandHosts),
+e6f38737 (bottom-trial early stop). Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/p3/` (perf data,
+`cost/` = the 200-game cells, `t_*` / `ps_*` / `te_*` = the repro runs). Base = 5e7998d6 (`p3/mtg.base`).
+
+* **The gi286 class (seed 90287 gi286 d3 b10, a 40-minute game).** perf (callgraph, a 40 s window): the
+  resolve-mode TUTOR axis was 18% of the game on its own -- one `Plan v = p` copy per Living Wish variant
+  (9.6%) plus a move into a side vector, its reallocation moves and a second move into the list (6.5%), and
+  the decline variant (1.7%) -- and the ~30 per-cast passes' action walks another ~6%. (P2's
+  `BpCandFingerprint` 5% was its own MTG_TURN_CENSUS instrument: `s_rollout_stats` is on under the census.)
+  - 86ba02b3: the tutor axis sizes its variants in one loop and copy-constructs them onto the end of the list
+    (capacity grown exactly as `vector::insert` grew it -- it feeds the plan cache's byte accounting); one
+    walk per plan records which per-cast traits it holds (wish x2, dig, Ponder, sac-land, Saga I, sac-creature
+    colour, Wave, untap loop) and each pass skips a plan whose bit is clear (every bit is a necessary
+    condition of that pass's own test); the dominated Stroke+loop erase is `remove_if` spelled out so the
+    traits move with the plans. AppendSubdecisionAxes 27.6% -> 19.2% of the window; what is left is the
+    variant copies themselves.
+  - Full game, base vs P3 as two concurrent single-thread runs: **2,601 s -> 2,307 s (1.13x)**, digest
+    df7a74d6161cbaa3 and 1,794,357 units in both (690 -> 778 units/s; the deck norm is ~23 k).
+* **22d15f95 (every Alchemist game).** The land-Aura readers zero-initialised a 424-byte `UntapLandHosts`
+  for every NONLAND permanent before `UntapLandHostsOf` rejected all but the Arbor Elf (LandAuraBonus +
+  UntapLandHostsOf were 3.4% of the cell's samples); the same source test now runs first.
+* **e6f38737 (bottom trials).** Every reader of a bottom trial's win turn asks only whether it EQUALS the
+  pass's best, so a trial with no win by the end of turn B (the best an earlier trial of the pass reached)
+  stops there and reports B + 1 -- decision-exact by construction (argument in the code; off under the
+  two-stage refine and, on the subset table, under an external chooser). Measured: units -1.6% (d5 b20) /
+  -1.7% (d3 b10) only -- at d5 a trial's early turns already search to the horizon, so the turns after B are
+  a small share. The one channel by which it could move a later trial is the shared bottoming TT (fewer
+  late-turn entries): reachable only through a key collision across different kept hands, or the TT's
+  store cap binding; neither showed (identity below).
+* **Byte-identity:** mtg-test 1499/1499; scenarios 228/228; smoke: all 128 case digests equal to HEAD's
+  (P2's smoke run), i.e. only the four known moves at their known digests (selesnya d3 a1937cded0ab6f58, d5
+  9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11); the deck's 200-game cells
+  identical (d3 b10 ed03ab6957a09593, d5 b20 f4d9cf88b0c3a26c). Not accepted.
+* **Cost, seed 70001, 200 games** (base and P3 as two concurrent 15-thread batches; ms per game):
+
+  | cell | base mean / p90 / max | P3 mean / p90 / max | core-s | units mean |
+  |---|---|---|---|---|
+  | d3 b10 | 7,031 / 17,987 / 65,181 | 7,075 / 18,443 / 63,058 | 1,406 -> 1,415 | 170 k -> 167 k |
+  | d5 b20 | 12,861 / 36,156 / 147,815 | 12,643 / 34,375 / 150,638 | 2,572 -> 2,529 (0.98x) | 319 k -> 314 k |
+
+  Single thread (perf stat, instructions -- the cycle counts were SMT-contended): g60 (seed 90061 gi60 d5 b20)
+  468.7 G -> 463.6 G (-1.1%), 67.4 s -> 66.2 s; g123 (seed 70124 gi123 d5 b20) 809.0 G -> 807.9 G (-0.1%).
+  **Still 1.42x over the 8,907 ms line at d5 b20.**
+* **Residual: there is no lossless per-node target left that is worth the line.** The cell profile
+  (callgraph, 12 threads) is flat: SolveWithLookahead 74% inclusive; SolveUncached 33%; SimulateToEndImpl
+  34%; ApplyPlanDirect 33%; EnumeratePlans 19%; mana payment (TapForCostShared) 15% -- 6.5% from the
+  enumeration's SubsetPayableWithFilters, 2.4% from ApplyActivatedUntap's per-iteration payer; BuildSimKey
+  4.6%; nothing else over ~3%. The line needs the USER's levers (bottom_eval, the mulligan stage,
+  MTG_SOLVE_CHARGE_W, MTG_ENUM_CHARGE), not more per-node work.
+* **One finding for the USER (not changed): the breakpoint-continuation cache thrashes on the tail class.**
+  `BpEnumEntryFor` clears its WHOLE cache when the plan-cache byte pool (3.2 GB, global) or the 8,192-entry
+  cap binds, and the tail games re-derive what it threw away. g60 single-thread: default 12,733 misses / 5
+  clears / 59.6 s; pool and cap unbounded 9,992 / 0 / **49.2 s (-17%)**, same digest and units
+  (pool only: 10,844 / 1 / 54.0 s; cap only: unchanged). gi286 is a different animal: with the pool
+  unbounded the cache reached 32.9 GB in 68 s and the process hit the 35 GB RSS cap -- its continuation
+  lists are GB-scale (the Living Wish variants of every plan, re-derived per breakpoint state), so no cache
+  size covers that class; it is a list-WIDTH problem. For the g60 class a smarter eviction (two
+  generations, the hot half kept) would recover most of the 17% inside the same memory bound -- but cache
+  HISTORY can move work units and so play (ClearPerGameCaches' note: a KittyEquipment game's digest moved
+  with it), so an eviction policy is not byte-identical by construction and was left to the USER.
 
 ## Chunk P2 (2026-10-19) -- landed: lossless per-node cuts; the enumeration-charge lever measured, OFF
 
@@ -716,6 +781,13 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   bottom-trial games + the 25x pass ceiling; which lever (mulligan stage first, profile bottom_eval_*,
   kOverrunBudgetMult, MTG_SOLVE_CHARGE_W, a start-gate estimate) is the USER's. (5) Per-game cost at seed
   70001 d5 b40 is ~2.4x the 3x line before the mulligan stage -- the suite entry needs a decision on that.
+* Chunk P3: (1) the bottom-trial early stop (e6f38737) is ON engine-wide: decision-exact by construction, byte-
+  identical on smoke and the cells; its one theoretical channel is the shared bottoming TT (a cross-hand key
+  collision or the TT store cap binding). (2) The continuation-cache eviction (clear-all on the 3.2 GB pool /
+  8,192-entry cap) costs the g60 tail class 17%; a two-generation eviction would recover most of it in the
+  same memory, but cache history moves work units on some decks, so it is a play change -- USER's call. The
+  gi286 class is not a cache problem: its continuation lists are GB-scale (an unbounded cache hit 33 GB in
+  68 s), i.e. the Living Wish variant width inside continuation derivations.
 
 ## Claude-play sweep
 - commit: `251c426e`
