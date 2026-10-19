@@ -625,7 +625,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "At the beginning of your upkeep, you may put a charge counter on this artifact. {T}: You may put a creature card with mana value equal to the number of charge counters on this artifact from your hand onto the battlefield. [AI heuristic: adds counters each upkeep until reaching the most common creature MV in hand; activates to deploy matching creatures for free each main phase.]",
+   "oracle_text": "At the beginning of your upkeep, you may put a charge counter on this artifact. {T}: You may put a creature card with mana value equal to the number of charge counters on this artifact from your hand onto the battlefield. [AI policy. CHARGE: the shared hand-aware rule WantVialCharge (executor and rollout alike) -- HOLD while an undeployed creature in hand has mana value equal to the counters (from two counters up; it climbs instead when the next level also holds a creature, unless this level holds two or more extra), else CLIMB while a creature in hand has a higher mana value, else pre-charge toward the deck's charge target (vial_target_mv: the most common creature mana value in the list, ties going up). The charge is not a searched decision (the searched charge axis MTG_VIAL_AXIS ships OFF, USER ruling 2026-08-30). PUT: searched -- one main-phase action per creature card in hand whose mana value equals the counters, both mains.]",
    "template": "custom",
    "parameters": {
     "upkeep_adds_charge": true
