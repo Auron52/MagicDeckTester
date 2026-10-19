@@ -1,0 +1,65 @@
+{
+  "card_scores": {
+    "Accomplished Alchemist": [
+      0.6182988726825878
+    ],
+    "Arbor Elf": [
+      0.4078878639548096
+    ],
+    "Crab Umbra": [
+      -0.330870465299685,
+      -0.5488170347003152
+    ],
+    "Elvish Harbinger": [
+      0.7757114680191597
+    ],
+    "Ezuri, Renegade Leader": [
+      0.20163449344793616
+    ],
+    "Feed the Clan": [
+      -0.17886320715986503,
+      -0.5840367428003974
+    ],
+    "Living Wish": [
+      0.18435184084334022,
+      -0.18589743589743613
+    ],
+    "Nourish": [
+      -0.2217192653653317,
+      -0.4318996415770613
+    ],
+    "Seedcradle Witch": [
+      0.3533333333333335
+    ],
+    "Staff of Domination": [
+      0.038918896716025664,
+      -0.14717246224095515
+    ],
+    "Stroke of Genius": [
+      -0.3752162095379292,
+      -0.28004694835680777
+    ],
+    "Utopia Sprawl": [
+      0.32211477384176757,
+      -0.17883374848310662
+    ],
+    "Weather the Storm": [
+      -0.3288848480912643
+    ],
+    "Wild Growth": [
+      0.1838828668907606
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
