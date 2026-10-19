@@ -6805,18 +6805,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // Stoneforge / Soulstoke put (executor mirror -- same shared ApplyPutFromHand), paid
             // under the creature-ability context naming the source (lockstep with apply_one).
-            ManaPool avail = AvailableManaPool(state);
-            std::optional<CreatureAbilityPayScope> put_scope;
-            if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
-            { put_scope.emplace(AbilitySourceCard(state, state.active_player_index, a.sac_source_id)); }
-            const bool put_paid = TapForCost(state, a.cost, avail, /*for_creature=*/false);
-            put_scope.reset();
-            if (put_paid)
+            // LEGALITY FIRST (sweep flag B): with the card no longer in hand (a same-plan cast or Vial
+            // put already used the copy) or the source unable to {T}, the ability does nothing -- so it
+            // must not be paid. Lockstep twin: apply_one.
+            if (PutFromHandLegalIndex(state, state.active_player_index, a.sac_source_id,
+                                      a.card_name.str()) >= 0)
             {
-                ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
-                if (m_logger)
-                { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
-                                       "put " + a.card_name.str() + " onto the battlefield"); }
+                ManaPool avail = AvailableManaPool(state);
+                std::optional<CreatureAbilityPayScope> put_scope;
+                if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+                { put_scope.emplace(AbilitySourceCard(state, state.active_player_index, a.sac_source_id)); }
+                const bool put_paid = TapForCost(state, a.cost, avail, /*for_creature=*/false);
+                put_scope.reset();
+                if (put_paid
+                    && ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str()))
+                {
+                    if (m_logger)
+                    { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
+                                           "put " + a.card_name.str() + " onto the battlefield"); }
+                }
             }
         }
         else if (a.kind == Action::Kind::AuraSwap)

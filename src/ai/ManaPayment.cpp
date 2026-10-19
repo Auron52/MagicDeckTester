@@ -1200,6 +1200,160 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     { PainDeferQuery(state, cost_in, state.floating_mana, reserved_mask, q); });
 }
 
+// How many untapped sources could pay a pip of colour `ci` (W,U,B,R,G = 0..4) in THIS payment -- the
+// payer's own source and restriction predicates (usable()'s, minus the in-flight scopes it alone
+// needs). Read by SpendRestrictedWildTowardCost to put a wild unit where the board is shortest.
+static int PipProvidersNow(const GameState& state, int active, int ci, bool for_creature)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const bool src = d->tmpl == CardTemplate::BasicLand || d->params.mana_rock
+                      || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield));
+        if (!src || !RestrictedManaUsable(d->params, for_creature, 1)) { continue; }
+        for (Color c : ProducesForPayment(state, active, *d, for_creature, &p))
+        { if (static_cast<int>(c) == ci) { ++n; break; } }
+    }
+    return n;
+}
+
+// THE RESTRICTED FLOAT, SPENT WHERE THE BOARD IS SHORT (LandfallElementals sweep flag G, seed 61003).
+// Smokebraider's leftover unit floats WILD ("two mana in any combination of colors" -- its colour was
+// the player's choice), and the plain drain (SpendFloatingTowardCost) hands a wild unit to the pips in
+// fixed W,U,B,R,G order: with {wild:1} floating and one untapped Mountain, Brushfire Elemental's {R}{G}
+// took the wild for {R} and then had no {G} -- an unpayable cast that was payable (wild for {G},
+// Mountain for {R}). Here exact colours drain first as before, then each wild unit goes to the
+// coloured pip whose colour the fewest untapped sources can make for this payment (ties: WUBRG), and
+// only then to generic. Used for a SUBTYPE reserve only; Troyan's big-spell reserve keeps the plain
+// drain (byte-identical).
+static void SpendRestrictedWildTowardCost(const GameState& state, int active, ManaPool& reserve,
+                                          ManaCost& cost, bool for_creature)
+{
+    if (reserve.Total() == 0) { return; }
+    auto drain = [](int& pip, int& pool) { while (pip > 0 && pool > 0) { --pip; --pool; } };
+    drain(cost.white, reserve.white);   drain(cost.blue,  reserve.blue);
+    drain(cost.black, reserve.black);   drain(cost.red,   reserve.red);
+    drain(cost.green, reserve.green);   drain(cost.colorless, reserve.colorless);
+    int* pips[5] = { &cost.white, &cost.blue, &cost.black, &cost.red, &cost.green };
+    while (reserve.wild > 0)
+    {
+        int best = -1, best_prov = 1 << 30;
+        for (int c = 0; c < 5; ++c)
+        {
+            if (*pips[c] <= 0) { continue; }
+            const int prov = PipProvidersNow(state, active, c, for_creature);
+            if (prov < best_prov) { best = c; best_prov = prov; }
+        }
+        if (best < 0) { break; }
+        --reserve.wild; --*pips[best];
+    }
+    drain(cost.generic, reserve.wild);
+    drain(cost.generic, reserve.colorless);
+    drain(cost.generic, reserve.white);   drain(cost.generic, reserve.blue);
+    drain(cost.generic, reserve.black);   drain(cost.generic, reserve.red);
+    drain(cost.generic, reserve.green);
+}
+
+// MAY A RESTRICTED CREATURE SOURCE THAT COULD ATTACK BE HELD BACK? (LandfallElementals sweep flags C
+// and E, seeds 61009 / 61017 / 61003.) MTG_CREATURE_ONLY_FIRST spends creature-only mana on a payment
+// it may fund before anything else -- it can pay nothing else, so that is never worse for the rest of
+// the turn -- EXCEPT a source whose tap costs an attack (Giada: measured, an Angels attacker is worth
+// more than the order). But "never worse" is about the LINE, and that exception can strand it: a 1/1
+// Smokebraider held for its attack made the payer spend the Mountain on Brushfire's {R} and the Island
+// on Risen Reef, so the Myriad Landscape crack / Metallic Mimic / Aether Vial the same declared line
+// still owed had nothing left -- legal lines unreachable, and plans scored that do not run. The hold is
+// kept when it strands nothing the restricted source could not have paid anyway: the GENERAL sources
+// (unrestricted, untapped, plus the general float) alone cover this payment's remainder AND what the
+// line still owes after it that the restricted source can NOT pay (PlanTraits::restr_pp's split: a
+// Mimic, a Myriad crack; a later Elemental it can still pay, so that one does not count -- spending
+// Smokebraider on Incandescent Soulstoke strands Risen Reef's {G}, seed 61010 T4). Flat totals.
+// Otherwise the restricted source pays now, which only ever frees general mana. Once per payment.
+// What the applying line still owes after the payment in progress that the board's SUBTYPE-restricted
+// creature source can NOT pay (PlanTraits::restr_pp's split: a Metallic Mimic, a Myriad crack -- not a
+// later Elemental, which it still can). `known` is false when no split was built (no plan traits, or
+// no such source up at apply time): the caller then has only the whole line to go on.
+static int RestrictedIneligOwedLater(const GameState& state, const ManaCost& cost_in, bool& known)
+{
+    const PlanTraits* pt = CurrentPlanTraits();
+    known = pt != nullptr && pt->restr_pp != nullptr && !pt->restr_inelig_overflow;
+    if (!known)
+    {
+        int owed = std::max(0, g_line_unpaid_cost.ManaValue() - cost_in.ManaValue());
+        if (pt != nullptr)
+        {
+            owed += std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue()
+                                - g_act_line_current.ManaValue());
+        }
+        return owed;
+    }
+    int owed = 0;
+    const std::vector<Card>& hand = state.players[state.active_player_index].hand;
+    for (int k = 0; k < pt->restr_inelig_count; ++k)
+    {
+        int now = 0;
+        for (const Card& c : hand) { if (c.m_name == pt->restr_inelig_def[k]->card.m_name) { ++now; } }
+        // Still owed while fewer copies than the plan casts have left the hand (the card being paid
+        // now is never one of these: the restricted source is only ever asked about an ELIGIBLE one).
+        const int kept    = pt->restr_inelig_hand0[k] - pt->restr_inelig_plan_n[k];
+        const int pending = std::clamp(now - kept, 0, pt->restr_inelig_plan_n[k]);
+        owed += pending * pt->restr_inelig_mv[k];
+    }
+    // Activations pay in the trailing pass; an eligible one paid first can only have reduced the
+    // ineligible remainder by less than this assumes (an over-estimate -> spend the restricted first).
+    const int act_paid = g_act_line_paid.ManaValue();
+    owed += std::max(0, pt->act_restr_inelig_mana - std::max(0, act_paid - pt->act_restr_elig_mana));
+    return owed;
+}
+
+// MAY A RESTRICTED CREATURE SOURCE THAT COULD ATTACK BE HELD BACK? (LandfallElementals sweep flags C
+// and E, seeds 61009 / 61017 / 61003.) MTG_CREATURE_ONLY_FIRST spends creature-only mana on a payment
+// it may fund before anything else -- it can pay nothing else, so that is never worse for the rest of
+// the turn -- EXCEPT a source whose tap costs an attack (Giada: measured, an Angels attacker is worth
+// more than the order). But "never worse" is about the LINE, and that exception can strand it: a 1/1
+// Smokebraider held for its attack made the payer spend the Mountain on Brushfire's {R} and the Island
+// on Risen Reef, so the Myriad Landscape crack / Metallic Mimic / Aether Vial the same declared line
+// still owed had nothing left -- legal lines unreachable, and plans scored that do not run. The hold is
+// kept when it strands nothing the restricted source could not have paid anyway: the GENERAL sources
+// (unrestricted, untapped, plus the general float) alone cover this payment's remainder AND what the
+// line still owes after it that the restricted source can NOT pay (RestrictedIneligOwedLater; a later
+// Elemental it can still pay does not count -- spending Smokebraider on Incandescent Soulstoke strands
+// Risen Reef's {G}, seed 61010 T4). Flat totals. Otherwise the restricted source pays now, which only
+// ever frees general mana. Computed once per payment.
+static bool RestrictedMayHoldForAttack(const GameState& state, int active, const ManaCost& cost_in,
+                                       const ManaCost& cost_left)
+{
+    const PlanTraits* pt = CurrentPlanTraits();
+    int general = static_cast<int>(state.floating_mana.Total());
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.creature_mana_only || BigSpellOnlySource(d->params)) { continue; }
+        const bool src = d->tmpl == CardTemplate::BasicLand || d->params.mana_rock
+                      || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                      || PaySacSpendableNow(state, p, *d);
+        if (!src || !StorageSourceLive(p, *d) || !GraveyardFuelLive(state, active, *d)
+            || !ManaSubtypeGateLive(state, active, *d)) { continue; }
+        // A pending trailing activation's own {T} source (the Myriad Landscape the line cracks) makes
+        // no mana for the line.
+        bool act_src = false;
+        if (pt != nullptr)
+        {
+            for (int i = 0; i < pt->act_src_count && i < PlanTraits::kMaxActSrcs; ++i)
+            { if (pt->act_src_nums[i] == p.card.m_number) { act_src = true; break; } }
+        }
+        if (act_src) { continue; }
+        const int y = PermanentManaYield(state, p, *d);
+        general += (y >= 0 ? y : ManaProducedPerTap(*d));
+    }
+    bool known = false;
+    const int owed_later = RestrictedIneligOwedLater(state, cost_in, known);
+    return general >= cost_left.ManaValue() + owed_later;
+}
+
 static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
                                      std::uint64_t reserved_mask, ManaPool* available,
                                      bool honor_legacy_cco)
@@ -1367,7 +1521,12 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     if (RestrictedFloatUsableNow(state, for_creature))
     {
         const int before = static_cast<int>(state.floating_bigspell_mana.Total());
-        SpendFloatingTowardCost(state.floating_bigspell_mana, cost);
+        // A SUBTYPE reserve (Smokebraider's wild leftover) re-splits its wild units across the pips
+        // by board scarcity (flag G); Troyan's big-spell reserve keeps the plain drain.
+        if (!BigSpellOnlySource(*state.floating_bigspell_pp))
+        { SpendRestrictedWildTowardCost(state, active, state.floating_bigspell_mana, cost, for_creature); }
+        else
+        { SpendFloatingTowardCost(state.floating_bigspell_mana, cost); }
         if (BigFloatStats::Enabled())
         { BigFloatStats::g_spent.fetch_add(static_cast<std::uint64_t>(before - state.floating_bigspell_mana.Total()),
                                            std::memory_order_relaxed); }
@@ -1382,11 +1541,28 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
     PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green, cost.ManaValue());
+    // What this payment's TAPS pay (after every float drain): the leftover attribution below reads it.
+    const ManaCost tap_bill = cost;
     // ...and this payment's OWN coloured pips as the line hold counts them (cost_in, before any
     // float is spent: the hold carries the cast's full cost until it lands). The generic-pip
     // readers of the hold take them back out -- see g_pay_own_line_pips in SpellEffects.h.
     PayOwnPipsScope _pops(cost_in);
     const int pay_full_mv = cost.ManaValue();   // restored before the backtracker (see pay())
+    // The restricted-first rank's attack exception, decided once per payment (see
+    // RestrictedMayHoldForAttack). Only a LINE can be stranded: with nothing owed after this payment
+    // the hold stays exactly as before (the greedy/backtracker settles this payment either way).
+    bool restricted_hold_ok = true;
+    // Plan traits say whether a creature-only creature was even up when the apply began (no such source
+    // -> nothing below can matter, and the board scan is skipped). With no traits in scope (CheckLine's
+    // walk) the test runs on the whole line, as the apply's fallback does.
+    const PlanTraits* const hold_pt = CurrentPlanTraits();
+    if (CreatureOnlyFirstEnabled() && (hold_pt == nullptr || hold_pt->restr_creature_up))
+    {
+        int line_owed = std::max(0, g_line_unpaid_cost.ManaValue() - cost_in.ManaValue());
+        if (hold_pt != nullptr)
+        { line_owed += std::max(0, hold_pt->act_mana_total - g_act_line_paid.ManaValue() - g_act_line_current.ManaValue()); }
+        if (line_owed > 0) { restricted_hold_ok = RestrictedMayHoldForAttack(state, active, cost_in, cost); }
+    }
 
     // SNOW-pip restriction (see ManaCost::snow_pips): while the greedy loop is settling an {S}
     // pip this flag narrows every candidate to SNOW producers -- the one choke point (usable)
@@ -1959,9 +2135,22 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // rank (the creature band, behind the lands), so it pays only when needed, exactly
                 // as before G. Somberwald Sage (0/1) and Ancient Ziggurat (a land) cost no attack
                 // and keep the creature-first rank.
-                if (for_creature && def->params.creature_mana_only && kind == 1
+                //
+                // ...AND THE HOLD MAY NOT STRAND THE LINE (LandfallElementals sweep flags C/E, seeds
+                // 61003 / 61009 / 61017). Holding Smokebraider for its attack made the payer spend
+                // the Mountain on Brushfire Elemental's {R} and the Island on Risen Reef, and the
+                // Myriad Landscape crack / Metallic Mimic the same declared line still owed found
+                // nothing left: the attack exception applies only while the general sources alone
+                // still cover the line (restricted_hold_ok, RestrictedMayHoldForAttack). And the
+                // rank covers an ABILITY payment this source may fund (Smokebraider's "or activate
+                // abilities of Elementals" -- usable() admitted it, so SubtypeAbilityManaOk passed):
+                // Incandescent Soulstoke's put {1}{R} spends Elemental-only mana first for the same
+                // reason. Only Smokebraider carries mana_only_subtype_abilities.
+                if ((for_creature || def->params.mana_only_subtype_abilities)
+                    && def->params.creature_mana_only && kind == 1
                     && CreatureOnlyFirstEnabled()
-                    && !(def->card.IsCreature() && SacPayFodderCostsAttack(state, p))) { rank = -500; }
+                    && !(def->card.IsCreature() && restricted_hold_ok
+                         && SacPayFodderCostsAttack(state, p))) { rank = -500; }
                 // BIG-SPELL-ONLY MANA PAYS A QUALIFYING SPELL FIRST (Troyan, Gutsy Explorer) -- the same
                 // argument: usable() admits it only for a spell of mana value 5+ (or with {X}), it can
                 // pay nothing else this turn, so spending it here and leaving the GENERAL sources up is
@@ -2829,6 +3018,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
           int sub_units = 0;
           bool sub_any_combo = false;
           const CardParams* sub_pp = nullptr;
+          int gen_tap_colours = 0;   // colours (W,U,B,R,G,C bits) the GENERAL sources this payment tapped make
           const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
           for (int bi = 0; bi < nb; ++bi)
           {
@@ -2836,7 +3026,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
               if (!bp.tapped || bf_pre[static_cast<std::size_t>(bi)].tapped) { continue; }
               if (bp.controller_index != active || bp.def_absent) { continue; }
               const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
-              if (bd == nullptr || !bd->params.creature_mana_only) { continue; }
+              if (bd == nullptr) { continue; }
+              if (!bd->params.creature_mana_only)
+              {
+                  for (Color c : EffectiveProduces(state, active, *bd))
+                  { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 6) { gen_tap_colours |= 1 << ci; } }
+                  continue;
+              }
               const int y = PermanentManaYield(state, bp, *bd);
               const int units = (y >= 0 ? y : ManaProducedPerTap(*bd));
               if (!bd->params.mana_only_subtype.empty())
@@ -2850,7 +3046,32 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
           }
           if (sub_units > 0 && sub_pp != nullptr)
           {
-              const int sub_left = std::min(sub_units, lo.Total());
+              int sub_left = std::min(sub_units, lo.Total());
+              // RESTRICTED UNITS PAY FIRST, WHEN THE LEFTOVER CAN BE GENERAL (LandfallElementals sweep,
+              // seed 61016 T9). Booking the leftover to the restricted source first is the safe default
+              // -- but it was wrong when the restricted units were all needed: Smokebraider paid Risen
+              // Reef's {U}{G}, Gruul Turf's {R}{G} paid the {1}, and the unit Turf left over went into
+              // the ELEMENTAL-ONLY reserve, so Metallic Mimic's {2} (Turf's {G} + Secluded Courtyard)
+              // was dropped. An ANY-COMBINATION source's colours were the player's choice at activation,
+              // so its units can be attributed to any pip of this payment but {C}: as many as the taps'
+              // bill holds are spent. The rest of the leftover is GENERAL only when every colour in it
+              // is one a general source tapped here makes (so it is that source's real surplus, never a
+              // unit no unrestricted source produced); otherwise the conservative booking stands. Only
+              // while the line still owes something the restricted unit could NOT pay: when both bookings
+              // are legal (Mountain {R} + Smokebraider for Brushfire's {R}{G}) neither dominates -- a general
+              // {R} vs a unit any later Elemental can spend as any colour -- and that demand is what decides.
+              bool inelig_known = false;
+              if (sub_any_combo && lo.wild == 0
+                  && RestrictedIneligOwedLater(state, cost_in, inelig_known) > 0 && inelig_known)
+              {
+                  const int coverable = std::max(0, tap_bill.ManaValue() - tap_bill.colorless);
+                  const int alt_left  = std::min(lo.Total(), std::max(0, sub_units - coverable));
+                  const int lo_cols[6] = { lo.white, lo.blue, lo.black, lo.red, lo.green, lo.colorless };
+                  bool general_made = true;
+                  for (int c = 0; c < 6; ++c)
+                  { if (lo_cols[c] > 0 && (gen_tap_colours & (1 << c)) == 0) { general_made = false; } }
+                  if (alt_left < sub_left && general_made) { sub_left = alt_left; }
+              }
               ManaPool r;
               int* src[7] = { &lo.white, &lo.blue, &lo.black, &lo.red, &lo.green, &lo.colorless, &lo.wild };
               int* dst[7] = { &r.white,  &r.blue,  &r.black,  &r.red,  &r.green,  &r.colorless,  &r.wild };
@@ -6726,11 +6947,23 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
         const bool dork = d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)
                           && GraveyardFuelLive(state, active, *d);
         if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
+        // The demand is an ACTIVATION's: a colored_creature_only land (Unclaimed Territory, Cavern
+        // of Souls) makes only {C} for it -- its colours pay creature SPELLS -- so it is no provider
+        // of a coloured pip here, exactly as the payer refuses it (ProducesForPayment). Secluded
+        // Courtyard's colours also pay a CREATURE's ability (colored_creature_ability_ok), the
+        // activations this hold protects in practice, so it keeps them. Holding a Territory for an
+        // activation's {R} held a source that could never pay it, and let the cast spend the real one.
+        // A creature_mana_only source pays NO ability (Giada, Somberwald Sage, Ancient Ziggurat), so
+        // it is not counted either -- except Smokebraider's kind, whose mana also pays an Elemental's
+        // ability (mana_only_subtype_abilities), the put this hold protects on its deck.
+        if (d->params.creature_mana_only && !d->params.mana_only_subtype_abilities) { continue; }
+        const bool cco_no_colour = d->params.colored_creature_only && !d->params.colored_creature_ability_ok;
         int seen = 0, breadth = 0;
         for (Color c : EffectiveProducesFor(state, active, *d, &p))
         {
             const int ci = static_cast<int>(c);
             if (ci >= 5 || (seen & (1 << ci))) { continue; }
+            if (cco_no_colour) { continue; }
             seen |= (1 << ci); ++breadth;
         }
         if (seen == 0) { continue; }

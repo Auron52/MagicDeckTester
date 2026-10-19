@@ -1394,41 +1394,60 @@ int ApplyAttachAllFreeEquipment(GameState& state, int controller, int host_id)
 }
 
 // Stoneforge Mystic's tap-put (see the SpellEffects.h declaration note).
-bool ApplyPutFromHand(GameState& state, int controller, int source_id,
-                      const std::string& put_name)
+// The put's legality (see the SpellEffects.h declaration): the source live and able to {T}, and a
+// non-staged hand copy of `put_name` that the source's type riders admit. Returns that hand index, or -1.
+int PutFromHandLegalIndex(const GameState& state, int controller, int source_id,
+                          const std::string& put_name)
 {
-    Permanent* src = nullptr;
-    for (Permanent& p : state.battlefield)
+    const Permanent* src = nullptr;
+    for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index == controller && p.card.m_number == source_id) { src = &p; break; }
     }
-    if (src == nullptr || src->tapped || !CanTapNow(*src, state.battlefield)) { return false; }
-    Player& ap = state.players[controller];
+    if (src == nullptr || src->tapped || !CanTapNow(*src, state.battlefield)) { return -1; }
+    const Player& ap = state.players[controller];
     int hi = -1;
     for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
     {
         if (!ap.hand[h].m_is_staged && ap.hand[h].m_name == put_name) { hi = h; break; }
     }
-    if (hi < 0) { return false; }
-    const std::string src_name = src->card.m_name.str();
-    // The source's riders (Incandescent Soulstoke): "an Elemental CREATURE card", "that creature gains
-    // haste until end of turn", "sacrifice it at the beginning of the next end step". All false for
+    if (hi < 0) { return -1; }
+    // The source's riders (Incandescent Soulstoke): "an Elemental CREATURE card". All false for
     // Stoneforge Mystic -> byte-identical there.
     const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src->card);
-    const bool put_creature_only = sdef && sdef->params.tap_put_from_hand_creature_only;
-    const bool put_haste         = sdef && sdef->params.tap_put_grants_haste;
-    const bool put_sac_at_end    = sdef && sdef->params.tap_put_sac_at_end_step;
-    const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[hi]);
-    if (put_creature_only && !(d ? d->card : ap.hand[hi]).IsCreature()) { return false; }
+    const CardDefinition* d    = CardDatabase::Instance().LookupCached(ap.hand[hi]);
+    const Card& hc = d ? d->card : ap.hand[hi];
+    if (sdef && sdef->params.tap_put_from_hand_creature_only && !hc.IsCreature()) { return -1; }
     // ...and the type list itself (the enumeration's filter, re-checked here so a declared human line
     // naming a non-matching card is a no-op rather than an illegal put).
     if (sdef != nullptr && !sdef->params.tap_put_from_hand_types.empty())
     {
         bool match = false;
         for (const std::string& t : sdef->params.tap_put_from_hand_types)
-        { if (CardMatchesTypeName(d ? d->card : ap.hand[hi], t)) { match = true; break; } }
-        if (!match) { return false; }
+        { if (CardMatchesTypeName(hc, t)) { match = true; break; } }
+        if (!match) { return -1; }
     }
+    return hi;
+}
+
+bool ApplyPutFromHand(GameState& state, int controller, int source_id,
+                      const std::string& put_name)
+{
+    const int hi = PutFromHandLegalIndex(state, controller, source_id, put_name);
+    if (hi < 0) { return false; }
+    Permanent* src = nullptr;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == source_id) { src = &p; break; }
+    }
+    Player& ap = state.players[controller];
+    const std::string src_name = src->card.m_name.str();
+    // The source's riders (Incandescent Soulstoke): "that creature gains haste until end of turn",
+    // "sacrifice it at the beginning of the next end step". All false for Stoneforge Mystic.
+    const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src->card);
+    const bool put_haste         = sdef && sdef->params.tap_put_grants_haste;
+    const bool put_sac_at_end    = sdef && sdef->params.tap_put_sac_at_end_step;
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[hi]);
     src->tapped = true;
     Card raw = ap.hand[hi];
     ap.hand.erase(ap.hand.begin() + hi);
@@ -3263,7 +3282,8 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         {
             bits |= (1u << static_cast<int>(Color::Colorless));   // only its free {C} mode survives
         }
-        else if (def->params.colored_creature_only && !for_creature)
+        else if (def->params.colored_creature_only && !for_creature
+                 && !(def->params.colored_creature_ability_ok && PayingCreatureAbility()))
         {
             bits |= (1u << static_cast<int>(Color::Colorless));   // only its {C} survives
         }
@@ -4385,7 +4405,13 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // hoist above (these lands are never reflecting). Identity for every other source -> byte-identical.
         static thread_local std::vector<Color> ccov;
         const std::vector<Color>* produces_ptr = &produces_base;
-        if (def->params.colored_creature_only && !for_creature)
+        // ...except Secluded Courtyard's ability clause (colored_creature_ability_ok) under the
+        // creature-ability payment context -- exactly ProducesForPayment's rule, which the greedy payer
+        // has always applied. Stripping it here too meant a creature source's ability paid with the
+        // Courtyard's colour was payable by the greedy and REFUSED by this fallback, so any such payment
+        // the greedy could not settle failed outright (an Incandescent Soulstoke put, a Minotaur pump).
+        if (def->params.colored_creature_only && !for_creature
+            && !(def->params.colored_creature_ability_ok && PayingCreatureAbility()))
         {
             ccov.clear();
             for (Color c : produces_base) { if (c == Color::Colorless) { ccov.push_back(c); } }
@@ -5673,6 +5699,20 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         }
         if (board_big != nullptr)
         { mix(h, BigSpellManaUsable(*board_big, 3) ? 0xB16B16ull : 0xB16B17ull); }
+        // SECLUDED COURTYARD'S ABILITY CLAUSE (colored_creature_ability_ok): since the backtracker
+        // honours it under the creature-ability context (the greedy always did), a creature source's
+        // ability and any other non-creature payment of the same cost can get different answers -- so
+        // that context is part of the key. Mixed ONLY for a creature-ability payment with such a land
+        // on the battlefield, so every other payment keys exactly as before.
+        if (PayingCreatureAbility() && !for_creature)
+        {
+            for (const Permanent& bp : state.battlefield)
+            {
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd != nullptr && bd->params.colored_creature_ability_ok)
+                { mix(h, 0xC0A7Bull); break; }
+            }
+        }
         if (board_has_restricted)
         {
             const Card* paying = PayingSpellCard();

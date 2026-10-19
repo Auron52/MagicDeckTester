@@ -151,6 +151,31 @@ struct PlanTraits
     int  act_pips_cab[5]       = {};
     int  act_src_nums[kMaxActSrcs] = {};
     int  act_src_count         = 0;
+    // Total MANA VALUE the plan's trailing activations owe (every IsTrailingActivation kind with a mana
+    // cost: a Myriad Landscape crack's {2}, an Incandescent Soulstoke put's {1}{R}). The fallback input of
+    // the restricted-first payer's line test (ManaPayment.cpp, RestrictedMayHoldForAttack) when no
+    // subtype-restricted source was on the board at apply time.
+    int  act_mana_total        = 0;
+    // --- RESTRICTED-FIRST LINE TEST inputs (LandfallElementals sweep flags C/E, 2026-10-19) ---
+    // What the plan owes that the board's SUBTYPE-restricted creature source (Smokebraider: Elemental
+    // spells and abilities of Elementals; Giada: Angel spells) can NOT pay. Holding such a source back
+    // for its attack is safe exactly when the general sources cover this payment plus THIS demand: the
+    // demand it can pay (a later Elemental) it still can, so it competes for nothing the hold strands.
+    // Casts are keyed by NAME with the hand's copy count at apply time (a hand index shifts once the
+    // land drop leaves the hand); a cast is still owed while fewer copies than it casts have left.
+    // restr_pp == nullptr -> no such source was up: the line test falls back to the whole line.
+    static constexpr int kMaxRestrCasts = 8;
+    bool restr_creature_up = false;   // ANY untapped creature_mana_only creature at apply time: the
+                                      // payer's attack-exception line test runs only when this is set
+    const struct CardParams*     restr_pp = nullptr;
+    const struct CardDefinition* restr_inelig_def[kMaxRestrCasts] = {};
+    int  restr_inelig_plan_n[kMaxRestrCasts]  = {};   // casts of that name in the plan
+    int  restr_inelig_hand0[kMaxRestrCasts]   = {};   // copies in hand when the apply began
+    int  restr_inelig_mv[kMaxRestrCasts]      = {};   // mana value of one such cast
+    int  restr_inelig_count                   = 0;
+    bool restr_inelig_overflow                = false;   // > kMaxRestrCasts names: fall back
+    int  act_restr_elig_mana                  = 0;   // trailing activations it MAY pay (an Elemental's)
+    int  act_restr_inelig_mana                = 0;   // ...and the rest (a land's crack, a Vial tick)
     // The plan casts something that can INTRODUCE a new cast mid-turn -- a Treasure mint
     // (creates_treasures opens the deferred breakpoint) or a flood-engine draw (DigDraw /
     // DrawUntilNonland, the batch-pay drawsafe class). Those follow-on casts are invisible to

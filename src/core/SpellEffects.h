@@ -4417,6 +4417,13 @@ inline bool HasBeginCombatAttachSource(const GameState& state, int controller)
 // silently un-equipping a double-striker would be the opposite of a convenience.
 int ApplyAttachAllFreeEquipment(GameState& state, int controller, int host_id);
 
+// PutFromHandLegalIndex -- body in SpellEffects.cpp. Is the put LEGAL right now (the source on the
+// battlefield, untapped and able to {T}; a non-staged hand copy of `put_name` its type riders admit)?
+// Returns that hand index, or -1. Both apply worlds ask it BEFORE paying the ability's mana, so a put
+// whose card a same-plan cast already spent is a full no-op instead of a {1}{R} paid for nothing.
+int PutFromHandLegalIndex(const GameState& state, int controller, int source_id,
+                          const std::string& put_name);
+
 // ApplyPutFromHand -- body in SpellEffects.cpp. Stoneforge Mystic's "{1}{W}, {T}: put an
 // Equipment card from your hand onto the battlefield" (mana paid by the caller; this taps the
 // source). The named card enters UNATTACHED through the shared enter cascade (Puresteel's draw

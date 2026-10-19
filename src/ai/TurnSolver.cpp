@@ -6993,6 +6993,22 @@ static void ComputeAvailableColors(const GameState& state, bool have[5], bool pe
         if (f.red   > 0) { have[3] = true; }
         if (f.green > 0) { have[4] = true; }
         if (f.wild  > 0) { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
+        // ...and the RESTRICTED floats (sweep flag H, seeds 61015 / 61012). Smokebraider's leftover unit
+        // (floating_bigspell_mana under its restriction, booked WILD) and the creature-only reserve are
+        // supply exactly like the untapped restricted source this gate already counts as every colour
+        // it makes. Reading only floating_mana hid them: with {wild:1} floating and Flamekin Harbinger
+        // {R} in hand the only plan offered was "cast nothing" -- a lost T4 kill in both worlds. This
+        // gate only REJECTS, so crediting the restricted units is safe because the flat test applies the
+        // restriction per cost (SubtypeOnlySubsetPayable / BigOnlySubsetPayable / the creature split).
+        for (const ManaPool* rf : { &state.floating_bigspell_mana, &state.floating_creature_mana })
+        {
+            if (rf->white > 0) { have[0] = true; }
+            if (rf->blue  > 0) { have[1] = true; }
+            if (rf->black > 0) { have[2] = true; }
+            if (rf->red   > 0) { have[3] = true; }
+            if (rf->green > 0) { have[4] = true; }
+            if (rf->wild  > 0) { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
+        }
     }
     // A land AURA still in HAND supplies its colours once the plan casts it -- the same state-only
     // blindness the domain widen above repairs, for the one source a plan can INSTALL mid-turn. Zero
@@ -15574,6 +15590,98 @@ static bool BigOnlySubsetPayable(const BigOnlyCtx& bc, const std::vector<Action>
     return base.CanPay(small) && base_nc.CanPay(small_nc);
 }
 
+// ---- SUBTYPE-RESTRICTED MANA in the subset affordability test (Smokebraider, Giada) -------------
+// The BigOnlyCtx shape for a mana_only_subtype source ("spend this mana only to cast Elemental spells
+// or activate abilities of Elementals"; Giada: "...an Angel spell"). The flat creature pool books such
+// a source as wild for EVERY creature cast and the noncreature pool books its restricted FLOAT for
+// every noncreature cost, so the enumerator offered "cast Metallic Mimic" off an untapped Smokebraider,
+// "cast Aether Vial" / "crack Myriad Landscape" off its float -- the payer refused, the cast or
+// activation silently dropped and the SAME plan came back (LandfallElementals sweep flag D: seeds
+// 61004 / 61009 / 61017 / 61003). Hall's condition, as for Troyan: everything in the subset the
+// restricted mana may NOT pay must be payable with it removed, and the same for its noncreature part.
+// ELIGIBLE = a creature spell with the subtype (printed card), or -- for a mana_only_subtype_abilities
+// source -- an activation whose SOURCE has it on the battlefield (a Metallic Mimic that chose it
+// included). Exact for the flat totals; colours stay with the colour gates. Built once per
+// enumeration; `live` is false on every board without such a source or float.
+struct SubtypeOnlyCtx
+{
+    bool                              live  = false;
+    ManaPool                          pool;          // what the restricted sources + float add
+    ManaPool                          pool_nc;       // ...of which the noncreature pool holds (the float only)
+    std::vector<const CardParams*>    pps;           // the distinct restrictions present
+    const GameState*                  state = nullptr;
+};
+static SubtypeOnlyCtx BuildSubtypeOnlyCtx(const GameState& state)
+{
+    SubtypeOnlyCtx sc;
+    sc.state = &state;
+    auto note = [&sc](const CardParams* pp)
+    { if (std::find(sc.pps.begin(), sc.pps.end(), pp) == sc.pps.end()) { sc.pps.push_back(pp); } };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.creature_mana_only || d->params.mana_only_subtype.empty()) { continue; }
+        if (d->tmpl == CardTemplate::ManaDork && !CanTapNow(p, state.battlefield)) { continue; }
+        AddSourceToPool(sc.pool, state, *d, PermanentManaYield(state, p, *d), &p);
+        sc.live = true;
+        note(&d->params);
+    }
+    // The restricted FLOAT a subtype source left over (GameState::floating_bigspell_mana under a
+    // non-big restriction -- RestrictedFloatUsableNow): both flat pools credit it.
+    if (FloatLeftoverManaEnabled() && state.floating_bigspell_mana.Total() > 0
+        && state.floating_bigspell_pp != nullptr && !BigSpellOnlySource(*state.floating_bigspell_pp)
+        && !state.floating_bigspell_pp->mana_only_subtype.empty())
+    {
+        sc.pool.AddPool(state.floating_bigspell_mana);
+        sc.pool_nc.AddPool(state.floating_bigspell_mana);
+        sc.live = true;
+        note(state.floating_bigspell_pp);
+    }
+    return sc;
+}
+// May the restricted mana pay action `c`? (Any present restriction admitting it -- never stricter.)
+static bool SubtypeOnlyEligible(const SubtypeOnlyCtx& sc, const Action& c)
+{
+    if (c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::CastFromGraveyard)
+    {
+        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { return false; }
+        for (const CardParams* pp : sc.pps)
+        { if (CardHasSubtype(d->card, pp->mana_only_subtype)) { return true; } }
+        return false;
+    }
+    if (c.sac_source_id <= 0 || sc.state == nullptr) { return false; }
+    const Card* src = AbilitySourceCard(*sc.state, sc.state->active_player_index, c.sac_source_id);
+    if (src == nullptr) { return false; }
+    for (const CardParams* pp : sc.pps)
+    { if (pp->mana_only_subtype_abilities && CardHasSubtype(*src, pp->mana_only_subtype)) { return true; } }
+    return false;
+}
+static bool SubtypeOnlySubsetPayable(const SubtypeOnlyCtx& sc, const std::vector<Action>& cands,
+                                     const std::vector<int>& sel, ManaPool base, ManaPool base_nc)
+{
+    ManaCost other, other_nc;
+    bool any = false;
+    for (int j : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(j)];
+        if (c.cost.ManaValue() == 0 && c.cost.hybrid_count == 0) { continue; }
+        if (SubtypeOnlyEligible(sc, c)) { continue; }
+        AddCostCarryingHybrids(other, c.cost);
+        if (c.is_noncreature) { AddCostCarryingHybrids(other_nc, c.cost); }
+        any = true;
+    }
+    if (!any) { return true; }
+    // The noncreature pool never held the SOURCES (BuildNonCreaturePool drops every creature_mana_only
+    // source), only the restricted float -- subtracting the sources there too under-counted it by their
+    // mana (Angels seed 1001 2hg gi42 T4: Giada's {W} taken off a pool that never had it, so Resplendent
+    // Angel's {3}{W}{W}{W} pump read as unpayable off four Plains and a Sol Ring).
+    SubtractPoolClamped(base, sc.pool);
+    SubtractPoolClamped(base_nc, sc.pool_nc);
+    return base.CanPay(other) && base_nc.CanPay(other_nc);
+}
+
 // The colours THIS subset adds to the domain, and the cost of the casts that add them. Only a
 // permanent counts (an instant/sorcery never enters play), and only a colour the domain is missing.
 // Hand cards are name-only placeholders with empty masks, so colours are read from the DEFINITION --
@@ -16920,6 +17028,7 @@ enum : unsigned
     kDupRemand   = 1u << 7,   // a remand variant paired with its own X slot / another remand
     kDupPitch    = 1u << 9,   // a pitch evoke paired with a cast / another pitch of its pitched copy
                               // (bit 8 is kDupPodEntry, the compact summary's Pod entry bit)
+    kDupCopies   = 1u << 10,  // more copies of one hand card used (cast / Vial / pitch / put) than held
     kDupAll      = ~0u
 };
 // SubsetFilterPre::dup_m's entry bits beyond the clause mask: the Birthing Pod clause (not gated on
@@ -16942,10 +17051,10 @@ struct DupCompact { const std::uint16_t* m; const int* src; const int* hidx; };
 namespace dupclause
 {
     enum : int { kSacForMana = 0, kFreeSlot, kPaidFreePair, kLoyalty, kGarth, kBlink,
-                 kPermAbility, kFoldPrefix, kPod, kRemand, kPitch, kCount };
+                 kPermAbility, kFoldPrefix, kPod, kRemand, kPitch, kCopies, kCount };
     inline constexpr const char* kNames[kCount] = {
         "sac_for_mana", "free_slot", "paid_free_pair", "loyalty", "garth", "blink",
-        "perm_ability_tap", "fold_prefix", "pod", "remand", "pitch" };
+        "perm_ability_tap", "fold_prefix", "pod", "remand", "pitch", "copies" };
     inline std::atomic<std::uint64_t> g_hits[kCount];
     // Gated on the same flag as the rest of the walk funnel (set by MTG_BRANCH_SHAPE or the census),
     // declared here because this predicate sits far above namespace shapestats.
@@ -16953,10 +17062,14 @@ namespace dupclause
     inline void Hit(int c) { if (Enabled()) { g_hits[c].fetch_add(1, std::memory_order_relaxed); } }
 }
 
+// COPY ACCOUNTING table (kDupCopies): name -> copies in hand, for the names a selection could use more
+// copies of than the hand holds (see BuildCopyCap). Null / empty = the clause cannot fire.
+using CopyCapTable = std::vector<std::pair<InternedName, int>>;
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer,
                                         unsigned dup_clause = kDupAll,
-                                        const DupCompact* dc = nullptr);
+                                        const DupCompact* dc = nullptr,
+                                        const CopyCapTable* copy_cap = nullptr);
 
 // For a selection the canonical-prefix rule is about to reject, BUILD ITS TWIN and check the twin
 // is a legal selection: every class member replaced by the same-class member holding ord 0..k-1.
@@ -17219,10 +17332,41 @@ static bool DupCompactReject(const std::vector<Action>& cands, const std::vector
     return false;
 }
 
+// How many copies of `name` a selected action uses up: a hand cast or a Vial put of that name (its own
+// hand slot), a pitch evoke's exiled card, an Incandescent Soulstoke / Stoneforge put, a Remand rider.
+static int CopiesOfNameUsed(const Action& b, const InternedName& name)
+{
+    int n = 0;
+    if ((b.kind == Action::Kind::CastFromHand || b.kind == Action::Kind::ActivateVial)
+        && b.hand_index >= 0 && b.card_name == name) { ++n; }
+    if (b.kind == Action::Kind::PutFromHandAbility && b.card_name == name) { ++n; }
+    if (!b.pitch_name.empty() && b.pitch_name == name) { ++n; }
+    if (!b.remand_by.empty() && b.remand_by == name) { ++n; }
+    return n;
+}
+
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer,
-                                        unsigned dup_clause, const DupCompact* dc)
+                                        unsigned dup_clause, const DupCompact* dc, const CopyCapTable* copy_cap)
 {
+    // COPY ACCOUNTING (kDupCopies; LandfallElementals sweep flags B and I, 2026-10-19). Casts and Vial
+    // puts are tied to a hand SLOT and are mutually exclusive per slot by the odometer's grouping, but a
+    // pitch evoke, a Soulstoke / Stoneforge put and a Remand rider name a card BY NAME -- so nothing
+    // stopped one selection from casting (or Vial-putting) the only Smokebraider AND putting it with
+    // Soulstoke, or Vial-putting the only Flamekin Harbinger AND exiling it to Fury's evoke. The apply
+    // then pays for the second use and does nothing (the put's {1}{R} spent, Soulstoke untapped). One
+    // rule for every such pair: no name may be used more often than the hand holds copies of it.
+    // Evaluated once per selection, over the contested names only (BuildCopyCap). Not a pick: a
+    // rejected selection is physically impossible.
+    if ((dup_clause & kDupCopies) != 0 && copy_cap != nullptr && !copy_cap->empty())
+    {
+        for (const std::pair<InternedName, int>& nc : *copy_cap)
+        {
+            int used = 0;
+            for (int s : sel) { used += CopiesOfNameUsed(cands[static_cast<std::size_t>(s)], nc.first); }
+            if (used > nc.second) { dupclause::Hit(dupclause::kCopies); return true; }
+        }
+    }
     if (BfCensusOn())
     {
         // See g_fold_site_calls: attribute this selection before any clause can return.
@@ -19281,6 +19425,9 @@ struct SubsetFilterPre
     const DupCompact* DupMBuild(const std::vector<Action>& cands) const;
     const DupCompact* DupM(const std::vector<Action>& cands) const
     { return dup_c.m != nullptr ? &dup_c : (dup_armed && !dup_tried ? DupMBuild(cands) : nullptr); }
+    // kDupCopies' table (BuildCopyCap): built on BOTH the instrumented and the optimised path, because
+    // it is the clause's own input, not an optimisation -- an instrument must never change play.
+    CopyCapTable copy_cap;
     // SubsetHasStrandedAttachSpell (Magnetic Theft). Placed after the positional aggregate init on
     // purpose: it keeps its TRUE initialiser (unoptimised) on the instruments-armed path, and the
     // builder below lowers it explicitly before raising it per candidate.
@@ -20003,6 +20150,43 @@ const DupCompact* SubsetFilterPre::DupMBuild(const std::vector<Action>& cands) c
 
 static void BuildEquipReleaseOnly(const GameState& state, const std::vector<Action>& cands,
                                   std::vector<int>& out);   // defined with DropInertHasteShroudEquips
+// The contested names for kDupCopies: a name some selection of `cands` could use more copies of than
+// the hand holds -- (distinct hand slots with a slot-bound use of it) + (by-name uses of it) > copies.
+// Slot-bound uses alone can never exceed the copies (one slot is one copy), so a name is contested
+// only when a pitch / put / Remand names it; every deck without one keeps an empty table.
+static void BuildCopyCap(const GameState& state, const std::vector<Action>& cands, CopyCapTable& out)
+{
+    out.clear();
+    std::vector<std::pair<InternedName, int>> by_name;   // name -> number of by-name candidates
+    for (const Action& a : cands)
+    {
+        auto bump = [&by_name](const InternedName& nm)
+        {
+            for (auto& e : by_name) { if (e.first == nm) { ++e.second; return; } }
+            by_name.emplace_back(nm, 1);
+        };
+        if (a.kind == Action::Kind::PutFromHandAbility) { bump(a.card_name); }
+        if (!a.pitch_name.empty())                      { bump(a.pitch_name); }
+        if (!a.remand_by.empty())                       { bump(a.remand_by); }
+    }
+    if (by_name.empty()) { return; }
+    const std::vector<Card>& hand = state.ActivePlayer().hand;
+    for (const auto& e : by_name)
+    {
+        int copies = 0;
+        for (const Card& c : hand) { if (c.m_name == e.first) { ++copies; } }
+        std::vector<int> slots;
+        for (const Action& a : cands)
+        {
+            if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial)
+                && a.hand_index >= 0 && a.card_name == e.first
+                && std::find(slots.begin(), slots.end(), a.hand_index) == slots.end())
+            { slots.push_back(a.hand_index); }
+        }
+        if (static_cast<int>(slots.size()) + e.second > copies) { out.emplace_back(e.first, copies); }
+    }
+}
+
 static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::vector<Action>& cands)
 {
     SubsetFilterPre p;
@@ -20015,6 +20199,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         BuildReplicatePending(state, cands, p.rep_pending);
         BuildEquipHostFold(state, cands, p);
         BuildEquipUnlandedCopy(state, cands, p);
+        BuildCopyCap(state, cands, p.copy_cap);
         return p;
     }
 
@@ -20130,6 +20315,9 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     if (best_target)
     { p.best_needs_body = FindBestOwnAttacker(state, state.active_player_index) < 0 ? 1 : 0; }
 
+    // kDupCopies' contested names (empty for every deck without a by-name hand use that can collide).
+    BuildCopyCap(state, cands, p.copy_cap);
+    if (!p.copy_cap.empty()) { p.dup_source = true; }
     // Per-clause populations for SubsetHasDuplicateSacSource. A clause needs TWO selected candidates
     // that match it, so fewer than two matches in `cands` makes its answer a foregone false. A
     // separate pass rather than counters threaded through the switch above: `cands` is a handful per
@@ -20173,6 +20361,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         // A pitch variant collides with a cast of its pitched copy or a second pitch of it: one
         // pitch variant + any second hand cast (every pitch variant is itself a hand cast).
         if (n_pitch >= 1 && n_handcast >= 2) { m |= kDupPitch; }
+        if (!p.copy_cap.empty()) { m |= kDupCopies; }
         p.dup_clause = m;
         // The equiv_tag canonical-prefix clause is NOT one of these seven and has no bit: it rejects
         // on a single selected action's ord, so no population count bounds it. `dup_source` still
@@ -37798,6 +37987,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (md->tmpl == CardTemplate::ManaDork && !CanTapNow(mp, state.battlefield)) { continue; }
                 if (CardHasSubtype(p.card, md->params.mana_only_subtype)) { restricted_payable = true; break; }
             }
+            // ...or its restricted FLOAT (Smokebraider's leftover unit) may pay it.
+            if (!restricted_payable && state.floating_bigspell_mana.Total() > 0
+                && state.floating_bigspell_pp != nullptr
+                && state.floating_bigspell_pp->mana_only_subtype_abilities
+                && CardHasSubtype(p.card, state.floating_bigspell_pp->mana_only_subtype))
+            { restricted_payable = true; }
+            // PAYABLE AT ALL? (LandfallElementals sweep, seed 61013 T5.) The flat noncreature pool books
+            // an Unclaimed Territory as any colour (MTG_CCO_NONCREATURE_POOL off), but for an ABILITY that
+            // land makes only {C} (no colored_creature_ability_ok), so "put X" was offered with no source
+            // able to make the {R} -- and every choice of it was a no-op the menu re-offered. A put this
+            // board cannot fund even ALONE can never happen, so it is not emitted (a lossless removal of
+            // a guaranteed no-op; the payer's own verdict, under the ability's real source scope, on a
+            // scratch copy). Lazy: one probe per source, only once a matching card is found.
+            int put_affordable = -1;   // -1 unknown, 0 no, 1 yes
+            auto put_payable_alone = [&]() -> bool
+            {
+                if (put_affordable < 0)
+                {
+                    GameState scratch = state;
+                    std::optional<CreatureAbilityPayScope> sc;
+                    if (p.card.IsCreature() || p.is_animated) { sc.emplace(&p.card); }
+                    put_affordable = TapForCostDirect(scratch, *pd->params.tap_put_from_hand_cost,
+                                                      /*for_creature=*/false) ? 1 : 0;
+                }
+                return put_affordable == 1;
+            };
             for (const Card& c : ap.hand)
             {
                 if (c.m_is_staged) { continue; }   // impulse-exiled: "from your hand" cannot reach
@@ -37810,6 +38025,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // "an Elemental CREATURE card" (Soulstoke): the type list is an OR, this ANDs.
                 if (pd->params.tap_put_from_hand_creature_only && !hc.IsCreature()) { continue; }
                 if (!seen_put.insert(c.m_name.str()).second) { continue; }
+                if (!put_payable_alone()) { break; }   // no variant of this source can be paid
                 Action a;
                 a.kind           = Action::Kind::PutFromHandAbility;
                 a.card_name      = c.m_name;          // the PUT card; the source rides sac_source_id
@@ -47236,6 +47452,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     ManaPool pool             = AvailableManaPool(state);
     ManaPool pool_noncreature = BuildNonCreaturePool(state);
     const BigOnlyCtx big_only = BuildBigOnlyCtx(state);   // Troyan's restricted mana (inert elsewhere)
+    const SubtypeOnlyCtx sub_only = BuildSubtypeOnlyCtx(state);   // Smokebraider / Giada (inert elsewhere)
     int total_lands  = CountLands(state);
     // PHASE-HONEST pending attack (see the sibling in EnumeratePlans): in the POST-combat main
     // this turn's combat is over, so no attack damage is pending. Counting it there is a phantom
@@ -47825,7 +48042,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer,
-                                           pre.dup_clause, pre.DupM(cands)))
+                                           pre.dup_clause, pre.DupM(cands), &pre.copy_cap))
         { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; } return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
@@ -48232,6 +48449,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (mana_ok && big_only.live
             && !BigOnlySubsetPayable(big_only, cands, sel, credited ? eff : pool,
                                      credited ? eff_nc : pool_noncreature))
+        { mana_ok = false; }
+        if (mana_ok && sub_only.live
+            && !SubtypeOnlySubsetPayable(sub_only, cands, sel, credited ? eff : pool,
+                                         credited ? eff_nc : pool_noncreature))
         { mana_ok = false; }
         // SEQUENCED ritual credit, applied LAZILY. The sequenced credit is never LARGER than the
         // simultaneous one, so a position the cheap model already rejects would be rejected by the
@@ -50892,6 +51113,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     for (const Action& a : acts)
     {
         if (a.kind == Action::Kind::DigDraw) { t.mid_turn_casts = true; }
+        if (TurnSolver::IsTrailingActivation(a.kind)) { t.act_mana_total += a.cost.ManaValue(); }
         // Line {C} hold input: the largest colourless pip count among the plan's own blink
         // activations (one crank; see PlanTraits::act_c_pips).
         if (a.kind == Action::Kind::ActivateBlink && a.cost.colorless > t.act_c_pips)
@@ -50915,20 +51137,27 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             t.act_pips_cab[2] += oc.black; t.act_pips_cab[3] += oc.red;
             t.act_pips_cab[4] += oc.green;
         }
+        // A PUT-FROM-HAND activation (Incandescent Soulstoke's "{1}{R}, {T}", Stoneforge Mystic's
+        // "{1}{W}, {T}") is the same shape and was the same hole (LandfallElementals sweep, seeds
+        // 61010 / 61013): a creature cast spent the board's only {R} an ABILITY may use (Gruul Turf,
+        // a Mountain -- Unclaimed Territory's colours pay creature SPELLS only) and the put, paid
+        // last, found nothing for its {R} and was dropped.
         // ActivateUntap (chunk C2a) holds its ONE activation's pips the same way; its {T} half is only
         // the Staff's (shape 3), which is no mana source -- a Galvanic grant's source is the creature
         // it untaps, which the plan's casts SHOULD be free to tap first.
         if (ActLineHoldEnabled() && !cab_act
             && (a.kind == Action::Kind::ActivatePermAbility
                 || a.kind == Action::Kind::UntapCreature
-                || a.kind == Action::Kind::ActivateUntap))
+                || a.kind == Action::Kind::ActivateUntap
+                || a.kind == Action::Kind::PutFromHandAbility))
         {
             t.act_pips[0] += a.cost.white; t.act_pips[1] += a.cost.blue;
             t.act_pips[2] += a.cost.black; t.act_pips[3] += a.cost.red;
             t.act_pips[4] += a.cost.green;
-            // The {T} half. UntapCreature always taps its source (Wirewood Lodge's "{G}, {T}");
-            // a permanent ability asks PermAbilityTaps, the single source of truth for that.
+            // The {T} half. UntapCreature and a put always tap their source (Wirewood Lodge's
+            // "{G}, {T}"); a permanent ability asks PermAbilityTaps, the single source of truth.
             const bool taps = a.kind == Action::Kind::UntapCreature
+                           || a.kind == Action::Kind::PutFromHandAbility
                            || (a.kind == Action::Kind::ActivateUntap ? a.gy_exile_mode == kUntapStaffTarget
                                                                      : PermAbilityTaps(a.ability_mode));
             if (taps && a.sac_source_id > 0 && t.act_src_count < PlanTraits::kMaxActSrcs)
@@ -51022,6 +51251,57 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         }
     }
     t.bodies_are_multipliers = t.plan_has_own_pump && t.copy_magnet_live;
+
+    // RESTRICTED-FIRST LINE TEST inputs (PlanTraits::restr_pp; read by ManaPayment.cpp's
+    // RestrictedMayHoldForAttack). Only a board holding an untapped SUBTYPE-restricted creature source
+    // (Smokebraider, Giada) runs the plan half -- every other deck's traits are unchanged.
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.creature_mana_only || !d->card.IsCreature()) { continue; }
+        t.restr_creature_up = true;
+        if (!d->params.mana_only_subtype.empty()) { t.restr_pp = &d->params; break; }
+    }
+    if (t.restr_pp != nullptr)
+    {
+        const CardParams& rp = *t.restr_pp;
+        const std::vector<Card>& hand = state.players[active].hand;
+        for (const Action& a : acts)
+        {
+            const int mv = a.cost.ManaValue();
+            if (mv <= 0) { continue; }
+            if (TurnSolver::IsTrailingActivation(a.kind))
+            {
+                // "...or activate abilities of Elementals": the activation's own source decides.
+                bool elig = false;
+                if (rp.mana_only_subtype_abilities && a.sac_source_id > 0)
+                {
+                    const Card* src = AbilitySourceCard(state, active, a.sac_source_id);
+                    elig = src != nullptr && CardHasSubtype(*src, rp.mana_only_subtype);
+                }
+                (elig ? t.act_restr_elig_mana : t.act_restr_inelig_mana) += mv;
+                continue;
+            }
+            if (a.kind != Action::Kind::CastFromHand || a.free_cast || a.alt_cost) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr) { continue; }
+            if (d->card.IsCreature() && CardHasSubtype(d->card, rp.mana_only_subtype)) { continue; }
+            int k = 0;
+            while (k < t.restr_inelig_count && t.restr_inelig_def[k]->card.m_name != d->card.m_name) { ++k; }
+            if (k == t.restr_inelig_count)
+            {
+                if (k >= PlanTraits::kMaxRestrCasts) { t.restr_inelig_overflow = true; continue; }
+                t.restr_inelig_def[k] = d;
+                t.restr_inelig_mv[k]  = mv;
+                int copies = 0;
+                for (const Card& c : hand) { if (c.m_name == d->card.m_name) { ++copies; } }
+                t.restr_inelig_hand0[k] = copies;
+                ++t.restr_inelig_count;
+            }
+            ++t.restr_inelig_plan_n[k];
+        }
+    }
 
     // Projected pump target -- the SAME picker the apply's auto-target uses (target_own_creature:
     // "targets the controller's best attacker"), evaluated pre-payment so the reserve can hold
@@ -59682,6 +59962,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ++g_trailing_act_skips;
                     if (a.ability_mode == Action::AbilityMode::TapDraw)
                     { ++g_stranded_tapdraw_count; }
+                    // REPORT it (sweep flag R): a declared activation the payment could not fund is a
+                    // dropped part of the line exactly like an unpayable cast, so it reaches the viewer's
+                    // drop sink. Sink-gated (real play only) -> autonomous play and rollouts unchanged.
+                    if (sink_stack.empty() && g_play_dropped_cast_sink)
+                    { g_play_dropped_cast_sink->push_back(a.card_name.str() + " (activation)"); }
                     if (taps)
                     { SetPermTapped(state, state.active_player_index, src_id, false); }
                     // MTG_ACT_DROP_AUDIT "unpaid" -- the cross-world, cross-deck twin of the
@@ -59690,6 +59975,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (ActDropAuditOn())
                     { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
                 }
+            }
+            // REPORT a declared activation whose source a cast payment of this line tapped for MANA
+            // (PermAbilityDeadReason 1 -- the plan is not being executed, sweep flag R). Gone or
+            // summoning-sick sources are not drops. Sink-gated (real play only) -> autonomous unchanged.
+            else if (a.def != nullptr && sink_stack.empty() && g_play_dropped_cast_sink
+                     && PermAbilityDeadReason(state, state.active_player_index, a.sac_source_id,
+                                              a.ability_mode) == 1)
+            {
+                g_play_dropped_cast_sink->push_back(a.card_name.str() + " (activation)");
+                if (ActDropAuditOn())
+                { NoteActDrop(1, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
             }
             // MTG_ACT_DROP_AUDIT: source not live -- PermAbilityDeadReason splits "tapped for MANA by
             // a cast payment" (the defect) from gone/summoning-sick. Nothing counted this before.
@@ -59933,11 +60229,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // ActivatePermAbility rule: Secluded Courtyard's coloured mana and Smokebraider's
             // ("...or activate abilities of Elementals") are legal for it. Executor twin: AIEngine's
             // PutFromHandAbility branch. Inert for every deck with neither kind of land / dork.
+            // LEGALITY FIRST (sweep flag B): a put whose card a same-plan cast / Vial put already used,
+            // or whose source cannot {T}, does nothing -- so it is not paid either (it used to pay the
+            // {1}{R} and then no-op). Executor twin: AIEngine's PutFromHandAbility branch.
+            const bool put_legal = PutFromHandLegalIndex(state, state.active_player_index, a.sac_source_id,
+                                                         a.card_name.str()) >= 0;
             std::optional<CreatureAbilityPayScope> put_scope;
-            if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+            if (put_legal && PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
             { put_scope.emplace(AbilitySourceCard(state, state.active_player_index, a.sac_source_id)); }
-            const bool put_paid = TapForCostDirect(state, a.cost, /*for_creature=*/false);
+            const bool put_paid = put_legal && TapForCostDirect(state, a.cost, /*for_creature=*/false);
             put_scope.reset();
+            // REPORT a declared put that did not happen (sweep flag R): the viewer's drop sink, the same
+            // way an unpayable cast is reported. Sink-gated (real play only) -> autonomous unchanged.
+            if (!put_paid && sink_stack.empty() && g_play_dropped_cast_sink)
+            { g_play_dropped_cast_sink->push_back("put " + a.card_name.str() + " (activation)"); }
             if (put_paid)
             {
                 ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
@@ -63622,6 +63927,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
     const BigOnlyCtx big_only = BuildBigOnlyCtx(state);   // Troyan's restricted mana (inert elsewhere)
+    const SubtypeOnlyCtx sub_only = BuildSubtypeOnlyCtx(state);   // Smokebraider / Giada (inert elsewhere)
     int           total_lands     = CountLands(state);
     // PHASE-HONEST pending attack. In the POST-combat main the attack has already happened, so
     // nothing is pending -- but PendingAttackDamage counts every creature that COULD attack, and
@@ -64509,7 +64815,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause,
-                                           pre.DupM(cands)))
+                                           pre.DupM(cands), &pre.copy_cap))
         { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_dup); ++ecallf.rej_dup; }
           // ...and the flat per-turn twin the census column `sub_rej_dupsrc_s1` reads. REDUNDANT with
           // e_rej_dup above -- kept only so that column does not silently read zero. The e_* funnel is
@@ -65152,6 +65458,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (mana_ok && big_only.live
             && !BigOnlySubsetPayable(big_only, cands, sel, credited ? eff : pool,
                                      credited ? eff_nc : pool_noncreature))
+        { mana_ok = false; }
+        if (mana_ok && sub_only.live
+            && !SubtypeOnlySubsetPayable(sub_only, cands, sel, credited ? eff : pool,
+                                         credited ? eff_nc : pool_noncreature))
         { mana_ok = false; }
         // FRESH-SPEND AT THE BASE (MTG_MINT_CREDIT_EXACT; see the mint block above): unpayable in
         // the doctrine world, payable with the subset's own magnetless mint -> credit it and TAG the

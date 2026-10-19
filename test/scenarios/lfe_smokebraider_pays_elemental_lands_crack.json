@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "LandfallElementals claude-play sweep flag E/C (2026-10-19, seed 61003 T4): the restricted-first",
+    "payer must not strand the declared line. Smokebraider (untapped, could attack), Myriad Landscape and",
+    "two Mountains; hand Brushfire Elemental (1/1 haste, landfall +2/+2); opponent at 5; resumed at main 1",
+    "of T4 so no land is drawn. Exact lethal T4 ONLY by: Smokebraider pays ALL of Brushfire's {R}{G} (its",
+    "two Elemental-only units), the two Mountains pay Myriad's {2} crack, two Mountains enter -> two",
+    "landfalls -> Brushfire 5/5 hasty swing for 5. The old payer held Smokebraider for its attack, spent a",
+    "Mountain on {R}, tapped Smokebraider for {G} only (its second unit floating Elemental-only), and the",
+    "crack had one Mountain for {2}: silently skipped, Brushfire 1/1, no win. Brushfire's {G} has no other",
+    "source, so Smokebraider is tapped on every line; the fix only decides WHICH of its pips it pays."
+  ],
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 5,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Smokebraider", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Myriad Landscape" },
+    { "name": "Mountain" },
+    { "name": "Mountain" }
+  ],
+  "hand": [ "Brushfire Elemental" ],
+  "library_filler": "Mountain",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "expect_win_turn": 4,
+  "log_out": "logs/play/lfe_smokebraider_pays_elemental_lands_crack.json"
+}
