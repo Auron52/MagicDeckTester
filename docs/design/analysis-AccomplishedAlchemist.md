@@ -391,6 +391,13 @@ Run 2026-10-18 on c96b7f46 (play-identical to 251c426e), profile = the freshly g
     float). Executor: the Stroke's recorded continuation is replayed at the cast (`[replay-bp]` right after
     it), which sets `bp_replayed`, so the site-9 twin stands down (`!bp_replayed`) and the Witch untap never
     happens -- the Alchemist stays tapped, the loop is unfunded.
+  * WHERE (both games): the rollout's plain-cantrip partition is DEFER + TRUNCATE (`TurnSolver.cpp` ~47905:
+    `deferred_cantrip_resolve` + `bp_truncate`; the continuation re-solves after the trailing passes and
+    after site 9), while the executor, for a committed plan, REPLAYS the partitioned cast's records AT THE
+    CAST (`AIEngine.cpp` ~7171, `equip_bp_truncates` -> `replay_segment()`), which sets `bp_replayed` and so
+    stands the site-9 twin down (gi54); and the site-9 twin's own `pe_cast` loop has no partition
+    truncation at all (gi120). Engine-wide (any deck whose committed plan holds a self-partitioning
+    cantrip AND opens site 9), so a fix moves other decks' play -- convergence loop, USER-visible.
   * Folds ruled out: both reproduce with `MTG_HAND_COPY_CLASS_FOLD=0` and/or `MTG_LAND_AURA_HOST_CLASS_FOLD=0`.
   * STATUS: OPEN -- not a local fix (the site-9 twin needs the rollout's partition truncation and the
     site-9-before-deferred-cantrip ordering). Back to the convergence loop (engine).
@@ -428,13 +435,23 @@ Run 2026-10-18 on c96b7f46 (play-identical to 251c426e), profile = the freshly g
   does not reach. A 5e finding: a narrowing (cast order, and/or Stroke's X menu) costs a turn at full budget.
   Cast order is the USER's decision; reported, not changed.
 
-**5c2 -- horizon-honest tie-break:** PENDING (see below).
+**5c2 -- horizon-honest tie-break: KEEP THE DEFAULT (ON).** `leaf_tiebreak_check.py` at play settings
+(d5 b20), seeds 1000000/1100000/1200000/1300000, 3,998 paired games (both arms; the base arm from the
+script's own run, stopped once it was clear the default 24,000-game sizing would take ~6 h at this deck's
+cost -- the binding rate is 20%, so 4 blocks are already decisive; the leaf arm from the identical
+manifest rows; one straggler, s1100000 gi821, dropped from both arms): **net -78 turns (377 worse / 427
+better), binding 804 / 3,998 = 20.1%**. Halves: A +7 (neutral), B -85, so the gain is real but modest
+(-0.02 turns/game) and the per-game churn is large -- the expected shape for a stored-value combo deck,
+where opponent life at the horizon prices the build-up at zero. No opt-out. Paired data:
+`build/scratch/aa/s5/tb_{base,leaf}.out`.
 
 **5h -- viewer decision surface: PASS.** `audit_viewer_decisions.py ... --sideboard`: expected
 {attach_host, attack_mode, choose_color, dig}; the 40-game sweep surfaced attach_host, choose_color,
 tutor_etb; the two UNVERIFIED (Eternal Witness `dig`, Trufflesnout `attack_mode`) were VERIFIED by the
 targeted seed search. No HARD MISS, no SELF-GUARD, no DRIVER failure. Oracle advisories (Staff/Witch
-'target', Trufflesnout 'modal') are already modelled or carry inert notes.
+'target', Trufflesnout 'modal') are already modelled or carry inert notes. Hand-driven claude-play check
+(seed 70121 gi 120, T4): Stroke of Genius is offered as every (target, X) pair -- self and opponent, X = 0
+and 1 (the affordable max) -- in `main_phase` plans, i.e. the human menu is unpruned.
 
 **verify_deck.py:** coverage PASS (21/21 full); card_costs FAIL = did-not-run (7 cards 429'd -- none of
 them in this deck; every AA card compared clean); card_fields SKIP (snapshot incomplete); regression_tiers
