@@ -75829,6 +75829,12 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
 // resolution and any breakpoint occurrence of that apply (SlotPrefixProbe::first_drop_covered); a
 // covered position keeps the blanket treatment. After the drop nothing is lost: a dropped cast changes
 // nothing, so every later look, pin and continuation is the reduced plan's own, one for one.
+// HUMAN PLAY has no covered case: there are no breakpoint variants and no mid-plan re-prompt (the
+// committed plan runs through; the main phase re-asks AFTER it), and the human's look-top answers (the
+// dig chooser: a land TAPPED onto the battlefield, or to hand) add no mana, so a look before the failing
+// cast cannot rescue it -- measured on the payer audit's s61009 board: "land after Akoum Hellhound;
+// Smokebraider, Hellhound" ran Smokebraider, its Reef look put Foundation Breaker into hand, and the
+// Hellhound was dropped with no prompt in between. Its realised line is the reduced plan's, offered.
 enum class PrefixProbeGuard { None, LookTopOnly, Blanket };
 static PrefixProbeGuard PositionPrefixProbeGuard(const GameState& state, const TurnSolver::Plan& p)
 {
@@ -76859,7 +76865,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                         GameState probe_state = state;
                         ApplyPlanDirect(probe_state, probe, is_pre_combat);
                     }
-                    const bool covered = look_guard && g_slot_prefix_probe.drops > 0
+                    const bool covered = look_guard && !HumanPlayActive() && g_slot_prefix_probe.drops > 0
                                       && g_slot_prefix_probe.first_drop_covered;
                     if (first_drop_out != nullptr)
                     { *first_drop_out = covered ? -1 : g_slot_prefix_probe.first_drop_watchers; }
