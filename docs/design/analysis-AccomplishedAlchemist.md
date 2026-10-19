@@ -10,7 +10,9 @@ Chunks A, B, C1, C2a, C2b, P, E1 landed (E1 = the Stage-5 / claude-play engine f
 Arbor Elf's aura yield, site-9 re-open + chained loop payoffs, loop colour, wish singletons). The SUITE ENTRY
 was attempted 2026-10-19 and STOPPED before adding rows (see "Suite entry attempt (2026-10-19)"): the
 status-quo deck is over the 8,907 ms/game line, no `bottom_eval_*` arm met the adoption rule, and NOTHING was
-adopted or added. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
+adopted or added. Chunk P2 (lossless per-node cuts, 2026-10-19) made the per-node tail class 1.51x cheaper
+per unit but the deck is still 1.55x over the line at d5 b20, and its `MTG_ENUM_CHARGE` lever (OFF) measured a
+quality loss. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
 `MTG_ALLOW_UNTESTED_DECK=1`), and/or the per-node enumeration cost found in the same attempt; then the suite
 rows, then profile -> mulligan -> value leaf. Viewer flags are the viewer worktree's. Open USER items are
 listed under "Open questions surfaced to USER".
@@ -59,6 +61,81 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk P2 (2026-10-19) -- landed: lossless per-node cuts; the enumeration-charge lever measured, OFF
+
+Commits (branch `accomplished-alchemist`): 93b53a61 (`CardDatabase::Lookup(InternedName)`), 3f014b9c
+(EnumeratePlans dedup + Aura host key), 77362b04 (the default-OFF lever `MTG_ENUM_CHARGE`).
+Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/p2/` (perf data, folded stacks, `cost/`, `abB/`).
+
+* **Where the repro's time was.** Seed 90061 gi60 (`--seed 90061 --game-index 60 --games 1 --budget-ms 20`,
+  the deck profile, d5): one T1 decision is 90 of the 91 s -- 453 k units, 13.9 M odometer visits, 8.7 M emitted
+  plans, 12.5 k breakpoint-continuation cache misses (`MTG_TURN_CENSUS`). 85% of the CPU is
+  `BpDeriveContinuationList -> EnumeratePlans`, and inside it the creature-Aura host ranking in the dedup
+  (Crab Umbra: 83% of the plans in those enumerations get an `AuraHostKey`, 2.64 M keys on 839 k bases) was
+  28%, `plan_signature` 10%, the string-keyed card lookup ~4%.
+* **The cuts (all byte-identical by construction):** the CastFromHand signature appended into one buffer (it
+  was ~30 chained `cond ? (...) : ""` temporaries) and the signature buckets thread-local/reused; the host
+  bases pooled per thread and refilled by copy-assignment (`AuraPlanHostBaseInto`); per-plan key slots in a
+  flat vector; each creature's swing memoised across the key's now/next sums and the dork walk
+  (`AuraHostKeyCreatureSwing`); one `try_emplace` on the pick map, which also replaces the second `seen` set;
+  the plan value sort done on (wins, value, index) keys with one permute; the two per-plan Aura-order
+  stable_sorts replaced by `StableSortByBoolKey` (key once per action, no buffer when already ordered);
+  `plan.actions` reserved; `CardDatabase::Lookup(InternedName)` (pointer hash, same map coverage).
+* **Repro, single thread (Release):** 88.1 s -> 58.2 s at the identical 494,867 units and digest
+  095c8c1e7b9ce516 -- **5,617 -> 8,503 units/s (1.51x)**. A greedy-walk-bound game is untouched, as expected:
+  seed 70124 gi123 d5 b20 (1,550,573 units) 54.4 s base vs 56.8 s P2 (two concurrent single-thread runs; noise).
+* **Byte-identity:** mtg-test 1499/1499; scenarios 228/228; smoke 124/128 with exactly the four known moves at
+  their known digests (selesnya d3 a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira
+  d0 0f633c1012b4fb11); the deck's 200-game cells identical (d3 b10 ed03ab6957a09593, d5 b20 f4d9cf88b0c3a26c).
+* **Deck cost, seed 70001, 200 games** (base = fc7b8a54 snapshot `build/scratch/aa/mtg.p2base`; the two
+  binaries ran as two concurrent 16-thread batches so contention is shared; ms per game):
+
+  | cell | base mean / p90 / max | P2 mean / p90 / max | core-s |
+  |---|---|---|---|
+  | d3 b10 | 7,246 / 19,177 / 69,118 | 7,249 / 18,493 / 64,525 | 1,449 -> 1,450 |
+  | d5 b20 | 14,606 / 40,888 / 178,414 | 13,826 / 39,477 / 153,584 | 2,921 -> 2,765 (0.95x) |
+
+  **Still over the 8,907 ms line at d5 (1.55x).** The per-node class the repro exposed is a TAIL class (seed
+  90001's gi60 / gi286 / gi408); this 200-game set is dominated by other cost: its heaviest games run 1.5-4.1 M
+  units each (the pre-keep-table bottom trials) at a normal ~23 k units/s contended, and the low-ratio ones are
+  greedy-walk bound (gi123, 10 k units/s: `SolveUncached` 63% of CPU -- the consider loop, `ColorFeasibility`,
+  `AttackTapLoss`), i.e. chunk P's walk, which `MTG_SOLVE_CHARGE_W` prices (a USER call, chunk P).
+* **B -- `MTG_ENUM_CHARGE` (DEFAULT OFF; per-job `"enum_charge_w"`, env `MTG_ENUM_CHARGE_W`, default 4).**
+  Bills EnumeratePlans' odometer visits, ceil(visits / W) units per enumeration, to `TurnSolver::DecisionBudget()`
+  (nullptr at an unlimited root, so inert at `--budget-ms 0`; the enumeration itself always completes -- a pure
+  re-pricing). Census bucket `u_enum_charge`. Repro: off 494,867 units / 79 s, W=16 627 k / 32 s, W=4 755 k /
+  12 s (3-way contended). Held-out seed 90001, 600 games, one pooled batch (32/32 busy), paired over the 599
+  games every arm finished (gi286 is excluded -- see below):
+
+  | cell | arm | avg | faster / slower vs off | mean ms | p90 | core-s |
+  |---|---|---|---|---|---|---|
+  | d5 b20 | off | 5.6344 | -- | 12,588 | 30,695 | 7,540 |
+  | d5 b20 | W=16 | 5.6444 | 1 / 5 | 11,560 | 29,757 | 6,925 (0.92x) |
+  | d5 b20 | W=4 | 5.6528 | 1 / 11 | 10,416 | 25,701 | 6,239 (0.83x) |
+  | d3 b10 | off | 5.6861 | -- | 7,961 | 17,872 | 4,769 |
+  | d3 b10 | W=16 | 5.6895 | 2 / 4 | 7,443 | 16,572 | 4,458 (0.93x) |
+  | d3 b10 | W=4 | 5.6962 | 6 / 12 | 6,408 | 14,881 | 3,839 (0.80x) |
+
+  THE TAIL GAME gi286 (a bottom-trial game: several full trial games, one T6 decision alone 226 k units /
+  35 s, 13 M greedy-walk visits): W=16 617 s (d3) / 629 s (d5), W=4 378 s / 614 s; the OFF arm was still
+  running at both cells after ~36 min (> 2,100 s) and was stopped (my own probe; the pre-P2 binary ran it > 45 min). That single game is worth +1 s or more per game on a 600-game
+  mean, which is why the cells' means sit near the line or over it whatever the arm. Its profile is not the
+  Aura-key class: `AppendSubdecisionAxes` ~29% (Plan variant copies 10.5%, 33 full scans of the plan list
+  9.6% self), `BpCandFingerprint` 5%, EnumeratePlans 10% -- a candidate for the next per-node pass.
+  gi408 (d5): off 163 s, W=16 191 s, W=4 360 s (7.4 M units) -- the charge can make a game DEARER, by
+  driving it into the no-completed-pass fallbacks.
+
+  Smoke with the lever on (not accepted): W=16 moves 21 cases beyond the four known (searched 6 slower / 5
+  faster games; hinata d3 +0.013, hinata2hg +0.027, soldiers2hg +0.020, antilife d3 +0.008), W=4 moves 30
+  (11 slower / 5 faster). **Verdict for the USER (not flipped):** a net quality LOSS on this deck at both
+  weights, and neither arm reaches the line at d5 (W=4 is 10.4 s/game). Not recommended as the route to the
+  line; it stays OFF.
+* **Residual cost location.** (1) Search units: the pre-keep-table bottom trials (the pending bottom_eval /
+  mulligan-stage USER decision is still the big lever). (2) The greedy horizon walk (`SolveUncached` visit
+  loop) on the low-ratio games. (3) The tail class (continuation re-enumeration with the Aura host key):
+  now 1.5x cheaper per unit, still ~3x the deck norm per unit; the remaining enumeration cost is per-plan
+  work (Action copies, Plan moves, the host key's power walk, the base GameState copy) rather than waste.
 
 ## Suite entry attempt (2026-10-19) -- bottom_eval A/B; NOTHING adopted, NO rows added
 
