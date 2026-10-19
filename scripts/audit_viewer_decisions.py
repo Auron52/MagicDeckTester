@@ -1581,6 +1581,13 @@ STATE_GATED_TYPES = {
         "forward sweep rarely builds that board. Pinned by test/unit/test_vampires_lords.cpp 'Combat window: "
         "Mavren Fein's token makes the fifth Vampire ...' and the hand-built --claude-play repro in "
         "docs/design/analysis-Vampire.md (cluster B).",
+    ("landfall_return_self_from_gy", "revive"):
+        "Bloodghast's `revive` is asked only when a land enters while a Bloodghast is IN THE GRAVEYARD; a "
+        "forward driver that casts the card puts it on the battlefield, and only a discard / sacrifice choice it "
+        "does not make stocks the graveyard. Pinned by test/unit/test_vampires_outlets.cpp 'Bloodghast (human): "
+        "the `revive` decision can decline -- it stays in the graveyard' and the hand-built repro "
+        "`--claude-play --seed 91011 --choices 0,1,1,0,-1,-1,0,0,1,-1,-1,38` (Stromkirk Condemned discards "
+        "Bloodghast on T2; the T3 land drop asks `revive`; docs/design/analysis-Vampire.md).",
     ("steal_tap_count", "target"):
         "Captivating Vampire's steal needs five untapped Vampires AND an opponent creature at once (a "
         "late-game, spawn-pattern-dependent board); its target + five-body prompts are pinned by the "
@@ -2289,7 +2296,7 @@ def main():
         for name, m, _ in unverified:
             by_card.setdefault(name, set()).add(m)
         print(f"\nESCALATING {len(by_card)} unverified expectation(s) to a targeted seed-search...")
-        still = []
+        still, late_gated = [], []
         for name, miss in sorted(by_card.items()):
             status, detail = verify_card(deck, prof, name, miss, base_seed,
                                          VERIFY_BUDGET, max(max_turns, 10))
@@ -2297,9 +2304,24 @@ def main():
             if status == "VERIFIED":
                 escalated.append((name, sorted(miss)))
             elif status == "HARD_MISS":
-                still.extend((name, m, True) for m in sorted(detail.get("missing") or miss))
+                # The targeted search CAST the card, so the STATE-GATED exemption applies here exactly as
+                # it does to a card the forward sweep cast (above). Without this a state-gated type on a
+                # card the short sweep happened not to cast (Bloodline Keeper's combat transform, Vampires
+                # 2026-10-19) skipped the exemption and read as a HARD MISS.
+                params = next(((c.get("parameters") or {}) for c in cards if c.get("name") == name), {})
+                for m in sorted(detail.get("missing") or miss):
+                    why = next((r for (k, t), r in STATE_GATED_TYPES.items() if t == m and params.get(k)), None)
+                    if why:
+                        late_gated.append((name, m, why))
+                    else:
+                        still.append((name, m, True))
             else:
                 still.extend((name, m, False) for m in sorted(miss))
+        if late_gated:
+            print("\nSTATE-GATED (soft): cast by the targeted search, but the decision exists only in a "
+                  "board state it does not reach; each is pinned by the unit test named:")
+            for name, m, why in late_gated:
+                print(f"  {name}: expected '{m}' -> {why}")
         unverified = [(n, m, c) for (n, m, c) in still if not c]
         hard_miss += [(n, m, c) for (n, m, c) in still if c]
 
