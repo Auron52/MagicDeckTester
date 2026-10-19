@@ -14698,12 +14698,14 @@ static bool IsCreatureAuraCast(const Action& a)
 // The host-INDEPENDENT half (steps 1-3): identical for every member of a plan class and for every
 // host combination Solve tries, so callers build it once and score each host combination on a copy
 // (AuraPlanHostKeyOn). The prepay (step 3) reads no Aura target.
-static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>& acts)
+// `t` is overwritten (copy-assigned from `s`) -- the out-parameter form lets a caller reuse one
+// GameState's capacity across many bases; AuraPlanHostBase below is the by-value wrapper.
+static void AuraPlanHostBaseInto(GameState& t, const GameState& s, const std::vector<Action>& acts)
 {
     AuraHostKeyQuiet quiet;
     const int me = s.active_player_index;
     const Player& ap = s.players[static_cast<std::size_t>(me)];
-    GameState t = s;
+    t = s;
     std::vector<int> used;
     auto hand_number = [&](const Action& a) -> int
     {
@@ -14834,6 +14836,12 @@ static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>&
             }
         }
     }
+}
+
+static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>& acts)
+{
+    GameState t;
+    AuraPlanHostBaseInto(t, s, acts);
     return t;
 }
 
@@ -14924,6 +14932,7 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
     // payer's own order (AttackerReserve holds the biggest attacker back) -- and those creatures are
     // left out of the next-turn sum. A creature-ONLY source pays only for a creature card.
     std::vector<int> mana_tapped;
+    std::vector<int> swing;   // per-battlefield-index swing memo, shared with the key below
     {
         std::vector<int> cast_hand;   // hand numbers this plan casts
         for (const Action& a : acts)
@@ -14950,8 +14959,10 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
         int supply = land_in_hand ? 1 : 0;
         struct Src { int pw; int num; int y; };
         std::vector<Src> dorks;
-        for (const Permanent& q : t.battlefield)
+        swing.assign(t.battlefield.size(), -1);   // `t` is final from here to the key (no Aura moves)
+        for (std::size_t qi = 0; qi < t.battlefield.size(); ++qi)
         {
+            const Permanent& q = t.battlefield[qi];
             if (q.controller_index != me || q.def_absent) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
             if (d == nullptr) { continue; }
@@ -14967,7 +14978,7 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
             {
                 if (d->tmpl != CardTemplate::ManaDork) { continue; }
                 if (d->params.creature_mana_only && !need_creature) { continue; }
-                dorks.push_back({ std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1), q.card.m_number, y });
+                dorks.push_back({ AuraHostKeyCreatureSwing(t, qi, &swing), q.card.m_number, y });
             }
             else { supply += y; }
         }
@@ -14986,7 +14997,7 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
             TRACE("hostkey", "T%d need=%d supply=%d dorks={%s} out=%zu", s.turn_number, need, supply, ds.c_str(), mana_tapped.size());
         }
     }
-    AuraHostKey key = AuraHostBoardKey(t, me, is_pre_combat, &mana_tapped);
+    AuraHostKey key = AuraHostBoardKey(t, me, is_pre_combat, &mana_tapped, &swing);
     const bool swap_order = WingsHostOrderOn();
     for (const Action& a : acts)
     {
@@ -59979,6 +59990,36 @@ static bool IsAuraOnNewCreature(const GameState& state, const Action& a)
     return true;
 }
 
+// std::stable_sort(v, [&](x, y) { return key(x) < key(y); }) for a PURE bool key, exactly: the false-keyed
+// actions first, then the true-keyed ones, each in their original order. Evaluates the key ONCE per action
+// (the comparator form re-evaluated it O(n log n) times, each a CardDatabase name lookup) and returns
+// without touching `v` when it is already in key order -- the common case, all keys false -- where the
+// stable_sort still paid a _Temporary_buffer allocation per emitted plan. Byte-identical by construction
+// (P2 2026-10-19, AccomplishedAlchemist: two such sorts per emitted plan on a Crab Umbra board).
+template <class KeyFn>
+static void StableSortByBoolKey(std::vector<Action>& v, KeyFn&& key)
+{
+    const std::size_t n = v.size();
+    if (n < 2) { return; }
+    bool small_keys[32];
+    std::vector<char> big_keys;
+    if (n > 32) { big_keys.resize(n); }
+    auto k_at = [&](std::size_t i) -> bool { return n > 32 ? big_keys[i] != 0 : small_keys[i]; };
+    bool sorted = true, seen_true = false;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const bool k = key(v[i]);
+        if (n > 32) { big_keys[i] = k ? 1 : 0; } else { small_keys[i] = k; }
+        if (k) { seen_true = true; } else if (seen_true) { sorted = false; }
+    }
+    if (sorted) { return; }
+    std::vector<Action> out;
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) { if (!k_at(i)) { out.push_back(std::move(v[i])); } }
+    for (std::size_t i = 0; i < n; ++i) { if (k_at(i))  { out.push_back(std::move(v[i])); } }
+    v.swap(out);
+}
+
 // True iff `acts` (in order) casts an Aura on a this-turn creature BEFORE that creature is cast. Such an
 // ordering is invalid: the Aura resolves with no such creature in play and mis-attaches (falls back to an
 // existing creature). Used to drop those orderings from the human-play cast-ordering expansion.
@@ -62708,7 +62749,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             auto by_cra = [&](const Action& x, const Action& y)
             { return IsConditionalRestrictedAura(state, x) < IsConditionalRestrictedAura(state, y); };
             if (!EnumAuraSortSkipOn() || cands_any(any_cond_ra, &IsConditionalRestrictedAura))
-            { std::stable_sort(plan.actions.begin(), plan.actions.end(), by_cra); }
+            { StableSortByBoolKey(plan.actions, [&](const Action& x) { return IsConditionalRestrictedAura(state, x); }); }
             else if (EnumAuraSortSkipVerifyOn()) { EnumAuraSortSkipVerify(plan.actions, by_cra); }
         }
         // Shroud-target Auras (aura_shroud_src != 0: the host is Greaves'd NOW and the plan moves the
@@ -62748,7 +62789,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             auto by_newc = [&](const Action& x, const Action& y)
             { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); };
             if (!EnumAuraSortSkipOn() || cands_any(any_aura_newc, &IsAuraOnNewCreature))
-            { std::stable_sort(plan.actions.begin(), plan.actions.end(), by_newc); }
+            { StableSortByBoolKey(plan.actions, [&](const Action& x) { return IsAuraOnNewCreature(state, x); }); }
             else if (EnumAuraSortSkipVerifyOn()) { EnumAuraSortSkipVerify(plan.actions, by_newc); }
         }
         // Cantrip-first runs AFTER the three Aura sorts (no-op unless searched play). Every Aura those
@@ -63911,7 +63952,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // MTG_PLAN_SIG_FAST_VERIFY=1 (see PlanSigFastOn).
     auto plan_signature_legacy = [s_human_play_sig, host_sig, cre_host_sig, rep_sig](const TurnSolver::Plan& p) -> std::string
     {
-        std::vector<std::string> v, s, a, g, l, u, msf;
+        // Per-thread reusable buckets (P2 2026-10-19, byte-identical): a bucket keeps its strings (and
+        // their capacity) across calls, so a signature no longer allocates a vector per non-empty bucket
+        // and a heap string per name longer than the SSO buffer. Same members, same sort, same concat.
+        // Safe because nothing below re-enters plan_signature while a bucket is being filled.
+        struct SigBucket
+        {
+            std::vector<std::string> buf;
+            std::size_t n = 0;
+            std::string& next()
+            {
+                if (n == buf.size()) { buf.emplace_back(); }
+                std::string& r = buf[n++];
+                r.clear();
+                return r;
+            }
+            void push_back(const std::string& x) { next().assign(x); }
+            std::string* begin() { return buf.data(); }
+            std::string* end()   { return buf.data() + n; }
+        };
+        static thread_local SigBucket v, s, a, g, l, u, msf;
+        v.n = s.n = a.n = g.n = l.n = u.n = msf.n = 0;
         for (const Action& act : p.actions)
         {
             switch (act.kind)
@@ -63927,23 +63988,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     // DISTINCT plans (the freed mana funds other casts) -- keep it in the signature.
                     // Modal split (Unite the Coalition): distinct splits are DISTINCT plans (core
                     // invariant); gated on the modal param so no existing deck's signature moves.
-                    (act.sacrifice_land ? a : s).push_back(
-                        (act.chosen_float_color.empty() ? act.card_name
-                                                        : act.card_name + "#" + act.chosen_float_color)
-                        + (act.free_cast ? "#FREE" : "")
-                        + ((act.def && act.def->params.modal_choose_n > 0)
-                           ? ("#S" + std::to_string(act.chosen_x)) : "")
+                    {
+                        // ONE buffer, appended in place (P2 2026-10-19, byte-identical): the former single expression
+                        // chained ~30 `cond ? (...) : ""` terms, constructing a temporary std::string per term (the
+                        // empty branch included) -- 9% of the AccomplishedAlchemist seed-90061 repro in string ctors.
+                        // Every term below appends exactly the bytes its ternary contributed, in the same order.
+                        std::string& k = (act.sacrifice_land ? a : s).next();
+                        k.assign(act.card_name.str());
+                        if (!act.chosen_float_color.empty()) { k += '#'; k += act.chosen_float_color.str(); }
+                        if (act.free_cast) { k += "#FREE"; }
+                        const CardDefinition* const cd = act.def;
+                        if (cd && cd->params.modal_choose_n > 0) { k += "#S"; k += std::to_string(act.chosen_x); }
                         // Natural Order: distinct sacrifice victims are DISTINCT plans (core
                         // invariant); gated on the param so no existing deck's signature moves.
-                        + ((act.def && !act.def->params.sac_additional_creature_color.empty())
-                           ? ("#V" + std::to_string(act.soulfire_own_targets)) : "")
+                        if (cd && !cd->params.sac_additional_creature_color.empty())
+                        { k += "#V"; k += std::to_string(act.soulfire_own_targets); }
                         // Turntimber Symbiosis: distinct put-choices are DISTINCT plans.
-                        + ((act.def && act.def->params.look_top_put_creature_count > 0)
-                           ? ("#T" + act.tutor_target) : "")
+                        if (cd && cd->params.look_top_put_creature_count > 0) { k += "#T"; k += act.tutor_target.str(); }
                         // Terastodon: distinct ETB destroy-K counts are DISTINCT plans (core
                         // invariant); gated on the param so no existing deck's signature moves.
-                        + ((act.def && act.def->params.etb_destroy_own_noncreature_max > 0)
-                           ? ("#K" + std::to_string(act.chosen_x)) : "")
+                        if (cd && cd->params.etb_destroy_own_noncreature_max > 0) { k += "#K"; k += std::to_string(act.chosen_x); }
                         // BESTOW: casting Gnarled Scarhide as a CREATURE and casting it as an AURA are
                         // two different spells that happen to share a name -- different cost, different
                         // type, different board. The signature keyed on the name alone, so the two modes
@@ -63951,17 +64015,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // only ever see ONE mode per subset, despite the enumeration deliberately
                         // emitting both ("that is a real decision, so the SEARCH owns it"). Gated on the
                         // param, so only a bestow deck's signature moves -- the #S/#V/#K precedent.
-                        + ((act.def && act.def->params.bestow_cost.has_value()
-                            && !s_legacy_bestow_sig)
-                           ? (act.bestow ? "#B1" : "#B0") : "")
+                        if (cd && cd->params.bestow_cost.has_value() && !s_legacy_bestow_sig) { k += (act.bestow ? "#B1" : "#B0"); }
                         // ADVENTURE: exactly the bestow case. Casting Brightcap Badger as a {3}{G}
                         // 3/4 and casting Fungus Frolic as a {2}{G} instant for two Saprolings are
                         // two different spells sharing one name -- different cost, different type,
                         // different board, and one of them leaves the card castable again later.
                         // Without this the dedup keeps whichever sorted higher and the search sees
                         // only one mode per subset. Gated on the param -- the #S/#V/#K/#B precedent.
-                        + ((act.def && !act.def->params.adventure_face_name.empty())
-                           ? (act.adventure ? "#A1" : "#A0") : "")
+                        if (cd && !cd->params.adventure_face_name.empty()) { k += (act.adventure ? "#A1" : "#A0"); }
                         // KICKER: exactly the bestow and adventure case, and the ONE site where
                         // forgetting it would silently undo the whole change -- the signature is
                         // keyed on the card NAME, and kicked/unkicked Saproling Migration share
@@ -63971,40 +64032,38 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // weighed. "#KI" not "#K": #K is already Terastodon's destroy-K count.
                         // Gated on the param -- the #S/#V/#K/#B/#A precedent -- so no deck without
                         // a kicker card moves a signature.
-                        + ((act.def && act.def->params.kicker_cost.has_value())
-                           ? (act.kicked ? "#KI1" : "#KI0") : "")
+                        if (cd && cd->params.kicker_cost.has_value()) { k += (act.kicked ? "#KI1" : "#KI0"); }
                         // TARGET PLAYER ("target player gains N life": Heroes' Reunion / Rest for the
                         // Weary). The kicker case once more -- both targets share one card name, so
                         // without a marker the dedup would keep one of them and the opponent variant
                         // the enumeration emitted would never be weighed. VALUE-gated (only the
                         // opponent variant carries it), so the self cast keeps the bare-name signature.
-                        + (act.player_target != 0 ? "#PT" + std::to_string(act.player_target) : std::string())
+                        if (act.player_target != 0) { k += "#PT"; k += std::to_string(act.player_target); }
                         // Chord of Calling: X, the fetch target AND the convoke tap counts are all
                         // real decisions (core invariant; the MTG_SIG_X_AUDIT class -- without the
                         // gate the autonomous dedup collapses the X axis). Gated on the params so
                         // no existing deck's signature moves.
-                        + ((act.def && (act.def->params.convoke
-                                        || act.def->params.tutor_mv_max_is_x))
-                           ? ("#X" + std::to_string(act.chosen_x) + "#T" + act.tutor_target
-                              + "#C" + std::to_string(act.convoke_green) + "/"
-                              + std::to_string(act.convoke_other)
-                              + ((act.convoke_plan_pip != 0 || act.convoke_plan_other != 0)
-                                 ? "+" + std::to_string(act.convoke_plan_pip) + "/"
-                                   + std::to_string(act.convoke_plan_other) : std::string())) : "")
+                        if (cd && (cd->params.convoke || cd->params.tutor_mv_max_is_x))
+                        {
+                            k += "#X"; k += std::to_string(act.chosen_x); k += "#T"; k += act.tutor_target.str();
+                            k += "#C"; k += std::to_string(act.convoke_green); k += '/'; k += std::to_string(act.convoke_other);
+                            if (act.convoke_plan_pip != 0 || act.convoke_plan_other != 0)
+                            {
+                                k += '+'; k += std::to_string(act.convoke_plan_pip); k += '/';
+                                k += std::to_string(act.convoke_plan_other);
+                            }
+                        }
                         // Felidar Guardian: distinct flicker targets (and the decline) are
                         // DISTINCT plans (core invariant); gated on the param.
-                        + ((act.def && act.def->params.etb_blink_permanent)
-                           ? ("#F" + std::to_string(act.chosen_x)) : "")
+                        if (cd && cd->params.etb_blink_permanent) { k += "#F"; k += std::to_string(act.chosen_x); }
                         // The ETB CHOICE AXIS (Utopia Sprawl's colour, Trufflesnout's mode):
                         // distinct pins are DISTINCT plays sharing one name -- the devour lesson;
                         // without the key the dedup keeps one and the rest are unfindable. Gated on
                         // the params (CastCarriesEtbChoice), so no other deck's signature moves.
-                        + ((act.def && CastCarriesEtbChoice(*act.def))
-                           ? ("#EC" + std::to_string(act.chosen_x)) : "")
+                        if (cd && CastCarriesEtbChoice(*cd)) { k += "#EC"; k += std::to_string(act.chosen_x); }
                         // Kitesail Larcenist: distinct Treasure targets (and "none", and the
                         // human-only choose-on-resolution variant) are DISTINCT plans; gated.
-                        + ((act.def && act.def->params.etb_treasurify_each_player)
-                           ? ("#L" + std::to_string(act.chosen_x)) : "")
+                        if (cd && cd->params.etb_treasurify_each_player) { k += "#L"; k += std::to_string(act.chosen_x); }
                         // MYCOLOTH'S DEVOUR COUNT (CR 702.81): "devour 0" and "devour 5" are
                         // DIFFERENT SPELLS -- different board, different permanent, different clock.
                         // Exactly the #S/#V/#K/#B/#X/#F case, and it was simply never added here.
@@ -64019,8 +64078,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // victim chooser dead in practice: devouring everything leaves nothing to
                         // choose. -1 = not a devour cast, so every other deck's signature is
                         // byte-identical (the #S/#V/#K precedent).
-                        + (act.devour_count >= 0
-                           ? ("#D" + std::to_string(act.devour_count)) : "")
+                        if (act.devour_count >= 0) { k += "#D"; k += std::to_string(act.devour_count); }
                         // MAGNETIC THEFT's (Equipment, creature) pair: "Theft the Hammer onto the
                         // Duelist" and "Theft the Warhammer onto the Vindicator" are DIFFERENT
                         // SPELLS that share a name -- the devour lesson exactly. Without the key the
@@ -64029,19 +64087,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // The hand-target names ride along: a same-plan hand piece is a different
                         // line from a battlefield copy. Gated on the field (0 = not an attach
                         // spell), so every other deck's signature is byte-identical.
-                        + (act.attach_equip_id != 0
-                           ? ("#MT" + std::to_string(act.attach_equip_id) + ">"
-                              + std::to_string(act.enchant_target) + "/" + act.attach_equip_hand.str()
-                              + "/" + act.trick_hand_target) : "")
+                        if (act.attach_equip_id != 0)
+                        {
+                            k += "#MT"; k += std::to_string(act.attach_equip_id); k += '>';
+                            k += std::to_string(act.enchant_target); k += '/'; k += act.attach_equip_hand.str();
+                            k += '/'; k += act.trick_hand_target;
+                        }
                         // DRAW X (Stroke of Genius): X AND the target player are both searched axes
                         // (CollectActions' DrawX branch). "Draw 3 myself", "draw 7 myself" and "deck
                         // the opponent" are DIFFERENT SPELLS sharing one name -- the devour / Theft
                         // lesson: without the key the name-only dedup keeps the highest-sorted
                         // variant and the rest are unfindable at any budget. Gated on the template
                         // (no draw_x card was ever cast from hand before), so no other deck moves.
-                        + ((act.def && act.def->tmpl == CardTemplate::DrawX)
-                           ? ("#DX" + std::to_string(act.chosen_x) + "/" + std::to_string(act.draw_target))
-                           : "")
+                        if (cd && cd->tmpl == CardTemplate::DrawX)
+                        { k += "#DX"; k += std::to_string(act.chosen_x); k += '/'; k += std::to_string(act.draw_target); }
                         // REPLICATE COUNT (CR 702.56, Hatchery Sliver): the devour defect again, on
                         // the axis that was fanned for the USER's no-greedy rule (2026-09-30) and
                         // then never reached the search. CollectActions emits one variant per pinned
@@ -64054,8 +64113,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // onboard_split probe). Keyed from >= 0 like the human key: "replicate zero
                         // times" is a real line. -1 = not pinned, so every deck that never pins a
                         // count (all but slivers) is byte-identical. Human play already keys it.
-                        + ((rep_sig && !s_human_play_sig && act.replicate_count >= 0)
-                           ? ("#R" + std::to_string(act.replicate_count)) : "")
+                        if (rep_sig && !s_human_play_sig && act.replicate_count >= 0)
+                        { k += "#R"; k += std::to_string(act.replicate_count); }
                         // CAST-TIME trick target (kTrickBestOwnTarget, MTG_MINT_CREDIT_EXACT): "the
                         // best attacker when the trick resolves" and an explicit pre-plan target
                         // are DISTINCT plans -- the explicit one aims at the body the payment then
@@ -64063,50 +64122,43 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // Same eval, so the name-only fold kept the explicit twin (enumerated first)
                         // and the variant never reached a rollout. Gated on the sentinel, which only
                         // exists under the lever -> every other deck's signature is byte-identical.
-                        + (act.enchant_target == kTrickBestOwnTarget ? "#B" : "")
+                        if (act.enchant_target == kTrickBestOwnTarget) { k += "#B"; }
                         // PATH TO EXILE's searched TARGET (land_search_for_removal_controller): one
                         // variant per own-creature identity class plus the opponent target (0) --
                         // DISTINCT plans (the #F / #L precedent). Without it the name-keyed dedup kept
                         // ONE target per subset, the first emitted, i.e. a greedy pick of which
                         // creature to exile. Gated on the param, so no other deck's signature moves.
-                        + ((act.def && RemovalSearchesForController(*act.def))
-                           ? ("#PX" + std::to_string(act.enchant_target)) : "")
+                        if (cd && RemovalSearchesForController(*cd)) { k += "#PX"; k += std::to_string(act.enchant_target); }
                         // Planeswalker cast + same-turn loyalty activation (CritterLifegain's Ajani):
                         // the plain cast and each "cast + activate #k" variant are DISTINCT plans
                         // (core invariant; the name-only dedup would keep the first and hide the
                         // activation the enumeration deliberately emitted). Gated on the walker
                         // param + a set index, so every existing deck's signature is unchanged.
-                        + ((act.def && act.def->params.loyalty_start > 0 && act.loyalty_ability >= 0)
-                           ? ("#L" + std::to_string(act.loyalty_ability)) : "")
+                        if (cd && cd->params.loyalty_start > 0 && act.loyalty_ability >= 0)
+                        { k += "#L"; k += std::to_string(act.loyalty_ability); }
                         // Phyrexian ({G/P} -- Birthing Pod): paying the pip with mana vs 2 life
                         // are DISTINCT plans (the life payment frees a source; core invariant).
                         // Gated on the field, so no existing deck's signature moves.
-                        + (act.phyrexian_life > 0
-                           ? ("#P" + std::to_string(act.phyrexian_life)) : "")
+                        if (act.phyrexian_life > 0) { k += "#P"; k += std::to_string(act.phyrexian_life); }
                         // Twobrid ({2/B} -- Beseech the Queen): paying a pip with {B} vs {2} are
                         // DISTINCT plans (different sources spent; core invariant). Gated on the
                         // field, so no existing deck's signature moves.
-                        + (act.twobrid_colored > 0
-                           ? ("#W" + std::to_string(act.twobrid_colored)) : "")
+                        if (act.twobrid_colored > 0) { k += "#W"; k += std::to_string(act.twobrid_colored); }
                         // Rolling Earthquake: X decides which of OUR creatures die and how much
                         // every player takes -- distinct X are DISTINCT plans (the #X precedent).
-                        + ((act.def && act.def->params.x_damage_each_creature_and_player)
-                           ? ("#Q" + std::to_string(act.chosen_x)) : "")
+                        if (cd && cd->params.x_damage_each_creature_and_player) { k += "#Q"; k += std::to_string(act.chosen_x); }
                         // Evoke (Reveillark): the evoke cast and the hard cast are two different
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.
-                        + ((act.def && act.def->params.evoke_cost.has_value())
-                           ? (act.evoke ? "#E1" : "#E0") : "")
+                        if (cd && cd->params.evoke_cost.has_value()) { k += (act.evoke ? "#E1" : "#E0"); }
                         // Timeless Witness: WHICH graveyard card the ETB returns is a real decision
                         // (one cast variant per distinct graveyard name + the unpinned resolution
                         // pick) -- distinct plans, the #T precedent. Gated on the param.
-                        + ((act.def && act.def->params.etb_return_gy_to_hand)
-                           ? ("#G" + act.tutor_target.str()) : "")
+                        if (cd && cd->params.etb_return_gy_to_hand) { k += "#G"; k += act.tutor_target.str(); }
                         // Forge Anew: WHICH graveyard Equipment the ETB returns is a real decision
                         // (one cast variant per distinct graveyard Equipment name + the unpinned
                         // resolution pick) -- the #G precedent. Gated on the param.
-                        + ((act.def && act.def->params.etb_return_equipment_from_gy)
-                           ? ("#FE" + act.tutor_target.str()) : "")
+                        if (cd && cd->params.etb_return_equipment_from_gy) { k += "#FE"; k += act.tutor_target.str(); }
                         // LAND-AURA HOST (MTG_EDF_AURA_HOST_SIG, default ON; 2026-09-15): WHICH land
                         // carries a Wild Growth / Trace of Abundance is a real decision, not a
                         // sub-decision the host heuristic can be trusted with -- a karoo in the same
@@ -64116,28 +64168,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // already narrows the host set (LandAuraHostCandidates, two), so keeping the
                         // variants distinct at most doubles the Aura plans. Gated on the param, so no
                         // deck without land Auras moves; =0 restores the name-only fold.
-                        + ((act.def && act.def->params.is_land_aura && act.enchant_target > 0
-                            && host_sig)
-                           ? ("#H" + std::to_string(act.enchant_target)) : "")
-                        + ((cre_host_sig && act.def && act.def->params.is_aura
-                            && !act.def->params.is_land_aura && act.enchant_target > 0)
-                           ? ("#A" + std::to_string(act.enchant_target)) : "")
+                        if (cd && cd->params.is_land_aura && act.enchant_target > 0 && host_sig)
+                        { k += "#H"; k += std::to_string(act.enchant_target); }
+                        if (cre_host_sig && cd && cd->params.is_aura && !cd->params.is_land_aura && act.enchant_target > 0)
+                        { k += "#A"; k += std::to_string(act.enchant_target); }
                         // LAND-PUT CREDIT (Search for Tomorrow): each credit class is a DIFFERENT
                         // pick of the searched basic -- distinct plans (the core invariant; the
                         // LAND-PUT CREDIT post-pass in CollectActions). Gated on the param + a
                         // stamped credit, so no other deck's signature moves.
-                        + ((act.def && act.rock_mana.Total() > 0 && LandSearchPutsUntapped(*act.def))
-                           ? ("#LP" + std::to_string(act.rock_mana.white) + "."
-                              + std::to_string(act.rock_mana.blue) + "." + std::to_string(act.rock_mana.black)
-                              + "." + std::to_string(act.rock_mana.red) + "." + std::to_string(act.rock_mana.green)
-                              + "." + std::to_string(act.rock_mana.colorless) + "."
-                              + std::to_string(act.rock_mana.snow_units)) : "")
+                        if (cd && act.rock_mana.Total() > 0 && LandSearchPutsUntapped(*cd))
+                        {
+                            k += "#LP"; k += std::to_string(act.rock_mana.white); k += '.';
+                            k += std::to_string(act.rock_mana.blue); k += '.'; k += std::to_string(act.rock_mana.black);
+                            k += '.'; k += std::to_string(act.rock_mana.red); k += '.'; k += std::to_string(act.rock_mana.green);
+                            k += '.'; k += std::to_string(act.rock_mana.colorless); k += '.';
+                            k += std::to_string(act.rock_mana.snow_units);
+                        }
                         // REMAND rider: "cast X" and "cast X, Remand it" share X's name and are
                         // DIFFERENT plans (X resolves vs X back in hand + a card) -- the bestow/devour
                         // lesson. X is keyed too: a remanded X spell's X is its MV on the stack and
                         // its cost, not a resolution detail. Gated on the field: no other deck moves.
-                        + (!act.remand_by.empty()
-                           ? ("#RM" + act.remand_by.str() + ":" + std::to_string(act.chosen_x)) : "")); break;
+                        if (!act.remand_by.empty())
+                        { k += "#RM"; k += act.remand_by.str(); k += ':'; k += std::to_string(act.chosen_x); }
+                    } break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -64311,6 +64364,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         std::sort(u.begin(), u.end());
         std::sort(msf.begin(), msf.end());
         std::string sig;
+        {
+            std::size_t len = 0;
+            for (SigBucket* b : { &v, &s, &a, &g, &l, &u, &msf })
+            { for (const std::string& n : *b) { len += 1 + n.size(); } }
+            sig.reserve(len);   // capacity only
+        }
         for (const std::string& n : v) { sig += 'V'; sig += n; }
         for (const std::string& n : s) { sig += 'S'; sig += n; }
         for (const std::string& n : a) { sig += 'A'; sig += n; }
@@ -64422,7 +64481,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // the class's survivor is its best-keyed member (AuraPlanHostKey; ties keep the FIRST enumerated
     // -- the historical survivor), emitted at the class's first position. `pick` maps a class to its
     // survivor; empty = no creature Aura anywhere -> the loop below is the unchanged first-wins dedup.
-    std::unordered_map<std::string, std::size_t> pick;
+    // value = (survivor index, class already emitted by the dedup loop below -- which then needs no
+    // separate `seen` lookup: every plan's signature is in `pick` whenever `pick` is non-empty).
+    std::unordered_map<std::string, std::pair<std::size_t, bool>> pick;
     std::vector<std::string> sigs;
     if (!cre_host_sig && !s_human_play_sig)
     {
@@ -64435,37 +64496,60 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (any)
         {
             sigs.reserve(plans.size());
-            std::unordered_map<std::size_t, AuraHostKey> keys;
-            // One host-independent base (+ its scratch copy) per plan-modulo-hosts.
-            std::unordered_map<std::string, std::pair<std::vector<Permanent>, GameState>> bases;
+            // Per-plan key slots (index = plan position; a flat vector, not a hash map: on the
+            // AccomplishedAlchemist repro 83% of the plans in these enumerations get a key).
+            std::vector<AuraHostKey> keys(plans.size());
+            std::vector<char>        have_key(plans.size(), 0);
+            // One host-independent base (+ its scratch copy) per plan-modulo-hosts. The bases live in a
+            // thread-local POOL that is reused across enumerations (P2 2026-10-19, byte-identical): a
+            // base is (re)filled by copy-ASSIGNMENT, which keeps every vector's capacity, where a fresh
+            // GameState per base paid a malloc per member vector and a battlefield reallocation on the
+            // first appended creature (839k bases on the seed-90061 repro). Stack discipline (mark /
+            // restore) keeps a nested enumeration from reusing an outer frame's live bases.
+            struct HostBase { std::vector<Permanent> bf; GameState w; };
+            static thread_local std::vector<std::unique_ptr<HostBase>> t_host_pool;
+            static thread_local std::size_t                            t_host_used = 0;
+            struct HostPoolMark
+            {
+                std::size_t mark;
+                ~HostPoolMark()
+                {
+                    t_host_used = mark;
+                    // Bound what an idle worker keeps resident (a base holds a whole GameState).
+                    if (mark == 0 && t_host_pool.size() > 256) { t_host_pool.resize(256); }
+                }
+            } host_pool_mark{ t_host_used };
+            std::unordered_map<std::string, HostBase*> bases;
             auto key_of = [&](std::size_t i) -> const AuraHostKey&
             {
-                auto it = keys.find(i);
-                if (it == keys.end())
+                if (!have_key[i])
                 {
                     const std::vector<Action>& acts = plans[i].actions;
                     const std::string fp = AuraPlanBaseFingerprint(acts);
                     auto bt = bases.find(fp);
                     if (bt == bases.end())
                     {
-                        GameState w = AuraPlanHostBase(state, acts);
-                        std::vector<Permanent> b = w.battlefield;
-                        bt = bases.emplace(fp, std::make_pair(std::move(b), std::move(w))).first;
+                        if (t_host_used == t_host_pool.size()) { t_host_pool.push_back(std::make_unique<HostBase>()); }
+                        HostBase* hb = t_host_pool[t_host_used++].get();
+                        AuraPlanHostBaseInto(hb->w, state, acts);
+                        hb->bf = hb->w.battlefield;
+                        bt = bases.emplace(fp, hb).first;
                     }
-                    it = keys.emplace(i, AuraPlanHostKeyOn(bt->second.first, bt->second.second, state,
-                                                           is_pre_combat, acts)).first;
+                    keys[i] = AuraPlanHostKeyOn(bt->second->bf, bt->second->w, state, is_pre_combat, acts);
+                    have_key[i] = 1;
                 }
-                return it->second;
+                return keys[i];
             };
+            pick.reserve(plans.size());
             for (std::size_t i = 0; i < plans.size(); ++i)
             {
                 sigs.push_back(plan_signature(plans[i]));
-                auto it = pick.find(sigs.back());
-                if (it == pick.end()) { pick.emplace(sigs.back(), i); continue; }
+                auto [it, fresh] = pick.try_emplace(sigs.back(), std::make_pair(i, false));   // one lookup
+                if (fresh) { continue; }
                 bool aura = false;
                 for (const Action& a : plans[i].actions) { if (IsCreatureAuraCast(a)) { aura = true; break; } }
                 if (!aura) { continue; }
-                if (AuraHostKeyBetter(key_of(i), key_of(it->second))) { it->second = i; }
+                if (AuraHostKeyBetter(key_of(i), key_of(it->second.first))) { it->second.first = i; }
             }
         }
     }
@@ -64582,13 +64666,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     for (std::size_t pi = 0; pi < plans.size(); ++pi)
     {
         TurnSolver::Plan& p = plans[pi];
-        const std::string sig = !sigs.empty() ? sigs[pi]
-                              : ds_cache      ? ds_cached_sig(p, pi)
-                                              : plan_signature(p);
-        if (seen.insert(sig).second)
+        std::string sig_own;   // computed here only when the host pass above did not already (no copy of sigs[pi])
+        if (sigs.empty()) { sig_own = ds_cache ? ds_cached_sig(p, pi) : plan_signature(p); }
+        const std::string& sig = sigs.empty() ? sig_own : sigs[pi];
+        bool first_of_class = false;
+        std::size_t keep = pi;
+        if (pick.empty()) { first_of_class = seen.insert(sig).second; }
+        else
+        {
+            std::pair<std::size_t, bool>& e = pick.find(sig)->second;
+            first_of_class = !e.second;
+            e.second = true;
+            keep = e.first;
+        }
+        if (first_of_class)
         {
             if (s_sig_x_audit) { sig_first[sig] = deduped.size(); }
-            const std::size_t keep = pick.empty() ? pi : pick[sig];
             if (range_hosts)
             {
                 const RhShape s = rh_shape(plans[keep]);

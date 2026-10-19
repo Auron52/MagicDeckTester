@@ -37782,19 +37782,36 @@ struct AuraHostKeyQuiet
 };
 
 // `next_out`: creatures left out of the NEXT-turn sum (see AuraHostBoardKey).
+// `swing_memo` (optional): one slot per battlefield index, -1 = not yet computed, else the creature's
+// max(0, CombatPowerOf) x double strike ON THIS BOARD. A pure function of the board, so callers that ask
+// it several times of one unchanged battlefield (the key's now + next sums, and AuraPlanHostKeyOn's
+// next-turn dork walk) compute it once (P2 2026-10-19, byte-identical). Ignored if its size does not
+// match the battlefield; never passed for a board the gather variants have re-pointed.
+inline int AuraHostKeyCreatureSwing(const GameState& t, std::size_t i, std::vector<int>* swing_memo)
+{
+    const Permanent& q = t.battlefield[i];
+    if (swing_memo == nullptr || swing_memo->size() != t.battlefield.size())
+    { return std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1); }
+    int& m = (*swing_memo)[i];
+    if (m < 0) { m = std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1); }
+    return m;
+}
+
 inline int AuraHostKeyAttackSum(const GameState& t, int controller, bool now,
-                                const std::vector<int>* next_out = nullptr)
+                                const std::vector<int>* next_out = nullptr,
+                                std::vector<int>* swing_memo = nullptr)
 {
     int sum = 0;
-    for (const Permanent& q : t.battlefield)
+    for (std::size_t i = 0; i < t.battlefield.size(); ++i)
     {
+        const Permanent& q = t.battlefield[i];
         if (q.controller_index != controller) { continue; }
         if (!q.card.IsCreature() && !q.is_animated) { continue; }
         if (now) { if (!CanAttackFull(q, t.battlefield, controller)) { continue; } }
         else if (q.card.HasKeyword(Keyword::Defender)) { continue; }
         if (!now && next_out != nullptr
             && std::find(next_out->begin(), next_out->end(), q.card.m_number) != next_out->end()) { continue; }
-        sum += std::max(0, CombatPowerOf(q, t)) * (CreatureHasDoubleStrike(q, t) ? 2 : 1);
+        sum += AuraHostKeyCreatureSwing(t, i, swing_memo);
     }
     return sum;
 }
@@ -37802,7 +37819,8 @@ inline int AuraHostKeyAttackSum(const GameState& t, int controller, bool now,
 // Team damage this turn (`now`) or next, with a gathering attacker's best gather (see the header).
 // `t` is a scratch board: the gather variants re-point Auras on it and restore its battlefield.
 inline int AuraHostKeyTeamDamage(GameState& t, int controller, bool now,
-                                 const std::vector<int>* next_out = nullptr)
+                                 const std::vector<int>* next_out = nullptr,
+                                 std::vector<int>* swing_memo = nullptr)
 {
     int gatherer = -1;
     for (int i = 0; i < static_cast<int>(t.battlefield.size()); ++i)
@@ -37815,7 +37833,7 @@ inline int AuraHostKeyTeamDamage(GameState& t, int controller, bool now,
         gatherer = i;
         break;
     }
-    int best = AuraHostKeyAttackSum(t, controller, now, next_out);
+    int best = AuraHostKeyAttackSum(t, controller, now, next_out, swing_memo);   // the unmodified board
     if (gatherer < 0) { return best; }
     const std::vector<Permanent> saved = t.battlefield;
     for (int skip_base = 0; skip_base < 2; ++skip_base)
@@ -37848,7 +37866,8 @@ inline int AuraHostKeyTeamDamage(GameState& t, int controller, bool now,
 // +21 next turn, but next turn the Pilgrim paid for Eldrazi Conscription and never swung; on Mother
 // it was lethal). Their this-turn swing is already zero (tapped).
 inline AuraHostKey AuraHostBoardKey(GameState& t, int controller, bool attack_window,
-                                    const std::vector<int>* mana_tapped = nullptr)
+                                    const std::vector<int>* mana_tapped = nullptr,
+                                    std::vector<int>* swing_memo = nullptr)
 {
     AuraHostKey k;
     // The Niv loop term: damage->draw Auras on a pinging host (deck-gated: a deck without the loop
@@ -37869,7 +37888,7 @@ inline AuraHostKey AuraHostBoardKey(GameState& t, int controller, bool attack_wi
             }
         }
     }
-    const int now = attack_window ? AuraHostKeyTeamDamage(t, controller, true) : 0;
+    const int now = attack_window ? AuraHostKeyTeamDamage(t, controller, true, nullptr, swing_memo) : 0;
     if (attack_window && now >= t.players[static_cast<std::size_t>(1 - controller)].life)
     {
         k.lethal = true;
@@ -37878,7 +37897,7 @@ inline AuraHostKey AuraHostBoardKey(GameState& t, int controller, bool attack_wi
         return k;
     }
     k.now = now;
-    k.dmg = now + AuraHostKeyTeamDamage(t, controller, false, mana_tapped);
+    k.dmg = now + AuraHostKeyTeamDamage(t, controller, false, mana_tapped, swing_memo);
     return k;
 }
 
