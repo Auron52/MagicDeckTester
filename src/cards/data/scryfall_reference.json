@@ -157,6 +157,17 @@
     "toughness": null,
     "type_line": "Legendary Planeswalker — Ajani"
   },
+  "Akoum Hellhound": {
+    "cmc": 1.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{R}",
+    "oracle_text": "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Dog"
+  },
   "All That Glitters": {
     "cmc": 2.0,
     "keywords": [
@@ -794,6 +805,18 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Angel"
+  },
+  "Brushfire Elemental": {
+    "cmc": 2.0,
+    "keywords": [
+      "Haste",
+      "Landfall"
+    ],
+    "mana_cost": "{R}{G}",
+    "oracle_text": "Haste\nThis creature can't be blocked by creatures with power 2 or less.\nLandfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
   },
   "Brushland": {
     "cmc": 0.0,
@@ -1775,6 +1798,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Flamekin Harbinger": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "When this creature enters, you may search your library for an Elemental card, reveal it, then shuffle and put that card on top.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Shaman"
+  },
   "Fluctuator": {
     "cmc": 2.0,
     "keywords": [],
@@ -1860,6 +1892,17 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Foundation Breaker": {
+    "cmc": 4.0,
+    "keywords": [
+      "Evoke"
+    ],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "When this creature enters, you may destroy target artifact or enchantment.\nEvoke {1}{G} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Elemental"
+  },
   "Frontline Heroism": {
     "cmc": 3.0,
     "keywords": [],
@@ -1887,6 +1930,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Fulminator Mage": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B/R}{B/R}",
+    "oracle_text": "Sacrifice this creature: Destroy target nonbasic land.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Elemental Shaman"
+  },
   "Fungus Frolic": {
     "cmc": 4.0,
     "keywords": [],
@@ -1895,6 +1947,18 @@
     "power": "3",
     "toughness": "4",
     "type_line": "Instant — Adventure"
+  },
+  "Fury": {
+    "cmc": 5.0,
+    "keywords": [
+      "Double strike",
+      "Evoke"
+    ],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "Double strike\nWhen this creature enters, it deals 4 damage divided as you choose among any number of target creatures and/or planeswalkers.\nEvoke—Exile a red card from your hand.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Elemental Incarnation"
   },
   "Furycalm Snarl": {
     "cmc": 0.0,
@@ -2514,6 +2578,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Incandescent Soulstoke": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Other Elemental creatures you control get +1/+1.\n{1}{R}, {T}: You may put an Elemental creature card from your hand onto the battlefield. That creature gains haste until end of turn. Sacrifice it at the beginning of the next end step.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Elemental Shaman"
   },
   "Indrik Umbra": {
     "cmc": 6.0,
@@ -3292,6 +3365,19 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Creature — Werewolf"
+  },
+  "Mossborn Hydra": {
+    "cmc": 3.0,
+    "keywords": [
+      "Double",
+      "Landfall",
+      "Trample"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nThis creature enters with a +1/+1 counter on it.\nLandfall — Whenever a land you control enters, double the number of +1/+1 counters on this creature.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Elemental Hydra"
   },
   "Mossfire Valley": {
     "cmc": 0.0,
@@ -4131,6 +4217,15 @@
     "toughness": null,
     "type_line": "Snow Land — Forest Island"
   },
+  "Risen Reef": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}{U}",
+    "oracle_text": "Whenever this creature or another Elemental you control enters, look at the top card of your library. If it's a land card, you may put it onto the battlefield tapped. If you don't put the card onto the battlefield, put it into your hand.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
+  },
   "Rite of Flame": {
     "cmc": 1.0,
     "keywords": [],
@@ -4649,6 +4744,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Smokebraider": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "{T}: Add two mana in any combination of colors. Spend this mana only to cast Elemental spells or activate abilities of Elementals.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Shaman"
+  },
   "Smoldering Crater": {
     "cmc": 0.0,
     "keywords": [
@@ -5068,6 +5172,39 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Forest Plains"
+  },
+  "Temple of Abandon": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {R} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Temple of Deceit": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {U} or {B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Temple of Enlightenment": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {W} or {U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Temple of Epiphany": {
     "cmc": 0.0,
@@ -5599,6 +5736,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Spirit Cleric"
+  },
+  "Waterlogged Grove": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life: Add {G} or {U}.\n{1}, {T}, Sacrifice this land: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Wellwisher": {
     "cmc": 2.0,

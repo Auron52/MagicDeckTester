@@ -1,0 +1,93 @@
+{
+  "card_scores": {
+    "Aether Vial": [
+      0.05920768807366805
+    ],
+    "Akoum Hellhound": [
+      0.15518974616737946,
+      0.16791340813782174
+    ],
+    "Brushfire Elemental": [
+      0.15224702073099738,
+      0.058904899135446165
+    ],
+    "Fiery Islet": [
+      0.027556785426035013
+    ],
+    "Flamekin Harbinger": [
+      0.20056758948221987,
+      -0.0537040563702158
+    ],
+    "Forest": [
+      -0.043658493112316066
+    ],
+    "Foundation Breaker": [
+      -0.3852163461538458
+    ],
+    "Fulminator Mage": [
+      -0.169527227336558
+    ],
+    "Fury": [
+      -0.19969179151061134
+    ],
+    "Gruul Turf": [
+      -0.19257627245229436
+    ],
+    "Incandescent Soulstoke": [
+      -0.046212121212121815
+    ],
+    "Island": [
+      -0.11249999999999982
+    ],
+    "Metallic Mimic": [
+      -0.11126252653632562
+    ],
+    "Mossborn Hydra": [
+      0.015597355886069586,
+      -0.21697530864197567
+    ],
+    "Mountain": [
+      0.06750942951437988,
+      -0.12370844564240802
+    ],
+    "Myriad Landscape": [
+      0.07851899763815773,
+      -0.1449641803624102
+    ],
+    "Risen Reef": [
+      -0.0243031243974956,
+      -0.26929468855946315
+    ],
+    "Secluded Courtyard": [
+      0.0688397811233239,
+      -0.07218426272867529
+    ],
+    "Smokebraider": [
+      -0.11656264029079111,
+      -0.34525625812284577
+    ],
+    "Terramorphic Expanse": [
+      0.08442953020134247,
+      0.07056603773584946
+    ],
+    "Unclaimed Territory": [
+      0.04426101396893589,
+      0.003551646864826452
+    ],
+    "Waterlogged Grove": [
+      -0.13051958183804047
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

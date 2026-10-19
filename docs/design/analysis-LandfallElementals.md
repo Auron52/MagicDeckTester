@@ -3,9 +3,9 @@
 Deck: `decks/LandfallElementals/LandfallElementals.cod` (R/G/u Elemental landfall tribal: 4 Akoum
 Hellhound, 4 Brushfire Elemental, 4 Mossborn Hydra, 4 Risen Reef, 4 Flamekin Harbinger,
 4 Smokebraider, 2 Fury, 1 Incandescent Soulstoke, 1 Fulminator Mage, 1 Foundation Breaker,
-1 Metallic Mimic, 3 Aether Vial; 22 lands: 4 Secluded Courtyard, 4 Unclaimed Territory, 4 Myriad
-Landscape, 4 Terramorphic Expanse, 1 Gruul Turf, 1 Fiery Islet, 1 Waterlogged Grove, 4 Mountain,
-3 Forest, 1 Island). Sideboard 2 Mulldrifter (unreachable: no wish -- not scanned). 60 cards.
+1 Metallic Mimic (30 creatures), 3 Aether Vial; 27 lands: 4 Secluded Courtyard, 4 Unclaimed
+Territory, 4 Myriad Landscape, 4 Terramorphic Expanse, 1 Gruul Turf, 1 Fiery Islet, 1 Waterlogged
+Grove, 4 Mountain, 3 Forest, 1 Island). Sideboard 2 Mulldrifter (unreachable: no wish -- not scanned). 60 cards.
 
 The user dropped the list into the primary checkout as
 `decks/LandfallElementals/LandfallElementals2.cod` and asked for an analysis on 2026-10-18. The list
@@ -132,6 +132,50 @@ two SpellEffects resolvers; INERT_PARAMS). `lfe` signature += Smokebraider's man
 `LookTopEntrantDef` already covers `PutFromHandAbility` (card_name = the put card), so a Soulstoke put is
 an entrant for Reef's look axis and the site-10 breakpoint clause.
 
+## Stage 3 / 2d-bis / 4 (2026-10-19)
+- Integrated tree (land + etb + fury + provider + seam tests): build clean, unit **1571/1571** (incl.
+  4 cross-cluster seam cases in `test/unit/test_lfe_integration.cpp`), scenarios **234/234**.
+- Stage 3 coverage re-run: missing [], all 22 cards `full`; every bracket note on the new cards is a
+  description or one of the PROVISIONAL deferrals listed under each cluster report -- no Tier 1-3 gap.
+- 2d-bis `audit_card_costs.py`: rc=0, 453/453 costed cards compared, all match Scryfall.
+- Stage 4 profile (`--analyzer-seed 181018`): card scores 1000 games d5, no hand-score gate, default
+  land window (1..5), `min_playable 0` (left as generated, the Minotaur / Mirrorwing precedent -- Q2),
+  cost diagnostic NO_COST_INTERACTIONS. The analyzer printed a determinism WARNING (plan cache refused
+  418 stores) during card scoring.
+
+## Other decks: the two shared fixes (2026-10-19)
+Integrated tree, all decks: smoke 121 unchanged / 7 changed (searched 0 slower, 5 faster; pirates,
+soldiers, 2hg, critter d0); regression 174 unchanged / 4 changed (0 slower, 0 faster; play-changed at
+the same score: pirates d3/d5 s3003, critter d3 s3003; critter d0). Exactly the decks lfe-etb predicted
+(719f690c6 -> goblins/pirates/soldiers; 387ab019f -> critter/soldiers); goblins byte-identical.
+Held-out paired A/B (base = the primary's binary, src c34f2d3 = origin 775aae82d; seeds 830000 d3 b10,
+850000 d5 b20, 870000 2hg d3; 2,000 games per cell, 18,000 total): **8 faster / 0 slower, every deck's
+aggregate <= 0** -- the no-greedy adoption bar is met. Smoke + regression GT ACCEPTED (full-mode, notes
+carried forward), `check_gt_logs` 735 consistent / 0 stale. Overnight GT for those decks is left to the
+periodic overnight run (CLAUDE.md overnight rule).
+`audit_card_fields.py`: snapshot refreshed (the bulk --update hit 429s; Risen Reef, Waterlogged Grove
+and 3 Temples re-fetched individually), rc=0, all 593 cards' hard fields match.
+
+## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
+Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
+STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout
+fidelity (the rollout always sheds heuristically, today by the generic max-MV rule, which sheds Fury
+and Foundation Breaker first). PROPOSAL for the user (one index per shed, quota-first, net of board):
+1. **LANDS** (land drops are also landfall triggers, so this deck keeps more than most): quota 2 while
+   board lands < 5, else 1. Keep order inside: Myriad Landscape (3 land entries) > Terramorphic
+   Expanse (2) > a land adding a colour the hand needs (R, then G, then U only with a Risen Reef in
+   hand) > Gruul Turf (with a land to return) > creature-type lands > a basic of a covered colour.
+2. **ACCELERATION**: Smokebraider while board mana < 5 and the hand holds an Elemental of MV >= 3;
+   Aether Vial only on turns 1-2 (late, a Vial in hand is a dead card).
+3. **THREATS** (catch-all, floor 2), rank: Mossborn Hydra > Brushfire Elemental > Risen Reef > Akoum
+   Hellhound > Incandescent Soulstoke > Fury > Flamekin Harbinger > Metallic Mimic > Fulminator Mage >
+   Foundation Breaker. STATE PROMOTIONS: Fury to the front while Soulstoke is on the battlefield (a
+   put Fury = 8 damage); Flamekin Harbinger above Hellhound while a Risen Reef is out (its tutor goes to
+   hand). DISTANCE-TO-PLAYABLE inside an over-full threat bucket: a Fury nowhere near 5 mana with no
+   Soulstoke anywhere sheds first.
+Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_BUCKET_DISCARD`
+(default ON once approved), validated by zero label regret + non-inferiority on all three tiers.
+
 ## Prep notes (orchestrator, while the clusters run)
 - **Routing hazards for Stage 4a** (`DetectDecisionProvider`, src/ai/DecisionProviders.cpp): Flamekin
   Harbinger's `tutor_to_top` is a term of the `anti` (AntiLifegain) signature (the Giant Harbinger
@@ -167,6 +211,16 @@ an entrant for Reef's look axis and the site-10 breakpoint clause.
   `LandfallElementals2.cod` is still untracked in the primary checkout; once the tracked copy lands
   there, should the `...2.cod` be removed (the viewer would otherwise see two lists in one folder)?
   Default: leave it in place until you say.
+- Q2. `min_playable` is 0 in the generated profile (the skill suggests >= 1 for multi-colour decks; most
+  decks ship 0 and Galadriel took 1 with its required piece). Mulligan territory -> yours. Default: as
+  generated.
+- Q3. Soulstoke's opponent-end-step timing: build the window (`docs/design/opponent-end-step-window.md`,
+  ~2-3 days, three rulings needed) or ship main-phase-only? Default: main-phase only, PROVISIONAL.
+- Q4. Sign off the PROVISIONAL deferrals listed in the three cluster reports above (Brushfire evasion,
+  Hydra trample, Reef fixed orders / defaults, Breaker own-target narrowing, Fulminator ranking,
+  Smokebraider Kindred refusal, Fury planeswalkers / trigger order) and the INERT_PARAMS rows.
+- Q5. Harbinger/Reef trigger order reuses the `dig` modal (two card tiles, asked up front) rather than a
+  new decision type -- OK?
 
 ## Approved deferrals
 (none yet)
