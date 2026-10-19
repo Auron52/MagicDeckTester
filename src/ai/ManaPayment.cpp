@@ -617,6 +617,41 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     }
 }
 
+// THE BURST'S COLOUR UNDER A PENDING ACTIVATION (AccomplishedAlchemist chunk E1; claude-play seed 80019).
+// A single-colour burst source (IsSingleColorBurstSource: Accomplished Alchemist's "X mana of any ONE
+// color") tapped for a GENERIC pip floats its whole surplus in the one colour picked here -- and the
+// greedy took prod[0], i.e. WHITE. A plan "cast Staff of Domination off the Alchemist, then Crab Umbra
+// untaps it" then floated 3 white and could not pay the Umbra's {2}{U}: the untap silently failed in BOTH
+// worlds. When the plan's own trailing activations still owe a coloured pip (PlanTraits::act_pips, net of
+// the pass's paid ones and of the float -- exactly ActLineHoldMask's PENDING demand), take the colour with
+// the largest shortfall instead. A mana-payment choice (the standing exemption): it decides only which
+// colour a surplus that is spent nowhere else carries, so it can only make a pending activation payable.
+// No plan scope / no pending pip / not a burst source -> `fallback`, byte-identical.
+static Color BurstPendingActColour(const GameState& state, const CardDefinition& def,
+                                   const std::vector<Color>& prod, const ManaPool& pay_float, Color fallback)
+{
+    if (!IsSingleColorBurstSource(def) || prod.size() < 2 || !ActLineHoldEnabled()) { return fallback; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (pt == nullptr) { return fallback; }
+    const int paid[5] = { g_act_line_paid.white + g_act_line_current.white,
+                          g_act_line_paid.blue  + g_act_line_current.blue,
+                          g_act_line_paid.black + g_act_line_current.black,
+                          g_act_line_paid.red   + g_act_line_current.red,
+                          g_act_line_paid.green + g_act_line_current.green };
+    const ManaPool& r = state.floating_mana;
+    const int have[5] = { r.white + pay_float.white, r.blue + pay_float.blue, r.black + pay_float.black,
+                          r.red + pay_float.red, r.green + pay_float.green };
+    Color best = fallback; int best_short = 0;
+    for (Color c : prod)
+    {
+        const int ci = static_cast<int>(c);
+        if (ci >= 5) { continue; }
+        const int shortfall = pt->act_pips[ci] - paid[ci] - have[ci];
+        if (shortfall > best_short) { best_short = shortfall; best = c; }
+    }
+    return best;
+}
+
 // MTG_LINE_FLOAT_TAP_FIRST: generic pips the turn-scoped reserve must NOT pay in this attempt (they go to
 // the tap loop instead). Set only around the rung's held attempt in TapForCostSharedImpl; 0 everywhere else.
 static thread_local int t_float_generic_hold = 0;
@@ -2068,7 +2103,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // with a colour the REST OF THIS LINE still owes; DripLandAnyPipColor still has the
                 // last word, so a painland keeps its painless {C}. See its header (EDF seed 6 T4).
                 const std::vector<Color>& prod = pay_produces(*bdef, &bp);
-                const Color gen_pick = LineDemandAnyPipColor(state, prod, floating, prod[0]);
+                const Color gen_pick = BurstPendingActColour(state, *bdef, prod, floating,
+                                                             LineDemandAnyPipColor(state, prod, floating, prod[0]));
                 tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick) : needed);
                 return true;
             }
@@ -2162,7 +2198,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // MTG_TAP_LEGACY baseline and the shipped path cannot disagree about which colour a
                 // choice source offers a generic pip. Grove {C} mode for generic still has last word.
                 col = DripLandAnyPipColor(state, active, *def,
-                                          LineDemandAnyPipColor(state, prod, floating, prod[0]));
+                                          BurstPendingActColour(state, *def, prod, floating,
+                                                                LineDemandAnyPipColor(state, prod, floating, prod[0])));
             }
             else
             {

@@ -68583,6 +68583,101 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // WISH SINGLETONS (AccomplishedAlchemist chunk E1, claude-play sweep seed 80012). Every sideboard
+    // card is a singleton consumed on fetch (PerformTutor erases it), but the name-bound tutor target
+    // is chosen per CAST at collection: two Living Wishes in one plan both carry the provider's front,
+    // so the second resolves to "chosen target no longer present" and fetches nothing -- the plan pays
+    // {1}{G} for a whiff while the menu promises the same card twice. Autonomous: re-point an
+    // over-subscribed wish at the provider's next-ranked name that still has a copy left (empty = a
+    // genuine whiff when none does). This is the second wish's heuristic default, exactly as before
+    // (the axis above varies ONE tutor per variant and "a second tutor keeps its heuristic target");
+    // it only stops that default naming a card the first wish has already taken. Human play: the
+    // human picks every wish's target, so a plan naming one singleton twice is simply not a legal
+    // line -- drop it; every distinct-target combination is still offered. Inert unless a plan holds
+    // two or more name-bound wish casts (tutor_to_hand + wish_from_sideboard).
+    {
+        const Player& wap = state.players[state.active_player_index];
+        auto is_wish = [](const Action& a) -> const CardDefinition*
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.tutor_target.empty()) { return nullptr; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+            return (d != nullptr && d->params.tutor_to_hand && d->params.wish_from_sideboard) ? d : nullptr;
+        };
+        std::map<std::string, std::vector<std::string>> wish_cands;
+        bool any_drop = false;
+        std::vector<char> drop(all.size(), 0);
+        for (std::size_t pi = 0; pi < all.size(); ++pi)
+        {
+            TurnSolver::Plan& p = all[pi];
+            int n_wish = 0;
+            for (const Action& a : p.actions) { if (is_wish(a) != nullptr) { ++n_wish; } }
+            if (n_wish < 2) { continue; }
+            std::map<std::string, int> left;
+            for (const Card& sc : wap.sideboard) { ++left[sc.m_name.str()]; }
+            for (Action& a : p.actions)
+            {
+                const CardDefinition* d = is_wish(a);
+                if (d == nullptr) { continue; }
+                const std::string want = a.tutor_target.str();
+                auto it = left.find(want);
+                if (it != left.end() && it->second > 0) { --it->second; continue; }
+                if (it == left.end()) { continue; }   // a sentinel / non-sideboard target: untouched
+                if (HumanPlayActive()) { drop[pi] = 1; any_drop = true; break; }
+                std::vector<std::string>& cands = wish_cands[a.card_name.str()];
+                if (cands.empty())
+                { cands = RankedTutorCandidates(ResolveProvider(state), state, state.active_player_index, d->params); }
+                std::string next;
+                for (const std::string& c : cands)
+                {
+                    auto lt = left.find(c);
+                    if (lt != left.end() && lt->second > 0) { next = c; --lt->second; break; }
+                }
+                a.tutor_target = next;
+            }
+        }
+        if (any_drop)
+        {
+            std::vector<TurnSolver::Plan> kept;
+            kept.reserve(all.size());
+            for (std::size_t pi = 0; pi < all.size(); ++pi)
+            { if (!drop[pi]) { kept.push_back(std::move(all[pi])); } }
+            all.swap(kept);
+        }
+    }
+
+    // NON-LETHAL OPPONENT STROKE + THE LOOP, IN ONE PLAN (chunk E1; claude-play sweep seeds 80013 / 80018).
+    // A plan's casts resolve BEFORE its trailing activations, so "Stroke of Genius at the opponent for a
+    // non-lethal X + the closed-form untap loop" always throws the Stroke first and loops afterwards. It is
+    // dominated, world by world, by the two plans that remain on the menu: drop the Stroke (P') or drop the
+    // loop (Q). (1) If P's loop starts at all, P' -- the same plan with the Stroke's card AND its mana still
+    // unspent, the same X -- starts it too (UntapLoopNextOp is monotone in mana), and with a draw-X kill card
+    // still in hand P''s need is a kill, which the loop funds and the continuation casts: P' wins this turn,
+    // so P can do no better. (2) If P's loop cannot start, ApplyUntapLoop does nothing (its first op is -1
+    // before any payment) and P realises exactly Q. The search takes the max over the menu, so removing an
+    // element that never exceeds max(P', Q) cannot change any decision. Human play too: the human reaches the
+    // same sequence by casting the Stroke and then choosing the loop at the re-prompt.
+    {
+        const int lethal_x = opponentdeck::ForcedDrawLethalX(state);
+        if (lethal_x > 0)
+        {
+            auto dominated = [&](const TurnSolver::Plan& p) -> bool
+            {
+                bool loop = false, small = false;
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind == Action::Kind::ActivateUntap && a.chosen_x >= kUntapLoopToNeed) { loop = true; }
+                    else if (a.kind == Action::Kind::CastFromHand && a.draw_target == 1 && a.chosen_x < lethal_x)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+                        if (d && d->params.draw_target_player && d->tmpl == CardTemplate::DrawX) { small = true; }
+                    }
+                }
+                return loop && small;
+            };
+            all.erase(std::remove_if(all.begin(), all.end(), dominated), all.end());
+        }
+    }
+
     // SEARCHED ETB-DIG PICK -- the same post-dedup fan-out as the tutor target above, for the same
     // reason: the pick is cost-neutral, so every variant shares a cast-name signature and the dedup
     // inside EnumeratePlans kept only the provider's first candidate. The base rule it replaces is

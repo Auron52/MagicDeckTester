@@ -1776,7 +1776,10 @@ TEST_CASE("Arbor Elf facing incomparable Forests ({U} Sprawl vs {G} Wild Growth)
 //  * CHAINED loop payoffs: a drain / team-pump creature cast from HAND (or a drain creature WISHED from the
 //    sideboard) is a this-turn kill once site 9 RE-OPENS for the ability that cast made activatable;
 //  * the shortest chain is preferred (a one-step kill wins the need);
-//  * the Staff's {5},{T}: draw is offered standalone.
+//  * two Living Wishes never name the one sideboard copy twice;
+//  * the Staff's {5},{T}: draw is offered standalone;
+//  * "non-lethal opponent Stroke + the loop" in one plan is dominated and dropped;
+//  * an unreachable loop does nothing at all (scored identical to the plan without it).
 namespace
 {
 void SideAa(GameState& s, const std::string& name)
@@ -1881,6 +1884,45 @@ TEST_CASE("Chained loop payoffs yield to a one-step kill: Stroke in hand wins th
     CHECK(ComputeUntapLoopNeed(s, 0).payoff == kLoopPayStroke);
 }
 
+TEST_CASE("Living Wish singletons: two wishes in one plan fetch two DIFFERENT sideboard cards (both worlds)")
+{
+    // Autonomous play binds no name at collection (MTG_TUTOR_AXIS_RESOLVE): each wish ranks the LIVE
+    // sideboard at its own resolution, so the second wish cannot re-name the singleton the first took.
+    // (Human play names the targets on the menu; the AppendSubdecisionAxes singleton pass drops a plan
+    // naming one sideboard copy twice -- MTG_HUMAN_PLAY is process-static, so that half is covered by
+    // the code path, not this case.)
+    GameState s = FreshAa();
+    for (int k = 0; k < 6; ++k) { PutAa(s, "Forest"); }
+    HandAa(s, "Living Wish");
+    HandAa(s, "Living Wish");
+    SideAa(s, "Accomplished Alchemist");
+    SideAa(s, "Scholar of Athreos");
+    SideAa(s, "Forest");
+    s.m_provider = &AaProv();
+    int checked = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        int wishes = 0;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.card_name.str() != "Living Wish") { wishes = -99; break; }
+            ++wishes;
+        }
+        if (wishes != 2 || p.bp_choice >= 0) { continue; }
+        const auto [ro, ex] = BothWorldsAa(s, p);
+        for (const GameState* g : { &ro, &ex })
+        {
+            std::set<std::string> got;
+            for (const Card& c : g->players[0].hand) { got.insert(c.m_name.str()); }
+            CHECK(g->players[0].sideboard.size() == 1);
+            CHECK(got.size() == 2);   // two distinct fetched names
+        }
+        if (++checked >= 3) { break; }
+    }
+    CHECK(checked > 0);
+}
+
 TEST_CASE("Staff of Domination: {5},{T}: draw is offered standalone (no loop needed)")
 {
     GameState s = FreshAa();
@@ -1894,4 +1936,77 @@ TEST_CASE("Staff of Domination: {5},{T}: draw is offered standalone (no loop nee
         if (a && a->ability_mode == Action::AbilityMode::TapDraw) { standalone = true; }
     }
     CHECK(standalone);
+}
+
+TEST_CASE("Non-lethal opponent Stroke + the loop in one plan is dominated and dropped (the loop-only and Stroke-only plans stay)")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Island");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 6;
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 40);
+    s.m_provider = &AaProv();
+    bool loop_only = false, small_only = false, combined = false;
+    const int lx = opponentdeck::ForcedDrawLethalX(s);
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        bool loop = LoopActionAa(p) != nullptr, small = false;
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.draw_target == 1 && a.chosen_x < lx) { small = true; } }
+        if (loop && small) { combined = true; }
+        if (loop && !small && CountKindAa(p, Action::Kind::CastFromHand) == 0) { loop_only = true; }
+        if (small && !loop) { small_only = true; }
+    }
+    CHECK_FALSE(combined);
+    CHECK(loop_only);
+    CHECK(small_only);
+}
+
+TEST_CASE("An unreachable loop does nothing: no payment, no tap, no float (scored identical to the plan without it)")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    MutAa(s, alch)->tapped = true;               // tapped, and nothing to pay the first {2}{U} untap with
+    AttachAa(s, "Crab Umbra", alch);
+    s.players[0].life_gained_this_turn = 6;
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 40);
+    s.m_provider = &AaProv();
+    GameState t = s;
+    CHECK(ApplyUntapLoop(t, 0, kUntapEnchanted, alch, alch) == 0);
+    CHECK(t.floating_mana.Total() == 0);
+    CHECK(ByNumAa(t, alch)->tapped);
+    CHECK(t.players[0].life == s.players[0].life);
+}
+
+TEST_CASE("Loop colour: cast Staff off the Alchemist, then the Umbra untap still finds its {U} (both worlds)")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Forest");
+    s.players[0].life_gained_this_turn = 6;
+    HandAa(s, "Staff of Domination");
+    s.m_provider = &AaProv();
+    // Any plan that casts the Staff AND activates the Umbra untap once must realise the untap in BOTH worlds:
+    // the Alchemist's 6 have to come out blue (or the Forest pays the Staff), never all white.
+    int seen = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        bool staff = false; const Action* un = nullptr;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Staff of Domination") { staff = true; }
+            if (a.kind == Action::Kind::ActivateUntap && a.chosen_x == 1) { un = &a; }
+        }
+        if (!staff || un == nullptr || p.bp_choice >= 0) { continue; }
+        ++seen;
+        const auto [ro, ex] = BothWorldsAa(s, p);
+        CHECK_MESSAGE(!ByNumAa(ro, alch)->tapped, "rollout left the Alchemist tapped");
+        CHECK_MESSAGE(!ByNumAa(ex, alch)->tapped, "executor left the Alchemist tapped");
+    }
+    CHECK(seen > 0);
 }
