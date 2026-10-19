@@ -2364,6 +2364,11 @@ struct Trunc
     // missing ones were the shields, which is the whole content of the report. Names make the
     // history line answer "what can I no longer do?" on its own.
     std::string dropped_names;
+    // The menu actually offered is the ENGINE'S OWN pruned list (MTG_VIEWER_EXECUTOR_FALLBACK), not the
+    // truncated unpruned slice the counts above describe. Set by AIEngine after the swap, so the
+    // decision JSON stops claiming `dropped_names` are missing from a menu that may well offer them
+    // (claude-play sweep seed 80016: "dropped_names: Stroke of Genius" over a menu that cast it).
+    bool   executor_menu = false;
     bool   Fired() const { return dropped_groups > 0 || pooled_groups > 0; }
 };
 

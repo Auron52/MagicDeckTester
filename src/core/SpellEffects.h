@@ -31366,9 +31366,29 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
                 if (di < 0) { break; }
                 const CardDefinition* dd = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(di)].card);
                 if (dd == nullptr) { break; }
+                const std::size_t hand_before = state.players[static_cast<std::size_t>(ctrl)].hand.size();
+                int drawn_k = 0;
                 for (int k = 0; k < need.count; ++k)
                 {
                     if (SpendSelfUntapRepeats(state, ctrl, need.source, PermAbilityMode::TapDraw, *dd, 1) != 1) { break; }
+                    ++drawn_k;
+                }
+                // VISIBLE TO THE PLAYER (claude-play sweep seed 80016: "the closed-form loop's Staff draws
+                // happen silently"). The draw-to-find count is the loop's documented default, not a human
+                // decision; the human who wants a different count runs the untaps by hand (untapact=).
+                // Output only: the sink is null in every search / rollout -> byte-identical.
+                if (g_play_event_sink && !g_tap_speculating && drawn_k > 0)
+                {
+                    const auto& hand = state.players[static_cast<std::size_t>(ctrl)].hand;
+                    std::string names;
+                    for (std::size_t h = hand_before; h < hand.size(); ++h)
+                    { names += (names.empty() ? "" : ", ") + hand[h].m_name.str(); }
+                    EmitPlayEvent(state.turn_number, "ability",
+                                  dd->card.m_name.str() + ": untap loop drew " + std::to_string(drawn_k)
+                                  + " card(s) looking for the payoff ({" + std::to_string(
+                                        dd->params.tap_draw_cost ? dd->params.tap_draw_cost->ManaValue() : 0)
+                                  + "},{T} each, paid from the float)"
+                                  + (names.empty() ? std::string() : ": " + names));
                 }
                 need = ComputeUntapLoopNeed(state, ctrl);
                 if (need.payoff == kLoopPayNone) { break; }
@@ -31457,9 +31477,19 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
     {
         static const char* const kPayoff[] = { "combat", "Stroke of Genius", "the drain", "the team pump", "the draws",
                                                "a drain creature", "a wished drain creature", "a team pump creature" };
+        // ...and WHICH colours (the loop picks each tap's colour itself -- UntapPreTapColour -- so the
+        // player cannot otherwise see that, e.g., the float is {G}x53 + {U}x1; sweep seed 80019).
+        const ManaPool& fl = state.floating_mana;
+        std::string cols;
+        const std::pair<const char*, int> parts[] = { {"W", fl.white}, {"U", fl.blue}, {"B", fl.black},
+                                                      {"R", fl.red}, {"G", fl.green}, {"C", fl.colorless},
+                                                      {"any", fl.wild} };
+        for (const auto& [sym, n] : parts)
+        { if (n > 0) { cols += (cols.empty() ? "" : " ") + std::string("{") + sym + "}x" + std::to_string(n); } }
         EmitPlayEvent(state.turn_number, "ability",
                       "untap loop x" + std::to_string(done) + " -- floating "
-                      + std::to_string(state.floating_mana.Total()) + " mana for "
+                      + std::to_string(state.floating_mana.Total()) + " mana"
+                      + (cols.empty() ? std::string() : " (" + cols + ")") + " for "
                       + kPayoff[std::clamp(need.payoff, 0, 7)]);
     }
     return done;

@@ -3007,7 +3007,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         unpruned_rec.dropped_groups, plans.size(), exec.size(),
                         exec.empty() ? "  (EMPTY -- keeping the truncated menu)" : "");
                 }
-                if (!exec.empty()) { plans.swap(exec); exec_menu = true; }
+                if (!exec.empty()) { plans.swap(exec); exec_menu = true; viewerplancap::Last().executor_menu = true; }
             }
             // VIEWER PLAN-SPACE VALVE: if the bound had to trim this board's plan space, SAY SO in
             // the history. The decision JSON carries the numbers (`plans_truncated`), but the
@@ -3358,7 +3358,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // land drop and a bounce). The recorded win turn was always correct, so this is
             // human-play ergonomics, not a scoring fix -- and it is the same shape as the empty-plan
             // break above. Autonomous play never reaches this branch, so it is GT-neutral.
-            if (state.players[1 - state.active_player_index].life <= 0) { break; }
+            // OpponentHasLost also covers the DECK-OUT (opponent_decked: a lethal Stroke of Genius,
+            // AccomplishedAlchemist sweep seed 80016 -- the decked opponent was still handed a
+            // 2,000-plan main-phase menu, ~12 s of enumeration, before the win was reported).
+            if (state.players[1 - state.active_player_index].life <= 0 || OpponentHasLost(state)) { break; }
             // ...and WE are dead (Prevent Damage: a payment / a Manabarbs hit / a sweeper killed us
             // mid-main -- own_death_live boards only). The game is over; re-prompting would show the
             // player a frame of a lost game (sweep gi9: one extra main_phase frame at the parked

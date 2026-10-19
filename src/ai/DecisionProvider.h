@@ -1402,8 +1402,10 @@ public:
     //   * self: a small searched set capped at our library size (an over-draw loses, CR 104.3c) --
     //     the cap, half of it, and 1..3, so "draw a lot" and "draw a few and keep mana for what I
     //     find" are both on the menu and the breakpoint re-solve casts what was drawn;
-    //   * HUMAN PLAY / MTG_UNPRUNED(XSpell): every legal X, 0..max for a human (X = 0 and an over-draw
-    //     are legal casts) and 1..max unpruned.
+    //   * HUMAN PLAY: ONE representative per target (opponent: minimal lethal if affordable, else 0;
+    //     you: X = 1, or 0 when nothing is drawable/affordable) -- the human picks the real X, every
+    //     legal value 0..max, in the follow-up `x_value` decision at the cast (g_play_x_value_chooser);
+    //   * MTG_UNPRUNED(XSpell): every X 1..max.
     virtual std::vector<int> DrawXCandidates(const GameState& s, const CardDefinition& def,
                                              bool target_opponent, int max_affordable) const;
 

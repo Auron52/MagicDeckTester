@@ -2132,6 +2132,10 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     // player can't find their Protege on the board (user-reported 2026-09-03).
     (o.printed?`<span class="copybadge" title="${esc(o.printed)} — entered as a copy of ${esc(o.name)}">🪞 copy</span>`:'')+
     counterBadges(o)+
+    // Scaled mana source's LIVE yield (Accomplished Alchemist: X = life gained this turn) and a
+    // creature's CURRENT power/toughness (counters, pumps, lords, Auras, Equipment included).
+    (o.yield!=null?`<span class="yieldbadge" title="taps for ${o.yield} mana right now" style="position:absolute;left:2px;top:2px;background:#225;color:#fff;border-radius:3px;padding:0 3px;font-size:11px">◆${o.yield}</span>`:'')+
+    (o.power!=null?`<span class="ptbadge" title="current power/toughness" style="position:absolute;right:2px;bottom:16px;background:#222;color:#fff;border-radius:3px;padding:0 3px;font-size:11px">${o.power}/${o.toughness}</span>`:'')+
     `<em>${esc(o.name)}${o.printed?`<i class="printedname">${esc(o.printed)}</i>`:''}</em></span>`;
 }
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
@@ -2237,7 +2241,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -2452,7 +2456,9 @@ function renderBoard() {
   // opponent's face is a legal target, the life total becomes a clickable, highlightable target.
   const oppFace = faceTarget(d,'opp');
   const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace?' facetgt':''}${oppFace&&isSelT(oppFace)?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
-  h += `<div class="lifebar"><span class="life">Opponent ${oppB}</span></div>`;
+  h += `<div class="lifebar"><span class="life">Opponent ${oppB}</span>`+
+       // The opponent's library, when one was dealt (a deck-out / mill deck must see its target).
+       (d.opponent&&d.opponent.library_size!=null?`<span class="life" title="cards left in the opponent's library${d.opponent.decked?' -- DECKED':''}">library <b>${d.opponent.library_size}</b>${d.opponent.decked?' (decked)':''}</span>`:'')+`</div>`;
   if (oppBf.length) { h += `<div class="zone oppz"><h3>Opponent permanents (${oppPerms.length})</h3>${zoneRow(oppPerms.map(bfThumb))}</div>`;
     if (oppLands.length) h += `<div class="zone oppz lands"><h3>Opponent lands (${oppLands.length})</h3>${zoneRow(oppLands.map(bfThumb))}</div>`; }
   else h += `<div class="hint">opponent has no permanents</div>`;
@@ -2463,6 +2469,9 @@ function renderBoard() {
   const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace?' facetgt':''}${youFace&&isSelT(youFace)?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">You ${youB}</span>`+
        `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
+       // Life gained this turn: the X of every "X = life gained this turn" source (Accomplished
+       // Alchemist). Published while such a source is ours, or when non-zero.
+       (me.life_gained_this_turn!=null?`<span class="life" title="life gained this turn (Accomplished Alchemist taps for this much)">gained <b>${me.life_gained_this_turn}</b> this turn</span>`:'')+
        // THE REVEALED LIBRARY TOP (Courser of Kruphix): shown face-up on the pile while a revealer is
        // ours (the engine publishes me.library_top only then). A playable top land is clicked to queue
        // it as the land drop FROM THE TOP (`landtop=`); a hand copy of the same name stays separate.
@@ -4061,6 +4070,7 @@ function renderDecisionPanel(d, dec){
                 || dec==='attack_mode'   // Tectonic Giant's modal attack trigger -- centred, like demonstrate
                 || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
                 || dec==='madness'   // Vampires A1: the discarded card is in EXILE (no visible zone) -- a card-image modal
+                || dec==='x_value'   // Stroke of Genius's X, picked at the cast (not a plan axis in human play)
                 // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
                 // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
                 // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
@@ -4075,6 +4085,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='expressive_iteration' ? eiPanelHtml(d)
                   : dec==='retrace_discard' ? retraceDiscardPanelHtml(d)
                   : dec==='replicate' ? replicatePanelHtml(d)
+                  : dec==='x_value' ? xValuePanelHtml(d)
                   : dec==='land_entry' ? landEntryPanelHtml(d)
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
@@ -4983,6 +4994,15 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitRetraceDiscard(d, +b.dataset.opt));
   else if (dec==='replicate')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitReplicate(d, +b.dataset.opt));
+  else if (dec==='x_value') {
+    // Presets fill the number box; Confirm commits whatever it holds (clamped to 0..max_x).
+    const inp=panel.querySelector('#xvinput');
+    panel.querySelectorAll('[data-xv]').forEach(b=>b.onclick=()=>{ if (inp) { inp.value=b.dataset.xv; inp.dispatchEvent(new Event('input')); } });
+    const lab=panel.querySelector('#xvlabel');
+    if (inp && lab) inp.oninput=()=>{ lab.innerHTML=xValueConsequence(d, +inp.value); };
+    const cb=panel.querySelector('#decconfirm');
+    if (cb) cb.onclick=()=>{ let n=parseInt(inp&&inp.value,10); if (!(n>=0)) n=d.heuristic_default|0; n=Math.max(0,Math.min(d.max_x|0,n)); commitXValue(d,n); };
+  }
   else if (dec==='firebreathe')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFirebreathe(d, +b.dataset.opt));
   else if (dec==='jitte')
@@ -5324,6 +5344,44 @@ function commitRetraceDiscard(d, oi){
 function commitReplicate(d, n){
   pushChoice(d, n, `${d.source}: replicate ×${n}`);
 }
+// X-value panel (Stroke of Genius, AccomplishedAlchemist 2026-10-19): the spell's X is chosen AT THE
+// CAST, not as a plan variant (one variant per X made the menu so wide after an untap loop that the
+// plan-space valve dropped Stroke entirely). IMAGE-based central modal: the spell's art, preset buttons
+// (lethal / your whole library / max affordable / the AI default) and a number box for any X 0..max_x.
+// The reply is X itself on the --choices stream.
+function xValueConsequence(d, n){
+  const opp = d.draw_target==='opponent';
+  if (opp) {
+    const L=d.lethal_x|0;
+    return L ? (n>=L ? `<b style="color:var(--good,#6c6)">decks the opponent (they lose)</b>` : `opponent draws ${n} — ${L-n} short of decking them`)
+             : `opponent draws ${n}`;
+  }
+  const lib=d.library_size|0;
+  return n>lib ? `<b style="color:var(--bad,#e66)">you draw ${n} from a ${lib}-card library — you LOSE</b>` : `you draw ${n} (library ${lib})`;
+}
+function xValuePanelHtml(d){
+  const max=d.max_x|0, def=(d.heuristic_default==null?max:d.heuristic_default|0);
+  const opp = d.draw_target==='opponent';
+  let h=`<h3>${esc(d.source||'X spell')} — choose X</h3>`;
+  h+=`<div class="sub">${opp?'The <b>opponent</b> draws X cards':'<b>You</b> draw X cards'}. You can pay up to <b>X=${max}</b> right now`+
+     `${opp&&d.opponent_library_size!=null?` · opponent library <b>${d.opponent_library_size}</b>`:''}${!opp?` · your library <b>${d.library_size|0}</b>`:''}.</div>`;
+  h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
+  const presets=[];
+  if (opp && d.lethal_x && d.lethal_x<=max) presets.push([d.lethal_x, `lethal ${d.lethal_x}`]);
+  if (!opp && (d.library_size|0)<=max && (d.library_size|0)>0) presets.push([d.library_size|0, `whole library ${d.library_size|0}`]);
+  presets.push([max, `max ${max}`]);
+  if (!presets.some(p=>p[0]===def)) presets.push([def, `AI ${def}`]);
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  presets.forEach(([v,l])=>{ h+=`<button class="${v===def?'primary':'ghost'}" data-xv="${v}">${esc(l)}${v===def?'  ·  AI':''}</button>`; });
+  h+=`</div><div class="pbtns" style="margin-top:8px"><span class="spacer"></span>`+
+     `<label>X = <input id="xvinput" type="number" min="0" max="${max}" value="${def}" style="width:6em"/></label>`+
+     `<span id="xvlabel" style="margin:0 10px">${xValueConsequence(d, def)}</span>`+
+     `<button class="primary" id="decconfirm">Cast with this X</button></div>`;
+  return h;
+}
+function commitXValue(d, n){
+  pushChoice(d, n, `${d.source}: X=${n} → ${d.draw_target==='opponent'?'opponent':'you'} draw${d.draw_target==='opponent'?'s':''}`);
+}
 // Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint
 // that isn't a spell sub-decision). Buttons 0..max, default = greedy max. The amount rides a TURN-keyed
 // side-channel (S.firebreathe), NOT the --choices stream, so it never shifts plan indices.
@@ -5332,6 +5390,10 @@ function firebreathePanelHtml(d){
   const atk=(d.attackers||[]).map(a=>a.name);
   let h=`<h3>Firebreathing — pump how much?</h3>`;
   h+=`<div class="sub">Spend leftover combat mana on attacker pumps (each activation = +power, e.g. Scourge {R}:+1/+0). You can spend up to <b>${max}</b>; the AI spends the maximum. Hold back to keep mana for a trick.</div>`;
+  // WHICH pump each activation buys (engine `pump_sources`, 2026-10-19): a team pump such as Ezuri's
+  // "{2}{G}{G}{G}: Elves you control get +3/+3" hits every matching attacker per activation.
+  const ps=d.pump_sources||[];
+  if (ps.length) h+=`<div class="sub">`+ps.map(p=>`<b>${esc(p.name)}</b> — ${esc(p.effect)}`).join('<br>')+`</div>`;
   h+=`<div class="tutgrid">`+atk.map(n=>cardMini(n)).join('')+`</div>`;
   h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
   for (let k=0;k<=max;k++)

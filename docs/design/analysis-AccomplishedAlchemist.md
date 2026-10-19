@@ -600,10 +600,69 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   - VERIFIED 700c5041 (test) -- Staff {5},{T} draw IS offered standalone whenever 5 mana is available (80005); not a defect.
   - DIAGNOSED, not a leak (see Chunk E1 "Budget") -- budget overrun at d5 b200 (80012 402 s, 80019 33 min).
 - VIEWER (not chunk E1 -- the viewer worktree):
-  - after a loop the human menu (16000-position cap) drops Stroke of Genius entirely (80016) -- human cannot win; X needs to be a follow-up decision under large float.
-  - life_gained_this_turn, opponent library size, floating pool, current P/T, Alchemist yield not exposed; Crab Umbra untap cost label shows U; Ezuri combat pump resolves without a decision (80006, 80008, 80003).
+  - RESOLVED (chunk E2, x_value decision) -- after a loop the human menu dropped Stroke of Genius entirely (80016).
+  - RESOLVED (chunk E2) -- life_gained_this_turn / opponent library / yield / P/T / activation_cost exposed; Ezuri pump = firebreathe decision under --firebreathe-prompt (the viewer always passes it; the sweep agents did not).
   - (E1 note) human-play: no Forest picker for Arbor Elf's untap (the default re-taps the best Forest); a human after a loop who draws a Stroke with the Staff gets the loop re-offered only if UntapLoopWorthOffering's need test passes against the live float (80018's human report).
 - DISMISSED: Harbinger decline leaves library unshuffled (declining = not searching; correct). Trufflesnout via attack_mode (deliberate reuse). dropped_casts on unpayable cast orders (existing enumerate-optimistic pattern, disclosed).
+
+## Chunk E2 (2026-10-19) -- viewer flags from the claude-play sweep (branch `accomplished-alchemist-viewer`)
+
+Every VIEWER flag of the sweep above, each verified through the `--claude-play` protocol. Autonomous play
+is untouched: every change is human-play-only (a chooser nulled by `RevealLogPause`, `HumanPlayActive()`,
+an output-only event sink, or the external-chooser segment loop).
+
+* **RESOLVED -- the human menu dropped Stroke of Genius after a big loop (80016).** Root cause: human play
+  enumerated one plan per (target, X) for every X 0..max, so after a 53-mana untap loop the Stroke group was
+  ~110 digits wide; the viewer plan-space valve priced the frame at 1.57M positions and dropped the
+  card. **New design: X is not a plan axis under human play.** `DrawXCandidates`' human branch returns ONE
+  representative per TARGET (opponent: the minimal lethal X when the pool pays it, else X = 0; you: X = 1,
+  or 0), and the X is the new **`x_value`** decision at the cast's payment (`g_play_x_value_chooser`,
+  called from `TurnSolver` `apply_one`; `WriteXValueDecisionJson`; `xValuePanelHtml`). Options = every X
+  0..max_x on the CURRENT pool (so X is chosen against the mana the line has left), reply = X itself on
+  the positional `--choices` stream, default = minimal lethal at the opponent (else max), min(max, library)
+  for yourself. The menu reads "Stroke of Genius (X chosen at cast; lethal X=50) → opponent draws"; the
+  CheckLine variant dialog asks the TARGET, not a representative X. The stale `plans_truncated.dropped_names`
+  under `MTG_VIEWER_EXECUTOR_FALLBACK` is replaced by `executor_menu: true`. The segment loop now also stops
+  prompting once the opponent is DECKED (it already did at life 0). Verification (seed 80016):
+  `0,1,0,0,4,-1,-1,2,4,-1,-1,0,-1,-1,0,8,4555,50` -> **win T4** (the search's T4); with X=49 the opponent keeps
+  1 card. Fixture `test/scenarios/aa_human_stroke_one_per_target.json` pins two variants (was 7+). Found on
+  the way: the enumerator's DrawX `dmax` counts the floating pool TWICE (`AvailableManaPool` already credits
+  it) -- harmless search over-generation, left for the engine chunk; the human branch takes it back out.
+* **RESOLVED -- state not exposed (80005/80009/80011/80012/80019).** Decision JSON now carries
+  `me.life_gained_this_turn` (while an X-per-life source is ours, or non-zero), `opponent.library_size`
+  (+ `decked`) when a library was dealt, per-permanent `yield` for scaled sources (Alchemist X) and
+  `power`/`toughness` (CombatPowerOf / LethalToughness: counters, pumps, lords, Auras, Equipment),
+  `activation_cost` on every activation (Crab Umbra's untap reads "{2}{U}"; `cost_pips` stays pips-only by
+  design) and `attached_to_idx` beside the unchanged `attached_to` (= host `num`, which the GUI and saved
+  references key on). The floating pool was already published (`me.floating_mana`, when non-empty). The
+  loop's "untap loop xN" event now names the float's colours ("{U}x1 {G}x53") -- there is no Alchemist
+  colour AXIS in the human menu (the loop picks each tap's colour inside the resolver), so that is where
+  the colour becomes visible. GUI: P/T and yield badges on thumbs, "gained N this turn" and the opponent's
+  library in the life bars.
+* **RESOLVED -- Ezuri's combat pump "silent" (80003/80006/80008).** Not a wiring gap: the `firebreathe`
+  decision covers `team_pump_cost`, but it is installed only under `--firebreathe-prompt` (the viewer
+  always passes it); the sweep agents ran bare `--claude-play`. The auditor's driver now passes it and
+  answers on the turn-keyed side channel, Ezuri is a NAME_CHOICES `firebreathe` expectation, the decision
+  JSON names its `pump_sources` ("{2}{G}{G}{G}: Elves you control get +3/+3"), and claude-play.md says so.
+  Verification (80008): `1,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0` + `--firebreathe-prompt` -> `firebreathe` T5
+  max 1; `--firebreathe 5:0` leaves the opponent at 12, `5:1` at 3.
+* **RESOLVED -- the loop's Staff draws were silent (80016).** Draw-to-find stays the loop's documented
+  default; each draw round now emits "Staff of Domination: untap loop drew 9 card(s) looking for the payoff
+  ({5},{T} each, paid from the float): Feed the Clan, ..., Stroke of Genius". A human who wants another
+  count runs the untaps by hand (`untapact=`).
+* **Gates (2026-10-19, this branch):** `audit_viewer_decisions.py ... --sideboard` (40 games) observed
+  attach_host / choose_color / discard / firebreathe / tutor_etb / x_value, escalations VERIFIED Eternal
+  Witness (dig) and Trufflesnout (attack_mode): **5h PASS**; `--no-sweep` expects attach_host, attack_mode,
+  choose_color, dig, firebreathe, x_value. verify_deck `viewer_wiring` PASS (choose_color, firebreathe,
+  x_value). `regression.sh --smoke` (VPC_ALWAYS=1): 226/226 scenarios, 124/128 cases -- the 4 moves are the
+  known pre-existing ones (critter_smoke_d0, melira_smoke_d0, selesnya d3/d5), no new move; reference
+  replay 630 refs, 0 play-drift / 0 enum-gap / 0 contract-fail (identical tally to the pre-change binary).
+  mtg-test 1486/1486. viewer_client_check: the same 2 pre-existing failures (equip, equip from hand) on
+  the pre-change binary.
+* **OPEN (engine-side, surfaced):** the post-loop 80016 frame now enumerates in full (~43k positions, 55k
+  plans, ~8-12 s per click; it was 0.7 s only because the valve had dropped Stroke). The width is the four
+  identical TAPPED Forests as Utopia Sprawl / Wild Growth hosts (16 combos) times cast-order permutations
+  -- the land-Aura host fold the C2b notes defer (moves other decks' GT: USER).
 
 ## Approved deferrals
 

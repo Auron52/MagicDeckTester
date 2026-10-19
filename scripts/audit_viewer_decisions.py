@@ -146,8 +146,9 @@ MANIFEST = {
     # listed here so the self-guard treats them as MAPPED (not unknown choice params).
     # Stroke of Genius "TARGET PLAYER draws X" (2026-10-18): WHO draws is a searched plan-variant axis
     # (Action::draw_target, self / opponent) alongside X, labelled "-> you draw" / "-> opponent draws"
-    # in the main_phase plan list -- the same ride as X itself. No resolution-time prompt: the target
-    # decides the cast's X and its lethality, so it is chosen with the plan, not on the board.
+    # in the main_phase plan list. No resolution-time prompt for the TARGET: it decides the cast's
+    # lethality, so it is chosen with the plan. X itself is the `x_value` decision at the cast since
+    # 2026-10-19 (keyed on template draw_x in expected_for_card, below).
     "draw_target_player":    ("main_phase",           truthy),
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
@@ -557,6 +558,12 @@ MANIFEST = {
 # trace: Soulfire cast -> `target` decision, source="Soulfire Eruption", 256 (=2^8) subset opts.
 NAME_CHOICES = {
     "Soulfire Eruption": "target",
+    # Ezuri, Renegade Leader's "{2}{G}{G}{G}: Elf creatures you control get +3/+3" rides the combat
+    # converter (ApplyFirebreathing), whose AMOUNT is the turn-keyed `firebreathe` decision
+    # (--firebreathe-prompt; the sweep's step() passes it now, as the viewer always has). Keyed by
+    # NAME rather than team_pump_cost so the Lathliss deferral below is not silently re-scoped.
+    # AccomplishedAlchemist 2026-10-19 (sweep seeds 80003/80006/80008 read it as "silent").
+    "Ezuri, Renegade Leader": "firebreathe",
 }
 
 # ---------------------------------------------------------------------------
@@ -1720,6 +1727,13 @@ def expected_for_card(card):
     # X spells: {X} in the mana cost -> chosen_x plan variant (rides main_phase)
     if "{X}" in (card.get("mana_cost") or ""):
         exp.add("main_phase")
+    # ...EXCEPT "target player draws X" (template draw_x: Stroke of Genius, Braingeyser): human play
+    # enumerates ONE representative cast per target and asks the X at the cast -- the `x_value`
+    # decision (g_play_x_value_chooser in TurnSolver apply_one, WriteXValueDecisionJson,
+    # xValuePanelHtml). One plan per X made the menu ~2*(float) wide after an untap loop and the
+    # viewer plan-space valve dropped the card (AccomplishedAlchemist sweep seed 80016, 2026-10-19).
+    if card.get("template") == "draw_x":
+        exp.add("x_value")
     if card.get("name") in NAME_CHOICES:
         exp.add(NAME_CHOICES[card["name"]])
     return exp, unmapped
@@ -1851,9 +1865,20 @@ def step(deck, prof, seed, gi, choices, max_turns, jitte=None):
     # `jitte` as "turn:count" pairs, NOT in the positional --choices stream.
     cmd = [BIN, deck, "--profile", prof, "--claude-play", "--seed", str(seed + gi),
            "--game-index", str(gi), "--max-turns", str(max_turns),
-           "--reveal", "6", "--choices", ",".join(map(str, choices)), "--jitte-prompt"]
+           "--reveal", "6", "--choices", ",".join(map(str, choices)), "--jitte-prompt",
+           "--firebreathe-prompt"]
+    # The `jitte` list carries BOTH turn-keyed side channels: "fb|<turn>:<count>" entries are the
+    # firebreathe / team-pump answers (--firebreathe; --firebreathe-prompt surfaces the decision the
+    # way the viewer does -- server.js always passes it; without it Ezuri's / Lathliss's combat pump
+    # resolved greedily and read as "silent", AccomplishedAlchemist sweep seeds 80003/80006/80008),
+    # plain "<turn>:<count>" entries are Jitte's.
     if jitte:
-        cmd += ["--jitte", ",".join(jitte)]
+        jit = [e for e in jitte if not e.startswith("fb|")]
+        fb  = [e[3:] for e in jitte if e.startswith("fb|")]
+        if jit:
+            cmd += ["--jitte", ",".join(jit)]
+        if fb:
+            cmd += ["--firebreathe", ",".join(fb)]
     # UNCAPPED plan list. MTG_PLAY_PLANS_CAP defaults to 200 (the viewer's DISPLAY cap, an ENOBUFS
     # guard), and this sweep's whole question is "does the engine ever OFFER this action" -- which
     # must be asked of the full enumeration, not of a truncated render. On a wide KittyEquipment
@@ -1982,8 +2007,8 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             if any(str(c.get("name", "")).lower() == target_lc for c in hand):
                 in_hand_here = True
             choice = pick_toward(d, target_lc)
-            if t == "jitte":                 # side-channel reply, keyed by turn (see step())
-                jitte.append(f"{d.get('turn')}:{choice}")
+            if t in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
+                jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
                 continue
             if t == "main_phase":
                 key = (d.get("turn"),
@@ -2065,8 +2090,8 @@ def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turn
                         return ("VERIFIED", {"seed": base_seed, "game_index": gi,
                                              "turn": d.get("turn"), "marker": marker})
             choice = pick_toward(d, target_lc)
-            if d.get("type") == "jitte":
-                jitte.append(f"{d.get('turn')}:{choice}")
+            if d.get("type") in ("jitte", "firebreathe"):
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
                 continue
             if d.get("type") == "main_phase":
                 key = (d.get("turn"),
@@ -2132,8 +2157,8 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
                         if open_mana > max_open_mana[nm]:
                             max_open_mana[nm] = open_mana
             choice = pick(d)
-            if d.get("type") == "jitte":     # side-channel reply, keyed by turn (see step())
-                jitte.append(f"{d.get('turn')}:{choice}")
+            if d.get("type") in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
                 continue
             # Free repeatable actions (equip {0}: Lightning Greaves, metalcraft) legally recur
             # forever -- the engine faithfully re-offers "move the equipment back" after every

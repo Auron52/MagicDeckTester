@@ -161,6 +161,14 @@ deterministic game applying the prior `--choices`, then prints the next decision
   decision types share the one `--choices` stream in the order they occur (mulligan/bottom
   first, then per turn a vial_charge before its main_phase). Not emitted under
   `--force-mulligan` (that reconstructs a fixed hand on the engine).
+  `"x_value"` — the X of a "target player draws X" spell (Stroke of Genius): human play
+  offers ONE plan per target player and asks X at the cast; reply the X itself
+  (`0..max_x`; `lethal_x` decks the opponent), or -1 for `heuristic_default`.
+  **Combat pumps (firebreathing, team pumps such as Ezuri's {2}{G}{G}{G} Elves +3/+3) are a
+  `"firebreathe"` decision ONLY with `--firebreathe-prompt`** (the viewer always passes it); its
+  answer rides the turn-keyed side channel `--firebreathe "<turn>:<count>,..."`, NOT `--choices`.
+  Without the flag the pump resolves greedily — that is not a missing decision, so do not flag it
+  (three 2026-10-18 sweep agents did).
 
   > **`-1` IS NOT A UNIVERSAL "PASS" — check the `type` before you reply.** On a
   > `main_phase` decision `-1` means "cast nothing", which is a normal way to advance. On

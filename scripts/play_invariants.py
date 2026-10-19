@@ -45,6 +45,8 @@ KNOWN_TYPES = {
     "main_phase", "mulligan", "bottom", "vial_charge",
     "scry", "surveil", "reorder", "divide", "target", "bounce",
     "dig", "discard", "expressive_iteration", "retrace_discard", "replicate", "land_entry",
+    # "target player draws X" (Stroke of Genius): X picked at the cast, reply = X itself.
+    "x_value",
     # sac-land additional cost (Shard Volley / Crop Rotation): single-int, engine default exposed.
     "sacrifice",
     # multi-consume put overrides (one 0/1 int per candidate): Dragonstorm put + Defense of the

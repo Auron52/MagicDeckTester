@@ -552,6 +552,21 @@ using ReplicateChooser = std::function<int(const GameState& state, int controlle
                                            const std::string& source, int max_count)>;
 extern thread_local ReplicateChooser* g_play_replicate_chooser;
 
+// ---- Human-play X-value chooser ("target player draws X": Stroke of Genius) --------------------
+// Under human play X is NOT a plan axis: the menu carries ONE representative cast per target player
+// (DecisionProvider::DrawXCandidates' human branch), and the X itself is picked HERE, at the cast's
+// payment in the shared TurnSolver apply_one, from every legal value 0..max_x (max_x = what the live
+// pool can pay right now). Why: a big untap loop floats 50+ mana, and one plan per (target, X) made the
+// Stroke group ~110 digits wide -- the viewer plan-space valve then dropped Stroke entirely (seed 80016,
+// AccomplishedAlchemist) and the human could not win. Reply = the X value itself; -1 / out of range =
+// `default_x`. `target` 0 = you draw, 1 = the opponent draws; `lethal_x` = the minimal decking X at the
+// opponent (0 = unknown / not dealt). Shares the positional --choices stream. Nulled by RevealLogPause
+// (and ComboOffApplyPause), so every search / rollout / trial apply keeps the plan's X -> autonomous play
+// is byte-identical (the autonomous menu never takes the human branch either).
+using XValueChooser = std::function<int(const GameState& state, int controller, const std::string& source,
+                                        int target, int max_x, int default_x, int lethal_x)>;
+extern thread_local XValueChooser* g_play_x_value_chooser;
+
 // ---- Human-play firebreathing-amount chooser (#4) ----------------------------------------------
 // At combat, LEFTOVER mana is spent greedily on attacker pumps (Scourge {R}:+1/+0, Lathliss {1}{R}:
 // team +1/+0) by ApplyFirebreathing. Under --claude-play the human instead chooses how many pump
@@ -995,6 +1010,7 @@ inline bool AllPlayHooksNull()
         && g_play_draw_sink == nullptr && g_play_reveal_sink == nullptr
         && g_play_event_sink == nullptr && g_play_dropped_cast_sink == nullptr
         && g_play_sacrifice_chooser == nullptr && g_play_replicate_chooser == nullptr
+        && g_play_x_value_chooser == nullptr
         && g_play_land_entry_chooser == nullptr && g_play_land_rad_chooser == nullptr
         && g_play_dragon_chooser == nullptr
         && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
@@ -1045,6 +1061,7 @@ struct RevealLogPause
     std::vector<std::string>* saved_dropsink;
     BounceChooser* saved_sacchooser;
     ReplicateChooser* saved_repchooser;
+    XValueChooser* saved_xvchooser = nullptr;
     LandEntryChooser* saved_lechooser;
     LandRadChooser*   saved_lradchooser = nullptr;
     DragonChooser* saved_dragchooser;
@@ -1106,6 +1123,7 @@ struct RevealLogPause
         saved_evsink = g_play_event_sink; saved_dropsink = g_play_dropped_cast_sink;
         saved_sacchooser = g_play_sacrifice_chooser;
         saved_repchooser = g_play_replicate_chooser; saved_lechooser = g_play_land_entry_chooser;
+        saved_xvchooser = g_play_x_value_chooser;
         saved_lradchooser = g_play_land_rad_chooser;
         saved_dragchooser = g_play_dragon_chooser; saved_sacttchooser = g_play_sac_tutor_chooser;
         saved_revchooser = g_play_revive_chooser;
@@ -1136,6 +1154,7 @@ struct RevealLogPause
         g_play_draw_sink = nullptr; g_play_reveal_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
         g_play_sacrifice_chooser = nullptr;
         g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr;
+        g_play_x_value_chooser = nullptr;
         g_play_land_rad_chooser = nullptr; g_play_dragon_chooser = nullptr;
         g_play_sac_tutor_chooser = nullptr; g_play_revive_chooser = nullptr;
         g_play_flicker_chooser = nullptr; g_play_rummage_chooser = nullptr;
@@ -1164,6 +1183,7 @@ struct RevealLogPause
                         g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
                         g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
+                        g_play_x_value_chooser = saved_xvchooser;
                         g_play_land_rad_chooser = saved_lradchooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
                         g_play_revive_chooser = saved_revchooser;
@@ -1230,6 +1250,7 @@ struct ComboOffApplyPause
     LifegainCountersChooser* c31;
     EtbColorChooser* c32; EtbKeywordsChooser* c33;
     MadnessChooser* c34;
+    XValueChooser* c35;
     ComboOffApplyPause()
     {
         c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
@@ -1252,6 +1273,7 @@ struct ComboOffApplyPause
         c31 = g_play_lifegain_counters_chooser;
         c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser;
         c34 = g_play_madness_chooser;
+        c35 = g_play_x_value_chooser;
         g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
         g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
@@ -1272,6 +1294,7 @@ struct ComboOffApplyPause
         g_play_lifegain_counters_chooser = nullptr;
         g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
         g_play_madness_chooser = nullptr;
+        g_play_x_value_chooser = nullptr;
     }
     ~ComboOffApplyPause()
     {
@@ -1295,6 +1318,7 @@ struct ComboOffApplyPause
         g_play_lifegain_counters_chooser = c31;
         g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33;
         g_play_madness_chooser = c34;
+        g_play_x_value_chooser = c35;
     }
     ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
     ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;

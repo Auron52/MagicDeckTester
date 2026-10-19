@@ -4789,15 +4789,43 @@ std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefi
 std::vector<int> DecisionProvider::DrawXCandidates(const GameState& s, const CardDefinition& def,
                                                    bool target_opponent, int max_affordable) const
 {
-    (void)def;
     std::vector<int> out;
     if (max_affordable < 0) { return out; }
-    // HUMAN PLAY sees every legal X for either target -- X = 0 and an over-draw included (both are
-    // legal casts; the executor resolves an over-draw as the loss it is). Widening only: false in
-    // every rollout (HumanPlaySuppress), so the search is unchanged.
+    // HUMAN PLAY: ONE representative cast per target -- X is NOT a plan axis here. The human picks the
+    // real X at the cast's payment (g_play_x_value_chooser, TurnSolver apply_one), from EVERY legal
+    // value 0..what the live pool pays (X = 0 and an over-draw included), so nothing is lost; the menu
+    // just stops multiplying by X. One variant per X (the old shape) made the Stroke group ~2*(float)
+    // digits wide: after a 53-mana untap loop the viewer plan-space valve priced the frame at 1.57M
+    // positions and DROPPED Stroke of Genius, the deck's kill (claude-play sweep seed 80016).
+    // The representative only fixes what the menu's payability check charges for the cast:
+    //   * opponent: the minimal LETHAL X when affordable (the kill, the line the menu should show),
+    //     else X = 0 (the cheapest cast; a multi-turn deck-out picks its X at the cast);
+    //   * you: X = 1 when the library has a card and the pool pays it, else X = 0 -- the cheapest real
+    //     draw, so "Stroke, then cast what it finds" is never priced out of the menu.
+    // False in every rollout (HumanPlaySuppress), so the search is unchanged.
     if (HumanPlayActive())
     {
-        for (int x = 0; x <= max_affordable; ++x) { out.push_back(x); }
+        // The enumerator's max_affordable counts the floating pool TWICE (AvailableManaPool already
+        // credits it under FloatLeftoverManaEnabled, and the DrawX branch adds it again -- harmless
+        // over-generation for the search, whose payment validates). A human menu with ONE variant per
+        // target cannot afford an unpayable representative (the target would vanish), so take the
+        // double count back out here.
+        int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
+        const int honest = FloatLeftoverManaEnabled()
+            ? max_affordable - static_cast<int>(s.floating_mana.Total()) / pips : max_affordable;
+        if (honest < 0) { return out; }
+        if (target_opponent)
+        {
+            // The kill when the pool pays it (the menu then reads "lethal X=n"); otherwise the
+            // cheapest cast -- the real X (up to everything the pool pays) is picked at the cast.
+            const int lethal = opponentdeck::ForcedDrawLethalX(s);
+            out.push_back((lethal > 0 && lethal <= honest) ? lethal : 0);
+        }
+        else
+        {
+            const int lib = static_cast<int>(s.ActivePlayer().library.size());
+            out.push_back((lib >= 1 && honest >= 1) ? 1 : 0);
+        }
         return out;
     }
     if (target_opponent)

@@ -53569,6 +53569,32 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ec.green   += own_targets * sc.green;
         }
 
+        // HUMAN PLAY ONLY: "target player draws X" (Stroke of Genius) takes its X HERE, at payment, from
+        // the human (`x_value` decision) -- the menu carried one representative cast per target, see
+        // DecisionProvider::DrawXCandidates. max = what the live pool (float included, counted ONCE)
+        // pays now over the base cost, so X is chosen against the mana the line has left. The
+        // chooser is null in every search / rollout / trial apply (RevealLogPause) -> byte-identical.
+        if (g_play_x_value_chooser != nullptr && def.tmpl == CardTemplate::DrawX && !free_cast)
+        {
+            ManaPool xpool = AvailableManaPool(state);   // credits the float itself (FloatLeftoverMana)
+            if (!FloatLeftoverManaEnabled()) { xpool.AddPool(state.floating_mana); }
+            int xpips = def.card.m_mana_cost.x_pips; if (xpips < 1) { xpips = 1; }
+            const int xmax = (static_cast<int>(xpool.Total()) - ec.ManaValue()) / xpips;
+            if (xmax >= 0)
+            {
+                const bool at_opp = def.params.draw_target_player && cast_draw_tgt != 0;
+                const int  lethal = at_opp ? opponentdeck::ForcedDrawLethalX(state) : 0;
+                const int  lib    = static_cast<int>(state.ActivePlayer().library.size());
+                // Default: the kill at the opponent (minimal lethal, else everything affordable); for
+                // yourself, as many as the pool pays without drawing past your library (CR 104.3c).
+                const int  dflt   = at_opp ? ((lethal > 0 && lethal <= xmax) ? lethal : xmax)
+                                           : std::min(xmax, lib);
+                int xv = (*g_play_x_value_chooser)(state, state.active_player_index, def.card.m_name.str(),
+                                                   at_opp ? 1 : 0, xmax, dflt, lethal);
+                if (xv < 0 || xv > xmax) { xv = dflt; }
+                chosen_x = xv;
+            }
+        }
         // {X} spells: pay the chosen X, once per {X} pip (Crackle {X}{X}{X} -> 3X generic).
         if (def.card.m_mana_cost.has_x && chosen_x > 0)
         {
@@ -92982,6 +93008,18 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                     : "\xC3\x97" + std::to_string(a.chosen_x);   // ×K
                 addSub(a.card_name + " " + times, a.card_name + " activations", times,
                        a.card_name, "activations");
+            }
+            // "Target player draws X" (Stroke of Genius) under human play: the variants differ by WHO
+            // draws -- the X is the `x_value` decision at the cast (one representative per target, see
+            // DrawXCandidates) -- so the dimension is the TARGET, never the representative's X (the
+            // dialog read "X=4 / X=1" for "the opponent / you", AccomplishedAlchemist 2026-10-19).
+            else if (a.kind == Action::Kind::CastFromHand && HumanPlayActive()
+                     && [&]{ const CardDefinition* xd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                             return xd != nullptr && xd->tmpl == CardTemplate::DrawX; }())
+            {
+                const std::string who = (a.draw_target != 0) ? "the opponent draws" : "you draw";
+                addSub(a.card_name + " \xE2\x86\x92 " + who + " (X chosen at cast)", a.card_name + " target",
+                       who + " (X chosen at cast)", a.card_name, "modal");
             }
             else if (a.chosen_x > 0)       { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
             // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top

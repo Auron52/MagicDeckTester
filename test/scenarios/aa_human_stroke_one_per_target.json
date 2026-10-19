@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "VIEWER (2026-10-19, AccomplishedAlchemist sweep seed 80016): under human play Stroke of Genius's X is NOT a",
+    "plan axis. The menu carries ONE representative cast per TARGET player (DrawXCandidates' human branch) and the",
+    "X is the `x_value` decision at the cast (g_play_x_value_chooser in TurnSolver apply_one). One plan per X made",
+    "the Stroke group ~2*(float) digits wide; after a 53-mana untap loop the viewer plan-space valve dropped the",
+    "card and the human could not win. Here 9 Islands float plenty: `cast=Stroke of Genius` must resolve to",
+    "EXACTLY two variants (you draw / the opponent draws), never one per X."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 4,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" }
+  ],
+  "hand": ["Stroke of Genius"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "validate_line": "cast=Stroke of Genius",
+  "expect_verdict": "choose",
+  "expect_variants": 2,
+  "expect_variants_all_contain": "X chosen at cast"
+}

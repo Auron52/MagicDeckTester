@@ -121,7 +121,13 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
                  // suffixes are matched. Empty for every source with no such Aura.
                  std::vector<HumanPreTapAura> tap_auras;
                  // Energy ONE coloured tap of this source costs (Aether Hub: 1); 0 = free.
-                 int tap_energy; };
+                 int tap_energy;
+                 // LIVE yield of one tap of a SCALED source (Accomplished Alchemist: X = life gained
+                 // this turn; Priest of Titania: the Elf count); -1 = not a scaled source (key absent).
+                 int yield;
+                 // CURRENT power / toughness of a creature (printed + counters + until-EOT pumps + lords
+                 // + Auras + Equipment -- what combat reads); has_pt false for a non-creature.
+                 bool has_pt; int power; int toughness; };
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -199,9 +205,18 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // say which of its two abilities the player is about to use rather than leaving the spend
         // to be discovered afterwards. Absent (0) for every source in every other deck.
         const int tap_energy = d ? d->params.energy_per_colored_tap : 0;
+        // The scaled source's live per-tap yield (claude-play sweep seed 80005: "Alchemist taps shows
+        // WUBRG not X amount") -- `taps` says WHICH colours, this says HOW MANY. Additive; absent for
+        // every fixed-yield source.
+        const int yield = (d && IsScaledManaDork(*d)) ? PermanentManaYield(s, p, *d) : -1;
+        // Current P/T (sweep: "creature current power/toughness incl. temp pumps not exposed"). The
+        // shared combat readers, so the number shown is the number combat deals / SBA checks.
+        const bool has_pt = p.card.IsCreature() || p.is_animated;
+        const int  pw     = has_pt ? CombatPowerOf(p, s) : 0;
+        const int  tf     = has_pt ? LethalToughness(p, s) : 0;
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
                          p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str(),
-                         std::move(taps), std::move(tap_auras), tap_energy });
+                         std::move(taps), std::move(tap_auras), tap_energy, yield, has_pt, pw, tf });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -215,7 +230,19 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (rows[i].tapped) { os << ", \"tapped\": true"; }
         if (rows[i].is_aura)  { os << ", \"is_aura\": true"; }
         if (rows[i].is_equip) { os << ", \"is_equip\": true"; }
-        if (rows[i].attached_to > 0) { os << ", \"attached_to\": " << rows[i].attached_to; }
+        if (rows[i].attached_to > 0)
+        {
+            // `attached_to` is the HOST's `num` (its stable m_number -- what the GUI groups on, and
+            // what saved references were rendered from; unchanged). `attached_to_idx` is the same
+            // host's battlefield `idx`, for a protocol reader that indexes by idx (sweep seed 80012
+            // read the num as an idx). Additive; absent if the host is not found.
+            os << ", \"attached_to\": " << rows[i].attached_to;
+            for (int hi = 0; hi < static_cast<int>(s.battlefield.size()); ++hi)
+            {
+                if (s.battlefield[hi].card.m_number == rows[i].attached_to)
+                { os << ", \"attached_to_idx\": " << hi; break; }
+            }
+        }
         // Copy-entrant provenance (Sakashima's Protege): the row's `name` is the COPIED card
         // (that IS what the permanent is); `printed` names the card that was actually cast so
         // the viewer can badge it -- otherwise the copy is indistinguishable from a real one.
@@ -239,6 +266,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
             os << "]";
         }
         if (rows[i].tap_energy > 0) { os << ", \"tap_energy\": " << rows[i].tap_energy; }
+        if (rows[i].yield >= 0) { os << ", \"yield\": " << rows[i].yield; }
+        if (rows[i].has_pt) { os << ", \"power\": " << rows[i].power << ", \"toughness\": " << rows[i].toughness; }
         if (!rows[i].counters.empty())
         {
             os << ", \"counters\": [";
@@ -552,7 +581,17 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 if (a.tutor_target.empty() && a.chosen_x >= 0)
                 {
                     const CardDefinition* xd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-                    if (xd && xd->card.m_mana_cost.has_x) { tag += " (X=" + std::to_string(a.chosen_x) + ")"; }
+                    // Human play's "target player draws X" cast is ONE representative per target: the
+                    // real X is the follow-up `x_value` decision at the cast, so the menu must not
+                    // claim an X the human has not chosen. The lethal X is named for the kill.
+                    if (xd && xd->tmpl == CardTemplate::DrawX && HumanPlayActive())
+                    {
+                        const int lx = (a.draw_target != 0) ? opponentdeck::ForcedDrawLethalX(s) : 0;
+                        tag += (lx > 0 && a.chosen_x >= lx)
+                                   ? " (X chosen at cast; lethal X=" + std::to_string(lx) + ")"
+                                   : std::string(" (X chosen at cast)");
+                    }
+                    else if (xd && xd->card.m_mana_cost.has_x) { tag += " (X=" + std::to_string(a.chosen_x) + ")"; }
                     // "Target player draws X" (Stroke of Genius): WHO draws is half of what tells two
                     // variants apart -- "you draw 5" and "the opponent draws 40 (deck-out)" share a name.
                     if (xd && xd->params.draw_target_player)
@@ -1367,6 +1406,20 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         }
         if (energy_relevant) { os << ", \"energy\": " << me.energy_counters; }
     }
+    // LIFE GAINED THIS TURN -- the X of every "X = life gained this turn" source (Accomplished
+    // Alchemist) and the read behind every lifegain-gated line (claude-play sweep seeds 80009/80011).
+    // Emitted when non-zero, or while such a source is ours (0 is then the number that matters).
+    {
+        bool lg_relevant = me.life_gained_this_turn > 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (lg_relevant) { break; }
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.mana_per_life_gained) { lg_relevant = true; }
+        }
+        if (lg_relevant) { os << ", \"life_gained_this_turn\": " << me.life_gained_this_turn; }
+    }
     if (reveal_count > 0)
     {
         // Optional partial clairvoyance (--reveal N): the next N draws, in draw order
@@ -1381,6 +1434,13 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     os << " },\n";
     os << "  \"opponent\": { \"life\": " << s.players[opp].life << ", \"battlefield\": ";
     JsonBattlefield(os, s, opp);
+    // The opponent's LIBRARY, when one was dealt (a deck that makes the opponent draw / mill:
+    // Stroke of Genius's deck-out needs X >= this; claude-play sweep seed 80005). Absent otherwise.
+    if (s.opponent_library_dealt)
+    {
+        os << ", \"library_size\": " << s.players[opp].library.size();
+        if (s.opponent_decked) { os << ", \"decked\": true"; }
+    }
     os << " },\n";
 }
 
@@ -2344,6 +2404,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                     for (int k = 0; k < q.green; ++k)     { pips += 'G'; }
                     for (int k = 0; k < q.colorless; ++k) { pips += 'C'; }
                     if (!pips.empty()) { os << ", \"cost_pips\": "; JsonStr(os, pips); }
+                    // ...and the FULL cost as a label (claude-play sweep seed 80011: Crab Umbra's
+                    // untap read "U" from cost_pips -- which is pips-only by design -- instead of
+                    // {2}{U}). Display only; nothing keys on it.
+                    if (q.ManaValue() > 0 || !pips.empty()) { os << ", \"activation_cost\": "; JsonStr(os, q.ToDisplayString()); }
                 }
                 // `makes_clue` = this activation is an Investigate, i.e. it puts a Clue token onto
                 // the battlefield. The viewer offers "Investigate & crack" off THIS flag rather than
@@ -2777,7 +2841,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                << ", \"why\": \"viewer plan-space bound (MTG_VIEWER_PLAN_CAP=0 to lift)\"";
             // The NAMES of what was dropped, not just the count -- a count is not diagnosable (it
             // cost a round trip with the user to establish that the missing groups were the shields).
-            if (!vt.dropped_names.empty())
+            // NOT emitted when the menu is the executor's own list (MTG_VIEWER_EXECUTOR_FALLBACK):
+            // the drop described the unpruned slice that was REPLACED, so naming its victims as
+            // missing from this menu was stale (sweep seed 80016).
+            if (vt.executor_menu) { os << ", \"executor_menu\": true"; }
+            else if (!vt.dropped_names.empty())
             { os << ", \"dropped_names\": "; JsonStr(os, vt.dropped_names); }
             os << " },\n";
         }
@@ -4226,6 +4294,30 @@ static void WriteReplicateDecisionJson(std::ostream& os, const GameState& s, con
            + "); each pays the replicate cost again to make a token copy. Default = replicate the maximum.");
 }
 
+// X-value decision ("target player draws X": Stroke of Genius; AccomplishedAlchemist 2026-10-19). Under
+// human play X is not a plan axis -- the menu carries one representative cast per target player -- so the
+// X is picked here, at the cast's payment, from EVERY legal value 0..max_x (what the live pool pays over
+// the base cost right now). Reply = the X value itself (0..max_x); -1 / out of range = heuristic_default.
+// `lethal_x` = the minimal X that decks the opponent (present only for the opponent target, when known);
+// `library_size` / `opponent_library_size` let a client label "draw past your library" / "decks them".
+static void WriteXValueDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                    int target, int max_x, int default_x, int lethal_x, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("x_value").Source(source).Turn(s.turn_number).Board(s)
+     .Word("draw_target", target != 0 ? "opponent" : "self")
+     .Int("min_x", 0).Int("max_x", max_x);
+    if (target != 0 && lethal_x > 0) { d.Int("lethal_x", lethal_x); }
+    d.Int("library_size", static_cast<int>(s.ActivePlayer().library.size()));
+    if (s.opponent_library_dealt)
+    { d.Int("opponent_library_size", static_cast<int>(s.players[1].library.size())); }
+    d.HeuristicDefault(default_x);
+    d.Note(std::string("reply the X to pay for ") + source + " (0.." + std::to_string(max_x) + "; "
+           + (target != 0 ? "the OPPONENT draws X -- X >= lethal_x decks them"
+                          : "YOU draw X -- drawing past your library loses the game")
+           + "), or -1 for the default (" + std::to_string(default_x) + ").");
+}
+
 // Attach-host decision (Armored Skyhunter): the attack-dig put an Equipment onto the
 // battlefield; the player picks WHICH controlled creature it attaches to (board-click, like the
 // bounce picker), or -1 to leave it unattached. Rides the positional --choices stream (the
@@ -4329,8 +4421,44 @@ static void WriteFirebreatheDecisionJson(std::ostream& os, const GameState& s,
         const Permanent& p = s.battlefield[attacker_indices[j]];
         os << "{ \"name\": "; JsonStr(os, p.card.m_name.str()); os << " }";
     });
-    d.Note("reply how many firebreathing activations to spend leftover combat mana on (0.."
-           + std::to_string(max_count) + "); each pumps an attacker. Default = spend the maximum.");
+    // WHICH pumps the activations buy (AccomplishedAlchemist sweep: Ezuri's team pump "+3/+3 to every
+    // Elf" read as an unexplained count). One entry per pump source we control, with its cost and effect.
+    {
+        std::vector<std::pair<std::string, std::string>> src;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd == nullptr) { continue; }
+            const CardParams& pp = pd->params;
+            if (pp.team_pump_cost.has_value())
+            {
+                std::string who = "creatures";
+                if (!pp.team_pump_subtypes.empty())
+                {
+                    who = pp.team_pump_subtypes.front();   // "Elf" -> "Elves", "Dragon" -> "Dragons"
+                    if (!who.empty() && who.back() == 'f') { who.pop_back(); who += "ves"; } else { who += "s"; }
+                }
+                src.emplace_back(p.card.m_name.str(),
+                                 pp.team_pump_cost->ToDisplayString() + ": " + who + " you control get +"
+                                 + std::to_string(pp.team_pump_power) + "/+" + std::to_string(pp.team_pump_tough));
+            }
+            else if (pp.firebreathing_cost.has_value())
+            {
+                src.emplace_back(p.card.m_name.str(),
+                                 pp.firebreathing_cost->ToDisplayString() + ": this creature gets +"
+                                 + std::to_string(std::max(1, pp.firebreathing_power)) + "/+0");
+            }
+        }
+        d.Array("pump_sources", src.size(), [&](std::size_t j)
+        {
+            os << "{ \"name\": "; JsonStr(os, src[j].first);
+            os << ", \"effect\": "; JsonStr(os, src[j].second); os << " }";
+        });
+    }
+    d.Note("reply how many pump activations to buy with leftover combat mana (0.."
+           + std::to_string(max_count) + "); each is one activation of a pump_sources ability "
+           "(a team pump hits every matching attacker). Default = spend the maximum.");
 }
 
 // Storage-land tap-vs-charge decision (#6, Dwarven Hold / Mercadian Bazaar): a charged storage land can
@@ -4747,6 +4875,7 @@ g_play_discard_chooser = nullptr;
 g_play_ei_chooser = nullptr;
 g_play_retrace_chooser = nullptr;
 g_play_replicate_chooser = nullptr;
+g_play_x_value_chooser = nullptr;
 g_play_land_entry_chooser = nullptr;
 g_play_dragon_chooser = nullptr;
 g_play_sac_tutor_chooser = nullptr;
@@ -5054,6 +5183,7 @@ struct ClaudePlayHarness
     EIChooser             ei_chooser;
     RetraceDiscardChooser retrace_chooser;
     ReplicateChooser      replicate_chooser;
+    XValueChooser         x_value_chooser;
     FirebreatheChooser    firebreathe_chooser;
     FirebreatheChooser    jitte_chooser;        // Umezawa's Jitte counter-spend (same shape)
     BounceChooser         attach_host_chooser;  // Skyhunter attach-host (same shape as bounce)
@@ -6797,6 +6927,40 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_replicate_chooser = &replicate_chooser;
+
+    // X value of a "target player draws X" spell (Stroke of Genius): picked at the cast's payment, since
+    // human play enumerates one representative cast per target (DrawXCandidates). Shares the --choices
+    // stream; the reply is X itself in [0, max_x]; -1 / out of range = the default.
+    x_value_chooser =
+        [this](const GameState& s, int controller, const std::string& source, int target,
+               int max_x, int default_x, int lethal_x) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+        claude_retry_xv:  // --interactive: new picks arrived on stdin; re-test the consume branch
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen > max_x) { chosen = default_x; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteXValueDecisionJson(ss, s, source, target, max_x, default_x, lethal_x, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteXValueDecisionJson(std::cout, s, source, target, max_x, default_x, lethal_x, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_xv; }
+            std::exit(70);
+        };
+    g_play_x_value_chooser = &x_value_chooser;
 }
 
 // The three KEYED side-channel choosers. They do NOT consume the positional --choices cursor, so
