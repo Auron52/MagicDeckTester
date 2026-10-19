@@ -265,7 +265,7 @@ one, ASK. Full rationale: `.claude/skills/deck-screening.md` Rule 0a.
 ### The normal path — ONE COMMAND (`scripts/mullgen.sh run`)
 
 ```bash
-bash scripts/mullgen.sh run decks/<Deck> [complete|fast]   # generate, THEN validate + gate
+bash scripts/mullgen.sh run decks/<Deck> fast   # generate, THEN validate + gate (fast is the default; complete only when asked)
 bash scripts/mullgen.sh status decks/<Deck>                # where is it up to
 ```
 
@@ -303,12 +303,18 @@ profile** (`value_play`), and prints its effective settings so a run is self-doc
 
 # 2) Then generate with the recipe you chose from the estimate:
 ./build/Release/mtg-analyze decks/<name>/<name>.cod --cards-json src/cards/data/cards.json \
-    --gen-mulligan complete      # full bottoming, R40 -- the definitive profile (default when it fits)
-#   --gen-mulligan fast          # adaptive bottoming, R30 -- ~a third off gen for slow/large-K decks
+    --gen-mulligan fast          # adaptive bottoming, R30 -- THE DEFAULT (USER 2026-10-19, below)
+#   --gen-mulligan complete      # full bottoming, R40 -- only when asked, or clearly cheap for this deck
 ```
 
 - **complete** = full bottoming + cap R40; **fast** = adaptive bottoming + cap R30; keep is always
   adaptive (floor 2). See the recipe study (quality cost ≤ ~0.02t; fast saves ~22–38% of gen).
+- **DEFAULT TO `fast` (USER 2026-10-19):** *"You should default to fast if no other instructions are given
+  unless we have clear reason to believe it will be fast."* Use `complete` only when the USER asks for it or a
+  projection shows it is clearly cheap for this deck -- and say which, and why, when you launch. The recipe is
+  pinned by the journal's R at launch, so the choice is only cheap to fix in the first minutes: Landfall
+  2026-10-19 was launched `complete` by inertia (K=18, d3/b3, ~150 ms per game) and was 14 h in before anyone
+  noticed, when restarting at `fast` no longer paid. Always pass the recipe explicitly to `mullgen.sh run`.
 - **Depth/budget** come from `value_play.mull_gen_depth` / `mull_gen_budget_ms` (in `<deck>.value.json`
   when a sidecar exists, else `<deck>.profile.json`); unset → inherit the play depth → built-in default.
 - **THE SETTING SCREEN IS A STAGE OF `mullgen.sh run` (USER 2026-10-18):** *"I'm not so fond of using play
