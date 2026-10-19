@@ -2021,6 +2021,46 @@ public:
         return true;
     }
 
+    // LookTopLandToBattlefield -- Risen Reef's "If it's a land card, you MAY put it onto the
+    // battlefield tapped. If you don't ..., put it into your hand." (CardParams::
+    // enters_look_top_land_or_hand; core/SpellEffects.h LOOK-TOP WATCHERS). The DEFAULT ONLY: the
+    // choice is a searched pin (Plan::look_top_pins) in every searched apply, the human answers it in
+    // the viewer, and this answer is what the unpinned resolutions take (the horizon playout, the d0
+    // runner, a decision past the plan's pin list). NEITHER answer dominates -- battlefield is a
+    // landfall now and an untapped land next turn; hand keeps the land drop's landfall and, with the
+    // drop still unused and no other land in hand, an UNTAPPED land this turn -- so the default is
+    // that one rule: hand exactly when this turn's drop is unused, no land is in hand, and the land
+    // would enter untapped when played (no enters-tapped / Karoo clause); otherwise battlefield.
+    virtual bool LookTopLandToBattlefield(const GameState& s, int controller,
+                                          const CardDefinition& land) const
+    {
+        const Player& p = s.players[static_cast<std::size_t>(controller)];
+        if (p.lands_played_this_turn >= p.LandDropsAvailable()) { return true; }
+        if (land.params.enters_tapped || land.params.etb_bounce_land) { return true; }
+        for (const Card& h : p.hand)
+        {
+            if (h.m_is_staged) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if ((hd != nullptr ? hd->card : h).IsLand()) { return true; }
+        }
+        return false;
+    }
+
+    // LookTopTriggersBeforeTopTutor -- the CR 603.3b ORDER of an entrant's own top-of-library tutor
+    // (Flamekin Harbinger: "search your library for an Elemental card, reveal it, then shuffle and put
+    // that card on top") against the `n` look-top triggers (Risen Reef) the same entry raised: how many
+    // of the look-tops resolve BEFORE the tutor (0..n). The DEFAULT ONLY -- searched as an ORDER entry
+    // of Plan::look_top_pins, asked of the human in the viewer. Default n-1: the existing tops are
+    // taken first and the LAST look-top takes the tutored card into hand -- every card the entry can
+    // reach arrives now, and the tutor's pick is not left on top for a later draw. Neither extreme
+    // dominates in general (all-first leaves the pick on top as next turn's draw; tutor-first reaches
+    // one card fewer), which is why it is searched.
+    virtual int LookTopTriggersBeforeTopTutor(const GameState& s, int controller, int n) const
+    {
+        (void)s; (void)controller;
+        return n > 0 ? n - 1 : 0;
+    }
+
     // HoldFuelWhileComboing -- "once you are going off, don't play any fuel; just cycle everything"
     // (USER, 2026-09-05, on Fluctuator). While the combo is live, every card in hand is AMMUNITION,
     // not a resource: cycling is 1-for-1 (it draws a replacement AND pings), a cast is 1-for-0, and
@@ -3494,6 +3534,27 @@ public:
             if (best < 0 || key < best_key) { best = k; best_key = key; }
         }
         return best < 0 ? 0 : best;
+    }
+
+    // EtbOptionalDestroyTargetPick -- Foundation Breaker's "When this creature enters, you MAY destroy
+    // target artifact or enchantment" (CardParams::etb_destroy_artifact_enchantment_optional): an
+    // index into `legal` (battlefield indices, both sides), or -1 to DECLINE. A DOMINANCE FOLD, not a
+    // value judgement: an opponent's artifact/enchantment is the trigger's only purposeful target, so
+    // take the first one; otherwise every legal target is OUR OWN, and destroying one removes a
+    // permanent we control and buys nothing unless its leaving pays something -- so decline. The one
+    // un-dominated own target is a creature whose death pays (SelfSacHasDeathPayoff's shape; Metallic
+    // Mimic is an artifact creature) -- not reachable today (no card in the pool rewards one of our
+    // artifacts or enchantments being destroyed in a deck running a "may destroy" ETB), disclosed as a
+    // PROVISIONAL known narrowing. The human always sees the full legal set and may decline.
+    virtual int EtbOptionalDestroyTargetPick(const GameState& s, int controller,
+                                             const std::vector<int>& legal) const
+    {
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        {
+            if (s.battlefield[static_cast<std::size_t>(legal[k])].controller_index != controller)
+            { return k; }
+        }
+        return -1;
     }
 
     // StorageLandHold -- a storage land (Mercadian Bazaar: "{T}: put a storage counter") offers a

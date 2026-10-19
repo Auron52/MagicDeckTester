@@ -1,0 +1,40 @@
+{
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "active_life": 20,
+  "opponent_life": 9,
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "_comment": "LandfallElementals / Risen Reef (2026-10-18). The look-top LAND choice must be SEARCHED, and the card the Reef puts into hand must be playable the SAME turn (site-10 put-in-hand breakpoint). Board: 2 Mountains, Risen Reef (can attack: 1), Aether Vial on 1. Hand: Flamekin Harbinger, 3x Lightning Bolt, Gruul Turf (a tapped Karoo). Library top: Mountain, then dead Swords filler (no Elemental: Harbinger's search finds nothing, so the trigger order is moot). The only T4 kill (opponent at 9): Vial the Harbinger in for free -> the Reef looks at the Mountain -> put it into HAND -> play it as the land drop -> 3 R -> three Bolts = 9. The provider's DEFAULT for the look is BATTLEFIELD (a land -- the Gruul Turf -- is already in hand), which leaves 2 R: two Bolts + the Reef's 1 = 7 and no win this turn; casting the Harbinger from hand instead of with the Vial nets no mana; not using the Reef at all is 2 Bolts + 1. So the fixture passes only if the land pin's HAND variant is enumerated, applied, and its continuation plays the Mountain.",
+  "battlefield": [
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Risen Reef"
+    },
+    {
+      "name": "Aether Vial",
+      "charge_counters": 1
+    }
+  ],
+  "hand": [
+    "Flamekin Harbinger",
+    "Lightning Bolt",
+    "Lightning Bolt",
+    "Lightning Bolt",
+    "Gruul Turf"
+  ],
+  "library_top": [
+    "Mountain"
+  ],
+  "expect_win_turn": 4
+}

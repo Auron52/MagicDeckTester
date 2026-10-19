@@ -283,6 +283,7 @@ void GameEngine::UntapStep(GameState& state)
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
+    DrainPendingLookTop(state);         // safety net (lockstep w/ SimulateEndAndStartNextTurn): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
     SweepOrphanedAuras(state);          // CR 704.5m SBA checkpoint (lockstep w/ SimulateEndAndStartNextTurn)
     state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks

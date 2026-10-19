@@ -9606,6 +9606,94 @@
    }
   },
   {
+   "name": "Risen Reef",
+   "mana_cost": "{1}{G}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Whenever this creature or another Elemental you control enters, look at the top card of your library. If it's a land card, you may put it onto the battlefield tapped. If you don't put the card onto the battlefield, put it into your hand. [MODELLED -- enters_look_top_land_or_hand + enters_watch_subtypes [Elemental] + creature_enters_includes_self ('this creature OR another Elemental': the self half carries no type test). A creature-enter WATCHER at the universal enter cascade (FireCreatureEnterWatchers): every way an Elemental enters -- cast, evoke (the evoked body still enters), Aether Vial put, any put helper -- in executor and rollout identically, filtered on the entrant's LIVE battlefield subtypes, so a Metallic Mimic that chose Elemental counts (its type is appended before the watchers run) while a Mimic in the library is a Shapeshifter. Each Reef copy is its own trigger; a Reef entering with another out triggers both. RECORDED in the cascade and RESOLVED at the outermost exit of FireOwnEtbTriggers (core/SpellEffects.h LOOK-TOP WATCHERS) -- the land put appends a permanent and a put Karoo's bounce erases one, so resolving inside the watcher walk would shift the slots the cascade's callers hold; Primeval Titan's ETB already mutates the board at that exit. LOOK: a LAND on top is a SEARCHED choice -- onto the battlefield TAPPED (EnterLand ForcedTapped: not a land drop, landfall fires, a Karoo's bounce resolves) or into the HAND -- one land entry of Plan::look_top_pins per land look (DecisionProvider::LookTopLandToBattlefield is only the default for unpinned looks: hand iff this turn's drop is open, no land is in hand and the land would enter untapped, else battlefield); a nonland (or a land not put) goes to HAND through EnterHand (a put, not a draw: no draw count) and the site-10 put-in-hand breakpoint lets the search cast it the same turn (PlanOpensBreakpoint's look-top route fans that continuation). Human play: the `dig` modal '(look-top land)' when the top is a land (0 = battlefield tapped, -1 = hand). TRIGGER ORDER with an entering creature's own top-of-library tutor (Flamekin Harbinger, CR 603.3b): the tutor is deferred into the same pending group and the order is SEARCHED (an ORDER entry of Plan::look_top_pins: k Reef looks before the search, provider default k = n-1, so the last look takes the found card into hand) and asked of the human UP FRONT ('(trigger order)'). Every OTHER own-ETB of the entrant resolves before the Reef looks -- a fixed order, disclosed as inert: no other card in the pool reads or writes the library top as it enters alongside a Reef (Mulldrifter is sideboard-only and unreachable). Elemental TOKENS / conjures (none in the pool) resolve at the world drain points.]",
+   "template": "custom",
+   "parameters": {
+    "enters_look_top_land_or_hand": true,
+    "enters_watch_subtypes": [
+     "Elemental"
+    ],
+    "creature_enters_includes_self": true
+   }
+  },
+  {
+   "name": "Flamekin Harbinger",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "When this creature enters, you may search your library for an Elemental card, reveal it, then shuffle and put that card on top. [MODELLED -- the Giant Harbinger / Forerunner of the Coalition machinery: tutor_to_top + tutor_types [Elemental] + tutor_shuffle_after + tutor_optional. 'Elemental card' resolves through CardMatchesTypeName's SUBTYPE fallback on the LIBRARY card's PRINTED subtypes, so every Elemental in the list must carry \"Elemental\" in its cards.json subtypes, and Metallic Mimic in the library is correctly NOT an Elemental card. PerformTutor erases the card, ShuffleAfterSearch (CR 701.19c, deterministic CRN), then puts it on top. WHICH Elemental is the searched tutor axis (Plan::tutor_choice index variants on a cast; every legal name in human play -- the tutor_etb chooser on a put); 'you MAY search' is the tutor_optional decline variant. WITH A RISEN REEF OUT the two enter triggers are ORDERED (CR 603.3b): the tutor is deferred into the Reef's pending look-top group and the order is searched (Plan::look_top_pins ORDER entry; default: the last Reef look takes the found card into hand -- a tutor to hand) and asked of the human up front ('(trigger order)'); tutor-target variants also fan the order, since the found card can reach hand this turn. [PROVISIONAL known gap, PRE-EXISTING engine-wide: a Harbinger PUT by Aether Vial takes the provider's front tutor pick in autonomous play (the tutor_choice axis fans cast actions only) -- the human still picks every legal target via tutor_etb.]]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_top": true,
+    "tutor_types": [
+     "Elemental"
+    ],
+    "tutor_shuffle_after": true,
+    "tutor_optional": true
+   }
+  },
+  {
+   "name": "Foundation Breaker",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Evoke"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, you may destroy target artifact or enchantment.\nEvoke {1}{G} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.) [MODELLED -- etb_destroy_artifact_enchantment_optional: the OPTIONAL twin of Acidic Slime's ETB (legal set = every artifact or enchantment on BOTH sides; Metallic Mimic is an artifact creature), fired from the shared FireOwnEtbTriggers on every entry. Autonomous choice = DecisionProvider::EtbOptionalDestroyTargetPick, a DOMINANCE FOLD: an opponent's artifact/enchantment if one exists, else DECLINE -- destroying one of our own (Aether Vial, Metallic Mimic) removes a permanent and buys nothing, since no card in this list rewards an artifact or enchantment of ours being destroyed. The goldfish opponent never controls an artifact or enchantment, so autonomously it always declines. [PROVISIONAL known narrowing: an OWN artifact-creature target whose death would pay (a death watcher) is never chosen autonomously -- unreachable in any deck that runs this card.] Human play: the `dig` modal '(may destroy)' over every legal target's card, both sides; -1 declines. EVOKE {1}{G}: evoke_cost, a second CastFromHand variant (Action::evoke, the Shriekmaw/Reveillark mechanism), offered while the deck has a creature-enter watcher (Risen Reef) or an opponent target exists -- otherwise it is 2 mana for nothing. The evoked Breaker still ENTERS: its look-top (Risen Reef) triggers and Metallic Mimic's as-enters counter happen before the self-sacrifice (the order among its ETB, the Reef triggers and the evoke sacrifice is inert here: nothing in the list reads the Breaker leaving or its power, and the Reef looks do not depend on it).]",
+   "template": "custom",
+   "parameters": {
+    "evoke_cost": "{1}{G}",
+    "etb_destroy_artifact_enchantment_optional": true
+   }
+  },
+  {
+   "name": "Fulminator Mage",
+   "mana_cost": "{1}{B/R}{B/R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Sacrifice this creature: Destroy target nonbasic land. [MODELLED -- sac_creature_outlet + sac_outlet_self_only + sac_outlet_destroy_nonbasic_land: a self-only sacrifice outlet (the Ranger-Captain of Eos route) whose payload destroys a NONBASIC land on either side (ResolveDestroyTargetNonbasicLand; the Basic SUPERTYPE decides, so Secluded Courtyard / Gruul Turf / Terramorphic Expanse are legal), activatable only while a legal target exists (CR 602.2b). Hybrid {B/R}{B/R}: real either-colour pips (ManaCost hybrid_pair). Against the goldfish opponent (no lands) every legal target is OUR OWN nonbasic land, so the activation loses a 2/2 AND a land; it is offered to the search only while a death payoff is live (SelfSacHasDeathPayoff -- none in this list, so it never branches here: a lossless dominated-action removal) and ALWAYS offered to the human (a main_phase plan action; WHICH land = the board-click `target`, full legal set). WHICH land autonomously = DecisionProvider::EtbDestroyTargetPick (an opponent's first, then our own tapped / lowest-value one), a PROVISIONAL reviewed ranking, not searched -- it can only run in a deck with a death payoff.]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_outlet_self_only": true,
+    "sac_outlet_destroy_nonbasic_land": true
+   }
+  },
+  {
    "name": "Pyroclasm",
    "mana_cost": "{1}{R}",
    "types": [

@@ -971,6 +971,7 @@ inline int  EquipGatePowerOf(const Permanent& host, const GameState& state);
 // Prevent Damage phase I3 ETBs (Shriekmaw / Acidic Slime / Timeless Witness), defined below.
 inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int source_id,
                                        const CardDefinition& def);
+inline void ResolveEtbDestroyOptional(GameState& state, int controller, const CardDefinition& def);
 inline void ResolveEtbTapMandatory(GameState& state, int controller, int source_id,
                                    const std::string& src_name);
 inline void ResolveEtbReturnGyToHand(GameState& state, int controller, const std::string& chosen,
@@ -1932,6 +1933,140 @@ inline int ConsumeScriptedLandSearchPin()
     }
     return -1;
 }
+
+// ---- SEARCHED LOOK-TOP PINS (Plan::look_top_pins; Risen Reef + Flamekin Harbinger, 2026-10-18) ----
+// ONE per-plan list carrying TWO independent per-ordinal streams -- the land_search_pins shape (a
+// list + a cursor) twice over, in one vector so the Plan grows by one field:
+//   * LAND entries (value < kLookTopOrderBase): the j-th look-top resolution of the apply whose top
+//     card IS A LAND takes the j-th land entry: 0 = onto the battlefield tapped, 1 = into the hand,
+//     -1 = the provider's default (DecisionProvider::LookTopLandToBattlefield). A nonland top is no
+//     choice ("if you don't put it onto the battlefield, put it into your hand") and consumes nothing.
+//   * ORDER entries (value >= kLookTopOrderBase): the i-th entry whose OWN top-of-library tutor met
+//     pending look-top triggers takes the i-th order entry: kLookTopOrderBase = the provider's default
+//     (DecisionProvider::LookTopTriggersBeforeTopTutor), kLookTopOrderBase + 1 + k = resolve k of the
+//     look-tops BEFORE the tutor (clamped to the number pending at resolution).
+// Each consumer walks its OWN cursor past the other kind's entries, so the two streams may be laid
+// out in any interleaving (the enumerator writes every order entry first). An exhausted stream takes
+// the default. Both are consumed UNCONDITIONALLY at their decision points, so the plan's j-th entry
+// always steers the j-th decision. The list rides a POINTER to the Plan's own vector (the Plan
+// outlives the apply). Installed by both worlds around the plan apply (ScriptedLookTop) and carried
+// by a breakpoint continuation (ContPins::look_top).
+inline constexpr int kLookTopOrderBase = 1000;
+inline thread_local const std::vector<int>* g_scripted_look_top_pins         = nullptr;
+inline thread_local int                     g_scripted_look_top_land_cursor  = 0;
+inline thread_local int                     g_scripted_look_top_order_cursor = 0;
+struct ScriptedLookTop
+{
+    explicit ScriptedLookTop(const std::vector<int>& pins)
+        : saved(g_scripted_look_top_pins), saved_land(g_scripted_look_top_land_cursor),
+          saved_order(g_scripted_look_top_order_cursor)
+    {
+        g_scripted_look_top_pins         = pins.empty() ? nullptr : &pins;
+        g_scripted_look_top_land_cursor  = 0;
+        g_scripted_look_top_order_cursor = 0;
+    }
+    ~ScriptedLookTop()
+    {
+        g_scripted_look_top_pins         = saved;
+        g_scripted_look_top_land_cursor  = saved_land;
+        g_scripted_look_top_order_cursor = saved_order;
+    }
+    ScriptedLookTop(const ScriptedLookTop&) = delete;
+    ScriptedLookTop& operator=(const ScriptedLookTop&) = delete;
+    const std::vector<int>* saved;
+    int saved_land;
+    int saved_order;
+};
+// The LAND stream's next entry: -1 (default), 0 (battlefield) or 1 (hand).
+inline int ConsumeScriptedLookTopLandPin()
+{
+    const std::vector<int>* v = g_scripted_look_top_pins;
+    if (v == nullptr) { return -1; }
+    int& c = g_scripted_look_top_land_cursor;
+    const int n = static_cast<int>(v->size());
+    while (c < n && (*v)[static_cast<std::size_t>(c)] >= kLookTopOrderBase) { ++c; }
+    if (c >= n) { return -1; }
+    return (*v)[static_cast<std::size_t>(c++)];
+}
+// The ORDER stream's next entry, decoded: -1 (default) or k >= 0 look-tops before the tutor.
+inline int ConsumeScriptedLookTopOrderPin()
+{
+    const std::vector<int>* v = g_scripted_look_top_pins;
+    if (v == nullptr) { return -1; }
+    int& c = g_scripted_look_top_order_cursor;
+    const int n = static_cast<int>(v->size());
+    while (c < n && (*v)[static_cast<std::size_t>(c)] < kLookTopOrderBase) { ++c; }
+    if (c >= n) { return -1; }
+    const int e = (*v)[static_cast<std::size_t>(c++)];
+    return e == kLookTopOrderBase ? -1 : e - kLookTopOrderBase - 1;
+}
+
+// ---- LOOK-TOP WATCHERS: the pending queue (Risen Reef) ---------------------------------------
+// A look-top trigger is RECORDED where it triggers (FireCreatureEnterWatchers, inside the universal
+// enter cascade) and RESOLVED at the end of the OUTERMOST FireOwnEtbTriggers -- the one call every
+// full enter site makes right after FireEtbWatchers (cast, Aether Vial, every put helper, Genesis
+// Wave), so a new put route that runs the full cascade drains it with no extra wiring. Why not
+// inline: the land put APPENDS a permanent and a put Karoo's bounce ERASES one, and the enter
+// cascade's callers hold slot indices across it (EffectHandler hands FireOwnEtbTriggers
+// `battlefield.size() - 1`). The end of FireOwnEtbTriggers has exactly the mutation profile Primeval
+// Titan's ETB land search already has there (lands put, a Karoo bounced), which every caller already
+// tolerates by re-finding the entrant by number.
+//
+// One GROUP per entry: the look-top triggers it raised (each copy of the watcher is its own trigger,
+// CR 603.2) plus, at most, the entrant's own DEFERRED top-of-library tutor (Flamekin Harbinger), so
+// the group's CR 603.3b order is one searched choice (an ORDER entry of Plan::look_top_pins). Every
+// other own-ETB of the entrant resolves BEFORE the look-tops (the drain runs after them) -- a fixed
+// order, disclosed: no card in the pool other than a top-tutor reads or writes the library top as it
+// enters alongside a look-top watcher (Mulldrifter, an Elemental that draws, is sideboard-only in the
+// one deck that runs Risen Reef, with no wish to reach it).
+//
+// Re-entrancy: a look-top resolution can fire landfall, whose payloads may create tokens -- an
+// Elemental token would record a NEW group mid-drain. The drain swaps the queue out and loops until
+// it is empty, so such a group resolves after the groups already pending (a disclosed simplification
+// of CR 405's LIFO; no Elemental token maker is in cards.json). Watcher-only enter sites (tokens,
+// suspend, conjures) never reach FireOwnEtbTriggers: their groups drain at the world drain points
+// beside DrainPendingSelfBounces and the turn-start safety net.
+struct PendingLookTop
+{
+    int controller     = 0;
+    int entrant_number = 0;
+    std::vector<std::string> watchers;            // one per trigger, battlefield order (the log)
+    const CardDefinition* tutor_def = nullptr;    // the entrant's deferred top-tutor, if any
+    std::string chosen_tutor;                     // ...and the target its cast carried
+};
+inline thread_local std::vector<PendingLookTop> g_pending_look_top;
+inline thread_local int  g_own_etb_depth      = 0;      // FireOwnEtbTriggers nesting (drain at 0)
+inline thread_local bool g_look_top_draining  = false;  // the drain is running (no nested drain)
+// Statistics for the unit tests and MTG_TRACE-free audits: resolutions by outcome.
+inline thread_local int  g_look_top_resolved  = 0;
+
+// Record one look-top trigger for the entrant `entrant_number` (watcher = the trigger's source).
+inline void RecordLookTopTrigger(int controller, int entrant_number, const std::string& watcher)
+{
+    if (!g_pending_look_top.empty())
+    {
+        PendingLookTop& b = g_pending_look_top.back();
+        if (b.controller == controller && b.entrant_number == entrant_number && b.tutor_def == nullptr)
+        { b.watchers.push_back(watcher); return; }
+    }
+    PendingLookTop g;
+    g.controller     = controller;
+    g.entrant_number = entrant_number;
+    g.watchers.push_back(watcher);
+    g_pending_look_top.push_back(std::move(g));
+}
+// The pending group of this entrant, or nullptr (the tutor-deferral test in FireOwnEtbTriggers).
+inline PendingLookTop* PendingLookTopGroupFor(int controller, int entrant_number)
+{
+    for (std::size_t i = g_pending_look_top.size(); i-- > 0; )
+    {
+        PendingLookTop& g = g_pending_look_top[i];
+        if (g.controller == controller && g.entrant_number == entrant_number) { return &g; }
+    }
+    return nullptr;
+}
+inline void DrainPendingLookTop(GameState& state);   // defined after EnterLand (it puts lands)
+
 // PACKED per-trigger pins for the two land searches decided in a main phase but resolved LATER --
 // Primeval Titan's ATTACK trigger (GameState::scripted_attack_land_search, consumed at
 // declare-attackers) and Search for Tomorrow's off-suspend cast (GameState::
@@ -6116,6 +6251,19 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             if (opp != state.active_player_index) { state.opponent_lost_life_this_turn = true; }
             if (log) { note(opp, w.card.m_name.str()); }
         }
+        // Risen Reef: "Whenever this creature or ANOTHER ELEMENTAL YOU CONTROL enters, look at the top
+        // card of your library ..." -- the own-controller lane, filtered on the entrant's LIVE
+        // battlefield subtypes (a Metallic Mimic that chose Elemental counts: its chosen type is
+        // appended above this call in FireEtbWatchers). RECORDED, not resolved: see LOOK-TOP
+        // WATCHERS -- the resolution puts a land (append) and a Karoo bounce (erase), and this walk and
+        // its callers hold slot indices. Each watcher copy is its own trigger. Nothing is mutated here,
+        // so `w` and `n` stay valid.
+        if (wp.enters_look_top_land_or_hand && w.controller_index == entered_controller
+            && state.deck_has_look_top_watcher && enters_subtype_ok(wp))
+        {
+            RecordLookTopTrigger(entered_controller, state.battlefield[entered_index].card.m_number,
+                                 w.card.m_name.str());
+        }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
         // clause 2 -- the drain engine; life LOSS, not damage).
         if (wp.opp_creature_enters_life_loss > 0 && w.controller_index != entered_controller)
@@ -6232,6 +6380,13 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             { watcher_draw(e.controller_index, ed->params.own_creature_enters_draw); }
             if (log) { note(e.controller_index, e.card.m_name.str()); }
         }
+        // Risen Reef's "Whenever THIS creature ... enters" half: the entrant's own look-top trigger,
+        // self-inclusive only with creature_enters_includes_self ("this creature or another"). NO
+        // subtype test here: "this creature OR another Elemental" puts the Elemental condition on the
+        // other half only.
+        if (ed && ed->params.enters_look_top_land_or_hand && ed->params.creature_enters_includes_self
+            && state.deck_has_look_top_watcher)
+        { RecordLookTopTrigger(e.controller_index, e.card.m_number, e.card.m_name.str()); }
     }
 
     if (log && (!on_entered.empty() || !on_other.empty()))
@@ -9294,8 +9449,10 @@ inline void TreasurifyPermanent(GameState& state, int bi)
     }
 }
 
-inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_index,
-                           const std::string& chosen_tutor = "", int etb_kx = -1)
+// The entrant's own ETB triggers -- see FireOwnEtbTriggers below, which wraps this body so the
+// LOOK-TOP queue drains once at the outermost exit (every early `return` in here included).
+inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
+                                   const std::string& chosen_tutor, int etb_kx)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
     // Daybound face first (idempotent; a no-op when FireEtbWatchers already ran it) -- a path that
@@ -9897,7 +10054,24 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     else if ((p.tutor_to_hand || p.tutor_to_top) && !p.tutor_types.empty()
         && p.etb_reveal_count == 0)   // Muxus (reveal) is handled below, not as a tutor
     {
-        PerformTutor(state, controller, p, chosen_tutor, def->card.m_name.str());
+        // A TOP tutor (Flamekin Harbinger, Giant Harbinger) whose entry raised look-top triggers
+        // (Risen Reef) is DEFERRED into that entry's pending group, so the CR 603.3b order of the two
+        // -- "tutor first, the Reef takes the found card into hand" vs "the Reef takes today's top,
+        // the found card waits on top" -- is one searched choice at the drain (LOOK-TOP WATCHERS).
+        // The carried target rides along unchanged. With no look-top trigger pending this is the
+        // inline tutor exactly as before (byte-identical for every deck without Risen Reef).
+        PendingLookTop* lt = p.tutor_to_top
+            ? PendingLookTopGroupFor(controller, state.battlefield[entered_index].card.m_number)
+            : nullptr;
+        if (lt != nullptr && lt->tutor_def == nullptr)
+        {
+            lt->tutor_def    = def;
+            lt->chosen_tutor = chosen_tutor;
+        }
+        else
+        {
+            PerformTutor(state, controller, p, chosen_tutor, def->card.m_name.str());
+        }
     }
 
     // (5) ETB reveal-and-cheat (Muxus): reveal top N, put matching creatures MV<=k onto the
@@ -9934,6 +10108,12 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         ResolveEtbDestroyMandatory(state, controller,
                                    state.battlefield[entered_index].card.m_number, *def);
     }
+    // Foundation Breaker's optional twin ("you MAY destroy target artifact or enchantment"). Same
+    // after-this-entered_index-may-be-stale contract: nothing below reads it for this card, and an
+    // evoked Breaker's sacrifice re-finds it by number. Its look-top triggers (it is an Elemental)
+    // were RECORDED by FireEtbWatchers and resolve at this cascade's outermost exit, BEFORE the evoke
+    // sacrifice -- an evoked Breaker still entered (CR 702.74a: the sacrifice is its own trigger).
+    if (p.etb_destroy_artifact_enchantment_optional) { ResolveEtbDestroyOptional(state, controller, *def); }
     // Timeless Witness: "return target card from your graveyard to your hand." `chosen_tutor` is the
     // cast's searched graveyard pick (one plan variant per distinct graveyard name); empty on a put
     // path / the unpinned variant -> the provider's resolution pick (human: the dig chooser).
@@ -10167,6 +10347,22 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
                        /*returns_tapped=*/false, /*permanents_ok=*/true);
         }
     }
+}
+
+// THE ENTRANT'S OWN ETB TRIGGERS, then -- at the OUTERMOST exit only -- the LOOK-TOP queue (Risen
+// Reef; see LOOK-TOP WATCHERS). Every full enter site calls FireEtbWatchers (which RECORDS the
+// look-top triggers) and then this, so draining here resolves them on every such route with no
+// per-site wiring, after every other own-ETB of the entrant. NESTED calls (Ghalta / Muxus / Forge
+// Anew puts, a Genesis Wave inside a cascade) do not drain: their outer cascade is still walking
+// slots, and the outermost exit drains everything they recorded, in entry order. The queue is empty
+// for every deck without a look-top watcher, so this is one counter and one empty() test there.
+inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_index,
+                               const std::string& chosen_tutor = "", int etb_kx = -1)
+{
+    ++g_own_etb_depth;
+    FireOwnEtbTriggersBody(state, controller, entered_index, chosen_tutor, etb_kx);
+    --g_own_etb_depth;
+    if (g_own_etb_depth == 0 && !g_pending_look_top.empty()) { DrainPendingLookTop(state); }
 }
 
 
@@ -13287,6 +13483,11 @@ inline bool EtbDestroyTargetLegal(const Permanent& q, const CardParams& p)
     {
         return q.card.HasType(CardType::Artifact) || q.card.IsEnchantment() || q.card.IsLand();
     }
+    // Foundation Breaker's optional "target artifact or enchantment" (see ResolveEtbDestroyOptional).
+    if (p.etb_destroy_artifact_enchantment_optional)
+    {
+        return q.card.HasType(CardType::Artifact) || q.card.IsEnchantment();
+    }
     return false;
 }
 inline bool EtbDestroyAnyLegal(const GameState& state, const CardParams& p)
@@ -13413,6 +13614,76 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
     }
     (void)source_id;
+}
+
+// Foundation Breaker: "When this creature enters, you MAY destroy target artifact or enchantment."
+// The OPTIONAL twin of the mandatory resolver above: same legal set over BOTH sides (an artifact or
+// an enchantment -- Metallic Mimic is an artifact creature, the source itself is neither), but the
+// controller may decline. Autonomously DecisionProvider::EtbOptionalDestroyTargetPick decides -- a
+// dominance fold (an opponent's target, else decline; see the hook), and the goldfish opponent never
+// controls an artifact or enchantment, so against it this always declines. HUMAN PLAY: the `dig`
+// modal "(may destroy)" over EVERY legal target's card (both sides), -1 = destroy nothing -- the
+// board-click `target` shape has no decline. Erases a permanent, so callers must not hold a slot
+// across it (FireOwnEtbTriggers' note: nothing below it reads entered_index for this card; the evoke
+// sacrifice re-finds by number).
+inline void ResolveEtbDestroyOptional(GameState& state, int controller, const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (EtbDestroyTargetLegal(state.battlefield[static_cast<std::size_t>(i)], p)) { legal.push_back(i); }
+    }
+    if (legal.empty()) { return; }   // no legal target: the trigger is removed
+    const std::string src_name = def.card.m_name.str();
+    int k = ResolveProvider(state).EtbOptionalDestroyTargetPick(state, controller, legal);
+    if (k >= static_cast<int>(legal.size())) { k = -1; }
+    if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+    {
+        std::vector<Card> examined;
+        std::vector<int>  idx;
+        for (std::size_t li = 0; li < legal.size(); ++li)
+        {
+            examined.push_back(state.battlefield[static_cast<std::size_t>(legal[li])].card);
+            idx.push_back(static_cast<int>(li));
+        }
+        const int pick = (*g_play_dig_chooser)(state, controller, src_name + " (may destroy)",
+                                               examined, idx, k);
+        k = (pick >= 0 && pick < static_cast<int>(legal.size())) ? pick : -1;
+    }
+    if (k < 0)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": declines to destroy anything"); }
+        return;
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+    if (q.card.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
+    const Card dead = q.card;
+    const int  dead_ctrl = q.controller_index;
+    const bool was_creature = q.card.IsCreature();
+    const bool was_token = q.is_token;
+    const int  m1 = MinusCountersOn(q);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x92\x80 " + src_name + ": destroys "
+                      + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
+                      + dead.m_name.str());
+    }
+    state.players[q.owner_index].graveyard.push_back(dead);
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    for (Permanent& o : state.battlefield)
+    {
+        if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+        if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+    }
+    if (was_creature)
+    {
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+        if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
+    }
 }
 
 // Timeless Witness's ETB: "return target card from your graveyard to your hand." Targeted with no
@@ -15149,6 +15420,55 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
 // ChosenFloatColorCandidates exactly as it fans the pre-cast SacForMana, so the pool only ever holds
 // typed mana. Empty for every other caller, which keeps the payload below byte-identical (an
 // any-colour outlet carries an EMPTY sac_outlet_add_mana_color, so it floated nothing here before).
+// "Destroy target nonbasic land" (Fulminator Mage's sacrifice ability; CardParams::
+// sac_outlet_destroy_nonbasic_land). Legal set = every NONBASIC land on BOTH sides (IsBasicLandCard
+// keys on the Basic supertype, so Fiery Islet / Gruul Turf / a creature-type land are legal). The
+// goldfish opponent controls no land, so the target is always one of OURS -- which is why the
+// activation is only ever offered to the search with a death payoff live (the self-only gate) and is
+// otherwise a human-only line. WHICH land = DecisionProvider::EtbDestroyTargetPick (an opponent's
+// first, then our tapped / lowest-value one -- the reviewed Acidic Slime ranking, PROVISIONAL, not
+// searched); the human picks from the full legal set (the board-click `target`, loyalty shape). A land
+// leaving fires nothing in this engine. No legal target: nothing happens (the enumeration requires one
+// to activate, so this is only reached if a same-plan action removed it).
+inline bool AnyNonbasicLand(const GameState& state)
+{
+    for (const Permanent& q : state.battlefield)
+    { if (q.card.IsLand() && !IsBasicLandCard(q.card)) { return true; } }
+    return false;
+}
+inline void ResolveDestroyTargetNonbasicLand(GameState& state, int controller, const std::string& src_name)
+{
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.IsLand() && !IsBasicLandCard(q.card)) { legal.push_back(i); }
+    }
+    if (legal.empty()) { return; }
+    int k = ResolveProvider(state).EtbDestroyTargetPick(state, controller, legal);
+    if (k < 0 || k >= static_cast<int>(legal.size())) { k = 0; }
+    if (g_play_loyalty_chooser && legal.size() > 1 && !g_tap_speculating)
+    {
+        const int c = (*g_play_loyalty_chooser)(state, controller, src_name,
+                                                "destroyed (target nonbasic land)", legal, k);
+        if (c >= 0 && c < static_cast<int>(legal.size())) { k = c; }
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    const Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+    if (q.card.HasKeyword(Keyword::Indestructible)) { return; }
+    const Card dead = q.card;
+    const int  owner = q.owner_index;
+    const bool own = q.controller_index == controller;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + ": destroys " + (own ? std::string("your ") : std::string("the opponent's "))
+                      + dead.m_name.str());
+    }
+    state.players[static_cast<std::size_t>(owner)].graveyard.push_back(dead);
+    state.battlefield.erase(state.battlefield.begin() + bi);
+}
+
 inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id,
                                    const std::string& any_color_float = std::string())
 {
@@ -15468,6 +15788,10 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
     }
 
+    // Fulminator Mage: "Sacrifice this creature: Destroy target nonbasic land." The destroy payload,
+    // resolved after the sacrifice (its cost). `op` is re-read from the definition: the victim erase
+    // above did not move the card DB.
+    if (op->sac_outlet_destroy_nonbasic_land) { ResolveDestroyTargetNonbasicLand(state, controller, src_name); }
     const bool outlet_free = !op->sac_creature_cost.has_value()
                           || op->sac_creature_cost->ManaValue() == 0;
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
@@ -36303,6 +36627,131 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     // Landfall (route 2). Captured by number, not by slot: a bounce extra above may already have
     // moved or returned the land, and landfall still triggered on the entry.
     if (fire_landfall) { OnLandEntered(state, perm.controller_index, perm.card.m_number); }
+}
+
+// ---- LOOK-TOP WATCHERS: resolution (Risen Reef; the queue and its contract are above, beside
+// ConsumeScriptedLookTopLandPin) ---------------------------------------------------------------
+// ONE look-top trigger: "look at the top card of your library. If it's a land card, you may put it
+// onto the battlefield tapped. If you don't put the card onto the battlefield, put it into your hand."
+// A LAND top is a choice -- the searched land pin, else the provider's default, else (human play) the
+// `dig` chooser "(look-top land)": 0 = battlefield, -1 = hand. The land enters through EnterLand
+// (ForcedTapped: "tapped" is the effect's, so the land's own enters-tapped / shock rule is not
+// consulted; not a land drop; its own ETB extras -- a Karoo's bounce -- resolve; LANDFALL fires).
+// Anything else -- a nonland, or a land not put -- goes to HAND through the EnterHand choke point
+// (HandEntryReason::Dig: it is put, not drawn -- no draw count, no draw triggers; the site-10
+// put-in-hand breakpoint sees it). An empty library: nothing to look at, nothing happens.
+inline void ResolveOneLookTop(GameState& state, int controller, const std::string& watcher)
+{
+    Player& ap = state.players[static_cast<std::size_t>(controller)];
+    if (ap.library.empty()) { return; }
+    const Card top = ap.library[0];
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(top);
+    const bool is_land = d != nullptr && d->card.IsLand();
+    bool to_bf = false;
+    if (is_land)
+    {
+        to_bf = ResolveProvider(state).LookTopLandToBattlefield(state, controller, *d);
+        const int pin = ConsumeScriptedLookTopLandPin();
+        if (pin >= 0) { to_bf = (pin == 0); }
+        if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+        {
+            const std::vector<Card> examined{ top };
+            const std::vector<int>  legal{ 0 };
+            const int pick = (*g_play_dig_chooser)(state, controller, watcher + " (look-top land)",
+                                                   examined, legal, to_bf ? 0 : -1);
+            to_bf = (pick == 0);
+        }
+    }
+    ++g_look_top_resolved;
+    if (RevealVisible())
+    {
+        EmitReveal(state.turn_number, watcher + " (look at the top card)",
+                   { top.m_number }, { top.m_name.str() }, {}, {},
+                   { to_bf ? "battlefield (tapped)" : "hand" });
+    }
+    Card c = ap.library.DrawTop();
+    if (to_bf)
+    {
+        EnterLand(state, *d, c.m_number, /*resolve_full_etb=*/true, /*fire_landfall=*/true,
+                  LandEntryTap::ForcedTapped);
+        return;
+    }
+    EnterHand(state, controller, std::move(c), HandEntryReason::Dig);
+}
+
+// One pending GROUP (one entry's look-top triggers + its deferred top-tutor, if any) in its CR 603.3b
+// order: k look-tops, the tutor, then the rest. k is the searched ORDER pin, else the provider's
+// default; the HUMAN orders the triggers UP FRONT, before any resolves (the order is fixed when the
+// triggers go on the stack -- asking between resolutions would show them the revealed card first):
+// the `dig` chooser "(trigger order)" offers [the tutor's source, a look-top watcher] repeatedly, and
+// each watcher picked resolves before the tutor. Mandatory: -1 keeps the default order.
+inline void ResolveLookTopGroup(GameState& state, PendingLookTop& g)
+{
+    const int n = static_cast<int>(g.watchers.size());
+    const bool tutor = g.tutor_def != nullptr;
+    int k = n;
+    if (tutor)
+    {
+        k = std::clamp(ResolveProvider(state).LookTopTriggersBeforeTopTutor(state, g.controller, n), 0, n);
+        const int pin = ConsumeScriptedLookTopOrderPin();
+        if (pin >= 0) { k = std::min(pin, n); }
+        if (g_play_dig_chooser != nullptr && !g_tap_speculating && n > 0)
+        {
+            const CardDefinition* wd = CardDatabase::Instance().Lookup(g.watchers.front());
+            if (wd != nullptr)
+            {
+                const std::vector<Card> examined{ g.tutor_def->card, wd->card };
+                const std::vector<int>  legal{ 0, 1 };
+                int human_k = 0;
+                bool keep_default = false;
+                for (; human_k < n; ++human_k)
+                {
+                    // "Which resolves NEXT": the default is the default order's answer at this slot.
+                    const int dflt = human_k < k ? 1 : 0;
+                    const int pick = (*g_play_dig_chooser)(
+                        state, g.controller,
+                        g.tutor_def->card.m_name.str() + " (trigger order)", examined, legal, dflt);
+                    if (pick != 0 && pick != 1) { keep_default = true; break; }   // -1: the AI's order
+                    if (pick == 0) { break; }   // the tutor resolves next
+                }
+                // -1 after some answers keeps the AI's order for the REST: the slots already answered
+                // stand, and the default places the search no earlier than that.
+                k = keep_default ? std::max(human_k, k) : human_k;
+            }
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          g.tutor_def->card.m_name.str() + ": trigger order -- "
+                          + std::to_string(k) + " of " + std::to_string(n) + " "
+                          + g.watchers.front() + " trigger(s) resolve before its search");
+        }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        if (tutor && i == k)
+        { PerformTutor(state, g.controller, g.tutor_def->params, g.chosen_tutor, g.tutor_def->card.m_name.str()); }
+        ResolveOneLookTop(state, g.controller, g.watchers[static_cast<std::size_t>(i)]);
+    }
+    if (tutor && k >= n)
+    { PerformTutor(state, g.controller, g.tutor_def->params, g.chosen_tutor, g.tutor_def->card.m_name.str()); }
+}
+
+// Drain every pending look-top group, oldest first (see LOOK-TOP WATCHERS for when and why). Swaps
+// the queue out per round, so a group recorded DURING a resolution (an Elemental token off a landfall
+// payload) lands in the next round; a nested call while a drain runs is a no-op (the running drain
+// picks the new group up).
+inline void DrainPendingLookTop(GameState& state)
+{
+    if (g_pending_look_top.empty() || g_look_top_draining) { return; }
+    g_look_top_draining = true;
+    while (!g_pending_look_top.empty())
+    {
+        std::vector<PendingLookTop> round;
+        round.swap(g_pending_look_top);
+        for (PendingLookTop& g : round) { ResolveLookTopGroup(state, g); }
+    }
+    g_look_top_draining = false;
 }
 
 // Galadriel of Lothlorien's trigger, once per watcher copy (see the SCRY WATCHERS block above

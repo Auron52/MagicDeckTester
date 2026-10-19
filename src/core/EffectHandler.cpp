@@ -315,6 +315,10 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // twin: apply_one's DrainPendingSelfBounces calls. No-op (empty check) for every deck
     // without the param.
     DrainPendingSelfBounces(state);
+    // ...and any look-top trigger (Risen Reef) a WATCHER-ONLY entry recorded (a token / conjure made by
+    // this resolution -- every full enter already drained at its own FireOwnEtbTriggers exit). Same
+    // safety argument. Rollout twin: apply_one's drains. One empty() test without a look-top watcher.
+    DrainPendingLookTop(state);
     // ...and a Saga that entered during this resolution takes its first lore counter here, firing
     // chapter I (CR 714.2a). Same safety argument: the resolution is complete, so chapter I may
     // append the creature it free-casts. Rollout twin: apply_one's DrainPendingSagaEnters calls.

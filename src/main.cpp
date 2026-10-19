@@ -3749,6 +3749,37 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                "enter trigger -- a scry -- triggers Galadriel again), or -1 not to reveal (the land "
                "stays on top). Default = reveal.");
     }
+    else if (source.find("(look-top land)") != std::string::npos)
+    {
+        // Risen Reef's enter watcher (SpellEffects.h ResolveOneLookTop) reuses this modal: the one
+        // examined card is the library TOP, a land. Asked only when the top IS a land (a nonland goes
+        // to hand -- no choice). 0 = onto the battlefield tapped (a landfall now, not a land drop),
+        // -1 = into your hand (it can be your land drop).
+        d.Note("reply 0 to put the top card -- a land -- onto the battlefield TAPPED (landfall triggers; "
+               "it is not your land drop), or -1 to put it into your HAND instead (you may then play it "
+               "as your land drop). Default = the AI's pick.");
+    }
+    else if (source.find("(may destroy)") != std::string::npos)
+    {
+        // Foundation Breaker's optional ETB (SpellEffects.h ResolveEtbDestroyOptional) reuses this
+        // modal: `examined` = every legal artifact or enchantment on the battlefield, BOTH sides (yours
+        // included -- the board-click `target` shape has no decline, this one does).
+        d.Note("reply an examined index to DESTROY that artifact or enchantment (yours or the "
+               "opponent's -- check whose before you pick), or -1 to destroy nothing (\"you may\"). "
+               "Default = the AI's pick (an opponent's, else nothing).");
+    }
+    else if (source.find("(trigger order)") != std::string::npos)
+    {
+        // The CR 603.3b order of an entering creature's own top-of-library tutor (Flamekin Harbinger)
+        // against the look-top triggers (Risen Reef) the same entry raised (SpellEffects.h
+        // ResolveLookTopGroup). examined = [the tutor's source, the look-top watcher]; asked
+        // repeatedly UP FRONT, before any trigger resolves. Mandatory: -1 keeps the AI's order.
+        d.Note("order the simultaneous triggers: reply 0 if the SEARCH (examined[0]) resolves next -- "
+               "a look-top trigger after it then sees the card you put on top -- or 1 if a LOOK-TOP "
+               "trigger (examined[1]) resolves next, taking today's top card first. You are asked again "
+               "until the search is placed or every look-top trigger is. Nothing has resolved yet. "
+               "-1 = the AI's order. Default = the AI's order.");
+    }
     else if (source.find("(return Equipment from graveyard)") != std::string::npos)
     {
         // Forge Anew's ETB (ResolveEtbReturnGyEquipment): `examined` is the WHOLE graveyard, only its

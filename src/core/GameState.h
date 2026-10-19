@@ -742,6 +742,12 @@ struct GameState
     // Galadriel is cast starts a reveal chain, one played before it does not (LandOrderMatters).
     // Stamped from the param, mainboard + sideboard, Garth holding it open. DEFAULT TRUE == walk.
     bool                     deck_has_scry_watcher           = true;  // Galadriel of Lothlorien
+    // AND 2026-10-18 -- a LOOK-TOP enter watcher (Risen Reef, CardParams::enters_look_top_land_or_hand):
+    // gates the look-top pending queue's record walk in FireCreatureEnterWatchers' caller, the search's
+    // look-top pin axis (AppendSubdecisionAxes) and its PlanOpensBreakpoint site-10 clause. Stamped
+    // from the param, mainboard + sideboard, Garth holding it open, so a clear bit PROVES no look-top
+    // trigger can be recorded (dead-code elimination, no lever). DEFAULT TRUE == walk.
+    bool                     deck_has_look_top_watcher       = true;  // Risen Reef
     // AND 2026-10-17 -- the NIV-MIZZET DRAW/DAMAGE LOOP (CardParams::draw_trigger_damage,
     // cast_trigger_instant_sorcery_draw, aura_damage_trigger_draw, soulbond_damage_trigger_draw).
     // Gates ResolveDrawTriggers' flush (called after every draw-producing resolution in both worlds)

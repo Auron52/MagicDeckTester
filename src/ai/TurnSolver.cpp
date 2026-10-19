@@ -1560,6 +1560,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
                   || first.combat_crack_choice != dup.combat_crack_choice
                   || first.land_search_act_slot != dup.land_search_act_slot);
+    pl("looktop", first.look_top_pins != dup.look_top_pins);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     pl("etbc", first.etbcounter_choice != dup.etbcounter_choice);
@@ -24395,6 +24396,13 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         fold(0x1A5C0000ull + static_cast<uint64_t>(p.land_search_pins.size()));
         for (int v : p.land_search_pins) { fold(static_cast<uint64_t>(v + 2) * 89); }
     }
+    // LOOK-TOP pins (Risen Reef land / trigger-order entries) -- same must-fold rule; value-gated so
+    // every deck without a look-top watcher keeps its exact signature value.
+    if (!p.look_top_pins.empty())
+    {
+        fold(0x100C7000ull + static_cast<uint64_t>(p.look_top_pins.size()));
+        for (int v : p.look_top_pins) { fold(static_cast<uint64_t>(v + 2) * 97); }
+    }
     if (p.attack_land_search_choice != -1)
     { fold(0x1A5D0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_land_search_choice + 2))); }
     if (p.upkeep_land_search_choice != -1)
@@ -24699,6 +24707,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.combat_transform_choice == -1
         && p.land_search_act_slot == -1
+        && p.look_top_pins.empty()
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
@@ -24740,6 +24749,10 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
+        // Look-top pins (Risen Reef): every variant is a clone of its base differing only in a land /
+        // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
+        // look that never happened) leaves it on its base plan's state -- the inert-duplicate shape.
+        || !p.look_top_pins.empty()
         // The cycle / sac-draw dig variants (0 = the no-dig twin / never, 1 = dig-while-affordable) --
         // NOT the 2 mark, which is a base plan. Missing from the 9d widening: a dig variant whose world
         // its base already reached (the gate refused, the source was unaffordable) paid a full rollout
@@ -34249,6 +34262,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             a.evoke          = true;
             actions.push_back(std::move(a));
         }
+        // EVOKE for a creature whose ETB is OPTIONAL (Foundation Breaker, "Evoke {1}{G}": "you may
+        // destroy target artifact or enchantment"). Its evoked body does nothing by itself, so the
+        // cast's whole value is the ENTRY: the enter watchers it fires (Risen Reef's look-top, an
+        // Elemental entering) and its ETB against an opponent's artifact/enchantment. Offered while
+        // either can exist -- a creature-enter watcher anywhere in the deck (the per-game stamp: a
+        // watcher cast LATER in the same plan counts, so a battlefield-only gate would be lossy), or a
+        // legal OPPONENT target now. Otherwise it is 2 mana for nothing, strictly dominated by not
+        // casting it (an emission gate on a provable no-op, not a judgement).
+        else if (def.params.evoke_cost.has_value()
+                 && def.params.etb_destroy_artifact_enchantment_optional)
+        {
+            bool live = state.deck_has_creature_enter_watcher;
+            if (!live)
+            {
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != state.active_player_index
+                        && EtbDestroyTargetLegal(q, def.params)) { live = true; break; }
+                }
+            }
+            if (live)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = *def.params.evoke_cost;
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = false;
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.evoke          = true;
+                actions.push_back(std::move(a));
+            }
+        }
 
         // Sakashima's Protege: WHICH this-turn entrant it copies is a SEARCH decision -- one
         // extra CastFromHand variant per legal battlefield entrant (sharing hand_index ->
@@ -40021,6 +40068,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (sd->params.sac_outlet_self_only && !HumanPlayActive()
                 && !SelfSacOutletUseful(state, state.active_player_index, src.card.m_number))
             { continue; }
+            // A TARGETED payload needs a legal target to activate at all (CR 602.2b / 601.2c):
+            // Fulminator Mage's "destroy target nonbasic land" with no nonbasic land anywhere is not
+            // an activation that exists -- for the human as much as for the search.
+            if (sd->params.sac_outlet_destroy_nonbasic_land && !AnyNonbasicLand(state)) { continue; }
             // ---- POOLED SAC-FOR-MANA OUTLETS (MTG_SAC_OUTLET_POOL) --------------------------
             // Replace the per-source POWERSET with a single COUNT axis. Emits nothing for a
             // non-canonical member and the family once for the canonical (oldest) one, so every
@@ -45951,6 +46002,7 @@ namespace solvememo
             || a.bounce_choice != b.bounce_choice
             || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
             || a.land_search_pins != b.land_search_pins
+            || a.look_top_pins != b.look_top_pins
             || a.attack_land_search_choice != b.attack_land_search_choice
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
             || a.combat_crack_choice != b.combat_crack_choice
@@ -52657,6 +52709,8 @@ struct BpPrefixSnap
                                      // sac_pins, re-installed by the resumed apply's entry guard;
                                      // only the cursor is prefix state)
     int  pin_land_search_cursor = 0; // the same for Plan::land_search_pins (core/LandSearch.h)
+    int  pin_look_top_land_cursor  = 0;   // ...and Plan::look_top_pins' two streams (Risen Reef):
+    int  pin_look_top_order_cursor = 0;   // the list is re-installed by _slt, the cursors are prefix state
     int  pin_bounce = -1;            // the put-Karoo bounce pin (ScriptedPutBounce) as the prefix left it
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
@@ -53923,6 +53977,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                // empty inert
     ScriptedLandSearch _sls(plan.land_search_pins);   // searched land-search picks, one per land-search
                                                       // ordinal (core/LandSearch.h); empty inert
+    ScriptedLookTop _slt(plan.look_top_pins);   // searched Risen Reef land / trigger-order entries (two
+                                                // per-ordinal streams, core/SpellEffects.h); empty inert
     // The put-Karoo bounce pin (Plan::bounce_choice on a plan whose drop is not a Karoo: Genesis Wave's
     // put Karoo; land-search gap 3). ALWAYS installed, -1 included, so a nested apply never inherits
     // an outer plan's unconsumed pin. Executor twin: AIEngine::TakeTurn.
@@ -56786,6 +56842,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // ...and clause 2's self-bounce (recorded by FireEtbWatchers if this entrant is a
             // watched-subtype permanent): safe here, no saved battlefield indices are live.
             DrainPendingSelfBounces(state);
+            DrainPendingLookTop(state);   // a watcher-only entry's Risen Reef trigger (executor twin: end of Resolve)
             // ...and a Saga's first lore counter + chapter I (CR 714.2a), lockstep with the
             // executor's end-of-Resolve drain.
             DrainPendingSagaEnters(state);
@@ -57700,6 +57757,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // PUT mid-resolution, e.g. a Dragonstorm tutor wave, whose FireEtbWatchers recorded
             // here): drained now, matching the executor's end-of-Resolve drain point.
             DrainPendingSelfBounces(state);
+            DrainPendingLookTop(state);   // ...and a watcher-only entry's Risen Reef trigger, same drain point
             // ...and a Saga's first lore counter + chapter I (CR 714.2a), same drain point.
             DrainPendingSagaEnters(state);
             // ...and that draw is a DECISION POINT (breakpoint site 6): the card it put in hand is
@@ -59864,6 +59922,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_putback_choice= bp_resume->pin_putback;
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
         g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
+        g_scripted_look_top_land_cursor  = bp_resume->pin_look_top_land_cursor;    // ...and by _slt
+        g_scripted_look_top_order_cursor = bp_resume->pin_look_top_order_cursor;
         // ...and the put-Karoo bounce pin (re-installed by _spb; a prefix that spent it stays spent).
         if (put_bounce_pin >= 1) { g_scripted_bounce_choice = bp_resume->pin_bounce; }
         if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
@@ -60253,6 +60313,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
+            bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
@@ -60288,6 +60350,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
+            bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
@@ -61208,6 +61272,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start
+    DrainPendingLookTop(state);                    // safety net (lockstep w/ UntapStep): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);                 // safety net: an off-cascade Saga enter takes its counter by turn start
     SweepOrphanedAuras(state);                     // CR 704.5m SBA checkpoint (lockstep w/ GameEngine::UntapStep)
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
@@ -68353,6 +68418,88 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
 // fetching CELES, RUNE KNIGHT, whose ETB discards any number and draws that many plus one. It is
 // exactly the drift the site-10 clause's own note warns about ("one list, three places"), so make
 // it one list in one place: add a route here and all three sites get it.
+// ---- LOOK-TOP SHAPE of a plan (Risen Reef; core/SpellEffects.h LOOK-TOP WATCHERS) ------------------
+// Shared by the look-top pin axis (AppendSubdecisionAxes) and its PlanOpensBreakpoint site-10 clause.
+//
+// The creature an action makes ENTER -- a cast creature (evoke included), a graveyard cast, an Aether
+// Vial put, a from-hand put ability -- or nullptr. A NEW put route must be added HERE or its look-top
+// triggers resolve at the provider's default (still correct play, but an unsearched choice).
+static const CardDefinition* LookTopEntrantDef(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+        && a.kind != Action::Kind::ActivateVial && a.kind != Action::Kind::PutFromHandAbility)
+    { return nullptr; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr || !d->card.IsCreature()) { return nullptr; }
+    return d;
+}
+// Could a look-top watcher with params `wp` trigger on `entrant` entering? Read off the DEFINITION and
+// CONSERVATIVELY (an over-count only costs inert duplicate variants): a card that chooses a creature
+// type as it enters (Metallic Mimic) may become the watched type, so it counts.
+static bool LookTopWatchMatches(const CardParams& wp, const CardDefinition& entrant)
+{
+    if (wp.enters_watch_subtypes.empty() || entrant.params.chosen_type_added_to_self) { return true; }
+    for (const std::string& want : wp.enters_watch_subtypes)
+    { if (CardHasSubtype(entrant.card, want)) { return true; } }
+    return false;
+}
+// The decisions a plan's apply can raise, as UPPER BOUNDS: one group per entering action (plan order),
+// each with at most `r` look-top triggers (every watcher on the battlefield now, plus every watcher the
+// plan itself makes enter -- the apply order is the canonical cast order, so which of those is already
+// out when a given entrant arrives is not known here; generous is the safe direction), and whether the
+// entrant's own ETB is a TOP tutor (an ORDER decision). `total` bounds the look-top resolutions, hence
+// the land decisions: the library the looks will see is not knowable here once anything else in the
+// plan can move it, so every look is sized as a possible land (over-sizing only costs inert duplicate
+// variants -- an entry past the decisions the apply reaches leaves the variant on its base's state;
+// under-sizing would make a land choice unpinnable, i.e. unfindable at any budget).
+struct LookTopShape
+{
+    std::vector<int>  group_r;       // per entering action: an upper bound on its look-top triggers
+    std::vector<char> group_tutor;   // ...and whether its own ETB is a top tutor (an order decision)
+    int total = 0;                   // sum of group_r
+};
+static LookTopShape PlanLookTopShape(const GameState& state, const TurnSolver::Plan& p)
+{
+    LookTopShape s;
+    if (!state.deck_has_look_top_watcher) { return s; }
+    const int me = state.active_player_index;
+    std::vector<const CardDefinition*> watchers;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->params.enters_look_top_land_or_hand) { watchers.push_back(d); }
+    }
+    for (const Action& a : p.actions)
+    {
+        const CardDefinition* d = LookTopEntrantDef(a);
+        if (d != nullptr && d->params.enters_look_top_land_or_hand) { watchers.push_back(d); }
+    }
+    if (watchers.empty()) { return s; }
+    for (const Action& a : p.actions)
+    {
+        const CardDefinition* d = LookTopEntrantDef(a);
+        if (d == nullptr) { continue; }
+        int r = 0;
+        bool self_counted = false;
+        for (const CardDefinition* w : watchers)
+        {
+            // The entrant's own self-inclusive trigger ("this creature or another"): once.
+            if (w == d && d->params.creature_enters_includes_self && !self_counted)
+            { ++r; self_counted = true; continue; }
+            if (LookTopWatchMatches(w->params, *d)) { ++r; }
+        }
+        if (r == 0) { continue; }
+        const CardParams& ep = d->params;
+        const bool top_tutor = ep.tutor_to_top && !ep.tutor_types.empty() && ep.etb_reveal_count == 0
+                            && !(ep.etb_tutor_hand_count > 1 && ep.tutor_to_hand);
+        s.group_r.push_back(r);
+        s.group_tutor.push_back(top_tutor ? 1 : 0);
+        s.total += r;
+    }
+    return s;
+}
+
 static bool PutBodyGainsCards(const CardParams& p)
 {
     return p.tutor_to_hand
@@ -69070,6 +69217,17 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (d && d->params.etb_return_equipment_from_gy) { mask |= 1 << 10; break; }
         }
     }
+    // SITE 10's LOOK-TOP ROUTE (Risen Reef, 2026-10-18). An entering Elemental with a look-top watcher
+    // out (or one the plan brings -- Reef's own entry is self-inclusive) puts the library top into HAND
+    // whenever it is a nonland or a land not put onto the battlefield, and both worlds arm site 10 for
+    // that hand entry through the per-cast / section windows (HandGainedACard; the resolution enters
+    // it via EnterHand). "If a route is ever added, ADD IT HERE TOO": without this clause the re-solve
+    // fires but its continuation is BpUnbranchedCanon's cands.front() at any budget -- an in-window
+    // greedy pick of the line that casts the card the Reef found. A SUPERSET, the safe direction (a
+    // look that puts a land onto the battlefield arms nothing; its variants collapse onto the base).
+    // Gated on the deck constant inside PlanLookTopShape.
+    if (BpPutInHandEnabled() && !(mask & (1 << 10)) && PlanLookTopShape(state, p).total > 0)
+    { mask |= 1 << 10; }
     // Site 9, the COUNTER-FILLED activation (Khalni Heart Expedition, 2026-10-15). The clause above
     // keys on a CAST that lands an activatable permanent; an Expedition ALREADY on the battlefield
     // below its count becomes activatable when this plan's own lands enter (each landfall adds a
@@ -74256,6 +74414,126 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // ---- SEARCHED LOOK-TOP PINS (Risen Reef + Flamekin Harbinger; Plan::look_top_pins, 2026-10-18) --
+    // Two decisions the enter cascade raises, both resolved at the true mid-plan state and bound by
+    // ORDINAL (core/SpellEffects.h ConsumeScriptedLookTopLandPin / ...OrderPin):
+    //   * LAND: a look-top whose top card is a land -- battlefield tapped (landfall now, untapped next
+    //     turn) or hand (the land drop's landfall, and an untapped land this turn while the drop is
+    //     open). Neither dominates (see DecisionProvider::LookTopLandToBattlefield), so both are
+    //     scored: per land ordinal the explicit values {0 = battlefield, 1 = hand}.
+    //   * ORDER: an entrant whose own top-tutor met look-top triggers (Flamekin Harbinger with a Reef
+    //     out) -- how many look-tops resolve before the tutor, {0 .. r} per order ordinal.
+    // A DURING-CAST axis (a continuation carries its own -- ContPins::look_top), so it fans inside a
+    // continuation derivation too. Ordinals are sized by PlanLookTopShape's UPPER BOUNDS (every look a
+    // possible land -- see its note: over-sizing is an inert duplicate the post-apply dedup skips,
+    // under-sizing would be a choice no budget can reach). The variants form the full PRODUCT across
+    // ordinals while it stays within kLookTopProductCap, and fall back to the ADDITIVE one-hot fan (the
+    // land-search shape) past it -- a disclosed representation limit: a plan needing two non-default
+    // look-top answers at once beyond the cap is reachable only through the breakpoint machinery.
+    // BASES: every base plan (land and order ordinals), and every TUTOR-TARGET variant (order ordinals
+    // only) -- with a look-top watcher the tutored card can reach hand THIS turn, so "which card" and
+    // "which order" interact and the tutor axis's additivity argument no longer holds for the order;
+    // the cross product is bounded by the tutor width. Human play never fans: the human answers the
+    // resolution-time `dig` prompts. Gated on the deck constant (one bool test for every other deck).
+    if (!HumanPlayActive() && state.deck_has_look_top_watcher)
+    {
+        constexpr std::size_t kLookTopProductCap = 16;
+        // A base plan, or a pure tutor-target variant (`tutor_variant`), and nothing else: the other
+        // axes' clones are left alone so the cost stays additive (PlanIsAxisVariantExceptOrder's terms
+        // minus tutor_choice, plus the land-search base terms).
+        auto look_top_base = [](const TurnSolver::Plan& p, bool& tutor_variant)
+        {
+            tutor_variant = p.tutor_choice != -1;
+            return p.bp_choice < 0 && p.scry_choice < 0 && p.etbdig_choice < 0
+                && p.lackey_choice < 0 && p.ponder_choice < 0 && p.discard_choice < 0
+                && p.putback_choice < 0 && p.etbcounter_choice < 0 && p.sweep_choice < 0
+                && p.le_fire_choice < 0 && p.bounce_choice < 1 && p.landfall_target_choice < 0
+                && p.combat_landfall_target_choice < 0 && (p.dig_choice == -1 || p.dig_choice == 2)
+                && p.land_search_pins.empty() && p.attack_land_search_choice == -1
+                && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
+                && p.land_search_act_slot == -1 && p.look_top_pins.empty()
+                && p.sac_pins.empty() && p.rad_mode == -1
+                && p.saga_target_choice == -1 && p.saga_ch1_choice == -1
+                && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
+                && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
+                && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
+                && p.attack_attach_choice == -1 && p.freshmode_choice == 0 && p.tapmode_choice == 0
+                && !p.soulbond_decline;
+        };
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            bool tutor_variant = false;
+            if (!look_top_base(p, tutor_variant)) { continue; }
+            // A DECLINED search has no order to choose (the tutor never resolves): nothing to fan.
+            if (p.tutor_choice == kTutorDeclineChoice) { continue; }
+            const LookTopShape sh = PlanLookTopShape(state, p);
+            if (sh.total <= 0) { continue; }
+            // Ordinal value lists: order ordinals first (their entries lead the list), then land.
+            std::vector<std::vector<int>> w;
+            for (std::size_t g = 0; g < sh.group_r.size(); ++g)
+            {
+                if (!sh.group_tutor[g]) { continue; }
+                std::vector<int> vals;
+                for (int k = 0; k <= sh.group_r[g]; ++k) { vals.push_back(kLookTopOrderBase + 1 + k); }
+                w.push_back(std::move(vals));
+            }
+            const int n_order = static_cast<int>(w.size());
+            if (!tutor_variant)
+            {
+                for (int j = 0; j < sh.total; ++j) { w.push_back({ 0, 1 }); }
+            }
+            const int n = static_cast<int>(w.size());
+            if (n == 0) { continue; }
+            std::size_t product = 1;
+            for (const std::vector<int>& wi : w)
+            { product = std::min<std::size_t>(product * wi.size(), 1u << 20); }
+            if (product <= kLookTopProductCap)
+            {
+                std::vector<int> digit(static_cast<std::size_t>(n), 0);
+                for (;;)
+                {
+                    TurnSolver::Plan v = p;
+                    v.look_top_pins.resize(static_cast<std::size_t>(n));
+                    for (int k = 0; k < n; ++k)
+                    {
+                        v.look_top_pins[static_cast<std::size_t>(k)] =
+                            w[static_cast<std::size_t>(k)][static_cast<std::size_t>(digit[static_cast<std::size_t>(k)])];
+                    }
+                    extra.push_back(std::move(v));
+                    int i = 0;
+                    while (i < n)
+                    {
+                        if (++digit[static_cast<std::size_t>(i)]
+                            < static_cast<int>(w[static_cast<std::size_t>(i)].size())) { break; }
+                        digit[static_cast<std::size_t>(i)] = 0;
+                        ++i;
+                    }
+                    if (i == n) { break; }
+                }
+            }
+            else
+            {
+                // Additive one-hot: every other ordinal at its default (-1 for a land entry,
+                // kLookTopOrderBase for an order entry).
+                for (int j = 0; j < n; ++j)
+                {
+                    for (int val : w[static_cast<std::size_t>(j)])
+                    {
+                        TurnSolver::Plan v = p;
+                        v.look_top_pins.resize(static_cast<std::size_t>(n));
+                        for (int k = 0; k < n; ++k)
+                        { v.look_top_pins[static_cast<std::size_t>(k)] = k < n_order ? kLookTopOrderBase : -1; }
+                        v.look_top_pins[static_cast<std::size_t>(j)] = val;
+                        extra.push_back(std::move(v));
+                    }
+                }
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
     // Axis-variant attribution (MTG_BRANCH_STATS; see branchstats::RecordAxis). Classified by
     // the choice tag -- the fans above set exactly one per variant ("one axis at a time").
     if (branchstats::Enabled())
@@ -74519,7 +74797,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 472;   // pinned; see the static_assert below (+8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
+static constexpr std::size_t kPlanDomAssertedSize = 496;   // pinned; see the static_assert below (+24: Plan::look_top_pins (Risen Reef land / trigger-order entries), 2026-10-18, folded into the Xaxes key; +8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -74693,6 +74971,8 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
             add(pl.combat_transform_choice);
+            x += "|lt";
+            for (int s : pl.look_top_pins)        { add(s); }
             x += "|bpacts";
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
@@ -76104,6 +76384,7 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     for (const std::string& s : p.would_drop) { b += s.capacity(); }
     b += p.sac_pins.capacity() * sizeof(int);
     b += p.land_search_pins.capacity() * sizeof(int);
+    b += p.look_top_pins.capacity() * sizeof(int);
     b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
     return b;
 }
@@ -89397,6 +89678,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 mix(static_cast<std::uint64_t>(p.land_search_act_slot + 300));
                 mix(p.land_search_pins.size());
                 for (int v : p.land_search_pins) { mix(static_cast<std::uint64_t>(v + 7)); }
+                if (!p.look_top_pins.empty())   // value-gated: every other deck's bucket hash unchanged
+                {
+                    mix(p.look_top_pins.size());
+                    for (int v : p.look_top_pins) { mix(static_cast<std::uint64_t>(v + 13)); }
+                }
                 mix(static_cast<std::uint64_t>(p.bp_choice + 7));
                 mix(static_cast<std::uint64_t>(p.landfall_target_choice + 7));
                 if (p.combat_landfall_target_choice >= 0) { mix(static_cast<std::uint64_t>(p.combat_landfall_target_choice + 11)); }
@@ -91818,6 +92104,8 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 const int   sv_fresh   = g_scripted_freshmode;
                 const int   sv_saccur  = g_scripted_sac_cursor;
                 const int   sv_lscur   = g_scripted_land_search_cursor;
+                const int   sv_ltland  = g_scripted_look_top_land_cursor;
+                const int   sv_ltorder = g_scripted_look_top_order_cursor;
                 GameState copy = state;
                 ApplyPlanDirect(copy, plans[cand], is_pre_combat);
                 g_scripted_top_choice     = sv_top;
@@ -91830,6 +92118,8 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 g_scripted_freshmode      = sv_fresh;
                 g_scripted_sac_cursor     = sv_saccur;
                 g_scripted_land_search_cursor = sv_lscur;
+                g_scripted_look_top_land_cursor  = sv_ltland;
+                g_scripted_look_top_order_cursor = sv_ltorder;
                 {
                     static const bool s_hg_dbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
                     if (s_hg_dbg)
@@ -92203,6 +92493,23 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         for (std::size_t i = static_cast<std::size_t>(g_scripted_land_search_cursor);
              i < g_scripted_land_search_pins->size(); ++i)
         { Fold(k, static_cast<uint64_t>((*g_scripted_land_search_pins)[i] + 2)); }
+    }
+    // LOOK-TOP pins (Plan::look_top_pins; Risen Reef): the same rule per stream -- live only while
+    // that stream has unconsumed entries, and then its remaining entries fold (each stream's cursor
+    // skips the other kind, so the suffix of EACH stream is what is still live). Its own gate, so
+    // every key without a live look-top list is byte-identical.
+    if (g_scripted_look_top_pins != nullptr)
+    {
+        const std::vector<int>& lt = *g_scripted_look_top_pins;
+        bool tagged = false;
+        for (std::size_t i = 0; i < lt.size(); ++i)
+        {
+            const bool order = lt[i] >= kLookTopOrderBase;
+            const int  cur   = order ? g_scripted_look_top_order_cursor : g_scripted_look_top_land_cursor;
+            if (static_cast<int>(i) < cur) { continue; }
+            if (!tagged) { Fold(k, 0x100C7); tagged = true; }
+            Fold(k, static_cast<uint64_t>(i) * 131 + static_cast<uint64_t>(lt[i] + 2));
+        }
     }
     // Archangel free-cast bank (added 2026-08-20, caught by MTG_ENUM_MEMO_VERIFY: cached 9
     // plans vs fresh 4 at t8 m2 = the free-variant emission): a this-turn post-combat counter,

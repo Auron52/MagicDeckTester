@@ -1349,6 +1349,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_self_pump_power_from_victim = params.value("sac_outlet_self_pump_power_from_victim", false);
     p.etb_destroy_nonartifact_nonblack       = params.value("etb_destroy_nonartifact_nonblack", false);
     p.etb_destroy_artifact_enchantment_land  = params.value("etb_destroy_artifact_enchantment_land", false);
+    p.etb_destroy_artifact_enchantment_optional =
+        params.value("etb_destroy_artifact_enchantment_optional", false);
     p.etb_return_gy_to_hand                  = params.value("etb_return_gy_to_hand", false);
     p.etb_return_equipment_from_gy           = params.value("etb_return_equipment_from_gy", false);
     if (params.contains("eternalize_cost"))
@@ -1622,6 +1624,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.creature_enters_min_power     = params.value("creature_enters_min_power", 0);
     p.own_creature_enters_draw      = params.value("own_creature_enters_draw", 0);
     p.creature_enters_includes_self = params.value("creature_enters_includes_self", false);
+    p.enters_look_top_land_or_hand  = params.value("enters_look_top_land_or_hand", false);
     for (const std::string& s : params.value("enters_watch_subtypes", json::array()))
         p.enters_watch_subtypes.push_back(s);
     p.own_creature_enters_lifegain_toughness =
@@ -1698,6 +1701,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);
     p.sac_outlet_self_only          = params.value("sac_outlet_self_only", false);
     p.sac_outlet_lifegain           = params.value("sac_outlet_lifegain", 0);
+    p.sac_outlet_destroy_nonbasic_land = params.value("sac_outlet_destroy_nonbasic_land", false);
     if (params.contains("bestow_cost"))
         p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());
 

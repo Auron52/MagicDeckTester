@@ -393,6 +393,7 @@ add_executable(mtg-test
     test/unit/test_kessig_wolf_run.cpp
     test/unit/test_landfall_self_payoffs.cpp
     test/unit/test_galadriel.cpp
+    test/unit/test_lfe_etb.cpp
     test/unit/test_courser.cpp
     test/unit/test_land_search.cpp
     test/unit/test_land_search_gaps.cpp

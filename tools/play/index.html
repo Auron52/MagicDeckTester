@@ -4324,6 +4324,63 @@ function digPanelHtml(d){
        `<button class="ghost" data-opt="-1">Don't reveal (the land stays on top)</button></div>`;
     return h;
   }
+  // Risen Reef's enter watcher reuses this modal ("(look-top land)" in the source): the one tile is
+  // the library top, a land; clicking it puts it onto the battlefield tapped, the button puts it into
+  // your hand.
+  if (/\(look-top land\)/.test(d.source||'')) {
+    const src=(d.source||'').replace(/\s*\(look-top land\)\s*$/,'');
+    const bf=d.heuristic_default===0;
+    let h=`<h3>${esc(src)} — the top card is a land</h3>`;
+    h+=`<div class="sub">An Elemental entered, so ${esc(src)} looks at the top card of your library. It is a land: put it onto the battlefield <b>tapped</b> (landfall triggers now; it is not your land drop), or put it into your <b>hand</b> (you may play it as your land drop).</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig${bf?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — put it onto the battlefield tapped">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+         (bf?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="${bf?'ghost':'primary'}" data-opt="-1">Put it into my hand${bf?'':' (the AI\'s pick)'}</button></div>`;
+    return h;
+  }
+  // Foundation Breaker's optional ETB ("(may destroy)" in the source): the tiles are every legal
+  // artifact/enchantment on the battlefield -- BOTH sides; clicking one destroys it, the button
+  // destroys nothing ("you may").
+  if (/\(may destroy\)/.test(d.source||'')) {
+    const src=(d.source||'').replace(/\s*\(may destroy\)\s*$/,'');
+    let h=`<h3>${esc(src)} — destroy an artifact or enchantment?</h3>`;
+    h+=`<div class="sub">${esc(src)} entered: you may destroy target artifact or enchantment. These are every legal target on the battlefield — including yours. Click one to destroy it, or destroy nothing.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      const def=c.index===d.heuristic_default;
+      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — destroy it">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+         (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="${d.heuristic_default<0?'primary':'ghost'}" data-opt="-1">Destroy nothing${d.heuristic_default<0?' (the AI\'s pick)':''}</button></div>`;
+    return h;
+  }
+  // The trigger-ORDER choice ("(trigger order)" in the source): an entering creature's own top-of-
+  // library search (Flamekin Harbinger) and the look-top triggers (Risen Reef) it raised go on the
+  // stack together. Two tiles -- the search's source and the look-top watcher -- pick which resolves
+  // NEXT; asked again until the search is placed. Nothing has resolved yet. Mandatory.
+  if (/\(trigger order\)/.test(d.source||'')) {
+    const src=(d.source||'').replace(/\s*\(trigger order\)\s*$/,'');
+    const ex=d.examined||[];
+    const watcher=(ex[1]||{}).name||'the look-top trigger';
+    let h=`<h3>Order the triggers — ${esc(src)} and ${esc(watcher)}</h3>`;
+    h+=`<div class="sub">Both triggered as ${esc(src)} entered. Choose which resolves <b>next</b>: ${esc(src)}'s search (the card you find goes on top — a ${esc(watcher)} trigger after it takes that card into your hand), or a ${esc(watcher)} trigger first (it takes today's top card). You are asked again until the search is placed. Nothing has resolved yet.</div>`;
+    h+=`<div class="tutgrid">`;
+    ex.forEach(c=>{
+      const def=c.index===d.heuristic_default;
+      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — resolves next">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}${c.index===0?' (search)':' (look at top)'}</em>`+
+         (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Use the AI's order</button></div>`;
+    return h;
+  }
   // Destination-aware wording: the shared dig chooser serves into-hand ETB digs (Acclaimed
   // Contender) AND onto-the-battlefield puts (Skyhunter "(attack dig)", Turntimber "(put)").
   const toBf = /\((attack dig|put)\)/.test(d.source||'');

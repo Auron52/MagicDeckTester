@@ -76,6 +76,11 @@ MANIFEST = {
     # Galadriel of Lothlorien (2026-10-17): "you may reveal the top card ... if a land, put it onto the
     # battlefield tapped" -- asked as `dig` "(galadriel reveal)" when the top is a land (FireScryWatchers).
     "scry_reveal_land_to_battlefield": ("dig",        truthy),
+    # Risen Reef (2026-10-18): "If it's a land card, you may put it onto the battlefield tapped. If you
+    # don't ..., put it into your hand" -- asked as `dig` "(look-top land)" when the top is a land
+    # (ResolveOneLookTop), and, with an entering top-tutor (Flamekin Harbinger), the CR 603.3b order
+    # as `dig` "(trigger order)" (ResolveLookTopGroup).
+    "enters_look_top_land_or_hand": ("dig",           truthy),
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")
@@ -340,6 +345,14 @@ MANIFEST = {
     # ResolveEtbDestroyMandatory; a forced single target is not prompted.
     "etb_destroy_nonartifact_nonblack":      ("target", truthy),
     "etb_destroy_artifact_enchantment_land": ("target", truthy),
+    # Foundation Breaker: "you MAY destroy target artifact or enchantment" -- the OPTIONAL twin; the
+    # board-click `target` has no decline, so it asks the `dig` modal "(may destroy)" over every legal
+    # target's card (both sides; -1 declines) at ResolveEtbDestroyOptional.
+    "etb_destroy_artifact_enchantment_optional": ("dig", truthy),
+    # Fulminator Mage: "Sacrifice this creature: Destroy target nonbasic land" -- the activation rides
+    # main_phase (sac_creature_outlet), WHICH land is the `target` board-click (loyalty shape) at
+    # ResolveDestroyTargetNonbasicLand; a forced single target is not prompted.
+    "sac_outlet_destroy_nonbasic_land": ("target",    truthy),
     # Timeless Witness: "return target card from your graveyard to your hand" -- human play asks the
     # shared `dig` chooser over the graveyard at resolution (no named plan variants under human play).
     "etb_return_gy_to_hand":         ("dig",         truthy),
@@ -1823,6 +1836,10 @@ def modeled_tokens(card):
     # Prevent Damage phase I3: Shriekmaw / Acidic Slime ETB targets (the `target` board-click);
     # Transmute's and Bilbo's library searches (the tutor chooser / the multi-pick).
     if p.get("etb_destroy_nonartifact_nonblack") or p.get("etb_destroy_artifact_enchantment_land"):
+        t.add("target")
+    # Foundation Breaker's optional twin (the `dig` "(may destroy)" pick IS its target choice) and
+    # Fulminator Mage's sacrifice payload (the `target` board-click).
+    if p.get("etb_destroy_artifact_enchantment_optional") or p.get("sac_outlet_destroy_nonbasic_land"):
         t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
         t.add("search")

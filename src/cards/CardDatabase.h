@@ -2303,6 +2303,15 @@ struct CardParams
     bool sac_outlet_self_pump_power_from_victim = false;
     bool etb_destroy_nonartifact_nonblack       = false;
     bool etb_destroy_artifact_enchantment_land  = false;
+    // Foundation Breaker: "When this creature enters, you MAY destroy target artifact or enchantment."
+    // The OPTIONAL twin of the mandatory pair above (same legal set over BOTH sides, minus lands):
+    // ResolveEtbDestroyOptional takes DecisionProvider::EtbOptionalDestroyTargetPick (default: an
+    // opponent's artifact/enchantment, else decline -- destroying one of our own with no leave/death
+    // payoff is dominated by declining), the human picks from the full legal set or declines. Also
+    // widens the evoke enumeration gate (TurnSolver CollectActions): an evoked creature's whole value
+    // is its enter, so the evoke cast is offered whenever the deck watches creature entries or an
+    // opponent target exists. false = inert.
+    bool etb_destroy_artifact_enchantment_optional = false;
     bool etb_return_gy_to_hand                  = false;
     // Forge Anew: "When this enchantment enters, return target Equipment card from your graveyard to
     // the battlefield." MANDATORY when our graveyard holds an Equipment card (no "up to", CR 603.3d);
@@ -3444,6 +3453,18 @@ struct CardParams
     // counters instead would silently trip the ANGELS archetype signature in
     // DetectDecisionProvider and route the whole deck to AngelsProvider. false = inert.
     bool any_creature_enters_self_counters_power = false;
+    // Risen Reef: "Whenever this creature or another Elemental you control enters, look at the top
+    // card of your library. If it's a land card, you may put it onto the battlefield tapped. If you
+    // don't put the card onto the battlefield, put it into your hand." A creature-ENTERS watcher in
+    // the own-controller lane, filtered by enters_watch_subtypes on the ENTRANT's LIVE battlefield
+    // subtypes (so a Metallic Mimic that chose Elemental counts), and self-inclusive when
+    // creature_enters_includes_self is also set ("this creature or another"). RECORDED by
+    // FireCreatureEnterWatchers and RESOLVED at the end of the outermost FireOwnEtbTriggers
+    // (core/SpellEffects.h, "LOOK-TOP WATCHERS"): the land put appends a permanent and a put Karoo's
+    // bounce erases one, so resolving inside the watcher walk would move the slots the cascade's
+    // callers hold. The land-vs-hand choice is SEARCHED (Plan::look_top_pins), the provider's
+    // LookTopLandToBattlefield is only its default. false = inert.
+    bool enters_look_top_land_or_hand = false;
 
     // Vaultborn Tyrant: "When this creature dies, if it's not a token, create a token that's a
     // copy of it ..." -> a token copy of the card (same name -> the copy's own params stay live:
@@ -3736,6 +3757,13 @@ struct CardParams
     // READS the gain (SacOutletLifegainRead): against a passive opponent unread life changes nothing.
     // 0 = no lifegain payload (byte-identical).
     int  sac_outlet_lifegain           = 0;
+    // Fulminator Mage: "Sacrifice this creature: Destroy target nonbasic land." A self-only outlet
+    // (sac_creature_outlet + sac_outlet_self_only) whose payload destroys a NONBASIC land, either side
+    // (the goldfish opponent has none, so the legal set is our own nonbasics). The activation needs a
+    // legal target to exist (CR 602.2b), and the target is DecisionProvider::EtbDestroyTargetPick's
+    // reviewed ranking (the human picks from the full legal set). Rides the self-only gate: offered
+    // to the search only while a death payoff is live (SelfSacHasDeathPayoff); humans always see it.
+    bool sac_outlet_destroy_nonbasic_land = false;
 
     // Gnarled Scarhide: "Bestow {3}{B}". An ALTERNATE cast mode (CR 702.103): the same card may be
     // cast for its printed cost as a creature, or for this cost as an AURA that enters attached to
@@ -4368,7 +4396,8 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.own_creature_enters_self_counters > 0
         || p.any_creature_enters_self_counters_power
         || p.opp_creature_enters_life_loss > 0
-        || p.own_creature_enters_opp_life_loss > 0;   // Forerunner of the Coalition (2026-09-26)
+        || p.own_creature_enters_opp_life_loss > 0    // Forerunner of the Coalition (2026-09-26)
+        || p.enters_look_top_land_or_hand;            // Risen Reef (2026-10-18)
 }
 
 // The lockstep disjunction for CardDefinition::landfall_watcher: TRUE iff FireLandfallTriggers

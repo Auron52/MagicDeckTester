@@ -46,6 +46,7 @@ struct ContPins
     int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
+    std::vector<int> look_top;      // Plan::look_top_pins (the continuation's own Risen Reef looks / orders)
     int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
                            // casts; PutBouncePinOf -- -1 when its own drop is the Karoo)
     int putback    = -1;   // Plan::putback_choice (a Brainstorm the continuation casts)
@@ -53,7 +54,7 @@ struct ContPins
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
-            || putback >= 0;
+            || putback >= 0 || !look_top.empty();
     }
 };
 
@@ -1400,6 +1401,17 @@ public:
         std::vector<int> land_search_pins;
         int attack_land_search_choice = -1;
         int upkeep_land_search_choice = -1;
+        // SEARCHED LOOK-TOP PINS (Risen Reef + Flamekin Harbinger, 2026-10-18; core/SpellEffects.h
+        // ConsumeScriptedLookTopLandPin / ...OrderPin). TWO per-ordinal streams in one list, the
+        // land_search_pins shape: LAND entries (< kLookTopOrderBase) steer each "the top card is a
+        // land" look-top resolution in apply order (0 = battlefield tapped, 1 = hand, -1 = the
+        // provider's LookTopLandToBattlefield); ORDER entries (>= kLookTopOrderBase) steer each entry
+        // whose own top-tutor met pending look-top triggers (kLookTopOrderBase + 1 + k = k look-tops
+        // before the tutor; kLookTopOrderBase = the provider's default). Empty == every decision takes
+        // the provider's default, byte-identical to no axis. A DURING-CAST axis (ContPins::look_top).
+        // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key,
+        // the dominance Xaxes key and (live) the breakpoint key.
+        std::vector<int> look_top_pins;
         //   combat_crack_choice -- crack Khalni Heart Expedition(s) IN COMBAT, after Primeval Titan's
         //     attack trigger filled them and before damage (a bitmask over the Expeditions eligible at
         //     that point, battlefield order; -1 = no crack). Rides GameState::

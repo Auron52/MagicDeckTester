@@ -1237,6 +1237,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
     g_pending_self_bounces.clear();   // thread-scoped queue: a fresh game must never inherit a stray record
+    g_pending_look_top.clear();       // ...the same for the look-top queue (Risen Reef)
+    g_own_etb_depth     = 0;
+    g_look_top_draining = false;
     // Does anything in this deck READ the mv-cast accumulator (Call Forth the Tempest's damage
     // clause)? Gates the mv_cast_this_turn key folds only -- see GameState::deck_reads_mv_cast.
     state.deck_reads_mv_cast = [&deck]{
@@ -1332,6 +1335,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool landfall = false;
         // The scry-watcher walk (see GameState::deck_has_scry_watcher): the param FireScryWatchers tests.
         bool scry_watcher = false;
+        // The look-top enter watcher (see GameState::deck_has_look_top_watcher): the param itself.
+        bool look_top_watcher = false;
         // Courser of Kruphix's top-of-library land drop (see GameState::deck_has_top_land_play): the
         // same param TopLandPlayStaticSource tests on the battlefield.
         bool top_land = false;
@@ -1401,6 +1406,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (!d->params.transform_back_name.empty()
                     || !d->params.transform_front_name.empty())           { transform = true; }
                 if (d->params.steal_tap_count > 0)                       { tap_steal = true; }
+                if (d->params.enters_look_top_land_or_hand) { look_top_watcher = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
@@ -1449,6 +1455,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_landfall          = garth || landfall;
         // Same reasoning, no lever: a clear bit proves FireScryWatchers' walk finds no scry watcher.
         state.deck_has_scry_watcher      = garth || scry_watcher;
+        // Same reasoning, no lever: a clear bit proves no look-top trigger (Risen Reef) can be recorded.
+        state.deck_has_look_top_watcher  = garth || look_top_watcher;
         // Same reasoning, no lever: a clear bit PROVES TopLandPlayStaticSource's walk finds no
         // play-from-top permanent, so every library-top land read is dead code for that deck.
         state.deck_has_top_land_play     = garth || top_land;
