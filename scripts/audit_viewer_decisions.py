@@ -70,6 +70,10 @@ MANIFEST = {
     "targeting":             ("target",               real_target),
     "spectacle_cost":        ("target",               truthy),   # cast post-combat, still targets
     "damage_divided":        ("divide",               truthy),
+    # Fury (LandfallElementals, 2026-10-18): "4 damage divided as you choose among any number of target
+    # creatures and/or planeswalkers" -- the `divide` decision with a creatures-only legal set and
+    # allow_none (an all-zero reply = no targets), asked from the shared ETB resolver.
+    "etb_damage_divided_creatures": ("divide",        positive),
     "etb_scry":              ("scry",                 positive),
     "cast_scry":             ("scry",                 positive),
     "etb_surveil":           ("surveil",              positive),
@@ -743,6 +747,12 @@ INERT_PARAMS = {
     # ---- LandfallElementals (2026-10-18) -- PROVISIONAL, pending the user's OK ----
     "landfall_self_pump_power": "Akoum Hellhound / Brushfire Elemental: 'this creature gets +2/+2 until end of turn' on each landfall -- MANDATORY, untargeted SELF pump, no choice (the land drop's timing is the decision and rides main_phase via Plan::land_slot)",
     "landfall_self_pump_toughness": "toughness half of the landfall self pump (rides landfall_self_pump_power) -- no choice",
+    # ---- LandfallElementals lfe-fury (2026-10-18) -- PROVISIONAL, pending the user's OK ----
+    "produces_any_combination": "Smokebraider's mana-ability SHAPE (two units, each of any colour) -- which colours a tap makes is a payment allocation the payer settles for the cast being paid (the Somberwald Sage produces_one_color precedent), not a player decision; the viewer's pre-tap never offers a creature-only source",
+    "mana_only_subtype_abilities": "Smokebraider's restricted-mana legality FILTER ('or activate abilities of Elementals') -- narrows which abilities its mana may pay; creates no choice (the mana_only_subtype precedent)",
+    "tap_put_from_hand_creature_only": "Incandescent Soulstoke's put filter detail ('an Elemental CREATURE card'; rides tap_put_from_hand_cost -> verb:sfput)",
+    "tap_put_grants_haste": "Incandescent Soulstoke's put rider -- the put creature gains haste until end of turn, automatic",
+    "tap_put_sac_at_end_step": "Incandescent Soulstoke's delayed trigger -- the put creature is sacrificed at the beginning of the next end step, automatic (no choice)",
     # ---- NivMizzetCombo (2026-10-17) -- PROVISIONAL, pending the user's OK ----
     "sac_for_mana_requires_tap": "Generator Servant's {T}-in-cost: a LEGALITY restriction (summoning sickness, CR 302.6) on an already-mapped sac-for-mana activation; it removes an option, creates none",
     "sac_for_mana_grants_haste": "Generator Servant's haste rider: which {C} pays a creature spell is a payment attribution folded SOUNDLY (one tagged {C} first, identical mana -- TakeHasteFloatForCreatureSpell), not a player decision; whether to crack rides main_phase like sac_for_mana_amount",
@@ -1536,6 +1546,10 @@ INERT_PARAMS = {
 # MAPPED (they pass the guard); the per-deck obligation is that every legal variant/activation
 # is OFFERED (unpruned) in the plan list -- verified in the sweep, not by a distinct type.
 MAINPHASE_PARAMS = {
+    # Fury (2026-10-18): "Evoke--Exile a red card from your hand" -- WHICH red card is exiled is one
+    # main_phase CastFromHand evoke variant per distinct legal red hand name (Action::pitch_name, #EX in
+    # the plan signature, the CheckLine `pitch` sub after the `evoke` mode sub), offered unpruned.
+    "evoke_exile_color":   "PITCH EVOKE (Fury): which red hand card is exiled = one main_phase evoke variant per distinct legal red name (Action::pitch_name, CheckLine `pitch` sub) -- surfaced at queue/commit time",
     "discard_land_damage": "Land's Edge discard-a-land activation (board-click source, main.cpp:100)",
     # Courser of Kruphix (2026-10-15): WHICH land and FROM WHERE (a hand copy vs the revealed library
     # top) is a main_phase plan variant -- Plan::land_from_top, branched against every hand land
@@ -1803,6 +1817,7 @@ def modeled_tokens(card):
     if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")
     if p.get("etb_surveil", 0) > 0:                                        t.add("surveil")
     if p.get("damage_divided"):                                           t.add("divide")
+    if p.get("etb_damage_divided_creatures", 0) > 0:                      t.add("divide")   # Fury's ETB
     if p.get("etb_bounce_land"):                                          t.add("bounce")
     if p.get("retrace") or p.get("discard_land_damage"):                  t.add("discard")
     if p.get("tap_draw_then_discard"):                                    t.add("discard")   # Troyan's loot

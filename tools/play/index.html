@@ -4061,8 +4061,11 @@ function updateDivPrompt(d){
   const sum=divTotalAssigned(), total=d.total_damage||0, n=divTargetCount();
   const c=document.querySelector('#decpanel .pcount');
   if(c) c.textContent=`${sum} / ${total} assigned · ${n} target${n===1?'':'s'}`;
-  const btn=document.querySelector('#decpanel #decconfirm'); if(btn) btn.disabled=!(sum===total && n>=1);
+  const btn=document.querySelector('#decpanel #decconfirm'); if(btn) btn.disabled=!divConfirmable(d, sum, total, n);
 }
+// A divide reply is legal when it assigns ALL the damage to >=1 target -- or, for an "any number of
+// target creatures" trigger (Fury: d.allow_none), assigns nothing at all (no targets, no damage).
+function divConfirmable(d, sum, total, n){ return (sum===total && n>=1) || (!!d.allow_none && sum===0); }
 // The host element (creature thumb or face life <b>) a divide widget is attached to.
 function divHostFor(key){
   const w=document.querySelector(`.divw[data-k="${key}"]`); if(!w) return null;
@@ -4834,10 +4837,11 @@ function promptPanelHtml(d, dec){
   }
   if (dec==='divide'){
     const total=d.total_damage||0, sum=divTotalAssigned(), n=divTargetCount();
+    const noneTxt = d.allow_none ? ` Or assign nothing: <b>no targets</b> is legal ("any number of target creatures"), and deals no damage.` : '';
     return `<h3>Divide ${total} damage — ${esc(d.source||'')}</h3>`+
-      `<div class="sub">Set the damage on each target on the board (type, or −/+). Any number of targets, each ≥1, summing to <b>${total}</b>.</div>`+
+      `<div class="sub">Set the damage on each target on the board (type, or −/+). Any number of targets, each ≥1, summing to <b>${total}</b>.${noneTxt}</div>`+
       `<div class="pbtns"><span class="pcount">${sum} / ${total} assigned · ${n} target${n===1?'':'s'}</span>`+
-      `<span class="spacer"></span><button id="decconfirm" class="primary" ${(sum===total&&n>=1)?'':'disabled'}>Confirm</button></div>`;
+      `<span class="spacer"></span><button id="decconfirm" class="primary" ${divConfirmable(d,sum,total,n)?'':'disabled'}>Confirm</button></div>`;
   }
   if (dec==='bounce'){
     const sel=[...(S.boardSel||[])];

@@ -665,6 +665,9 @@ inline uint64_t FungibilityKey(const Permanent& p)
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
+    // Soulstoke's delayed sacrifice (Permanent::sac_at_end_step): a body that dies at this turn's end
+    // step is not the same body as one that stays. Mixed only when set -> every other key unchanged.
+    if (p.sac_at_end_step) { Mix(h, 0x5AC0E5D5ull); }
     // Soulbond partner (Silverblade Paladin). A full int, not a bit: WHICH creature is paired is
     // what decides who double-strikes, so two otherwise-identical Paladins paired to different
     // bodies are NOT fungible.
@@ -3381,6 +3384,7 @@ static std::string BoardSignature(const GameState& s)
         if (p.temp_double_strike) { e += "/ds"; }   // Valiant Knight until-EOT team grant
         if (p.paired_with != 0) { e += "/sb" + std::to_string(p.paired_with); }   // soulbond pair
         if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
+        if (p.sac_at_end_step) { e += "/xs"; } // Soulstoke put, sacrificed at end step
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
         e += "/o" + std::to_string(p.controller_index);
@@ -9618,6 +9622,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         if (a.kicked)    { s += "[kick]"; }
         if (a.bestow)    { s += "[bestow]"; }
         if (a.evoke)     { s += "[evoke]"; }
+        if (!a.pitch_name.empty()) { s += "[pitch:" + a.pitch_name.str() + "]"; }   // Fury's exiled card
     }
     // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
     // so print it too -- a T1/T2 root on a land-only turn is otherwise five identical blank lines.
@@ -15537,7 +15542,8 @@ static BigOnlyCtx BuildBigOnlyCtx(const GameState& state)
     // floating_bigspell_mana) is the same restricted supply: both flat pools credit it, so the
     // non-qualifying part of a subset must be payable without it.
     if (FloatLeftoverManaEnabled() && state.floating_bigspell_mana.Total() > 0
-        && state.floating_bigspell_pp != nullptr)
+        && state.floating_bigspell_pp != nullptr
+        && BigSpellOnlySource(*state.floating_bigspell_pp))   // a subtype reserve is not big-only supply
     {
         bc.pool.AddPool(state.floating_bigspell_mana);
         bc.live = true;
@@ -16139,7 +16145,8 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
                                     || p.fade_counters != 0))
     { return false; }
     why = foldcensus::kTempHasteEtc;
-    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end) { return false; }
+    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
+        || p.sac_at_end_step) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
     // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object state that makes two
@@ -16563,6 +16570,14 @@ static std::uint64_t ActionFoldSig(const Action& a)
         FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.remand_by.str())));
         FoldMix(h, static_cast<std::uint64_t>(a.remand_slot));
     }
+    // PITCH EVOKE (Action::pitch_name / pitch_slot -- Fury): WHICH hand card the evoke exiles is a
+    // searched axis. Folded only when set -> every other deck's signature is byte-identical.
+    if (!a.pitch_name.empty())
+    {
+        FoldMix(h, 0x50495443ull);   // "PITC"
+        FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.pitch_name.str())));
+        FoldMix(h, static_cast<std::uint64_t>(a.pitch_slot));
+    }
     FoldMix(h, static_cast<std::uint64_t>(a.eval));
     FoldMix(h, static_cast<std::uint64_t>(a.direct_damage));
     FoldMix(h, a.is_noncreature ? 1u : 0u);
@@ -16903,6 +16918,8 @@ enum : unsigned
     kDupBlink    = 1u << 5,   // two blink activations on one outlet
     kDupPermAbil = 1u << 6,   // two {T} ability activations on one source
     kDupRemand   = 1u << 7,   // a remand variant paired with its own X slot / another remand
+    kDupPitch    = 1u << 9,   // a pitch evoke paired with a cast / another pitch of its pitched copy
+                              // (bit 8 is kDupPodEntry, the compact summary's Pod entry bit)
     kDupAll      = ~0u
 };
 // SubsetFilterPre::dup_m's entry bits beyond the clause mask: the Birthing Pod clause (not gated on
@@ -16925,10 +16942,10 @@ struct DupCompact { const std::uint16_t* m; const int* src; const int* hidx; };
 namespace dupclause
 {
     enum : int { kSacForMana = 0, kFreeSlot, kPaidFreePair, kLoyalty, kGarth, kBlink,
-                 kPermAbility, kFoldPrefix, kPod, kRemand, kCount };
+                 kPermAbility, kFoldPrefix, kPod, kRemand, kPitch, kCount };
     inline constexpr const char* kNames[kCount] = {
         "sac_for_mana", "free_slot", "paid_free_pair", "loyalty", "garth", "blink",
-        "perm_ability_tap", "fold_prefix", "pod", "remand" };
+        "perm_ability_tap", "fold_prefix", "pod", "remand", "pitch" };
     inline std::atomic<std::uint64_t> g_hits[kCount];
     // Gated on the same flag as the rest of the walk funnel (set by MTG_BRANCH_SHAPE or the census),
     // declared here because this predicate sits far above namespace shapestats.
@@ -17122,6 +17139,24 @@ static bool DupRemandReject(const std::vector<Action>& cands, const std::vector<
     return false;
 }
 
+// The PITCH EVOKE clause (kDupPitch), shared by the full filter and DupCompactReject: the pitch variant
+// at `a` paired with a hand cast of its pitched copy, or with another pitch of that copy.
+static bool DupPitchReject(const std::vector<Action>& cands, const std::vector<int>& sel, std::size_t a)
+{
+    const Action& ra = cands[sel[a]];
+    for (size_t b = 0; b < sel.size(); ++b)
+    {
+        if (b == a) { continue; }
+        const Action& rb = cands[sel[b]];
+        if (rb.kind == Action::Kind::CastFromHand && rb.hand_index >= 0
+            && rb.hand_index == ra.pitch_slot)
+        { dupclause::Hit(dupclause::kPitch); return true; }
+        if (b > a && rb.pitch_slot == ra.pitch_slot)
+        { dupclause::Hit(dupclause::kPitch); return true; }
+    }
+    return false;
+}
+
 // SubsetHasDuplicateSacSource on the per-candidate COMPACT summary (SubsetFilterPre::DupM): the same
 // clauses in the same order with the same Hit attribution, every Action field test answered from the
 // summary (entry bits by kind / free_cast / hand slot, the source id, the hand index); the
@@ -17137,7 +17172,8 @@ static bool DupCompactReject(const std::vector<Action>& cands, const std::vector
     {
         const std::size_t ja = static_cast<std::size_t>(sel[a]);
         const unsigned ma = m[ja];
-        if ((ma & ((dup_clause & 0xFFu) | kDupPodEntry)) == 0 && !(from_odometer && (ma & kDupEquivEntry) != 0))
+        if ((ma & ((dup_clause & (0xFFu | kDupPitch)) | kDupPodEntry)) == 0
+            && !(from_odometer && (ma & kDupEquivEntry) != 0))
         { continue; }
         auto pair_with = [&](unsigned bit) -> bool
         {
@@ -17174,6 +17210,8 @@ static bool DupCompactReject(const std::vector<Action>& cands, const std::vector
             && DupEquivReject(cands, sel, a, site))
         { return true; }
         if ((dup_clause & kDupRemand) != 0 && (ma & kDupRemand) != 0 && DupRemandReject(cands, sel, a))
+        { return true; }
+        if ((dup_clause & kDupPitch) != 0 && (ma & kDupPitch) != 0 && DupPitchReject(cands, sel, a))
         { return true; }
         if ((ma & kDupPodEntry) != 0 && pair_with(kDupPodEntry))
         { dupclause::Hit(dupclause::kPod); return true; }
@@ -17307,6 +17345,15 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // fold of interchangeable copies, never a pick). Inert unless a remand variant exists.
         if ((dup_clause & kDupRemand) != 0 && !cands[sel[a]].remand_by.empty()
             && DupRemandReject(cands, sel, a))
+        { return true; }
+        // PITCH EVOKE (Action::pitch_slot -- Fury "Evoke--Exile a red card from your hand"). The variant
+        // spends a SECOND hand card as its cost, so the odometer can pair it with a cast of that very
+        // copy, or with another evoke pitching the same copy: one physical card spent twice. Reject
+        // both. (The pitched copy is the name's LAST copy, so a plan casting the FIRST copy of that
+        // name and pitching the second stays legal, and a plan needing the card twice is impossible
+        // with one copy.) Inert unless a pitch variant exists.
+        if ((dup_clause & kDupPitch) != 0 && cands[sel[a]].pitch_slot >= 0
+            && DupPitchReject(cands, sel, a))
         { return true; }
         // Birthing Pod: one activation per Pod per plan (the {T} cost).
         if (cands[sel[a]].kind == Action::Kind::ActivatePod)
@@ -19943,6 +19990,7 @@ const DupCompact* SubsetFilterPre::DupMBuild(const std::vector<Action>& cands) c
         if (a.kind == Action::Kind::ActivateBlink)                     { m |= kDupBlink; }
         if (a.kind == Action::Kind::ActivatePermAbility)               { m |= kDupPermAbil; }
         if (!a.remand_by.empty())                                      { m |= kDupRemand; }
+        if (a.pitch_slot >= 0)                                         { m |= kDupPitch; }
         if (a.kind == Action::Kind::ActivatePod)                       { m |= kDupPodEntry; }
         if (a.equiv_tag != 0)                                          { m |= kDupEquivEntry; }
         dup_m[j]    = static_cast<std::uint16_t>(m);
@@ -20037,6 +20085,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         if (a.free_cast)          { p.dup_source = true; }   // bank slots, and the paid/free pair
         if (a.equiv_tag != 0)     { p.dup_source = true; }   // canonical-prefix fold (see the note above)
         if (!a.remand_by.empty()) { p.dup_source = true; }   // the remand pair (kDupRemand)
+        if (a.pitch_slot >= 0)    { p.dup_source = true; }   // the pitch pair (kDupPitch)
         if (a.alt_cost)           { p.alt_payload = true; }
         if (a.phyrexian_life > 0) { p.phyrexian = true; }
         if (d == nullptr) { continue; }
@@ -20089,11 +20138,12 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     if (p.dup_source)
     {
         int n_sacmana = 0, n_free = 0, n_handcast = 0, n_loyalty = 0, n_garth = 0, n_blink = 0,
-            n_permabil = 0, n_remand = 0;
+            n_permabil = 0, n_remand = 0, n_pitch = 0;
         for (const Action& a : cands)
         {
             if (a.free_cast) { ++n_free; }
             if (!a.remand_by.empty()) { ++n_remand; }
+            if (a.pitch_slot >= 0) { ++n_pitch; }
             switch (a.kind)
             {
                 case Action::Kind::SacForMana:         ++n_sacmana;  break;
@@ -20120,6 +20170,9 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         // A remand variant collides with X's own cast or another remand: one variant + any second
         // hand cast. One remand is the cheap necessary half (X's plain cast is in `cands` with it).
         if (n_remand >= 1 && n_handcast >= 2) { m |= kDupRemand; }
+        // A pitch variant collides with a cast of its pitched copy or a second pitch of it: one
+        // pitch variant + any second hand cast (every pitch variant is itself a hand cast).
+        if (n_pitch >= 1 && n_handcast >= 2) { m |= kDupPitch; }
         p.dup_clause = m;
         // The equiv_tag canonical-prefix clause is NOT one of these seven and has no bit: it rejects
         // on a single selected action's ord, so no population count bounds it. `dup_source` still
@@ -24540,6 +24593,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.evoke) != static_cast<long long>(y.evoke))
     { add("evoke", std::to_string(static_cast<long long>(x.evoke)),
            std::to_string(static_cast<long long>(y.evoke))); }
+    if (x.pitch_name != y.pitch_name)
+    { add("pitch_name", x.pitch_name.str(), y.pitch_name.str()); }
     if (static_cast<long long>(x.adventure) != static_cast<long long>(y.adventure))
     { add("adventure", std::to_string(static_cast<long long>(x.adventure)),
            std::to_string(static_cast<long long>(y.adventure))); }
@@ -34296,6 +34351,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(a));
             }
         }
+        // PITCH EVOKE (Fury "Evoke--Exile a red card from your hand"; the MH2 Incarnations generally:
+        // CardParams::evoke_exile_color). The cost is a CARD, not mana (evoke_cost is "{0}", so every
+        // evoke cost-recompute site prices it at zero unchanged). WHICH card is a real decision -- a
+        // Brushfire Elemental and a second Fury are not interchangeable -- so one variant per DISTINCT
+        // legal hand name (copies are fungible, the core invariant's identity fold), each pinning the
+        // name (pitch_name) and the LAST copy's slot (pitch_slot, the subset guard's kDupPitch key:
+        // that copy is not also cast, nor pitched twice). The cast card itself is excluded (it is on
+        // the stack while the cost is paid). Always offered beside the hard cast -- no emission gate:
+        // the evoked body still ENTERS (enter watchers such as Risen Reef, Metallic Mimic's counter,
+        // its own ETB) and is a cast, and whether that is worth two cards is the search's call. With
+        // no legal red card in hand no variant exists, and the evoke is simply not castable.
+        else if (def.params.evoke_cost.has_value() && !def.params.evoke_exile_color.empty())
+        {
+            std::unordered_set<std::string> seen_pitch;
+            for (int j = n - 1; j >= 0; --j)   // last copy first -> it becomes the name's slot
+            {
+                if (j == i) { continue; }
+                const Card& pc = ap.hand[j];
+                if (!IsPitchableHandCard(pc, def.params.evoke_exile_color)) { continue; }
+                if (!seen_pitch.insert(pc.m_name.str()).second) { continue; }
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = *def.params.evoke_cost;
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = false;
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.evoke          = true;
+                a.pitch_name     = pc.m_name;
+                a.pitch_slot     = j;
+                actions.push_back(std::move(a));
+            }
+        }
 
         // Sakashima's Protege: WHICH this-turn entrant it copies is a SEARCH decision -- one
         // extra CastFromHand variant per legal battlefield entrant (sharing hand_index ->
@@ -37681,6 +37770,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (!pd || !pd->params.tap_put_from_hand_cost.has_value()) { continue; }
             if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             std::unordered_set<std::string> seen_put;
+            // Incandescent Soulstoke: may a live Smokebraider-type source ("...or activate abilities
+            // of Elementals") pay THIS source's ability? Then its cost is priced in the full pool only
+            // (is_noncreature false), because BuildNonCreaturePool drops every creature_mana_only
+            // source -- leaving it there would make "Smokebraider pays the put" unfindable at any
+            // budget. The payer still decides (RestrictedManaUsable under the ability's source scope).
+            // False for every source no such mana can pay -> Stoneforge is byte-identical.
+            bool restricted_payable = false;
+            for (const Permanent& mp : state.battlefield)
+            {
+                if (mp.controller_index != state.active_player_index || mp.tapped) { continue; }
+                const CardDefinition* md = CardDatabase::Instance().LookupCached(mp.card);
+                if (!md || !md->params.mana_only_subtype_abilities || md->params.mana_only_subtype.empty()) { continue; }
+                if (md->tmpl == CardTemplate::ManaDork && !CanTapNow(mp, state.battlefield)) { continue; }
+                if (CardHasSubtype(p.card, md->params.mana_only_subtype)) { restricted_payable = true; break; }
+            }
             for (const Card& c : ap.hand)
             {
                 if (c.m_is_staged) { continue; }   // impulse-exiled: "from your hand" cannot reach
@@ -37690,6 +37794,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 for (const std::string& t : pd->params.tap_put_from_hand_types)
                 { if (CardMatchesTypeName(hc, t)) { match = true; break; } }
                 if (!match) { continue; }
+                // "an Elemental CREATURE card" (Soulstoke): the type list is an OR, this ANDs.
+                if (pd->params.tap_put_from_hand_creature_only && !hc.IsCreature()) { continue; }
                 if (!seen_put.insert(c.m_name.str()).second) { continue; }
                 Action a;
                 a.kind           = Action::Kind::PutFromHandAbility;
@@ -37702,7 +37808,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // realized by the rollout, not this ordering hint.
                 a.eval           = std::max(1, hc.m_mana_cost.ManaValue()
                                                - a.cost.ManaValue());
-                a.is_noncreature = true;
+                a.is_noncreature = !restricted_payable;
+                // A HASTED put creature (Soulstoke: "gains haste until end of turn") attacks THIS turn,
+                // so it carries the same this-turn attack stamp a hasted Vial drop does -- without it
+                // the subset's this-turn lethal projection cannot see a put Fury's 8 (4/4 double
+                // striker under the lord). Its value is that one attack (sacrificed at the end step).
+                if (pd->params.tap_put_grants_haste && hc.IsCreature())
+                {
+                    auto [lord_pb, lord_tb] = ComputeLordBonus(hc, state, state.active_player_index);
+                    (void)lord_tb;
+                    const bool ds = hc.HasKeyword(Keyword::DoubleStrike)
+                                 || HasDoubleStrikeFromLords(hc, state.battlefield, state.active_player_index);
+                    const int power = std::max(0, hc.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+                    a.vial_attack_power = power;
+                    a.eval              = std::max(a.eval, power * DMG);
+                }
                 actions.push_back(std::move(a));
             }
         }
@@ -38649,7 +38769,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (HumanPlayActive() && (src.card.IsCreature() || src.is_animated))
                     {
                         GameState scratch = state;
-                        CreatureAbilityPayScope probe_pay_scope;
+                        CreatureAbilityPayScope probe_pay_scope(&src.card);
                         if (!TapForCostDirect(scratch, cost, /*for_creature=*/false)) { continue; }
                     }
                     for (int k : counts)
@@ -39621,7 +39741,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         GameState scratch = state;
                         // Same creature-source ability payment scope as the real apply (D12), so
                         // the probe and the trailing payment agree on Courtyard colour legality.
-                        CreatureAbilityPayScope probe_pay_scope;
+                        CreatureAbilityPayScope probe_pay_scope(&src.card);
                         if (!TapForCostDirect(scratch, probe, /*for_creature=*/false)) { continue; }
                     }
                     Action a;
@@ -41939,7 +42059,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                      + "|" + std::to_string(b.soulfire_own_targets)
                      + "|" + std::to_string(b.crackle_targets)
                      + (b.evoke ? "|e" : "") + (b.kicked ? "|k" : "") + (b.bestow ? "|b" : "")
-                     + (b.adventure ? "|a" : "");
+                     + (b.adventure ? "|a" : "")
+                     + (b.pitch_name.empty() ? std::string() : "|p" + b.pitch_name.str());
             };
             const std::size_t base_n = actions.size();
             std::vector<std::string> keys;
@@ -50573,7 +50694,7 @@ namespace
 {
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
-                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_N };
+                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_SUBTYPE_MANA, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -50584,7 +50705,8 @@ const char* const kPrepayName[PP_N] = {
     "declined: every hold failed on a mint line (MTG_MINT_CREDIT_EXACT)",
     "declined: big-spell-only mana + a non-qualifying cast (Troyan)",
     "declined: an earlier cast grows the pain chain (MTG_PD_BATCH_TIMING)",
-    "declined: a life-scaled source the batch's lifegain grows (LifeScaledManaInOrderWalk)" };
+    "declined: a life-scaled source the batch's lifegain grows (LifeScaledManaInOrderWalk)",
+    "declined: subtype-restricted mana live (Smokebraider)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -51408,6 +51530,25 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     {
         const ManaPool& f = state.floating_mana;
         if (!PrepayFloatPoolOn() || f.wild != 0 || f.snow_units != 0) { return Pp(PP_FLOAT_NZ); }
+    }
+    // SUBTYPE-RESTRICTED MANA WITH AN ABILITY / ANY-COMBINATION CLAUSE (Smokebraider: "Spend this mana
+    // only to cast Elemental spells or activate abilities of Elementals"). The joint solve pays every
+    // cast of the batch out of ONE pool with no paying-spell identity (PayingSpellCard is unset there,
+    // which SubtypeManaOk answers permissively), so it could spend this mana on a Metallic Mimic. The
+    // per-cast payer carries each cast's identity (SpellSubtypePayScope), so decline to it while such a
+    // source is live, or while its restricted leftover sits in the reserve. Keyed on the two new
+    // params, so every other deck -- Angels' Giada included -- is byte-identical.
+    if (state.floating_bigspell_mana.Total() > 0 && state.floating_bigspell_pp != nullptr
+        && !BigSpellOnlySource(*state.floating_bigspell_pp))
+    { return Pp(PP_SUBTYPE_MANA); }
+    for (const Permanent& sp : state.battlefield)
+    {
+        if (sp.controller_index != state.active_player_index || sp.tapped) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+        if (sd == nullptr || sd->params.mana_only_subtype.empty()) { continue; }
+        if (!sd->params.mana_only_subtype_abilities && !sd->params.produces_any_combination) { continue; }
+        if (sd->tmpl == CardTemplate::ManaDork && !CanTapNow(sp, state.battlefield)) { continue; }
+        return Pp(PP_SUBTYPE_MANA);
     }
 
     const int active = state.active_player_index;
@@ -55636,6 +55777,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...nor an Aura spell whose searched host is not a legal target now (the SHARED
         // AuraSpellCastLegal; AIEngine::CastSpellFromHand returns before paying on the same predicate).
         if (!AuraSpellCastLegal(state, state.active_player_index, def, enchant_target)) { return; }
+        // PITCH EVOKE (Fury "Evoke--Exile a red card from your hand"): the evoke's cost is a hand card.
+        // With the pinned card gone (a same-plan cast or put spent the last copy) -- or no pin at all
+        // -- the cost cannot be paid, so the spell is not cast: nothing paid, the card stays in hand
+        // (the stranded pattern, never a free cast). Checked before any mutation. Lockstep twin:
+        // AIEngine::CastSpellFromHand.
+        const bool cast_pitch = evoke && !def.params.evoke_exile_color.empty() && !from_graveyard;
+        if (cast_pitch
+            && (riders.pitch_name.empty()
+                || FindPitchHandIndex(ap, riders.pitch_name.str(), def.params.evoke_exile_color,
+                                      it->m_number) < 0))
+        { return; }
 
         // REMAND: the rider is LIVE only for a plain paid hand cast with a copy of the Remand in hand
         // and a cast left in the Irencrag budget for it (X takes one, the Remand another). Checked
@@ -55932,6 +56084,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Does the Remand counter X? Not when X can't be countered: then X resolves after it.
         const bool remand_countered = remand_def != nullptr && !def.params.cant_be_countered;
         zone.erase(it);
+        // ...and the PITCH half of the evoke cost (validated before payment above): exile the pinned
+        // red card from hand -- any copy of that name other than the cast card. Paid here, with the
+        // mana half, before the spell resolves (CR 601.2h). Lockstep twin: AIEngine::CastSpellFromHand.
+        if (cast_pitch)
+        {
+            PerformEvokePitchCost(state, state.active_player_index, riders.pitch_name.str(),
+                                  def.params.evoke_exile_color, cast_number, def.card.m_name.str());
+        }
 
         // STORM counter (Dragonstorm): the spell is now cast (committed to the "stack"). Count it
         // ONCE per apply_one invocation -- a spliced Desperate Ritual is ONE base cast (the k spliced
@@ -59247,7 +59407,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // (D12). Covers the K-1 repeat payments below too. Executor twin: AIEngine.
                 std::optional<CreatureAbilityPayScope> creature_ability_scope;
                 if (PermAbilitySourceIsCreature(state, state.active_player_index, src_id))
-                { creature_ability_scope.emplace(); }
+                { creature_ability_scope.emplace(AbilitySourceCard(state, state.active_player_index, src_id)); }
                 // Voldaren Estate's Blood ability costs {1} less per Vampire we control AT ACTIVATION:
                 // pay the TRUE cost now (TapBloodCostNow), not the enumeration variant's estimate.
                 // Executor twin: AIEngine. Every other mode pays a.cost exactly as before.
@@ -59536,7 +59696,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Burning-Fist discard-pump / Sethron team-pump-with-haste: pay K x cost, then apply K
             // activations. Stranded (cost unpayable, or the source left) -> full no-op, both worlds.
             // Creature-source ability payment scope: Secluded Courtyard's coloured mana is legal (D12).
-            CreatureAbilityPayScope pump_pay_scope;
+            CreatureAbilityPayScope pump_pay_scope(AbilitySourceCard(state, state.active_player_index, a.sac_source_id));
             // Stromkirk Condemned (mode 4, Vampires A2): liveness FIRST -- unused this turn and the
             // pinned card in hand -- so a stale activation is a clean no-op (it costs no mana anyway).
             if (a.gy_exile_mode == 4)
@@ -59746,7 +59906,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                 && TurnSolver::EquipmentEtbDrawFires(state, *put_def);
             const std::vector<int> hand_before_put =
                 put_draws ? TurnSolver::HandCardNumbers(state) : std::vector<int>{};
-            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            // The put is an activated ability of a CREATURE source (Stoneforge, Incandescent
+            // Soulstoke), so it pays under the creature-ability context naming that source -- the
+            // ActivatePermAbility rule: Secluded Courtyard's coloured mana and Smokebraider's
+            // ("...or activate abilities of Elementals") are legal for it. Executor twin: AIEngine's
+            // PutFromHandAbility branch. Inert for every deck with neither kind of land / dork.
+            std::optional<CreatureAbilityPayScope> put_scope;
+            if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+            { put_scope.emplace(AbilitySourceCard(state, state.active_player_index, a.sac_source_id)); }
+            const bool put_paid = TapForCostDirect(state, a.cost, /*for_creature=*/false);
+            put_scope.reset();
+            if (put_paid)
             {
                 ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
                 if (put_draws)
@@ -61095,6 +61265,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             state.battlefield.erase(state.battlefield.begin() + i);
         }
     }
+    // Incandescent Soulstoke's delayed sacrifice (Permanent::sac_at_end_step) -- lockstep twin of
+    // GameEngine::EndStep, same position, same shared helper. No-op without the flag.
+    PerformEndStepDelayedSacrifices(state);
 
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
     // (Ocelot Pride). Lockstep twin of GameEngine::EndStep -- same position (after the exile
@@ -67017,6 +67190,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.
                         if (cd && cd->params.evoke_cost.has_value()) { k += (act.evoke ? "#E1" : "#E0"); }
+                        // PITCH EVOKE (Fury): WHICH card the evoke exiles -- distinct plans.
+                        // Only a pitch variant carries it, so no existing deck moves.
+                        if (!act.pitch_name.empty()) { k += "#EX" + act.pitch_name.str(); }
                         // Timeless Witness: WHICH graveyard card the ETB returns is a real decision
                         // (one cast variant per distinct graveyard name + the unpinned resolution
                         // pick) -- distinct plans, the #T precedent. Gated on the param.
@@ -77826,6 +78002,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.paired_with != 0)
         { Fold(tk, 0x50B0Dull); Fold(tk, static_cast<uint64_t>(perm.paired_with)); }
         if (perm.exile_at_end) { Fold(tk, 0xE71E); }
+        if (perm.sac_at_end_step) { Fold(tk, 0x5AC0E5D5ull); }   // Soulstoke put (nonzero-gated)
         // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object, future-determining
         // (lifelink + vigilance on every Human; which opponent creature returns). Nonzero-gated.
         if (perm.chosen_keyword_mask != 0)
@@ -96528,6 +96705,14 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                     addSub(a.card_name + " " + mode, a.card_name + " mode", mode,
                            a.card_name.str(), "evoke");
                 }
+                // PITCH EVOKE (Fury "Evoke--Exile a red card from your hand"): WHICH card the evoke
+                // exiles. Only the evoked variants carry it, and the mode sub above is asked first, so
+                // the set is never mixed once "evoked" is picked. The art is the exiled card.
+                if (!a.pitch_name.empty())
+                {
+                    addSub(a.card_name + " exiles " + a.pitch_name.str(), a.card_name + " evoke exile",
+                           a.pitch_name.str(), a.pitch_name.str(), "pitch");
+                }
                 // PHYREXIAN ({G/P} -- Birthing Pod's cast AND ActivatePod): pay-mana vs pay-2-life
                 // are distinct variants (#P) that would otherwise share every sub and collapse.
                 // Gated on the printed cost carrying a phyrexian pip, so both modes carry the sub.
@@ -98461,7 +98646,8 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
             std::string k = std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str()
                 + "|" + a.tutor_target.str() + "|" + a.chosen_float_color.str() + "|" + a.victim_name.str()
                 + "|" + a.land_face.str() + "|" + a.land_fetch_target.str() + "|" + a.trick_hand_target
-                + "|" + a.remand_by.str();
+                + "|" + a.remand_by.str()
+                + (a.pitch_name.empty() ? std::string() : "|px" + a.pitch_name.str());
             const int f[] = { a.chosen_x, a.splice_count, a.replicate_count, a.devour_count,
                               a.enchant_target, a.sac_source_id, a.sac_victim_id, a.sac_count,
                               static_cast<int>(a.ability_mode), a.alt_cost ? 1 : 0, a.alt_lifegain,

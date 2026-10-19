@@ -1411,16 +1411,39 @@ bool ApplyPutFromHand(GameState& state, int controller, int source_id,
     }
     if (hi < 0) { return false; }
     const std::string src_name = src->card.m_name.str();
+    // The source's riders (Incandescent Soulstoke): "an Elemental CREATURE card", "that creature gains
+    // haste until end of turn", "sacrifice it at the beginning of the next end step". All false for
+    // Stoneforge Mystic -> byte-identical there.
+    const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src->card);
+    const bool put_creature_only = sdef && sdef->params.tap_put_from_hand_creature_only;
+    const bool put_haste         = sdef && sdef->params.tap_put_grants_haste;
+    const bool put_sac_at_end    = sdef && sdef->params.tap_put_sac_at_end_step;
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[hi]);
+    if (put_creature_only && !(d ? d->card : ap.hand[hi]).IsCreature()) { return false; }
+    // ...and the type list itself (the enumeration's filter, re-checked here so a declared human line
+    // naming a non-matching card is a no-op rather than an illegal put).
+    if (sdef != nullptr && !sdef->params.tap_put_from_hand_types.empty())
+    {
+        bool match = false;
+        for (const std::string& t : sdef->params.tap_put_from_hand_types)
+        { if (CardMatchesTypeName(d ? d->card : ap.hand[hi], t)) { match = true; break; } }
+        if (!match) { return false; }
+    }
     src->tapped = true;
     Card raw = ap.hand[hi];
     ap.hand.erase(ap.hand.begin() + hi);
-    const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
     Permanent perm;
     perm.card              = d ? d->card : raw;
     perm.card.m_number     = raw.m_number;
     perm.controller_index  = controller;
     perm.owner_index       = controller;
     perm.entered_this_turn = true;
+    // Set BEFORE the enter cascade, as the effect that put it there grants them: an enter trigger
+    // that checks for haste (none today) or the delayed trigger's target must see the body as put.
+    // The sacrifice is a delayed trigger, not a replacement -- swept at the end step
+    // (PerformEndStepDelayedSacrifices), so its LTB / dies triggers fire then, not now.
+    if (put_haste)      { perm.temp_haste      = true; }
+    if (put_sac_at_end) { perm.sac_at_end_step = true; }
     state.battlefield.push_back(perm);   // may reallocate -- `src` is dead from here on
     const int slot = static_cast<int>(state.battlefield.size()) - 1;
     if (RevealVisible())
@@ -3262,8 +3285,11 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             // in `produces`, total = produces.size()), so an infeasible verdict is still a proof; a
             // feasible cost is never cut. Same predicate as the DFS (bundle_src); drip lands, stripped
             // (energy / creature-only) and reflecting shapes are left on the old over-credit.
+            // Not an any-combination source (Smokebraider): its `amt` units really can all be one
+            // colour or split, which is exactly the default (non-bundle) edge model.
             if (BundleExactEnabled() && !LegacyKarooPay() && amt > 1 && produces.size() > 1
                 && !IsSingleColorBurstSource(*def) && !def->params.reflecting
+                && !def->params.produces_any_combination
                 && def->params.tap_opponent_lifegain == 0)
             {
                 int mult[6] = { 0, 0, 0, 0, 0, 0 }, per = 0;
@@ -4897,7 +4923,51 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 // in TapSourceIntoFloat -- fixing one payer and not the other is the split this
                 // comment block records.
                 const bool bundle_src = (amt > 1 && produces.size() > 1
-                                         && !IsSingleColorBurstSource(*def));
+                                         && !IsSingleColorBurstSource(*def)
+                                         && !def->params.produces_any_combination);
+                // ANY COMBINATION (Smokebraider: "Add two mana in any combination of colors"): one tap
+                // makes `amt` units, EACH of any produced colour. Branch over the unordered colour
+                // multisets, restricted to the colours this cost's pips name (special_mask) plus ONE
+                // filler colour for the units that pay generic -- complete for this payment, since a
+                // unit of a colour no pip names can only pay generic and any one such colour does that
+                // equally. The colour a leftover unit was given is immaterial: commit_leftover
+                // re-books this source's surplus as WILD (the colour was the player's choice at
+                // activation). amt is 2 for every such card; larger yields fall to the one-colour loop
+                // below (a legal subset of the real choices -- under-credit, never a phantom).
+                if (def->params.produces_any_combination && amt == 2 && produces.size() > 1)
+                {
+                    // The cost's named colours, computed here rather than read off special_mask, which
+                    // is only filled under collapse_colors (and out_leftover callers run without it).
+                    unsigned named_mask = 0;
+                    if (cost.white > 0) { named_mask |= 1u << static_cast<int>(Color::White); }
+                    if (cost.blue  > 0) { named_mask |= 1u << static_cast<int>(Color::Blue); }
+                    if (cost.black > 0) { named_mask |= 1u << static_cast<int>(Color::Black); }
+                    if (cost.red   > 0) { named_mask |= 1u << static_cast<int>(Color::Red); }
+                    if (cost.green > 0) { named_mask |= 1u << static_cast<int>(Color::Green); }
+                    for (int h = 0; h < cost.hybrid_count; ++h)
+                    {
+                        named_mask |= 1u << (cost.hybrid_pair[h] >> 4);
+                        named_mask |= 1u << (cost.hybrid_pair[h] & 0xF);
+                    }
+                    Color pick[6]; int np = 0; bool filler = false;
+                    for (Color c : produces)
+                    {
+                        const bool named = (named_mask & (1u << static_cast<int>(c))) != 0;
+                        if (!named) { if (filler) { continue; } filler = true; }
+                        if (np < 6) { pick[np++] = c; }
+                    }
+                    for (int a1 = 0; a1 < np; ++a1)
+                    {
+                        for (int a2 = a1; a2 < np; ++a2)
+                        {
+                            CcoAuditTap(*def, pick[a1], for_creature);
+                            CcoAuditTap(*def, pick[a2], for_creature);
+                            ManaPool f = floating; f.Add(pick[a1], 1); f.Add(pick[a2], 1);
+                            if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; }
+                        }
+                    }
+                    continue;   // every legal split was explored
+                }
                 if (bundle_src && !LegacyKarooPay())
                 {
                     ManaPool f = floating;
@@ -5613,6 +5683,29 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
                 { for (char ch : s) { sub_h = sub_h * 1099511628211ull ^ static_cast<unsigned char>(ch); } }
             }
             mix(h, sub_h);
+            // ...and the ABILITY half (Smokebraider: "or activate abilities of Elementals"): with such
+            // a source on the battlefield, "pay {1}{R}" is payable for an Elemental's ability and may
+            // not be for a land's, so the ability SOURCE's subtypes join the key. Folded only when a
+            // mana_only_subtype_abilities source is on the battlefield, so Giada's boards (and every
+            // board without one) key exactly as before.
+            bool board_has_ability_restricted = false;
+            for (const Permanent& bp : state.battlefield)
+            {
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd != nullptr && bd->params.mana_only_subtype_abilities)
+                { board_has_ability_restricted = true; break; }
+            }
+            if (board_has_ability_restricted)
+            {
+                const Card* asrc = PayingAbilitySource();
+                std::uint64_t ab_h = asrc == nullptr ? 0xAB50ull : 0xAB51ull;
+                if (asrc != nullptr)
+                {
+                    for (const std::string& s : asrc->m_subtypes)
+                    { for (char ch : s) { ab_h = ab_h * 1099511628211ull ^ static_cast<unsigned char>(ch); } }
+                }
+                mix(h, ab_h);
+            }
         }
         mix(h, reserved_mask);
         mix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(untapped_max)));

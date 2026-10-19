@@ -2946,6 +2946,54 @@ struct CardParams
     // sac outlet in play. nullopt = no evoke.
     std::optional<ManaCost>  evoke_cost;
 
+    // ---- LandfallElementals cluster "lfe-fury" (2026-10-18): Fury / Incandescent Soulstoke /
+    // Smokebraider. One block so the parallel card clusters merge cleanly. Every field is new and
+    // gated (false / 0 / empty = inert), so no existing card moves.
+    //
+    // PITCH EVOKE (the Modern Horizons 2 Incarnations: Fury "Evoke--Exile a red card from your hand",
+    // Solitude white, Subtlety blue, Grief black, Endurance green). A NON-MANA alternative cost: the
+    // card also sets evoke_cost "{0}" (so every existing evoke cost-recompute site prices the variant at
+    // zero mana unchanged), and this names the colour of the hand card exiled as the cost (CR 702.74a /
+    // 118.9). The card being cast is on the stack while its cost is paid (CR 601.2a-h), so it can never
+    // pitch itself -- another copy of it in hand is a legal pitch. A multicolour card with that colour
+    // (Brushfire Elemental {R}{G}, Fulminator Mage {1}{B/R}{B/R}) is "a red card" (CR 105.2). WHICH card
+    // is exiled is a SEARCHED axis: CollectActions emits one evoke variant per distinct legal hand name
+    // (Action::pitch_name / pitch_slot), so the search and the human pick it. Empty = not a pitch evoke.
+    std::string evoke_exile_color;   // "W" / "U" / "B" / "R" / "G"
+    // Fury's ETB: "it deals N damage divided as you choose among any number of target creatures
+    // and/or planeswalkers." ZERO targets is legal ("any number"), and no player is a legal target.
+    // Resolved by the shared ResolveEtbDividedCreatureDamage (FireOwnEtbTriggers, so cast, evoke and
+    // Soulstoke-put entries all fire it in both worlds); the allocation is the provider's
+    // EtbDividedDamageAlloc (a stated dominance fold) and the human's `divide` decision. 0 = none.
+    int etb_damage_divided_creatures = 0;
+    // Incandescent Soulstoke's put ("{1}{R}, {T}: You may put an Elemental creature card from your hand
+    // onto the battlefield. That creature gains haste until end of turn. Sacrifice it at the beginning
+    // of the next end step."). Rides tap_put_from_hand_cost / _types (the Stoneforge PutFromHandAbility
+    // action, enumeration, viewer verb and both apply sites) plus these riders:
+    //   tap_put_from_hand_creature_only -- the hand card must ALSO be a creature card ("Elemental
+    //       CREATURE card": _types is an OR list of type/subtype names, this ANDs IsCreature()).
+    //   tap_put_grants_haste            -- the put creature gains haste until end of turn (temp_haste).
+    //   tap_put_sac_at_end_step         -- a delayed trigger sacrifices it at the beginning of the next
+    //       end step (Permanent::sac_at_end_step, swept at both end-step sites through the shared
+    //       SacrificePermanentAt, so its dies/LTB triggers fire).
+    bool tap_put_from_hand_creature_only = false;
+    bool tap_put_grants_haste            = false;
+    bool tap_put_sac_at_end_step         = false;
+    // Smokebraider: "{T}: Add two mana in any combination of colors." produces = WUBRG, produces_amount
+    // = 2, and this marks the yield as ANY COMBINATION -- neither the Karoo one-of-each bundle (which a
+    // multi-colour produces_amount > 1 source otherwise is) nor a one-colour burst. The greedy payer taps
+    // it for two of one colour; the backtracker branches over colour PAIRS; the flow oracle prices it
+    // as `amt` units splittable across its colours; a unit it leaves over floats as WILD in the
+    // restricted reserve (its colour was the player's choice at activation).
+    bool produces_any_combination = false;
+    // "...Spend this mana only to cast Elemental spells OR ACTIVATE ABILITIES OF ELEMENTALS." Extends
+    // creature_mana_only + mana_only_subtype (which already restricts the SPELL half to creature spells
+    // of the subtype) to an activated ability whose SOURCE has the subtype on the battlefield (Metallic
+    // Mimic's chosen type included). The ability's source rides the PayingAbilitySource thread_local
+    // (set where CreatureAbilityPayScope is). No Kindred (noncreature) spell of any subtype that a
+    // card sets here exists in cards.json, so the creature-spell restriction is exact for the spell half.
+    bool mana_only_subtype_abilities = false;
+
     // ADVENTURE (CR 715 -- Brightcap Badger // Fungus Frolic). One physical card, two spells: the
     // adventure half is cast from hand for its own cost and, on resolution, EXILES "on an
     // adventure" instead of going to the graveyard; the creature half may then be cast from that

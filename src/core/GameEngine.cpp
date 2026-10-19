@@ -943,6 +943,10 @@ void GameEngine::EndStep(GameState& state)
             state.battlefield.erase(state.battlefield.begin() + i);
         }
     }
+    // Incandescent Soulstoke's put: "Sacrifice it at the beginning of the next end step"
+    // (Permanent::sac_at_end_step). Lockstep twin at the same position in
+    // TurnSolver::SimulateEndAndStartNextTurn; no-op for every deck that never sets the flag.
+    PerformEndStepDelayedSacrifices(state);
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
     // (Ocelot Pride). Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; after
     // the exile sweep above, which is the other beginning-of-end-step effect. Param-gated ->

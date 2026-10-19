@@ -1483,6 +1483,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.ltb_return_max_power      = params.value("ltb_return_max_power", 0);
     if (params.contains("evoke_cost"))
         p.evoke_cost = ManaCostFromString(params["evoke_cost"].get<std::string>());
+    // lfe-fury cluster (Fury / Incandescent Soulstoke / Smokebraider) -- see the CardParams block.
+    p.evoke_exile_color              = params.value("evoke_exile_color", std::string());
+    p.etb_damage_divided_creatures   = params.value("etb_damage_divided_creatures", 0);
+    p.tap_put_from_hand_creature_only = params.value("tap_put_from_hand_creature_only", false);
+    p.tap_put_grants_haste           = params.value("tap_put_grants_haste", false);
+    p.tap_put_sac_at_end_step        = params.value("tap_put_sac_at_end_step", false);
+    p.produces_any_combination       = params.value("produces_any_combination", false);
+    p.mana_only_subtype_abilities    = params.value("mana_only_subtype_abilities", false);
     p.adventure_face_name       = params.value("adventure_face_name", std::string());
     p.adventure_parent_name     = params.value("adventure_parent_name", std::string());
     p.cast_creates_tokens       = params.value("cast_creates_tokens", 0);

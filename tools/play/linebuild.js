@@ -799,7 +799,7 @@
   const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, loyalty: 1.3,
                         bestow: 1.4, enchant: 1.5, equip: 1.5, pumptarget: 1.5, jitte: 1.6, x: 2, activations: 2,
                         modal: 2.5, soulfire: 3, crackle: 4, splice: 5, devour: 5.5, replicate: 6,
-                        color: 7 };
+                        color: 7, pitch: 9.5 };   // pitch: Fury's evoke-exile card, after its `evoke` mode (9)
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
   function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }

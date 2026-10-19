@@ -539,6 +539,11 @@ struct Permanent
     // cannot collide with temp_haste's owners. A function of the permanent's definition and the
     // opponent's life, both already in every key, so it is folded nowhere.
     bool      cond_haste           : 1 = false;
+    // Incandescent Soulstoke's put: "Sacrifice it at the beginning of the next end step." A delayed
+    // trigger, swept at BOTH end-step sites in lockstep through the shared SacrificePermanentAt (dies /
+    // LTB fire, unlike the Twinflame exile). Folded into every sim key beside exile_at_end. Never set
+    // outside tap_put_sac_at_end_step. A 1-bit field in the byte above, so sizeof(Permanent) stays 304.
+    bool      sac_at_end_step      : 1 = false;
     bool      lifegain_counters_used_this_turn = false; // Nykthos Paragon's "Do this only once each
                                            // turn" on "whenever you gain life, you may put that many
                                            // +1/+1 counters on each creature you control". PER

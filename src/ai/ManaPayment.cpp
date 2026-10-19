@@ -400,6 +400,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.temp_double_strike != b.temp_double_strike) { fail(i, "temp_double_strike"); }
         if (a.paired_with != b.paired_with)           { fail(i, "paired_with"); }
         if (a.exile_at_end != b.exile_at_end)         { fail(i, "exile_at_end"); }
+        if (a.sac_at_end_step != b.sac_at_end_step)   { fail(i, "sac_at_end_step"); }
         if (a.chosen_subtype_id != b.chosen_subtype_id) { fail(i, "chosen_subtype_id"); }
         if (a.is_animated != b.is_animated)           { fail(i, "is_animated"); }
         // Typed vs all-types animation (Gideon's +1 vs Mutavault): same is_animated bit, but a
@@ -565,7 +566,12 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     // source as `amt` wild, and debiting the COLOUR for a 7-unit burst would drive that colour to
     // -7 while leaving the wild untouched. Same fix required in the backtracker (SpellEffects.cpp);
     // fixing only one leaves the documented greedy/backtracker split.
-    const bool one_colour_burst = IsSingleColorBurstSource(def);
+    // Smokebraider ("Add two mana in any combination of colors") is not a one-of-each bundle either.
+    // The greedy taps it for `amt` of the ONE colour this pip asked for -- a legal activation -- and
+    // debits `wild` like a one-colour burst (AddSourceToPool credited it as `amt` wild). A cost that
+    // needs two DIFFERENT colours from it ({R}{G}) fails this greedy and is paid by the backtracker,
+    // which branches over colour pairs; a unit left over is re-booked as WILD by commit_leftover.
+    const bool one_colour_burst = IsSingleColorBurstSource(def) || def.params.produces_any_combination;
     if (amt > 1 && prod.size() > 1 && !one_colour_burst)
     {
         for (Color c : prod) { floating.Add(c, 1); }
@@ -574,7 +580,22 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     }
     else
     {
-        floating.Add(col, amt);
+        // ANY COMBINATION (Smokebraider): the second unit takes ANOTHER colour this payment still
+        // asks for (the payment's published coloured need, PayNeedScope), so a lone Smokebraider pays
+        // Brushfire Elemental's {R}{G} in the greedy instead of failing it over to the backtracker. With
+        // no other needed colour it is a second unit of `col` -- any surplus is re-booked as WILD by
+        // commit_leftover either way, so the pick only ever helps this payment.
+        int c2 = -1;
+        if (def.params.produces_any_combination && amt == 2 && g_pay_need_live)
+        {
+            for (Color c : prod)
+            {
+                const int ci = static_cast<int>(c);
+                if (c != col && ci >= 0 && ci < 5 && g_pay_colored_need[ci] > 0) { c2 = ci; break; }
+            }
+        }
+        if (c2 >= 0) { floating.Add(col, 1); floating.Add(static_cast<Color>(c2), 1); }
+        else         { floating.Add(col, amt); }
         if (available)
         {
             if (one_colour_burst && prod.size() > 1)
@@ -1343,7 +1364,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // Same for the BIG-SPELL-ONLY reserve (Troyan's floated {G}{U}): a qualifying spell (MV 5+ or
     // {X}) spends it before the general float -- it can pay nothing else. Empty for every deck
     // without such a source -> byte-identical.
-    if (BigFloatUsableNow(state))
+    if (RestrictedFloatUsableNow(state, for_creature))
     {
         const int before = static_cast<int>(state.floating_bigspell_mana.Total());
         SpendFloatingTowardCost(state.floating_bigspell_mana, cost);
@@ -2793,9 +2814,21 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
       // Restricted production is read off the payment's own tap diff (bf_pre), which holds for the
       // greedy and both backtracker paths alike. Inert unless a creature payment tapped such a
       // source AND left mana over.
-      if (for_creature && lo.Total() > 0)
+      // An ABILITY payment that named its source (CreatureAbilityPayScope(src)) can also have tapped a
+      // restricted source -- Smokebraider paying an Elemental's ability -- so it runs this block too.
+      // Every other ability payment taps no creature_mana_only source (RestrictedManaUsable refuses
+      // it), so both counts below stay 0 there and nothing moves.
+      if ((for_creature || PayingAbilitySource() != nullptr) && lo.Total() > 0)
       {
           int restricted = 0;
+          // SUBTYPE-RESTRICTED units (a mana_only_subtype source: Giada, Smokebraider) are the MOST
+          // restricted, so the leftover is attributed to them first -- the conservative direction (a
+          // general unit may be under-credited, a restricted one is never laundered). They float in the
+          // restricted reserve under their source's own restriction (RestrictedFloatUsableNow), never
+          // in the any-creature reserve, which a Metallic Mimic could spend.
+          int sub_units = 0;
+          bool sub_any_combo = false;
+          const CardParams* sub_pp = nullptr;
           const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
           for (int bi = 0; bi < nb; ++bi)
           {
@@ -2805,8 +2838,40 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
               const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
               if (bd == nullptr || !bd->params.creature_mana_only) { continue; }
               const int y = PermanentManaYield(state, bp, *bd);
-              restricted += (y >= 0 ? y : ManaProducedPerTap(*bd));
+              const int units = (y >= 0 ? y : ManaProducedPerTap(*bd));
+              if (!bd->params.mana_only_subtype.empty())
+              {
+                  sub_units += units;
+                  if (sub_pp == nullptr) { sub_pp = &bd->params; }
+                  if (bd->params.produces_any_combination) { sub_any_combo = true; }
+                  continue;
+              }
+              restricted += units;
           }
+          if (sub_units > 0 && sub_pp != nullptr)
+          {
+              const int sub_left = std::min(sub_units, lo.Total());
+              ManaPool r;
+              int* src[7] = { &lo.white, &lo.blue, &lo.black, &lo.red, &lo.green, &lo.colorless, &lo.wild };
+              int* dst[7] = { &r.white,  &r.blue,  &r.black,  &r.red,  &r.green,  &r.colorless,  &r.wild };
+              for (int k = 0; k < sub_left; ++k)
+              {
+                  int best = -1;
+                  for (int c = 0; c < 7; ++c) { if (*src[c] > 0 && (best < 0 || *src[c] > *src[best])) { best = c; } }
+                  if (best < 0) { break; }
+                  --*src[best]; ++*dst[best];
+              }
+              // "Two mana in any combination of colors": the surplus unit's colour was the player's
+              // choice at activation, so it floats as WILD (pays any coloured pip of a later legal
+              // payment) rather than as whatever colour this payment's arrangement happened to give it.
+              if (sub_any_combo) { const int t = r.Total(); r = ManaPool{}; r.wild = t; }
+              // One reserve holds ONE restriction: never book on top of a different kind (a Troyan's
+              // big-spell units). Dropped instead -- conservative, and no deck runs both shapes.
+              if (FloatLeftoverManaEnabled()
+                  && (state.floating_bigspell_mana.Total() <= 0 || state.floating_bigspell_pp == sub_pp))
+              { AddBigSpellFloat(state, r, *sub_pp); }
+          }
+          if (!for_creature) { restricted = 0; }   // only a creature payment books the any-creature reserve
           restricted = std::min(restricted, lo.Total());
           if (restricted > 0)
           {
@@ -6885,7 +6950,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             const int creature_float = for_creature ? static_cast<int>(state.floating_creature_mana.Total()) : 0;
             // The big-spell-only reserve likewise, for a payment that may spend it (permissive on an
             // unset identity: this is a BOUND).
-            const int big_float = BigFloatMayBeUsable(state) ? static_cast<int>(state.floating_bigspell_mana.Total()) : 0;
+            const int big_float = RestrictedFloatMayBeUsable(state, for_creature) ? static_cast<int>(state.floating_bigspell_mana.Total()) : 0;
             if (!PaymentManaCovers(state, for_creature,
                                    cost_in.ManaValue() - state.floating_mana.Total() - creature_float - big_float))
             {

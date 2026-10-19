@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "LandfallElementals (lfe-fury, 2026-10-18): Incandescent Soulstoke puts Fury from hand for {1}{R}, {T}.",
+    "The put creature gains haste and is pumped by Soulstoke's lord: a 4/4 DOUBLE STRIKER = exactly 8, the",
+    "opponent's life. Two Mountains cannot hard-cast Fury ({3}{R}{R}) and the hand holds no other red card, so",
+    "the pitch evoke is not castable either: the put is the ONLY lethal line. Guards the put's haste, the",
+    "lord's +1/+1 on a put creature, double strike in combat AND in the search's this-turn projection (the",
+    "put's attack stamp), and that the creature is put (not cast) through the real executor. The library is",
+    "a dead draw (Swords to Plowshares, no white mana) so the board stays fixed."
+  ],
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4, "on_the_play": true, "max_turns": 4,
+  "active_life": 20, "opponent_life": 8,
+  "battlefield": [
+    { "name": "Incandescent Soulstoke", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Fury" ],
+  "library_filler": "Swords to Plowshares", "library_size": 30,
+  "depth": 3, "budget_ms": 0,
+  "expect_win_turn": 4
+}

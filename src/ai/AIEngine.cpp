@@ -6463,7 +6463,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // may pay an ability of a creature source). Covers the K-1 repeat payments too.
                 std::optional<CreatureAbilityPayScope> creature_ability_scope;
                 if (PermAbilitySourceIsCreature(state, state.active_player_index, src_id))
-                { creature_ability_scope.emplace(); }
+                { creature_ability_scope.emplace(AbilitySourceCard(state, state.active_player_index, src_id)); }
                 // Voldaren Estate's TRUE Blood cost at activation (lockstep twin of the rollout's).
                 const ManaCost act_cost = (a.ability_mode == Action::AbilityMode::TapBlood)
                     ? TapBloodCostNow(state, state.active_player_index, *a.def) : OutletOwnCost(a);
@@ -6627,7 +6627,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // The pay scope marks this as a creature-source ability payment (ActivatePump sources
             // are always creatures -- the params only exist on them), so Secluded Courtyard's
             // coloured mana is legal here (D12).
-            CreatureAbilityPayScope pump_pay_scope;
+            CreatureAbilityPayScope pump_pay_scope(AbilitySourceCard(state, state.active_player_index, a.sac_source_id));
             // Stromkirk Condemned (mode 4): liveness first -- lockstep twin of the rollout's.
             if (a.gy_exile_mode == 4
                 && !DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
@@ -6803,9 +6803,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::PutFromHandAbility)
         {
-            // Stoneforge put (executor mirror -- same shared ApplyPutFromHand).
+            // Stoneforge / Soulstoke put (executor mirror -- same shared ApplyPutFromHand), paid
+            // under the creature-ability context naming the source (lockstep with apply_one).
             ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            std::optional<CreatureAbilityPayScope> put_scope;
+            if (PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
+            { put_scope.emplace(AbilitySourceCard(state, state.active_player_index, a.sac_source_id)); }
+            const bool put_paid = TapForCost(state, a.cost, avail, /*for_creature=*/false);
+            put_scope.reset();
+            if (put_paid)
             {
                 ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
                 if (m_logger)
@@ -8734,6 +8740,15 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // ...and an Aura spell whose searched host is not a legal target now (CR 303.4a / 601.2c; the SHARED
     // AuraSpellCastLegal; lockstep twin of apply_one's guard).
     if (!AuraSpellCastLegal(state, state.active_player_index, *def, enchant_target)) { return; }
+    // PITCH EVOKE (Fury): the evoke's cost is a hand card (riders.pitch_name). No such card left -> the
+    // spell is not cast, nothing paid (lockstep twin of apply_one's guard, same shared predicate).
+    const bool cast_pitch = evoke && !def->params.evoke_exile_color.empty();
+    const InternedName pitch_name = riders.pitch_name;
+    if (cast_pitch
+        && (pitch_name.empty()
+            || FindPitchHandIndex(ap, pitch_name.str(), def->params.evoke_exile_color,
+                                  hand_card.m_number) < 0))
+    { return; }
 
     // REMAND rider: live only for a plain paid hand cast with a copy of the Remand in hand and a cast
     // left in the Irencrag budget for it -- the EXACT conditions of the rollout's apply_one (lockstep);
@@ -9312,8 +9327,17 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // REMAND: keep the physical card -- a countered X goes back to its owner's hand under its own number.
     Card remand_x_card;
     if (remand_def != nullptr) { remand_x_card = hand_card; }
+    const int pitch_cast_number = hand_card.m_number;   // `hand_card` dies with the erase below
     ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
         [&hand_card](const Card& c) { return &c == &hand_card; }));
+    // ...and the PITCH half of the evoke cost (validated before payment above): exile the pinned red
+    // card -- any copy of that name other than the cast card (lockstep twin of apply_one).
+    if (cast_pitch)
+    {
+        PerformEvokePitchCost(state, state.active_player_index, pitch_name.str(),
+                              def->params.evoke_exile_color, pitch_cast_number,
+                              def->card.m_name.str());
+    }
 
     // Replicate: if the card (or a lord on the battlefield) grants replicate to this
     // creature type, pay the mana cost additional times before resolving to create token

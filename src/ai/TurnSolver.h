@@ -748,6 +748,19 @@ struct Action
                                        // odometer group key and the canonical-order key of the subset
                                        // guard; never read at apply, which takes the Remand BY NAME --
                                        // copies are interchangeable). -1 = not a remand variant.
+    InternedName pitch_name;           // PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile
+                                       // a red card from your hand"). Non-empty only on an evoke variant
+                                       // of such a card: the NAME of the hand card exiled as the cost. One
+                                       // variant per distinct legal name (the search, and the human, pick
+                                       // it); copies of one name are interchangeable, so the apply worlds
+                                       // take any copy BY NAME other than the cast card. Folded into every
+                                       // plan signature when set. Rides CastRiders::pitch_name to both
+                                       // cast sites.
+    int         pitch_slot       = -1; // ...the hand index of the LAST copy of that name (never the cast
+                                       // card itself): the subset guard's key (kDupPitch) -- a plan may
+                                       // not also cast that very copy, nor pitch it twice. The last copy,
+                                       // so a plan that casts the first copy and pitches the second stays
+                                       // inside the hand-cast canonical prefix. -1 = not a pitch variant.
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;
@@ -902,6 +915,8 @@ struct CastRiders
     int      player_target   = 0;       // Action::player_target (Heroes' Reunion / Rest for the Weary:
                                         // 0 = we gain, 1 = the opponent gains) -- read at resolution by
                                         // ApplyCastLifegain in both worlds
+    InternedName pitch_name;            // Action::pitch_name: the hand card a pitch evoke exiles as its
+                                        // cost (Fury); empty for every other cast
 
     static CastRiders Of(const Action& a)
     {
@@ -915,6 +930,7 @@ struct CastRiders
         r.remand_by       = a.remand_by;
         r.player_target   = a.player_target;
         r.draw_target     = a.draw_target;
+        r.pitch_name      = a.pitch_name;
         return r;
     }
     // Copy out and reset: the ONLY way a cast reads them.

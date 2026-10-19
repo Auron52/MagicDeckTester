@@ -25,6 +25,19 @@ struct MtgTestSeam
                             false, false, -1, 0, 0, 0, false, false, false, riders);
     }
 
+    // The executor's hand cast in EVOKE mode carrying a PITCH rider (Fury's "Evoke--Exile a red card
+    // from your hand"): exactly what cast_by_name passes for an evoke Action with pitch_name set (the
+    // rider rides CastRiders, evoke rides the positional flag). Pushes the StackEntry; the caller
+    // resolves it (EffectHandler::Resolve) to see the enter + evoke sacrifice.
+    static void CastEvokeFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail,
+                                  const std::string& pitch_name)
+    {
+        CastRiders riders = e.m_cast_riders.Take();
+        riders.pitch_name = pitch_name;
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), 0, 0, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, /*evoke=*/true, false, false, riders);
+    }
+
     // Commit ONE phase plan, so the engine's next TakeTurn for that phase EXECUTES it (the
     // committed-line pop) instead of searching -- the only way a test can hand the real executor a
     // specific plan, e.g. to check it realises a plan exactly as the rollout's ApplyPlan does.

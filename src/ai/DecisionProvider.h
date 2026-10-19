@@ -3557,6 +3557,60 @@ public:
         return -1;
     }
 
+    // EtbDividedDamageAlloc -- an ENTERS trigger that "deals N damage divided as you choose among any
+    // number of target creatures and/or planeswalkers" (Fury). `legal` = battlefield indices of the
+    // legal targets (BOTH sides; the caller has applied shroud/hexproof); `lethal_need[k]` = the damage
+    // that would kill legal[k] now (0 = cannot be killed by damage, e.g. indestructible). Returns one
+    // amount per legal entry, either all ZERO ("any number" includes zero targets -- the trigger then
+    // does nothing) or each >= 0 summing to `total`. A RESOLUTION pick (the trigger fires on every entry
+    // path -- cast, evoke, an Incandescent Soulstoke put); human play overrides it through the `divide`
+    // decision over the full legal set.
+    //
+    // DEFAULT -- a stated DOMINANCE FOLD, not a value ranking. Against the goldfish the opponent's
+    // creatures never block or attack (they exist only as removal targets) and it has no planeswalkers,
+    // so killing one gains nothing UNLESS one of our permanents pays on an opponent creature's death
+    // (opp_dies_life_loss -- Massacre Wurm's drain); damage to our own creatures can only lose material.
+    // So: no targets at all, unless such a watcher is out -- then kill as many opposing creatures as the
+    // damage allows (cheapest kill first), dumping any surplus on the last one killed (the damage must
+    // all be assigned once a target is chosen). A deck with an own-death or damage payoff overrides.
+    virtual std::vector<int> EtbDividedDamageAlloc(const GameState& s, int controller,
+                                                   const std::vector<int>& legal,
+                                                   const std::vector<int>& lethal_need,
+                                                   int total) const
+    {
+        std::vector<int> out(legal.size(), 0);
+        if (total <= 0 || legal.empty()) { return out; }
+        bool opp_death_pays = false;
+        for (const Permanent& w : s.battlefield)
+        {
+            if (w.controller_index != controller) { continue; }
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+            if (wd != nullptr && wd->params.opp_dies_life_loss > 0) { opp_death_pays = true; break; }
+        }
+        if (!opp_death_pays) { return out; }
+        std::vector<int> order;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(k)])];
+            if (q.controller_index != controller && lethal_need[static_cast<std::size_t>(k)] > 0)
+            { order.push_back(k); }
+        }
+        std::stable_sort(order.begin(), order.end(), [&](int a, int b)
+        { return lethal_need[static_cast<std::size_t>(a)] < lethal_need[static_cast<std::size_t>(b)]; });
+        int left = total, last = -1;
+        for (int k : order)
+        {
+            const int need = lethal_need[static_cast<std::size_t>(k)];
+            if (need > left) { break; }
+            out[static_cast<std::size_t>(k)] = need;
+            left -= need;
+            last = k;
+        }
+        if (last < 0) { return std::vector<int>(legal.size(), 0); }   // no kill reachable: no targets
+        out[static_cast<std::size_t>(last)] += left;
+        return out;
+    }
+
     // StorageLandHold -- a storage land (Mercadian Bazaar: "{T}: put a storage counter") offers a
     // real either/or every main phase: tap it for MANA NOW, or hold it untapped so it CHARGES for a
     // bigger burst later. `counters` is what it already holds.

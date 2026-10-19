@@ -9834,6 +9834,91 @@
    }
   },
   {
+   "name": "Smokebraider",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add two mana in any combination of colors. Spend this mana only to cast Elemental spells or activate abilities of Elementals. [MODEL (lfe-fury 2026-10-18): a CREATURE mana source (mana_dork), so summoning sickness gates the {T} (CanTapNow). YIELD -- produces WUBRG x produces_amount 2 with produces_any_combination: two units, EACH of any colour (neither the Karoo one-of-each bundle nor a one-colour burst). The greedy payer taps it for two of the asked colour; the backtracker branches over colour pairs, so one Smokebraider alone pays Brushfire Elemental's {R}{G}, and a hybrid {B/R} pip (Fulminator Mage) is paid as either half; the flow oracle prices it as two units splittable across its colours. RESTRICTION -- creature_mana_only + mana_only_subtype Elemental: the SPELL half pays only an Elemental creature spell, read off the paying spell's printed card (SpellSubtypePayScope), so Metallic Mimic -- a Shapeshifter in hand -- is refused. mana_only_subtype_abilities: the ABILITY half pays an activated ability whose SOURCE is an Elemental on the battlefield (the source rides CreatureAbilityPayScope(src); Mimic on the battlefield IS an Elemental via its chosen type), e.g. Incandescent Soulstoke's {1}{R}; every other ability (Aether Vial's tick, Myriad Landscape / Waterlogged Grove / Fiery Islet activations) is refused. An unspent unit floats as WILD in the restricted reserve under this card's own restriction (RestrictedFloatUsableNow), never as general or any-creature float, so it cannot be laundered into Mimic. The whole-turn batch prepay declines while such a source is live (the per-cast payer carries each cast's identity); the search's ability pricing counts it only for an Elemental source's ability. [PARTIAL: an Elemental spell of a NONCREATURE type (a Kindred spell) is refused -- WHY inert: cards.json holds no such card. The viewer's manual pre-tap does not offer this source (creature-only sources are paid automatically -- the Somberwald Sage / Giada precedent).]]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "produces_amount": 2,
+    "produces_any_combination": true,
+    "creature_mana_only": true,
+    "mana_only_subtype": "Elemental",
+    "mana_only_subtype_abilities": true
+   }
+  },
+  {
+   "name": "Incandescent Soulstoke",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Elemental creatures you control get +1/+1.\n{1}{R}, {T}: You may put an Elemental creature card from your hand onto the battlefield. That creature gains haste until end of turn. Sacrifice it at the beginning of the next end step. [MODEL (lfe-fury 2026-10-18): LORD -- subtypes_affected Elemental +1/+1 with lord_excludes_self, read by the shared ComputeLordBonus off each creature's LIVE subtypes, so a Metallic Mimic that chose Elemental is pumped. PUT -- tap_put_from_hand_cost {1}{R} (+{T}: summoning sickness gates it, CanTapNow) on the Stoneforge PutFromHandAbility action; tap_put_from_hand_types Elemental + tap_put_from_hand_creature_only (an Elemental CREATURE card). WHICH card is searched: one plan variant per distinct legal hand name (human: the sfput verb, every legal name). Paid under the creature-ability context naming this source, so Secluded Courtyard's coloured mana and Smokebraider's mana are legal for it. The put card is NOT cast (no cast triggers, no evoke) but ENTERS through the universal enter cascade (FireEtbWatchers + FireOwnEtbTriggers): Risen Reef's watcher, Metallic Mimic's +1/+1 counter and the creature's own ETB (Fury's divided damage) fire. tap_put_grants_haste -> temp_haste until end of turn; tap_put_sac_at_end_step -> Permanent::sac_at_end_step, a delayed trigger swept at the beginning of the end step in both worlds through SacrificePermanentAt (its dies/LTB triggers fire; a body that already left is not found). The search's this-turn attack projection stamps the put creature's hasted power (lord and double strike included: a put Fury is a 4/4 double striker = 8). 'You may': not activating is the decline; activating and putting nothing is dominated (a tap for nothing) and not offered. [PARTIAL/PROVISIONAL (user sign-off): INSTANT-SPEED TIMING -- the ability is activated only in our own main phase (pre-combat, so the creature attacks). The engine has no opponent's-turn action window, so the real line 'activate at the end of the OPPONENT's turn' -- the creature then survives through our whole next turn and attacks, is sacrificed at OUR end step, uses mana left over from our turn, and Soulstoke untaps to activate again in our main phase (two puts per turn cycle; an Elemental entering on their turn also triggers Risen Reef / landfall a turn early) -- is not modelled. WHY deferred: it needs a new between-turns decision node with executor/rollout parity, budget accounting and a viewer decision -- see docs/design/opponent-end-step-window.md (design + sizing). Effect: the deck is UNDER-rated wherever that line is better.]]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Elemental"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "tap_put_from_hand_cost": "{1}{R}",
+    "tap_put_from_hand_types": [
+     "Elemental"
+    ],
+    "tap_put_from_hand_creature_only": true,
+    "tap_put_grants_haste": true,
+    "tap_put_sac_at_end_step": true
+   }
+  },
+  {
+   "name": "Fury",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Incarnation"
+   ],
+   "keywords": [
+    "Evoke",
+    "Double strike"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Double strike\nWhen this creature enters, it deals 4 damage divided as you choose among any number of target creatures and/or planeswalkers.\nEvoke—Exile a red card from your hand. [MODEL (lfe-fury 2026-10-18): DOUBLE STRIKE -- the printed keyword (CreatureHasDoubleStrike): combat doubles its damage and every attack projection (PendingAttackDamage, the Soulstoke put stamp) reads it. ETB -- etb_damage_divided_creatures 4, the shared ResolveEtbDividedCreatureDamage fired from FireOwnEtbTriggers on every entry (cast, evoke, an Incandescent Soulstoke or Aether Vial put), executor and rollout alike. Legal targets: every creature on either side it may target (shroud / an opponent's hexproof excluded; itself included). 'Any number' includes ZERO. The autonomous allocation is DecisionProvider::EtbDividedDamageAlloc -- a stated DOMINANCE FOLD: no targets, because the goldfish opponent's creatures never block or attack and our own can only lose material; when an opponent-death payoff is out (opp_dies_life_loss, Massacre Wurm) it kills as many opposing creatures as 4 damage allows. The human allocates freely through the `divide` decision (allow_none: an all-zero reply = no targets). Deaths: one simultaneous lethality pass (LethalToughness), then OnCreatureDies / FireOppCreatureDies. EVOKE -- a PITCH alternative cost: evoke_cost {0} + evoke_exile_color R. WHICH red card is exiled is SEARCHED (one evoke variant per distinct red hand name, the cast copy excluded -- it is on the stack -- and a second Fury included; multicolour red cards count: Brushfire Elemental, Fulminator Mage). With no other red card in hand it is not castable for its evoke cost. The evoked Fury still ENTERS (Risen Reef, Metallic Mimic's counter, its ETB) and is then sacrificed (SacrificePermanentAt -> dies triggers). [PARTIAL/PROVISIONAL (user sign-off): (a) PLANESWALKERS are not in the target set -- WHY inert: the goldfish opponent has none and the engine models no damage to loyalty, so the only walker targets would be our own, which it could only hurt. (b) The ETB-vs-evoke-sacrifice trigger ORDER is a player choice (CR 603.3b); the engine always resolves the ETB first -- WHY inert: the ETB's damage does not depend on Fury remaining on the battlefield, and nothing in the engine acts on the evoked body between the two triggers (no sacrifice outlet or Fling in this list).]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "evoke_cost": "{0}",
+    "evoke_exile_color": "R",
+    "etb_damage_divided_creatures": 4
+   }
+  },
+  {
    "name": "Adaptive Automaton",
    "mana_cost": "{3}",
    "types": [

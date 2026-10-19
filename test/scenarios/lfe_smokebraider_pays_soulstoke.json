@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "LandfallElementals (lfe-fury, 2026-10-18): the SAME lethal as lfe_soulstoke_put_fury_lethal, with NO",
+    "lands -- Smokebraider is the only mana source. Its two mana may be spent only on Elemental spells or",
+    "ABILITIES OF ELEMENTALS; Incandescent Soulstoke is an Elemental, so Smokebraider alone pays the {1}{R}",
+    "put. Guards the restricted payer's ability half end to end (the enumerator must price the put against",
+    "the creature-only source, and the real executor must pay it under the ability-source scope): a",
+    "regression here leaves Fury in hand and the opponent alive."
+  ],
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4, "on_the_play": true, "max_turns": 4,
+  "active_life": 20, "opponent_life": 8,
+  "battlefield": [
+    { "name": "Incandescent Soulstoke", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Smokebraider", "controller": 0, "tapped": false, "sick": false }
+  ],
+  "hand": [ "Fury" ],
+  "library_filler": "Swords to Plowshares", "library_size": 30,
+  "depth": 3, "budget_ms": 0,
+  "expect_win_turn": 4
+}

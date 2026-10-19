@@ -761,7 +761,22 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                                                              a.sac_victim_id).size())
                     + ") \xE2\x86\x92 " + a.card_name.str(); break;
             case Action::Kind::PutFromHandAbility:
-                tag = "put " + a.card_name + " onto battlefield (Stoneforge)"; break;
+            {
+                // Incandescent Soulstoke's put carries riders the human must see before choosing it:
+                // haste now, and the body is sacrificed at this turn's end step. Stoneforge's label is
+                // unchanged.
+                const CardDefinition* srcd = nullptr;
+                for (const Permanent& sp : s.battlefield)
+                { if (sp.card.m_number == a.sac_source_id) { srcd = CardDatabase::Instance().LookupCached(sp.card); break; } }
+                if (srcd != nullptr && (srcd->params.tap_put_grants_haste || srcd->params.tap_put_sac_at_end_step))
+                {
+                    tag = "put " + a.card_name + " onto battlefield (" + srcd->card.m_name.str()
+                        + (srcd->params.tap_put_grants_haste ? ": haste" : ":")
+                        + (srcd->params.tap_put_sac_at_end_step ? ", sacrificed at end step)" : ")");
+                }
+                else { tag = "put " + a.card_name + " onto battlefield (Stoneforge)"; }
+                break;
+            }
             case Action::Kind::AuraSwap:
                 tag = "aura swap: " + EnchantTargetName(s, a.sac_source_id) + " \xE2\x87\x84 "
                     + a.card_name.str();
@@ -1113,6 +1128,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                  + (a.twobrid_colored > 1 ? "s" : "") + " with colour)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
+        // PITCH EVOKE (Fury): WHICH card the evoke exiles -- the variants differ only in it.
+        if (!a.pitch_name.empty()) { tag += " (exile " + a.pitch_name.str() + " from hand)"; }
         // REMAND rider (Action::remand_by): "cast X, then Remand it" shares X's name with the plain
         // cast of X -- the same lesson once more. Say which card answers it and what it does.
         if (!a.remand_by.empty())
@@ -1867,7 +1884,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + "|" + std::to_string(a.twobrid_colored)
                      + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                      + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "")
-                     + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str()) + ";";
+                     + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str())
+                     + (a.pitch_name.empty() ? "" : "|px:" + a.pitch_name.str()) + ";";
             }
             if (has_collapse && !pod_reps.insert(key).second) { hide_bundle[i] = 1; }
         }
@@ -2030,6 +2048,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                       + "+" + std::to_string(static_cast<int>(a.convoke_plan_pip))
                       + "/" + std::to_string(static_cast<int>(a.convoke_plan_other)) : std::string())
                  + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
+                 // PITCH EVOKE: Fury evoked exiling X and exiling Y are different payloads.
+                 + (a.pitch_name.empty() ? std::string() : "|px" + a.pitch_name.str())
                  + "|" + tgt;
         };
         // The PLAN-level identity: its land, its face, and its actions' payload keys IN VECTOR
@@ -2733,6 +2753,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
+            // PITCH EVOKE (Fury): the hand card the evoke exiles (its cost), so the choose dialog can
+            // tell "evoke, exile Brushfire Elemental" from "evoke, exile Fury".
+            if (!ac.pitch_name.empty())
+            {
+                os << ", \"evoke_exile\": "; JsonStr(os, ac.pitch_name.str());
+                if (ac.pitch_slot >= 0) { os << ", \"evoke_exile_slot\": " << ac.pitch_slot; }
+            }
             // REMAND rider (Action::remand_by): the same bestow lesson -- "cast X" and "cast X,
             // Remand it" share X's name and hand slot. The key names the answering card (and its
             // slot, so the GUI can light the Remand too) for the choose dialog.
@@ -3476,18 +3503,32 @@ static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTar
 // `default_amounts` (aligned to legal_targets) seeds the board with the heuristic pick (all to face).
 static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
                                     const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
-                                    int total, const std::vector<int>& default_amounts, int decision_index)
+                                    int total, const std::vector<int>& default_amounts, int decision_index,
+                                    bool allow_none = false)
 {
     DecisionJson d(os, decision_index);
     d.Type("divide").Source(source).Turn(s.turn_number).Int("total_damage", total).Board(s);
+    // "ANY NUMBER of target creatures" (Fury's ETB): choosing NO target is legal and deals no damage, so
+    // an all-zero reply is accepted too. Absent for the "any number of targets" burn spells, which
+    // name the opponent's face and are cast to be aimed.
+    if (allow_none) { d.Bool("allow_none", true); }
     d.Array("legal_targets", legal.size(), [&](std::size_t i)
     {
         os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : "permanent")
            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]);
         os << ", \"default\": " << (i < default_amounts.size() ? default_amounts[i] : 0) << " }";
     });
-    d.Note("reply one integer per legal target (in this order), each >= 0 and summing to "
-           + std::to_string(total) + " -- the damage assigned to each. Default = all to the opponent face.");
+    if (allow_none)
+    {
+        d.Note("reply one integer per legal target (in this order), each >= 0, summing to "
+               + std::to_string(total) + " -- or ALL ZERO for no targets (no damage). Default = the "
+               "engine's allocation (no targets unless an opponent-death payoff is out).");
+    }
+    else
+    {
+        d.Note("reply one integer per legal target (in this order), each >= 0 and summing to "
+               + std::to_string(total) + " -- the damage assigned to each. Default = all to the opponent face.");
+    }
 }
 
 // Emit a board-click target decision for a uniform-damage spell. `options` (built by the caller)
@@ -6037,6 +6078,64 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
         [this](const GameState& s, const CardDefinition& def, int controller, int max_targets,
             int per_target_damage, const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
         {
+            // Fury's ETB (etb_damage_divided_creatures): "N damage divided as you choose among any
+            // number of target creatures and/or planeswalkers". The `divide` decision with the
+            // resolver's OWN legal set (DividedCreatureDamageTargets -- creatures of both sides, no
+            // faces) and allow_none: an all-zero reply chooses no targets. Default = the engine's
+            // allocation (`heuristic`). One integer per legal target, read positionally.
+            if (def.params.etb_damage_divided_creatures > 0)
+            {
+                (void)max_targets;
+                std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
+                for (int bi : DividedCreatureDamageTargets(s, controller))
+                {
+                    const Permanent& p = s.battlefield[static_cast<std::size_t>(bi)];
+                    legal.push_back({ 1, bi, 0 });
+                    legal_labels.push_back(ProtocolPTLabel(p, s)
+                                           + (p.controller_index == controller ? " (yours)" : ""));
+                }
+                if (legal.empty()) { return heuristic; }
+                const int total = per_target_damage;
+                const int need  = static_cast<int>(legal.size());
+                std::vector<int> defaults(need, 0);
+                for (const ChosenTarget& h : heuristic)
+                {
+                    for (int i = 0; i < need; ++i)
+                    { if (legal[i].index == h.index) { defaults[i] += h.amount; } }
+                }
+                int di = static_cast<int>(cursor);
+            claude_retry_fury:  // --interactive: new picks arrived on stdin; re-test the consume branch
+                if (cursor + need <= static_cast<int>(choices.size()))
+                {
+                    std::vector<int> amts(need);
+                    int sum = 0;
+                    for (int i = 0; i < need; ++i) { int a = choices[cursor++]; if (a < 0) { a = 0; } amts[i] = a; sum += a; }
+                    ++decisions_made;
+                    std::vector<ChosenTarget> built;
+                    for (int i = 0; i < need; ++i)
+                    { if (amts[i] > 0) { ChosenTarget c = legal[i]; c.amount = amts[i]; built.push_back(c); } }
+                    const bool ok = (sum == total) || (sum == 0);   // all-zero = no targets (legal)
+                    if (!log_dir.empty())
+                    {
+                        std::ostringstream ss;
+                        ss << "{ \"chosen\": [";
+                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
+                        ss << "], \"decision\": ";
+                        WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di,
+                                                /*allow_none=*/true);
+                        ss << "}";
+                        trace.push_back(ss.str());
+                    }
+                    return ok ? built : heuristic;
+                }
+                std::cout << "<<<CLAUDE_DECISION>>>\n";
+                WriteDivideDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di,
+                                        /*allow_none=*/true);
+                std::cout << "<<<END_DECISION>>>\n";
+                std::cout.flush();
+                if (AwaitMoreChoices()) { goto claude_retry_fury; }
+                std::exit(70);
+            }
             // Own-creature pump (Invigorate): legal targets are the controller's creatures, not
             // damage targets, and the dialog reads "+P/+T" rather than "N damage".
             const bool own_pump = (def.tmpl == CardTemplate::PumpSpell) && def.params.target_own_creature;

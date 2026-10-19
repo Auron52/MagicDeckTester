@@ -23057,8 +23057,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // signature below and misroute the whole deck to AntiLifegainProvider (the Goblin-Matron
         // misroute class). Every field here is new + gated (0/false/empty inert), so only a deck
         // carrying the new equipment params sets this -- all existing decks are byte-identical.
+        // tap_put_from_hand_cost counts only when it puts EQUIPMENT (Stoneforge Mystic): Incandescent
+        // Soulstoke's put of an Elemental creature rides the same param and is no equipment signal
+        // (it would otherwise route a LandfallElementals list to the Equipment provider).
+        const bool puts_equipment = p.tap_put_from_hand_cost.has_value()
+            && std::find(p.tap_put_from_hand_types.begin(), p.tap_put_from_hand_types.end(),
+                         std::string("Equipment")) != p.tap_put_from_hand_types.end();
         if (p.attack_dig_attach_count > 0 || p.equip_combat_damage_charges > 0
-            || p.tap_put_from_hand_cost.has_value() || p.attach_all_equipment_cost.has_value()
+            || puts_equipment || p.attach_all_equipment_cost.has_value()
             || p.metalcraft_equip_zero_artifacts || p.draw_on_equipment_etb
             || p.upkeep_tokens_per_equipment > 0 || p.double_strike_while_equipped
             // v2-puresteel-hammer additions, OR-ed from several different cards so a deckbuilding

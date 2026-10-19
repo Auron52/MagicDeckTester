@@ -192,6 +192,14 @@
 // also in BuildSimKey; no direction survives alone). cond_haste is DERIVED (a function of the definition
 // and the opponent's life, both already compared) and re-derived at entry / beginning of combat, so it
 // needs no fold.
+// 304 -> 304 (2026-10-22, LandfallElementals / Incandescent Soulstoke, rebased onto Vampires A2):
+// Permanent gained `sac_at_end_step` ("Sacrifice it at the beginning of the next end step" -- the put
+// creature's delayed trigger), a 1-bit field in the byte above, so the size held. Classification: a
+// BOUNDARY ASSERTION in AtCleanBoundary, beside exile_at_end (the Twinflame twin): it is set mid-turn and
+// swept at the beginning of the end step -- before the post-SimulateEndAndStartNextTurn point this
+// comparator works at -- so a state still carrying one is not at a clean boundary. Also folded into
+// TurnSolver's BuildSimKey and every per-permanent sim key, gated on set, because it decides mid-turn
+// whether a body survives the turn.
 static_assert(sizeof(Permanent) == 304,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -721,7 +729,8 @@ inline bool AtCleanBoundary(const GameState& s)
         // state is not where we think it is and no comparison is safe.
         if (p.damage != 0 || p.pending_death_trigger != 0)          { return false; }
         if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)     { return false; }
-        if (p.temp_haste || p.is_animated || p.exile_at_end)        { return false; }
+        if (p.temp_haste || p.is_animated || p.exile_at_end
+            || p.sac_at_end_step)                                   { return false; }
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
         if (p.etb_tap_pending)                                      { return false; }   // Colossification deferral (mid-turn only)

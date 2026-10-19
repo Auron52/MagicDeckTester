@@ -974,6 +974,8 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
 inline void ResolveEtbDestroyOptional(GameState& state, int controller, const CardDefinition& def);
 inline void ResolveEtbTapMandatory(GameState& state, int controller, int source_id,
                                    const std::string& src_name);
+// Fury's divided-damage ETB (etb_damage_divided_creatures), defined beside the destroy resolver.
+inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, const CardDefinition& def);
 inline void ResolveEtbReturnGyToHand(GameState& state, int controller, const std::string& chosen,
                                      const std::string& source_name);
 // Forge Anew's ETB ("return target Equipment card from your graveyard to the battlefield"), defined
@@ -7699,6 +7701,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
+        || p.sac_at_end_step
         || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
@@ -10043,6 +10046,11 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
             }
         }
     }
+
+    // (3b) Fury: "it deals N damage divided as you choose among any number of target creatures and/or
+    //      planeswalkers" -- the shared resolver (provider allocation / the human's `divide`). AFTER
+    //      it, entered_index may be stale (a death erases); nothing below reads it for this card.
+    if (p.etb_damage_divided_creatures > 0) { ResolveEtbDividedCreatureDamage(state, controller, *def); }
 
     // (4) ETB tutor to hand keyed on subtype (Goblin Matron). Reuses PerformTutor; the chosen
     //     target rides in from the cast (search/human) or falls back to the provider's pick.
@@ -13348,6 +13356,88 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     OnCreatureDies(state, controller, dead, was_tok, dead_m1);
 }
 
+// ---- PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile a red card from your hand") ----
+// The cost is paid AS THE SPELL IS CAST (CR 601.2h), so by then the cast card is on the stack: it can
+// never pitch itself, while another copy of it in hand is a legal pitch. "A red card" is any card with
+// red among its colours (CR 105.2: Brushfire Elemental {R}{G}, Fulminator Mage {1}{B/R}{B/R}) -- read
+// off the DATABASE card, since a zone card is a name-only placeholder with an empty colour mask. An
+// impulse-staged card is in exile, not in hand. Shared by the enumeration (CollectActions), both cast
+// sites (AIEngine::CastSpellFromHand, TurnSolver's apply_one) and the tests, so legality cannot drift.
+inline bool IsPitchableHandCard(const Card& c, const std::string& color)
+{
+    if (color.empty() || c.m_is_staged) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return d != nullptr && CardHasColorNamed(d->card, color);
+}
+// Hand index of a copy of `name` that may be exiled for a pitch evoke, never the card being cast
+// (`cast_number`); the LAST such copy (the enumeration's representative slot). -1 = none.
+inline int FindPitchHandIndex(const Player& pl, const std::string& name, const std::string& color,
+                              int cast_number)
+{
+    for (int h = static_cast<int>(pl.hand.size()) - 1; h >= 0; --h)
+    {
+        const Card& c = pl.hand[static_cast<std::size_t>(h)];
+        if (c.m_number == cast_number || c.m_name != name) { continue; }
+        if (IsPitchableHandCard(c, color)) { return h; }
+    }
+    return -1;
+}
+// Pay the pitch: exile one copy of `name` from the controller's hand (not the cast card). Returns
+// false -- nothing changes -- when no such copy is left, which the cast sites check BEFORE paying, so
+// a pitch evoke whose card a same-plan action already spent is dropped cleanly (the stranded pattern,
+// never a phantom free cast).
+inline bool PerformEvokePitchCost(GameState& state, int controller, const std::string& name,
+                                  const std::string& color, int cast_number,
+                                  const std::string& source_name)
+{
+    Player& pl = state.players[controller];
+    const int h = FindPitchHandIndex(pl, name, color, cast_number);
+    if (h < 0) { return false; }
+    Card c = pl.hand[static_cast<std::size_t>(h)];
+    pl.hand.erase(pl.hand.begin() + h);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "cost",
+                      source_name + " evoked -- exiled " + c.m_name.str() + " from hand");
+    }
+    state.exile.push_back(std::move(c));
+    return true;
+}
+
+// Incandescent Soulstoke's delayed trigger: "Sacrifice it at the beginning of the next end step."
+// Every permanent carrying Permanent::sac_at_end_step is sacrificed through the SHARED
+// SacrificePermanentAt (graveyard, attachments off, sacrifice watchers, OnCreatureDies -- so a
+// Reveillark put this way fires its LTB). Called at the TOP of BOTH end-step sites in lockstep
+// (GameEngine::EndStep and TurnSolver's SimulateEndAndStartNextTurn), beside the Twinflame exile
+// sweep, before cleanup (CR 513.1a / 514). Re-found by m_number after each sacrifice because a death
+// cascade may append or erase permanents. A body that already left the battlefield (it died in
+// combat, was bounced) is simply not found: the delayed trigger does nothing (CR 603.7c -- it tracks
+// that object only). No-op (one flag test per permanent) for every deck without the param.
+inline void PerformEndStepDelayedSacrifices(GameState& state)
+{
+    std::vector<std::pair<int, int>> due;   // (m_number, controller)
+    for (const Permanent& p : state.battlefield)
+    { if (p.sac_at_end_step) { due.emplace_back(p.card.m_number, p.controller_index); } }
+    for (const std::pair<int, int>& d : due)
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != d.first || q.controller_index != d.second || !q.sac_at_end_step)
+            { continue; }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xE2\x8F\xB3 " + q.card.m_name.str()
+                              + " -- sacrificed at the beginning of the end step (put onto the "
+                                "battlefield this turn)");
+            }
+            SacrificePermanentAt(state, d.second, i);
+            break;
+        }
+    }
+}
+
 // Pyroclasm: "deals N damage to each creature" -- a SYMMETRIC untargeted sweep over BOTH sides.
 // The opponent-only twin is PerformMvCastDamageOppCreatures; this one can kill OUR creatures, so
 // it additionally owes the two things that twin never needed: equipment detach from a dead host
@@ -13683,6 +13773,127 @@ inline void ResolveEtbDestroyOptional(GameState& state, int controller, const Ca
     {
         OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
+    }
+}
+
+// Fury's ETB (CardParams::etb_damage_divided_creatures): "it deals N damage divided as you choose
+// among any number of target creatures and/or planeswalkers." Shared by every entry path through
+// FireOwnEtbTriggers (cast, evoke, an Incandescent Soulstoke or Vial put), executor and rollout alike.
+//   * LEGAL TARGETS: every creature on the battlefield, either side, that this ability may target --
+//     shroud blocks it (our Lightning Greaves), an opponent's hexproof blocks it (CR 702.11b). The
+//     source itself is legal (it is on the battlefield as the trigger resolves). PLANESWALKERS: the
+//     goldfish opponent never has one and the engine models no damage to loyalty, so our own walkers
+//     are left out of the set -- damaging one could only cost us loyalty (disclosed, inert).
+//   * ALLOCATION: "any number" includes ZERO, and once any target is chosen all N must be assigned,
+//     each target at least 1 (CR 601.2d). The autonomous allocation is the provider's
+//     EtbDividedDamageAlloc (default: a dominance fold -- no targets unless an opponent-death payoff is
+//     out); the human allocates through the `divide` decision (g_play_target_chooser; nulled in every
+//     search scope, so autonomous play is byte-identical to the provider's pick).
+//   * DEATHS: damage is dealt simultaneously, then ONE lethality pass with the shared LethalToughness
+//     (the executor's SBA and the rollout agree), detach, then OnCreatureDies for each (and
+//     FireOppCreatureDies for the opponent's) -- the PerformDamageAllCreatures shape.
+// The legal-target set (battlefield indices, battlefield order) -- ONE predicate, read by the
+// resolver below and by the claude-play / viewer `divide` emitter (main.cpp), so the human is offered
+// exactly the set the engine will accept.
+inline std::vector<int> DividedCreatureDamageTargets(const GameState& state, int controller)
+{
+    static const bool legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!(q.card.IsCreature() || q.is_animated)) { continue; }
+        if (!legacy_shroud && q.controller_index == controller && CreatureHasShroud(q, state)) { continue; }
+        if (q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof)) { continue; }
+        legal.push_back(i);
+    }
+    return legal;
+}
+
+inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, const CardDefinition& def)
+{
+    const int total = def.params.etb_damage_divided_creatures;
+    if (total <= 0) { return; }
+    const std::vector<int> legal = DividedCreatureDamageTargets(state, controller);
+    if (legal.empty()) { return; }
+    std::vector<int> need;
+    for (int i : legal)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        const bool unkillable = q.card.HasKeyword(Keyword::Indestructible);
+        need.push_back(unkillable ? 0 : std::max(1, LethalToughness(q, state) - q.damage));
+    }
+    std::vector<int> alloc = ResolveProvider(state).EtbDividedDamageAlloc(state, controller, legal, need, total);
+    if (alloc.size() != legal.size()) { alloc.assign(legal.size(), 0); }
+    {   // a provider answer that is neither "none" nor a full division is not a legal allocation
+        int sum = 0; bool neg = false;
+        for (int v : alloc) { sum += v; if (v < 0) { neg = true; } }
+        if (neg || (sum != 0 && sum != total)) { alloc.assign(legal.size(), 0); }
+    }
+    if (g_play_target_chooser && !g_tap_speculating)
+    {
+        std::vector<ChosenTarget> heur;
+        for (std::size_t k = 0; k < legal.size(); ++k)
+        { if (alloc[k] > 0) { heur.push_back({ 1, legal[k], alloc[k] }); } }
+        const std::vector<ChosenTarget> got =
+            (*g_play_target_chooser)(state, def, controller, static_cast<int>(legal.size()), total, heur);
+        std::vector<int> human(legal.size(), 0);
+        int sum = 0; bool ok = true;
+        for (const ChosenTarget& t : got)
+        {
+            if (t.kind != 1 || t.amount < 0) { ok = false; break; }
+            const auto at = std::find(legal.begin(), legal.end(), t.index);
+            if (at == legal.end()) { ok = false; break; }
+            human[static_cast<std::size_t>(at - legal.begin())] += t.amount;
+            sum += t.amount;
+        }
+        if (ok && (sum == 0 || sum == total)) { alloc = human; }
+    }
+    std::vector<int> hit_numbers;
+    std::string desc;
+    for (std::size_t k = 0; k < legal.size(); ++k)
+    {
+        if (alloc[k] <= 0) { continue; }
+        Permanent& q = state.battlefield[static_cast<std::size_t>(legal[k])];
+        q.damage += alloc[k];
+        hit_numbers.push_back(q.card.m_number);
+        if (!desc.empty()) { desc += ", "; }
+        desc += std::to_string(alloc[k]) + " to "
+              + (q.controller_index == controller ? std::string("your ") : std::string("the opponent's "))
+              + q.card.m_name.str();
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xF0\x9F\x94\xA5 " + def.card.m_name.str() + ": "
+                      + (desc.empty() ? std::string("no targets (deals no damage)") : desc));
+    }
+    if (hit_numbers.empty()) { return; }
+    struct DividedDeath { Card card; int controller; bool was_token; int minus_counters; };
+    std::vector<DividedDeath> died;
+    for (std::size_t i = state.battlefield.size(); i-- > 0; )
+    {
+        Permanent& q = state.battlefield[i];
+        if (std::find(hit_numbers.begin(), hit_numbers.end(), q.card.m_number) == hit_numbers.end()) { continue; }
+        if (!(q.card.IsCreature() || q.is_animated)) { continue; }
+        if (q.damage < LethalToughness(q, state)) { continue; }
+        if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q) });
+        if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(q.card); }
+        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+    for (const DividedDeath& d : died)
+    {
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.equipped_to      == d.card.m_number) { q.equipped_to      = 0; }
+            if (q.aura_attached_to == d.card.m_number) { q.aura_attached_to = 0; }
+        }
+    }
+    for (const DividedDeath& d : died)
+    {
+        OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters);
+        if (d.controller != controller) { FireOppCreatureDies(state, d.controller); }
     }
 }
 
@@ -31255,11 +31466,28 @@ inline bool& PayingCreatureAbility()
     static thread_local bool v = false;
     return v;
 }
+// The SOURCE of the activated ability being paid for (its battlefield card, so a Metallic Mimic's
+// chosen type -- appended to the permanent's own subtypes at enter -- is visible). Read ONLY by a
+// mana_only_subtype_abilities source (Smokebraider: "Spend this mana only to cast Elemental spells or
+// activate abilities of Elementals") and by the mana-cache fold that source requires; null outside an
+// ability payment that named its source. Set by the source-taking CreatureAbilityPayScope below.
+inline const Card*& PayingAbilitySource()
+{
+    static thread_local const Card* v = nullptr;
+    return v;
+}
 struct CreatureAbilityPayScope
 {
     bool prev;
-    CreatureAbilityPayScope()  : prev(PayingCreatureAbility()) { PayingCreatureAbility() = true; }
-    ~CreatureAbilityPayScope() { PayingCreatureAbility() = prev; }
+    const Card* prev_src;
+    CreatureAbilityPayScope()  : prev(PayingCreatureAbility()), prev_src(PayingAbilitySource())
+    { PayingCreatureAbility() = true; }
+    // ...naming the ability's source permanent (its battlefield card). Byte-identical to the default
+    // form for every deck without a mana_only_subtype_abilities source: nothing else reads the source.
+    explicit CreatureAbilityPayScope(const Card* src)
+        : prev(PayingCreatureAbility()), prev_src(PayingAbilitySource())
+    { PayingCreatureAbility() = true; PayingAbilitySource() = src; }
+    ~CreatureAbilityPayScope() { PayingCreatureAbility() = prev; PayingAbilitySource() = prev_src; }
 };
 // ==== ACTIVATED UNTAPPERS (Action::Kind::ActivateUntap; AccomplishedAlchemist chunk C2a) ==========
 // Crab Umbra ("{2}{U}: Untap enchanted creature"), Galvanic Alchemist's soulbond grant ("each of those
@@ -32573,6 +32801,14 @@ inline bool CombatLethalNow(const GameState& s, int ctrl)
     return power >= opp;
 }
 
+// The battlefield card of the permanent `source_id` controlled by `controller`, or null. For the
+// source-taking CreatureAbilityPayScope at the ability apply sites.
+inline const Card* AbilitySourceCard(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    { if (p.card.m_number == source_id && p.controller_index == controller) { return &p.card; } }
+    return nullptr;
+}
 // Is the source of a battlefield ActivatePermAbility a CREATURE (Recruitment Officer's dig, King
 // Darien's token ability, Slimefoot's)? Then its payment runs under CreatureAbilityPayScope, so
 // Secluded Courtyard's coloured mana is legal for it (D12) -- Cavern of Souls / Unclaimed Territory
@@ -32842,14 +33078,58 @@ inline void AddBigSpellFloat(GameState& state, const ManaPool& units, const Card
 
 // The one predicate every payment site asks of a restricted source: "creature-only, and (if it also
 // names a subtype) a spell of that subtype". Returns false when the source may NOT pay.
+// Smokebraider's ability half ("...or activate abilities of Elementals"): may a
+// mana_only_subtype_abilities source pay the ability currently being paid for? Only when the payment
+// named its source (CreatureAbilityPayScope(src)) and that battlefield card has the subtype. An
+// unnamed ability payment answers NO at every site -- an equip, a land's activation, an Aether Vial
+// tick never name a source, and none of them may spend this mana -- except the two BOUND sites
+// (2 = TapFlowInfeasible's prune probe, 4 = UntappedManaUpperBound), which stay permissive exactly
+// as SubtypeManaOk's unset scope is (a bound must not under-count).
+inline bool SubtypeAbilityManaOk(const CardParams& pp, int site)
+{
+    if (!pp.mana_only_subtype_abilities || pp.mana_only_subtype.empty()) { return false; }
+    const Card* src = PayingAbilitySource();
+    if (src == nullptr) { return site == 2 || site == 4; }
+    for (const std::string& s : src->m_subtypes)
+    { if (s == pp.mana_only_subtype) { return true; } }
+    return false;
+}
+
 inline bool RestrictedManaUsable(const CardParams& pp, bool for_creature, int site = 0)
 {
     if (BigSpellOnlySource(pp)) { return BigSpellManaUsable(pp, site); }
     if (!pp.creature_mana_only) { return true; }
-    if (!for_creature)          { return false; }
+    if (!for_creature)          { return SubtypeAbilityManaOk(pp, site); }
     if (SubtypeManaAuditOn() && !pp.mana_only_subtype.empty() && PayingSpellCard() == nullptr)
     { SubtypeManaUnsetSite(site).fetch_add(1, std::memory_order_relaxed); }
     return SubtypeManaOk(pp);
+}
+
+// THE RESTRICTED FLOAT, generalised. GameState::floating_bigspell_mana + floating_bigspell_pp is the
+// turn-scoped reserve that KEEPS THE RESTRICTION OF THE SOURCE THAT MADE IT. It was built for
+// Troyan's big-spell-only units; a subtype-restricted source's surplus (Smokebraider's second unit,
+// "only to cast Elemental spells or activate abilities of Elementals") rides the same reserve, so the
+// unit cannot be laundered into a Metallic Mimic (a Shapeshifter in hand) the way the any-creature
+// reserve (floating_creature_mana) would let it. Troyan's units answer exactly as BigFloatUsableNow /
+// BigFloatMayBeUsable did (byte-identical); a subtype source's units answer that source's own
+// RestrictedManaUsable for THIS payment -- the exact form (site 1) to spend, the bound form (site 4)
+// for the fail-fast bound. One reserve holds one restriction; commit_leftover never books a second
+// kind on top of the first (no deck runs both shapes).
+inline bool RestrictedFloatUsableNow(const GameState& state, bool for_creature)
+{
+    if (state.floating_bigspell_mana.Total() <= 0 || state.floating_bigspell_pp == nullptr)
+    { return false; }
+    const CardParams& pp = *state.floating_bigspell_pp;
+    if (BigSpellOnlySource(pp)) { return BigSpellManaUsable(pp, /*site=*/1); }
+    return RestrictedManaUsable(pp, for_creature, /*site=*/1);
+}
+inline bool RestrictedFloatMayBeUsable(const GameState& state, bool for_creature)
+{
+    if (state.floating_bigspell_mana.Total() <= 0 || state.floating_bigspell_pp == nullptr)
+    { return false; }
+    const CardParams& pp = *state.floating_bigspell_pp;
+    if (BigSpellOnlySource(pp)) { return BigSpellManaUsable(pp, /*site=*/4); }
+    return RestrictedManaUsable(pp, for_creature, /*site=*/4);
 }
 
 // Colours a source may produce to pay for THIS spell (payment context -> for_creature is known).
@@ -37754,7 +38034,7 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
         && dd.params.tap_opponent_lifegain == 0 && dd.params.energy_per_colored_tap == 0
         && !dd.params.colored_creature_only && !dd.params.etb_choose_color
         && ManaProducedPerTap(dd) > 1 && dd.params.produces.size() > 1
-        && !IsSingleColorBurstSource(dd))
+        && !IsSingleColorBurstSource(dd) && !dd.params.produces_any_combination)
     {
         int mult[6] = { 0, 0, 0, 0, 0, 0 }, per = 0;
         for (Color c : dd.params.produces)
@@ -38795,7 +39075,8 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.colored_cast_lifegain_used_this_turn ? 524288 : 0)
         | (p.storied_draw_used_this_turn ? 1048576 : 0)
         | (p.lifegain_counters_used_this_turn ? 2097152 : 0)
-        | (p.once_per_turn_used ? 4194304 : 0));   // Stromkirk Condemned's once-each-turn activation
+        | (p.once_per_turn_used ? 4194304 : 0)   // Stromkirk Condemned's once-each-turn activation
+        | (p.sac_at_end_step ? 8388608 : 0));
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);

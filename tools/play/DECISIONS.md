@@ -70,6 +70,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `target` | `g_play_target_chooser` (`TargetChooser`) | `EffectHandler` damage/removal | `WriteTargetDecisionJson` | `promptPanelHtml` | board |
 | `target` (reuse: **Heroes' Reunion** / **Rest for the Weary**, "TARGET PLAYER gains N life" -- `cast_lifegain_target_player`; SelesnyaLifegain screen 2026-10-22) | `g_play_target_chooser` (`TargetChooser`; legal set = BOTH players, labels "You (self)" / "Opponent") | `ApplyCastLifegain` (SpellEffects.h -- the ONE resolver for EffectHandler's executor branch and TurnSolver's apply_one, so `ApplyPlan`, claude-play and the viewer ask here). Default = the SEARCHED target (Action::player_target, 0 = you; the autonomous search prunes the opponent variant by default via `DecisionProvider::OffersLifegainOpponentTarget`, human play never carries a variant -- one cast, the click picks: the Path to Exile shape). No verb: `cast=<name>` | `WriteTargetDecisionJson` with a `lifegain` prompt | `promptPanelHtml` (`d.lifegain` branch) | board |
 | `divide` | (target/divide path) | `EffectHandler` divided damage | `WriteDivideDecisionJson` | `promptPanelHtml` | board |
+| `divide` (reuse: **Fury**'s ETB "4 damage divided as you choose among any number of target creatures and/or planeswalkers" -- `etb_damage_divided_creatures`; LandfallElementals 2026-10-18) | `g_play_target_chooser` (the Fury branch at the top of `InstallResolutionChoosers`' target chooser, keyed on the param) | `ResolveEtbDividedCreatureDamage` (SpellEffects.h, from the shared `FireOwnEtbTriggers` -- every entry path, cast / evoke / Soulstoke put); legal set = `DividedCreatureDamageTargets` (creatures of BOTH sides, no faces), default = `DecisionProvider::EtbDividedDamageAlloc` | `WriteDivideDecisionJson(..., allow_none=true)` -- `allow_none: true` in the JSON: an ALL-ZERO reply = no targets (legal: "any number") | `promptPanelHtml` (`divConfirmable` accepts sum 0 when `allow_none`) | board |
 | `bounce` | `g_play_bounce_chooser` (`BounceChooser`) | `SpellEffects.h` ETB bounce | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
 | `sacrifice` | `g_play_sacrifice_chooser` (`BounceChooser`) | sac-land cost **+ creature-sac outlets** (`ChooseSacOutletVictimIndex`, SpellEffects.h; Falkenrath Pit Fighter's "Sacrifice a Vampire" through `ApplyDiscardSacOutlet`, asked AFTER the discard -- Vampires A2) **+ Natural Order's "sacrifice a green creature" ADDITIONAL COST** (`PerformSacrificeCreatureCost`) | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
 | `sacrifice` (reuse: **Mycoloth's DEVOUR victims**, CR 702.81) | same `g_play_sacrifice_chooser` | `ApplyDevourAsEnters` -> `ChooseDevourVictimIndices` (SpellEffects.h, shared by both enter sites) | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
@@ -222,7 +223,13 @@ ability-choice sub + this `target` decision. See also `LoyaltyAbilityText`/`Loya
 and the history label — those three used to disagree (Bolas's -2 had no English mapping at all).
 Balan's attach-all, Stoneforge's put, the Equip itself and the Jitte -1/-1 / lifegain modes are
 `main_phase` plan lines (`equip=` / `attachall=` / `sfput=` / `jittemode=` LineSpec verbs) — see
-**Board activations** below for how a human reaches them.
+**Board activations** below for how a human reaches them. **Incandescent Soulstoke**'s put ("{1}{R},
+{T}: put an Elemental creature card from your hand onto the battlefield", LandfallElementals
+2026-10-18) rides the same `PutFromHandAbility` action and `sfput=` verb -- one variant per distinct
+Elemental creature name in hand; its plan label names the riders ("haste, sacrificed at end step").
+**Fury**'s pitch evoke ("Evoke--Exile a red card from your hand") is likewise a `main_phase` choice:
+one evoke `CastFromHand` variant per distinct red hand card (`evoke_exile` in the plan JSON, the
+CheckLine `pitch` sub asked after the `evoke` mode sub in the choose dialog).
 
 **"Equip all free to X" is a plan line too, and it is the one activation with NO board-click
 affordance.** `equipallfree=<host m_number>` (`Action::Kind::AttachAllFreeEquipment`) is one action
