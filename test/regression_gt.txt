@@ -1,4 +1,4 @@
-# Regression ground truth -- commit bff87208d  date 2026-10-18
+# Regression ground truth -- commit 775aae82  date 2026-10-19
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
@@ -101,7 +101,7 @@ critter2hg_smoke_d3_s1001=4.7600/a5edfe66f0792867
 melira2hg_smoke_d3_s1001=4.8400/7d182c91725b79a6
 pirates2hg_smoke_d3_s1001=4.9400/e3ebbee3c32e4689
 soldiers2hg_smoke_d3_s1001=4.9800/eded3f2b34b85d3a
-colossus2hg_smoke_d3_s1001=4.4400/aae36d676660cd76
+colossus2hg_smoke_d3_s1001=4.1200/357602b2af303984
 pd2hg_smoke_d3_s1001=5.6000/3ec18a53def26c00
 fluctuator_smoke_d0_s1001=4.9870/51bdb352a7a5fc23
 fluctuator_smoke_d3_s1001=3.5400/68f1f512c6091db9
@@ -135,9 +135,9 @@ galadriel_smoke_d0_s1001=6.9400/876fdad1871c1c5a
 galadriel_smoke_d3_s1001=4.9933/e962de98bc12e846
 galadriel_smoke_d5_s1001=4.8933/0bebbdb5d1970e7b
 galadriel2hg_smoke_d3_s1001=4.8933/d3057555a751735b
-colossus_smoke_d0_s1001=4.7370/2a31be5c5bc074e4
-colossus_smoke_d3_s1001=3.5933/9d160417d1498579
-colossus_smoke_d5_s1001=3.6400/a71c3b3bb9881698
+colossus_smoke_d0_s1001=4.3610/5b076b322d4ff5e5
+colossus_smoke_d3_s1001=3.2533/3fccee818433ea10
+colossus_smoke_d5_s1001=3.2133/2f155b640caca7f2
 
 # --- regression ---
 fungusv2_regression_d0_s2002=5.3740/3e4466ecbee3860b
@@ -313,11 +313,11 @@ galadriel_regression_d5_s2002=4.7467/cea0d50820af0494
 galadriel_regression_d5_s3003=5.0400/0ffe792cccf1eede
 galadriel2hg_regression_d3_s2002=4.8000/cbb05033420480e8
 galadriel2hg_regression_d5_s2002=4.7000/0bc1a02dac979b66
-colossus_regression_d0_s2002=4.8740/f45b7b7e8a8effad
-colossus_regression_d3_s2002=3.8000/7ecba2865b245d6e
-colossus_regression_d3_s3003=3.6333/eaef7006cbea0562
-colossus_regression_d5_s2002=3.7067/0727c066ee93e59b
-colossus_regression_d5_s3003=3.4933/47c3ed04e5c3c392
+colossus_regression_d0_s2002=4.4230/866e23942589f3f3
+colossus_regression_d3_s2002=3.4200/9a5609afa772e094
+colossus_regression_d3_s3003=3.4933/2b7a842d7a7c5a82
+colossus_regression_d5_s2002=3.4133/13a4d6f6acc3731f
+colossus_regression_d5_s3003=3.4400/fd10158d8dd88d0e
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6540/d6b7b03035b25cc2

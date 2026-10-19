@@ -52,6 +52,12 @@ ScryVerdict + nlfit): smoke 126/128 and regression 176/178 byte-identical, the 4
 then park this session"). Next stage for this deck under the 10-18 pipeline order
 (profile -> MULLIGAN -> value leaf): `bash scripts/mullgen.sh run "decks/Colossus Hammer"` (screens its own
 generation setting first; alone on the box) -- the USER launches it.
+10-19 MULLIGAN + VALUE LEAF DONE (USER-launched chain, `logs/colossus/chain_20261019/`): gen at d1 b1 (rho 0.9974),
+K=19, 439,100 hands, R<=40, ~2.6 h on PGO. Keep vs static -0.483t (4/4), confounded bottoming -0.082t (7/7): PASSED.
+Value leaf: the learned model was NOTABLY WORSE (+0.0054t) and stays staged (`logs/eval/Colossus Hammer.value.STAGED.json`);
+the no-leaf `nlfit` shape (ladder single, leaf none, alpha relaxed) adopted at 0.56x units, -0.0023t. GT accepted in two
+attributed steps (keep table alone: smoke 4 + regression 5 rows all faster, 0 unexplained of ~1,900 changed games; then
+value.json: 0 slower, 1 faster, 9 same-score play changes). Overnight colossus rows are left to the periodic overnight run.
 Open USER questions: below + cast-order adoption, discard buckets, human main-2 asymmetry, MTG_EQUIP_PAY_GUARD,
 keep-table cache keying, autonomous hand-aware batch prepay, the d0 greedy's self-Path valuation, a lossy
 combat-landfall top-pick prune (all listed in the final report).
