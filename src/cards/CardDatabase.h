@@ -4381,6 +4381,12 @@ public:
 
     // Look up a card by name (case-sensitive, matches Scryfall name).
     const CardDefinition* Lookup(const std::string& name) const;
+    // Same answer as Lookup(name.str()) -- m_by_name_ptr maps the interned pointer of EVERY m_cards key
+    // (RebuildInternedIndex), and an absent name is absent from both -- but a pointer hash instead of a
+    // string hash + compare. An exact match for every `Lookup(action.card_name)` call site, which had
+    // been converting the InternedName to const std::string& and hashing the bytes (P2 2026-10-19:
+    // the string-keyed find was ~4% of the AccomplishedAlchemist seed-90061 repro).
+    const CardDefinition* Lookup(const InternedName& name) const { return LookupInterned(name); }
 
     // Names of every modal double-faced (MDFC) BACK face known to the DB (e.g. "Boulderloft
     // Pathway"). The play viewer uses this to request the correct Scryfall face image -- a back
