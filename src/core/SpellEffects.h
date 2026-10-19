@@ -8045,12 +8045,22 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
                 w.temp_tough_bonus += wp.landfall_self_pump_toughness;
                 if (log)
                 {
+                    // The FULL P/T, as combat reads it (LandfallElementals sweep s61010 / s61013): the
+                    // body's own value plus the lord (Incandescent Soulstoke's +1/+1), Aura and
+                    // Equipment bonuses -- the sum Jitte's death check uses. EffectivePower alone
+                    // under-reported a pumped Hellhound beside a Soulstoke. Display only.
+                    const std::pair<int, int> lord  = ComputeLordBonus(w.card, state, w.controller_index,
+                                                                       w.AnimatedAllTypes(), &w);
+                    const std::pair<int, int> aura  = AuraBonusFor(w, state);
+                    const std::pair<int, int> equip = EquipBonusFor(w, state);
                     EmitPlayEvent(state.turn_number, "trigger",
                                   "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name + "): +"
                                   + std::to_string(wp.landfall_self_pump_power) + "/+"
                                   + std::to_string(wp.landfall_self_pump_toughness)
-                                  + " until end of turn (now " + std::to_string(w.EffectivePower())
-                                  + "/" + std::to_string(w.EffectiveToughness()) + ")");
+                                  + " until end of turn (now "
+                                  + std::to_string(w.EffectivePower() + lord.first + aura.first + equip.first)
+                                  + "/" + std::to_string(w.EffectiveToughness() + lord.second + aura.second
+                                                         + equip.second) + ")");
                 }
                 break;
             }

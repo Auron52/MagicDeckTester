@@ -3766,6 +3766,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // exec_slot_hook after the k-th watcher (after the land at the same k), else the trailing pass.
     int         exec_ls_act_seen        = 0;
     bool        exec_ls_act_done        = false;
+    int         exec_ls_act_first_mask  = 0;   // Plan::land_search_act_slot <= -2: the pre-cast subset run
     // The deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix) -- lockstep twin of
     // ApplyPlanDirect's karoo_from_top: a deferred top land is played from the top or not at all.
     bool        karoo_from_top      = false;
@@ -7316,6 +7317,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         TurnSolver::ApplyLandSearchActs(state, plan.actions);
         exec_ls_act_done = true;
     }
+    // ...the PRE-CAST SUBSET (slot <= -2) -- lockstep twin of ApplyPlanDirect's: only the masked
+    // activations run now, the rest keep the trailing pass.
+    else if (const int fm = TurnSolver::LandSearchActFirstMask(plan.land_search_act_slot); fm != 0)
+    {
+        TurnSolver::ApplyLandSearchActs(state, TurnSolver::LandSearchActsMasked(plan.actions, fm, true));
+        exec_ls_act_first_mask = fm;
+    }
     // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
     // prepay and every cast payment below. Null scope (levers off) changes nothing.
     PlanTraits _plan_traits;
@@ -7851,8 +7859,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Plan::land_search_act_slot: its land-search activations already ran at their position (twin of
     // ApplyPlanDirect's trailing pass: a position never reached runs them here, as -1 does).
     const std::vector<Action> exec_trail = exec_ls_act_done
-        ? TurnSolver::WithoutLandSearchActs(plan.actions) : std::vector<Action>{};
-    const std::vector<Action>& exec_own_acts = exec_ls_act_done ? exec_trail : plan.actions;
+        ? TurnSolver::WithoutLandSearchActs(plan.actions)
+        : exec_ls_act_first_mask != 0
+            ? TurnSolver::LandSearchActsMasked(plan.actions, exec_ls_act_first_mask, false)
+            : std::vector<Action>{};
+    const std::vector<Action>& exec_own_acts = (exec_ls_act_done || exec_ls_act_first_mask != 0)
+                                             ? exec_trail : plan.actions;
     if (pending_cont_acts.empty()) { exec_trailing_activations(exec_own_acts); }
     else
     {

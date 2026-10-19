@@ -10740,6 +10740,21 @@ std::vector<Action> TurnSolver::WithoutLandSearchActs(const std::vector<Action>&
     return out;
 }
 
+std::vector<Action> TurnSolver::LandSearchActsMasked(const std::vector<Action>& acts, int mask, bool in_mask)
+{
+    std::vector<Action> out;
+    out.reserve(acts.size());
+    int ord = 0;
+    for (const Action& a : acts)
+    {
+        if (!IsLandSearchActivation(a)) { if (!in_mask) { out.push_back(a); } continue; }
+        const bool hit = ord < 31 && ((mask >> ord) & 1) != 0;
+        ++ord;
+        if (hit == in_mask) { out.push_back(a); }
+    }
+    return out;
+}
+
 // Projection twin of Primeval Titan's ATTACK trigger (FireAttackLandSearch): the lands it fetches
 // enter at declare-attackers, before damage, so their LANDFALL payloads (Avenger of Zendikar's +1/+1
 // on every Plant, Phylath's +4 on one) grow the attacking Plants THIS combat. The very same helper
@@ -23391,7 +23406,11 @@ static thread_local long long g_trailing_act_skips = 0;
 // positioned land is still pending, how many landfall watchers had been DISPATCHED before it
 // (`first_drop_watchers`; -1 = no such drop). Every position at or below that count has a payable
 // prefix; every position above it is the degenerate line. Inert (-1 depth) outside the probe.
-struct SlotPrefixProbe { int apd_depth = -1; int first_drop_watchers = -1; };
+// `drops` (2026-10-19, LandfallElementals sweep s61005) counts EVERY declared top-level cast the probed
+// apply drops -- before the land OR after it: "land=Waterlogged Grove (after Brushfire Elemental);
+// Brushfire, Smokebraider" pays Brushfire with the only two red sources BEFORE the land, so the Grove +
+// Island left cannot pay Smokebraider's {R} after it. The prefix count alone never saw that.
+struct SlotPrefixProbe { int apd_depth = -1; int first_drop_watchers = -1; int drops = 0; };
 static thread_local SlotPrefixProbe g_slot_prefix_probe;
 // Did the LAST ApplyPlanDirect to return on this thread change the state in its cycle / sac-to-draw dig
 // loop? Written on every exit of every apply (RAII), so a candidate loop reads its OWN apply's answer
@@ -24659,6 +24678,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
     else if (p.land_search_act_slot > 0)
     { fold(0x1A61AC75ull); fold(static_cast<uint64_t>(p.land_search_act_slot)); }
+    // ...and the PRE-CAST SUBSET (<= -2; TurnSolver::LandSearchActFirstMask) -- its own tag + the mask.
+    else if (p.land_search_act_slot <= -2)
+    { fold(0x1A62AC75ull); fold(static_cast<uint64_t>(TurnSolver::LandSearchActFirstMask(p.land_search_act_slot))); }
     return h;
 }
 // DIAGNOSTIC ONLY (MTG_DEDUP_CENSUS). Names every Action field on which two candidates that share an
@@ -32540,6 +32562,90 @@ static bool UntapLoopKillAction(const GameState& state, const Action& a, int pay
     }
 }
 
+// ---- AN EVOKED BODY WHOSE ENTRY NOTHING READS (LandfallElementals sweep s61001 / s61007, 2026-10-19) ----
+// Foundation Breaker's evoke ({1}{G}: it enters, its OPTIONAL "you may destroy target artifact or
+// enchantment" resolves, it is sacrificed) changes the game only through what reads that entry or that
+// death: a creature-enter watcher that fires for it (Risen Reef's look, a Soul Warden), an opponent's
+// artifact / enchantment for its ETB, or a death / sacrifice payoff. With none of those it spends two
+// mana and a card for NOTHING -- strictly dominated by the same plan without it (which the subset
+// enumeration always holds), so emitting it is wasted search (the collapse-unconditionally rule).
+// Scoped to the optional-ETB evoke (etb_destroy_artifact_enchantment_optional): Shriekmaw's MANDATORY
+// destroy and Reveillark's LTB have their own, unrelated gates.
+//
+// Does `w`'s definition watch `entrant` entering? FireCreatureEnterWatchers' payloads (the enter_watcher
+// byte, filtered by enters_watch_subtypes on the ENTRANT), Kili's other-subtype-enters draw, and the
+// Lathliss other-subtype token maker -- each subtype test read off the entrant's DEFINITION, with a
+// chosen-type card (Metallic Mimic) matching anything (conservative: only ever keeps a line).
+static bool DefWatchesEntry(const CardDefinition& w, const CardDefinition& entrant)
+{
+    auto sub_ok = [&](const std::vector<std::string>& subs)
+    {
+        if (subs.empty() || entrant.params.chosen_type_added_to_self) { return true; }
+        for (const std::string& s : subs) { if (CardHasSubtype(entrant.card, s)) { return true; } }
+        return false;
+    };
+    if (w.enter_watcher && sub_ok(w.params.enters_watch_subtypes)) { return true; }
+    if (!w.params.draw_on_other_subtype_enter.empty() && sub_ok(w.params.draw_on_other_subtype_enter))
+    { return true; }
+    if (w.params.etb_other_subtype_creates_tokens
+        && (w.params.etb_token_requires_subtype.empty()
+            || CardHasSubtype(entrant.card, w.params.etb_token_requires_subtype))) { return true; }
+    return false;
+}
+// ...and does `w` pay off `dier` dying / being sacrificed (SelfSacHasDeathPayoff's terms, plus the
+// "whenever you sacrifice" pump -- the evoke sacrifice is a sacrifice)?
+static bool DefPaysOffDeath(const CardDefinition& w, const CardDefinition& dier)
+{
+    const CardParams& wp = w.params;
+    return wp.own_creature_dies_lifegain > 0 || wp.ltb_return_creatures > 0
+        || wp.sacrifice_watch_pump_power > 0
+        || (!wp.dies_watch_subtype.empty() && CardHasSubtype(dier.card, wp.dies_watch_subtype));
+}
+// Is the evoked entry of `d` LIVE on the board as it stands (before the plan's casts)?
+static bool EvokeEntryLiveOnBoard(const GameState& state, const CardDefinition& d)
+{
+    const int me = state.active_player_index;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me && EtbDestroyTargetLegal(q, d.params)) { return true; }
+        if (q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        if (DefWatchesEntry(*qd, d)) { return true; }
+        if (q.controller_index == me && DefPaysOffDeath(*qd, d)) { return true; }
+    }
+    return false;
+}
+// Can an action of this plan make a watcher / payoff for `d` ENTER before the evoke resolves? Only an
+// entry dispatched in the ORDERED cast sequence can precede a cast (a hand or graveyard cast, an Aether
+// Vial put -- sequenced like a cast); a board activation's put (Incandescent Soulstoke) runs in the
+// trailing pass, after every cast, so it never sees the evoked body. Order within the sequence is not
+// asserted (the apply's payable-order walk can move a cast), so any such entry keeps the plan.
+static bool PlanEntersWatcherFor(const TurnSolver::Plan& p, const Action& evoke, const CardDefinition& d)
+{
+    for (const Action& a : p.actions)
+    {
+        if (&a == &evoke) { continue; }
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+            && a.kind != Action::Kind::ActivateVial) { continue; }
+        const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (ad != nullptr && (DefWatchesEntry(*ad, d) || DefPaysOffDeath(*ad, d))) { return true; }
+    }
+    return false;
+}
+static bool PlanHasDeadOptionalEvoke(const GameState& state, const TurnSolver::Plan& p)
+{
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || !a.evoke) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !d->params.etb_destroy_artifact_enchantment_optional) { continue; }
+        if (EvokeEntryLiveOnBoard(state, *d) || PlanEntersWatcherFor(p, a, *d)) { continue; }
+        return true;
+    }
+    return false;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
@@ -34509,22 +34615,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // EVOKE for a creature whose ETB is OPTIONAL (Foundation Breaker, "Evoke {1}{G}": "you may
         // destroy target artifact or enchantment"). Its evoked body does nothing by itself, so the
         // cast's whole value is the ENTRY: the enter watchers it fires (Risen Reef's look-top, an
-        // Elemental entering) and its ETB against an opponent's artifact/enchantment. Offered while
-        // either can exist -- a creature-enter watcher anywhere in the deck (the per-game stamp: a
-        // watcher cast LATER in the same plan counts, so a battlefield-only gate would be lossy), or a
-        // legal OPPONENT target now. Otherwise it is 2 mana for nothing, strictly dominated by not
-        // casting it (an emission gate on a provable no-op, not a judgement).
+        // Elemental entering), its ETB against an opponent's artifact/enchantment, and a death payoff.
+        // Offered only while one CAN read it (2026-10-19, tightened from the deck-level stamp, which
+        // let the search evoke it with no Reef anywhere -- s61001 / s61007): live on the board now
+        // (EvokeEntryLiveOnBoard), or a watcher / payoff card in HAND that this same plan could make
+        // enter first. A plan that evokes it without that watcher entering is dropped as a whole in
+        // EnumeratePlans (PlanHasDeadOptionalEvoke) -- strictly dominated by its sibling without the
+        // evoke, an emission gate on a provable no-op, not a judgement.
         else if (def.params.evoke_cost.has_value()
                  && def.params.etb_destroy_artifact_enchantment_optional)
         {
-            bool live = state.deck_has_creature_enter_watcher;
-            if (!live)
+            bool live = EvokeEntryLiveOnBoard(state, def);
+            for (std::size_t hj = 0; !live && hj < ap.hand.size(); ++hj)
             {
-                for (const Permanent& q : state.battlefield)
-                {
-                    if (q.controller_index != state.active_player_index
-                        && EtbDestroyTargetLegal(q, def.params)) { live = true; break; }
-                }
+                if (static_cast<int>(hj) == i || ap.hand[hj].m_is_staged) { continue; }
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[hj]);
+                if (hd != nullptr && hd->card.IsCreature()
+                    && (DefWatchesEntry(*hd, def) || DefPaysOffDeath(*hd, def))) { live = true; }
             }
             if (live)
             {
@@ -54754,6 +54861,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // twin: AIEngine::TakeTurn's exec_ls_act_seen / exec_ls_act_done.
     int         ls_act_seen             = 0;
     bool        ls_act_done             = false;
+    // ...and the PRE-CAST SUBSET (Plan::land_search_act_slot <= -2): the mask of the activations the
+    // pre-cast pass already ran, so the trailing pass runs only the rest. 0 = none.
+    int         ls_act_first_mask       = 0;
     // ...and the deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix), for the Karoo
     // and the land-after drop alike: a deferred TOP land is played from the top at the deferred
     // point, and if a cast changed the top in between, PlayLandByName refuses it -- in both worlds
@@ -56261,6 +56371,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (sink_stack.empty() && g_slot_prefix_probe.apd_depth == g_apd_depth && land_after_deferred
                     && deferred_land_slot > 0 && g_slot_prefix_probe.first_drop_watchers < 0)
                 { g_slot_prefix_probe.first_drop_watchers = deferred_watchers_seen; }   // see SlotPrefixProbe
+                if (sink_stack.empty() && g_slot_prefix_probe.apd_depth == g_apd_depth)
+                { ++g_slot_prefix_probe.drops; }
                 return;
             }
             // RESERVE THE AURA'S OWN HOST across its payment -- the REALIZATION twin of the
@@ -56337,6 +56449,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (g_slot_prefix_probe.apd_depth == g_apd_depth && land_after_deferred
                         && deferred_land_slot > 0 && g_slot_prefix_probe.first_drop_watchers < 0)
                     { g_slot_prefix_probe.first_drop_watchers = deferred_watchers_seen; }
+                    if (g_slot_prefix_probe.apd_depth == g_apd_depth) { ++g_slot_prefix_probe.drops; }
                 }
                 return;
             }
@@ -60469,6 +60582,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         TurnSolver::ApplyLandSearchActs(state, plan.actions);
         ls_act_done = true;
     }
+    // ...the PRE-CAST SUBSET (slot <= -2): only the masked activations run here, the rest keep the
+    // trailing pass. Executor twin: AIEngine::TakeTurn's pre-cast pass, the same two helpers.
+    else if (const int fm = TurnSolver::LandSearchActFirstMask(plan.land_search_act_slot); fm != 0)
+    {
+        TurnSolver::ApplyLandSearchActs(state, TurnSolver::LandSearchActsMasked(plan.actions, fm, true));
+        ls_act_first_mask = fm;
+    }
 
     // PLAN TRAITS for the payment layer (mana-order-and-reserve-overhaul.md layer 3): computed
     // once, in scope over the prepay AND the casts below. Mirrored in AIEngine::TakeTurn through
@@ -60570,8 +60690,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Plan::land_search_act_slot: its land-search activations already ran at their position
         // (pre-cast, or after their watcher); a position never reached runs them here, as -1 does.
         const std::vector<Action> trail = ls_act_done
-            ? TurnSolver::WithoutLandSearchActs(plan.actions) : std::vector<Action>{};
-        const std::vector<Action>& own_acts = ls_act_done ? trail : plan.actions;
+            ? TurnSolver::WithoutLandSearchActs(plan.actions)
+            : ls_act_first_mask != 0
+                ? TurnSolver::LandSearchActsMasked(plan.actions, ls_act_first_mask, false)
+                : std::vector<Action>{};
+        const std::vector<Action>& own_acts = (ls_act_done || ls_act_first_mask != 0) ? trail : plan.actions;
         if (pending_cont_acts.empty()) { apply_trailing_activations(own_acts); }
         else
         {
@@ -68589,6 +68712,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         drop_attach_illegal_core(v);
         drop_partial_vamp(v);
     };
+    // AN EVOKE NOTHING READS (PlanHasDeadOptionalEvoke; LandfallElementals s61001 / s61007): a plan that
+    // evokes Foundation Breaker while no enter watcher / opponent target / death payoff is on the board
+    // and none of its own cast-sequence entries brings one is strictly dominated by the same plan
+    // without the evoke (always in this list). Dropped before every return below (the ordering
+    // expansion is built from `deduped`). One `evoke` test per action for every deck without the param.
+    deduped.erase(std::remove_if(deduped.begin(), deduped.end(),
+                                 [&](const TurnSolver::Plan& pl) { return PlanHasDeadOptionalEvoke(state, pl); }),
+                  deduped.end());
     if (!OrderingSearchEnabled(state)) { drop_attach_illegal(deduped); return deduped; }
     // SATURATED CAST-ORDER COLLAPSE (see HumanEnumSaturated). This expansion APPLIES every
     // candidate ordering on a GameState copy -- up to 5! = 120 ApplyPlanDirect calls per surviving
@@ -69006,6 +69137,30 @@ static LookTopShape PlanLookTopShape(const GameState& state, const TurnSolver::P
         s.total += r;
     }
     return s;
+}
+
+// Does resolving `a` READ (or FIX) THE LIBRARY TOP, so that a land-search crack's SHUFFLE before vs
+// after it changes what it gets? The reader trigger of Plan::land_search_act_slot's position twins
+// (2026-10-19, LandfallElementals sweep s61002 / s61016): a top tutor (Flamekin Harbinger -- a crack
+// AFTER it shuffles the found card away), an entry that draws / digs / reveals the top (an ETB draw,
+// an ETB dig, Muxus's reveal, a look-top put), or a draw spell. A look-top WATCHER's trigger (Risen
+// Reef) is the plan-level PlanLookTopShape test, asked separately. Read off the definition, so it is
+// a superset in the safe direction (a reader that ends up reading nothing only yields a twin that
+// collapses onto its base).
+static bool ActionReadsLibraryTop(const Action& a)
+{
+    const bool cast = a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard;
+    if (!cast && a.kind != Action::Kind::ActivateVial && a.kind != Action::Kind::PutFromHandAbility)
+    { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return false; }
+    const CardParams& p = d->params;
+    if (p.tutor_to_top && !p.tutor_types.empty()) { return true; }
+    if (p.etb_self_draw > 0 || p.etb_dig_count > 0 || p.etb_reveal_count > 0
+        || p.look_top_put_creature_count > 0) { return true; }
+    if (cast && (d->tmpl == CardTemplate::DrawSpell || d->tmpl == CardTemplate::DrawUntilNonland
+                 || p.draw > 0 || p.cast_draw > 0)) { return true; }
+    return false;
 }
 
 static bool PutBodyGainsCards(const CardParams& p)
@@ -74351,14 +74506,31 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             std::vector<TurnSolver::Plan> twins;
             for (const TurnSolver::Plan& p : all)
             {
-                if (!base_plan(p) || p.land_search_act_slot != -1) { continue; }
-                bool acts = false, counts_lands = false, counter_not_watcher = false;
+                if (p.land_search_act_slot != -1) { continue; }
+                // A pure TUTOR-TARGET variant is a base here too, but only for the reader twins below:
+                // a top tutor's pick and the crack's position INTERACT (the found card survives only if
+                // the shuffle comes first), so "crack, THEN Harbinger finds Incandescent Soulstoke" is a
+                // cross product the additive axes cannot otherwise reach (s61016). A declined search
+                // has nothing to protect.
+                bool tutor_base = false;
+                if (!base_plan(p))
+                {
+                    if (p.tutor_choice < 0 || p.tutor_choice == kTutorDeclineChoice) { continue; }
+                    TurnSolver::Plan q = p;
+                    q.tutor_choice = -1;
+                    if (!base_plan(q)) { continue; }
+                    tutor_base = true;
+                }
+                bool acts = false, counts_lands = false, counter_not_watcher = false, reads_top = false;
                 int watchers = 0;
+                std::vector<std::string> act_names;   // the plan's land-search sources, in action order
                 for (const Action& a : p.actions)
                 {
-                    if (TurnSolver::IsLandSearchActivation(a)) { acts = true; continue; }
+                    if (TurnSolver::IsLandSearchActivation(a))
+                    { acts = true; act_names.push_back(a.card_name.str()); continue; }
                     const bool watcher = TurnSolver::PutsLandfallWatcher(a);
                     if (watcher) { ++watchers; }
+                    if (ActionReadsLibraryTop(a)) { reads_top = true; }
                     if (a.kind != Action::Kind::CastFromHand) { continue; }
                     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
                     if (d != nullptr && d->params.etb_tokens_per_land > 0)
@@ -74367,13 +74539,51 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         if (!watcher) { counter_not_watcher = true; }
                     }
                 }
-                if (!acts || !counts_lands) { continue; }
-                const int last = counter_not_watcher ? watchers : watchers - 1;
+                if (!acts) { continue; }
+                // THE LIBRARY-TOP READERS (2026-10-19, LandfallElementals s61002 / s61016). A land-search
+                // crack SHUFFLES, so whether it resolves before or after a card that reads the top (a
+                // Risen Reef look on an Elemental's entry, a Flamekin Harbinger top tutor, an ETB draw /
+                // dig, a draw spell) changes what that card gets: "crack Myriad Landscape, THEN Vial in
+                // Risen Reef (it sees the reshuffled top)" and "crack, THEN Harbinger (the found card
+                // is not shuffled away)" were not one plan at ANY budget -- every crack ran in the
+                // trailing pass, after every cast and put. The same twins therefore fire for a reader,
+                // and position W (after the LAST watcher) is distinct from the trailing pass whenever a
+                // reader exists (a reader can follow the last watcher).
+                if (!reads_top) { reads_top = PlanLookTopShape(state, p).total > 0; }
+                if (!counts_lands && !reads_top) { continue; }
+                if (tutor_base && !reads_top) { continue; }   // the cross product is for readers only
+                const int last = (counter_not_watcher || reads_top) ? watchers : watchers - 1;
                 for (int k = 0; k <= last; ++k)
                 {
                     TurnSolver::Plan v = p;
                     v.land_search_act_slot = static_cast<int8_t>(std::min(k, 127));
                     twins.push_back(std::move(v));
+                }
+                // ...and, for a reader, the PRE-CAST SUBSETS (TurnSolver::LandSearchActFirstMask): with
+                // two or more cracks the reader can sit BETWEEN them -- the s61002 kill is "crack Myriad,
+                // Vial-put Reef (its look takes the reshuffled Waterlogged Grove), crack Expanse" -- which
+                // the single-position twins above cannot express. Every proper non-empty subset runs
+                // before the casts and the rest after; the full set is position 0 and the empty set the
+                // base plan. Subsets of IDENTICAL sources (two Terramorphic Expanses) are one subset (an
+                // identity fold on the source names). Capped at six activations (the int8 encoding).
+                const int n_act = static_cast<int>(act_names.size());
+                if (reads_top && n_act >= 2 && n_act <= 6)
+                {
+                    std::vector<std::string> seen;
+                    for (int mask = 1; mask < (1 << n_act) - 1; ++mask)
+                    {
+                        std::vector<std::string> first;
+                        for (int i = 0; i < n_act; ++i)
+                        { if ((mask >> i) & 1) { first.push_back(act_names[static_cast<std::size_t>(i)]); } }
+                        std::sort(first.begin(), first.end());
+                        std::string key;
+                        for (const std::string& nm : first) { key += nm; key += '|'; }
+                        if (std::find(seen.begin(), seen.end(), key) != seen.end()) { continue; }
+                        seen.push_back(key);
+                        TurnSolver::Plan v = p;
+                        v.land_search_act_slot = TurnSolver::LandSearchActSlotForMask(mask);
+                        twins.push_back(std::move(v));
+                    }
                 }
             }
             all.insert(all.end(), std::make_move_iterator(twins.begin()),
@@ -74446,7 +74656,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (int i = 0; i < n; ++i)
                 {
                     w[static_cast<std::size_t>(i)] =
-                        p.land_search_act_slot > 0 ? &v_both
+                        // a pre-cast SUBSET (<= -2) interleaves some activations before the casts
+                        // and the rest after: sized at the wider class, like a mid-sequence k
+                        (p.land_search_act_slot > 0 || p.land_search_act_slot <= -2) ? &v_both
                         : p.land_search_act_slot == 0 ? (i < n_act ? &v_act : &v_cast)
                         : (i < n_cast ? &v_cast : &v_act);
                 }
@@ -74974,7 +75186,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.combat_landfall_target_choice < 0 && (p.dig_choice == -1 || p.dig_choice == 2)
                 && p.land_search_pins.empty() && p.attack_land_search_choice == -1
                 && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
-                && p.land_search_act_slot == -1 && p.look_top_pins.empty()
+                // a land-search position twin IS a base here (2026-10-19): a crack before the look
+                // changes the card it sees, so the land / order answer and the position interact
+                && p.look_top_pins.empty()
                 && p.sac_pins.empty() && p.rad_mode == -1
                 && p.saga_target_choice == -1 && p.saga_ch1_choice == -1
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
@@ -76565,27 +76779,55 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             const int w = std::min(watchers_in(p), 127);
             int payable = w;   // positions 1..payable have a payable prefix
             const bool probed = w > 0 && slot_probe_on && !PositionPrefixChoiceMayAddMana(state, p);
+            // THE SUFFIX TOO (LandfallElementals sweep s61005, 2026-10-19): a position whose casts AFTER
+            // the land fail is the same degenerate line -- the prefix spent the colour the suffix needs
+            // ("land=Waterlogged Grove (after Brushfire Elemental); Brushfire, Smokebraider": Brushfire
+            // takes the only red sources before the land, Grove + Island cannot pay Smokebraider's {R},
+            // dropped_casts=[Smokebraider]). Its realised line ("Brushfire, then the Grove") is the
+            // position variant over the smaller cast set, enumerated in its own right, so the argument
+            // above holds unchanged: what the clone could differ in is only the payment allocation, the
+            // standing exemption. Keyed on what the APPLY drops (SlotPrefixProbe::drops, any declared
+            // top-level cast, before or after the land), never on a pip count -- so it tracks the payer
+            // as it stands. Each position k <= payable has its own suffix, so each is applied once (the
+            // probe at w is reused); `dropped[k]` = position k drops a cast.
+            std::vector<char> dropped(static_cast<std::size_t>(w) + 1, 0);
             if (probed)
             {
-                TurnSolver::Plan probe = p;
-                probe.land_slot = static_cast<int8_t>(w);
-                const SlotPrefixProbe saved = g_slot_prefix_probe;
-                g_slot_prefix_probe = SlotPrefixProbe{ g_apd_depth + 1, -1 };
+                auto probe_at = [&](int k, int* first_drop_out) -> int
                 {
-                    GameState probe_state = state;
-                    ApplyPlanDirect(probe_state, probe, is_pre_combat);
-                }
-                const int first_drop = g_slot_prefix_probe.first_drop_watchers;
-                g_slot_prefix_probe = saved;
+                    TurnSolver::Plan probe = p;
+                    probe.land_slot = static_cast<int8_t>(k);
+                    const SlotPrefixProbe saved = g_slot_prefix_probe;
+                    g_slot_prefix_probe = SlotPrefixProbe{ g_apd_depth + 1, -1, 0 };
+                    {
+                        GameState probe_state = state;
+                        ApplyPlanDirect(probe_state, probe, is_pre_combat);
+                    }
+                    if (first_drop_out != nullptr) { *first_drop_out = g_slot_prefix_probe.first_drop_watchers; }
+                    const int drops = g_slot_prefix_probe.drops;
+                    g_slot_prefix_probe = saved;
+                    return drops;
+                };
+                int first_drop = -1;
+                const int drops_w = probe_at(w, &first_drop);
                 if (first_drop >= 0) { payable = std::min(w, first_drop); }
                 n_slot_pruned += static_cast<std::size_t>(w - payable);
+                for (int k = payable; k >= 1; --k)
+                {
+                    const int drops = (k == w) ? drops_w : probe_at(k, nullptr);
+                    if (drops > 0) { dropped[static_cast<std::size_t>(k)] = 1; ++n_slot_pruned; }
+                }
             }
             TRACE("landslot", "T%d base land=%s casts=%zu watchers=%d probed=%d payable=%d",
                   state.turn_number, p.land_to_play.c_str(), p.actions.size(), w,
                   probed ? 1 : 0, payable);
             const bool prefer_late = two_spots && probed;
-            for (int k = prefer_late ? std::max(payable, 1) : 1; k <= payable; ++k)
+            // The deck's latest-spot preference picks the latest position that drops nothing.
+            int latest = payable;
+            while (latest >= 1 && dropped[static_cast<std::size_t>(latest)]) { --latest; }
+            for (int k = prefer_late ? std::max(latest, 1) : 1; k <= (prefer_late ? latest : payable); ++k)
             {
+                if (dropped[static_cast<std::size_t>(k)]) { continue; }
                 TurnSolver::Plan v = p;
                 v.land_slot = static_cast<int8_t>(k);
                 if (prefer_late)

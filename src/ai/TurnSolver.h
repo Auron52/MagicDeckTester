@@ -2815,6 +2815,16 @@ public:
     static bool IsLandSearchActivation(const Action& a);
     static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts);
     static std::vector<Action> WithoutLandSearchActs(const std::vector<Action>& acts);
+    // ...and the PRE-CAST SUBSET form of the position (Plan::land_search_act_slot <= -2, 2026-10-19):
+    // bit i of the mask = the plan's i-th land-search activation (in `actions` order) runs in the
+    // pre-cast pass, every other one in the trailing pass -- "crack Myriad Landscape BEFORE the Vial-put
+    // Risen Reef looks, crack Terramorphic Expanse after it". Encoded as slot = -1 - mask (mask >= 1),
+    // so the existing field, its folds and its identity keys carry it; -1 (mask 0) stays "all
+    // trailing" and 0 "all pre-cast". LandSearchActFirstMask(slot) is 0 for every other slot.
+    static int LandSearchActFirstMask(int slot) { return slot <= -2 ? -1 - slot : 0; }
+    static int8_t LandSearchActSlotForMask(int mask) { return static_cast<int8_t>(-1 - mask); }
+    // `acts`' land-search activations IN the mask (in_mask), or `acts` minus them (!in_mask).
+    static std::vector<Action> LandSearchActsMasked(const std::vector<Action>& acts, int mask, bool in_mask);
     // MTG_SAC_FODDER_ACT_MAKER: a trailing sac whose victim this same line makes
     // (Kind::SacCreatureOutlet with sac_victim_id == kSameLineSacVictim) has to run AFTER the
     // activation that makes it -- Slimefoot's {4} Saproling -- so BOTH trailing dispatchers stable-
