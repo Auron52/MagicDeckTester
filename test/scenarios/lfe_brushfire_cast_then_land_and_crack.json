@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "LandfallElementals 2026-10-18 (lfe-land cluster): the landfall SELF PUMP (landfall_self_pump_power/",
+    "_toughness) seen by the search through BOTH land-entry routes. Mountain + Forest untapped, an OLD",
+    "Akoum Hellhound (0/1) and an uncracked Terramorphic Expanse; hand Brushfire Elemental (1/1 haste) +",
+    "Mountain; opponent at 9; resumed at main 1 of T4. Exact lethal T4 ONLY by: CAST BRUSHFIRE FIRST",
+    "(Mountain + Forest), THEN play the Mountain (landfall 1: Hellhound 2/3, Brushfire 3/3), and crack the",
+    "Expanse for a basic (landfall 2: 4/5 and 5/5) -> 4 + 5 = 9. Land-first makes Brushfire miss the drop's",
+    "pump: 4 + 3 = 7, no win. So the T4 win needs (a) the pump in the rollout as well as the executor,",
+    "(b) the searched land-drop position after a landfall-watcher cast (Plan::land_slot), (c) the crack in",
+    "the trailing pass AFTER the cast, and (d) Brushfire's haste. Filler = Forest: the crack's target; no",
+    "draw happens before the win (resume_at main1)."
+  ],
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 9,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Forest" },
+    { "name": "Akoum Hellhound" },
+    { "name": "Terramorphic Expanse" }
+  ],
+  "hand": [ "Brushfire Elemental", "Mountain" ],
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "expect_win_turn": 4,
+  "log_out": "logs/play/lfe_brushfire_cast_then_land_and_crack.json"
+}

@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "LandfallElementals 2026-10-18 (lfe-land cluster): Mossborn Hydra's enters-with counter",
+    "(enters_with_plus_counters) and landfall DOUBLING (landfall_double_self_counters), and the counters",
+    "PERSISTING across cleanup in the search's rollout and the executor alike. Forest, Forest, Mountain and an",
+    "uncracked Terramorphic Expanse; hand Mossborn Hydra + Forest; opponent at 4; resumed at main 1 of T4.",
+    "Library = dead Swords to Plowshares draws + ONE Forest (the crack's only target, reachable by search",
+    "but never drawn), so no land arrives after T4. Win T5 ONLY by casting the Hydra BEFORE both T4",
+    "landfalls (1 -> 2 on the drop -> 4 on the crack, or the crack held to T5's main 1): a 4/4 swings T5",
+    "for exactly 4. Land-first is 1 -> 2: 2 damage on T5, the win slips to T6. The Hydra is summoning sick",
+    "on T4, so the T5 win also proves the counters were not cleared at cleanup."
+  ],
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 4,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Mountain" },
+    { "name": "Terramorphic Expanse" }
+  ],
+  "hand": [ "Mossborn Hydra", "Forest" ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "library": [ "Forest" ],
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 7,
+  "expect_win_turn": 5,
+  "log_out": "logs/play/lfe_hydra_cast_then_land_counters_persist.json"
+}
