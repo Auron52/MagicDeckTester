@@ -54256,7 +54256,8 @@ static void EnumAuraSortSkipVerify(const std::vector<Action>& acts, Less less)
 //
 // LOCKSTEP: every token below mirrors one line of the legacy `plan_signature` lambda in EnumeratePlans,
 // field for field, in the same order. A marker added there and not here is the silent "the feature is
-// undone" defect (the devour #D / kicker #KI history) -- so after ANY edit to either, run
+// undone" defect (the devour #D / kicker #KI history; #MT/#PX/#FE and #RM arrived by rebase) --
+// `python3 test/check_plan_sig_lockstep.py` checks the marker sets mechanically; and after ANY edit, run
 // MTG_PLAN_SIG_FAST_VERIFY=1 (builds both, returns the LEGACY string so play is the old play, counts a
 // difference; printed at exit, must be 0) over a batch that exercises the changed card.
 static bool PlanSigFastOn()       { static const bool v = EnvOn("MTG_PLAN_SIG_FAST", true); return v; }
@@ -54355,6 +54356,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                     w.Put('.'); w.Int(rm.red); w.Put('.'); w.Int(rm.green); w.Put('.'); w.Int(rm.colorless);
                     w.Put('.'); w.Int(rm.snow_units);
                 }
+                if (!act.remand_by.empty()) { w.Put("#RM"); w.Put(act.remand_by); w.Put(':'); w.Int(act.chosen_x); }
                 w.End();
                 break;
             }
