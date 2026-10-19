@@ -546,6 +546,35 @@ TEST_CASE("Risen Reef: the SEARCH finds 'land to hand, play it, cast more' -- an
     }
 }
 
+TEST_CASE("Tutor axis: a Flamekin Harbinger PUT by Aether Vial fans its tutor target (not only casts)")
+{
+    EnsureCardsLfe();
+    GameState s = FreshLfe();
+    PutLfe(s, kVial, 1);
+    s.battlefield.back().charge_counters = 1;
+    s.players[0].hand.push_back(CardLfe(kHarbinger, 5));
+    LibLfe(s, { "Forest", kFulm, kReef, "Mountain" }, 10);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* base = nullptr;
+    const TurnSolver::Plan* variant = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() != 1 || p.actions[0].kind != Action::Kind::ActivateVial) { continue; }
+        if (p.actions[0].card_name.str() != kHarbinger || !p.look_top_pins.empty()) { continue; }
+        if (p.tutor_choice == -1 && base == nullptr) { base = &p; }
+        if (p.tutor_choice >= 1 && p.tutor_choice != kTutorDeclineChoice && variant == nullptr) { variant = &p; }
+    }
+    REQUIRE(base != nullptr);
+    REQUIRE(variant != nullptr);
+    GameState a = s, b = s;
+    TurnSolver::ApplyPlan(a, *base, true);
+    TurnSolver::ApplyPlan(b, *variant, true);
+    REQUIRE(!a.players[0].library.empty());
+    REQUIRE(!b.players[0].library.empty());
+    // Two different Elementals reach the top: the pin steered the PUT's tutor.
+    CHECK(a.players[0].library[0].m_name.str() != b.players[0].library[0].m_name.str());
+}
+
 namespace
 {
 struct DigChooserScope

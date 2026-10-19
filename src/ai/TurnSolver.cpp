@@ -71465,11 +71465,26 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0) { continue; }
             for (const Action& act : p.actions)
             {
-                if (act.kind != Action::Kind::CastFromHand) { continue; }
+                // A creature PUT onto the battlefield (Aether Vial, a from-hand put ability) whose OWN
+                // ETB is a single tutor (Flamekin Harbinger / Giant Harbinger / Forerunner / Goblin
+                // Matron put by Vial) resolves PerformTutor inside this apply exactly as a cast one
+                // does, so the same index pin steers it (the first tutor of the apply consumes it).
+                // Before 2026-10-18 only casts fanned, so every PUT tutor took the provider's front --
+                // an unsearched pick inside the search window (the no-greedy rule). The ETB multi-
+                // tutor (Ranger of Eos) and the Muxus reveal resolve elsewhere and are not pinned.
+                const bool put_tutor = act.kind == Action::Kind::ActivateVial
+                                    || act.kind == Action::Kind::PutFromHandAbility;
+                if (act.kind != Action::Kind::CastFromHand && !put_tutor) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
+                if (put_tutor
+                    && !(d->card.IsCreature() && !d->params.tutor_types.empty()
+                         && (d->params.tutor_to_hand || d->params.tutor_to_top)
+                         && d->params.etb_reveal_count == 0
+                         && !(d->params.etb_tutor_hand_count > 1 && d->params.tutor_to_hand)))
+                { continue; }
                 auto it = size_cache.find(act.card_name);
                 if (it == size_cache.end())
                 {
