@@ -1,0 +1,47 @@
+{
+  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "seed": 61002,
+  "active_life": 18,
+  "opponent_life": 20,
+  "library_filler": "Forest",
+  "library_size": 20,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 5,
+  "_comment": "LandfallElementals sweep s61002 (2026-10-19): a land-search crack SHUFFLES, so it must be orderable BEFORE a library-top reader in one plan (Plan::land_search_act_slot reader twins + the pre-cast subset). Board: Aether Vial on 3, Fiery Islet, Secluded Courtyard, Myriad Landscape, Flamekin Harbinger, 2x Akoum Hellhound (+2/+2 per landfall). Hand: Risen Reef, Terramorphic Expanse. Library top: Swords to Plowshares over Forest filler. Opponent at 20. With every crack in the trailing pass (the only order before the fix) the Vial-put Reef looks at the Swords: 4 landfalls (Expanse drop, Myriad x2, Expanse crack) = 2 x 8 + Harbinger 1 = 17, no kill this turn (T5). Cracking Myriad (or both) BEFORE the Reef lets its look take a Forest off the reshuffled top: a 5th landfall, 2 x 10 + 1 = 21 -> the T4 kill. Discriminates on every seed tried (61002, 1-5): base T5, fixed T4.",
+  "battlefield": [
+    {
+      "name": "Aether Vial",
+      "charge_counters": 3
+    },
+    {
+      "name": "Fiery Islet"
+    },
+    {
+      "name": "Secluded Courtyard"
+    },
+    {
+      "name": "Myriad Landscape"
+    },
+    {
+      "name": "Flamekin Harbinger"
+    },
+    {
+      "name": "Akoum Hellhound"
+    },
+    {
+      "name": "Akoum Hellhound"
+    }
+  ],
+  "hand": [
+    "Risen Reef",
+    "Terramorphic Expanse"
+  ],
+  "library_top": [
+    "Swords to Plowshares"
+  ],
+  "expect_win_turn": 4
+}
