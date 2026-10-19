@@ -68427,6 +68427,61 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // Put-back fan bases (index into `all`, group) -- stamped with Plan::putback_group at the very end,
     // after every axis has cloned, so no later clone inherits the mark (the dig twin's rule).
     std::vector<std::pair<std::size_t, int>> putback_based;
+
+    // PER-PLAN ACTION TRAITS (P3, 2026-10-19). Most passes below walk EVERY plan's whole action list
+    // looking for one kind of cast (a Ponder, a sac-land, a Saga, a dig ...) that most decks never hold:
+    // ~30 walks of 472-byte Actions per enumeration, a CardDatabase lookup per cast in each, which was
+    // ~6% of a continuation-heavy game. One walk per plan now records which of those casts it holds, and
+    // a pass skips a plan whose bit is clear. Each bit is a NECESSARY condition of its pass's own per-plan
+    // test (same definition source, same kind test; fields a pass edits -- tutor_target, ponder_keep,
+    // soulfire_own_targets -- are never read), so a skipped plan is one the pass would have skipped:
+    // byte-identical. Computed lazily as `all` grows (clones carry their source's actions). The two
+    // removals below keep it aligned: the dominated-plan compaction moves each plan's traits with it,
+    // and the human-play wish drop clears the cache.
+    enum : std::uint32_t
+    {
+        kTrWish2   = 1u << 0,   // two or more wish casts (tutor_to_hand + wish_from_sideboard)
+        kTrDig     = 1u << 1,   // an activated dig, or a cast / Vial put with an ETB dig
+        kTrPonder  = 1u << 2,   // a cast with cast_reorder > 0
+        kTrSacLand = 1u << 3,   // a cast paying sacrifice_land
+        kTrSaga1   = 1u << 4,   // a cast whose chapter I free-casts a creature
+        kTrSacCol  = 1u << 5,   // a cast with a sacrifice-a-creature additional cost
+        kTrWave    = 1u << 6,   // a reveal-X-put-permanents cast with X > 0
+        kTrLoop    = 1u << 7,   // an untap-loop activation (ActivateUntap, chosen_x >= kUntapLoopToNeed)
+    };
+    std::vector<std::uint32_t> plan_tr;
+    auto plan_traits = [&](std::size_t i) -> std::uint32_t
+    {
+        while (plan_tr.size() <= i)
+        {
+            const TurnSolver::Plan& tp = all[plan_tr.size()];
+            std::uint32_t t = 0;
+            int wishes = 0;
+            for (const Action& a : tp.actions)
+            {
+                if (a.kind == Action::Kind::ActivateUntap && a.chosen_x >= kUntapLoopToNeed) { t |= kTrLoop; }
+                if (a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::ActivatedDig) { t |= kTrDig; }
+                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
+                const CardDefinition* dl = CardDatabase::Instance().Lookup(a.card_name);
+                if (dl != nullptr && dl->params.etb_dig_count > 0) { t |= kTrDig; }
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                if (dl != nullptr && dl->params.cast_reorder > 0) { t |= kTrPonder; }
+                if (dl != nullptr && dl->params.tutor_to_hand && dl->params.wish_from_sideboard) { ++wishes; }
+                if (a.sacrifice_land) { t |= kTrSacLand; }
+                const CardDefinition* dd = a.def ? a.def : dl;
+                if (dd != nullptr)
+                {
+                    if (!dd->params.saga_ch1_free_cast_creature_colors.empty()) { t |= kTrSaga1; }
+                    if (!dd->params.sac_additional_creature_color.empty())      { t |= kTrSacCol; }
+                    if (dd->params.reveal_x_put_permanents && a.chosen_x > 0)  { t |= kTrWave; }
+                }
+            }
+            if (wishes >= 2) { t |= kTrWish2; }
+            plan_tr.push_back(t);
+        }
+        return plan_tr[i];
+    };
     const Player& ap = state.ActivePlayer();
     // SEARCHED land-ETB scry/surveil (MTG_SCRY_SEARCH, opt-in). The disposition resolves inline
     // inside the land's ETB, so it cannot be an Action -- instead emit one plan variant per
@@ -68549,10 +68604,20 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     if (TutorAxisResolveMode() && TutorAxisEnabled() && TutorAxisWidth(state) > 1
         && !HumanPlayActive())
     {
-        std::vector<TurnSolver::Plan> extra;
+        // EMITTED IN PLACE (P3, 2026-10-19): the first loop only SIZES each plan's variants; the
+        // clones are then copy-constructed straight onto the end of `all` after one reserve. Same
+        // variants in the same order as building them in a side vector and appending it (which paid
+        // a temporary, a move into the side vector, its reallocation moves, and a second move into
+        // `all` per clone -- ~8% of a continuation-heavy Living Wish game). The sizing loop makes the
+        // same RankedTutorCandidates calls in the same order as before.
+        struct TutorEmit { std::size_t i; std::size_t k; bool decline; };
+        std::vector<TutorEmit> emits;
+        std::size_t n_extra = 0;
         std::map<std::string, std::size_t> size_cache;   // tutor card name -> distinct-name count
-        for (const TurnSolver::Plan& p : all)
+        const std::size_t n_tut = all.size();
+        for (std::size_t ti = 0; ti < n_tut; ++ti)
         {
+            const TurnSolver::Plan& p = all[ti];
             // Base plans only -- one axis at a time, so cost stays additive (same trade as scry).
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0) { continue; }
             for (const Action& act : p.actions)
@@ -68575,28 +68640,38 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     it = size_cache.emplace(act.card_name, uniq.size()).first;
                 }
                 const std::size_t k = std::min(it->second, TutorAxisWidth(state));
-                for (std::size_t c = 1; c < k; ++c)
-                {
-                    TurnSolver::Plan v = p;
-                    v.tutor_choice = static_cast<int>(c);
-                    extra.push_back(std::move(v));
-                }
                 // "You MAY search": one extra variant that DECLINES. Only for a card whose data
                 // says the search is optional, so every other tutor deck keeps exactly the
                 // variants it had. Declining is a real line for a tutor_to_top -- the fetch costs
                 // the next draw step -- which is why it is not merely a dominated duplicate of
                 // fetching the worst candidate.
-                if (d->params.tutor_optional)
-                {
-                    TurnSolver::Plan v = p;
-                    v.tutor_choice = kTutorDeclineChoice;
-                    extra.push_back(std::move(v));
-                }
+                const bool decline = d->params.tutor_optional;
+                const std::size_t nv = (k > 1 ? k - 1 : 0) + (decline ? 1 : 0);
+                if (nv > 0) { emits.push_back(TutorEmit{ ti, k, decline }); n_extra += nv; }
                 break;   // vary ONE tutor per variant; the first to resolve consumes the pin
             }
         }
-        all.insert(all.end(), std::make_move_iterator(extra.begin()),
-                              std::make_move_iterator(extra.end()));
+        if (n_extra > 0)
+        {
+            // Capacity EXACTLY as vector::insert grew it (reallocate only when short, to size +
+            // max(size, n)) -- capacity feeds the plan cache's byte accounting (ApproxPlansBytes),
+            // so it must not move. No reallocation while appending, so `all[e.i]` stays a valid
+            // copy source.
+            if (all.capacity() < n_tut + n_extra) { all.reserve(n_tut + std::max(n_tut, n_extra)); }
+            for (const TutorEmit& e : emits)
+            {
+                for (std::size_t c = 1; c < e.k; ++c)
+                {
+                    all.push_back(all[e.i]);
+                    all.back().tutor_choice = static_cast<int>(c);
+                }
+                if (e.decline)
+                {
+                    all.push_back(all[e.i]);
+                    all.back().tutor_choice = kTutorDeclineChoice;
+                }
+            }
+        }
     }
     else if (TutorAxisEnabled() && TutorAxisWidth(state) > 1 && !HumanPlayActive())
     {
@@ -68774,6 +68849,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         std::vector<char> drop(all.size(), 0);
         for (std::size_t pi = 0; pi < all.size(); ++pi)
         {
+            if ((plan_traits(pi) & kTrWish2) == 0) { continue; }
             TurnSolver::Plan& p = all[pi];
             int n_wish = 0;
             for (const Action& a : p.actions) { if (is_wish(a) != nullptr) { ++n_wish; } }
@@ -68808,6 +68884,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (std::size_t pi = 0; pi < all.size(); ++pi)
             { if (!drop[pi]) { kept.push_back(std::move(all[pi])); } }
             all.swap(kept);
+            plan_tr.clear();   // indices moved: recompute lazily
         }
     }
 
@@ -68840,7 +68917,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 }
                 return loop && small;
             };
-            all.erase(std::remove_if(all.begin(), all.end(), dominated), all.end());
+            // std::remove_if spelled out (P3) so the trait cache moves with its plans, and a plan with no
+            // loop activation (trait clear: `loop` would stay false) is never walked. Same survivors,
+            // same move-assignments, same order; the erase leaves the capacity as it was.
+            std::size_t w = 0;
+            const std::size_t n_dom = all.size();
+            for (std::size_t r = 0; r < n_dom; ++r)
+            {
+                if ((plan_traits(r) & kTrLoop) != 0 && dominated(all[r])) { continue; }
+                if (w != r) { all[w] = std::move(all[r]); plan_tr[w] = plan_tr[r]; }
+                ++w;
+            }
+            all.erase(all.begin() + static_cast<std::ptrdiff_t>(w), all.end());
+            plan_tr.resize(w);
         }
     }
 
@@ -68860,10 +68949,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     if (EtbDigAxisEnabled() && EtbDigAxisWidth(state) > 1 && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
-        for (const TurnSolver::Plan& p : all)
+        for (std::size_t pi = 0, n_dig = all.size(); pi < n_dig; ++pi)
         {
+            const TurnSolver::Plan& p = all[pi];
             // Base plans only -- one axis at a time, so cost stays additive (same trade as scry).
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0) { continue; }
+            if ((plan_traits(pi) & kTrDig) == 0) { continue; }
             for (const Action& act : p.actions)
             {
                 // Recruitment Officer's ACTIVATED dig shares the resolver and the pin, so it shares
@@ -69434,11 +69525,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         // it behind). This axis stamps nothing on its bases, so skipping the clones there leaves the
         // base plans bit-for-bit the same. Full lists are never built this way.
         const bool pond_materialize = t_bp_front_only_depth != g_bp_enum_depth;
-        for (const TurnSolver::Plan& p : all)
+        for (std::size_t pi = 0, n_pon = all.size(); pi < n_pon; ++pi)
         {
+            const TurnSolver::Plan& p = all[pi];
             // Base plans only -- one axis at a time, so cost stays additive.
             if (p.scry_choice >= 0 || p.bp_choice >= 0
                 || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
+            if ((plan_traits(pi) & kTrPonder) == 0) { continue; }
             for (std::size_t ai = 0; ai < p.actions.size(); ++ai)
             {
                 const Action& act = p.actions[ai];
@@ -69883,12 +69976,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         if (W > 1)
         {
             std::vector<TurnSolver::Plan> extra;
-            for (const TurnSolver::Plan& p : all)
+            for (std::size_t pi = 0, n_sl = all.size(); pi < n_sl; ++pi)
             {
+                const TurnSolver::Plan& p = all[pi];
                 // Base plans only -- one axis at a time, so cost stays additive (tutor's rule).
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                     || p.etbdig_choice >= 0 || p.lackey_choice >= 0
                     || !p.sac_pins.empty()) { continue; }
+                if ((plan_traits(pi) & kTrSacLand) == 0) { continue; }
                 int sacs = 0;
                 for (const Action& act : p.actions)
                 {
@@ -69931,8 +70026,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         auto ch1_colors = [](const CardDefinition* d) -> std::string
         { return d ? d->params.saga_ch1_free_cast_creature_colors : std::string{}; };
         std::string colors;
-        for (const TurnSolver::Plan& p : all)
+        for (std::size_t pi = 0, n_s1 = all.size(); pi < n_s1; ++pi)
         {
+            if ((plan_traits(pi) & kTrSaga1) == 0) { continue; }
+            const TurnSolver::Plan& p = all[pi];
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
@@ -70180,13 +70277,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             return true;
         };
         std::vector<TurnSolver::Plan> extra;
-        for (const TurnSolver::Plan& p : all)
+        for (std::size_t pi = 0, n_sc = all.size(); pi < n_sc; ++pi)
         {
+            const TurnSolver::Plan& p = all[pi];
             // Base plans only -- one axis at a time, so cost stays additive (the tutor axis's rule).
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                 || p.etbdig_choice >= 0 || p.lackey_choice >= 0
                 || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                 || !p.sac_pins.empty()) { continue; }
+            if ((plan_traits(pi) & kTrSacCol) == 0) { continue; }
             // This plan's sac-cost casts, plus the family-representative test (every one of them
             // carrying its colour's collection front).
             std::vector<std::size_t> sac_at;
@@ -70529,6 +70628,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             const TurnSolver::Plan& p = all[i];
             if (p.bounce_choice >= 0 || p.bp_choice >= 0) { continue; }
+            if ((plan_traits(i) & kTrWave) == 0) { continue; }
             if (p.land_decided && !p.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
