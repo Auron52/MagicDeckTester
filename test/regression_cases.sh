@@ -1367,18 +1367,19 @@ OVERNIGHT_CASES=(
   "galadriel2hg 5 5005 170 40"
   "galadriel2hg 5 6006 170 40"
   "galadriel2hg 5 7007 170 40"
-  # colossus: see the SMOKE block. The ENTRY set (regression-testing.md "Sizing a deck's overnight
-  # rows"); it expands to the FULL set just before a keep table is adopted.
+  # colossus: see the SMOKE block. FULL set (standard shape) since the 2026-10-19 keep-table adoption,
+  # resized from the ENTRY set (4x400 b10 / 4x300 b20) and accepted table-ABSENT first (regression-testing.md
+  # "Sizing a deck's overnight rows"). ~7 ms/game in the regression tier vs galadriel's 79 on this shape.
   "colossus 0 4004 2000 0"
   "colossus 0 6006 2000 0"
   "colossus 0 8008 2000 0"
   "colossus 0 10010 2000 0"
-  "colossus 3 4004  400 10"
-  "colossus 3 5005  400 10"
-  "colossus 3 6006  400 10"
-  "colossus 3 7007  400 10"
-  "colossus 5 4004  300 20"
-  "colossus 5 5005  300 20"
-  "colossus 5 6006  300 20"
-  "colossus 5 7007  300 20"
+  "colossus 3 4004 1000 20"
+  "colossus 3 5005 1000 20"
+  "colossus 3 6006 1000 20"
+  "colossus 3 7007 1000 20"
+  "colossus 5 4004  500 40"
+  "colossus 5 5005  500 40"
+  "colossus 5 6006  500 40"
+  "colossus 5 7007  500 40"
 )

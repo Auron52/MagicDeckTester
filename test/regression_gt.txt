@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 775aae82  date 2026-10-19
+# Regression ground truth -- commit 89e35cd4  date 2026-10-19
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
@@ -6,6 +6,7 @@
 # accepted-with-regressions (overnight, 2026-10-17): colossus: deck ADDED to all three tiers with the overnight ENTRY set (12 NEW keys, d0 4x2000, d3 4x400 b10, d5 4x300 b20; analysis-Colossus Hammer.md), PGO binary of 0d410db07, makespan 2m23s. Expands to the FULL set just before a keep table is adopted.
 # accepted-with-regressions (smoke, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 4 slower / 6 faster, ALL hinata + hinata2hg = the Remand self-target rider (every slower game ties or beats base at unlimited budget; analysis-NivMizzetCombo.md T2). Same-turn line moves: auras d3/d5/2hg, kittyv3 2hg, bruna 2hg, snow d3 = the breakpoint un-gate c52ed5c9d (a card drawn mid-turn is cast that phase). d0: hinata 6.723->6.783 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); goblins d0 = un-gate; bruna/dragons/fivecolour/mirrorwing/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; +-0.001 greedy churn). galadriel + colossus byte-identical to origin GT. CARRIED (colossus cells unchanged by this accept): the USER's full cast order + equips, Path never cast, tutor rule + Lizard amendment (4f984afac), Aid lethal-first; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); 2hg gi34 (the tutor rule drops Dragonfire Blade beside a free attach) was raised to the USER.
 # accepted-with-regressions (regression, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 15 slower / 29 faster: ALL 15 slower are hinata + hinata2hg = the Remand self-target rider (the same 15 as the T2 isolation run; at unlimited budget new <= base on every one -- 13 tie, d5 s3003 gi64 new T5 vs base T7, gi27 a loss in BOTH; analysis-NivMizzetCombo.md T2). hinata d3 s3003 gi128 5->4 = MTG_LA_NESTED_BAIL (re-price). Same-turn line moves: goblins d3/d5/2hg + bruna d3 = the breakpoint un-gate c52ed5c9d; fivecolour2hg d3 gi38 same turn. d0: hinata 6.791->6.847 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); breaching 4.832->4.826 + fungusv2 = the mana-fidelity fixes; bruna/dragons/fivecolour/mirrorwing (5.884->5.889)/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; d0 greedy churn, e.g. mirrorwing gi236: T4 now affords Ancestral Anger beside Zada). galadriel + colossus byte-identical to origin GT. Refs 630 / 0 drift. CARRIED (colossus cells unchanged by this accept): the USER's tutor rule as stated + Lizard amendment (4f984afac) decide s2002 gi25 / gi112; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); s2002 gi79 / gi129 / gi136 recover at depth W b100 (budget truncation).
+# accepted-with-regressions (overnight, 2026-10-19): colossus only: overnight d3/d5 rows RESIZED from the ENTRY set (4x400 b10 / 4x300 b20) to the standard FULL shape (4x1000 b20 / 4x500 b40) ahead of the 2026-10-19 keep-table adoption, measured TABLE-ABSENT (MTG_EXHAUSTIVE_PROFILE=none MTG_VALUE_PROFILE=none; verified byte-identical to the pre-adoption smoke GT) so the adoption that follows in the periodic overnight is like-for-like. The d0 rows (unchanged size) also move, -0.21..-0.28t, because the 10-18 Colossus package (tutor rule, Lizard amendment, Aid lethal-first) was accepted on smoke+regression only, never on overnight.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -737,15 +738,15 @@ galadriel2hg_overnight_d5_s4004=4.8706/d89b1ff047e81cbc
 galadriel2hg_overnight_d5_s5005=4.8471/937d6713ef4b265a
 galadriel2hg_overnight_d5_s6006=5.0235/28c92672c5ee2edf
 galadriel2hg_overnight_d5_s7007=5.1000/b5a4b7480fa463ca
-colossus_overnight_d0_s4004=5.0490/7bc7d6b3cd5d3fb7
-colossus_overnight_d0_s6006=5.0260/581d8f857a491236
-colossus_overnight_d0_s8008=5.0745/99e392a9dec4a89e
-colossus_overnight_d0_s10010=5.0480/2e373016ff5a2f07
-colossus_overnight_d3_s4004=3.7850/d775316ffbc80d9b
-colossus_overnight_d3_s5005=3.8050/b0c7780647d97aaf
-colossus_overnight_d3_s6006=3.7125/1bf4b0180e08a298
-colossus_overnight_d3_s7007=3.8275/038dbf44d9451de3
-colossus_overnight_d5_s4004=3.7900/ea3bfc2444b381f9
-colossus_overnight_d5_s5005=3.7733/f88a96d2596ca046
-colossus_overnight_d5_s6006=3.7200/69876c9697c723cf
-colossus_overnight_d5_s7007=3.8367/b52d133411310cf0
+colossus_overnight_d0_s4004=4.7885/cd472e6ae4da867d
+colossus_overnight_d0_s6006=4.8145/6784c6e6e57e5ced
+colossus_overnight_d0_s8008=4.8445/0e44f0d28d0fcd2c
+colossus_overnight_d0_s10010=4.7730/d2e7a390cffdb015
+colossus_overnight_d3_s4004=3.8110/e77e9f9bf0ff54c5
+colossus_overnight_d3_s5005=3.7790/e809caa1f78ea94f
+colossus_overnight_d3_s6006=3.6870/579ffd3e34b326f8
+colossus_overnight_d3_s7007=3.7890/6e9ce4a0f8d79354
+colossus_overnight_d5_s4004=3.7860/2d67755f6d839ea6
+colossus_overnight_d5_s5005=3.7780/1ae7d9a6fe2efa51
+colossus_overnight_d5_s6006=3.6340/678b8bf08614f75e
+colossus_overnight_d5_s7007=3.8040/556a005b7d5b22e5
