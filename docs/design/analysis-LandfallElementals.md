@@ -58,10 +58,10 @@ generic).
 ## Stage 2 — cards (in progress)
 | card | cluster | tier | status |
 |---|---|---|---|
-| Akoum Hellhound | lfe-land | | |
-| Brushfire Elemental | lfe-land | | |
-| Mossborn Hydra | lfe-land | | |
-| Waterlogged Grove | lfe-land | | |
+| Akoum Hellhound | lfe-land | 2 | DONE `landfall_self_pump_power/_toughness` (FireLandfallTriggers via OnLandEntered) |
+| Brushfire Elemental | lfe-land | 2 | DONE same + Haste; evasion PROVISIONAL inert |
+| Mossborn Hydra | lfe-land | 2/3 | DONE `enters_with_plus_counters` + `landfall_double_self_counters`; trample PROVISIONAL inert |
+| Waterlogged Grove | lfe-land | 1 | DONE Fiery Islet shape |
 | Risen Reef | lfe-etb | | |
 | Flamekin Harbinger | lfe-etb | | |
 | Foundation Breaker | lfe-etb | | |
@@ -69,6 +69,47 @@ generic).
 | Smokebraider | lfe-fury | | |
 | Incandescent Soulstoke | lfe-fury | | |
 | Fury | lfe-fury | | |
+
+### lfe-land report (2026-10-19, commits d200ac87a d23951908 39eac6b4b)
+Unit 1521/1522 (the 1 = the deck-folder count routing test, fixed by the Stage 4a routing row),
+scenarios 231/231 (+2: `lfe_brushfire_cast_then_land_and_crack`, `lfe_hydra_cast_then_land_counters_persist`).
+Pumps/doubling sit in the shared `OnLandEntered` chokepoint (every land-entry path). Play-neutral for
+other decks (new params default off). PROVISIONAL deferrals: Brushfire's power<=2 blocking restriction,
+Hydra's trample (goldfish never blocks); the four new params listed INERT in audit_viewer_decisions.py.
+Integration notes: Soulstoke's put must reach `FireEtbWatchers` (Hydra's entry counter); Reef's land via
+`EnterLand`; the pre-play "win this turn" estimate cannot see landfall (ordering only here); `EvalCard`
+gives Hellhound 0 and no expected-landfall credit (d0 casts it anyway; a provider `ComboCardValue`
+candidate).
+
+## Prep notes (orchestrator, while the clusters run)
+- **Routing hazards for Stage 4a** (`DetectDecisionProvider`, src/ai/DecisionProviders.cpp): Flamekin
+  Harbinger's `tutor_to_top` is a term of the `anti` (AntiLifegain) signature (the Giant Harbinger
+  misroute), Aether Vial's `upkeep_adds_charge` sets `vial`, `doubles_counters` sets `fungus` (lfe-land
+  told not to reuse it for Mossborn Hydra), and the four Landfall payoff params set `landfall`. The deck
+  needs its own `LandfallElementalsProvider` + a signature OR'd across several of its NEW params,
+  routed above all of those; derive from `DeckProvider` unless a measured reason says otherwise.
+- **Stage 3 re-checks of existing cards for this deck:**
+  * Terramorphic Expanse / Myriad Landscape: the "instant-speed timing collapsed to the trailing pass of
+    our main phase" PROVISIONAL note. Here the landfall payoffs are EOT pumps (Hellhound, Brushfire:
+    want main 1, before combat) and Mossborn Hydra's permanent counter doubling, so a main-1 crack
+    weakly dominates an opponent's-turn crack. That holds unless an opponent-end-step window is built
+    for Soulstoke (lfe-fury is assessing), when Myriad's {2} would compete with Soulstoke's {1}{R}.
+  * Gruul Turf: the Karoo bounce is a searched plan dimension narrowed by
+    `DecisionProvider::BounceSearchCandidates`. In this deck an UNCRACKED Terramorphic / Myriad is a
+    valuable return (replay = an extra landfall + a later crack). Check at 5e that the generic narrowing
+    does not drop it (`MTG_UNPRUNE=karoobounce` oracle diff).
+  * Aether Vial's bracket note says "AI heuristic: adds counters each upkeep until reaching the most
+    common creature MV in hand". CHECKED: the charge is the provider hook `WantVialCharge` (hand-aware:
+    hold while a creature at the current MV is in hand, else climb toward a bigger one, else pre-charge
+    toward the deck's dominant MV); the searched fan `MTG_VIAL_AXIS` is opt-in, default OFF (USER
+    2026-08-30 shipped it that way; AIEngine::DecideVialCharge, EngineFlags.h VialAxisEnabled). A
+    provider prune -> disclose in 6a. With Risen Reef, a Vial put is an Elemental entering (Reef
+    trigger). This deck's creature MVs: 1 x8, 2 x9, 3 x10, 4 x1, 5 x2.
+  * Secluded Courtyard / Unclaimed Territory "any creature" simplification: exact here iff every creature
+    is an Elemental (Mimic is a Shapeshifter in hand but costs only generic {2}).
+- **Suite sizing reference:** 3x budget = 8,907 ms/game (galadriel 2,969 x 3, 2026-10-18 table).
+  Landfall's entry shape: smoke d0 1000 / d3 30 b10 / d5 15 b20; regression d0 1000, d3 2x40 b10,
+  d5 2x20 b20; overnight d0 4x2000, d3 4x250, d5 4x150.
 
 ## Open questions for the user (collected, never blocking)
 - Q1. Deck file name: the shipped copy is `LandfallElementals.cod` (the folder's name). Your original
