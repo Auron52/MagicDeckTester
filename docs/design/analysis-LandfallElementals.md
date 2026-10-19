@@ -62,10 +62,10 @@ generic).
 | Brushfire Elemental | lfe-land | 2 | DONE same + Haste; evasion PROVISIONAL inert |
 | Mossborn Hydra | lfe-land | 2/3 | DONE `enters_with_plus_counters` + `landfall_double_self_counters`; trample PROVISIONAL inert |
 | Waterlogged Grove | lfe-land | 1 | DONE Fiery Islet shape |
-| Risen Reef | lfe-etb | | |
-| Flamekin Harbinger | lfe-etb | | |
-| Foundation Breaker | lfe-etb | | |
-| Fulminator Mage | lfe-etb | | |
+| Risen Reef | lfe-etb | 3 | DONE `enters_look_top_land_or_hand` + enters_watch_subtypes; land/hand SEARCHED (`Plan::look_top_pins`); viewer `dig` |
+| Flamekin Harbinger | lfe-etb | 1 (+3 order) | DONE tutor_to_top Elemental; Harbinger/Reef trigger ORDER searched (generic ETB tutor-to-top x look-at-top watcher); viewer `dig` (trigger order) + `tutor_etb` |
+| Foundation Breaker | lfe-etb | 2 | DONE `etb_destroy_artifact_enchantment_optional` + evoke_cost; decline own Vial/Mimic dominates; viewer `dig` (may destroy) |
+| Fulminator Mage | lfe-etb | 2 | DONE hybrid; `sac_outlet_destroy_nonbasic_land` (search offers it only when a death pays); viewer `target` |
 | Smokebraider | lfe-fury | | |
 | Incandescent Soulstoke | lfe-fury | | |
 | Fury | lfe-fury | | |
@@ -80,6 +80,28 @@ Integration notes: Soulstoke's put must reach `FireEtbWatchers` (Hydra's entry c
 `EnterLand`; the pre-play "win this turn" estimate cannot see landfall (ordering only here); `EvalCard`
 gives Hellhound 0 and no expected-landfall credit (d0 casts it anyway; a provider `ComboCardValue`
 candidate).
+
+### lfe-etb report (2026-10-19, commits c95839d40 caef6e9af 719f690c6 387ab019f)
+Unit 1538/1539 (same routing-row pin), scenarios 230/230 (+1 `lfe_reef_land_to_hand_open_drop`).
+Reef's trigger is collected during the enter cascade and resolved when the outermost
+`FireOwnEtbTriggers` unwinds (depth counter), so battlefield indices held by callers stay valid; the
+land enters via `EnterLand` (tapped, landfall, not a land drop); a card to hand opens a breakpoint
+(new site-10 clause in `PlanOpensBreakpoint`). `Plan` +24 bytes (kPlanDomAssertedSize 496).
+Two SHARED engine fixes kept (both are rule-mandated, not judgement): 719f690c6 the tutor-index axis
+fans a creature PUT's ETB tutor (Aether Vial) instead of a greedy pick (can move goblins/pirates/
+soldiers); 387ab019f a self-only sac outlet's victim is the source itself, it used to pick another
+creature and do nothing (can move critter/soldiers). 48-game paired spot checks: 0 changed; the tiers
+measure them for real.
+PROVISIONAL (user sign-off): Reef -- the entrant's OTHER own-ETBs resolve before the Reef looks (fixed
+order; nothing else in the pool touches the library top on entry); Reef triggers from non-plan entries
+(e.g. a landfall token) take the provider default; mid-resolution triggers resolve after older pending
+ones (not strict LIFO); >16 combined look/order variants fall back to one-at-a-time variation. Breaker
+-- an own artifact-creature target whose death would pay is never chosen autonomously. Fulminator --
+which land it destroys follows the fixed `EtbDestroyTargetPick` ranking (only reachable with a death
+payoff). Trigger order reuses the `dig` modal rather than a new decision type (user may prefer one).
+Integration notes: Soulstoke's put needs `LookTopEntrantDef` + `put_tutor` if it is a new Action kind;
+Fury's evoke will touch the same `CollectActions` evoke branch; slow probe games are multi-mulligan
+bottoming (no keep table yet); Reef widens search by design (an exact-count optimisation is possible).
 
 ## Prep notes (orchestrator, while the clusters run)
 - **Routing hazards for Stage 4a** (`DetectDecisionProvider`, src/ai/DecisionProviders.cpp): Flamekin

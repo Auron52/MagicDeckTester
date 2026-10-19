@@ -188,6 +188,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // mana_per_life_gained) -- and AccomplishedAlchemistProvider DERIVES from SelesnyaLifegainProvider,
         // so the move is play-neutral by construction (it inherits the Selesnya discard buckets).
         {"AccomplishedAlchemist", "AccomplishedAlchemist"},
+        // LandfallElementals (onboarded 2026-10-18): its own `lfe` signature (Risen Reef's
+        // enters_look_top_land_or_hand). Would otherwise
+        // ride AntiLifegainProvider (Flamekin Harbinger's tutor_to_top) or VialProvider (Aether Vial);
+        // LandfallElementalsProvider is an empty DeckProvider derivation.
+        {"LandfallElementals", "LandfallElementals"},
     };
 
     namespace fs = std::filesystem;

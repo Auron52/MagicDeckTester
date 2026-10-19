@@ -3302,6 +3302,29 @@ public:
     bool LandEntrySpotsRule(const GameState& s) const override;
 };
 
+// LandfallElementals (R/G/u Elemental landfall tribal: Akoum Hellhound, Brushfire Elemental, Mossborn
+// Hydra, Risen Reef, Flamekin Harbinger, Smokebraider, Incandescent Soulstoke, Fury; onboarded
+// 2026-10-18). Its OWN provider from day one (Stage 4a). Without the `lfe` signature the deck would
+// route by an archetype-neutral accident: Flamekin Harbinger's tutor_to_top sets `anti`, Aether Vial's
+// upkeep_adds_charge sets `vial`. Thematically close to LandfallProvider, but deliberately NOT derived
+// from it (its fetch / Titan / bounce / cast-order / discard rules are the USER's rules for THAT list).
+// An EMPTY DeckProvider derivation (== Generic behaviour): play-neutral by construction, no judgement
+// hook until one is measured.
+class LandfallElementalsProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage is combat only: Akoum Hellhound and "
+               "Brushfire Elemental (haste) get +2/+2 per land entering this turn, Mossborn Hydra "
+               "doubles its +1/+1 counters per land entering, Incandescent Soulstoke adds +1/+1 to "
+               "other Elementals and puts an Elemental (Fury: double strike) in with haste. A "
+               "winless-this-turn bound must count EVERY land entry still reachable this turn -- the "
+               "land drop, Terramorphic Expanse / Myriad Landscape cracks, a Gruul Turf replay, and a "
+               "Risen Reef look per Elemental entering (a land on top goes in tapped) -- times every "
+               "landfall attacker that can attack, plus the haste sources." }; }
+    const char* Name() const override { return "LandfallElementals"; }
+};
+
 class LandfallProvider : public DeckProvider
 {
 public:
