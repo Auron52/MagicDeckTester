@@ -34376,7 +34376,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_name      = ap.hand[i].m_name;
                 a.hand_index     = i;
                 a.cost           = *def.params.evoke_cost;
-                a.eval           = EvalCard(def, state);
+                // NOT EvalCard(def): that prices the 3/3 double-striking BODY, which an evoked Fury
+                // never keeps (sacrificed on entry). Measured: with it, the LandfallElementals probe
+                // (seed 777, 50 games, d3 b20) evoked Fury in 21 of 27 casts -- turn-1 evokes pitching a
+                // card for nothing -- because Solve's comparator (wins, then total_eval) and the greedy
+                // playout read this value. The static value of a pitch evoke is its ETB's (the divided
+                // damage is a dominance-folded no-op against the goldfish) minus two cards: -2 -- STRICTLY
+                // below the pass, whose Plan::value is -1 ("nothing castable"), because FSLineTail's
+                // main-2 loop and FSLineWin keep the FIRST of equal-scoring plans after MoveOrderPlans'
+                // value sort: at -1 the evoke tied the pass, sorted ahead of it (stable order) and won
+                // every no-gain tie (probe seed 787 gi10: T1 main 2 evoked Fury pitching the other Fury
+                // at d3 AND d5 unbudgeted). So a plan that evokes for nothing now loses the tie to the
+                // same plan without it; whatever the entry is really worth (a Risen Reef trigger, a
+                // cast payoff) the searched rollout still sees and can prefer.
+                a.eval           = -2;
                 a.is_noncreature = false;
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.evoke          = true;
@@ -37822,6 +37835,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const int power = std::max(0, hc.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
                     a.vial_attack_power = power;
                     a.eval              = std::max(a.eval, power * DMG);
+                }
+                // AFTER COMBAT the put creature can no longer attack and dies at this turn's end step
+                // (tap_put_sac_at_end_step), so its static value is only its entry -- priced by the
+                // rollout -- minus the card: -2, strictly below the pass (Plan::value -1), the pitch-
+                // evoke rule, so the main-2 loop never takes a card-losing put on a no-gain tie.
+                if (!is_pre_combat && pd->params.tap_put_sac_at_end_step)
+                {
+                    a.vial_attack_power = 0;
+                    a.eval              = -2;
                 }
                 actions.push_back(std::move(a));
             }

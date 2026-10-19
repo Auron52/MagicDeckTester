@@ -511,3 +511,51 @@ TEST_CASE("Fury ETB: no targets by default; with an opponent-death payoff it kil
     CHECK(ByNumL(b, smoke)->damage == 0);     // never our own
     CHECK(b.players[1].life <= life_b - 4);
 }
+
+// ================== NO CARD-LOSING ACTION ON A NO-GAIN TIE (the pass is Plan::value -1) ==================
+
+TEST_CASE("Fury: an evoke-for-nothing plan ranks strictly BELOW the pass (Plan::value < -1)")
+{
+    // The probe defect (seed 787 gi10): at -1 an evoke tied the pass, sorted ahead of it in
+    // MoveOrderPlans' stable order and won every no-gain tie in the main-2 loop.
+    GameState s = BoardL();
+    HandL(s, "Fury");
+    HandL(s, "Fury");
+    HandL(s, "Smokebraider");
+    int evoke_plans = 0;
+    for (const bool pre : { true, false })
+    {
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, pre))
+        {
+            bool only_evokes = !p.actions.empty();
+            for (const Action& a : p.actions) { if (!(a.kind == Action::Kind::CastFromHand && a.evoke)) { only_evokes = false; } }
+            if (!only_evokes) { continue; }
+            ++evoke_plans;
+            CHECK(p.value < -1);
+        }
+    }
+    CHECK(evoke_plans > 0);
+}
+
+TEST_CASE("Soulstoke: AFTER combat the put has no attack stamp and ranks below the pass")
+{
+    GameState s = BoardL();
+    PutL(s, "Incandescent Soulstoke");
+    PutL(s, "Mountain"); PutL(s, "Mountain");
+    HandL(s, "Fury");
+    bool seen_pre = false, seen_post = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::PutFromHandAbility) { seen_pre = true; CHECK(a.vial_attack_power == 8); } }
+    }
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+    {
+        if (p.actions.size() != 1 || p.actions[0].kind != Action::Kind::PutFromHandAbility) { continue; }
+        seen_post = true;
+        CHECK(p.actions[0].vial_attack_power == 0);
+        CHECK(p.value < -1);
+    }
+    CHECK(seen_pre);
+    CHECK(seen_post);
+}
