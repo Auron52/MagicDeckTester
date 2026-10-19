@@ -568,3 +568,53 @@ TEST_CASE("LFE fix D (Angels 2hg gi42): an untapped Giada never shrinks the NONC
     CHECK(pump_offered(4));          // 4 Plains + Sol Ring = exactly {3}{W}{W}{W}
     CHECK_FALSE(pump_offered(3));    // ...and Giada's {W} can never be the sixth mana of an ability
 }
+
+// ===================== THE BATCH PREPAY HONOURS GIADA'S ANGEL-ONLY MANA (Angels 2HG gi308) =====================
+
+namespace
+{
+std::vector<Action> HandCastsF(const GameState& s, const std::vector<std::string>& names)
+{
+    std::vector<Action> acts;
+    for (const std::string& n : names)
+    {
+        const CardDefinition& d = DefF(n);
+        Action a;
+        a.kind = Action::Kind::CastFromHand;
+        a.card_name = d.card.m_name;
+        a.def = &d;
+        a.cost = d.card.m_mana_cost;
+        for (int i = 0; i < static_cast<int>(s.players[0].hand.size()); ++i)
+        { if (s.players[0].hand[static_cast<std::size_t>(i)].m_name == d.card.m_name) { a.hand_index = i; break; } }
+        acts.push_back(a);
+    }
+    return acts;
+}
+}   // namespace
+
+TEST_CASE("Angels fix (2HG gi308): the whole-turn prepay never spends Giada's {W} on a batch with no Angel")
+{
+    // Plains, Plains, Seraph Sanctuary ({C}) and Giada: Lightning Greaves {2} + Bishop of Wings {W}{W} is
+    // four mana for two non-Angels off three general sources. The joint solve had no spell identity,
+    // read Giada as payable, and tapped her: the batch "paid", Bishop and Greaves both resolved.
+    GameState s = BoardF();
+    PutF(s, "Plains"); PutF(s, "Plains"); PutF(s, "Seraph Sanctuary");
+    const int giada = PutF(s, "Giada, Font of Hope");
+    HandF(s, "Lightning Greaves"); HandF(s, "Bishop of Wings");
+    const std::vector<Action> acts = HandCastsF(s, { "Lightning Greaves", "Bishop of Wings" });
+    GameState t = s;
+    CHECK_FALSE(TurnSolver::BatchPrepayMainCasts(t, acts));
+    CHECK_FALSE(ByNumF(t, giada)->tapped);
+    CHECK(t.floating_mana.Total() == 0);
+
+    // A batch whose Angel casts can absorb her {W} may still use her (unchanged): Lyra + Righteous
+    // Valkyrie ({2}{W} each) off four Plains, Seraph Sanctuary and Giada needs all six.
+    GameState u = BoardF();
+    for (int k = 0; k < 4; ++k) { PutF(u, "Plains"); }
+    PutF(u, "Seraph Sanctuary");
+    const int giada_u = PutF(u, "Giada, Font of Hope");
+    HandF(u, "Lyra, Archangel of Dawn"); HandF(u, "Righteous Valkyrie");
+    const std::vector<Action> acts_u = HandCastsF(u, { "Lyra, Archangel of Dawn", "Righteous Valkyrie" });
+    CHECK(TurnSolver::BatchPrepayMainCasts(u, acts_u));
+    CHECK(ByNumF(u, giada_u)->tapped);
+}

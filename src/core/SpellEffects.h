@@ -32989,9 +32989,35 @@ inline std::atomic<long long>& SubtypeManaUnsetSite(int i)
 inline bool SubtypeManaAuditOn()
 { static const bool v = EnvOn("MTG_SUBTYPE_MANA_AUDIT"); return v; }
 
+// THE WHOLE-TURN BATCH PREPAY'S VERDICT for subtype-restricted mana (Giada, Font of Hope: "Spend this
+// mana only to cast an Angel spell"). BatchPrepayMainCasts pays several casts in ONE solve, so no single
+// card is "the" spell and the unset identity below would answer YES -- which let the joint solve tap
+// Giada for a batch with NO Angel in it (Angels 2HG seed 910308 gi308 T3: Lightning Greaves + Bishop of
+// Wings paid off three lands AND Giada, a turn the board cannot legally pay). The prepay sets this
+// around its joint solves, BigSpellBatchState's twin:
+//   -1  not inside a batch prepay -> decide off PayingSpellCard() as always;
+//    1  the batch's casts of the restricted subtype carry enough mana value to absorb every restricted
+//       unit up, so any joint payment re-attributes to a legal one (the pool is fungible) -> usable;
+//    0  they do not -> refused; the joint solve then pays the batch without it or declines to the
+//       per-cast payer, which carries each cast's identity.
+inline int& SubtypeBatchState()
+{
+    static thread_local int v = -1;
+    return v;
+}
+struct SubtypeBatchScope
+{
+    int prev;
+    explicit SubtypeBatchScope(int st) : prev(SubtypeBatchState()) { SubtypeBatchState() = st; }
+    ~SubtypeBatchScope() { SubtypeBatchState() = prev; }
+    SubtypeBatchScope(const SubtypeBatchScope&)            = delete;
+    SubtypeBatchScope& operator=(const SubtypeBatchScope&) = delete;
+};
+
 inline bool SubtypeManaOk(const CardParams& pp)
 {
     if (pp.mana_only_subtype.empty()) { return true; }
+    { const int batch = SubtypeBatchState(); if (batch >= 0) { return batch == 1; } }
     const Card* c = PayingSpellCard();
     if (SubtypeManaAuditOn())
     {

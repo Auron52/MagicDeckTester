@@ -5715,6 +5715,8 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         }
         if (board_has_restricted)
         {
+            // The batch prepay's subtype verdict (SubtypeBatchState) decides before the identity does.
+            if (SubtypeBatchState() >= 0) { mix(h, 0x5B7BA7C0ull + static_cast<std::uint64_t>(SubtypeBatchState())); }
             const Card* paying = PayingSpellCard();
             std::uint64_t sub_h = paying == nullptr ? 0ull : 1ull;
             if (paying != nullptr)

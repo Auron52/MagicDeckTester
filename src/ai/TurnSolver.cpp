@@ -52158,6 +52158,48 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
     // The life-scaled decline armed above: the batch needs the Alchemist -> pay per cast, in order.
     if (life_scaled_armed && !life_scaled_rest.CanPay(combined)) { return Pp(PP_LIFE_SCALED); }
+    // SUBTYPE-RESTRICTED MANA IN THE JOINT SOLVE (Giada; see SubtypeBatchState). The solves below run
+    // with no paying-spell identity, so the restriction is decided for the batch: usable only when the
+    // batch's casts of that subtype carry at least as much mana value as the restricted units the board
+    // has up (then the fungible pool always re-attributes to a legal assignment -- the unit goes to an
+    // Angel's pip), else refused. Angels 2HG seed 910308 gi308 T3: {Lightning Greaves, Bishop of Wings}
+    // was paid off three lands plus Giada's Angel-only {W}. No such source up -> unset (byte-identical);
+    // a batch with enough Angel mana value -> 1, exactly the permissive answer it had before.
+    int sub_batch = -1;
+    {
+        const std::string* sub_name[4] = {};
+        int sub_units[4] = {}, n_sub = 0;
+        for (const Permanent& sp : state.battlefield)
+        {
+            if (sp.controller_index != active || sp.tapped || sp.def_absent) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+            if (sd == nullptr || !sd->params.creature_mana_only || sd->params.mana_only_subtype.empty()) { continue; }
+            if (sd->tmpl == CardTemplate::ManaDork && !CanTapNow(sp, state.battlefield)) { continue; }
+            const int y = PermanentManaYield(state, sp, *sd);
+            int k = 0;
+            while (k < n_sub && *sub_name[k] != sd->params.mana_only_subtype) { ++k; }
+            if (k == n_sub) { if (n_sub == 4) { continue; } sub_name[n_sub++] = &sd->params.mana_only_subtype; }
+            sub_units[k] += (y >= 0 ? y : ManaProducedPerTap(*sd));
+        }
+        if (n_sub > 0)
+        {
+            bool ok_all = true;
+            for (int k = 0; k < n_sub; ++k)
+            {
+                int elig_mv = 0;
+                for (const Action& a : acts)
+                {
+                    if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    if (d == nullptr || !d->card.IsCreature() || !CardHasSubtype(d->card, *sub_name[k])) { continue; }
+                    elig_mv += a.cost.ManaValue() - a.cost.colorless;
+                }
+                if (elig_mv < sub_units[k]) { ok_all = false; }
+            }
+            sub_batch = ok_all ? 1 : 0;
+        }
+    }
+    SubtypeBatchScope _sub_batch_scope(sub_batch);
     // PREVENT DAMAGE: paying the whole plan now would deal a later cast's pain before an earlier cast
     // that grows the gain chain has resolved -- a dominated timing (dmgev::BatchTimingEnabled). The
     // casts then pay one at a time, each on the board the casts before it left. Armed boards only.
