@@ -15689,12 +15689,108 @@ inline std::vector<ConvokeArmSpec> CreatureConvokeArms(const GameState& s, int c
     return arms;
 }
 
+// ---- THE CONVOKE COVER (Vampires Stage 6a defects D1 / D2, 2026-10-19) --------------------------------
+// A MADNESS cast's convoke is pinned by its COVER -- what the bodies pay of the madness cost: `cp` of the
+// pips of the spell's convoke colour, `cg` of its generic (MadnessCoverPack) -- and realised on the board
+// at the trigger. These are the cover's three board-free facts, shared by the search's fan (MadnessFanFor),
+// its subset books (TurnSolver's madness cover rule) and the resolver (MadnessPinnedOptionNow).
+//
+// The cost a cover leaves to pay in mana: a property of the pin alone, so the search books it exactly.
+inline ManaCost ConvokeCoveredCost(const ManaCost& base, Color pip, int cp, int cg)
+{
+    ManaCost c = base;
+    int* pf = ConvokePipField(c, pip);
+    *pf -= std::min(std::max(0, cp), *pf);
+    c.generic -= std::min(std::max(0, cg), c.generic);
+    return c;
+}
+// The cover an arm's reduced cost stands for on `base`.
+inline std::int8_t ConvokeCoverOf(const ManaCost& base, const ManaCost& reduced, Color pip)
+{
+    ManaCost b = base, r = reduced;
+    return MadnessCoverPack(*ConvokePipField(b, pip) - *ConvokePipField(r, pip), b.generic - r.generic);
+}
+// Can bodies pay the cover (cp, cg) of a cost with `pn` pips of the convoke colour, given `pipc` pip-
+// coloured bodies, `othc` other bodies and `totc` bodies in all (totc <= pipc + othc; a caller with only
+// per-class bounds passes their sum)? ApplyConvokeReduction's rule: a pip-coloured body pays a pip first,
+// then {1}; any other body pays {1} only. So while a pip is left uncovered every pip-coloured body is paying
+// a pip and the generic part is all OTHER bodies; once every pip is covered, any body pays generic.
+inline bool ConvokeCoverPayable(int cp, int cg, int pn, int pipc, int othc, int totc)
+{
+    if (cp > pipc) { return false; }
+    if (cp < pn)   { return cg <= othc && cp + cg <= totc; }
+    return cp + cg <= std::min(totc, pipc + othc);
+}
+// Ledger question 16's dominance, stated on the cover: with at least `fp` pip-coloured and `fo` other FREE
+// bodies untapped at the cast (a free body -- one that cannot attack and has no live {T} ability -- has no
+// other use against the passive opponent), a cover that leaves one of them unused while it would still pay
+// a pip or {1} is the same line paying one more mana: dominated by the cover with that body added. The
+// cheapest realisation spends free bodies first (they give up no attacking power), so `un_*` is exactly what
+// it leaves, and every count is monotone in fp / fo -- LOWER bounds on the free bodies are sound inputs.
+// Never consulted under CONTENTION (another claimant for the bodies this turn; MadnessConvokeContention).
+inline bool ConvokeCoverDominated(int cp, int cg, int pn, int gen, int fp, int fo)
+{
+    fp = std::max(0, fp); fo = std::max(0, fo);
+    if (cp < pn)
+    {
+        const int un_p = fp - std::min(cp, fp);
+        const int un_o = fo - std::min(cg, fo);
+        return un_p > 0 || (cg < gen && un_o > 0);
+    }
+    const int used_p = std::min(cp, fp);
+    const int used_g = std::min(cg, fo + (fp - used_p));
+    return cg < gen && fp + fo - used_p - used_g > 0;
+}
+// CONTENTION for a creature-convoke MADNESS cast (defect D2, 2026-10-19; the hand cast's test lives in
+// TurnSolver's convoke post-pass and reads the same two claimants): another card this turn may want the
+// same untapped bodies -- a second creature-convoke card in hand (a hard-cast or madness-cast Markov Baron),
+// or a "tap N untapped Vampires" steal source (Captivating Vampire) on `owner`'s battlefield or in hand --
+// so "leave this free body untapped" is a real line and the dominance above is not applied. `skip_number`:
+// the m_number of the pending card while it is still in hand (the search's subset books), -1 at the trigger
+// (it is in exile). Bloodline Keeper's transform COUNTS Vampires without tapping them, Pit Fighter
+// sacrifices one tapped or not, and Voldaren Estate's Blood counts them: none of them is a claimant.
+inline bool MadnessConvokeContention(const GameState& s, int owner, int skip_number = -1)
+{
+    const Player& p = s.players[static_cast<std::size_t>(owner)];
+    for (const Card& hc : p.hand)
+    {
+        if (hc.m_number == skip_number && skip_number >= 0) { skip_number = -1; continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr) { continue; }
+        if ((hd->params.convoke && hd->card.IsCreature()) || hd->params.steal_tap_count > 0) { return true; }
+    }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != owner || q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && qd->params.steal_tap_count > 0) { return true; }
+    }
+    return false;
+}
+
 // ---- THE MADNESS CORE, part 2: options, the cast, the resolver ----------------------------------
 // Every payable way to cast the pending card NOW: one per (distinct madness cost) x (convoke arm, for a
 // card with convoke -- convoke applies after the alternative cost, CR 601.2f / the Markov Baron ruling),
 // each kept only if a probe ON A COPY can tap the arm's bodies and pay the reduced cost with `payer`
 // (exact under the restricted lands). Empty when nothing is payable or no more spells may be cast this
 // turn (Irencrag's budget, casts_remaining_this_turn == 0). Never asks a human (probes run paused).
+// Each option's `arm` is its COVER (ConvokeCoverOf). The arms are this board's (CreatureConvokeArms), with
+// CONTENTION read off the board (defect D2, 2026-10-19: a steal source or a second convoke card keeps the
+// fewer-free arms, down to the plain cast, which the free-body dominance used to drop -- the human's menu
+// and the unpinned default's list; option 0, the default's pick, is the every-free-body arm either way).
+inline bool MadnessProbePays(const GameState& state, const MadnessPending& pend, const ConvokeRules& r,
+                             const MadnessOption& o, const MadnessPayFn* payer)
+{
+    if (payer == nullptr) { return true; }
+    GameState probe = state;
+    ApplyConvokeTapsEx(probe, pend.owner, o.conv_pip, o.conv_other, r);
+    bool& pca = PayingCreatureAbility();
+    const bool prev = pca;
+    pca = false;   // a SPELL payment, never an enclosing ability's pay scope
+    const bool ok = (*payer)(probe, o.reduced);
+    pca = prev;
+    return ok;
+}
 inline std::vector<MadnessOption> MadnessOptionsNow(const GameState& state, const MadnessPending& pend,
                                                     MadnessWindow w, const MadnessPayFn* payer)
 {
@@ -15705,36 +15801,78 @@ inline std::vector<MadnessOption> MadnessOptionsNow(const GameState& state, cons
     const bool late = w == MadnessWindow::PostCombatMain || w == MadnessWindow::Cleanup
                    || state.phase == Phase::PostCombatMain;
     const ConvokeRules r = ConvokeRulesFor(*d, late);
+    const bool creature_convoke = d->params.convoke && d->card.IsCreature();
+    const bool contention = creature_convoke && MadnessConvokeContention(state, pend.owner);
     RevealLogPause _pause;               // a probe never asks a human or logs
     TapSpeculationScope _spec;
     for (std::size_t ci = 0; ci < pend.costs.size(); ++ci)
     {
         std::vector<ConvokeArmSpec> arms;
-        if (d->params.convoke && d->card.IsCreature()) { arms = CreatureConvokeArms(state, pend.owner, pend.costs[ci], r); }
+        if (creature_convoke) { arms = CreatureConvokeArms(state, pend.owner, pend.costs[ci], r, 0, 0, contention); }
         else { arms.push_back(ConvokeArmSpec{ 0, 0, pend.costs[ci] }); }
         for (std::size_t a = 0; a < arms.size(); ++a)
         {
             MadnessOption o;
             o.cost_idx   = static_cast<std::int8_t>(ci);
-            o.arm        = static_cast<std::int8_t>(a);
+            o.arm        = creature_convoke ? ConvokeCoverOf(pend.costs[ci], arms[a].reduced, r.pip) : 0;
             o.conv_pip   = static_cast<std::int8_t>(arms[a].pip);
             o.conv_other = static_cast<std::int8_t>(arms[a].other);
             o.reduced    = arms[a].reduced;
-            if (payer != nullptr)
-            {
-                GameState probe = state;
-                ApplyConvokeTapsEx(probe, pend.owner, o.conv_pip, o.conv_other, r);
-                bool& pca = PayingCreatureAbility();
-                const bool prev = pca;
-                pca = false;   // a SPELL payment, never an enclosing ability's pay scope
-                const bool ok = (*payer)(probe, o.reduced);
-                pca = prev;
-                if (!ok) { continue; }
-            }
+            if (!MadnessProbePays(state, pend, r, o, payer)) { continue; }
             out.push_back(o);
         }
     }
     return out;
+}
+
+// THE PINNED option (defect D1, 2026-10-19): cast with costs[cost_idx], the convoke bodies paying the cover
+// (cp, cg) -- realised on THIS board, the board at the trigger, by the body set CreatureConvokeArms keeps for
+// that reduced cost (the least attacking power given up: free bodies first, then would-attack / live-{T}
+// bodies by ascending true power -- the within-arm order the hand cast uses). The arms are listed with
+// contention ON, so every cover the board can pay is present (the free-body dominance is a search-side
+// prune, applied when the pin is emitted, never a reason to refuse a pin). False -- the stranded-premise
+// decline -- when no more spells may be cast, the cover is not payable by this board's bodies, or the
+// probe cannot pay the reduced cost. Shared by both worlds through ResolvePendingMadness.
+inline bool MadnessPinnedOptionNow(const GameState& state, const MadnessPending& pend, MadnessWindow w,
+                                   const MadnessPayFn* payer, int cost_idx, std::int8_t cover, MadnessOption* out)
+{
+    if (state.casts_remaining_this_turn == 0) { return false; }
+    if (cost_idx < 0 || cost_idx >= static_cast<int>(pend.costs.size())) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(pend.card);
+    if (d == nullptr) { return false; }
+    const bool late = w == MadnessWindow::PostCombatMain || w == MadnessWindow::Cleanup
+                   || state.phase == Phase::PostCombatMain;
+    const ConvokeRules r = ConvokeRulesFor(*d, late);
+    const ManaCost& base = pend.costs[static_cast<std::size_t>(cost_idx)];
+    MadnessOption o;
+    o.cost_idx = static_cast<std::int8_t>(cost_idx);
+    o.arm      = cover;
+    if (d->params.convoke && d->card.IsCreature())
+    {
+        const ManaCost want = ConvokeCoveredCost(base, r.pip, MadnessCoverPip(cover), MadnessCoverGeneric(cover));
+        if (ConvokeCoverOf(base, want, r.pip) != cover) { return false; }   // a cover the cost does not have
+        bool found = false;
+        for (const ConvokeArmSpec& a : CreatureConvokeArms(state, pend.owner, base, r, 0, 0, /*contention=*/true))
+        {
+            if (!(a.reduced == want)) { continue; }
+            o.conv_pip   = static_cast<std::int8_t>(a.pip);
+            o.conv_other = static_cast<std::int8_t>(a.other);
+            o.reduced    = a.reduced;
+            found = true;
+            break;
+        }
+        if (!found) { return false; }
+    }
+    else
+    {
+        if (cover != 0) { return false; }
+        o.reduced = base;
+    }
+    RevealLogPause _pause;
+    TapSpeculationScope _spec;
+    if (!MadnessProbePays(state, pend, r, o, payer)) { return false; }
+    *out = o;
+    return true;
 }
 
 // The madness CAST (CR 702.35b: cast it for its madness cost): the cast bookkeeping every cast site
@@ -15803,20 +15941,20 @@ inline int ResolvePendingMadness(GameState& state, std::vector<MadnessPending>& 
         const MadnessPin use = (qi == 0) ? pin : MadnessPin{};   // a pin names ONE discard
         const CardDefinition* d = CardDatabase::Instance().LookupCached(pend.card);
         std::vector<MadnessOption> opts;
-        if (payer != nullptr && d != nullptr) { opts = MadnessOptionsNow(state, pend, w, payer); }
         int choice = -1;   // index into opts, -1 = decline
         const bool unpinned = use.choice < 0;
         if (use.choice > 0)
         {
-            for (std::size_t k = 0; k < opts.size(); ++k)
-            {
-                if (opts[k].cost_idx == use.choice - 1 && opts[k].arm == use.arm)
-                { choice = static_cast<int>(k); break; }
-            }
-            // absent = the pinned option no longer exists / is no longer payable: decline (the
-            // stranded-premise rule -- legal, and the variant then scores as the decline it is).
+            // The pinned (cost, cover), realised on THIS board (defect D1: never an index into a list).
+            // Not payable here = decline (the stranded-premise rule -- legal, and the variant then scores
+            // as the decline it is).
+            MadnessOption po;
+            if (payer != nullptr && d != nullptr
+                && MadnessPinnedOptionNow(state, pend, w, payer, use.choice - 1, use.arm, &po))
+            { opts.push_back(po); choice = 0; }
         }
-        else if (unpinned && !opts.empty() && d != nullptr)
+        if (unpinned && payer != nullptr && d != nullptr) { opts = MadnessOptionsNow(state, pend, w, payer); }
+        if (unpinned && !opts.empty() && d != nullptr)
         {
             choice = ResolveProvider(state).MadnessCastDefault(state, pend.owner, *d, opts, w);
             if (choice >= static_cast<int>(opts.size())) { choice = static_cast<int>(opts.size()) - 1; }
