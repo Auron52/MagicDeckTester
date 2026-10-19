@@ -661,6 +661,7 @@ enum Slot : int
     DEPLETION_SBA,            // MTG_DEPLETION_SBA  the apply (TurnSolver::ApplyPlanDirect, rollout + search) sacrifices a depletion land whose last counter was spent at the EXECUTOR's SBA point -- when an outermost committed cast has RESOLVED -- not once at the end of the plan, and never earlier (a land the whole-turn prepay empties before the first cast is still there when that cast resolves). A mid-plan resolution read a dead Saprazzan Skerry as a land in play: NivMizzetCombo seed 6 T3, Preordain's ScryKeepOnTop bottomed Island + Cascade Bluffs in the search while the executor kept them, the recorded continuation (play Saprazzan Skerry) could not replay, no land was played and the committed T5 realised T7. Rollout only (the executor already sweeps). DEFAULT ON; =0 -> the end-of-plan sweep
     NIV_SERVANT_FIREMIND_ONLY,// MTG_NIV_SERVANT_FIREMIND_ONLY  NivMizzetCombo: a Generator Servant sacrifice the line does NOT need for mana is searched only beside a Niv-Mizzet, the Firemind cast (its haste = {T}: draw the turn it lands); any other plan holding an unneeded sacrifice is pruned (NivMizzetComboProvider::SacForManaOnlyIfNeeded; USER 2026-10-22: "we should only use it for Niv-mizzet the firemind in that case"). A Servant the line needs (ramp) is untouched; human play is never pruned. DEFAULT ON (the USER's rule, Niv-only); =0 -> every Servant plan searched
     NIV_SERVANT_UNPAIR,       // MTG_NIV_SERVANT_UNPAIR  NivMizzetCombo: amendment to the Servant rule (DEFAULT OFF, the USER's call): an unneeded Servant sacrifice is ALSO searched when the Servant is a Tandem Lookout's live soulbond partner and the plan casts either Niv-Mizzet -- the sacrifice breaks the pair so the Lookout pairs with the entering Niv, and every ping draws (held-out d3 s67072: sac -> Parun paired -> T4 kill; the rule's prune -> T5, at 4x budget too). Inert unless MTG_NIV_SERVANT_FIREMIND_ONLY is on
+    LFE_TUTOR_WIDTH,          // MTG_LFE_TUTOR_WIDTH  LandfallElementals: TutorSearchWidth admits EVERY distinct legal Elemental name for Flamekin Harbinger (10 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so four names were unreachable per search at ANY budget, which the shuffle chose (sweep s61016: Incandescent Soulstoke never scored -> T5 vs T4). A COVERAGE fix (it widens, never narrows; the axis is additive). =0 -> the base 6
     COUNT
 };
 
@@ -1272,6 +1273,7 @@ inline const char* Name(int slot)
         "MTG_DEPLETION_SBA",
         "MTG_NIV_SERVANT_FIREMIND_ONLY",
         "MTG_NIV_SERVANT_UNPAIR",
+        "MTG_LFE_TUTOR_WIDTH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

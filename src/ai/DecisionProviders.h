@@ -3323,6 +3323,17 @@ public:
                "Risen Reef look per Elemental entering (a land on top goes in tapped) -- times every "
                "landfall attacker that can attack, plus the haste sources." }; }
     const char* Name() const override { return "LandfallElementals"; }
+    // TutorSearchWidth -- a COVERAGE fix, not a heuristic (2026-10-19, sweep s61016): Flamekin
+    // Harbinger can find 10 distinct Elemental names (Akoum Hellhound, Brushfire Elemental, Mossborn
+    // Hydra, Risen Reef, Flamekin Harbinger, Smokebraider, Fury, Incandescent Soulstoke, Fulminator Mage,
+    // Foundation Breaker; Metallic Mimic is a Shapeshifter, not one) and the generic candidate
+    // list is in LIBRARY (= shuffle) order, so the base width 6 left four names unreachable per search
+    // at ANY budget -- which four, decided by the shuffle. The Pirates (9) / Giants (7) precedent:
+    // admit every distinct legal name (32 = "all" for any list this archetype can hold; the axis is
+    // bounded by the distinct candidates, so the cap costs nothing beyond them). It widens, never
+    // narrows; the axis is ADDITIVE (one rollout per extra target). MTG_LFE_TUTOR_WIDTH=0 restores
+    // the base 6; MTG_TUTOR_WIDTH still overrides engine-side.
+    int TutorSearchWidth() const override;
 };
 
 class LandfallProvider : public DeckProvider

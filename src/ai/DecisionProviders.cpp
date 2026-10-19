@@ -30340,6 +30340,16 @@ bool GiantsProvider::CleanupDiscardShedStable() const
     return !GiantsBucketDiscardEnabled();
 }
 
+// ---- LandfallElementalsProvider::TutorSearchWidth --------------------------
+// Flamekin Harbinger's tutor axis must reach every distinct Elemental NAME (10 in the list); the
+// base width 6 over the library-order candidate list left four unreachable per search, chosen by the
+// shuffle (sweep s61016). A coverage fix (see the header note). MTG_LFE_TUTOR_WIDTH=0 -> the base 6.
+int LandfallElementalsProvider::TutorSearchWidth() const
+{
+    static const bool on = EnvOn("MTG_LFE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
+    return heurarm::Flag(heurarm::LFE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
+}
+
 // ---- GiantsProvider::TutorSearchWidth ---------------------------------------
 // Giant Harbinger's tutor axis must be able to reach every Giant NAME in the list -- seven of them --
 // and the base width 6 left one unreachable per game, chosen by the shuffle (the library-order

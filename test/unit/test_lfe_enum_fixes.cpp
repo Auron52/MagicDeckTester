@@ -9,6 +9,7 @@
 //  3. FOUNDATION BREAKER EVOKED FOR NOTHING (s61001 / s61007): no plan evokes it while nothing can read
 //     its entry (PlanHasDeadOptionalEvoke).
 //  4. The landfall self-pump event reports the FULL P/T (lord bonus included).
+//  5. LandfallElementalsProvider's tutor width admits every distinct Elemental name.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -19,6 +20,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "deck/DeckLoader.h"
 
 #include <string>
 #include <vector>
@@ -290,4 +292,14 @@ TEST_CASE("Landfall self-pump event reports the FULL P/T (Incandescent Soulstoke
         CHECK(e.text.find("now 3/4") != std::string::npos);   // 0/1 + 2/2 + the lord's 1/1
     }
     CHECK(found);
+}
+
+TEST_CASE("LandfallElementals' tutor width admits every distinct Elemental name")
+{
+    EnsureCardsLfx();
+    const Decklist deck = DeckLoader::LoadFromFile(
+        ResolveHeuristicDefaultsPath("decks/LandfallElementals/LandfallElementals.cod"));
+    const DecisionProvider& p = SelectDecisionProvider(deck);
+    CHECK(std::string(p.Name()) == "LandfallElementals");
+    CHECK(p.TutorSearchWidth() >= 10);
 }
