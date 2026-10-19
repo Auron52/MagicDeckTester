@@ -7547,139 +7547,154 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (!HumanPlayActive() && plan.bp_choice >= 0 && bp_seen_exec == 0 && !bp_replayed
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     {
-        TurnSolver::Plan extra;
-        bool pe_searched = false;
-        // The continuation's positioned land, if any (ExecContLand; guard as in resolve_draw_breakpoint).
-        ExecContLand pe_land;
-        struct PeLandGuard
+        // RE-OPEN (MTG_SITE9_REOPEN, chunk E1) -- lockstep twin of ApplyPlanDirect's re-open loop: the
+        // activation snapshot right BEFORE each applied continuation; an ability that continuation made
+        // activatable opens the next counted occurrence, applied only when the plan's choice targets it.
+        const bool s9_reopen = Site9ReopenEnabled();
+        std::vector<uint64_t> s9_keys;
+        if (s9_reopen) { s9_keys = TurnSolver::SnapshotActivatableAbilities(state); }
+        for (int reopen = 0; ; ++reopen)
         {
-            ExecContLand& l; int& held;
-            ~PeLandGuard() { if (l.pending) { l.pending = false; --held; } }
-        } _pe_land_guard{ pe_land, exec_cont_lands_held };
-        const int pe_idx = bp_seen_exec++;
-        if (pe_idx >= 0 && (plan.bp_all || pe_idx == plan.bp_at))
-        {
-            TurnSolver::Site9Trace("ex", state, plan, is_pre_combat_main);
-            const std::vector<TurnSolver::Plan> cands =
-                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
-            // DEMOTED lockstep (MTG_BP_NEW_ONLY_DEMOTE) -- the site-9 twin of the main site's.
-            const bool pe_dem = TurnSolver::IsBpDemotedChoice(plan.bp_choice);
-            const std::vector<TurnSolver::Plan> pe_demoted = pe_dem
-                ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main)
-                : std::vector<TurnSolver::Plan>{};
-            const std::size_t pe_dj = pe_dem
-                ? static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice) : 0;
-            // CHAIN SENTINEL lockstep (2026-10-15): the rollout's site 9 resolves kBpChainChoice + j
-            // through BpChainCandIndex like every site; indexing with the raw value overran the list
-            // and applied nothing where the scored line had applied the chain continuation. A chain
-            // scan that finds no entry (-1) applies nothing, as the rollout's unresolved site 9 does.
-            const int pe_ci = (plan.bp_choice >= TurnSolver::kBpChainChoice)
-                ? TurnSolver::BpChainCandIndex(state, cands, plan.bp_choice - TurnSolver::kBpChainChoice)
-                : plan.bp_choice;
-            if (pe_dem ? (pe_dj < pe_demoted.size())
-                       : (pe_ci >= 0 && pe_ci < static_cast<int>(cands.size())))
+            TurnSolver::Plan extra;
+            bool pe_searched = false;
+            // The continuation's positioned land, if any (ExecContLand; guard as in resolve_draw_breakpoint).
+            ExecContLand pe_land;
+            struct PeLandGuard
             {
-                extra       = pe_dem ? pe_demoted[pe_dj] : cands[pe_ci];
-                pe_searched = true;
-                if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
-                    && !exec_cont_land_defer(pe_land, extra))   // a positioned land waits for its slot
-                { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
-                  if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
-                  TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
+                ExecContLand& l; int& held;
+                ~PeLandGuard() { if (l.pending) { l.pending = false; --held; } }
+            } _pe_land_guard{ pe_land, exec_cont_lands_held };
+            const int pe_idx = bp_seen_exec++;
+            if (pe_idx >= 0 && (plan.bp_all || pe_idx == plan.bp_at))
+            {
+                TurnSolver::Site9Trace("ex", state, plan, is_pre_combat_main);
+                const std::vector<TurnSolver::Plan> cands =
+                    TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+                // DEMOTED lockstep (MTG_BP_NEW_ONLY_DEMOTE) -- the site-9 twin of the main site's.
+                const bool pe_dem = TurnSolver::IsBpDemotedChoice(plan.bp_choice);
+                const std::vector<TurnSolver::Plan> pe_demoted = pe_dem
+                    ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main)
+                    : std::vector<TurnSolver::Plan>{};
+                const std::size_t pe_dj = pe_dem
+                    ? static_cast<std::size_t>(plan.bp_choice - TurnSolver::kBpDemotedChoice) : 0;
+                // CHAIN SENTINEL lockstep (2026-10-15): the rollout's site 9 resolves kBpChainChoice + j
+                // through BpChainCandIndex like every site; indexing with the raw value overran the list
+                // and applied nothing where the scored line had applied the chain continuation. A chain
+                // scan that finds no entry (-1) applies nothing, as the rollout's unresolved site 9 does.
+                const int pe_ci = (plan.bp_choice >= TurnSolver::kBpChainChoice)
+                    ? TurnSolver::BpChainCandIndex(state, cands, plan.bp_choice - TurnSolver::kBpChainChoice)
+                    : plan.bp_choice;
+                if (pe_dem ? (pe_dj < pe_demoted.size())
+                           : (pe_ci >= 0 && pe_ci < static_cast<int>(cands.size())))
+                {
+                    extra       = pe_dem ? pe_demoted[pe_dj] : cands[pe_ci];
+                    pe_searched = true;
+                    if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
+                        && !exec_cont_land_defer(pe_land, extra))   // a positioned land waits for its slot
+                    { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
+                      if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                      TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
+                }
             }
-        }
-        if (pe_searched)
-        {
-            // Precasts, then the casts in the executor's canonical order, then the continuation's
-            // ACTIVATIONS through the trailing dispatcher (the site-7 applier shape).
-            const ContPins ca_pins = ContPinsOf(extra);   // the continuation's during-cast pins (ContPins)
-            std::optional<ContPinScope> ca_scope;
-            if (ca_pins.Any()) { ca_scope.emplace(&ca_pins); }
-            for (const Action& ca : extra.actions)
+            if (pe_searched)
             {
-                if (ca.kind == Action::Kind::SacForMana)
-                { ApplySacForMana(state, state.active_player_index, ca.sac_source_id,
-                                  TurnSolver::SacFloatColorFor(state, extra.actions, ca),
-                                  ca.ritual_float, ca.sac_victim_id); }
-                else if (ca.kind == Action::Kind::Suspend)
-                { ApplySuspend(state, state.active_player_index, ca.card_name); }
-                else if (ca.kind == Action::Kind::CastFromHand
-                         && (ca.convoke_green > 0 || ca.convoke_other > 0))
-                { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(ca), ca.convoke_green, ca.convoke_other); }
+                // Precasts, then the casts in the executor's canonical order, then the continuation's
+                // ACTIVATIONS through the trailing dispatcher (the site-7 applier shape).
+                const ContPins ca_pins = ContPinsOf(extra);   // the continuation's during-cast pins (ContPins)
+                std::optional<ContPinScope> ca_scope;
+                if (ca_pins.Any()) { ca_scope.emplace(&ca_pins); }
+                for (const Action& ca : extra.actions)
+                {
+                    if (ca.kind == Action::Kind::SacForMana)
+                    { ApplySacForMana(state, state.active_player_index, ca.sac_source_id,
+                                      TurnSolver::SacFloatColorFor(state, extra.actions, ca),
+                                      ca.ritual_float, ca.sac_victim_id); }
+                    else if (ca.kind == Action::Kind::Suspend)
+                    { ApplySuspend(state, state.active_player_index, ca.card_name); }
+                    else if (ca.kind == Action::Kind::CastFromHand
+                             && (ca.convoke_green > 0 || ca.convoke_other > 0))
+                    { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(ca), ca.convoke_green, ca.convoke_other); }
+                }
+                // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
+                std::optional<CastSectionUnlock> pe_unlock;
+                pe_unlock.emplace(state, extra.actions);
+                std::vector<int> pe_cont_order;
+                for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
+                {
+                    const Action& ca = extra.actions[ci];
+                    if (ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
+                    { pe_cont_order.push_back(ci); }
+                }
+                if (!extra.searched_order && pe_cont_order.size() > 1)
+                {
+                    if (pe_land.pending && pe_land.slot > 0)
+                    { TurnSolver::LandSlotWatchersFirst(extra.actions, pe_cont_order); }   // land position: ties
+                    std::stable_sort(pe_cont_order.begin(), pe_cont_order.end(),
+                        [&](int x, int y)
+                        { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+                    ApplyDeckCastArrangement(state, extra.actions, pe_cont_order);   // lockstep: apply_plan_actions
+                    ApplyPayableCastOrder(state, extra.actions, pe_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
+                }
+                auto pe_cast = [&](const Action& ca)
+                {
+                    // ADVENTURE / KICKER must ride through, as every other cast site here passes them.
+                    // This call stopped at `evoke`, so the defaulted `adventure = false` re-cast a
+                    // continuation's Fungus Frolic as the {3}{G} Brightcap Badger creature: it failed
+                    // to pay, the two Saprolings never existed, and Fungus v2 seed 7021's proven T4
+                    // kill realised T5 (docs/design/fungus-v2-fd-diverge-7021.md;
+                    // test/scenarios/fungus_site9_adventure_continuation.json). The pod twin above had
+                    // the same truncated call.
+                    m_cast_riders = CastRiders::Of(ca); cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
+                                 ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
+                                 ca.splice_count, ca.chosen_float_color, ca.enchant_target,
+                                 ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
+                                 ca.convoke_other, ca.phyrexian_life, ca.evoke, ca.adventure, ca.kicked);
+                    resolve_now();
+                    walker_cast_activation(ca);
+                };
+                // PARTITION TRUNCATION inside the continuation (fd-diverge lockstep, chunk E1). The
+                // rollout applies this continuation through apply_plan_actions, whose apply_one stops
+                // every cast after a partitioning one (bp_truncate: a plain cantrip / self-targeted
+                // Stroke of Genius at sink depth 0 arms the DEFERRED re-solve and ends the section);
+                // the deferred continuation then runs after this site and arrives here through the
+                // end-of-main catch-all (committed) or acq_pending (no-commit). Casting the rest of the
+                // continuation anyway spent the float the scored deferred continuation needed (seed
+                // 70121 gi120: Stroke X=1 then the second Staff ate the Alchemist's mana; the scored
+                // loop -> Stroke X=51 had no mana, T5 proven, T6 realised). Trailing activations still
+                // run, as the rollout's apply_trailing_activations(extra.actions) does.
+                bool pe_trunc = false;
+                auto pe_truncates = [&](const Action& ca) -> bool
+                {
+                    const bool paid = last_cast_paid;
+                    if (!((paid || (!fd_plan_committed && !ExecFailedCastNoResolve()))
+                          && equip_bp_truncates(ca.card_name, ca.draw_target)))
+                    { return false; }
+                    if (!fd_plan_committed && paid && m_lookahead_depth > 0) { arm_acq_deferred(ca.card_name); }
+                    return true;
+                };
+                for (int ci : pe_cont_order)
+                {
+                    pe_cast(extra.actions[ci]);
+                    pe_trunc = pe_truncates(extra.actions[ci]);
+                    pe_unlock->Fire(); exec_cont_land_hook(pe_land, extra.actions[ci]);
+                    if (pe_trunc) { break; }
+                }
+                for (const Action& ca : extra.actions)
+                {
+                    if (pe_trunc) { break; }
+                    if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land)
+                    { pe_cast(ca); exec_cont_land_hook(pe_land, ca); pe_trunc = pe_truncates(ca); }
+                }
+                exec_cont_land_finish(pe_land);   // a positioned land whose watcher never came
+                pe_unlock.reset();   // the cast section ends before the trailing activations
+                exec_trailing_activations(extra.actions);
             }
-            // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
-            std::optional<CastSectionUnlock> pe_unlock;
-            pe_unlock.emplace(state, extra.actions);
-            std::vector<int> pe_cont_order;
-            for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
-            {
-                const Action& ca = extra.actions[ci];
-                if (ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
-                { pe_cont_order.push_back(ci); }
-            }
-            if (!extra.searched_order && pe_cont_order.size() > 1)
-            {
-                if (pe_land.pending && pe_land.slot > 0)
-                { TurnSolver::LandSlotWatchersFirst(extra.actions, pe_cont_order); }   // land position: ties
-                std::stable_sort(pe_cont_order.begin(), pe_cont_order.end(),
-                    [&](int x, int y)
-                    { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
-                ApplyDeckCastArrangement(state, extra.actions, pe_cont_order);   // lockstep: apply_plan_actions
-                ApplyPayableCastOrder(state, extra.actions, pe_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
-            }
-            auto pe_cast = [&](const Action& ca)
-            {
-                // ADVENTURE / KICKER must ride through, as every other cast site here passes them.
-                // This call stopped at `evoke`, so the defaulted `adventure = false` re-cast a
-                // continuation's Fungus Frolic as the {3}{G} Brightcap Badger creature: it failed
-                // to pay, the two Saprolings never existed, and Fungus v2 seed 7021's proven T4
-                // kill realised T5 (docs/design/fungus-v2-fd-diverge-7021.md;
-                // test/scenarios/fungus_site9_adventure_continuation.json). The pod twin above had
-                // the same truncated call.
-                m_cast_riders = CastRiders::Of(ca); cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
-                             ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
-                             ca.splice_count, ca.chosen_float_color, ca.enchant_target,
-                             ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
-                             ca.convoke_other, ca.phyrexian_life, ca.evoke, ca.adventure, ca.kicked);
-                resolve_now();
-                walker_cast_activation(ca);
-            };
-            // PARTITION TRUNCATION inside the continuation (fd-diverge lockstep, chunk E1). The
-            // rollout applies this continuation through apply_plan_actions, whose apply_one stops
-            // every cast after a partitioning one (bp_truncate: a plain cantrip / self-targeted
-            // Stroke of Genius at sink depth 0 arms the DEFERRED re-solve and ends the section);
-            // the deferred continuation then runs after this site and arrives here through the
-            // end-of-main catch-all (committed) or acq_pending (no-commit). Casting the rest of the
-            // continuation anyway spent the float the scored deferred continuation needed (seed
-            // 70121 gi120: Stroke X=1 then the second Staff ate the Alchemist's mana; the scored
-            // loop -> Stroke X=51 had no mana, T5 proven, T6 realised). Trailing activations still
-            // run, as the rollout's apply_trailing_activations(extra.actions) does.
-            bool pe_trunc = false;
-            auto pe_truncates = [&](const Action& ca) -> bool
-            {
-                const bool paid = last_cast_paid;
-                if (!((paid || (!fd_plan_committed && !ExecFailedCastNoResolve()))
-                      && equip_bp_truncates(ca.card_name, ca.draw_target)))
-                { return false; }
-                if (!fd_plan_committed && paid && m_lookahead_depth > 0) { arm_acq_deferred(ca.card_name); }
-                return true;
-            };
-            for (int ci : pe_cont_order)
-            {
-                pe_cast(extra.actions[ci]);
-                pe_trunc = pe_truncates(extra.actions[ci]);
-                pe_unlock->Fire(); exec_cont_land_hook(pe_land, extra.actions[ci]);
-                if (pe_trunc) { break; }
-            }
-            for (const Action& ca : extra.actions)
-            {
-                if (pe_trunc) { break; }
-                if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land)
-                { pe_cast(ca); exec_cont_land_hook(pe_land, ca); pe_trunc = pe_truncates(ca); }
-            }
-            exec_cont_land_finish(pe_land);   // a positioned land whose watcher never came
-            pe_unlock.reset();   // the cast section ends before the trailing activations
-            exec_trailing_activations(extra.actions);
+            if (!pe_searched || !s9_reopen || reopen >= kSite9ReopenCeiling || extra.actions.empty()
+                || OpponentHasLost(state)
+                || !(plan.bp_all || bp_seen_exec == plan.bp_at)   // targeted occurrences only (rollout twin)
+                || !TurnSolver::PostEntryActivationPending(state, s9_keys))
+            { break; }
+            s9_keys = TurnSolver::SnapshotActivatableAbilities(state);
         }
     }
 

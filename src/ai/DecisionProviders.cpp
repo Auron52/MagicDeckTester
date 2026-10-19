@@ -42976,10 +42976,13 @@ std::vector<int> AccomplishedAlchemistProvider::ManaSinkActivationCounts(const G
     else if (mode == PermAbilityMode::TapDraw && d->params.self_untap_cost.has_value())
     {
         const auto& lib = s.players[me].library;
-        for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card
+        for (int pass = 0; pass < 2 && finish == 0; ++pass)   // a Stroke first; a chained payoff only without one
         {
-            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[i]);
-            if (ld && UntapLoopPayoffCard(s, me, *ld)) { finish = static_cast<int>(i) + 1; break; }
+            for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card
+            {
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[i]);
+                if (ld && UntapLoopPayoffCard(s, me, *ld, pass == 1)) { finish = static_cast<int>(i) + 1; break; }
+            }
         }
     }
     if (finish > 0 && finish <= max_affordable

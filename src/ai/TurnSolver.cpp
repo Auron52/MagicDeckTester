@@ -32039,6 +32039,21 @@ static bool UntapLoopKillAction(const GameState& state, const Action& a, int pay
                 && std::max(1, a.chosen_x) >= count;
         case kLoopPayPump:
             return a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 2 && a.chosen_x >= count;
+        // CHAINED payoffs (chunk E1): the continuation's kill is the SETUP cast -- its own ability is reached
+        // by the re-opened site 9, where the need has become kLoopPayDrain / kLoopPayPump. Read through the
+        // card name: a collected cast's `def` is not populated (CollectedActionDef's note).
+        case kLoopPayCastDrain:
+        case kLoopPayCastPump:
+        case kLoopPayWishDrain:
+        {
+            if (a.kind != Action::Kind::CastFromHand) { return false; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr) { return false; }
+            if (payoff == kLoopPayWishDrain)
+            { return d->params.tutor_to_hand && d->params.wish_from_sideboard
+                     && a.tutor_target == g_untap_loop_kill_card; }
+            return a.card_name == g_untap_loop_kill_card;
+        }
         default: return false;
     }
 }
@@ -41572,7 +41587,18 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     {
         std::vector<Action> kept;
         for (Action& a : actions)
-        { if (UntapLoopKillAction(state, a, g_untap_loop_kill_only, g_untap_loop_kill_count)) { kept.push_back(std::move(a)); } }
+        {
+            // The wished kill names its target: the collected wish carries the provider's front, and the
+            // kill IS "wish for the drain creature" (the need was priced for exactly that card), so the
+            // fold binds it -- one action per wish copy, the dominance fold's only survivor.
+            if (g_untap_loop_kill_only == kLoopPayWishDrain && a.kind == Action::Kind::CastFromHand)
+            {
+                const CardDefinition* wd = CardDatabase::Instance().Lookup(a.card_name);
+                if (wd && wd->params.tutor_to_hand && wd->params.wish_from_sideboard)
+                { a.tutor_target = g_untap_loop_kill_card; }
+            }
+            if (UntapLoopKillAction(state, a, g_untap_loop_kill_only, g_untap_loop_kill_count)) { kept.push_back(std::move(a)); }
+        }
         actions.swap(kept);
     }
 
@@ -57655,14 +57681,37 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     {
         TurnSolver::Site9Trace("ro", state, plan, is_pre_combat);
+        // RE-OPEN (MTG_SITE9_REOPEN, chunk E1): the activation snapshot right BEFORE each continuation,
+        // so an ability that continuation makes activatable re-opens this site as the next occurrence.
+        const bool s9_reopen = Site9ReopenEnabled();
+        std::vector<uint64_t> s9_keys;
+        if (s9_reopen) { s9_keys = TurnSolver::SnapshotActivatableAbilities(state); }
         TurnSolver::Plan extra;
-        if (bp_searched_plan(9, extra))
+        bool s9_applied = bp_searched_plan(9, extra);
+        for (int reopen = 0; ; ++reopen)
         {
-            ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
-            bp_play_searched_land(extra, nullptr);
-            apply_continuation_precasts(extra);
-            apply_continuation_plan(extra);
-            apply_trailing_activations(extra.actions);
+            if (!s9_applied) { break; }
+            {
+                ContPinFrame _cpf(extra, nullptr);   // the continuation's own during-cast pins (ContPins)
+                bp_play_searched_land(extra, nullptr);
+                apply_continuation_precasts(extra);
+                apply_continuation_plan(extra);
+                apply_trailing_activations(extra.actions);
+            }
+            // Lockstep with the executor twin's re-open loop: same tests, same order, same counting.
+            // ...and only an occurrence the plan's choice TARGETS (bp_all, or bp_at == the next index) is
+            // opened at all: an untargeted re-open would apply nothing, yet counting it would still run
+            // bp_searched_plan's section-window reset -- after a loop's Staff draws that erased the hand
+            // entry the deferred site-10 continuation (the drawn Stroke's cast) arms on.
+            if (!s9_reopen || reopen >= kSite9ReopenCeiling || extra.actions.empty()
+                || OpponentHasLost(state)
+                || !(plan.bp_all || bp_seen == plan.bp_at)
+                || !TurnSolver::PostEntryActivationPending(state, s9_keys))
+            { break; }
+            s9_keys = TurnSolver::SnapshotActivatableAbilities(state);
+            TurnSolver::Site9Trace("ro+", state, plan, is_pre_combat);
+            extra = TurnSolver::Plan{};
+            s9_applied = bp_searched_plan(9, extra);
         }
     }
 
@@ -90174,15 +90223,17 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         UntapLoopNeed kn;
         if (s_kill_fold && !HumanPlayActive() && state.floating_mana.Total() > 0
             && UntapLoopNeedFunded(state, state.active_player_index, nullptr, &kn)
-            && (kn.payoff == kLoopPayStroke || kn.payoff == kLoopPayDrain || kn.payoff == kLoopPayPump))
+            && (kn.payoff == kLoopPayStroke || kn.payoff == kLoopPayDrain || kn.payoff == kLoopPayPump
+                || kn.payoff == kLoopPayCastDrain || kn.payoff == kLoopPayWishDrain || kn.payoff == kLoopPayCastPump))
         {
             struct KillScope
             {
-                int pk, pc;
-                KillScope(int k, int c) : pk(g_untap_loop_kill_only), pc(g_untap_loop_kill_count)
-                { g_untap_loop_kill_only = k; g_untap_loop_kill_count = c; }
-                ~KillScope() { g_untap_loop_kill_only = pk; g_untap_loop_kill_count = pc; }
-            } _ks(kn.payoff, kn.count);
+                int pk, pc; InternedName pn;
+                KillScope(int k, int c, const InternedName& n)
+                    : pk(g_untap_loop_kill_only), pc(g_untap_loop_kill_count), pn(g_untap_loop_kill_card)
+                { g_untap_loop_kill_only = k; g_untap_loop_kill_count = c; g_untap_loop_kill_card = n; }
+                ~KillScope() { g_untap_loop_kill_only = pk; g_untap_loop_kill_count = pc; g_untap_loop_kill_card = pn; }
+            } _ks(kn.payoff, kn.count, kn.card);
             std::vector<TurnSolver::Plan> kills = EnumeratePlansWithLandUncached(state, is_pre_combat);
             std::vector<TurnSolver::Plan> keep, keep_noland;
             for (TurnSolver::Plan& kp : kills)

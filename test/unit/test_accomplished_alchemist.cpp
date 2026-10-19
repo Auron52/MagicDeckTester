@@ -1771,3 +1771,127 @@ TEST_CASE("Arbor Elf facing incomparable Forests ({U} Sprawl vs {G} Wild Growth)
     CHECK(UntapLandHostCount(d, *ByNumAa(d, arbor)) == 1);
     CHECK(LandAuraBonus(d, *ByNumAa(d, arbor)) == 2);
 }
+
+// ---- chunk E1 (2026-10-19): the claude-play sweep's fix list ----------------------------------------------------
+//  * CHAINED loop payoffs: a drain / team-pump creature cast from HAND (or a drain creature WISHED from the
+//    sideboard) is a this-turn kill once site 9 RE-OPENS for the ability that cast made activatable;
+//  * the shortest chain is preferred (a one-step kill wins the need);
+//  * the Staff's {5},{T}: draw is offered standalone.
+namespace
+{
+void SideAa(GameState& s, const std::string& name)
+{
+    Card c = DefAa(name).card; c.m_number = g_aa_num++; s.players[0].sideboard.push_back(c);
+}
+int CountKindAa(const TurnSolver::Plan& p, Action::Kind k)
+{
+    int n = 0;
+    for (const Action& a : p.actions) { if (a.kind == k) { ++n; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("Chained loop payoff: Scholar of Athreos from HAND -- loop, cast it, the re-opened site 9 drains")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    const int umbra = AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Island");
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 6;
+    s.players[1].life = 6;
+    HandAa(s, "Scholar of Athreos");
+    s.m_provider = &AaProv();
+
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, 0);
+    CHECK(need.payoff == kLoopPayCastDrain);
+    CHECK(need.count == 6);
+    CHECK(need.n_pre == 1);
+    CHECK(need.cost.ManaValue() == 3 + 6 * 3);
+    GameState t = s;
+    CHECK(ApplyUntapLoop(t, 0, kUntapEnchanted, umbra, alch) > 0);
+    CHECK(UntapLoopFloatPays(t.floating_mana, need));
+    CHECK(t.floating_mana.white >= 1);
+    CHECK(t.floating_mana.black >= 6);
+
+    // Some loop plan (its uniform continuation variant: cast Scholar at occurrence 0, drain at the
+    // re-opened occurrence 1) wins THIS turn in both worlds.
+    CHECK(LoopPlanBothAa(s, [](const GameState& g) { return OpponentHasLost(g); }));
+}
+
+TEST_CASE("Chained loop payoff: Living Wish for the sideboard Scholar, cast it, drain -- both worlds")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Island");
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 6;
+    s.players[1].life = 5;
+    HandAa(s, "Living Wish");
+    SideAa(s, "Scholar of Athreos");
+    SideAa(s, "Brindle Boar");
+    s.m_provider = &AaProv();
+
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, 0);
+    CHECK(need.payoff == kLoopPayWishDrain);
+    CHECK(need.card == InternedName("Scholar of Athreos"));
+    CHECK(need.n_pre == 2);
+    CHECK(LoopPlanBothAa(s, [](const GameState& g) { return OpponentHasLost(g); }));
+}
+
+TEST_CASE("Chained loop payoff: Ezuri from HAND is cast off the float and pumps the team in the same main")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Elvish Harbinger");
+    PutAa(s, "Island");
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 7;
+    HandAa(s, "Ezuri, Renegade Leader");
+    s.m_provider = &AaProv();
+
+    // Attackers: Alchemist 2 + Harbinger 1 = 3 of 20; 17 short at 2 Elves x 3 = 6 per pump -> 3 pumps.
+    const UntapLoopNeed need = ComputeUntapLoopNeed(s, 0);
+    CHECK(need.payoff == kLoopPayCastPump);
+    CHECK(need.count == 3);
+    // Both worlds end the main with Ezuri out and the attackers pumped to lethal (+9/+9 each).
+    CHECK(LoopPlanBothAa(s, [&](const GameState& g)
+    {
+        bool ezuri = false;
+        for (const Permanent& p : g.battlefield) { if (p.card.m_name.str() == "Ezuri, Renegade Leader") { ezuri = true; } }
+        return ezuri && PowerAa(g, alch) == 2 + 9 && !ByNumAa(g, alch)->tapped;
+    }));
+}
+
+TEST_CASE("Chained loop payoffs yield to a one-step kill: Stroke in hand wins the need over Scholar")
+{
+    GameState s = FreshAa();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    AttachAa(s, "Crab Umbra", alch);
+    PutAa(s, "Island");
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    s.players[0].life_gained_this_turn = 6;
+    s.players[1].life = 2;                       // the chained drain would be CHEAPER (3 + 2x3) ...
+    HandAa(s, "Scholar of Athreos");
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 40);                            // ... than Stroke X = 40, and Stroke still wins the need
+    s.m_provider = &AaProv();
+    CHECK(ComputeUntapLoopNeed(s, 0).payoff == kLoopPayStroke);
+}
+
+TEST_CASE("Staff of Domination: {5},{T}: draw is offered standalone (no loop needed)")
+{
+    GameState s = FreshAa();
+    PutAa(s, "Staff of Domination");
+    for (int k = 0; k < 5; ++k) { PutAa(s, "Forest"); }
+    s.m_provider = &AaProv();
+    bool standalone = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = OnlyActionAa(p, Action::Kind::ActivatePermAbility);
+        if (a && a->ability_mode == Action::AbilityMode::TapDraw) { standalone = true; }
+    }
+    CHECK(standalone);
+}

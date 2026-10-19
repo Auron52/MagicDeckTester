@@ -1352,6 +1352,24 @@ inline bool AcqResolveEnabled()
     return v;
 }
 
+// MTG_SITE9_REOPEN (DEFAULT ON; =0 restores "site 9 opens once per apply") -- AccomplishedAlchemist
+// chunk E1. After a site-9 (post-entry activation) continuation has been APPLIED, a further ability it
+// made activatable -- the drain of a Scholar of Athreos the continuation cast, Ezuri's team pump, a loop
+// funded for a NEW need -- re-opens the same site as the next breakpoint occurrence, keyed against the
+// activation snapshot taken just before that continuation (the delta rule, unchanged). Each re-open is
+// an ordinary counted occurrence (bp_seen / bp_seen_exec): applied only for a plan whose choice targets
+// it (bp_all or bp_at == idx), searched-only exactly like the first, so a plan without a variant for it
+// realises the line as scored. Read by ApplyPlanDirect AND the executor's site-9 twin -- shared reader.
+inline bool Site9ReopenEnabled()
+{
+    static const bool v = EnvOn("MTG_SITE9_REOPEN", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+// SAFETY ONLY (the kUntapLoopCeiling shape): a re-open needs an applied, non-empty continuation that
+// made a NEW ability activatable, so a real chain is a handful deep; this only stops a mis-modelled
+// ability that re-keys itself forever. Never a lever.
+constexpr int kSite9ReopenCeiling = 32;
+
 // MTG_ACQ_DIG=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): extend the
 // MTG_ACQ_RESOLVE acquisition family to the ETB library dig (etb_dig_count -- Acclaimed Contender,
 // the only such card today). The dig puts a same-phase-castable card into hand at resolution, but

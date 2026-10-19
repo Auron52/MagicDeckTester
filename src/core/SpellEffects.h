@@ -30771,6 +30771,13 @@ enum UntapLoopPayoff : int
     kLoopPayDrain  = 2,   // Scholar of Athreos' drain to lethal (a drain source already on the battlefield)
     kLoopPayPump   = 3,   // Ezuri's team pump sized to lethal on the creatures that can attack
     kLoopPayDraw   = 4,   // Staff of Domination's draw TO FIND a Stroke (only when no kill is reachable)
+    // CHAINED payoffs (chunk E1): a SETUP cast the loop's continuation makes, whose own new ability is then
+    // reached by the RE-OPENED site 9 (a further post-entry re-plan, see ApplyPlanDirect / the executor
+    // twin). Each is the cheapest-kill fold exactly as above -- the kill is just two (or three) decisions
+    // long. `pre` holds the setup payments, paid one at a time ahead of the activations.
+    kLoopPayCastDrain = 5,   // a drain creature in HAND (Scholar of Athreos): cast it, then drain to lethal
+    kLoopPayWishDrain = 6,   // Living Wish in hand + a drain creature in the SIDEBOARD: wish, cast, drain
+    kLoopPayCastPump  = 7,   // a team pump creature in HAND (Ezuri): cast it, then pump to lethal
 };
 struct UntapLoopNeed
 {
@@ -30778,13 +30785,17 @@ struct UntapLoopNeed
     ManaCost cost;          // the payoff's total mana (pips exact, generic summed)
     int      count  = 0;    // X / drains / pumps / draws
     int      source = 0;    // kLoopPayDraw: the drawing permanent's m_number
-    ManaCost unit;          // kLoopPayDrain: ONE activation (the drains are paid one at a time)
+    ManaCost unit;          // kLoopPayDrain/CastDrain/WishDrain: ONE activation (paid one at a time)
+    ManaCost pre[2];        // chained payoffs: the setup casts, in order (the wish, then the creature)
+    int      n_pre  = 0;
+    InternedName card;      // chained payoffs: the creature the setup casts (the wish's target)
 };
 
 // The continuation's KILL FOLD (BpDeriveContinuationList): while non-zero, CollectActions keeps only the
 // kill action of this payoff kind sized >= the count. Set ONLY around that derivation.
 inline thread_local int g_untap_loop_kill_only  = 0;
 inline thread_local int g_untap_loop_kill_count = 0;
+inline thread_local InternedName g_untap_loop_kill_card{};   // chained payoffs: the setup card (wish target)
 
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies);   // ManaPayment.cpp
 
@@ -30834,11 +30845,33 @@ inline int TeamPumpLethalCount(const GameState& s, int ctrl, const CardDefinitio
 // Scholar of Athreos / Ezuri / Living Wish would need a further post-entry re-plan after its own cast
 // (site 9 opens once per apply -- the first-occurrence rule), so drawing for one this turn buys nothing
 // this turn; the loop does not dig for them (recorded in docs/design/alchemist-untap-loop.md).
-inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefinition& d)
+inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefinition& d, bool chained = false)
 {
-    (void)ctrl;
-    return d.params.draw_target_player && d.tmpl == CardTemplate::DrawX && s.opponent_library_dealt
-        && !s.opponent_decked;
+    if (d.params.draw_target_player && d.tmpl == CardTemplate::DrawX && s.opponent_library_dealt
+        && !s.opponent_decked)
+    { return true; }
+    // `chained` = the second pass, taken only when no one-step kill (Stroke) is in the library at all --
+    // the same shortest-chain preference ComputeUntapLoopNeed applies to the hand.
+    if (!chained) { return false; }
+    // Chunk E1: a drain creature / a team pump creature is a this-turn kill too now -- the loop's
+    // continuation casts it and the RE-OPENED site 9 activates it (the chained payoffs below). A Living
+    // Wish is one only while the sideboard still holds a drain creature it can fetch.
+    if (d.card.IsCreature() && (UntapLoopDrainCard(d.params)
+                                || (d.params.team_pump_cost.has_value() && d.params.team_pump_power > 0
+                                    && !d.params.team_pump_taps_source)))
+    { return true; }
+    if (d.params.tutor_to_hand && d.params.wish_from_sideboard)
+    {
+        for (const Card& sc : s.players[static_cast<std::size_t>(ctrl)].sideboard)
+        {
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(sc);
+            if (sd && sd->card.IsCreature() && UntapLoopDrainCard(sd->params)
+                && std::find(d.params.tutor_types.begin(), d.params.tutor_types.end(), "Creature")
+                       != d.params.tutor_types.end())
+            { return true; }
+        }
+    }
+    return false;
 }
 
 // THE NEED: the cheapest payoff that WINS this turn (every win this turn is the same goldfish outcome, so
@@ -30898,29 +30931,113 @@ inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
             }
         }
     }
+    // A one-step kill (a-c) wins outright when one exists: every win this turn is the same outcome, and a
+    // one-step kill needs only the loop's own continuation, where a chained one also needs the RE-OPENED
+    // site 9 (a deeper breakpoint occurrence the wave reaches only through its uniform arm) -- so the
+    // shortest chain is the dominance fold's representative, never a costlier search for the same win.
     if (best.payoff != kLoopPayNone) { return best; }
     // (d) no kill reachable: the Staff's "{5},{T}: draw" (with its {1} self-untap between draws) TO FIND one.
-    for (const Permanent& p : s.battlefield)
+    // A lambda since chunk E1: the first pass digs for a ONE-STEP kill (Stroke), and only when neither that nor a
+    // chained kill from hand (e) exists does a second pass dig for a chained payoff card -- the shortest chain first.
+    auto draw_to_find = [&](bool chained_pass)
     {
-        if (p.controller_index != ctrl || p.def_absent) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr || !d->params.tap_draw_cost.has_value() || !d->params.self_untap_cost.has_value()) { continue; }
-        const auto& lib = me.library;
-        int k = 0;
-        for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card: drawing it is a loss later
+        for (const Permanent& p : s.battlefield)
         {
-            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[i]);
-            if (ld && UntapLoopPayoffCard(s, ctrl, *ld)) { k = static_cast<int>(i) + 1; break; }
+            if (p.controller_index != ctrl || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.tap_draw_cost.has_value() || !d->params.self_untap_cost.has_value()) { continue; }
+            const auto& lib = me.library;
+            int k = 0;
+            for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card: drawing it is a loss later
+            {
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[i]);
+                if (ld && UntapLoopPayoffCard(s, ctrl, *ld, chained_pass)) { k = static_cast<int>(i) + 1; break; }
+            }
+            if (k <= 0) { continue; }
+            const ManaCost draw  = EffectiveActivationCost(s, ctrl, p.card, *d->params.tap_draw_cost);
+            const ManaCost untap = EffectiveActivationCost(s, ctrl, p.card, *d->params.self_untap_cost);
+            ManaCost c = draw;
+            if (p.tapped) { SumManaCostInto(c, untap); }
+            for (int i = 1; i < k; ++i) { SumManaCostInto(c, draw); SumManaCostInto(c, untap); }
+            if (best.payoff == kLoopPayNone || c.ManaValue() < best.cost.ManaValue())
+            { best.payoff = kLoopPayDraw; best.cost = c; best.count = k; best.source = p.card.m_number; best.unit = ManaCost{}; }
         }
-        if (k <= 0) { continue; }
-        const ManaCost draw  = EffectiveActivationCost(s, ctrl, p.card, *d->params.tap_draw_cost);
-        const ManaCost untap = EffectiveActivationCost(s, ctrl, p.card, *d->params.self_untap_cost);
-        ManaCost c = draw;
-        if (p.tapped) { SumManaCostInto(c, untap); }
-        for (int i = 1; i < k; ++i) { SumManaCostInto(c, draw); SumManaCostInto(c, untap); }
-        if (best.payoff == kLoopPayNone || c.ManaValue() < best.cost.ManaValue())
-        { best.payoff = kLoopPayDraw; best.cost = c; best.count = k; best.source = p.card.m_number; best.unit = ManaCost{}; }
+    };
+    draw_to_find(false);
+    if (best.payoff != kLoopPayNone) { return best; }
+    // (e) CHAINED (chunk E1): a drain / team-pump creature cast from HAND (or a drain creature WISHED from
+    // the sideboard first), then activated off the same float through the re-opened site 9. Its own cast
+    // pays out of the loop's float like everything else, so its cost is just added in front.
+    {
+        auto drain_total = [&](const CardDefinition& dd, ManaCost& unit, int& n) -> ManaCost
+        {
+            const int per = std::max(1, DrainLossPerActivation(dd.params));
+            n = (opp_life + per - 1) / per;
+            Card probe = dd.card;
+            unit = EffectiveActivationCost(s, ctrl, probe, *dd.params.drain_cost);
+            return ScaleFlatManaCost(unit, n);
+        };
+        auto consider_chain = [&best](int payoff, const ManaCost& total, int count, const ManaCost& unit,
+                                      const ManaCost* pre, int n_pre, const InternedName& card)
+        {
+            if (best.payoff == kLoopPayNone || total.ManaValue() < best.cost.ManaValue())
+            {
+                best = UntapLoopNeed{};
+                best.payoff = payoff; best.cost = total; best.count = count; best.unit = unit;
+                best.n_pre = n_pre;
+                for (int i = 0; i < n_pre; ++i) { best.pre[i] = pre[i]; }
+                best.card = card;
+            }
+        };
+        const CardDefinition* wish = nullptr;
+        for (const Card& h : me.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (d == nullptr) { continue; }
+            if (d->params.tutor_to_hand && d->params.wish_from_sideboard
+                && std::find(d->params.tutor_types.begin(), d->params.tutor_types.end(), "Creature")
+                       != d->params.tutor_types.end())
+            { if (wish == nullptr) { wish = d; } continue; }
+            if (!d->card.IsCreature()) { continue; }
+            if (UntapLoopDrainCard(d->params))
+            {
+                ManaCost unit; int n = 0;
+                const ManaCost pre = EffectiveSpellCost(*d, s, 1);
+                ManaCost total = drain_total(*d, unit, n);
+                SumManaCostInto(total, pre);
+                consider_chain(kLoopPayCastDrain, total, n, unit, &pre, 1, d->card.m_name);
+            }
+            else if (d->params.team_pump_cost.has_value())
+            {
+                const int k = TeamPumpLethalCount(s, ctrl, *d);
+                if (k > 0)
+                {
+                    Card probe = d->card;
+                    const ManaCost pre = EffectiveSpellCost(*d, s, 1);
+                    ManaCost total = ScaleFlatManaCost(EffectiveActivationCost(s, ctrl, probe, *d->params.team_pump_cost), k);
+                    SumManaCostInto(total, pre);
+                    consider_chain(kLoopPayCastPump, total, k, ManaCost{}, &pre, 1, d->card.m_name);
+                }
+            }
+        }
+        if (wish != nullptr)
+        {
+            for (const Card& sc : me.sideboard)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(sc);
+                if (d == nullptr || !d->card.IsCreature() || !UntapLoopDrainCard(d->params)) { continue; }
+                ManaCost unit; int n = 0;
+                const ManaCost pre[2] = { EffectiveSpellCost(*wish, s, 1), EffectiveSpellCost(*d, s, 1) };
+                ManaCost total = drain_total(*d, unit, n);
+                SumManaCostInto(total, pre[0]);
+                SumManaCostInto(total, pre[1]);
+                consider_chain(kLoopPayWishDrain, total, n, unit, pre, 2, d->card.m_name);
+            }
+        }
     }
+    if (best.payoff != kLoopPayNone) { return best; }
+    if (best.payoff != kLoopPayNone) { return best; }
+    draw_to_find(true);
     return best;
 }
 
@@ -31142,10 +31259,24 @@ inline bool UntapLoopFloatPays(const ManaPool& fl, const UntapLoopNeed& need)
         return left.generic == 0 && left.white == 0 && left.blue == 0 && left.black == 0 && left.red == 0
             && left.green == 0 && left.colorless == 0;
     };
-    if (need.payoff == kLoopPayDrain && need.count > 0 && need.unit.ManaValue() > 0)
+    // Chained payoffs: the setup casts first, each its own payment, then the activations.
+    for (int i = 0; i < need.n_pre; ++i) { if (!pay(need.pre[i])) { return false; } }
+    if ((need.payoff == kLoopPayDrain || need.payoff == kLoopPayCastDrain || need.payoff == kLoopPayWishDrain)
+        && need.count > 0 && need.unit.ManaValue() > 0)
     {
         for (int i = 0; i < need.count; ++i) { if (!pay(need.unit)) { return false; } }
         return true;
+    }
+    if (need.n_pre > 0)
+    {
+        ManaCost rest = need.cost;   // the activations' share: total minus the setup casts
+        for (int i = 0; i < need.n_pre; ++i)
+        {
+            rest.generic -= need.pre[i].generic; rest.white -= need.pre[i].white; rest.blue -= need.pre[i].blue;
+            rest.black -= need.pre[i].black; rest.red -= need.pre[i].red; rest.green -= need.pre[i].green;
+            rest.colorless -= need.pre[i].colorless;
+        }
+        return pay(rest);
     }
     return pay(need.cost);
 }
@@ -31325,11 +31456,12 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
     }
     if (g_play_event_sink && !g_tap_speculating && done > 0)
     {
-        static const char* const kPayoff[] = { "combat", "Stroke of Genius", "the drain", "the team pump", "the draws" };
+        static const char* const kPayoff[] = { "combat", "Stroke of Genius", "the drain", "the team pump", "the draws",
+                                               "a drain creature", "a wished drain creature", "a team pump creature" };
         EmitPlayEvent(state.turn_number, "ability",
                       "untap loop x" + std::to_string(done) + " -- floating "
                       + std::to_string(state.floating_mana.Total()) + " mana for "
-                      + kPayoff[std::clamp(need.payoff, 0, 4)]);
+                      + kPayoff[std::clamp(need.payoff, 0, 7)]);
     }
     return done;
 }
