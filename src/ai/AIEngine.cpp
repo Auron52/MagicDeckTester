@@ -7359,12 +7359,30 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Boilerworks stayed tapped; the search (Karoo first, its bounce takes the spent Island, the
         // Spasm untaps the Boilerworks) had two more mana and the T5 kill. Truncate here as the
         // opaque loops do; the end-of-main catch-all replays the segment after the Karoo.
-        const CardDefinition* clean_bpd = (fd_plan_committed && ExecCleanBpDeferredOn())
-                                        ? CardDatabase::Instance().Lookup(BpNameOf(a)) : nullptr;
-        const bool clean_bp_inline = !(fd_plan_committed && ExecCleanBpDeferredOn())
-                                  || (clean_bpd != nullptr && TurnSolver::EquipmentDrawBreakpointInline()
-                                      && TurnSolver::EquipmentDrawBreakpoint(state, *clean_bpd));
-        if (s_full_depth && clean_bp_inline && equip_bp_truncates(BpNameOf(a), a.draw_target))
+        // ONLY THE INLINE CLASS REPLAYS AT THE CAST (fd-diverge lockstep, AccomplishedAlchemist
+        // chunk E1). equip_bp_truncates also answers true for the plain-cantrip partition (incl. a
+        // self-targeted Stroke of Genius, IsSelfDrawXCast) and, under MTG_BP_NODE_D56, for the
+        // deferred site-5/6 classes. ApplyPlanDirect DEFERS all of those: it truncates at the cast
+        // but runs the continuation after the plan's trailing activations, after breakpoint site 9
+        // and after the Karoo drop (the deferred_cantrip_resolve loop). Replaying the recorded
+        // segment here instead realised the continuation BEFORE the trailing pass, and set
+        // bp_replayed, which stood the site-9 twin down -- seed 70055 gi54 lost the Witch's untap
+        // of the Alchemist (site 9) and the recorded loop went unfunded (T6 proven, T7 realised).
+        // So, exactly as acq_deferred does for the acquisition classes: a committed segment
+        // replays through the end-of-main catch-all, a no-commit fallback re-solves there
+        // (acq_pending). Depth 0 has no scored line to match and keeps the inline re-solve.
+        // The two fixes (upstream's MTG_EXEC_CLEAN_BP_DEFERRED for the committed REMAND case, and chunk
+        // E1's for the self-targeted Stroke, incl. the no-commit fallback) are one rule: keyed on
+        // BpNameOf (the Remand when a rider rides the cast) and gated on that flag (=0 -> the inline
+        // replay for every class, as before both).
+        const CardDefinition* clean_bpd = CardDatabase::Instance().Lookup(BpNameOf(a));
+        const bool trunc_deferred = ExecCleanBpDeferredOn() && s_full_depth && m_lookahead_depth > 0
+            && equip_bp_truncates(BpNameOf(a), a.draw_target)
+            && !(clean_bpd != nullptr && TurnSolver::EquipmentDrawBreakpointInline()
+                 && TurnSolver::EquipmentDrawBreakpoint(state, *clean_bpd));
+        if (trunc_deferred)
+        { if (!fd_plan_committed && cast_paid) { arm_acq_deferred(BpNameOf(a)); } }
+        else if (s_full_depth && equip_bp_truncates(BpNameOf(a), a.draw_target))
         {
             if (fd_plan_committed)
             { if (cast_paid) { replay_segment(); } }
@@ -7626,10 +7644,39 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 resolve_now();
                 walker_cast_activation(ca);
             };
+            // PARTITION TRUNCATION inside the continuation (fd-diverge lockstep, chunk E1). The
+            // rollout applies this continuation through apply_plan_actions, whose apply_one stops
+            // every cast after a partitioning one (bp_truncate: a plain cantrip / self-targeted
+            // Stroke of Genius at sink depth 0 arms the DEFERRED re-solve and ends the section);
+            // the deferred continuation then runs after this site and arrives here through the
+            // end-of-main catch-all (committed) or acq_pending (no-commit). Casting the rest of the
+            // continuation anyway spent the float the scored deferred continuation needed (seed
+            // 70121 gi120: Stroke X=1 then the second Staff ate the Alchemist's mana; the scored
+            // loop -> Stroke X=51 had no mana, T5 proven, T6 realised). Trailing activations still
+            // run, as the rollout's apply_trailing_activations(extra.actions) does.
+            bool pe_trunc = false;
+            auto pe_truncates = [&](const Action& ca) -> bool
+            {
+                const bool paid = last_cast_paid;
+                if (!((paid || (!fd_plan_committed && !ExecFailedCastNoResolve()))
+                      && equip_bp_truncates(ca.card_name, ca.draw_target)))
+                { return false; }
+                if (!fd_plan_committed && paid && m_lookahead_depth > 0) { arm_acq_deferred(ca.card_name); }
+                return true;
+            };
             for (int ci : pe_cont_order)
-            { pe_cast(extra.actions[ci]); pe_unlock->Fire(); exec_cont_land_hook(pe_land, extra.actions[ci]); }
+            {
+                pe_cast(extra.actions[ci]);
+                pe_trunc = pe_truncates(extra.actions[ci]);
+                pe_unlock->Fire(); exec_cont_land_hook(pe_land, extra.actions[ci]);
+                if (pe_trunc) { break; }
+            }
             for (const Action& ca : extra.actions)
-            { if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land) { pe_cast(ca); exec_cont_land_hook(pe_land, ca); } }
+            {
+                if (pe_trunc) { break; }
+                if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land)
+                { pe_cast(ca); exec_cont_land_hook(pe_land, ca); pe_trunc = pe_truncates(ca); }
+            }
             exec_cont_land_finish(pe_land);   // a positioned land whose watcher never came
             pe_unlock.reset();   // the cast section ends before the trailing activations
             exec_trailing_activations(extra.actions);

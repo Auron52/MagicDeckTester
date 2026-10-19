@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "fd-diverge lockstep (AccomplishedAlchemist chunk E1), the board of Stage 5a seed 70121 gi120 turn 5.",
+    "The scored line: Forest, Staff of Domination, Nourish (Alchemist X = 6); the Staff's entry opens",
+    "BREAKPOINT SITE 9, whose searched continuation is `Stroke of Genius X=1 (self) + Staff #2 + the Staff",
+    "loop`. In the rollout the self-targeted Stroke is a plain-cantrip PARTITION: it truncates the rest of",
+    "the continuation's casts (Staff #2 is never cast), the loop still runs as a trailing activation, and",
+    "the deferred re-solve casts Stroke at the opponent for the whole library. The executor's site-9 twin",
+    "had no partition truncation: it cast Staff #2 too, spending the float the scored kill needed, and the",
+    "game realised T6 against a proven T5. Asserts the realised T5."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 17,
+  "opponent_library_size": 48,
+  "battlefield": [
+    { "name": "Forest" },
+    { "name": "Wild Growth", "equips": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Elvish Harbinger", "sick": false },
+    { "name": "Accomplished Alchemist", "sick": false }
+  ],
+  "hand": [ "Staff of Domination", "Staff of Domination", "Nourish", "Stroke of Genius", "Forest" ],
+  "library_top": [ "Utopia Sprawl", "Nourish", "Forest", "Forest", "Forest", "Staff of Domination", "Forest",
+                   "Feed the Clan", "Elvish Harbinger", "Accomplished Alchemist", "Crab Umbra", "Feed the Clan",
+                   "Stroke of Genius" ],
+  "library_filler": "Forest",
+  "library_size": 35,
+  "depth": 5,
+  "budget_ms": 40,
+  "max_turns": 7,
+  "expect_win_turn": 5
+}
