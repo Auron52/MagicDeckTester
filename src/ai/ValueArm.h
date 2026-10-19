@@ -147,6 +147,10 @@ struct Arm
     // W in {1,4,16,...} x the fleet in ONE pooled batch. An env static pins one W per process.
     // 1 (and unset) = today's asserted 1:1 rate, byte-identical. See GreedyChargeGuard.
     int         solve_charge_w    = -1;     // <=0 unset => env => 1
+    // ENUMERATION CHARGE WEIGHT (MTG_ENUM_CHARGE / MTG_ENUM_CHARGE_W; EnumChargeScope in TurnSolver.cpp):
+    // odometer visits per charged unit. Per-job so the off arm and a W sweep share one pooled batch.
+    // -1 unset => env (MTG_ENUM_CHARGE, default off) | 0 off | > 0 on at that W.
+    int         enum_charge_w     = -1;
     // CHAIN-SLOT COUNT (MTG_BP_CHAIN_SLOT): how many chain continuations get a reserved breakpoint
     // slot. Here rather than in heurarm for the same reason as solve_charge_w -- the knob is an int
     // (0 = arm off, 1 = shipped default, 2 = reachable) and heurarm::Arm is boolean-only -- and for

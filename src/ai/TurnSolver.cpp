@@ -1398,12 +1398,13 @@ enum Site
                            // (default 8, NOT 1 -- TurnSolver::ChargeDecisionUnits, equiproute::NodeUnits)
     kPutBackPrice,         // Brainstorm put-back VARIANT price: MTG_PUTBACK_PRICE_UNITS per variant applied
                            // (MTG_PUTBACK_PRICE; see ChargePutBackVariant)
+    kEnumCharge,           // EnumeratePlans' odometer visits, one unit per W (MTG_ENUM_CHARGE, default OFF)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
-    "fs_m2_wave", "greedy_walk", "equip_route", "putback_price"
+    "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -1875,6 +1876,12 @@ static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
     { g_units_after_spent.fetch_add(1, std::memory_order_relaxed); }
     budget->Consume(1);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(1, std::memory_order_relaxed); }
+}
+static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n)
+{
+    if (budget == nullptr || n <= 0) { return; }
+    budget->Consume(n);
+    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(n, std::memory_order_relaxed); }
 }
 
 namespace
@@ -60606,9 +60613,48 @@ struct Dump
 };
 inline Dump g_dump;
 }
+// ENUMERATION CHARGE (MTG_ENUM_CHARGE, DEFAULT OFF -- a lever awaiting a USER decision; P2 2026-10-19).
+//
+// WHY. EnumeratePlans is not a search node, so its odometer walk is billed to NO budget: a decision whose
+// breakpoint continuations re-enumerate wide plan lists (AccomplishedAlchemist seed 90061 gi60, T1:
+// 13.9 M odometer visits, 8.7 M emitted plans, 12.5 k continuation-cache misses) spends ~5x more wall per
+// metered unit than the norm, so a "20 ms" decision runs for a minute. This bills that walk: one unit per
+// W visits (eval_and_push_body entries), charged to the decision's root budget at the end of each
+// enumeration (the enumeration itself always COMPLETES -- nothing is cut inside it).
+//
+// WHY IT IS A RE-PRICING, NOT A LOSS (CLAUDE.md, COMPLETENESS AT LARGE BUDGET). The charge lands on
+// TurnSolver::DecisionBudget(), which is nullptr at an unlimited root, so at --budget-ms 0 nothing is
+// ever charged and play is untouched; below that it only makes a finite budget run out sooner, monotone
+// in budget. It DOES move budgeted play for every deck when on, which is why it ships OFF.
+//
+// W: per-job manifest "enum_charge_w" (> 0 = on at that W, 0 = off for the job), else MTG_ENUM_CHARGE=1
+// with MTG_ENUM_CHARGE_W (default 4). Charged per enumeration as ceil(visits / W): no residual carried
+// between enumerations, so the charge cannot depend on which games a batch worker ran before.
+static int EnumChargeWeight()
+{
+    const int job = valuearm::t_arm.enum_charge_w;
+    if (job >= 0) { return job; }   // per-job arm: 0 = off, > 0 = W
+    static const bool s_on = EnvOn("MTG_ENUM_CHARGE");
+    static const int  s_w  = std::max(1, static_cast<int>(EnvInt("MTG_ENUM_CHARGE_W", 4)));
+    return s_on ? s_w : 0;
+}
+struct EnumChargeScope
+{
+    long long visits = 0;
+    ~EnumChargeScope()
+    {
+        if (visits <= 0) { return; }
+        SearchBudget* const b = TurnSolver::DecisionBudget();
+        if (b == nullptr) { return; }   // unlimited root / no decision: never charged
+        const int w = EnumChargeWeight();
+        if (w <= 0) { return; }
+        ConsumeAtN(b, unitsite::kEnumCharge, (visits + w - 1) / w);
+    }
+};
 
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
+    EnumChargeScope enum_charge;   // MTG_ENUM_CHARGE (default off): bills this walk at exit
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
     // scry/dig/cantrips), which is hypothetical, not real resolution. Pause the human-play choosers
     // and reveal logging for the whole scoring pass so claude-play does NOT ask the player to resolve
@@ -61337,6 +61383,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     auto eval_and_push = [&](const std::vector<int>& sel) { eval_and_push_body(sel); };
     eval_and_push_body = [&](const std::vector<int>& sel)
     {
+        ++enum_charge.visits;   // MTG_ENUM_CHARGE (see EnumChargeScope); a counter only when off
         // BRANCH SHAPE, EnumeratePlans side. Distinct from SolveUncached's funnel: this is the
         // odometer walk the odo/plans/dedup columns actually describe.
         if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }
@@ -95041,6 +95088,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_greedy_walk,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kGreedyWalk]))           \
     X(u_equip_route,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kEquipRoute]))           \
     X(u_putback_price,    MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kPutBackPrice]))         \
+    X(u_enum_charge,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kEnumCharge]))           \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
