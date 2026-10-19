@@ -195,6 +195,55 @@ One SLOW-GAME: overnight d5 s4004 gi89 30.5 s (won T5) -- to inspect at 5c.
   Fiery Islet to draw) makes some lines unfindable even at 20x budget. -> Q7 (USER: a shared provider
   prune; the completeness rule vs the provider-prune licence).
 
+## Convergence loop 1 — sweep fixes (2026-10-19)
+Two fix agents in worktrees lfe-fix-pay / lfe-fix-enum, integrated onto lfe-analysis (clean cherry-picks):
+**Payer / copy accounting (119895b07; flags B C D E G H I R):** Smokebraider pays first unless general
+mana covers this payment plus what the rest of the line owes that Smokebraider cannot pay
+(`RestrictedMayHoldForAttack` / `RestrictedIneligOwedLater`, ManaPayment.cpp, fed by PlanContext);
+the restricted wild float goes to the pip the board cannot make (`SpendRestrictedWildTowardCost`);
+non-Elemental costs are priced without Smokebraider or its float (`SubtypeOnlyCtx`); a Soulstoke put
+is offered only when its {1}{R} is payable for that ability; `ComputeAvailableColors` counts the
+restricted float; ONE per-plan copy guard over casts, Vial puts, Soulstoke puts, Fury pitches and
+Remand riders; the put checks its card before paying (both worlds); stranded activations reported to
+`dropped_casts`. Menu audit (every plan on every menu of the 8 flagged seeds): dropping plans 61 -> 8
+of 5,852 (the 8 = land-slot + Reef boundary, then taken up by the enum fix). Agent smoke check: byte-
+identical for bruna slivers knights minotaur pirates soldiers dragonstorm fungusv2 goblins dragons
+hinata burn th; ANGELS moves (Giada; one d0 game faster), elementals moves.
+**Enumeration (f42d64ab4, 7dd1acdc4, 260495d72, 7f095457e, 56a295a6b, 71aa23ca2):** (1) fetch-crack
+positions before library-top readers (Risen Reef looks, top tutors): `ActionReadsLibraryTop` + reader
+twins and pre-cast subset masks; root plans +24% on the 61002 crack turn, +63% on a two-crack board
+with a Reef; the 61002 T4 kill is now found at the shipped d5 b20. (2) land-slot probe counts every
+dropped cast and decides Reef plans per plan (`PositionPrefixProbeGuard`). (3) a Foundation Breaker
+evoke nothing can read is cut (`PlanHasDeadOptionalEvoke`). (4) pump event text shows full P/T.
+(5) `LandfallElementalsProvider` TutorSearchWidth admits every distinct Elemental name
+(`MTG_LFE_TUTOR_WIDTH`, default ON -- Q8). (#16) LOCKSTEP fix: a breakpoint continuation's pitch evoke
+recorded no exiled card, so the executor declined a Fury evoke the search had scored (gi28: committed
+T4, realised T5); `docs/design/rollout-executor-lockstep.md` #16. Agent measurement (seed 4004, base =
+accepted GT): d3 b10 4.6200 -> 4.5575 (width 6) -> 4.5200 (width 32; vs base 39 faster / 0 slower), d5
+b20 4.5967 -> 4.5400 -> 4.5067 (28 faster / 2 slower, both recover at d8 b0); width 32 costs ~1.11x units.
+Integrated tree: unit **1595/1595**, scenarios **237/237**; full smoke + regression running.
+
+### Integrated tiers + held-out A/B on the loop-1 fixes (2026-10-19)
+Full smoke: 125 unchanged / 7 changed; full regression 171 / 12. Moved: elementals (all rows faster),
+angels (play changes at the same avg; d0 slightly faster), bruna_regression_d0_s2002 (same avg).
+Searched SLOWER games: 9, ALL elementals -- 8 recover at 4x / 16x (`classify_turn_later.sh`; 2 end
+BETTER than baseline), regression d3 s2002 gi112 persists at 16x but its draws diverge from T4 (a
+shuffle) and it recovers to T4 at --depth 8 --budget-ms 0. Held-out A/B (base = primary binary src
+c34f2d3; seeds 880000-910000): angels d3 2000 g 0/0, d5 1000 g 0/0, d0 4000 g 8 faster / 2 slower,
+bruna d0 4000 g 0 / 1, angels 2HG d3 1000 g 0 / 1 = **gi308**: base T5 / new T6 at every budget incl. d8
+b0. ROOT CAUSE (pay agent, VERIFIED from base's game log): base's T5 is ILLEGAL -- on T3 it cast
+Lightning Greaves {2} + Bishop of Wings {W}{W} (two non-Angels, 4 mana) from Plains, Plains, Seraph
+Sanctuary ({C}) and Giada ({W} for Angel spells only); the whole-turn batch prepay's creature-only
+joint solve ran without the paying spell's identity and laundered Giada's mana. No legal T5 exists
+(exhaustive claude-play menu search, 52,082 runs). So T6 is the CORRECT result: a correctness fix, not
+a lost line. The prepay hole is closed in 8c684037b (`SubtypeBatchScope`, the Troyan big-spell scope's
+twin; the A/B is byte-identical with it -- the enumeration already kept those batches out). The 3 d0
+slowdowns are greedy picks among options that are now legal / correctly paid (angels gi632, gi1424 --
+Giada now pays an Angel and does not attack; bruna gi1442 -- Mother of Runes newly castable off
+Somberwald Sage's creature-only float). This confirms the 'possible Angels hole' the lfe-fury agent
+flagged UNVERIFIED in Stage 2.
+Final binary (8c684037b): unit 1596/1596, scenarios 237/237; tiers running.
+
 ## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
 Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
 STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout
@@ -264,6 +313,13 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
   units) but hides 8/1,600 d3 lines even at 20x budget. Recommendation: open it for LandfallElementals
   (a deck-scoped provider override: more complete, measured neutral-to-better), and decide separately
   whether the GenericProvider gate should become budget-staged for every deck. Default: unchanged.
+- Q8. Harbinger's tutor width: the provider now admits every distinct Elemental name (was the default
+  6, which made Incandescent Soulstoke unfindable at any budget in sweep seed 61016). Measured d3 -0.0375,
+  d5 -0.0333 on top of the other fixes, at ~1.11x units. ON by default (`MTG_LFE_TUTOR_WIDTH=0` restores
+  6) -- keep it?
+- Q9. Crack ordering is expressible only as "some cracks before all casts" (not between two specific
+  later casts); in the SEARCH, land positions with a Reef look before the failing cast are still kept
+  (conservative). OK as is?
 - Q5. Harbinger/Reef trigger order reuses the `dig` modal (two card tiles, asked up front) rather than a
   new decision type -- OK?
 
