@@ -303,3 +303,79 @@ TEST_CASE("LandfallElementals' tutor width admits every distinct Elemental name"
     CHECK(std::string(p.Name()) == "LandfallElementals");
     CHECK(p.TutorSearchWidth() >= 10);
 }
+
+namespace
+{
+// Every positioned (land_slot >= 1) plan of `s`, applied: the casts each one drops.
+std::vector<std::pair<const TurnSolver::Plan*, std::vector<std::string>>>
+PositionedDropsLfx(const GameState& s, const std::vector<TurnSolver::Plan>& plans)
+{
+    std::vector<std::pair<const TurnSolver::Plan*, std::vector<std::string>>> out;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.land_slot < 1 || p.land_slot == TurnSolver::kLandSlotAfterCasts) { continue; }
+        std::vector<std::string> dropped;
+        std::vector<std::string>* saved = g_play_dropped_cast_sink;
+        g_play_dropped_cast_sink = &dropped;
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        g_play_dropped_cast_sink = saved;
+        out.emplace_back(&p, dropped);
+    }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Land slot with a Risen Reef out: a drop BEFORE any look is pruned (the payer audit's s61013 shape)")
+{
+    // Risen Reef's look-top route used to exempt every plan from the position probe. "Mossborn Hydra
+    // ({2}{G}), then the Mountain" on a Mountain + Forest drops the Hydra before anything enters, so no
+    // look and no breakpoint can precede the drop: the position is the degenerate line, not emitted.
+    EnsureCardsLfx();
+    GameState s = FreshLfx();
+    s.players[0].lands_played_this_turn = 0;
+    PutLfx(s, "Risen Reef", 1);
+    PutLfx(s, "Mountain", 20);
+    PutLfx(s, "Forest", 22);
+    s.players[0].hand.push_back(CardLfx("Mossborn Hydra", 2));
+    s.players[0].hand.push_back(CardLfx("Mountain", 21));
+    LibLfx(s, { "Swords to Plowshares", "Swords to Plowshares", "Forest" }, 10);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool land_first = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.land_slot == 0 && p.land_to_play == "Mountain" && p.actions.size() == 1
+            && HasAction(p, "Mossborn Hydra", Action::Kind::CastFromHand)) { land_first = true; }
+    }
+    CHECK(land_first);   // "Mountain, then the Hydra" stays
+    for (const auto& pd : PositionedDropsLfx(s, plans))
+    { CHECK_MESSAGE(pd.second.empty(), "positioned plan drops ", pd.second.size(), " cast(s)"); }
+}
+
+TEST_CASE("Land slot with a Risen Reef out: a drop AFTER a look keeps its position (the guard's covered side)")
+{
+    // "Akoum Hellhound, Mossborn Hydra, then the Mountain" on Mountain, Forest, Forest: Hellhound's
+    // entry is a Reef look BEFORE the Hydra ({2}{G}) fails, so a continuation at that look could still
+    // change the line -- the position keeps the conservative treatment, as every Reef plan did before.
+    EnsureCardsLfx();
+    GameState s = FreshLfx();
+    s.players[0].lands_played_this_turn = 0;
+    PutLfx(s, "Risen Reef", 1);
+    PutLfx(s, "Mountain", 20);
+    PutLfx(s, "Forest", 22);
+    PutLfx(s, "Forest", 23);
+    s.players[0].hand.push_back(CardLfx("Akoum Hellhound", 2));
+    s.players[0].hand.push_back(CardLfx("Mossborn Hydra", 3));
+    s.players[0].hand.push_back(CardLfx("Mountain", 21));
+    LibLfx(s, { "Swords to Plowshares", "Swords to Plowshares", "Forest" }, 10);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool covered_kept = false;
+    for (const auto& pd : PositionedDropsLfx(s, plans))
+    {
+        const TurnSolver::Plan& p = *pd.first;
+        if (p.land_to_play == "Mountain" && p.land_slot == 2 && p.actions.size() == 2 && !pd.second.empty()
+            && HasAction(p, "Akoum Hellhound", Action::Kind::CastFromHand)
+            && HasAction(p, "Mossborn Hydra", Action::Kind::CastFromHand)) { covered_kept = true; }
+    }
+    CHECK(covered_kept);
+}

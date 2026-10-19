@@ -23410,7 +23410,16 @@ static thread_local long long g_trailing_act_skips = 0;
 // apply drops -- before the land OR after it: "land=Waterlogged Grove (after Brushfire Elemental);
 // Brushfire, Smokebraider" pays Brushfire with the only two red sources BEFORE the land, so the Grove +
 // Island left cannot pay Smokebraider's {R} after it. The prefix count alone never saw that.
-struct SlotPrefixProbe { int apd_depth = -1; int first_drop_watchers = -1; int drops = 0; };
+// `first_drop_covered` (2026-10-19, the payer audit's 8 Risen Reef survivors): did a LOOK-TOP resolution
+// (g_look_top_resolved) or ANY breakpoint occurrence (g_bp_any_last) happen in this apply BEFORE its
+// first drop? Read only for a plan whose sole mana-buying exemption is the look-top breakpoint route
+// (PrefixProbeGuard::LookTopOnly; see PositionPrefixProbeGuard). `looks0` / `bps0` are the counters'
+// values when the probe was armed (both monotonic; nested applies can only raise them -- the safe side).
+struct SlotPrefixProbe
+{
+    int apd_depth = -1; int first_drop_watchers = -1; int drops = 0;
+    int looks0 = 0; std::uint64_t bps0 = 0; bool first_drop_covered = false;
+};
 static thread_local SlotPrefixProbe g_slot_prefix_probe;
 // Did the LAST ApplyPlanDirect to return on this thread change the state in its cycle / sac-to-draw dig
 // loop? Written on every exit of every apply (RAII), so a candidate loop reads its OWN apply's answer
@@ -24453,7 +24462,9 @@ static int BpChainSlots(const GameState& state)
 }
 
 // Defined with the wave-0 selector far below; the chain slot reads the same predicate.
-static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p);
+// `look_top_route` = false asks the same question WITHOUT site 10's look-top route (Risen Reef) -- the
+// land-position prefix probe's guard reads both (PositionPrefixProbeGuard).
+static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p, bool look_top_route = true);
 // The wave-0 / wave-walker DIG BYPASS: when site 4 is in the mask and the board is about to
 // dig, every plan is fanned out regardless of PlanOpensBreakpoint. Forward-declared so the
 // canon audit can count it as a real route rather than reporting a false violation.
@@ -27230,6 +27241,19 @@ static thread_local int g_bp_fired_last = 0;
 // m2 fixpoint for exactly this reason; a delta on a counter with no owner cannot collide with
 // anyone.
 static thread_local std::uint64_t g_bp_any_last = 0;
+
+// One top-level declared cast the probed apply dropped (both drop sites of apply_one; see SlotPrefixProbe).
+// `land_pending` = the positioned land had not been played yet (a PREFIX drop); `watchers_seen` = the
+// landfall watchers dispatched so far. Inert unless the probe is armed for exactly this apply depth.
+static void SlotPrefixProbeNoteDrop(bool land_pending, int watchers_seen)
+{
+    SlotPrefixProbe& pr = g_slot_prefix_probe;
+    if (pr.apd_depth != g_apd_depth) { return; }
+    if (land_pending && pr.first_drop_watchers < 0) { pr.first_drop_watchers = watchers_seen; }
+    if (pr.drops == 0)
+    { pr.first_drop_covered = g_look_top_resolved != pr.looks0 || g_bp_any_last != pr.bps0; }
+    ++pr.drops;
+}
 // ...and the same event restricted to an ENABLED class (BpSiteMask), also monotonic, also read as a
 // before/after delta. This is the count the UNIFORM COLLAPSE needs and `g_bp_any_last` cannot give:
 // `bp_all` only ever differs from a plain rank variant at a breakpoint whose index is not `bp_at`,
@@ -56368,11 +56392,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 && state.players[state.active_player_index].life <= phyrexian_life)
             {
                 if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
-                if (sink_stack.empty() && g_slot_prefix_probe.apd_depth == g_apd_depth && land_after_deferred
-                    && deferred_land_slot > 0 && g_slot_prefix_probe.first_drop_watchers < 0)
-                { g_slot_prefix_probe.first_drop_watchers = deferred_watchers_seen; }   // see SlotPrefixProbe
-                if (sink_stack.empty() && g_slot_prefix_probe.apd_depth == g_apd_depth)
-                { ++g_slot_prefix_probe.drops; }
+                if (sink_stack.empty())   // see SlotPrefixProbe
+                { SlotPrefixProbeNoteDrop(land_after_deferred && deferred_land_slot > 0, deferred_watchers_seen); }
                 return;
             }
             // RESERVE THE AURA'S OWN HOST across its payment -- the REALIZATION twin of the
@@ -56446,10 +56467,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (g_enum_drop_names) { g_enum_drop_names->push_back(name); }
                     // The land-position prefix probe (see SlotPrefixProbe): THIS apply only, the
                     // first declared cast that fails while the positioned land is still pending.
-                    if (g_slot_prefix_probe.apd_depth == g_apd_depth && land_after_deferred
-                        && deferred_land_slot > 0 && g_slot_prefix_probe.first_drop_watchers < 0)
-                    { g_slot_prefix_probe.first_drop_watchers = deferred_watchers_seen; }
-                    if (g_slot_prefix_probe.apd_depth == g_apd_depth) { ++g_slot_prefix_probe.drops; }
+                    SlotPrefixProbeNoteDrop(land_after_deferred && deferred_land_slot > 0, deferred_watchers_seen);
                 }
                 return;
             }
@@ -69289,7 +69307,7 @@ static bool PlanActionMayGainLife(const Action& a, bool enter_watch)
     }
 }
 
-static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p)
+static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p, bool look_top_route)
 {
     int mask = 0;
     // Watcher on the battlefield already? (The plan-cast case is picked up in the loop below.)
@@ -69898,7 +69916,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // greedy pick of the line that casts the card the Reef found. A SUPERSET, the safe direction (a
     // look that puts a land onto the battlefield arms nothing; its variants collapse onto the base).
     // Gated on the deck constant inside PlanLookTopShape.
-    if (BpPutInHandEnabled() && !(mask & (1 << 10)) && PlanLookTopShape(state, p).total > 0)
+    if (look_top_route && BpPutInHandEnabled() && !(mask & (1 << 10)) && PlanLookTopShape(state, p).total > 0)
     { mask |= 1 << 10; }
     // Site 9, the COUNTER-FILLED activation (Khalni Heart Expedition, 2026-10-15). The clause above
     // keys on a CAST that lands an activatable permanent; an Expedition ALREADY on the battlefield
@@ -75796,21 +75814,41 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
 // Every other axis resolves a choice the prefix's payment never reads (a scry, a target, a counter, a
 // discard) or, for the land-search activations' position, can only move mana use EARLIER. A new
 // mana-adding resolution choice must be added here, or the probe would delete its cured line.
-static bool PositionPrefixChoiceMayAddMana(const GameState& state, const TurnSolver::Plan& p)
+//
+// THE LOOK-TOP ROUTE IS DECIDED PER PLAN, NOT BLANKET (2026-10-19, the payer audit: every one of the 8
+// dropping plans left on the LandfallElementals sweep menus survived only because a Risen Reef was on
+// the battlefield). Site 10's look-top route (PlanOpensBreakpoint's Risen Reef clause) opens a
+// breakpoint at a look's HAND entry, and a look-top's own choices (Plan::look_top_pins: a land to the
+// battlefield TAPPED or to hand; the ORDER against a Flamekin Harbinger top tutor) add no mana by
+// themselves. What could buy the mana back is a continuation at such a hand entry -- or the looked
+// land sent to HAND by a pin and played by one -- and both need a look to resolve BEFORE the failing
+// cast. Looks happen at Elemental ENTRIES, which no pin or order axis adds or moves (they change what a
+// look takes, never whether or when it resolves), and the clairvoyant probe applies the very entries
+// the plan makes. So when the look-top route is the plan's ONLY exemption (LookTopOnly), the probe is
+// run and its verdict stands for a position whose first dropped cast came before any look-top
+// resolution and any breakpoint occurrence of that apply (SlotPrefixProbe::first_drop_covered); a
+// covered position keeps the blanket treatment. After the drop nothing is lost: a dropped cast changes
+// nothing, so every later look, pin and continuation is the reduced plan's own, one for one.
+enum class PrefixProbeGuard { None, LookTopOnly, Blanket };
+static PrefixProbeGuard PositionPrefixProbeGuard(const GameState& state, const TurnSolver::Plan& p)
 {
     // The tapmode axis's own emission gate (AppendSubdecisionAxes): never under human play, where the
     // global MTG_UNPRUNED opens every gate but the axis is not fanned (a person pays by hand instead).
-    if (DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive()) { return true; }
+    if (DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive()) { return PrefixProbeGuard::Blanket; }
     for (const Action& a : p.actions)
     {
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
-        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && SacAxisEnabled()) { return true; }
-        if (d->params.creates_treasures > 0) { return true; }
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && SacAxisEnabled())
+        { return PrefixProbeGuard::Blanket; }
+        if (d->params.creates_treasures > 0) { return PrefixProbeGuard::Blanket; }
         const LandSearchSpec ls = LandSearchSpecOf(d->params);
-        if (ls.count > ls.to_hand && !ls.tapped) { return true; }
+        if (ls.count > ls.to_hand && !ls.tapped) { return PrefixProbeGuard::Blanket; }
     }
-    return (PlanOpensBreakpoint(state, p) & ~(1 << 9)) != 0;
+    if ((PlanOpensBreakpoint(state, p, /*look_top_route=*/false) & ~(1 << 9)) != 0)
+    { return PrefixProbeGuard::Blanket; }
+    if ((PlanOpensBreakpoint(state, p) & ~(1 << 9)) != 0) { return PrefixProbeGuard::LookTopOnly; }
+    return PrefixProbeGuard::None;
 }
 
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const GameState& state,
@@ -76764,7 +76802,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // at once, because positions 1..s dispatch exactly that probe's casts before their land (same
         // watchers-first order, no land yet) and a position above s drops the same cast before its land.
         // Skipped -- every position kept, as before -- where a later fan-out could buy the mana back
-        // (PositionPrefixChoiceMayAddMana) and inside a breakpoint continuation's derivation (applied
+        // (PositionPrefixProbeGuard; the look-top route is decided per position by the probe itself) and inside a breakpoint continuation's derivation (applied
         // there through apply_continuation_plan, which has no whole-turn prepay, so this top-level probe
         // is not that world's answer; the memo's own g_bp_enum_depth == 0 gate keeps the two lists
         // apart).
@@ -76787,7 +76825,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             if (ld != nullptr && ld->params.etb_bounce_land) { continue; }   // a Karoo: after-all already
             const int w = std::min(watchers_in(p), 127);
             int payable = w;   // positions 1..payable have a payable prefix
-            const bool probed = w > 0 && slot_probe_on && !PositionPrefixChoiceMayAddMana(state, p);
+            const PrefixProbeGuard guard = (w > 0 && slot_probe_on) ? PositionPrefixProbeGuard(state, p)
+                                                                   : PrefixProbeGuard::Blanket;
+            const bool probed  = guard != PrefixProbeGuard::Blanket;
+            // LookTopOnly: a position whose first drop came after a look-top resolution or a breakpoint
+            // occurrence keeps the blanket treatment (see PositionPrefixProbeGuard).
+            const bool look_guard = guard == PrefixProbeGuard::LookTopOnly;
             // THE SUFFIX TOO (LandfallElementals sweep s61005, 2026-10-19): a position whose casts AFTER
             // the land fail is the same degenerate line -- the prefix spent the colour the suffix needs
             // ("land=Waterlogged Grove (after Brushfire Elemental); Brushfire, Smokebraider": Brushfire
@@ -76802,23 +76845,33 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             std::vector<char> dropped(static_cast<std::size_t>(w) + 1, 0);
             if (probed)
             {
+                // Returns the drops that COUNT: 0 when the look-top guard covers the first one.
                 auto probe_at = [&](int k, int* first_drop_out) -> int
                 {
                     TurnSolver::Plan probe = p;
                     probe.land_slot = static_cast<int8_t>(k);
                     const SlotPrefixProbe saved = g_slot_prefix_probe;
-                    g_slot_prefix_probe = SlotPrefixProbe{ g_apd_depth + 1, -1, 0 };
+                    g_slot_prefix_probe = SlotPrefixProbe{};
+                    g_slot_prefix_probe.apd_depth = g_apd_depth + 1;
+                    g_slot_prefix_probe.looks0    = g_look_top_resolved;
+                    g_slot_prefix_probe.bps0      = g_bp_any_last;
                     {
                         GameState probe_state = state;
                         ApplyPlanDirect(probe_state, probe, is_pre_combat);
                     }
-                    if (first_drop_out != nullptr) { *first_drop_out = g_slot_prefix_probe.first_drop_watchers; }
-                    const int drops = g_slot_prefix_probe.drops;
+                    const bool covered = look_guard && g_slot_prefix_probe.drops > 0
+                                      && g_slot_prefix_probe.first_drop_covered;
+                    if (first_drop_out != nullptr)
+                    { *first_drop_out = covered ? -1 : g_slot_prefix_probe.first_drop_watchers; }
+                    const int drops = covered ? 0 : g_slot_prefix_probe.drops;
                     g_slot_prefix_probe = saved;
                     return drops;
                 };
                 int first_drop = -1;
                 const int drops_w = probe_at(w, &first_drop);
+                // A position above the first prefix drop dispatches the same casts before its land, so
+                // it drops that cast after the same looks: a covered drop at w (first_drop = -1 above)
+                // keeps every position, and an uncovered one bounds them all.
                 if (first_drop >= 0) { payable = std::min(w, first_drop); }
                 n_slot_pruned += static_cast<std::size_t>(w - payable);
                 for (int k = payable; k >= 1; --k)
