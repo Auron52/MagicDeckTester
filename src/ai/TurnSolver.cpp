@@ -68163,6 +68163,57 @@ inline TranspositionTable::Key FSOfHintKey(const TranspositionTable::Key& canoni
     return k;
 }
 
+// ---- PROVISIONAL DEAD ENDS (MTG_PROVISIONAL_NOWIN; heurarm PROVISIONAL_NOWIN; DEFAULT ON 2026-10-20) -----
+// A no-win is memoised only when nothing beneath it was cut short: a cut-short search proves nothing, and a
+// later search must not take it as a refutation. Once a pass has spent its budget, the search keeps going
+// through its main options (to the proportional overrun ceiling) but skips the deferred wave phases, and
+// every skip is booked as a cut (g_fs_trunc_events) -- so from then on almost NO dead end is memoised, and
+// every transposition of one is searched again at full price. A rated leaf hardly notices (its nodes
+// return estimated WINS, which are stored regardless); a leafless pass is nearly all dead ends, which is
+// why it was given the stop at exhaustion (ConstantExhaustMult) and the strict start gate.
+// The refusal buys nothing INSIDE the over-budget pass, though: a repeat search there skips the same
+// phases and comes back with the same incomplete answer. So, under this lever, a dead end found while the
+// budget is spent is stored under a PROVISIONAL key -- private salt + this pass's epoch -- that only the
+// same pass, with its budget still spent, can look up. A later pass (new epoch), a search with budget left,
+// and every ordinary reader never see it, and a reuse books a cut, so no ancestor is ever stored as a
+// proof on the strength of one. STRUCTURALLY BUDGETED: it can only act once a finite budget is exhausted,
+// so it is inert at an unlimited budget and re-prices work without making any line unfindable.
+inline thread_local std::uint64_t        g_prov_epoch        = 0;   // the current pass's epoch
+inline thread_local std::uint64_t        g_prov_epoch_issued = 0;   // monotonic issuer (never reused)
+inline thread_local const SearchBudget*  g_prov_budget       = nullptr;
+struct ProvEpochGuard   // a pass root (outermost FSLineWin) opens a fresh epoch; a nested root restores ours
+{
+    bool on; std::uint64_t prev_epoch; const SearchBudget* prev_budget;
+    ProvEpochGuard(bool root, const SearchBudget* b) : on(root), prev_epoch(g_prov_epoch), prev_budget(g_prov_budget)
+    { if (on) { g_prov_epoch = ++g_prov_epoch_issued; g_prov_budget = b; } }
+    ~ProvEpochGuard() { if (on) { g_prov_epoch = prev_epoch; g_prov_budget = prev_budget; } }
+};
+inline bool ProvisionalNoWinOn()
+{
+    static const bool env = EnvOn("MTG_PROVISIONAL_NOWIN", true);
+    return heurarm::Flag(heurarm::PROVISIONAL_NOWIN, env);
+}
+// "The budget is spent", WITHOUT SearchBudget::Exhausted()'s side effect: that call books a budget bind
+// (budgetbind::t_binds), and a bind under a node vetoes its no-win store -- reading the budget here must
+// not change what the search memoises.
+inline bool BudgetSpentQuiet(const SearchBudget* b)
+{
+    return b != nullptr && !b->Unlimited() && b->Used() >= b->Limit();
+}
+// Store or reuse a provisional dead end here? Only on the pass's own budget, and only once it is spent.
+// The lever is tested FIRST so the off state does no work at all.
+inline bool ProvisionalLive(const SearchBudget* budget)
+{
+    return ProvisionalNoWinOn() && budget != nullptr && budget == g_prov_budget && BudgetSpentQuiet(budget);
+}
+inline TranspositionTable::Key FSProvKey(const TranspositionTable::Key& canonical)
+{
+    TranspositionTable::Key k = canonical;
+    Fold(k, 0x9D3B5E7F1A2C4D6BULL);   // private salt: the provisional namespace
+    Fold(k, g_prov_epoch);            // ... of THIS pass only
+    return k;
+}
+
 static bool OfWaveEnabled()
 {
     static const bool on = EnvOn("MTG_FSL_OF_WAVE", true);
@@ -69130,6 +69181,10 @@ inline bool FsStrictCutOn()
 // measured, the value-leaf ladder's deep passes cost MORE with it (Landfall d5 7.5k -> 11.9k units/pass,
 // Prevent Damage d5 3.6k -> 8.3k, at an unchanged admission rate), while rollout passes cost less (Landfall
 // live d5 5.7k -> 4.1k). Both cuts return the same answer at every node, so this re-prices work only.
+// 2026-10-20: that "costs MORE" was the dead-end memo defect (see PROVISIONAL DEAD ENDS): with the fix on, =1 is
+// NEUTRAL -- held-out A/B over every shipped value leaf plus Landfall's staged leaf (31 decks x 400 paired
+// games): 3 of 12,800 games moved, pooled units 1.003x (0.92-1.28x per deck). The cut simply has nothing to
+// save at an O(1) leaf, so the default stays the inclusive cut there.
 static inline bool FsStrictCutO1On()
 {
     static const bool env = EnvOn("MTG_FS_STRICT_CUT_O1");
@@ -70314,6 +70369,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
+    const ProvEpochGuard _prov(g_fsline_nest == 0, budget);   // a pass root opens its own provisional epoch
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // The search-window frame GreedyPermit checks (greedywindow, TurnSolver.h): THIS node's remaining
     // depth. The full-line search is the deepest host there is, and before this frame a greedy Solve
@@ -70447,6 +70503,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 PROF_INC(fsline_nowin_hit);
                 ++g_fs_memo_nowin_hits;
                 return itn->second.line;
+            }
+            // PROVISIONAL DEAD END (MTG_PROVISIONAL_NOWIN): the same pass already searched this position
+            // after its budget was spent and found no win. Reused only while that is still the case, and
+            // booked as a cut so nothing above it is memoised as a proof.
+            if (ProvisionalLive(budget))
+            {
+                FSLineCache::const_iterator itp = lc->find(FSProvKey(key));
+                if (itp != lc->end() && cutoff <= itp->second.nowin_bound)
+                {
+                    ++g_fs_trunc_events;
+                    return itp->second.line;
+                }
             }
             // ---- ORDER-FREE REUSE WAVE (see FSLineStoreOfHint for the whole argument) ---------
             // No order-exact win and no usable refutation, so this node is about to re-search a
@@ -72633,6 +72701,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // incumbent tightening ever happened. Clamped to max_turns+1 (the widest question the
             // search can be asked) so an unbounded query still hits.
             FSLineStoreNoWin(lc, key, best, std::min(cutoff, max_turns + 1));
+        }
+        else if (FSNoWinCacheOn() && ProvisionalLive(budget))
+        {
+            // Not a refutation (something beneath was cut short) -- but the budget is spent, so keep it as a
+            // PROVISIONAL dead end for the rest of this pass (see PROVISIONAL DEAD ENDS).
+            FSLineStoreNoWin(lc, FSProvKey(key), best, std::min(cutoff, max_turns + 1));
         }
     }
     // ---- TWIN-AGREEMENT PROBE (MTG_OF_WAVE_PROBE; counters only) --------------------------------
