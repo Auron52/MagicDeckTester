@@ -2146,4 +2146,222 @@ TEST_CASE("Late-bound Crab Umbra host (searched walk): the same plan list as wal
         CHECK_MESSAGE(text(on) == text(off), "board ", board);
     }
     CHECK(dropped > 0);
+// ---- THE USER'S LIVING WISH BUCKETS (2026-10-20, MTG_AA_WISH_BUCKETS) ------------------------------------------
+// AccomplishedAlchemistProvider::TutorCandidates offers a wish only the sideboard cards of the buckets (Mana,
+// Accomplished Alchemist, Lifegain, Untap, Wincon/Draw) that our hand + battlefield lack, in that order;
+// Trufflesnout and Eternal Witness never. Under the Tutor unprune gate (human play / MTG_UNPRUNED) the
+// full list stands -- these cases expect it whenever the gate is open, so they hold in either process.
+namespace
+{
+const std::vector<std::string> kAaSide = { "Accomplished Alchemist", "Galvanic Alchemist", "Trufflesnout",
+                                           "Scholar of Athreos", "Forest", "Island", "Eternal Witness",
+                                           "Arbor Elf", "Brindle Boar" };
+GameState WishAa()
+{
+    GameState s = FreshAa();
+    HandAa(s, "Living Wish");
+    for (const std::string& n : kAaSide) { SideAa(s, n); }
+    s.m_provider = &AaProv();
+    return s;
+}
+std::vector<std::string> WishCandsAa(const GameState& s)
+{
+    return AaProv().TutorCandidates(s, 0, DefAa("Living Wish").params);
+}
+// The narrowed expectation, or the whole sideboard when the Tutor gate is open.
+void ExpectWishAa(const GameState& s, const std::vector<std::string>& want)
+{
+    const std::vector<std::string> full = AaProv().GenericProvider::TutorCandidates(s, 0, DefAa("Living Wish").params);
+    CHECK(WishCandsAa(s) == (DecisionUnpruned(UnprunedGate::Tutor) ? full : want));
+}
+struct WishArmAa
+{
+    std::int8_t saved;
+    explicit WishArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_WISH_BUCKETS])
+    { heurarm::t_arm[heurarm::AA_WISH_BUCKETS] = static_cast<std::int8_t>(v); }
+    ~WishArmAa() { heurarm::t_arm[heurarm::AA_WISH_BUCKETS] = saved; }
+};
+}   // namespace
+
+TEST_CASE("Wish buckets: nothing held -> every bucket, in the USER's order; never Trufflesnout / Eternal Witness")
+{
+    const GameState s = WishAa();
+    ExpectWishAa(s, { "Arbor Elf", "Forest", "Island", "Accomplished Alchemist", "Brindle Boar",
+                      "Galvanic Alchemist", "Scholar of Athreos" });
+    CHECK(AaProv().TutorSearchWidth() >= 7);   // every admitted name is searched (coverage)
+}
+
+TEST_CASE("Wish buckets: ALCHEMIST -- offered only while none is in hand or in play")
+{
+    GameState h = WishAa();
+    for (int k = 0; k < 4; ++k) { PutAa(h, "Forest"); }
+    HandAa(h, "Nourish"); HandAa(h, "Crab Umbra"); HandAa(h, "Stroke of Genius");
+    GameState p = h;
+    ExpectWishAa(h, { "Accomplished Alchemist" });           // only the Alchemist is lacking
+    HandAa(h, "Accomplished Alchemist");
+    ExpectWishAa(h, { "Scholar of Athreos" });               // nothing lacking -> Scholar
+    PutAa(p, "Accomplished Alchemist");
+    ExpectWishAa(p, { "Scholar of Athreos" });               // in play fills the bucket too
+}
+
+TEST_CASE("Wish buckets: MANA -- < 4 projected mana; hand lands count; Island only without a blue source")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    // 3 mana (Utopia Sprawl in hand is not counted as mana; it IS a blue source) -> Elf + Forest, no Island.
+    GameState sprawl = s;
+    HandAa(sprawl, "Utopia Sprawl");
+    ExpectWishAa(sprawl, { "Arbor Elf", "Forest" });
+    // 3 mana and no blue source -> Elf + Forest + Island.
+    ExpectWishAa(s, { "Arbor Elf", "Forest", "Island" });
+    // An Island in play is a blue source (and the 4th mana) -> not lacking.
+    GameState isl = s;
+    PutAa(isl, "Island");
+    ExpectWishAa(isl, { "Scholar of Athreos" });
+    // A land in HAND is the 4th mana.
+    GameState hl = s;
+    HandAa(hl, "Forest");
+    ExpectWishAa(hl, { "Scholar of Athreos" });
+    // A dork in play is the 4th mana.
+    GameState dk = s;
+    PutAa(dk, "Elvish Harbinger");
+    ExpectWishAa(dk, { "Scholar of Athreos" });
+}
+
+TEST_CASE("Wish buckets: MANA -- Arbor Elf ALONE when it re-taps a land-Aura Forest for more than one mana")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    const int f = PutAa(s, "Forest");
+    PutAa(s, "Forest");
+    AttachAa(s, "Wild Growth", f);                       // 3 mana, and the Elf would make 2
+    ExpectWishAa(s, { "Arbor Elf" });
+    // The Elf already fetched: the lands come back (Wild Growth is green, so Island too).
+    GameState gone = s;
+    auto& sb = gone.players[0].sideboard;
+    sb.erase(std::remove_if(sb.begin(), sb.end(), [](const Card& c) { return c.m_name.str() == "Arbor Elf"; }), sb.end());
+    ExpectWishAa(gone, { "Forest", "Island" });
+}
+
+TEST_CASE("Wish buckets: LIFEGAIN -- Brindle Boar only with no lifegain held; the Staff's gain-1 is not lifegain")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectWishAa(s, { "Brindle Boar" });
+    GameState st = s;
+    PutAa(st, "Staff of Domination");                    // untap + draw, but not lifegain for this test
+    ExpectWishAa(st, { "Brindle Boar" });
+    for (const char* g : { "Nourish", "Feed the Clan", "Weather the Storm", "Trufflesnout" })
+    {
+        GameState h = s;
+        HandAa(h, g);
+        ExpectWishAa(h, { "Scholar of Athreos" });
+    }
+    GameState bp = s;
+    PutAa(bp, "Brindle Boar");                           // an unspent Boar in play is held lifegain
+    ExpectWishAa(bp, { "Scholar of Athreos" });
+}
+
+TEST_CASE("Wish buckets: UNTAP -- Galvanic only with no Crab Umbra / Staff / Galvanic held")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectWishAa(s, { "Galvanic Alchemist" });
+    for (const char* u : { "Crab Umbra", "Staff of Domination", "Galvanic Alchemist" })
+    {
+        GameState h = s;
+        HandAa(h, u);
+        ExpectWishAa(h, { "Scholar of Athreos" });
+    }
+}
+
+TEST_CASE("Wish buckets: Staff of Domination fills BOTH Untap and Wincon/Draw")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectWishAa(s, { "Galvanic Alchemist", "Scholar of Athreos" });
+    GameState st = s;
+    HandAa(st, "Staff of Domination");
+    ExpectWishAa(st, { "Scholar of Athreos" });          // nothing lacking -> Scholar ("need nothing else")
+    GameState sp = s;
+    PutAa(sp, "Staff of Domination");
+    ExpectWishAa(sp, { "Scholar of Athreos" });
+}
+
+TEST_CASE("Wish buckets: Seedcradle Witch is an untapper unless the held lifegain totals < 5 (the Boar's 4)")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Stroke of Genius"); HandAa(s, "Seedcradle Witch");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    GameState big = s;
+    HandAa(big, "Nourish");                              // 6 >= 5: the Witch loops -> no Galvanic
+    ExpectWishAa(big, { "Scholar of Athreos" });
+    GameState boar = s;
+    HandAa(boar, "Brindle Boar");                        // 4 < 5: only a Boar -> Galvanic allowed
+    ExpectWishAa(boar, { "Galvanic Alchemist" });
+    GameState two = boar;
+    HandAa(two, "Weather the Storm");                    // 4 + 3 = 7 >= 5 -> the Witch counts again
+    ExpectWishAa(two, { "Scholar of Athreos" });
+}
+
+TEST_CASE("Wish buckets: WINCON -- Scholar only with no Stroke / Staff / Scholar held, or with nothing else lacking")
+{
+    GameState s = WishAa();
+    HandAa(s, "Nourish"); HandAa(s, "Crab Umbra");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectWishAa(s, { "Accomplished Alchemist", "Scholar of Athreos" });
+    GameState st = s;
+    HandAa(st, "Stroke of Genius");
+    ExpectWishAa(st, { "Accomplished Alchemist" });      // a lacking bucket elsewhere: no Scholar
+    GameState sc = s;
+    HandAa(sc, "Scholar of Athreos");
+    ExpectWishAa(sc, { "Accomplished Alchemist" });
+}
+
+TEST_CASE("Wish buckets: nothing admitted -> the whole legal list (a wish is never made unfetchable)")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    auto& sb = s.players[0].sideboard;
+    sb.erase(std::remove_if(sb.begin(), sb.end(), [](const Card& c) { return c.m_name.str() == "Scholar of Athreos"; }), sb.end());
+    std::vector<std::string> rest;
+    for (const std::string& n : kAaSide) { if (n != "Scholar of Athreos") { rest.push_back(n); } }
+    CHECK(WishCandsAa(s) == rest);
+}
+
+TEST_CASE("Wish buckets: =0 restores every name at the base width; a non-wish tutor is untouched")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist");
+    {
+        WishArmAa off(0);
+        CHECK(WishCandsAa(s) == kAaSide);
+        CHECK(AaProv().TutorSearchWidth() == 6);
+    }
+    {
+        WishArmAa on(1);
+        CHECK(AaProv().TutorSearchWidth() == 9);
+        // Elvish Harbinger's library Elf tutor is not a wish: the generic list.
+        GameState h = FreshAa();
+        LibAa(h, "Accomplished Alchemist"); LibAa(h, "Arbor Elf");
+        h.m_provider = &AaProv();
+        const CardParams& hp = DefAa("Elvish Harbinger").params;
+        CHECK(AaProv().TutorCandidates(h, 0, hp) == AaProv().GenericProvider::TutorCandidates(h, 0, hp));
+    }
+}
+
+TEST_CASE("Wish buckets: human play / the Tutor unprune gate keeps the whole list, the rule's pick ranked first")
+{
+    // MTG_HUMAN_PLAY / MTG_UNPRUNED are process-static, so this case asserts the gate's contract in
+    // whichever process runs it (run it once under MTG_UNPRUNE=tutor to exercise the open branch).
+    GameState s = WishAa();
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { CHECK(WishCandsAa(s) == kAaSide); }
+    else { CHECK(WishCandsAa(s) == std::vector<std::string>{ "Scholar of Athreos" }); }
 }

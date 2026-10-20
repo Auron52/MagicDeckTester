@@ -3153,6 +3153,17 @@ public:
     // Ezuri's main-phase pump to lethal, only while FLOATING mana funds it (see the base hook).
     std::vector<int> MainPhaseTeamPumpCounts(const GameState& s, const Permanent& source,
                                              int max_affordable) const override;
+    // THE USER'S LIVING WISH BUCKETS (2026-10-20): "everything divides into buckets Mana, Accomplished
+    // Alchemist, Lifegain, Untap, Wincon/Draw and we only need to search for buckets where our current
+    // hand is lacking." A provider RESTRICTION of the wish's searched target axis (and an ORDER: the
+    // buckets in the user's order); every admitted name is still a searched variant. Trufflesnout and
+    // Eternal Witness are never offered. MTG_AA_WISH_BUCKETS (heurarm AA_WISH_BUCKETS), default ON;
+    // =0 -> every legal sideboard name in sideboard order, exactly as before. Human play / MTG_UNPRUNED
+    // (the Tutor gate) keeps the full list. See the .cpp for the reading of each bucket.
+    std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    // 9 while the bucket rule is on: a COVERAGE bound, so every name the rule can admit (7 in the
+    // widest case) and its empty-set fallback (the 9-name sideboard) is searched. =0 -> the base 6.
+    int TutorSearchWidth() const override;
 };
 
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval

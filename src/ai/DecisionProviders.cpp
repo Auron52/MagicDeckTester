@@ -42973,6 +42973,193 @@ std::vector<int> AccomplishedAlchemistProvider::EtbChoiceCandidates(const GameSt
     return kept.empty() ? out : kept;
 }
 
+// ---- AccomplishedAlchemistProvider::TutorCandidates: THE USER'S LIVING WISH BUCKETS (2026-10-20) -----------
+// The USER, verbatim: "We should create a heuristic for Living Wish as there are only 7 relevant targets and
+// most can be eliminated based on what you have in hand. Accomplished Alchemist is good whenever you don't
+// have one. Arbor Elf or lands are specifically when you don't have 4-5 mana, (the elf preferred when we can
+// untap for more than 1 mana) I would only take Brindle Boar if we have no other lifegain in hand. Galvanic
+// Alchemist should only be taken if we have no untapper (Crab Umbra, Staff of Domination) in hand. (maybe we
+// can allow it when you have Seedcradle Witch if you only have something that gains 4 like the Boar) I would
+// kind of like to skip Trufflesnout ... this deck is terrible at that strategy. Scholar of Athreos is the
+// wincon and should be taken only if we have no wincon or draw in hand or if we need nothing else. (it's fine
+// to end the game with the Scholar once we have the infinite mana) Essentially everything divides into
+// buckets Mana, Accomplished Alchemist, Lifegain, Untap, Wincon/Draw and we only need to search for buckets
+// where our current hand is lacking." And: "Staff of Domination is a special card in the list as it can do
+// the untap and the draw." And on Eternal Witness: "We don't need Eternal Witness in Goldfishing. It is good
+// in real games because it can do things like bringing back a killed Alchemist." (in a goldfish nothing kills
+// our creatures, so its only role -- rebuying a lost piece -- never arises).
+//
+// THE READING (every test keyed on cards.json PARAMS; "held" = in our HAND or on our BATTLEFIELD, since a
+// permanent already in play fills its bucket at least as well as the card in hand):
+//   * ALCHEMIST lacking  <=> no mana_per_life_gained card held.        Offers: the sideboard Alchemist.
+//   * MANA lacking       <=> projected mana < 4 (the USER's "4-5": 4 is the threshold). Projected mana =
+//     our lands in play (1 each) + land-Aura extra mana in play + mana creatures in play (1 each; an Arbor
+//     Elf also counts its best Forest's land-Aura bonus) + lands in HAND (1 each). The Alchemist's own X is
+//     its own bucket and is not counted. Offers: Arbor Elf ALONE when it can untap a Forest for more than one
+//     mana (a land Aura on one of our Forests -- "the elf preferred"); otherwise Arbor Elf + Forest, plus
+//     Island only while no blue source is held (Island is the list's only reason to wish a land over a
+//     Forest: {U} for Crab Umbra / Stroke / Galvanic). A blue source = an Island-like land, a blue-capable land
+//     Aura (Utopia Sprawl: its LOCKED colour in play, the menu in hand) or a blue dork (Elvish Harbinger),
+//     held; the Accomplished Alchemist is NOT one (its mana is X = life gained this turn, 0 without a gain).
+//   * LIFEGAIN lacking   <=> no lifegain card held: a cast_lifegain spell (Nourish / Feed the Clan / Weather
+//     the Storm) or etb_modal_lifegain creature in hand, or a sac_outlet_lifegain creature in hand or play.
+//     Staff of Domination's {2},{T}: gain 1 is NOT counted (one life a turn does not fuel the engine).
+//     Offers: Brindle Boar (sac_outlet_lifegain). Trufflesnout is never offered (the USER: skip it).
+//   * UNTAP lacking      <=> no untapper held: Crab Umbra (untap_enchanted_cost), Staff of Domination
+//     (untap_target_creature_cost), Galvanic Alchemist (soulbond_grants_untap_self_cost) -- and Seedcradle
+//     Witch (untap_pump_cost) counts too UNLESS the held lifegain totals < 5 (its {2}{G}{W} untap nets mana
+//     only at X >= 5; "if you only have something that gains 4 like the Boar"). The total is the SUM of the
+//     held gains at their printed base (Nourish 6, Feed the Clan 5, Weather the Storm 3, Boar 4, Trufflesnout
+//     4) -- ferocious and storm are not projected. Offers: Galvanic Alchemist.
+//   * WINCON/DRAW lacking <=> no Stroke of Genius (draw_target_player), Staff of Domination (tap_draw_cost)
+//     or Scholar of Athreos (drain_cost) held. Offers: Scholar of Athreos -- ALSO when NO bucket is lacking
+//     ("if we need nothing else"). The loop's own Scholar kill ("fine to end the game with the Scholar once we
+//     have the infinite mana") is unaffected: the closed-form loop binds the wish's target by NAME
+//     (kLoopPayWishDrain), which PerformTutor fetches without consulting this list.
+// The admitted names come out in the USER's bucket order (Mana: Elf, Forest, Island; Alchemist; Lifegain;
+// Untap; Wincon), which is the rollout's default pick. Nothing admitted (every bucket's card already
+// fetched) -> the whole legal list: a wish is never made unfetchable. One admitted name is the USER's
+// one-option prune.
+namespace
+{
+struct AaWishCensus
+{
+    bool alchemist = false, untapper = false, witch = false, wincon = false, lifegain = false;
+    bool blue = false, elf_multi = false;
+    int  mana = 0, gain_total = 0;
+};
+
+bool AaHasColour(const std::vector<Color>& v, Color c) { return std::find(v.begin(), v.end(), c) != v.end(); }
+
+AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
+{
+    AaWishCensus c;
+    auto roles = [&](const CardParams& p)
+    {
+        if (p.mana_per_life_gained) { c.alchemist = true; }
+        if (p.untap_enchanted_cost || p.untap_target_creature_cost || p.soulbond_grants_untap_self_cost)
+        { c.untapper = true; }
+        if (p.untap_pump_cost) { c.witch = true; }
+        if (p.draw_target_player || p.tap_draw_cost || p.drain_cost) { c.wincon = true; }
+    };
+    int best_forest_bonus = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        roles(pp);
+        if (pp.sac_outlet_lifegain > 0) { c.lifegain = true; c.gain_total += pp.sac_outlet_lifegain; }
+        if (d->card.IsLand())
+        {
+            ++c.mana;
+            if (AaHasColour(pp.produces, Color::Blue)) { c.blue = true; }
+            int bonus = 0;
+            for (const Permanent& a : s.battlefield)
+            {
+                if (a.aura_attached_to != p.card.m_number || a.controller_index != controller) { continue; }
+                const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+                if (ad == nullptr || !ad->params.is_land_aura) { continue; }
+                bonus += ad->params.land_aura_extra_mana;
+                if (AaHasColour(LandAuraProducesFor(*ad, a), Color::Blue)) { c.blue = true; }
+            }
+            c.mana += bonus;
+            bool forest = false;
+            for (const std::string& st : d->card.m_subtypes) { if (st == "Forest") { forest = true; break; } }
+            if (forest) { best_forest_bonus = std::max(best_forest_bonus, bonus); }
+        }
+        else if (d->card.IsCreature() && !pp.produces.empty() && !pp.mana_per_life_gained)
+        {
+            ++c.mana;                                    // a dork; Arbor Elf's Forest bonus is added below
+            if (AaHasColour(pp.produces, Color::Blue)) { c.blue = true; }
+        }
+    }
+    // Arbor Elf re-taps our best-decorated Forest: one mana plus that Forest's land-Aura bonus.
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->card.IsCreature() && !d->params.mana_requires_land_subtype.empty())
+        { c.mana += best_forest_bonus; }
+    }
+    c.elf_multi = best_forest_bonus > 0;
+    for (const Card& h : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        roles(pp);
+        const int gain = pp.cast_lifegain + pp.sac_outlet_lifegain + pp.etb_modal_lifegain;
+        if (gain > 0) { c.lifegain = true; c.gain_total += gain; }
+        if (d->card.IsLand()) { ++c.mana; }
+        if ((AaHasColour(pp.produces, Color::Blue) && !pp.mana_per_life_gained)
+            || (pp.is_land_aura && AaHasColour(pp.land_aura_produces, Color::Blue))) { c.blue = true; }
+    }
+    return c;
+}
+}   // namespace
+
+static bool AaWishBucketsOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_WISH_BUCKETS", true);   // DEFAULT ON (the USER's rule); =0 = off
+    return heurarm::Flag(heurarm::AA_WISH_BUCKETS, s_env);
+}
+
+int AccomplishedAlchemistProvider::TutorSearchWidth() const
+{
+    return AaWishBucketsOn() ? 9 : GenericProvider::TutorSearchWidth();
+}
+
+std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const GameState& s, int controller,
+                                                                        const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    if (!pp.wish_from_sideboard || all.size() <= 1 || DecisionUnpruned(UnprunedGate::Tutor) || !AaWishBucketsOn())
+    { return all; }
+    const AaWishCensus c = AaTakeWishCensus(s, controller);
+    const bool mana_lacking  = c.mana < 4;
+    const bool untap_lacking = !c.untapper && !(c.witch && c.gain_total >= 5);
+    const bool need_nothing  = c.alchemist && !mana_lacking && c.lifegain && !untap_lacking && c.wincon;
+    // Rank = the USER's bucket order (lower first); -1 = not offered.
+    enum : int { kElf = 0, kForest, kIsland, kAlch, kGain, kUntap, kWin };
+    std::vector<std::pair<int, std::string>> ranked;
+    bool elf_legal = false;
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d != nullptr && d->card.IsCreature() && !d->params.mana_requires_land_subtype.empty()) { elf_legal = true; }
+    }
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        int r = -1;
+        if (p.mana_per_life_gained)                     { if (!c.alchemist) { r = kAlch; } }
+        else if (d->card.IsCreature() && !p.mana_requires_land_subtype.empty())
+                                                        { if (mana_lacking) { r = kElf; } }
+        else if (d->card.IsLand())
+        {
+            const bool lands_ok = mana_lacking && !(c.elf_multi && elf_legal);   // "the elf preferred"
+            if (lands_ok && AaHasColour(p.produces, Color::Green)) { r = kForest; }
+            else if (lands_ok && AaHasColour(p.produces, Color::Blue) && !c.blue) { r = kIsland; }
+        }
+        else if (p.sac_outlet_lifegain > 0)             { if (!c.lifegain) { r = kGain; } }
+        else if (p.soulbond_grants_untap_self_cost)     { if (untap_lacking) { r = kUntap; } }
+        else if (p.drain_cost)                          { if (!c.wincon || need_nothing) { r = kWin; } }
+        // Trufflesnout (etb_modal_lifegain) and Eternal Witness (etb_return_gy_to_hand): never offered.
+        if (r >= 0) { ranked.emplace_back(r, nm); }
+    }
+    if (ranked.empty()) { return all; }
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<std::string> out;
+    out.reserve(ranked.size());
+    for (auto& e : ranked) { out.push_back(std::move(e.second)); }
+    return out;
+}
+
 // ---- AccomplishedAlchemistProvider: the closed-form untap loop and its payoffs (chunk C2b) ---------
 std::vector<int> AccomplishedAlchemistProvider::UntapActivationCounts(const GameState& s, const Permanent& source,
                                                                       const Permanent& target, int shape,

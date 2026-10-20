@@ -608,6 +608,7 @@ enum Slot : int
     GREEDY_AURA_HOST_LATE,    // MTG_GREEDY_AURA_HOST_LATE  SOUND fold (AccomplishedAlchemist branching, 2026-10-20): in the GREEDY walk only, a plain creature Aura's host options collapse to the first -- the walk's verdicts never read such an Aura's host, and the chosen plan's host is re-picked over EVERY host by RetargetSolveAuraHosts anyway. Byte-identical while the candidates fit the walk's 31-bit tie-break mask. Default ON; =0 walks every host
     AURA_HOST_LATE_BIND,      // MTG_AURA_HOST_LATE_BIND  SOUND fold (AccomplishedAlchemist branching, 2026-10-20): in the SEARCHED walk (EnumeratePlans, autonomous) a host-inert creature Aura's host options collapse to one representative whose plan binds the best-keyed LEGAL host when built -- the name-keyed dedup kept exactly that member of the class and discarded the rest. Differs only on host-key ties. Default ON; =0 walks every host
     GREEDY_UNTAP_TARGET_TIE,  // MTG_GREEDY_UNTAP_TARGET_TIE  fold (AccomplishedAlchemist branching, 2026-10-20): in the GREEDY walk only, an untapper variant whose target-blind twin sits at an EARLIER candidate index with an eval at least as high is never chosen (the walk scores no untap target; ties go to the smaller mask). Byte-identical while the candidates fit the 31-bit tie-break mask. Default ON; =0 keeps every target
+    AA_WISH_BUCKETS,          // MTG_AA_WISH_BUCKETS  AccomplishedAlchemist: the USER's Living Wish BUCKET rule (2026-10-20) -- the wish is offered only the sideboard cards of the buckets (Mana, Accomplished Alchemist, Lifegain, Untap, Wincon/Draw) our hand + battlefield lack; Trufflesnout / Eternal Witness never (AccomplishedAlchemistProvider::TutorCandidates). Default ON (the USER's rule); =0 -> every legal sideboard name at the base width 6
     COUNT
 };
 
@@ -1166,6 +1167,7 @@ inline const char* Name(int slot)
         "MTG_GREEDY_AURA_HOST_LATE",
         "MTG_AURA_HOST_LATE_BIND",
         "MTG_GREEDY_UNTAP_TARGET_TIE",
+        "MTG_AA_WISH_BUCKETS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
